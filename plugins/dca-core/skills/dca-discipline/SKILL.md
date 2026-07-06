@@ -1,0 +1,198 @@
+---
+name: dca-discipline
+description: |
+  Applies Domain-Centric Architecture invariants while writing or editing
+  Java/Spring code: framework-free domain, dependency inversion (interfaces in
+  app/domain, impls in adapters), bounded-context isolation (no raw cross-context
+  imports), domain-event hygiene (publish + clear). Use during edits to
+  domain/, application/, or adapter/ folders.
+disable-model-invocation: false
+---
+
+# /dca-discipline — DCA invariants while writing code
+
+This skill is a **set of write-time guards**, not a review. Before every edit
+inside a DCA-shaped project, Claude checks the file's layer and applies the
+rules that apply to that layer.
+
+## The five invariants
+
+### 1. No framework in domain
+
+Files under `**/domain/**` MUST NOT import:
+
+- `org.springframework.*`
+- `jakarta.persistence.*`, `jakarta.validation.*` (except Bean-Validation
+  annotations only if the project deliberately allows it — check conventions)
+- `org.hibernate.*`
+- `com.fasterxml.jackson.*`
+- Any other framework-specific package
+
+**What to do when the user asks for a forbidden import:**
+
+> The annotation `@Component` would put framework code into the domain. The
+> DCA invariant is: domain is framework-free. Place this class in
+> `application/{usecase}/` (if it's a use case) or in `adapter/` (if it
+> integrates with a framework).
+>
+> Want me to (a) move the class, or (b) keep it in domain *without* the
+> annotation, or (c) explicitly override the rule via an ADR?
+
+Don't silently rewrite; ask. The third option is rare but real — if the user
+chooses it, suggest `/adr new` to record the exception.
+
+### 2. Dependency inversion
+
+Code in `domain/` and `application/` may only depend on:
+
+- Other domain types
+- Output ports (interfaces) — never their implementations
+- Standard library and language
+
+It MAY NOT import:
+
+- Classes from `adapter/`, `infrastructure/`
+- Concrete clients (`RestTemplate`, `JdbcTemplate`, `KafkaProducer`, etc.)
+- Framework annotations on the **API surface** of a use case (return types,
+  parameters)
+
+**What to do when a use-case impl needs new infrastructure:**
+
+1. Define an output port interface in `application/shared/` (or in the use
+   case's own folder if it's only used there — see decision guide in
+   `../dca-review/reference/use-case-pattern.md` §3).
+2. Reference the port from the use case.
+3. Add an implementation in `adapter/outgoing/...`.
+
+If the user tries to inject a concrete adapter type, stop and suggest the
+port-first refactor.
+
+### 3. Bounded-context isolation
+
+Direct imports from `{basePackage}.contextA.domain.*` into a file in
+`{basePackage}.contextB.*` are forbidden.
+
+**Allowed cross-context channels:**
+
+| Channel | Where the dependency lives | Example |
+|---|---|---|
+| Open Host Service (REST/MCP) | downstream calls upstream's incoming API | `Cart` reads `Catalog` via HTTP `/products/{id}` |
+| Integration event | downstream consumes upstream event | `Checkout` listens to `OrderPlacedEvent` |
+| Shared kernel value objects | both contexts import from `sharedkernel/` | `Money`, `ProductId` |
+
+**What to do when you see a cross-context import:**
+
+> `cart.application.AddToCart` imports `catalog.domain.Product`. That couples
+> the contexts at the domain level. Options:
+>
+> 1. Call Catalog's Open Host Service (REST) — recommended for read-time data.
+> 2. Listen to a Catalog integration event and project locally — recommended if
+>    Cart needs to react to changes.
+> 3. Move `Product` into the shared kernel if it's truly universal (rare).
+>
+> Which fits the use case?
+
+### 4. Domain-event hygiene
+
+When a domain class registers events (`registerEvent(...)`), the calling use
+case must clear them after persistence or publication. Otherwise events
+accumulate on a long-lived aggregate and get re-emitted.
+
+**Checklist for use-case impls:**
+
+```java
+@Transactional
+public Result execute(Command cmd) {
+    var aggregate = repository.findById(cmd.id()).orElseThrow();
+    aggregate.doSomething(cmd.payload());    // registers event(s) internally
+    repository.save(aggregate);              // persist
+    eventPublisher.publishAll(aggregate.domainEvents());
+    aggregate.clearDomainEvents();           // <-- this line is the discipline
+    return Result.of(aggregate);
+}
+```
+
+If the project uses Spring Modulith's `ApplicationEventPublisher` plus
+`AggregateRoot.andEvents()` or a `BaseAggregateRoot` that handles clearing
+automatically, skip the explicit clear but verify the abstraction handles it.
+
+**Event shape rules** (all four required):
+
+1. **Immutable**: Java `record`, no setters, no mutable fields.
+2. **Past tense name**: `OrderPlaced`, not `PlaceOrder` or `OrderPlacement`.
+3. **`occurredOn` field** of type `Instant` (or matching convention).
+4. **Carries IDs and value objects only**, no aggregate references.
+
+### 5. Domain-model and transaction discipline
+
+When writing or editing domain model classes:
+
+- **Never add public setters.** State changes go through intention-revealing
+  ubiquitous-language methods (`confirm()`, `cancel(reason)`), not
+  `setStatus(...)`.
+- **Aggregates are persistence-ignorant.** No `Repository`, `Store`, or other
+  `OutputPort` fields on an aggregate — if domain logic needs one, pass it as
+  a method parameter.
+- **`@Transactional` only on application-layer use cases.** Outgoing
+  persistence adapters are an allowed exception; never on domain classes or
+  incoming adapters.
+
+> **Note:** invariant strictness follows the context's declared pattern style
+> (see the project's pattern-selection ADR, if any). Contexts implemented as
+> transaction script (supporting subdomains) get structural rules only —
+> invariants 1–3 apply, the tactical rules in 4–5 may be relaxed.
+
+## How this skill operates
+
+Before any write or edit, Claude:
+
+1. Looks at the target path. Classifies the layer (`domain` / `application` /
+   `adapter/incoming` / `adapter/outgoing` / `infrastructure`).
+2. Applies the rules that match that layer (see table).
+3. Cross-checks imports the edit would introduce.
+4. If a violation is about to happen, stops and surfaces the choice to the
+   user (using the exact phrasing from the invariant sections above).
+
+| Layer | Rules applied |
+|---|---|
+| `domain/` | 1, 2, 3, 4, 5 |
+| `application/{usecase}/` | 2, 3, 4, 5 (`@Transactional` lives here) |
+| `application/shared/` | 2 (interfaces only — no impls) |
+| `adapter/incoming/` | 3 (must not bypass application layer to reach domain), 5 (no `@Transactional`) |
+| `adapter/outgoing/` | 3 (must implement a port, not introduce new domain concepts); `@Transactional` allowed on persistence adapters |
+| `infrastructure/` | — (framework code belongs here) |
+
+## Conventions overlay
+
+Read `<project-root>/.claude/dca/conventions.md` for:
+
+- The actual base package and marker FQNs
+- Whether the project's layer folders use the DCA defaults (`incoming` /
+  `outgoing`) or alternatives (`in` / `out`)
+- Project-specific exceptions (e.g. "Bean Validation annotations allowed in
+  domain")
+
+If no conventions file: use DCA defaults from
+`implementing-domain-centric-architecture/README.md`.
+
+## What this skill does NOT do
+
+- **Doesn't review existing code.** That's `dca-review` and the reviewer agents.
+- **Doesn't generate scaffolds.** That's `dca-scaffold`.
+- **Doesn't enforce naming.** That's `/clean-code` and `/ubiquitous-language`.
+- **Doesn't run ArchUnit.** ArchUnit is the safety net *after* this skill;
+  if `dca-discipline` does its job, ArchUnit stays green.
+
+## Anti-pattern: silently bypassing the rule
+
+If the user insists on a violation ("just add `@Entity` to the aggregate"),
+do NOT silently comply. Either:
+
+1. Refuse and explain the alternative (port + adapter, ACL, etc.).
+2. Ask the user to record the exception via `/adr new` so future readers
+   understand why the rule was bent here.
+
+The point of the skill is to make the discipline visible, not to make the
+user's life harder. When the rule's cost outweighs its benefit (legacy
+integration, framework-mandated annotation), an ADR makes the exception
+explicit — and that's a successful outcome.

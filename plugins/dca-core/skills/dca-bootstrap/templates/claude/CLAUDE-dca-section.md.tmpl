@@ -1,0 +1,16 @@
+## Architecture: Domain-Centric Architecture (DCA)
+
+This project follows DCA, governed by ArchUnit (`{{verifyCommand}}`).
+
+**Before constructing anything** (aggregate, use case, adapter, event, context):
+run the `/dca-knowledge build <thing>` loop — it reads the canonical OKF catalog:
+
+1. Route via the task router (`recipe/build-a-dca-application.md`)
+2. Resolve the "Decide first" forks (entity-vs-VO, repository-vs-store, …)
+3. Generate from the linked template, satisfying the recipe's rule checklist
+4. Verify with `{{verifyCommand}}`
+
+Never invent DCA conventions from memory — if the catalog doesn't cover it,
+say so, then `/dca-knowledge save` the resolved answer as a new catalog node.
+Apply `/dca-discipline` while editing domain/application/adapter code;
+run `/dca-review` before committing.

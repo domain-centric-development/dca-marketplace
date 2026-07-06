@@ -1,0 +1,160 @@
+package {{basePackage}}
+
+import com.tngtech.archunit.lang.syntax.ArchRuleDefinition
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
+
+/**
+ * ArchUnit tests for Hexagonal Architecture (Ports and Adapters) pattern.
+ *
+ * Ensures:
+ * - Clear separation between ports (interfaces) and adapters (implementations)
+ * - Primary adapters (driving) handle incoming requests
+ * - Secondary adapters (driven) handle outgoing integrations
+ * - Adapters don't communicate directly with each other
+ * - Incoming adapters only access their own bounded context (dynamically discovered)
+ * - Open Host Services are special incoming adapters that may be accessed by other contexts
+ *
+ * Reference: Alistair Cockburn's Hexagonal Architecture, Vaughn Vernon's Implementing DDD
+ */
+class HexagonalArchitectureArchUnitTest extends BaseArchUnitTest {
+
+  def "Classes from the domain should not access port adapters"() {
+    expect:
+    noClasses()
+      .that().resideInAPackage(DOMAIN_MODEL_PACKAGE)
+      .should().accessClassesThat().resideInAPackage(ADAPTER_PACKAGE)
+      .because("Domain should not depend on adapters (ports and adapters pattern)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Application Services should not access port adapters"() {
+    expect:
+    noClasses()
+      .that().resideInAPackage(APPLICATION_PACKAGE)
+      .should().accessClassesThat().resideInAPackage(ADAPTER_PACKAGE)
+      .because("Application services should only depend on domain and outbound ports, not adapters")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Controllers and Resources must never access repositories directly"() {
+    expect:
+    // Incoming web adapters drive the application through input ports (use cases) only.
+    // Direct repository access would bypass the application layer and its
+    // transaction/authorization/orchestration responsibilities.
+    noClasses()
+      .that().haveSimpleNameEndingWith("Controller")
+      .or().haveSimpleNameEndingWith(REST_CONTROLLER_SUFFIX)
+      .should().dependOnClassesThat().areAssignableTo(REPOSITORY_MARKER)
+      .because("Controllers must go through use cases (input ports), never directly to repositories")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Incoming Adapters must only use outbound ports (not infrastructure implementations)"() {
+    expect:
+    noClasses()
+      .that().resideInAPackage(INCOMING_ADAPTER_PACKAGE)
+      .should().dependOnClassesThat(INFRASTRUCTURE_IMPLEMENTATION)
+      .because("Incoming adapters should only use outbound ports from sharedkernel.application.port, not infrastructure implementation details")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Outgoing Adapters must only use outbound ports (not infrastructure implementations)"() {
+    expect:
+    noClasses()
+      .that().resideInAPackage(OUTGOING_ADAPTER_PACKAGE)
+      .should().dependOnClassesThat(INFRASTRUCTURE_IMPLEMENTATION)
+      .because("Outgoing adapters should only use outbound ports from sharedkernel.application.port, not infrastructure implementation details")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Port adapters (incoming and outgoing) must not communicate directly with each other within the same context"() {
+    expect:
+    // Incoming adapters within a context should not directly call outgoing adapters
+    // Exception: Event consumers (..adapter.incoming.event..) may depend on integration events
+    // in other contexts' events/ packages — this is the standard cross-context integration pattern
+    noClasses()
+      .that().resideInAPackage(INCOMING_ADAPTER_PACKAGE)
+        .and().resideOutsideOfPackage("..${ADAPTER_SUBPKG}.${INCOMING_SUBFOLDER}.event..")
+      .should().dependOnClassesThat().resideInAPackage(OUTGOING_ADAPTER_PACKAGE)
+      .because("Port adapters should communicate through application services, not directly (event consumers are the exception)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+
+    // Note: Outgoing adapters MAY access api/ packages from OTHER contexts
+    // when calling Open Host Services (e.g., Cart's ProductDataAdapter calls Product's ProductCatalogService)
+    // This is the intended cross-context communication pattern via api/ packages
+  }
+
+  def "Incoming adapters must only access their own bounded context (except event consumers and Open Host Services)"() {
+    given:
+    Map<String, ?> boundedContexts = discoverBoundedContextPackages()
+    List<String> contextPackages = boundedContexts.keySet().toList()
+
+    expect:
+    // Dynamically check each bounded context's incoming adapters
+    // They must not access any other bounded context
+    // Exception: Event consumers may access other contexts' integration events
+    // Note: Open Host Services (api/ packages) are designed to BE ACCESSED by other contexts,
+    // but they themselves should not access other contexts
+    contextPackages.each { contextPackage ->
+      String contextName = boundedContexts[contextPackage].name()
+
+      // Get all other context packages (excluding current)
+      List<String> otherContexts = contextPackages.findAll { it != contextPackage }
+
+      if (!otherContexts.isEmpty()) {
+        String[] otherContextPatterns = otherContexts.collect { it + ".." } as String[]
+
+        noClasses()
+          .that().resideInAPackage("${contextPackage}.${ADAPTER_SUBPKG}.${INCOMING_SUBFOLDER}..")
+            .and().resideOutsideOfPackage("..${ADAPTER_SUBPKG}.${INCOMING_SUBFOLDER}.event..")
+          .should().accessClassesThat().resideInAnyPackage(otherContextPatterns)
+          .allowEmptyShould(true)
+          .because("Incoming adapters in '${contextName}' must only orchestrate use cases from their own bounded context - use domain events for cross-context integration")
+          .check(allClasses)
+      }
+    }
+  }
+
+  def "Outgoing adapters may access Open Host Services from other contexts"() {
+    given:
+    Map<String, ?> boundedContexts = discoverBoundedContextPackages()
+    List<String> contextPackages = boundedContexts.keySet().toList()
+
+    expect:
+    // This is a "positive" test documenting the allowed pattern:
+    // Outgoing adapters may access api/ packages from other contexts (Open Host Services)
+    // This is verified by the successful compilation and the stricter tests in DddStrategicPatternsArchUnitTest
+    // that ensure outgoing adapters do NOT access domain or application layers of other contexts
+    true // Pattern verification: outgoing adapters call Open Host Services via api/ packages
+  }
+
+  def "Repository Implementations must reside in portadapter.outgoing package"() {
+    expect:
+    ArchRuleDefinition.classes()
+      .that().haveSimpleNameEndingWith("Repository")
+      .and().areNotInterfaces()
+      .should().resideInAPackage(OUTGOING_ADAPTER_PACKAGE)
+      .because("Repository implementations are secondary adapters (outgoing ports)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Output Ports in application.shared must extend OutputPort"() {
+    expect:
+    classes()
+      .that().resideInAPackage("..application.shared..")
+      .and().areInterfaces()
+      .should().beAssignableTo(OUTPUT_PORT_MARKER)
+      .because("Interfaces in application.shared are output ports and must extend OutputPort to be part of the port hierarchy")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+}

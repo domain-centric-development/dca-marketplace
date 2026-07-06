@@ -1,0 +1,20 @@
+{
+  "name": "dca-core",
+  "description": "DCA-specific skills and reviewer agents: framework-free domain discipline, ubiquitous language glossaries, strategic context maps. DDD and Hexagonal review perspectives. Pairs with software-craftsmanship plugin for a complete daily-practice setup.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Christoph Bloemer"
+  },
+  "homepage": "https://github.com/chbloemer/dca-marketplace",
+  "keywords": [
+    "dca",
+    "domain-centric-architecture",
+    "ddd",
+    "hexagonal-architecture",
+    "bounded-context",
+    "ubiquitous-language",
+    "context-map",
+    "okf",
+    "knowledge-catalog"
+  ]
+}

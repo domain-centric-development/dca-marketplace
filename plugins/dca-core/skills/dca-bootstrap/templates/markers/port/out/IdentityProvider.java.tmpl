@@ -1,0 +1,138 @@
+package {{sharedKernelPackage}}.port.out;
+
+import {{basePackage}}.{{sharedKernelRoot}}.domain.model.UserId;
+import java.util.Optional;
+import java.util.Set;
+
+/**
+ * Port for retrieving the current user's identity.
+ *
+ * <p>This is the primary way for application services and controllers to access the current user's
+ * identity without depending on infrastructure details like HTTP sessions or JWT tokens.
+ *
+ * <p>The implementation (in the infrastructure layer) extracts the identity from the security
+ * context, which is populated by the JWT filter.
+ *
+ * <p><b>Usage in Controllers:</b>
+ *
+ * <pre>{@code
+ * @GetMapping("/cart")
+ * public String showCart(Model model) {
+ *     UserId userId = identityProvider.getCurrentIdentity().userId();
+ *     CustomerId customerId = CustomerId.of(userId.value());
+ *     // ... use customerId to find cart
+ * }
+ * }</pre>
+ *
+ * <p><b>Usage in Use Cases:</b>
+ *
+ * <pre>{@code
+ * public class SomeUseCase {
+ *     private final IdentityProvider identityProvider;
+ *
+ *     public void execute() {
+ *         Identity identity = identityProvider.getCurrentIdentity();
+ *         if (identity.isAnonymous()) {
+ *             // handle anonymous user
+ *         }
+ *     }
+ * }
+ * }</pre>
+ */
+public interface IdentityProvider extends OutputPort {
+
+  /**
+   * Retrieves the current user's identity from the security context.
+   *
+   * <p>This method always returns a valid identity because:
+   *
+   * <ul>
+   *   <li>The JWT filter creates an anonymous identity for first-time visitors
+   *   <li>Existing users have their identity extracted from the JWT
+   * </ul>
+   *
+   * @return the current user's identity (never null)
+   * @throws IllegalStateException if called outside of a request context
+   */
+  Identity getCurrentIdentity();
+
+  /**
+   * Represents the current user's identity.
+   *
+   * <p>Identity can be either:
+   *
+   * <ul>
+   *   <li><b>Anonymous</b> - User has a UserId but no account (soft identity)
+   *   <li><b>Registered</b> - User has a UserId linked to an account (hard identity)
+   * </ul>
+   *
+   * <p>The UserId remains the same when an anonymous user registers, ensuring cart continuity.
+   *
+   * <p>Implementations should be immutable records or classes.
+   */
+  interface Identity {
+
+    /** Default role for registered customers. */
+    String ROLE_CUSTOMER = "CUSTOMER";
+
+    /** The user's unique identifier (always present). */
+    UserId userId();
+
+    /** The identity type (ANONYMOUS or REGISTERED). */
+    IdentityType type();
+
+    /** The user's email (only present for registered users). */
+    Optional<String> email();
+
+    /** The user's roles (typically empty for anonymous, contains CUSTOMER for registered). */
+    Set<String> roles();
+
+    /**
+     * Checks if this is an anonymous identity.
+     *
+     * @return true if the identity is anonymous
+     */
+    default boolean isAnonymous() {
+      return type().isAnonymous();
+    }
+
+    /**
+     * Checks if this is a registered identity.
+     *
+     * @return true if the identity is registered
+     */
+    default boolean isRegistered() {
+      return type().isRegistered();
+    }
+
+    /**
+     * Checks if this identity has a specific role.
+     *
+     * @param role the role to check
+     * @return true if the identity has the role
+     */
+    default boolean hasRole(final String role) {
+      return roles().contains(role);
+    }
+  }
+
+  /**
+   * Represents the type of user identity.
+   *
+   * <p>This is an interface to allow projects to define their own identity types (e.g.,
+   * SERVICE_ACCOUNT, API_KEY, etc.) while maintaining a common contract.
+   *
+   * <p>Implementations should typically be enums.
+   */
+  interface IdentityType {
+
+    /** The name of this identity type. */
+    String name();
+
+    /** Returns true if this is an anonymous identity type. */
+    boolean isAnonymous();
+
+    /** Returns true if this is a registered identity type. */
+    boolean isRegistered();
+  }
+}

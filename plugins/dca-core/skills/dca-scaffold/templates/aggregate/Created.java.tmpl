@@ -1,0 +1,16 @@
+package {{basePackage}}.{{context}}.domain.event;
+
+import {{domainEventMarkerFqn}};
+import {{basePackage}}.{{context}}.domain.model.{{Name}}Id;
+
+import java.time.Instant;
+
+/**
+ * Domain event raised when a new {{Name}} aggregate is created.
+ *
+ * <p>Past-tense naming is intentional — domain events describe things that already happened.
+ */
+public record {{Name}}Created(
+    {{Name}}Id aggregateId,
+    Instant occurredAt
+) implements DomainEvent {}

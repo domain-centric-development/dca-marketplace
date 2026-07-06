@@ -1,0 +1,26 @@
+package {{basePackage}}.{{context}}.application.shared;
+
+import {{storeMarkerFqn}};
+{{storedTypeImports}}
+
+import java.time.Duration;
+
+/**
+ * Output port: operational data store for {{storedTypeDescription}}.
+ *
+ * <p>{{storeDescription}}
+ *
+ * <p><b>Why a Store, not a Repository?</b> The stored objects ({{StoredType}}) have no
+ * own identity-based lifecycle — there is no {@code findById({{StoredType}}Id id)}.
+ * The Store records and aggregates over them. If you find yourself adding {@code findById}
+ * or {@code save}, the stored type is probably an Aggregate Root and you should switch
+ * to a {@code Repository} instead.
+ */
+public interface {{Name}}Store extends Store {
+
+    /** Append a new record. */
+    void record({{StoredType}} entry);
+
+    /** Aggregate query — count, exists, etc. */
+    {{queryMethods}}
+}

@@ -1,0 +1,45 @@
+package {{basePackage}}.{{context}}.application.{{usecasename}};
+
+{{outputPortImports}}
+{{#if useLombok}}
+import lombok.RequiredArgsConstructor;
+{{/if}}
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * {{Name}} use case implementation.
+ *
+ * <p>Orchestrates the {{commandOrQueryNoun}} by:
+ * <ol>
+ *   <li>Loading the relevant aggregate(s) via output ports
+ *   <li>Validating business rules and invariants
+ *   <li>Executing the operation on the aggregate
+ *   <li>Persisting and publishing domain events (for Commands)
+ * </ol>
+ */
+@Service
+{{transactionalAnnotation}}
+{{#if useLombok}}
+@RequiredArgsConstructor
+{{/if}}
+public class {{Name}}{{useCaseImplSuffix}} implements {{Name}}InputPort {
+
+{{constructorInjectionFields}}
+
+{{#if !useLombok}}
+    public {{Name}}{{useCaseImplSuffix}}({{constructorParameters}}) {
+{{constructorBody}}
+    }
+{{/if}}
+
+    @Override
+    public {{Name}}Result execute({{Name}}{{CommandOrQuery}} input) {
+        // TODO: implement {{Name}}.
+        //  1. Resolve aggregate(s) via output ports.
+        //  2. Apply business rules.
+        //  3. {{commandStepGuidance}}
+        //  4. Map to {{Name}}Result.
+        throw new UnsupportedOperationException("Not yet implemented");
+    }
+}

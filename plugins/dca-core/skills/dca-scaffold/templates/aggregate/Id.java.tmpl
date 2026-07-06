@@ -1,0 +1,27 @@
+package {{basePackage}}.{{context}}.domain.model;
+
+import {{idMarkerFqn}};
+
+import java.util.UUID;
+
+/**
+ * Identifier for a {{Name}} aggregate.
+ *
+ * <p>Strongly-typed wrapper around a {{idValueType}} — prevents accidental mixing
+ * of {{Name}}Ids with other identifier types.
+ */
+public record {{Name}}Id({{idValueType}} value) implements Id {
+
+    public {{Name}}Id {
+        if (value == null) {
+            throw new IllegalArgumentException("{{Name}}Id value must not be null");
+        }
+    }
+
+{{idFactoryMethod}}
+
+    @Override
+    public String toString() {
+        return value.toString();
+    }
+}

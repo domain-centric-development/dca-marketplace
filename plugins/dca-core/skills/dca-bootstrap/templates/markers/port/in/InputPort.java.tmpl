@@ -1,0 +1,50 @@
+package {{sharedKernelPackage}}.port.in;
+
+/**
+ * Marker interface for Input Ports (Hexagonal Architecture).
+ *
+ * <p>Input ports are the entry points to the application layer. They define how the outside world
+ * (driving/primary adapters) can interact with the application. In Hexagonal Architecture terms,
+ * input ports sit on the "left side" of the hexagon.
+ *
+ * <p><b>Driving Adapters that use Input Ports:</b>
+ *
+ * <ul>
+ *   <li>REST Controllers
+ *   <li>GraphQL Resolvers
+ *   <li>CLI Command Handlers
+ *   <li>Event Consumers (external events)
+ *   <li>Scheduled Tasks
+ *   <li>MCP Tool Providers
+ * </ul>
+ *
+ * <p><b>Common Input Port Types:</b>
+ *
+ * <ul>
+ *   <li>{@link UseCase} - Command/Query pattern with INPUT and OUTPUT types
+ *   <li>Event Handlers - Process incoming events from other systems
+ * </ul>
+ *
+ * <p><b>Key Characteristics:</b>
+ *
+ * <ul>
+ *   <li>Technology-agnostic (no framework dependencies)
+ *   <li>Defined in terms of application/domain concepts
+ *   <li>Implemented by application layer classes (use cases)
+ *   <li>Called by adapters in the incoming adapter layer
+ * </ul>
+ *
+ * <p><b>Example Hierarchy:</b>
+ *
+ * <pre>{@code
+ * InputPort (marker)
+ *   └── UseCase<INPUT, OUTPUT>
+ *         └── CreateProductInputPort extends UseCase<CreateProductCommand, CreateProductResult>
+ * }</pre>
+ *
+ * @see UseCase
+ * @see {{sharedKernelPackage}}.port.out.OutputPort
+ */
+public interface InputPort {
+  // Marker interface - no methods
+}

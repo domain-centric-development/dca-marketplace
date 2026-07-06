@@ -1,0 +1,40 @@
+package {{basePackage}}
+
+import org.springframework.modulith.core.ApplicationModules
+import spock.lang.Shared
+import spock.lang.Specification
+
+/**
+ * Spring Modulith module structure verification test.
+ *
+ * Validates that all application modules respect their declared boundaries:
+ * - No undeclared cross-module dependencies
+ * - Named interfaces (api/, events/) are properly configured
+ * - Module allowedDependencies are respected
+ */
+class SpringModulithVerificationTest extends Specification {
+
+  @Shared
+  ApplicationModules modules = ApplicationModules.of("{{basePackage}}")
+
+  def "Application module structure should be valid"() {
+    expect:
+    modules.verify()
+  }
+
+  def "Diagnostic: Display discovered application modules"() {
+    when:
+    def moduleList = modules.stream().toList()
+
+    then:
+    println "=== Spring Modulith Application Modules ==="
+    moduleList.each { module ->
+      println "  ${module.name}: ${module.basePackage}"
+      module.namedInterfaces.each { ni ->
+        println "    Named Interface: ${ni.name} -> ${ni}"
+      }
+    }
+    println "============================================"
+    moduleList.size() >= 1
+  }
+}

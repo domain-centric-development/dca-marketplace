@@ -1,0 +1,21 @@
+package {{basePackage}}.{{context}}.application.shared;
+
+import {{repositoryMarkerFqn}};
+import {{basePackage}}.{{context}}.domain.model.{{Name}};
+import {{basePackage}}.{{context}}.domain.model.{{Name}}Id;
+
+import java.util.Optional;
+
+/**
+ * Output port: persistence for the {{Name}} aggregate.
+ *
+ * <p>Implementations live in {@code adapter/{{outgoingSubfolder}}/persistence/}. Add custom
+ * finders here as the use cases need them — but only for {@link {{Name}}} (one repository
+ * per aggregate root).
+ */
+public interface {{Name}}Repository extends Repository<{{Name}}, {{Name}}Id> {
+
+    Optional<{{Name}}> findById({{Name}}Id id);
+
+    {{Name}} save({{Name}} aggregate);
+}

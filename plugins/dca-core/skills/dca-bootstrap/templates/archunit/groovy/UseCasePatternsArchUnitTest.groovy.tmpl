@@ -1,0 +1,164 @@
+package {{basePackage}}
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
+
+import com.tngtech.archunit.core.domain.JavaModifier
+
+/**
+ * ArchUnit tests for Use Case and Mapping Patterns.
+ *
+ * Tests patterns for clean architecture use cases:
+ * - Base UseCase interface (generic contract)
+ * - Use Case implementations
+ * - Use Case Input/Output models
+ * - DTOs and mapping strategy
+ *
+ * These patterns ensure:
+ * - Explicit use case contracts
+ * - Decoupling from domain models
+ * - Clear boundaries between layers
+ *
+ * Reference:
+ * - "Get Your Hands Dirty on Clean Architecture" (Tom Hombergs)
+ * - Robert C. Martin's Clean Architecture
+ * - Hexagonal Architecture (input ports)
+ */
+class UseCasePatternsArchUnitTest extends BaseArchUnitTest {
+
+  // ============================================================================
+  // USE CASE INTERFACE PATTERN (Base Contract)
+  // ============================================================================
+
+  def "Base InputPort interface must be in sharedkernel marker port in package"() {
+    expect:
+    classes()
+      .that().areInterfaces()
+      .and().haveSimpleName("InputPort")
+      .should().resideInAPackage(SHAREDKERNEL_MARKER_PORT_IN_PACKAGE)
+      .because("Base InputPort interface defines the generic contract for all use cases (Hexagonal Architecture)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  // ============================================================================
+  // USE CASE COMMAND/QUERY MODEL PATTERN
+  // ============================================================================
+
+  def "Use Case Commands must end with 'Command' and reside in application package"() {
+    expect:
+    classes()
+      .that().haveSimpleNameEndingWith("Command")
+      .and().resideInAnyPackage(BASE_PACKAGE + "..")
+      .should().resideInAnyPackage(allApplicationPatterns())
+      .because("Use case commands should be in application layer (CQRS pattern)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Use Case Queries must end with 'Query' and reside in application package"() {
+    expect:
+    classes()
+      .that().haveSimpleNameEndingWith("Query")
+      .and().resideInAnyPackage(BASE_PACKAGE + "..")
+      .should().resideInAnyPackage(allApplicationPatterns())
+      .because("Use case queries should be in application layer (CQRS pattern)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Use Case Commands should be immutable (final or records)"() {
+    expect:
+    classes()
+      .that().haveSimpleNameEndingWith("Command")
+      .and().resideInAnyPackage(allApplicationPatterns())
+      .and().areNotInterfaces()
+      .and().areNotRecords()
+      .should().haveModifier(JavaModifier.FINAL)
+      .because("Use case commands should be immutable (value objects)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Use Case Queries should be immutable (final or records)"() {
+    expect:
+    classes()
+      .that().haveSimpleNameEndingWith("Query")
+      .and().resideInAnyPackage(allApplicationPatterns())
+      .and().areNotInterfaces()
+      .and().areNotRecords()
+      .should().haveModifier(JavaModifier.FINAL)
+      .because("Use case queries should be immutable (value objects)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  // ============================================================================
+  // USE CASE RESULT MODEL PATTERN (ADR-020)
+  // Application layer uses *Result, Adapter layer uses *Response
+  // ============================================================================
+
+  def "Use Case Result Models must end with 'Result' and reside in application package"() {
+    expect:
+    classes()
+      .that().haveSimpleNameEndingWith("Result")
+      .and().resideInAnyPackage(BASE_PACKAGE + "..")
+      .and().doNotImplement(VALUE_MARKER)
+      .should().resideInAnyPackage(allApplicationPatterns())
+      .because("Use case result models should be in application layer (ADR-020: Application layer uses *Result). Domain Value Objects with 'Result' in name are allowed in domain layer.")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Use Case Result Models should be immutable (final or records)"() {
+    expect:
+    classes()
+      .that().haveSimpleNameEndingWith("Result")
+      .and().resideInAnyPackage(allApplicationPatterns())
+      .and().areNotInterfaces()
+      .and().areNotRecords()
+      .should().haveModifier(JavaModifier.FINAL)
+      .because("Use case result models should be immutable (value objects)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "HTTP Response Models must end with 'Response' and reside in adapter incoming package"() {
+    expect:
+    // Use allIncomingAdapterPatterns() — includes both bounded-context adapters AND the
+    // shared kernel adapter, where cross-cutting Response classes (ErrorResponse, base
+    // Response, SimpleResponse) typically live. The shared kernel package is discovered
+    // dynamically via @SharedKernel.
+    classes()
+      .that().haveSimpleNameEndingWith("Response")
+      .and().resideInAnyPackage(BASE_PACKAGE + "..")
+      .should().resideInAnyPackage(allIncomingAdapterPatterns())
+      .because("HTTP response models should be in adapter incoming layer (ADR-020: Adapter layer uses *Response)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  // ============================================================================
+  // MAPPING STRATEGY (DTOs)
+  // ============================================================================
+
+  def "DTOs must not be used in the Domain Layer"() {
+    expect:
+    noClasses()
+      .that().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .should().dependOnClassesThat().haveSimpleNameEndingWith("Dto")
+      .because("Domain layer should not depend on DTOs (presentation concerns) - Dependency Inversion Principle")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "DTOs must not be used in the Application Layer"() {
+    expect:
+    noClasses()
+      .that().resideInAnyPackage(allApplicationPatterns())
+      .should().dependOnClassesThat().haveSimpleNameEndingWith("Dto")
+      .because("Application layer should use Command/Query/Response models, not presentation DTOs (Clean Architecture)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+}

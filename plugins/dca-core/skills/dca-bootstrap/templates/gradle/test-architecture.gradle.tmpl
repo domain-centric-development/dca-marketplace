@@ -1,0 +1,94 @@
+// DCA ArchUnit governance source set + task.
+// Installed by the dca-bootstrap skill.
+//
+// Apply from your build.gradle:
+//   apply from: "gradle/plugins/test-architecture.gradle"
+//
+// Run with:
+//   ./gradlew test-architecture
+
+ext {
+  archunitVersion = '{{archunitVersion}}'
+{{#if testStyleGroovy}}
+  groovyVersion   = '5.0.4'
+  spockVersion    = '2.4-groovy-5.0'
+{{/if}}
+}
+
+sourceSets {
+  testArchitecture {
+    java.srcDir file("src/test-architecture/java")
+{{#if testStyleGroovy}}
+    groovy.srcDir file("src/test-architecture/groovy")
+{{/if}}
+    resources.srcDir file("src/test-architecture/resources")
+  }
+}
+
+configurations {
+  testArchitectureImplementation.extendsFrom(implementation)
+  testArchitectureRuntimeOnly.extendsFrom(runtimeOnly)
+}
+
+dependencies {
+  testArchitectureImplementation sourceSets.main.output
+  testArchitectureImplementation "com.tngtech.archunit:archunit:${archunitVersion}"
+
+{{#if testStyleGroovy}}
+  // Spock + Groovy
+  testArchitectureImplementation "org.apache.groovy:groovy-all:${groovyVersion}"
+  testArchitectureImplementation("org.spockframework:spock-core:${spockVersion}") {
+    exclude(module: 'groovy-all')
+  }
+{{else}}
+  // JUnit5
+  testArchitectureImplementation "org.junit.jupiter:junit-jupiter-api:5.10.2"
+  testArchitectureImplementation "org.assertj:assertj-core:3.25.3"
+  testArchitectureRuntimeOnly  "org.junit.jupiter:junit-jupiter-engine:5.10.2"
+  testArchitectureRuntimeOnly  "org.junit.platform:junit-platform-launcher:1.10.2"
+{{/if}}
+
+  // Spring Boot test (optional — useful if rules touch Spring annotations)
+  testArchitectureImplementation("org.springframework.boot:spring-boot-starter-test") {
+    exclude(module: 'commons-logging')
+  }
+
+{{#if springModulithEnabled}}
+  // Spring Modulith — for SpringModulithVerificationTest
+  testArchitectureImplementation "org.springframework.modulith:spring-modulith-starter-test"
+{{/if}}
+}
+
+tasks.register('test-architecture', Test) {
+  description = 'Runs DCA architecture governance tests (ArchUnit).'
+  group       = 'verification'
+
+  testClassesDirs = sourceSets.testArchitecture.output.classesDirs
+  classpath       = sourceSets.testArchitecture.runtimeClasspath
+
+  useJUnitPlatform()
+
+  // Optional filter:  ./gradlew test-architecture -Pfilter=Hexagonal
+  if (project.hasProperty('filter')) {
+    filter {
+      includeTestsMatching "*${project.property('filter')}*"
+    }
+  }
+
+  testLogging {
+    events 'skipped', 'failed'
+    displayGranularity = 2
+    exceptionFormat = 'full'
+    showExceptions = true
+    showStandardStreams = false
+  }
+
+  reports.html.outputLocation = reporting.baseDirectory.dir('test-architecture')
+}
+
+{{#if testStyleGroovy}}
+tasks.withType(GroovyCompile).configureEach {
+  options.encoding = 'UTF-8'
+  groovyOptions.forkOptions.memoryMaximumSize = '2g'
+}
+{{/if}}

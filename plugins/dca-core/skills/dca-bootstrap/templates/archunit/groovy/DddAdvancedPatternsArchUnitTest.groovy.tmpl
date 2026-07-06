@@ -1,0 +1,304 @@
+package {{basePackage}}
+
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
+
+import com.tngtech.archunit.core.domain.JavaModifier
+
+import org.springframework.stereotype.Component
+import org.springframework.stereotype.Service
+import org.springframework.context.event.EventListener
+
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZonedDateTime
+
+/**
+ * ArchUnit tests for Advanced DDD Patterns.
+ *
+ * Tests advanced DDD patterns:
+ * - Domain Events: Things that happened in the domain
+ * - Domain Services: Operations that don't belong to entities/value objects
+ * - Factories: Complex object creation logic
+ * - Specifications: Business rules as objects
+ *
+ * Reference:
+ * - Eric Evans' Domain-Driven Design (Domain Events, Services, Factories, Specifications)
+ * - Vaughn Vernon's Implementing DDD (Domain Events for eventual consistency)
+ */
+class DddAdvancedPatternsArchUnitTest extends BaseArchUnitTest {
+
+  // ============================================================================
+  // DOMAIN EVENTS PATTERN
+  // ============================================================================
+
+  def "Domain Events must implement DomainEvent Marker Interface and be records"() {
+    expect:
+    classes()
+      .that().implement(DOMAIN_EVENT_MARKER)
+      .and().areNotInterfaces()
+      .should().beRecords()
+      .because("Domain events should be immutable records implementing DomainEvent (named in past tense, e.g., ProductCreated, CartCleared)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Domain Events must reside in domain package"() {
+    expect:
+    classes()
+      .that().implement(DOMAIN_EVENT_MARKER)
+      .should().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .because("Domain events are part of the domain layer (named in past tense)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Domain Events should be immutable (final or records)"() {
+    expect:
+    classes()
+      .that().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .and().implement(DOMAIN_EVENT_MARKER)
+      .and().areNotInterfaces()
+      .and().areNotEnums()
+      .and().areNotRecords()
+      .should().haveModifier(JavaModifier.FINAL)
+      .because("Domain events should be immutable (final classes or records)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Domain Events must not have Spring annotations"() {
+    expect:
+    noClasses()
+      .that().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .and().implement(DOMAIN_EVENT_MARKER)
+      .should().beAnnotatedWith(Component.class)
+      .orShould().beAnnotatedWith(Service.class)
+      .orShould().beAnnotatedWith(EventListener.class)
+      .because("Domain events must be framework-independent POJOs")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Integration Events must be annotated with IntegrationEventType"() {
+    expect:
+    // The annotation carries the stable logical name + schema version as a class property —
+    // the single source of truth for an event's contract identity (cf. ADR-027 in the reference).
+    classes()
+      .that().areAssignableTo(INTEGRATION_EVENT_MARKER)
+      .and().areNotInterfaces()
+      .should().beAnnotatedWith("{{sharedKernelPackage}}.tactical.IntegrationEventType")
+      .because("@IntegrationEventType(name, version) is the contract identity of every " +
+               "integration event — a serializer keys (name, version) to the class and stamps " +
+               "both onto the wire envelope")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Integration Events must not have a version field"() {
+    when:
+    // The schema version is a class property (@IntegrationEventType), never per-instance
+    // payload data — a version data field duplicates the annotation and can drift from it.
+    def violations = allClasses
+      .findAll { it.isAssignableTo(INTEGRATION_EVENT_MARKER) && !it.isInterface() }
+      .findAll { eventClass ->
+        eventClass.getAllFields().stream().anyMatch { it.getName() == "version" }
+      }
+      .collect { "${it.getName()} carries a version data field — declare the version in @IntegrationEventType instead" }
+
+    then:
+    if (!violations.isEmpty()) {
+      throw new AssertionError(
+      "Integration Events must not have a version field — @IntegrationEventType is the single source of truth:\n" +
+      violations.join("\n")
+      )
+    }
+    true
+  }
+
+  def "Domain Events that are not Integration Events must not have a version field"() {
+    when:
+    def domainOnlyEventClasses = allClasses.stream()
+      .filter { it.isAssignableTo(DOMAIN_EVENT_MARKER) }
+      .filter { !it.isAssignableTo(INTEGRATION_EVENT_MARKER) }
+      .filter { !it.isInterface() }
+      .collect()
+
+    def violations = []
+
+    domainOnlyEventClasses.each { eventClass ->
+      def hasVersionField = eventClass.getAllFields().stream()
+        .anyMatch { field ->
+          field.getName() == "version"
+        }
+
+      if (hasVersionField) {
+        violations.add("${eventClass.getName()} has a version field but is not an IntegrationEvent — only IntegrationEvents need versioning")
+      }
+    }
+
+    then:
+    if (!violations.isEmpty()) {
+      throw new AssertionError(
+      "Domain Events (non-IntegrationEvent) must not have a version field — versioning is only for IntegrationEvents:\n" +
+      violations.join("\n")
+      )
+    }
+    true
+  }
+
+  def "Domain Events must have a timestamp field"() {
+    when:
+    def domainEventClasses = allClasses.stream()
+      .filter { it.isAssignableTo(DOMAIN_EVENT_MARKER) }
+      .filter { !it.isInterface() }
+      .collect()
+
+    def violations = []
+
+    domainEventClasses.each { eventClass ->
+      def hasTimestampField = eventClass.getAllFields().stream()
+        .anyMatch { field ->
+          field.getRawType().isEquivalentTo(Instant.class) ||
+            field.getRawType().isEquivalentTo(LocalDateTime.class) ||
+            field.getRawType().isEquivalentTo(ZonedDateTime.class)
+        }
+
+      if (!hasTimestampField) {
+        violations.add("${eventClass.getName()} does not have a timestamp field")
+      }
+    }
+
+    then:
+    if (!violations.isEmpty()) {
+      throw new AssertionError(
+      "Domain Events must have a timestamp field (when did the event occur?):\n" +
+      violations.join("\n")
+      )
+    }
+    true
+  }
+
+  // ============================================================================
+  // DOMAIN SERVICES PATTERN
+  // ============================================================================
+
+  def "Domain Services must implement DomainService Marker Interface and reside in domain.service"() {
+    expect:
+    classes()
+      .that().implement(DOMAIN_SERVICE_MARKER)
+      .and().areNotInterfaces()
+      .should().resideInAPackage("..domain.service..")
+      .because("Domain services implement DomainService marker and reside in domain.service packages (named descriptively, e.g., PricingService, CartTotalCalculator)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Domain Services must reside in domain package"() {
+    expect:
+    classes()
+      .that().implement(DOMAIN_SERVICE_MARKER)
+      .should().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .because("Domain services are part of the domain layer, not application layer")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Domain Services must not have Spring annotations"() {
+    expect:
+    noClasses()
+      .that().implement(DOMAIN_SERVICE_MARKER)
+      .should().beAnnotatedWith(Service.class)
+      .orShould().beAnnotatedWith(Component.class)
+      .because("Domain services should be framework-independent")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Domain Services should be stateless (only final fields for dependencies)"() {
+    expect:
+    classes()
+      .that().implement(DOMAIN_SERVICE_MARKER)
+      .and().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .should().haveOnlyFinalFields()
+      .because("Domain services should be stateless (only final fields for dependencies)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  // ============================================================================
+  // FACTORIES PATTERN
+  // ============================================================================
+
+  def "Factories should implement Factory Marker Interface"() {
+    expect:
+    classes()
+      .that().implement(FACTORY_MARKER)
+      .should().haveSimpleNameEndingWith("Factory")
+      .because("Classes implementing Factory marker should have 'Factory' in their name")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Factories must reside in domain package"() {
+    expect:
+    classes()
+      .that().implement(FACTORY_MARKER)
+      .should().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .because("Factories are part of the domain layer (complex aggregate creation logic)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Factories must not have Spring annotations"() {
+    expect:
+    noClasses()
+      .that().implement(FACTORY_MARKER)
+      .and().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .should().beAnnotatedWith(Component.class)
+      .orShould().beAnnotatedWith(Service.class)
+      .because("Factories should be framework-independent")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Factories should be stateless (only final fields for dependencies)"() {
+    expect:
+    classes()
+      .that().implement(FACTORY_MARKER)
+      .and().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .should().haveOnlyFinalFields()
+      .because("Factories should be stateless (only final fields for dependencies)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  // ============================================================================
+  // SPECIFICATION PATTERN
+  // ============================================================================
+
+  def "Specifications must end with 'Specification'"() {
+    expect:
+    classes()
+      .that().haveSimpleNameEndingWith("Specification")
+      .and().areNotInterfaces()
+      .and().doNotHaveSimpleName("Specification")
+      .should().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .because("Specification implementations are part of the domain layer")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Specifications must not have Spring annotations"() {
+    expect:
+    noClasses()
+      .that().haveSimpleNameEndingWith("Specification")
+      .and().resideInAnyPackage(allDomainPatternsWithSharedKernel())
+      .should().beAnnotatedWith(Component.class)
+      .orShould().beAnnotatedWith(Service.class)
+      .because("Specifications should be framework-independent value objects")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+}

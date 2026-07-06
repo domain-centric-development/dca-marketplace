@@ -1,0 +1,31 @@
+package {{basePackage}}.{{sharedKernelRoot}}.domain.model;
+
+import {{idMarkerFqn}};
+import {{valueMarkerFqn}};
+import java.util.UUID;
+
+/**
+ * Value Object representing a user's unique identifier.
+ *
+ * <p>The shared identity across all bounded contexts: a raw UUID that stays stable across the
+ * user lifecycle (e.g. from anonymous browsing through registration), so per-user data keeps its
+ * continuity. Referenced by {@code IdentityProvider.Identity}.
+ */
+public record UserId(String value) implements Id, Value {
+
+  public UserId {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException("UserId cannot be null or blank");
+    }
+  }
+
+  /** Creates a UserId from a string value. */
+  public static UserId of(final String value) {
+    return new UserId(value);
+  }
+
+  /** Generates a new random UserId (raw UUID, stable across the user lifecycle). */
+  public static UserId generate() {
+    return new UserId(UUID.randomUUID().toString());
+  }
+}

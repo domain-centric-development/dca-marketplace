@@ -1,0 +1,303 @@
+package {{basePackage}};
+
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.importer.ClassFileImporter;
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.core.importer.Location;
+import {{boundedContextAnnotationFqn}};
+import {{sharedKernelAnnotationFqn}};
+import {{openHostServiceAnnotationFqn}};
+import org.junit.jupiter.api.BeforeAll;
+
+import java.lang.annotation.Annotation;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+/**
+ * Base class for all DCA ArchUnit tests (JUnit 5 + Java variant).
+ *
+ * The CONFIGURATION block below is populated by the dca-bootstrap skill at install time.
+ * All other rule classes inherit these constants — never hardcode FQNs in the rule classes.
+ */
+public abstract class BaseArchUnitTest {
+
+  // ============================================================================
+  // CONFIGURATION — populated by dca-bootstrap skill
+  // ============================================================================
+
+  protected static final String BASE_PACKAGE                = "{{basePackage}}";
+  protected static final String SHARED_KERNEL_MARKER_PACKAGE = "{{sharedKernelPackage}}";
+  protected static final String DOMAIN_SUBPKG                = "{{domainSubpackage}}";
+  protected static final String APP_SUBPKG                   = "{{appSubpackage}}";
+  protected static final String ADAPTER_SUBPKG              = "{{adapterSubpackage}}";
+  protected static final String INCOMING_SUBFOLDER           = "{{incomingSubfolder}}";   // "incoming" (DCA) or "in" (Hombergs-style)
+  protected static final String OUTGOING_SUBFOLDER           = "{{outgoingSubfolder}}";   // "outgoing" (DCA) or "out" (Hombergs-style)
+  protected static final String INFRASTRUCTURE_SUBPKG        = "{{infrastructureSubpackage}}";
+  protected static final String USE_CASE_IMPL_SUFFIX         = "{{useCaseImplSuffix}}";
+  protected static final String REST_CONTROLLER_SUFFIX       = "{{restControllerSuffix}}";
+
+  protected static final Class<?> AGGREGATE_ROOT_MARKER     = {{aggregateRootMarkerFqn}}.class;
+  protected static final Class<?> ENTITY_MARKER             = {{entityMarkerFqn}}.class;
+  protected static final Class<?> VALUE_MARKER              = {{valueMarkerFqn}}.class;
+  protected static final Class<?> ID_MARKER                 = {{idMarkerFqn}}.class;
+  protected static final Class<?> REPOSITORY_MARKER         = {{repositoryMarkerFqn}}.class;
+  protected static final Class<?> STORE_MARKER              = {{storeMarkerFqn}}.class;
+  protected static final Class<?> USE_CASE_MARKER           = {{useCaseMarkerFqn}}.class;
+  protected static final Class<?> INPUT_PORT_MARKER         = {{inputPortMarkerFqn}}.class;
+  protected static final Class<?> OUTPUT_PORT_MARKER        = {{outputPortMarkerFqn}}.class;
+  protected static final Class<?> DOMAIN_EVENT_MARKER       = {{domainEventMarkerFqn}}.class;
+  protected static final Class<?> INTEGRATION_EVENT_MARKER  = {{integrationEventMarkerFqn}}.class;
+  protected static final Class<?> DOMAIN_SERVICE_MARKER     = {{domainServiceMarkerFqn}}.class;
+  protected static final Class<?> FACTORY_MARKER            = {{factoryMarkerFqn}}.class;
+  protected static final Class<?> SPECIFICATION_MARKER      = {{specificationMarkerFqn}}.class;
+
+  protected static final Class<? extends Annotation> BOUNDED_CONTEXT_ANNOTATION = BoundedContext.class;
+  protected static final Class<? extends Annotation> SHARED_KERNEL_ANNOTATION   = SharedKernel.class;
+  protected static final Class<? extends Annotation> OPEN_HOST_SERVICE_ANNOTATION = OpenHostService.class;
+
+  protected static final List<String> THIRD_PARTY_PACKAGES_ALLOWED_IN_DOMAIN = List.of(
+      "java..",
+      "lombok..",
+      "org.apache.commons.lang3..",
+      "org.apache.commons.collections4",
+      "org.jspecify.annotations.."
+  );
+
+  protected static final List<String> EXTRA_APPLICATION_PACKAGES = List.of({{extraApplicationPackages}});
+  protected static final List<String> EXTRA_ADAPTER_PACKAGES     = List.of({{extraAdapterPackages}});
+
+  // ============================================================================
+  // DERIVED PATTERNS
+  // ============================================================================
+
+  protected static final String SHAREDKERNEL_PACKAGE                  = SHARED_KERNEL_MARKER_PACKAGE + "..";
+  protected static final String SHAREDKERNEL_MARKER_TACTICAL_PACKAGE  = SHARED_KERNEL_MARKER_PACKAGE + ".tactical..";
+  protected static final String SHAREDKERNEL_MARKER_STRATEGIC_PACKAGE = SHARED_KERNEL_MARKER_PACKAGE + ".strategic..";
+  protected static final String SHAREDKERNEL_MARKER_PORT_PACKAGE      = SHARED_KERNEL_MARKER_PACKAGE + ".port..";
+  protected static final String SHAREDKERNEL_MARKER_PORT_IN_PACKAGE   = SHARED_KERNEL_MARKER_PACKAGE + ".port.in..";
+  protected static final String SHAREDKERNEL_MARKER_PORT_OUT_PACKAGE  = SHARED_KERNEL_MARKER_PACKAGE + ".port.out..";
+
+  protected static final String DOMAIN_PACKAGE_PATTERN           = BASE_PACKAGE + ".*." + DOMAIN_SUBPKG + "..";
+  protected static final String DOMAIN_MODEL_PACKAGE_PATTERN     = BASE_PACKAGE + ".*." + DOMAIN_SUBPKG + ".model..";
+  protected static final String APPLICATION_PACKAGE_PATTERN      = BASE_PACKAGE + ".*." + APP_SUBPKG + "..";
+  protected static final String ADAPTER_PACKAGE_PATTERN          = BASE_PACKAGE + ".*." + ADAPTER_SUBPKG + "..";
+  protected static final String INCOMING_ADAPTER_PACKAGE_PATTERN = BASE_PACKAGE + ".*." + ADAPTER_SUBPKG + "." + INCOMING_SUBFOLDER + "..";
+  protected static final String OUTGOING_ADAPTER_PACKAGE_PATTERN = BASE_PACKAGE + ".*." + ADAPTER_SUBPKG + "." + OUTGOING_SUBFOLDER + "..";
+  protected static final String INFRASTRUCTURE_PACKAGE           = BASE_PACKAGE + "." + INFRASTRUCTURE_SUBPKG + "..";
+  protected static final String SHAREDKERNEL_DOMAIN_PACKAGE      = BASE_PACKAGE + ".{{sharedKernelRoot}}." + DOMAIN_SUBPKG + "..";
+
+  // Short-form aliases — Groovy templates and ported Java tests use these names
+  protected static final String DOMAIN_PACKAGE           = DOMAIN_PACKAGE_PATTERN;
+  protected static final String DOMAIN_MODEL_PACKAGE     = DOMAIN_MODEL_PACKAGE_PATTERN;
+  protected static final String APPLICATION_PACKAGE      = APPLICATION_PACKAGE_PATTERN;
+  protected static final String ADAPTER_PACKAGE          = ADAPTER_PACKAGE_PATTERN;
+  protected static final String INCOMING_ADAPTER_PACKAGE = INCOMING_ADAPTER_PACKAGE_PATTERN;
+  protected static final String OUTGOING_ADAPTER_PACKAGE = OUTGOING_ADAPTER_PACKAGE_PATTERN;
+
+  protected static final DescribedPredicate<JavaClass> INFRASTRUCTURE_IMPLEMENTATION =
+      DescribedPredicate.describe(
+          "reside in infrastructure implementation",
+          (JavaClass javaClass) ->
+              javaClass.getPackageName().startsWith(BASE_PACKAGE + "." + INFRASTRUCTURE_SUBPKG + ".")
+      );
+
+  static class DoNotIncludeTestCode implements ImportOption {
+    private static final Pattern TEST_JAR = Pattern.compile(".*-test\\.jar!.*");
+    private static final Pattern TEST_CLASSES = Pattern.compile(".*/build/classes/([^/]+/)?test.*/.*");
+
+    @Override
+    public boolean includes(Location location) {
+      return !location.matches(TEST_JAR) && !location.matches(TEST_CLASSES);
+    }
+  }
+
+  static class OnlyProjectJars implements ImportOption {
+    private static final Pattern THIRD_PARTY_JAR = Pattern.compile(".*/caches|wrapper/.*\\.jar!.*");
+
+    @Override
+    public boolean includes(Location location) {
+      return !location.matches(THIRD_PARTY_JAR);
+    }
+  }
+
+  protected static JavaClasses allClasses;
+
+  @BeforeAll
+  static void importAllClasses() {
+    if (allClasses == null) {
+      allClasses = new ClassFileImporter()
+          .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+          .withImportOption(new DoNotIncludeTestCode())
+          .withImportOption(new OnlyProjectJars())
+          .importPackages(BASE_PACKAGE);
+    }
+  }
+
+  // ============================================================================
+  // BOUNDED CONTEXT DISCOVERY UTILITIES
+  // ============================================================================
+
+  protected Map<String, BoundedContext> discoverBoundedContextPackages() {
+    Map<String, BoundedContext> contexts = new HashMap<>();
+    for (JavaClass javaClass : allClasses) {
+      String rootPackage = extractRootContextPackage(javaClass.getPackageName());
+      if (rootPackage != null && !contexts.containsKey(rootPackage)) {
+        BoundedContext annotation = getPackageAnnotation(rootPackage, BOUNDED_CONTEXT_ANNOTATION);
+        if (annotation != null) {
+          contexts.put(rootPackage, annotation);
+        }
+      }
+    }
+    return contexts;
+  }
+
+  protected String discoverSharedKernelPackage() {
+    Set<String> checked = new HashSet<>();
+    for (JavaClass javaClass : allClasses) {
+      String rootPackage = extractRootContextPackage(javaClass.getPackageName());
+      if (rootPackage != null && !checked.contains(rootPackage)) {
+        checked.add(rootPackage);
+        if (getPackageAnnotation(rootPackage, SHARED_KERNEL_ANNOTATION) != null) {
+          return rootPackage;
+        }
+      }
+    }
+    return null;
+  }
+
+  protected <T extends Annotation> T getPackageAnnotation(String packageName, Class<T> annotationType) {
+    try {
+      Class<?> packageInfoClass = Thread.currentThread().getContextClassLoader()
+          .loadClass(packageName + ".package-info");
+      return packageInfoClass.getAnnotation(annotationType);
+    } catch (ClassNotFoundException ignored) {
+      return null;
+    }
+  }
+
+  protected String extractRootContextPackage(String fullPackageName) {
+    if (!fullPackageName.startsWith(BASE_PACKAGE + ".")) return null;
+    String remainder = fullPackageName.substring((BASE_PACKAGE + ".").length());
+    int dotIndex = remainder.indexOf('.');
+    if (dotIndex > 0) return BASE_PACKAGE + "." + remainder.substring(0, dotIndex);
+    if (!remainder.isEmpty()) return BASE_PACKAGE + "." + remainder;
+    return null;
+  }
+
+  protected String extractContextName(String fullPackageName) {
+    if (!fullPackageName.startsWith(BASE_PACKAGE + ".")) return fullPackageName;
+    String remainder = fullPackageName.substring((BASE_PACKAGE + ".").length());
+    int dotIndex = remainder.indexOf('.');
+    return dotIndex > 0 ? remainder.substring(0, dotIndex) : remainder;
+  }
+
+  protected List<String> getBoundedContextPackagePatterns() {
+    return discoverBoundedContextPackages().keySet().stream()
+        .map(p -> p + "..")
+        .collect(Collectors.toList());
+  }
+
+  protected List<String> getBoundedContextPackagePatternsExcluding(String excludePackage) {
+    return discoverBoundedContextPackages().keySet().stream()
+        .filter(p -> !p.equals(excludePackage))
+        .map(p -> p + "..")
+        .collect(Collectors.toList());
+  }
+
+  protected String[] getBoundedContextPackagePatternsArray() {
+    return getBoundedContextPackagePatterns().toArray(new String[0]);
+  }
+
+  protected String[] getBoundedContextDomainPatterns() {
+    return discoverBoundedContextPackages().keySet().stream()
+        .map(p -> p + "." + DOMAIN_SUBPKG + "..")
+        .toArray(String[]::new);
+  }
+
+  protected String[] getBoundedContextDomainModelPatterns() {
+    return discoverBoundedContextPackages().keySet().stream()
+        .map(p -> p + "." + DOMAIN_SUBPKG + ".model..")
+        .toArray(String[]::new);
+  }
+
+  protected String[] getBoundedContextApplicationPatterns() {
+    return discoverBoundedContextPackages().keySet().stream()
+        .map(p -> p + "." + APP_SUBPKG + "..")
+        .toArray(String[]::new);
+  }
+
+  protected String[] getBoundedContextAdapterPatterns() {
+    return discoverBoundedContextPackages().keySet().stream()
+        .map(p -> p + "." + ADAPTER_SUBPKG + "..")
+        .toArray(String[]::new);
+  }
+
+  protected String[] allDomainModelPatternsWithSharedKernel() {
+    List<String> patterns = new ArrayList<>(Arrays.asList(getBoundedContextDomainModelPatterns()));
+    patterns.add(SHAREDKERNEL_DOMAIN_PACKAGE);
+    return patterns.toArray(new String[0]);
+  }
+
+  protected String[] allDomainPatternsWithSharedKernel() {
+    List<String> patterns = new ArrayList<>(Arrays.asList(getBoundedContextDomainPatterns()));
+    patterns.add(SHAREDKERNEL_DOMAIN_PACKAGE);
+    return patterns.toArray(new String[0]);
+  }
+
+  protected String[] allApplicationPatterns() {
+    List<String> patterns = new ArrayList<>(Arrays.asList(getBoundedContextApplicationPatterns()));
+    patterns.addAll(EXTRA_APPLICATION_PACKAGES);
+    return patterns.toArray(new String[0]);
+  }
+
+  protected String[] allAdapterPatterns() {
+    List<String> patterns = new ArrayList<>(Arrays.asList(getBoundedContextAdapterPatterns()));
+    patterns.addAll(EXTRA_ADAPTER_PACKAGES);
+    return patterns.toArray(new String[0]);
+  }
+
+  /**
+   * Incoming adapter patterns for all contexts PLUS the shared kernel's incoming adapter
+   * package (if it exists). Cross-cutting Response classes (ErrorResponse, base Response,
+   * generic SimpleResponse, etc.) typically live in the shared kernel adapter — without
+   * including it, rules that check for {@code *Response} placement will miss them.
+   *
+   * <p>The shared kernel package is discovered dynamically via the {@code @SharedKernel}
+   * annotation on its package-info.java — works regardless of whether the package is
+   * named {@code shared}, {@code common}, {@code core}, or {@code sharedkernel}.
+   */
+  protected String[] allIncomingAdapterPatterns() {
+    List<String> patterns = new ArrayList<>(
+        discoverBoundedContextPackages().keySet().stream()
+            .map(p -> p + "." + ADAPTER_SUBPKG + "." + INCOMING_SUBFOLDER + "..")
+            .toList());
+    String sharedKernelPkg = discoverSharedKernelPackage();
+    if (sharedKernelPkg != null) {
+      patterns.add(sharedKernelPkg + "." + ADAPTER_SUBPKG + "." + INCOMING_SUBFOLDER + "..");
+    }
+    return patterns.toArray(new String[0]);
+  }
+
+  /** Outgoing adapter patterns for all contexts plus the shared kernel's outgoing adapter package. */
+  protected String[] allOutgoingAdapterPatterns() {
+    List<String> patterns = new ArrayList<>(
+        discoverBoundedContextPackages().keySet().stream()
+            .map(p -> p + "." + ADAPTER_SUBPKG + "." + OUTGOING_SUBFOLDER + "..")
+            .toList());
+    String sharedKernelPkg = discoverSharedKernelPackage();
+    if (sharedKernelPkg != null) {
+      patterns.add(sharedKernelPkg + "." + ADAPTER_SUBPKG + "." + OUTGOING_SUBFOLDER + "..");
+    }
+    return patterns.toArray(new String[0]);
+  }
+}

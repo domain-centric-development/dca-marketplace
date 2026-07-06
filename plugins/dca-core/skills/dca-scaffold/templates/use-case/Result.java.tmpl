@@ -1,0 +1,11 @@
+package {{basePackage}}.{{context}}.application.{{usecasename}};
+
+/**
+ * Result of the {{Name}} use case.
+ *
+ * <p>Application-layer output model — adapter layer maps this to a {@code *Response}
+ * (e.g. JSON DTO) before exposing it externally.
+ */
+public record {{Name}}Result(
+{{resultFields}}
+) {}

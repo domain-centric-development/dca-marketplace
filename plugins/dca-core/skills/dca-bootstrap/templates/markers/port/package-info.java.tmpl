@@ -1,0 +1,25 @@
+/**
+ * Hexagonal Architecture Port Interfaces.
+ *
+ * <p>This package contains the port interfaces for Hexagonal (Ports and Adapters) Architecture:
+ *
+ * <ul>
+ *   <li>{@code in/} - Input ports (driving/primary) - entry points to the application
+ *   <li>{@code out/} - Output ports (driven/secondary) - dependencies the application needs
+ * </ul>
+ *
+ * <p><b>Architecture:</b>
+ *
+ * <pre>
+ *   [Driving Adapters] → [Input Ports] → [Application] → [Output Ports] → [Driven Adapters]
+ *   (REST, Web, CLI)      (UseCase)        (Domain)      (Repository)     (DB, APIs, MQ)
+ * </pre>
+ *
+ * <p><b>References:</b>
+ *
+ * <ul>
+ *   <li>Alistair Cockburn - Hexagonal Architecture (Ports & Adapters)
+ *   <li>Robert C. Martin - Clean Architecture
+ * </ul>
+ */
+package {{sharedKernelPackage}}.port;

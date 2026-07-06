@@ -1,0 +1,51 @@
+package {{sharedKernelPackage}}.strategic;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * Marks a class as an Open Host Service in Domain-Driven Design.
+ *
+ * <p>An Open Host Service is a public API that a bounded context exposes for other bounded contexts
+ * to consume. It acts as an incoming adapter that translates domain objects to DTOs, similar to how
+ * REST controllers translate domain objects to JSON.
+ *
+ * <p><b>Architectural rules:</b>
+ *
+ * <ul>
+ *   <li>Open Host Services must be placed in {@code adapter/incoming/openhost/}
+ *   <li>They must return DTOs, never domain objects
+ *   <li>Outgoing adapters from other contexts may ONLY import from Open Host Services
+ *   <li>Application layer use cases must NEVER import from Open Host Services directly
+ * </ul>
+ *
+ * <p><b>Usage:</b>
+ *
+ * <pre>{@code
+ * @OpenHostService(
+ *     context = "Product Catalog",
+ *     description = "Provides product information for other contexts"
+ * )
+ * @Service
+ * public class ProductCatalogService {
+ *     // Returns DTOs, not domain objects
+ *     public Optional<ProductInfo> getProductInfo(ProductId id) { ... }
+ * }
+ * }</pre>
+ *
+ * @see BoundedContext
+ */
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface OpenHostService {
+
+  /** The bounded context this Open Host Service belongs to. */
+  String context();
+
+  /** Description of what this Open Host Service provides. */
+  String description() default "";
+}

@@ -1,0 +1,54 @@
+package {{sharedKernelPackage}}.strategic;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * Marks a package as a Bounded Context in Domain-Driven Design.
+ *
+ * <p>A Bounded Context is an explicit boundary within which a domain model exists. Each Bounded
+ * Context has its own Ubiquitous Language and should be isolated from other contexts.
+ *
+ * <p><b>Usage:</b> Place this annotation on a {@code package-info.java} file at the root of a
+ * bounded context package.
+ *
+ * <pre>{@code
+ * @BoundedContext(name = "Product Catalog", description = "Product management and catalog")
+ * package {{basePackage}}.product;
+ *
+ * import {{sharedKernelPackage}}.strategic.BoundedContext;
+ * }</pre>
+ *
+ * <p><b>Architectural Rules:</b>
+ *
+ * <ul>
+ *   <li>Bounded contexts must not directly depend on each other (except via Shared Kernel or
+ *       events)
+ *   <li>Each bounded context has its own domain, application, and adapter layers
+ *   <li>Cross-context communication should use domain events or Anti-Corruption Layers
+ * </ul>
+ *
+ * @see SharedKernel
+ */
+@Target(ElementType.PACKAGE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface BoundedContext {
+
+  /**
+   * The name of the bounded context.
+   *
+   * @return the bounded context name (e.g., "Product Catalog", "Shopping Cart")
+   */
+  String name();
+
+  /**
+   * An optional description of the bounded context's responsibility.
+   *
+   * @return the description (default: empty)
+   */
+  String description() default "";
+}

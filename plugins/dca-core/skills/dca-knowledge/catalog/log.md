@@ -1,0 +1,22 @@
+# Changelog
+
+## v0.1
+
+Generated bundle: the DCA book and implementation guide (full text, as Chapter/Guide containers + Section nodes), anchored to the reference implementation's marker interfaces, ArchUnit rules and ADRs.
+
+### Generated zone (rebuilt from sources)
+- Chapters (book): 31
+- Guides: 13
+- Sections: 507
+- Markers: 24
+- Rules: 88
+- ADRs: 27
+- Process: 1
+
+### Extensible zone (authored, preserved across regeneration)
+- Recipe: 11
+- Decision: 15
+- Pitfall: 10
+- Template: 10
+- Note: 2
+- Total authored: 48

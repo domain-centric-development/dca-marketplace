@@ -1,0 +1,56 @@
+package {{sharedKernelPackage}}.strategic;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * Marks a package as the Shared Kernel in Domain-Driven Design.
+ *
+ * <p>A Shared Kernel is a small, carefully curated subset of the domain model that is shared
+ * between bounded contexts. Changes to the Shared Kernel require coordination between all teams
+ * that use it.
+ *
+ * <p><b>Usage:</b> Place this annotation on a {@code package-info.java} file at the root of the
+ * shared kernel package.
+ *
+ * <pre>{@code
+ * @SharedKernel(description = "Common value objects and DDD markers")
+ * package {{basePackage}}.sharedkernel;
+ *
+ * import {{sharedKernelPackage}}.strategic.SharedKernel;
+ * }</pre>
+ *
+ * <p><b>What belongs in the Shared Kernel:</b>
+ *
+ * <ul>
+ *   <li>Universal value objects (Money, Currency)
+ *   <li>Cross-context identifiers (ProductId, UserId)
+ *   <li>DDD marker interfaces (Entity, AggregateRoot, Value)
+ *   <li>Common domain primitives
+ * </ul>
+ *
+ * <p><b>What does NOT belong in the Shared Kernel:</b>
+ *
+ * <ul>
+ *   <li>Aggregates (each belongs to one context)
+ *   <li>Context-specific business logic
+ *   <li>Infrastructure concerns
+ * </ul>
+ *
+ * @see BoundedContext
+ */
+@Target(ElementType.PACKAGE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface SharedKernel {
+
+  /**
+   * An optional description of the shared kernel's contents.
+   *
+   * @return the description (default: empty)
+   */
+  String description() default "";
+}

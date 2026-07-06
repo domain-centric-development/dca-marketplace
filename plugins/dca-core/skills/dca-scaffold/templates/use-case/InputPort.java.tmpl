@@ -1,0 +1,16 @@
+package {{basePackage}}.{{context}}.application.{{usecasename}};
+
+import {{useCaseMarkerFqn}};
+
+/**
+ * Input port for the {{Name}} use case.
+ *
+ * <p>{{useCaseDescription}}
+ *
+ * <p>Hexagonal Architecture: this is a driving/primary port for {{commandOrQueryNoun}} operations.
+ */
+public interface {{Name}}InputPort extends UseCase<{{Name}}{{CommandOrQuery}}, {{Name}}Result> {
+
+    @Override
+    {{Name}}Result execute({{Name}}{{CommandOrQuery}} input);
+}

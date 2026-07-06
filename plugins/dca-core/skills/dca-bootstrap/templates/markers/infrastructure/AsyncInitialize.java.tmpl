@@ -1,0 +1,67 @@
+package {{sharedKernelPackage}}.infrastructure;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * Marks a component for asynchronous initialization.
+ *
+ * <p>Components annotated with {@code @AsyncInitialize} can define an {@code asyncInitialize()}
+ * method that will be called asynchronously after bean construction, allowing for non-blocking
+ * initialization of caches, metrics, or other background setup tasks.
+ *
+ * <p><b>Usage Example:</b>
+ *
+ * <pre>{@code
+ * @Repository
+ * @AsyncInitialize(priority = 50, description = "Warm up product cache")
+ * public class InMemoryProductRepository implements ProductRepository {
+ *
+ *     @Async
+ *     public void asyncInitialize() {
+ *         // Non-blocking initialization logic
+ *         warmUpCache();
+ *         preloadFrequentData();
+ *     }
+ * }
+ * }</pre>
+ *
+ * <p><b>Architecture Pattern:</b>
+ *
+ * <ul>
+ *   <li>Annotation definition: {@code sharedkernel.marker.infrastructure} (pure Java)
+ *   <li>Annotation processing: {@code infrastructure.support.AsyncInitializationProcessor}
+ *       (Spring-specific)
+ *   <li>Async configuration: {@code infrastructure.config.AsyncConfiguration} (Spring-specific)
+ * </ul>
+ *
+ * @see {{basePackage}}.{{infrastructureSubpackage}}.support.AsyncInitializationProcessor
+ * @see {{basePackage}}.{{infrastructureSubpackage}}.config.AsyncConfiguration
+ */
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface AsyncInitialize {
+
+  /**
+   * Priority for initialization order. Lower values indicate higher priority (initialized first).
+   *
+   * <p>Default is 100 (standard priority). Use lower values (e.g., 10, 50) for critical
+   * initializations that should run first, or higher values (e.g., 200) for less critical tasks.
+   *
+   * @return initialization priority, default is 100
+   */
+  int priority() default 100;
+
+  /**
+   * Human-readable description of what this component initializes.
+   *
+   * <p>Useful for logging, monitoring, and documentation purposes.
+   *
+   * @return description of the initialization purpose
+   */
+  String description() default "";
+}

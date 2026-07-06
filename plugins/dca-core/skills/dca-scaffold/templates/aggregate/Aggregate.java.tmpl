@@ -1,0 +1,55 @@
+package {{basePackage}}.{{context}}.domain.model;
+
+import {{aggregateRootMarkerFqn}};
+import {{basePackage}}.{{context}}.domain.event.{{Name}}Created;
+{{additionalImports}}
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * {{Name}} aggregate root.
+ *
+ * <p>{{aggregateDescription}}
+ *
+ * <p>This class is the consistency boundary for {{Name}}-related state. All mutations to
+ * the aggregate go through methods on this class — never via setters or direct field access
+ * from outside.
+ */
+public final class {{Name}} {{aggregateRootExtendsClause}} {
+
+    private final {{Name}}Id id;
+{{aggregateFields}}
+    private final List<Object> domainEvents = new ArrayList<>();
+
+    private {{Name}}({{Name}}Id id{{constructorExtraParameters}}) {
+        this.id = id;
+{{constructorBody}}
+    }
+
+    /** Factory method — emits a {{Name}}Created domain event. */
+    public static {{Name}} create({{factoryParameters}}) {
+        // TODO: validate invariants here.
+        var aggregate = new {{Name}}({{factoryArguments}});
+        aggregate.domainEvents.add(new {{Name}}Created(aggregate.id, Instant.now()));
+        return aggregate;
+    }
+
+    public {{Name}}Id id() {
+        return id;
+    }
+
+{{aggregateAccessors}}
+
+    public List<Object> domainEvents() {
+        return Collections.unmodifiableList(domainEvents);
+    }
+
+    public void clearDomainEvents() {
+        domainEvents.clear();
+    }
+
+    // TODO: add business methods that enforce invariants and emit domain events.
+}

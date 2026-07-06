@@ -1,0 +1,41 @@
+package {{sharedKernelPackage}}.tactical;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * The mandatory contract identity every {@link IntegrationEvent} carries: a stable logical type
+ * name plus schema version, decoupled from the Java class name.
+ *
+ * <p>Decoupling name and version from the class means a breaking schema change ships as a new V2
+ * class that keeps the old logical {@code name} in its annotation. A serializer keys {@code (name,
+ * version)} to the class and stamps both onto the wire envelope, so a remote consumer (outbox relay
+ * or message broker) picks its translator from the message alone.
+ *
+ * <p>This annotation is the <b>single source of truth for an event's version</b> — integration
+ * events carry no {@code version} data field on the instance.
+ *
+ * <p><b>Example:</b>
+ *
+ * <pre>
+ * &#64;IntegrationEventType(name = "cart-checked-out", version = 1)
+ * public record CartCheckedOutEvent(UUID eventId, Instant occurredOn, ...)
+ *     implements IntegrationEvent {}
+ * </pre>
+ *
+ * @see IntegrationEvent
+ */
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.TYPE)
+public @interface IntegrationEventType {
+
+  /** Stable logical type name of the event, independent of the Java class name. */
+  String name();
+
+  /** Schema version of the event contract; bump on breaking changes. */
+  int version() default 1;
+}
