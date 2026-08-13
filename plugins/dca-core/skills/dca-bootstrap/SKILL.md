@@ -36,6 +36,16 @@ Use `Glob`, `Read`, `Grep`, and `Bash` (for `find`) to determine:
    - Spring Boot version? Spring Modulith already present?
    - Existing test plugins (Spock? JUnit5?)
 
+   **Greenfield (no build file yet):** don't propose a Java/Spring Boot version from training-data
+   memory — it goes stale (a newer major line ships every year; e.g. Spring Boot 4 exists as of
+   2026 and training data may still anchor on 3.x). Look up the current stable line first —
+   `context7` (`resolve-library-id` + `query-docs` for "Spring Boot") or `WebSearch`/`WebFetch`
+   against spring.io — then offer that as the recommended default in the version question (decision
+   in Phase 2), with the previous stable line as the fallback option. Same for Spring Modulith and
+   ArchUnit versions if Spring Modulith / a specific ArchUnit baseline is in play. Re-verify at
+   bootstrap time even if you "know" the current version from a recent session — don't cache it
+   across projects.
+
 2. **Source layout:**
    - Source root (usually `src/main/java`, but could be `app/src/...` in Android-style multi-module)
    - Top-level base package (read a few `package` declarations under `src/main/java`)
@@ -299,3 +309,4 @@ The Java template already has a `DoNotIncludeArchitectureTests` ImportOption —
 - **Don't** skip `package-info.java` generation. Without `@BoundedContext` annotations on package-info files, `discoverBoundedContextPackages()` returns an empty map and all context-scoped rules silently pass (no classes checked = no findings).
 - **Don't** hardcode bounded context package names in templates. Use `discoverBoundedContextPackages()` for dynamic discovery. Hardcoded names break when applied to any project that doesn't share those exact context names.
 - **Don't** use `Package.getPackage()` or `Class.forName()` for loading `package-info` classes. Use `Thread.currentThread().getContextClassLoader().loadClass()` — this works reliably in multi-module Gradle builds where the classloader hierarchy differs from single-module projects.
+- **Don't freehand-scaffold example bounded contexts, aggregates, use cases, or ports as part of bootstrap.** `dca-bootstrap`'s job ends at markers + ArchUnit governance + `package-info.java` skeletons. If the user's request implies "also build me a first context" (e.g. "build a new app with context for X"), hand that generation off to `/dca-scaffold` — it owns the canonical placement rules (e.g. output ports go in `application/shared/`, never in `domain/model/`, see `dca-scaffold/reference/use-case-pattern.md` §6) and knows the shared-vs-local port decision guide. Writing example domain code inline here, without consulting `dca-scaffold` or `/dca-knowledge`, is how structural mistakes silently ship even when the freshly-installed ArchUnit suite passes — the generic modules don't cover every placement mistake (see rule catalog #9 for one gap that was closed after exactly this happened). If in doubt about a placement decision instead of guessing, ask the user or consult `/dca-knowledge`.

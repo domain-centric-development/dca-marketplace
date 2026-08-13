@@ -70,7 +70,7 @@ deviations as findings.
 | `InputPort` | generic input port marker |
 | `UseCase<I, O>` | use-case input port marker |
 | `DomainEvent` | domain event marker |
-| `IntegrationEvent` | cross-context event marker (extends DomainEvent + version field) |
+| `IntegrationEvent` | cross-context event marker — separate hierarchy, does *not* extend `DomainEvent`; version via `@IntegrationEventType` |
 | `DomainService` | domain service marker |
 | `Factory` | factory marker |
 | `Specification` | specification marker |
