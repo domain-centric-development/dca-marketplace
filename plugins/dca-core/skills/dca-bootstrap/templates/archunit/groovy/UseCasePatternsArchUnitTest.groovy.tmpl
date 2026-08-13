@@ -3,7 +3,13 @@ package {{basePackage}}
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
+import com.tngtech.archunit.core.domain.JavaClass
 import com.tngtech.archunit.core.domain.JavaModifier
+import com.tngtech.archunit.lang.ArchCondition
+import com.tngtech.archunit.lang.ConditionEvents
+import com.tngtech.archunit.lang.SimpleConditionEvent
+import {{basePackage}}.sharedkernel.marker.port.out.DomainEventPublisher
+import {{basePackage}}.sharedkernel.marker.port.out.Repository
 
 /**
  * ArchUnit tests for Use Case and Mapping Patterns.
@@ -134,6 +140,42 @@ class UseCasePatternsArchUnitTest extends BaseArchUnitTest {
       .and().resideInAnyPackage(BASE_PACKAGE + "..")
       .should().resideInAnyPackage(allIncomingAdapterPatterns())
       .because("HTTP response models should be in adapter incoming layer (ADR-020: Adapter layer uses *Response)")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  // ============================================================================
+  // DOMAIN EVENT PUBLICATION (Use Case obligation)
+  // ============================================================================
+
+  def "Use cases that save an aggregate must publish its domain events"() {
+    given:
+    ArchCondition<JavaClass> publishAfterSaving =
+      new ArchCondition<JavaClass>("publish the aggregate's domain events after saving it") {
+        @Override
+        void check(JavaClass item, ConditionEvents events) {
+          boolean savesAnAggregate = item.methodCallsFromSelf.any {
+            it.target.name == "save" && it.targetOwner.isAssignableTo(Repository)
+          }
+          if (!savesAnAggregate) {
+            return
+          }
+          boolean publishes = item.methodCallsFromSelf.any {
+            it.target.name == "publishAndClearEvents" && it.targetOwner.isAssignableTo(DomainEventPublisher)
+          }
+          events.add(publishes
+            ? SimpleConditionEvent.satisfied(item, "${item.simpleName} publishes after saving")
+            : SimpleConditionEvent.violated(item, "${item.simpleName} saves an aggregate without publishing its domain events"))
+        }
+      }
+
+    expect:
+    classes()
+      .that().resideInAnyPackage(allApplicationPatterns())
+      .and().haveSimpleNameEndingWith("UseCase")
+      .and().areNotInterfaces()
+      .should(publishAfterSaving)
+      .because("A saved aggregate must not keep its events: unpublished, they are lost, and stored on the instance they may later be published out of context. Publishing belongs after the save, in the use case that owns the unit of work - even when the action raised no event")
       .allowEmptyShould(true)
       .check(allClasses)
   }

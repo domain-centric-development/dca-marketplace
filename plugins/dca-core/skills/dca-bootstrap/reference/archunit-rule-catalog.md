@@ -31,6 +31,7 @@ module-selection options in the bootstrap workflow.
 | 6 | Incoming adapters must only access their own bounded context | A `product.web` controller calling `cart` use cases directly | Cross-context calls go via Open Host Service or events. |
 | 7 | Repository implementations must reside in `adapter.outgoing` | `*Repository` classes outside that package | Naming and location must match. |
 | 8 | Output ports in `application.shared` must extend `OutputPort` | A `*Repository` interface that doesn't extend the marker | Architectural traceability — every output dependency is explicit. |
+| 9 | Output ports must not reside in `domain.*` | A `Repository`/`Store`/`OutputPort`-assignable interface declared in `domain.model` next to the aggregate instead of `application/shared/` | Rule 8 only scopes `application.shared` and passes silently when the port isn't there at all — this rule closes that gap so a misplaced port fails loudly instead of being missed. |
 
 ---
 
@@ -154,6 +155,7 @@ Bounded-context rules.
 | 8 | `*Response` lives in adapter.incoming | ADR-020 — adapters return *Response (e.g. JSON-shaped) |
 | 9 | DTOs not used in domain layer | Pure model |
 | 10 | DTOs not used in application layer | (same) — DTOs are an adapter concern |
+| 11 | A use case that saves an aggregate publishes its domain events | Unpublished events are lost, and events stored on the instance may later be published out of context |
 
 ---
 
