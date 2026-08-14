@@ -2,24 +2,24 @@
 name: dca-knowledge
 description: |
   Answers Domain-Centric Architecture questions grounded in the generated OKF
-  knowledge catalog (`dca-knowledge-catalog/bundle/`) — the full book + guide text
-  anchored to marker contracts, ArchUnit rules, and ADRs as one cross-linked graph.
-  Loads `index.md`, traverses typed links (governed-by / applies-to / enforced-by /
-  referenced-by), and cites the source `resource:` for every claim. Use when the user
-  asks "what does DCA say about X", "which rule governs this marker", "why this
-  decision (ADR)", "explain <DCA concept>", "/dca-knowledge", or wants an answer
+  knowledge catalog (`dca-knowledge-catalog/bundle/`) — the full implementation-guide
+  text anchored to marker contracts and ArchUnit rules as one cross-linked graph.
+  Loads `index.md`, traverses typed links (governed-by / applies-to / discussed-in),
+  and cites the source `resource:` for every claim. Use when the user
+  asks "what does DCA say about X", "which rule governs this marker",
+  "explain <DCA concept>", "/dca-knowledge", or wants an answer
   grounded in the canonical catalog rather than the model's own recollection.
 disable-model-invocation: false
 ---
 
 # /dca-knowledge — Grounded Q&A over the OKF catalog
 
-The OKF bundle is the **canonical, machine-readable DCA knowledge base**: ~690 atomic
+The OKF bundle is the **canonical, machine-readable DCA knowledge base**: ~300 atomic
 markdown nodes, each with typed frontmatter and bundle-relative cross-links forming a
 graph. Two zones:
 
-- **Generated** (book chapters/sections, implementation-guide sections, 22 marker
-  contracts, 87 ArchUnit rules, 26 ADRs, 1 process) — derived from the sources.
+- **Generated** (implementation-guide docs and sections, 24 marker contracts,
+  90 ArchUnit rules, 1 process) — derived from the sources.
 - **Extensible** (`recipe/`, `decision/`, `pitfall/`, `template/`, `note/`) — authored
   by a human or an LLM, preserved across regeneration. May be empty until populated.
 
@@ -47,11 +47,12 @@ Resolve the catalog path in this order; stop at the first that exists:
 Prefer the in-repo bundle (#2) over the vendored copy (#3) when both exist — the in-repo
 one is freshly regenerable; the vendored one is a snapshot from the plugin's release.
 
-> **Vendored copy is book-redacted:** in the plugin's catalog, `book/` nodes carry only
-> frontmatter, a one-line description and their graph links — the verbatim chapter text is
-> not shipped (the book is not public). All other node types are complete. When a deep
-> book quote is needed and only the vendored copy is available, say so and answer from the
-> `guide/` sections (full text) plus the node's metadata instead of guessing the book text.
+> **No book, no ADRs.** The catalog is built from the implementation guide plus the
+> reference implementation's marker interfaces and ArchUnit rules. The DCA book is not a
+> source (it is not public), and neither are the sample's ADRs: an ADR records a decision
+> *one* project made, so citing "ADR-030" would point at a file the user does not have.
+> Answer from the `guide/` sections and the skeleton — and if the question is really about
+> a decision the catalog does not carry, say so rather than reconstructing it.
 
 If none found, tell the user the catalog isn't present and how to get it:
 
@@ -68,19 +69,18 @@ without reading everything.
 
 | Node `type` | Lives in | Carries | Key outgoing edges |
 |---|---|---|---|
-| `Chapter` / `Guide` | `book/`, `guide/` | preamble + `## Sections` index | → child Sections |
-| `Section` | `book/<ch>/`, `guide/<g>/` | **full verbatim text** | `## Related markers`, embedded `/adr/...` links |
-| `Marker` | `marker/<cat>/` | interface signature, `extends`, methods | `## Extends`, `## Governed by` (rules), `## Referenced by ADRs` |
+| `Guide` | `guide/` | preamble + `## Sections` index | → child Sections |
+| `Section` | `guide/<g>/` | **full verbatim text** | `## Related markers` |
+| `Marker` | `marker/<cat>/` | interface signature, `extends`, methods | `## Extends`, `## Governed by` (rules), `## Discussed in` (sections) |
 | `Rule` | `rule/<cat>/` | ArchUnit/Spock body, `enforced_by`, `status` | `## Applies to markers` |
-| `ADR` | `adr/` | decision `pattern`, `status` | `## Applies to markers`, `## Enforced by` (rules), `## Decision process` |
 | `Process` | `process/` | how-to (e.g. writing an ADR) | → any |
 | `Recipe`/`Decision`/`Pitfall`/`Template`/`Note` | `recipe/` … `note/` (**extensible zone**) | authored playbooks, design-fork guides, anti-patterns, code skeletons, saved query answers | links into the skeleton |
 
 **Link format:** bundle-relative, leading `/`, `.md` suffix — e.g. `/marker/port-in/usecase.md`.
 Resolve against the bundle root, not the current file.
 
-**Frontmatter as filter:** `type`, `tags`, `category`, `status` (rules/ADRs:
-`enforced`/`accepted`/etc.), `source` (book vs guide). Use these to narrow before reading bodies.
+**Frontmatter as filter:** `type`, `tags`, `category`, `status` (rules:
+`enforced`/`informational`/`disabled`). Use these to narrow before reading bodies.
 
 **Reserved files** (`index.md`, `log.md`) are navigation, not knowledge — read them to
 route, don't cite them as answers.
@@ -91,15 +91,16 @@ Don't grep-and-dump. Walk the graph like a researcher:
 
 1. **Enter** — read `bundle/index.md` (node-type counts + links to category indices).
 2. **Route** — pick the category whose `type` fits the question:
-   - "what/why/how concept" → `book/` or `guide/` section
+   - "what/why/how concept" → `guide/` section
    - "what's the contract / interface" → `marker/`
    - "what's enforced / is this allowed" → `rule/`
-   - "why this decision / what's the rationale" → `adr/`
+   - "why this rule exists" → the `rule/` node's `rule:` rationale, then the guide
+     section that discusses the marker it applies to
 3. **Locate** — read the category `index.md`, pick candidate node(s) by title/slug.
 4. **Read** — read the node body + frontmatter.
 5. **Expand** — follow typed edges that the question needs:
    - marker → `Governed by` to get its enforced rules
-   - marker/ADR → cross-links for rationale + enforcement together
+   - marker → `Discussed in` for the guide sections that explain it
    - section → `Related markers` to jump from prose to contract
 6. **Cite** — answer with the node path(s) and each node's `resource:` source.
 
@@ -110,10 +111,10 @@ Stop expanding once the question is answered. Prefer 2–4 precise node reads ov
 ### `/dca-knowledge ask <question>`
 Default. Route → locate → read → expand → answer, grounded + cited.
 > "Why must aggregate roots not reference other aggregate roots by type?"
-> → reads the tactical rule + its `Applies to markers` + the linked ADR/section, answers with all three cited.
+> → reads the tactical rule + its `Applies to markers` + the marker's `Discussed in` section, answers with all three cited.
 
 ### `/dca-knowledge explain <concept>`
-Concept walkthrough from the **book/guide** body (the teaching text), then anchor to the
+Concept walkthrough from the **guide** body (the teaching text), then anchor to the
 concrete `marker`/`rule` nodes that realize it.
 > "explain the use case pattern" → relevant section(s) + `/marker/port-in/usecase.md` + its governing rules.
 
@@ -122,12 +123,14 @@ List the `Rule` nodes governing a marker (follow `Governed by`), with each rule'
 `status` and `enforced_by` test, plus the source `resource:`.
 > "rules-for Repository" → all rules whose `Applies to markers` includes `/marker/port-out/repository.md`.
 
-### `/dca-knowledge why <ADR-id | decision>`
-Pull the `ADR` node: its `pattern` (the decision), the markers it `Applies to`, and the
-rules that `Enforced by` it. Surfaces decision + consequence + enforcement as one answer.
+### `/dca-knowledge why <rule | pattern>`
+Pull the `Rule` node's `rule:` (the rationale — the `.because(...)` text), the markers it
+`Applies to`, and those markers' `Discussed in` guide sections. Surfaces constraint +
+rationale + teaching text as one answer. The catalog carries no ADR nodes, so a question
+about a *specific* recorded decision has no grounded answer here — say so.
 
 ### `/dca-knowledge trace <node>`
-Graph dump for one node: all inbound/outbound typed edges (marker ↔ rule ↔ ADR ↔ section).
+Graph dump for one node: all inbound/outbound typed edges (marker ↔ rule ↔ section).
 Use to understand how one concept is wired through the catalog before a deeper question.
 
 ### `/dca-knowledge find <text>`
@@ -154,12 +157,12 @@ and offer to `save` a new `recipe/` so the next build is covered.
 **extensible-zone** node so the wiki grows instead of re-deriving. Pick the type:
 - `note` — a synthesis worth keeping ("domain vs integration events in an outbox")
 - `decision` — a design-fork guide ("sync vs async event delivery")
-- `pitfall` — an anti-pattern + the rule/ADR that forbids it
+- `pitfall` — an anti-pattern + the rule that forbids it
 - `recipe` — an ordered task playbook · `template` — a domain-free code skeleton
 
 Write `bundle/<type>/<slug>.md` (or the resolved catalog's extensible zone) with
 frontmatter `type:` + `title:` + `tags:`, a body that **synthesizes** (don't paste the
-chat), and bundle-relative links into the generated skeleton (markers/rules/ADRs/sections)
+chat), and bundle-relative links into the generated skeleton (markers/rules/sections)
 **and** to sibling extensible nodes. Then regenerate so it's catalogued:
 `cd dca-knowledge-catalog && PYTHONPATH=src python3 -m dca_catalog.generate`. The node
 survives future regenerations (extensible zone is preserved).
@@ -212,15 +215,15 @@ to confirm the new node is wired into the graph (no `unanchored-authored`/`orpha
 
 | Skill | How it pairs |
 |---|---|
-| `/dca-discipline`, `/dca-review` | They *apply* the rules while editing/reviewing; this skill *explains and cites* the rule + its rationale (ADR) on demand. |
+| `/dca-discipline`, `/dca-review` | They *apply* the rules while editing/reviewing; this skill *explains and cites* the rule + its rationale on demand. |
 | `/dca-bootstrap` | Bootstrap installs the markers/ArchUnit suite; this skill answers "what does each installed rule mean and why". |
 | `/dca-scaffold` | Scaffold generates structure; ask this skill which marker/pattern a new use case should follow, with citation. |
-| `/adr` | New decisions are recorded as ADRs in the sample; after regenerating the catalog they become queryable `why` answers here. |
+| `/adr` | Records a new decision in the consuming project. The catalog does not ingest ADRs — it carries `process/creating-an-adr.md`, the how-to. |
 | `/context-map`, `/ubiquitous-language` | Strategic/naming views of the live code; this skill is the canonical-knowledge view of the documented patterns. |
 
 ## What this skill does NOT do
 
-- **Doesn't edit the generated zone.** `book/ guide/ marker/ rule/ adr/ process/` are
+- **Doesn't edit the generated zone.** `guide/ marker/ rule/ process/` are
   derived from the sources (see the generator in `dca-knowledge-catalog/`) — the only
   writes this skill performs are `save` operations into the authored **extensible zone**
   (`recipe/ decision/ pitfall/ template/ note/`).
