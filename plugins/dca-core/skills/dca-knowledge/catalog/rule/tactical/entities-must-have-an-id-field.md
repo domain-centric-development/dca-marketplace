@@ -6,7 +6,6 @@ constraint: Entities must have an ID field.
 enforced_by: "DddTacticalPatternsArchUnitTest#Entities must have an ID field"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

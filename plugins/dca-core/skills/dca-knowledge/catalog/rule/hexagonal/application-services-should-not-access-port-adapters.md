@@ -6,7 +6,6 @@ constraint: Application Services should not access port adapters.
 enforced_by: "HexagonalArchitectureArchUnitTest#Application Services should not access port adapters"
 status: enforced
 test_class: HexagonalArchitectureArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/HexagonalArchitectureArchUnitTest.groovy
 tags: [hexagonal, archunit]
 ---
 

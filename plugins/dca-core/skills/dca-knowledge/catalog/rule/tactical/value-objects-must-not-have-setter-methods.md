@@ -6,7 +6,6 @@ constraint: Value Objects must not have setter methods.
 enforced_by: "DddTacticalPatternsArchUnitTest#Value Objects must not have setter methods"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

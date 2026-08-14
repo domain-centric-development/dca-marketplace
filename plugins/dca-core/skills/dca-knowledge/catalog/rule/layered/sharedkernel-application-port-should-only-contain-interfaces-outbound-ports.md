@@ -6,7 +6,6 @@ constraint: "sharedkernel.application.port should only contain interfaces (Outbo
 enforced_by: "LayeredArchitectureArchUnitTest#sharedkernel.application.port should only contain interfaces (Outbound Ports)"
 status: enforced
 test_class: LayeredArchitectureArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/LayeredArchitectureArchUnitTest.groovy
 tags: [layered, archunit]
 ---
 

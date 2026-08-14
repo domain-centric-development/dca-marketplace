@@ -6,7 +6,6 @@ constraint: Outgoing adapters may access Open Host Services from other contexts.
 enforced_by: "HexagonalArchitectureArchUnitTest#Outgoing adapters may access Open Host Services from other contexts"
 status: enforced
 test_class: HexagonalArchitectureArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/HexagonalArchitectureArchUnitTest.groovy
 tags: [hexagonal, archunit]
 ---
 

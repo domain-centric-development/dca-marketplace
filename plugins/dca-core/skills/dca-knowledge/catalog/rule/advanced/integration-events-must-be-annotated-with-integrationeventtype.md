@@ -6,7 +6,6 @@ constraint: Integration Events must be annotated with IntegrationEventType.
 enforced_by: "DddAdvancedPatternsArchUnitTest#Integration Events must be annotated with IntegrationEventType"
 status: enforced
 test_class: DddAdvancedPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddAdvancedPatternsArchUnitTest.groovy
 tags: [advanced, archunit]
 ---
 

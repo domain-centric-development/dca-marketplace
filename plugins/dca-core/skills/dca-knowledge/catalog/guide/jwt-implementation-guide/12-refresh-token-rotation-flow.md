@@ -3,7 +3,6 @@ type: Section
 title: 12. Refresh Token Rotation Flow
 chapter: JWT Implementation Guide
 source: guide
-resource: implementing-domain-centric-architecture/jwt-implementation-guide.md
 tags: [guide, section]
 ---
 

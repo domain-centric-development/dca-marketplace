@@ -6,7 +6,6 @@ constraint: "Use case classes must be annotated with @Service."
 enforced_by: "NamingConventionsArchUnitTest#Use case classes must be annotated with @Service"
 status: enforced
 test_class: NamingConventionsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/NamingConventionsArchUnitTest.groovy
 tags: [naming, archunit]
 ---
 

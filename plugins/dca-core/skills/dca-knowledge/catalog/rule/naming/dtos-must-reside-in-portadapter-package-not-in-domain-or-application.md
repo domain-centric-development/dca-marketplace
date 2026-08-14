@@ -6,7 +6,6 @@ constraint: "DTOs must reside in portadapter package (not in domain or applicati
 enforced_by: "NamingConventionsArchUnitTest#DTOs must reside in portadapter package (not in domain or application)"
 status: enforced
 test_class: NamingConventionsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/NamingConventionsArchUnitTest.groovy
 tags: [naming, archunit]
 ---
 

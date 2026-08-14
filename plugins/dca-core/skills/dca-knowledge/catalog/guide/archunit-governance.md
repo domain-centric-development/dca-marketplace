@@ -2,7 +2,6 @@
 type: Guide
 title: ArchUnit Governance for Domain-Centric Architecture
 source: guide
-resource: implementing-domain-centric-architecture/archunit-governance.md
 tags: [guide, guide]
 ---
 

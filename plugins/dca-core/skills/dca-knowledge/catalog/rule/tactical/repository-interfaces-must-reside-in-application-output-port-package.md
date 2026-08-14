@@ -6,7 +6,6 @@ constraint: Repository Interfaces must reside in application output port package
 enforced_by: "DddTacticalPatternsArchUnitTest#Repository Interfaces must reside in application output port package"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

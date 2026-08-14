@@ -6,7 +6,6 @@ constraint: Repositories must only exist for Aggregate Roots.
 enforced_by: "DddTacticalPatternsArchUnitTest#Repositories must only exist for Aggregate Roots"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

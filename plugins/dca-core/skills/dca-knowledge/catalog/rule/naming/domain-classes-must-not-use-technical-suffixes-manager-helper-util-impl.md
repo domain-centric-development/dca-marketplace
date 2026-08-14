@@ -6,7 +6,6 @@ constraint: "Domain classes must not use technical suffixes (Manager, Helper, Ut
 enforced_by: "NamingConventionsArchUnitTest#Domain classes must not use technical suffixes (Manager, Helper, Util, Impl)"
 status: enforced
 test_class: NamingConventionsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/NamingConventionsArchUnitTest.groovy
 tags: [naming, archunit]
 ---
 

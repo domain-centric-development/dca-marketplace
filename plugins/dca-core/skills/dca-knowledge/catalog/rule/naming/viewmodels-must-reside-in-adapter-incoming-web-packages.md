@@ -6,7 +6,6 @@ constraint: ViewModels must reside in adapter.incoming.web packages.
 enforced_by: "NamingConventionsArchUnitTest#ViewModels must reside in adapter.incoming.web packages"
 status: enforced
 test_class: NamingConventionsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/NamingConventionsArchUnitTest.groovy
 tags: [naming, archunit]
 ---
 

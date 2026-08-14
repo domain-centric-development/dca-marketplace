@@ -6,7 +6,6 @@ constraint: "Use Case Result Models should be immutable (final or records)."
 enforced_by: "UseCasePatternsArchUnitTest#Use Case Result Models should be immutable (final or records)"
 status: enforced
 test_class: UseCasePatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/UseCasePatternsArchUnitTest.groovy
 tags: [usecase, archunit]
 ---
 

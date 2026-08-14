@@ -5,7 +5,6 @@ category: strategic
 kind: annotation
 signature: "public @interface BoundedContext"
 methods: ["String name()", "String description()"]
-resource: ai-architecture-sample/src/main/java/de/sample/aiarchitecture/sharedkernel/marker/strategic/BoundedContext.java
 tags: [strategic, marker]
 ---
 

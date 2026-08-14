@@ -3,7 +3,6 @@ type: Section
 title: "References & Further Reading"
 chapter: Domain-Centric Architecture
 source: guide
-resource: implementing-domain-centric-architecture/README.md
 tags: [guide, section]
 ---
 

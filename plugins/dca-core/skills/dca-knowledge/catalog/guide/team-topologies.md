@@ -2,7 +2,6 @@
 type: Guide
 title: Team Topologies Integration
 source: guide
-resource: implementing-domain-centric-architecture/team-topologies.md
 tags: [guide, guide]
 ---
 

@@ -6,7 +6,6 @@ constraint: Domain Events must have a timestamp field.
 enforced_by: "DddAdvancedPatternsArchUnitTest#Domain Events must have a timestamp field"
 status: enforced
 test_class: DddAdvancedPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddAdvancedPatternsArchUnitTest.groovy
 tags: [advanced, archunit]
 ---
 

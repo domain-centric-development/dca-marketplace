@@ -6,7 +6,6 @@ constraint: "Value Object classes should be final (immutability)."
 enforced_by: "DddTacticalPatternsArchUnitTest#Value Object classes should be final (immutability)"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

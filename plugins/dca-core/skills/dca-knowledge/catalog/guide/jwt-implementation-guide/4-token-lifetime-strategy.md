@@ -3,7 +3,6 @@ type: Section
 title: 4. Token Lifetime Strategy
 chapter: JWT Implementation Guide
 source: guide
-resource: implementing-domain-centric-architecture/jwt-implementation-guide.md
 tags: [guide, section]
 ---
 

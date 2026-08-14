@@ -2,7 +2,6 @@
 type: Guide
 title: Deployment Patterns
 source: guide
-resource: implementing-domain-centric-architecture/deployment-patterns.md
 tags: [guide, guide]
 ---
 

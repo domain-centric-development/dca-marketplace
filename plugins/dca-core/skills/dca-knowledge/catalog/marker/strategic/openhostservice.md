@@ -5,7 +5,6 @@ category: strategic
 kind: annotation
 signature: "public @interface OpenHostService"
 methods: ["String context()", "String description()"]
-resource: ai-architecture-sample/src/main/java/de/sample/aiarchitecture/sharedkernel/marker/strategic/OpenHostService.java
 tags: [strategic, marker]
 ---
 

@@ -5,7 +5,6 @@ category: tactical
 kind: interface
 signature: public interface IntegrationEvent
 methods: ["UUID eventId()", "Instant occurredOn()"]
-resource: ai-architecture-sample/src/main/java/de/sample/aiarchitecture/sharedkernel/marker/tactical/IntegrationEvent.java
 tags: [tactical, marker]
 ---
 

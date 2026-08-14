@@ -3,7 +3,6 @@ type: Section
 title: Common Pitfalls and Solutions
 chapter: ArchUnit Governance for Domain-Centric Architecture
 source: guide
-resource: implementing-domain-centric-architecture/archunit-governance.md
 tags: [guide, section]
 ---
 

@@ -3,7 +3,6 @@ type: Section
 title: 17. Related Documents
 chapter: JWT Implementation Guide
 source: guide
-resource: implementing-domain-centric-architecture/jwt-implementation-guide.md
 tags: [guide, section]
 ---
 

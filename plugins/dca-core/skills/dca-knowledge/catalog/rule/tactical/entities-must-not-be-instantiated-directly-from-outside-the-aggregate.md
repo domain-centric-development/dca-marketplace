@@ -6,7 +6,6 @@ constraint: Entities must not be instantiated directly from outside the aggregat
 enforced_by: "DddTacticalPatternsArchUnitTest#Entities must not be instantiated directly from outside the aggregate"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

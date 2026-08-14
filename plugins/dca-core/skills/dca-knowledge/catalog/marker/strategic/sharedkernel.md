@@ -5,7 +5,6 @@ category: strategic
 kind: annotation
 signature: "public @interface SharedKernel"
 methods: ["String description()"]
-resource: ai-architecture-sample/src/main/java/de/sample/aiarchitecture/sharedkernel/marker/strategic/SharedKernel.java
 tags: [strategic, marker]
 ---
 

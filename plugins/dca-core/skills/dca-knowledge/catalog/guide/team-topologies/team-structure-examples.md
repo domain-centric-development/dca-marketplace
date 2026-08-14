@@ -3,7 +3,6 @@ type: Section
 title: Team Structure Examples
 chapter: Team Topologies Integration
 source: guide
-resource: implementing-domain-centric-architecture/team-topologies.md
 tags: [guide, section]
 ---
 

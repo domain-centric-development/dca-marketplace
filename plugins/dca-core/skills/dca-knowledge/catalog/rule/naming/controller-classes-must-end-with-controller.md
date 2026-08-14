@@ -6,7 +6,6 @@ constraint: Controller classes must end with 'Controller'.
 enforced_by: "NamingConventionsArchUnitTest#Controller classes must end with 'Controller'"
 status: enforced
 test_class: NamingConventionsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/NamingConventionsArchUnitTest.groovy
 tags: [naming, archunit]
 ---
 

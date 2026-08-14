@@ -6,7 +6,6 @@ constraint: Repository Implementations must reside in portadapter.outgoing packa
 enforced_by: "HexagonalArchitectureArchUnitTest#Repository Implementations must reside in portadapter.outgoing package"
 status: enforced
 test_class: HexagonalArchitectureArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/HexagonalArchitectureArchUnitTest.groovy
 tags: [hexagonal, archunit]
 ---
 

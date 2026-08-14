@@ -6,7 +6,6 @@ constraint: Domain Models must not have Spring/JPA annotations.
 enforced_by: "OnionArchitectureArchUnitTest#Domain Models must not have Spring/JPA annotations"
 status: enforced
 test_class: OnionArchitectureArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/OnionArchitectureArchUnitTest.groovy
 tags: [onion, archunit]
 ---
 

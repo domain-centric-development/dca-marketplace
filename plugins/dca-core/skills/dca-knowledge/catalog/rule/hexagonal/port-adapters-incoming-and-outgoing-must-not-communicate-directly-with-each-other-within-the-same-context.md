@@ -6,7 +6,6 @@ constraint: "Port adapters (incoming and outgoing) must not communicate directly
 enforced_by: "HexagonalArchitectureArchUnitTest#Port adapters (incoming and outgoing) must not communicate directly with each other within the same context"
 status: enforced
 test_class: HexagonalArchitectureArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/HexagonalArchitectureArchUnitTest.groovy
 tags: [hexagonal, archunit]
 ---
 

@@ -2,7 +2,6 @@
 type: Guide
 title: JWT Implementation Guide
 source: guide
-resource: implementing-domain-centric-architecture/jwt-implementation-guide.md
 tags: [guide, guide]
 ---
 

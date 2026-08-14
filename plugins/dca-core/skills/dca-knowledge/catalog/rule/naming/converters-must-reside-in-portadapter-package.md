@@ -6,7 +6,6 @@ constraint: Converters must reside in portadapter package.
 enforced_by: "NamingConventionsArchUnitTest#Converters must reside in portadapter package"
 status: enforced
 test_class: NamingConventionsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/NamingConventionsArchUnitTest.groovy
 tags: [naming, archunit]
 ---
 

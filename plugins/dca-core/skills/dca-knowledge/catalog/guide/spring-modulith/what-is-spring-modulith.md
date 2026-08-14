@@ -3,7 +3,6 @@ type: Section
 title: What is Spring Modulith?
 chapter: Spring Modulith Implementation
 source: guide
-resource: implementing-domain-centric-architecture/spring-modulith.md
 tags: [guide, section]
 ---
 

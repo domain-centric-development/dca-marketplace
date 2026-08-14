@@ -4,7 +4,6 @@ title: Factory
 category: tactical
 kind: interface
 signature: public interface Factory
-resource: ai-architecture-sample/src/main/java/de/sample/aiarchitecture/sharedkernel/marker/tactical/Factory.java
 tags: [tactical, marker]
 ---
 

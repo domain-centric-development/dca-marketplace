@@ -6,7 +6,6 @@ constraint: Repository methods must return Aggregate Roots.
 enforced_by: "DddTacticalPatternsArchUnitTest#Repository methods must return Aggregate Roots"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

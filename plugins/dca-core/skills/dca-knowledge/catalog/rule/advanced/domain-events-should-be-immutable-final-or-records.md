@@ -6,7 +6,6 @@ constraint: "Domain Events should be immutable (final or records)."
 enforced_by: "DddAdvancedPatternsArchUnitTest#Domain Events should be immutable (final or records)"
 status: enforced
 test_class: DddAdvancedPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddAdvancedPatternsArchUnitTest.groovy
 tags: [advanced, archunit]
 ---
 

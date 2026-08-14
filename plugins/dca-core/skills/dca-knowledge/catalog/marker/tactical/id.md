@@ -4,7 +4,6 @@ title: Id
 category: tactical
 kind: interface
 signature: public interface Id
-resource: ai-architecture-sample/src/main/java/de/sample/aiarchitecture/sharedkernel/marker/tactical/Id.java
 tags: [tactical, marker]
 ---
 

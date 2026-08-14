@@ -3,7 +3,6 @@ type: Section
 title: "13. Customer Tracking: Visitor Identity After Logout"
 chapter: JWT Implementation Guide
 source: guide
-resource: implementing-domain-centric-architecture/jwt-implementation-guide.md
 tags: [guide, section]
 ---
 

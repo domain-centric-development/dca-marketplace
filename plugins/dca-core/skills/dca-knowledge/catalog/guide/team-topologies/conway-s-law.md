@@ -3,7 +3,6 @@ type: Section
 title: Conway's Law
 chapter: Team Topologies Integration
 source: guide
-resource: implementing-domain-centric-architecture/team-topologies.md
 tags: [guide, section]
 ---
 

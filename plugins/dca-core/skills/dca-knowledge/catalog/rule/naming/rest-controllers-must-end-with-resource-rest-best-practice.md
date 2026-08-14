@@ -6,7 +6,6 @@ constraint: "REST Controllers must end with 'Resource' (REST best practice)."
 enforced_by: "NamingConventionsArchUnitTest#REST Controllers must end with 'Resource' (REST best practice)"
 status: enforced
 test_class: NamingConventionsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/NamingConventionsArchUnitTest.groovy
 tags: [naming, archunit]
 ---
 

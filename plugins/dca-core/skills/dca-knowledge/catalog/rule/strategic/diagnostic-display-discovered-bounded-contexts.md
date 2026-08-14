@@ -6,7 +6,6 @@ constraint: "Diagnostic: Display discovered bounded contexts."
 enforced_by: "DddStrategicPatternsArchUnitTest#Diagnostic: Display discovered bounded contexts"
 status: informational
 test_class: DddStrategicPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddStrategicPatternsArchUnitTest.groovy
 tags: [strategic, archunit]
 ---
 

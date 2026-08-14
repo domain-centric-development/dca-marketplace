@@ -6,7 +6,6 @@ constraint: Use Case Queries must end with 'Query' and reside in application pac
 enforced_by: "UseCasePatternsArchUnitTest#Use Case Queries must end with 'Query' and reside in application package"
 status: enforced
 test_class: UseCasePatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/UseCasePatternsArchUnitTest.groovy
 tags: [usecase, archunit]
 ---
 

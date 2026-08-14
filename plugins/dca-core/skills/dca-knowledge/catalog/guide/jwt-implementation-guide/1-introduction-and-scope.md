@@ -3,7 +3,6 @@ type: Section
 title: 1. Introduction and Scope
 chapter: JWT Implementation Guide
 source: guide
-resource: implementing-domain-centric-architecture/jwt-implementation-guide.md
 tags: [guide, section]
 ---
 

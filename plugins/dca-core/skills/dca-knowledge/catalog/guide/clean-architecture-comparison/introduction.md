@@ -3,7 +3,6 @@ type: Section
 title: Introduction
 chapter: Domain-Centric Architecture vs Clean Architecture
 source: guide
-resource: implementing-domain-centric-architecture/clean-architecture-comparison.md
 tags: [guide, section]
 ---
 

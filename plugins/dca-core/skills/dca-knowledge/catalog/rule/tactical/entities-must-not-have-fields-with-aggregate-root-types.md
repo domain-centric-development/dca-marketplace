@@ -6,7 +6,6 @@ constraint: Entities must not have fields with Aggregate Root types.
 enforced_by: "DddTacticalPatternsArchUnitTest#Entities must not have fields with Aggregate Root types"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

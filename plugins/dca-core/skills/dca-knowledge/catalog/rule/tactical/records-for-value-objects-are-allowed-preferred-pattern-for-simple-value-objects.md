@@ -6,7 +6,6 @@ constraint: "Records for Value Objects are allowed (preferred pattern for simple
 enforced_by: "DddTacticalPatternsArchUnitTest#Records for Value Objects are allowed (preferred pattern for simple Value Objects)"
 status: enforced
 test_class: DddTacticalPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddTacticalPatternsArchUnitTest.groovy
 tags: [tactical, archunit]
 ---
 

@@ -4,7 +4,6 @@ title: DomainService
 category: tactical
 kind: interface
 signature: public interface DomainService
-resource: ai-architecture-sample/src/main/java/de/sample/aiarchitecture/sharedkernel/marker/tactical/DomainService.java
 tags: [tactical, marker]
 ---
 

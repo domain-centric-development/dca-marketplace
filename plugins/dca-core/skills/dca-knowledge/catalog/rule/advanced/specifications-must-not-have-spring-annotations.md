@@ -6,7 +6,6 @@ constraint: Specifications must not have Spring annotations.
 enforced_by: "DddAdvancedPatternsArchUnitTest#Specifications must not have Spring annotations"
 status: enforced
 test_class: DddAdvancedPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddAdvancedPatternsArchUnitTest.groovy
 tags: [advanced, archunit]
 ---
 

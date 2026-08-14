@@ -5,7 +5,7 @@ description: |
   knowledge catalog (`dca-knowledge-catalog/bundle/`) — the full implementation-guide
   text anchored to marker contracts and ArchUnit rules as one cross-linked graph.
   Loads `index.md`, traverses typed links (governed-by / applies-to / discussed-in),
-  and cites the source `resource:` for every claim. Use when the user
+  and cites the node path for every claim. Use when the user
   asks "what does DCA say about X", "which rule governs this marker",
   "explain <DCA concept>", "/dca-knowledge", or wants an answer
   grounded in the canonical catalog rather than the model's own recollection.
@@ -24,8 +24,9 @@ graph. Two zones:
   by a human or an LLM, preserved across regeneration. May be empty until populated.
 
 This skill answers DCA questions **from that bundle** — not from the model's own
-memory — and **cites** the node + its `resource:` (the live source file) for every
-claim. It is the read/query counterpart to the catalog generator in
+memory — and **cites** the node path for every claim. The bundle is
+self-contained: nodes carry the marker signature, the rule expression and the guide
+text themselves, so a citation needs no path outside the catalog. It is the read/query counterpart to the catalog generator in
 `dca-knowledge-catalog/`.
 
 > **Grounding rule (non-negotiable):** Answer only from nodes you actually read in the
@@ -102,7 +103,7 @@ Don't grep-and-dump. Walk the graph like a researcher:
    - marker → `Governed by` to get its enforced rules
    - marker → `Discussed in` for the guide sections that explain it
    - section → `Related markers` to jump from prose to contract
-6. **Cite** — answer with the node path(s) and each node's `resource:` source.
+6. **Cite** — answer with the node path(s) you read.
 
 Stop expanding once the question is answered. Prefer 2–4 precise node reads over a bulk dump.
 
@@ -120,7 +121,7 @@ concrete `marker`/`rule` nodes that realize it.
 
 ### `/dca-knowledge rules-for <marker|concept>`
 List the `Rule` nodes governing a marker (follow `Governed by`), with each rule's
-`status` and `enforced_by` test, plus the source `resource:`.
+`status` and `enforced_by` test.
 > "rules-for Repository" → all rules whose `Applies to markers` includes `/marker/port-out/repository.md`.
 
 ### `/dca-knowledge why <rule | pattern>`
@@ -147,7 +148,7 @@ When the user is **constructing** DCA code ("add a use case", "create an aggrega
 3. **Template** — emit from the linked `/template/<...>.md` skeleton.
 4. **Checklist** — satisfy the recipe's "Rules to satisfy" *while generating* — each links a
    `rule/` node whose `constraint:` is the one-line precondition (no need to parse the Groovy).
-5. **Verify** — run the rule's `resource:` test suite (`./gradlew test-architecture`).
+5. **Verify** — run the project's architecture test suite (`./gradlew test-architecture`).
 
 If no recipe covers the task, build from the relevant `marker/` (+ its `Governed by` rules)
 and offer to `save` a new `recipe/` so the next build is covered.
@@ -178,11 +179,12 @@ Every substantive claim ends with its provenance:
 ```
 <claim>.
   — [Rule] /rule/tactical/aggregate-roots-must-not-have-fields-with-other-aggregate-root-types.md
-    source: ai-architecture-sample/src/test-architecture/.../TacticalDDDArchUnitTest.groovy (status: enforced)
+    enforced_by: TacticalDDDArchUnitTest (status: enforced)
 ```
 
-For "show me the real code", surface the `resource:` path so the user (or another tool)
-opens the live source — the bundle is the index, `resource:` is the ground truth.
+For "show me the real code", quote the node itself: a `rule` node carries its ArchUnit
+expression and `enforced_by` test name, a `marker` node its signature. Then point at the
+matching type in *the user's own* project — never at another repository.
 
 ## Token discipline
 
@@ -204,10 +206,10 @@ implementation, the source changed but the bundle wasn't regenerated:
 cd dca-knowledge-catalog && PYTHONPATH=src python3 -m dca_catalog.generate && PYTHONPATH=src python3 -m pytest tests/
 ```
 
-(See `dca-knowledge-catalog/CLAUDE.md`.) When citing, the `resource:` is the source of
-truth; if it diverges from the node body, flag the divergence and recommend a regenerate.
+(See `dca-knowledge-catalog/CLAUDE.md`.) When citing, the node body is the source of
+truth; if it looks stale against the generator's sources, recommend a regenerate.
 
-Health: `python3 -m dca_catalog.lint` mechanically flags broken links, stale `resource:`
+Health: `python3 -m dca_catalog.lint` mechanically flags broken links, stale source
 pointers, and unanchored/orphan authored nodes. Run it after saving a `note/`/`recipe/`/etc
 to confirm the new node is wired into the graph (no `unanchored-authored`/`orphan`/`broken-link`).
 

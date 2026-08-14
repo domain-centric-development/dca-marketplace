@@ -2,7 +2,6 @@
 type: Guide
 title: Domain-Centric Architecture
 source: guide
-resource: implementing-domain-centric-architecture/README.md
 tags: [guide, guide]
 ---
 

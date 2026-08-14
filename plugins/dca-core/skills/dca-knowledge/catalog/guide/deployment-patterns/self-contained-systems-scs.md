@@ -3,7 +3,6 @@ type: Section
 title: "Self-Contained Systems (SCS)"
 chapter: Deployment Patterns
 source: guide
-resource: implementing-domain-centric-architecture/deployment-patterns.md
 tags: [guide, section]
 ---
 

@@ -3,7 +3,6 @@ type: Section
 title: Table of Contents
 chapter: Architecture Reference Guide
 source: guide
-resource: implementing-domain-centric-architecture/architecture-reference-guide.md
 tags: [guide, section]
 ---
 

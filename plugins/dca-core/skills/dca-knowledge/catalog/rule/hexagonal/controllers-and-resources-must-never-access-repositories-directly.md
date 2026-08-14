@@ -6,7 +6,6 @@ constraint: Controllers and Resources must never access repositories directly.
 enforced_by: "HexagonalArchitectureArchUnitTest#Controllers and Resources must never access repositories directly"
 status: enforced
 test_class: HexagonalArchitectureArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/HexagonalArchitectureArchUnitTest.groovy
 tags: [hexagonal, archunit]
 ---
 

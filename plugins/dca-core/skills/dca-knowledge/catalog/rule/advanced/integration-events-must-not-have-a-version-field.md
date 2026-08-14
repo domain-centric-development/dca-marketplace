@@ -6,7 +6,6 @@ constraint: Integration Events must not have a version field.
 enforced_by: "DddAdvancedPatternsArchUnitTest#Integration Events must not have a version field"
 status: enforced
 test_class: DddAdvancedPatternsArchUnitTest
-resource: ai-architecture-sample/src/test-architecture/groovy/de/sample/aiarchitecture/DddAdvancedPatternsArchUnitTest.groovy
 tags: [advanced, archunit]
 ---
 

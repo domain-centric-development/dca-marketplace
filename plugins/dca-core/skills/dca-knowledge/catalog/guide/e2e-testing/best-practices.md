@@ -3,7 +3,6 @@ type: Section
 title: Best Practices
 chapter: E2E Testing for Domain-Centric Architecture
 source: guide
-resource: implementing-domain-centric-architecture/e2e-testing.md
 tags: [guide, section]
 ---
 
