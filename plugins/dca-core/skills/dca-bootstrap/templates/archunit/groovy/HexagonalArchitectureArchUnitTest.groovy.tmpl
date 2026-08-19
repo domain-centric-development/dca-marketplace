@@ -136,7 +136,7 @@ class HexagonalArchitectureArchUnitTest extends BaseArchUnitTest {
     true // Pattern verification: outgoing adapters call Open Host Services via api/ packages
   }
 
-  def "Repository Implementations must reside in portadapter.outgoing package"() {
+  def "Classes named *Repository must reside in the outgoing adapter package"() {
     expect:
     ArchRuleDefinition.classes()
       .that().haveSimpleNameEndingWith("Repository")

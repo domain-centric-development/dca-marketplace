@@ -93,7 +93,17 @@ The most important ones inside these templates:
 
 ## Things to know about the templates
 
-- **Cross-context references via dynamic discovery.** The original DCA reference implementation listed bounded contexts explicitly (`PRODUCT_DOMAIN_PACKAGE`, `CART_DOMAIN_PACKAGE`, ...). These templates use `discoverBoundedContextPackages()` instead, so the rules apply to whatever contexts the user's project has — no hardcoded list to maintain.
+- **No rule names a bounded context.** Two mechanisms, and the choice matters:
+  - *Layer rules* — anything that applies to a layer regardless of which context owns it — use the
+    wildcard patterns (`DOMAIN_PACKAGE` = `${BASE_PACKAGE}.*.domain..`, and its siblings). A wildcard
+    needs no list at all, and it covers a module that carries the same layering without being a
+    bounded context (an operational or backoffice module).
+  - *Context rules* — the ones that need the boundary as a concept, such as cross-context isolation —
+    use `discoverBoundedContextPackages()` and `discoverSharedKernelPackage()`, so they apply to
+    whatever contexts the project declares via `@BoundedContext` / `@SharedKernel`.
+  Several layer rules in these templates still take the discovery route, which is why
+  `{{extraApplicationPackages}}` exists — a list of non-context modules to patch back in. Converting
+  those rules to wildcards would remove the need for that placeholder entirely.
 - **Marker classes via constants.** Templates never `import` marker classes by FQN; they reference `BaseArchUnitTest`'s `*_MARKER` static fields. This lets the bootstrap skill point those at the user's existing markers (decision A in the SKILL.md workflow).
 - **`@SharedKernel`-annotated package is also discovered**, not hardcoded. So if the user's sharedkernel lives at `com.acme.shop.common` instead of `.../sharedkernel`, the rules still find it via the package-info annotation.
 

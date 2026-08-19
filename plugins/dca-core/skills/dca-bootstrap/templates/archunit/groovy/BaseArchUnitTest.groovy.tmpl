@@ -90,6 +90,8 @@ abstract class BaseArchUnitTest extends Specification {
   protected static final String DOMAIN_PACKAGE_PATTERN          = "${BASE_PACKAGE}.*.${DOMAIN_SUBPKG}.."
   protected static final String DOMAIN_MODEL_PACKAGE_PATTERN    = "${BASE_PACKAGE}.*.${DOMAIN_SUBPKG}.model.."
   protected static final String APPLICATION_PACKAGE_PATTERN     = "${BASE_PACKAGE}.*.${APP_SUBPKG}.."
+  // Output ports shared by the use cases of one context (repositories, stores, gateways)
+  protected static final String SHARED_OUTPUT_PORT_PACKAGE_PATTERN = "${BASE_PACKAGE}.*.${APP_SUBPKG}.shared.."
   protected static final String ADAPTER_PACKAGE_PATTERN         = "${BASE_PACKAGE}.*.${ADAPTER_SUBPKG}.."
   protected static final String INCOMING_ADAPTER_PACKAGE_PATTERN = "${BASE_PACKAGE}.*.${ADAPTER_SUBPKG}.${INCOMING_SUBFOLDER}.."
   protected static final String OUTGOING_ADAPTER_PACKAGE_PATTERN = "${BASE_PACKAGE}.*.${ADAPTER_SUBPKG}.${OUTGOING_SUBFOLDER}.."
@@ -99,6 +101,7 @@ abstract class BaseArchUnitTest extends Specification {
   protected static final String DOMAIN_PACKAGE          = DOMAIN_PACKAGE_PATTERN
   protected static final String DOMAIN_MODEL_PACKAGE    = DOMAIN_MODEL_PACKAGE_PATTERN
   protected static final String APPLICATION_PACKAGE     = APPLICATION_PACKAGE_PATTERN
+  protected static final String SHARED_OUTPUT_PORT_PACKAGE = SHARED_OUTPUT_PORT_PACKAGE_PATTERN
   protected static final String ADAPTER_PACKAGE         = ADAPTER_PACKAGE_PATTERN
   protected static final String INCOMING_ADAPTER_PACKAGE = INCOMING_ADAPTER_PACKAGE_PATTERN
   protected static final String OUTGOING_ADAPTER_PACKAGE = OUTGOING_ADAPTER_PACKAGE_PATTERN
