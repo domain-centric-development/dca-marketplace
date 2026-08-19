@@ -208,6 +208,9 @@ Store (for operational data — record/count/exists). Confusing them breaks the 
 Language: a reader can no longer tell from the port name what kind of data it manages.
 Fix: rename and re-marker. If `findById` makes sense → `*Repository extends Repository<T,ID>`.
 If `record`/`count` makes sense → `*Store extends Store`.
+Note: the Store half is now mechanical — ArchUnit checks the marker, both placements, and the
+forbidden `findById`/`save`/`delete` method names. What remains for review is the direction ArchUnit
+cannot see: a `*Repository` whose stored type has no aggregate lifecycle.
 
 ## Reading dca-bootstrap conventions (if installed)
 

@@ -98,7 +98,8 @@ Aggregate-level rules — if you don't use DDD aggregates, skip this module.
 | 13 | Repositories exist only for AggregateRoots | One repository per aggregate root |
 | 14 | Repository methods return AggregateRoots, not Entities | Aggregate boundary |
 | 15 | `*Store` interfaces extend `Store` marker, not `Repository` | Repository is reserved for Aggregate Roots; Stores serve operational data (Value Objects, events) |
-| 16 | Store interfaces live in application layer | Stores are output ports |
+| 16 | Store interfaces live in `application.shared` | Locational rule — same placement as Repository |
+| 16a | Store implementations live in `adapter.outgoing` | (same) |
 | 17 | Store interfaces don't have `findById` / `save` / `delete` methods | Those are Repository semantics — if a Store has them, the stored object is actually an Aggregate Root and the port should be a Repository |
 
 ---

@@ -56,7 +56,7 @@ class LayeredArchitectureArchUnitTest extends BaseArchUnitTest {
     noClasses()
       .that().resideInAnyPackage(allApplicationPatterns())
       .should().dependOnClassesThat(INFRASTRUCTURE_IMPLEMENTATION)
-      .because("Application services should only use outbound ports from sharedkernel.application.port, not infrastructure implementation details")
+      .because("Application services should only use outbound ports declared as interfaces (sharedkernel.marker.port.out), not infrastructure implementation details")
       .allowEmptyShould(true)
       .check(allClasses)
   }
@@ -86,7 +86,7 @@ class LayeredArchitectureArchUnitTest extends BaseArchUnitTest {
     transactionalClasses.check(allClasses)
   }
 
-  def "sharedkernel.application.port should only contain interfaces (Outbound Ports)"() {
+  def "The shared kernel's output-port markers must all be interfaces"() {
     expect:
     classes()
       .that().resideInAPackage(SHAREDKERNEL_MARKER_PORT_OUT_PACKAGE)

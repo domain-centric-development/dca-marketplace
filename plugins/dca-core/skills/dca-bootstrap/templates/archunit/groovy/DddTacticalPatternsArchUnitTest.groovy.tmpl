@@ -566,7 +566,7 @@ class DddTacticalPatternsArchUnitTest extends BaseArchUnitTest {
   // STORE PATTERN (Repository's sibling for non-aggregate operational data)
   // ============================================================================
 
-  def "Store interfaces must extend Store marker (not Repository)"() {
+  def "Store interfaces must extend the Store marker, not Repository"() {
     expect:
     // *Store classes are operational-data output ports — they extend Store, not Repository.
     // Using Repository for non-aggregates is a category error.
@@ -582,19 +582,32 @@ class DddTacticalPatternsArchUnitTest extends BaseArchUnitTest {
       .check(allClasses)
   }
 
-  def "Store interfaces must reside in application layer"() {
+  def "Store interfaces must reside in the application layer's shared output-port package"() {
     expect:
+    // Same placement as Repository: a Store is an output port, so it is declared where the
+    // application layer owns its contracts, not where an adapter implements them.
     classes()
-      .that().areAssignableTo(STORE_MARKER)
-      .and().areInterfaces()
+      .that().areInterfaces()
+      .and().areAssignableTo(STORE_MARKER)
       .and().doNotHaveSimpleName("Store") // exclude the marker itself
-      .should().resideInAnyPackage(allApplicationPatterns())
-      .because("Store interfaces are application-layer output ports")
+      .should().resideInAPackage(SHARED_OUTPUT_PORT_PACKAGE)
+      .because("Store interfaces are output ports in the application layer (Hexagonal Architecture)")
       .allowEmptyShould(true)
       .check(allClasses)
   }
 
-  def "Store interfaces must not have findById or save methods"() {
+  def "Store implementations must reside in the adapter.outgoing package"() {
+    expect:
+    classes()
+      .that().areNotInterfaces()
+      .and().areAssignableTo(STORE_MARKER)
+      .should().resideInAPackage(OUTGOING_ADAPTER_PACKAGE)
+      .because("Store implementations are outgoing adapters in bounded contexts")
+      .allowEmptyShould(true)
+      .check(allClasses)
+  }
+
+  def "Store interfaces must not declare findById or save methods"() {
     expect:
     // findById/save are Repository semantics — if a Store has them, it is actually a Repository
     // and the stored object should be an Aggregate Root.
