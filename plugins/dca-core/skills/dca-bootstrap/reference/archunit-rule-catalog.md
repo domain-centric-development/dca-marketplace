@@ -91,7 +91,7 @@ Aggregate-level rules — if you don't use DDD aggregates, skip this module.
 | 7 | Value Object classes are `final` | Immutability |
 | 8 | Value Object fields are `final` | Deep immutability |
 | 9 | Value Objects have no setters | Same |
-| 9a | Value Objects are records (enums and interfaces excluded) | The compiler grants immutability and attribute equality, so no rule has to check them |
+| 9a | Value Objects are records or immutable classes with their own `equals`/`hashCode` (enums and interfaces excluded) | Records are preferred — the compiler grants immutability and attribute equality for free. A hand-written class is allowed: rules 7–9 already force its immutability, so this rule checks the one thing they cannot — attribute equality |
 | 10 | Repository interfaces extend the Repository marker | Traceability |
 | 11 | Repository interfaces live in `application.shared` | Locational rule |
 | 12 | Repository implementations live in `adapter.outgoing` | (same) |

@@ -396,21 +396,41 @@ class DddTacticalPatternsArchUnitTest extends BaseArchUnitTest {
     true
   }
 
-  def "Value Objects must be records"() {
-    expect:
-    // Was a tautology: "records in the domain model should reside in the domain model", which
-    // passes for any codebase. The real rule is that a Value Object is a record, so the compiler
-    // grants immutability and attribute equality instead of a rule having to check them.
-    classes()
-      .that().areAssignableTo(VALUE_MARKER)
-      .and().areNotInterfaces()
-      .and().areNotEnums()
-      .should().beRecords()
-      .because("A Value Object is defined by its attributes, which a record gives for free: "
-      + "final components, attribute-based equality and no identity. An enum is already a fixed "
-      + "set of immutable values and needs no record.")
-      .allowEmptyShould(true)
-      .check(allClasses)
+  def "Value Objects must be records or immutable classes with attribute equality"() {
+    when:
+    // Records are the preferred implementation: the compiler grants final fields, no setters
+    // and attribute-based equality. A hand-written class is a permitted alternative — the
+    // immutability rules above (final class, final fields, no setters) apply to it unchanged.
+    // What they cannot check is the one thing a record gives for free: a Value Object
+    // compares by its attributes, so a non-record class must override equals and hashCode
+    // itself.
+    def valueObjectClasses = allClasses.stream()
+      .filter { it.isAssignableTo(VALUE_MARKER) }
+      .filter { !it.isInterface() && !it.isRecord() && !it.isEnum() }
+      .collect()
+
+    def violations = []
+    valueObjectClasses.each { voClass ->
+      def overridesOwn = { String name, int paramCount ->
+        voClass.getAllMethods().any {
+          it.getName() == name &&
+            it.getRawParameterTypes().size() == paramCount &&
+            it.getOwner().getName() != "java.lang.Object"
+        }
+      }
+      if (!overridesOwn("equals", 1) || !overridesOwn("hashCode", 0)) {
+        violations.add("${voClass.getName()} is a non-record Value Object without its own equals/hashCode")
+      }
+    }
+
+    then:
+    if (!violations.isEmpty()) {
+      throw new AssertionError(
+      "Value Objects are records by preference; an immutable class is allowed, "
+      + "but it must implement attribute equality itself.\n"
+      + "Violations found:\n" + violations.join("\n"))
+    }
+    true
   }
 
   // ============================================================================
