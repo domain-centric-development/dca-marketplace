@@ -84,7 +84,7 @@ Aggregate-level rules — if you don't use DDD aggregates, skip this module.
 | 2 | Aggregates reference other aggregates by ID, not direct field | Vernon's Aggregate Design Rule #2 |
 | 2a | Aggregates don't hold Repository/OutputPort fields | Aggregates are persistence-ignorant — dependencies are passed as method parameters |
 | 2b | Domain model classes have no public setters | State changes go through intention-revealing methods from the ubiquitous language |
-| 3 | Entities must have an `id` field | Identity is part of being an entity |
+| 3 | Entities must hold a field whose **type** implements the `Id` marker | Identity is part of being an entity. Matched by type, not by name: a name check for a field ending in `id` accepts `valid`, `paid` and `uuid`, so an entity with no identity passes it |
 | 4 | Non-root entities must not be public-constructible | Encapsulation: only the aggregate creates them |
 | 5 | Entities don't hold AggregateRoot references | Same as #2 but for entities |
 | 6 | Value Objects don't contain AggregateRoot or Entity types | Value Objects are pure data |
