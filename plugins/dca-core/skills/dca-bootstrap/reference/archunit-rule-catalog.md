@@ -96,7 +96,7 @@ Aggregate-level rules — if you don't use DDD aggregates, skip this module.
 | 11 | Repository interfaces live in `application.shared` | Locational rule |
 | 12 | Repository implementations live in `adapter.outgoing` | (same) |
 | 13 | Repositories exist only for AggregateRoots | One repository per aggregate root |
-| 14 | Repository methods return AggregateRoots, not Entities | Aggregate boundary |
+| 14 | Repository methods must not **expose** an Entity that is not an AggregateRoot — checked recursively through type arguments (`Optional<X>`, `List<? extends X>`, `X[]`, `Map<K,List<X>>`) | Aggregate boundary: a caller holding a non-root entity can mutate part of an aggregate without passing its root, so the root's invariants never run. Framed as a prohibition, not as "must return an AggregateRoot" — a boolean, a count, a page wrapper or a use-case-optimal Value Object are all legitimate returns |
 | 15 | `*Store` interfaces extend `Store` marker, not `Repository` | Repository is reserved for Aggregate Roots; Stores serve operational data (Value Objects, events) |
 | 16 | Store interfaces live in `application.shared` | Locational rule — same placement as Repository |
 | 16a | Store implementations live in `adapter.outgoing` | (same) |
