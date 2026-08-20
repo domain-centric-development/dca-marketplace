@@ -109,6 +109,6 @@ The most important ones inside these templates:
 
 ## Known caveats
 
-- `BACKOFFICE_*` from the original ai-architecture-sample is replaced with literal patterns inside `EXTRA_APPLICATION_PACKAGES` / `EXTRA_ADAPTER_PACKAGES` in `BaseArchUnitTest`. If the user's project doesn't have a backoffice module, leave those lists empty and the rules collapse cleanly.
+- `BACKOFFICE_*` from the original dca-ecommerce-sample is replaced with literal patterns inside `EXTRA_APPLICATION_PACKAGES` / `EXTRA_ADAPTER_PACKAGES` in `BaseArchUnitTest`. If the user's project doesn't have a backoffice module, leave those lists empty and the rules collapse cleanly.
 - `SpringModulithVerificationTest` will fail to compile if `spring-modulith-starter-test` isn't on the classpath. Only install when Spring Modulith is in use.
 - The templates assume Java 21+ for record support. On older Java, a few rules ("must be a record") will fail with informative errors — adjust by removing those specific rules.

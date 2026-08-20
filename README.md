@@ -59,7 +59,7 @@ Working from a local clone instead (e.g. for plugin development):
 DCA is described in:
 
 - [implementing-domain-centric-architecture](https://github.com/chbloemer/domain-centric-architecture) — compact reference
-- [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) — reference Java/Spring implementation
+- [dca-ecommerce-sample](https://github.com/chbloemer/dca-ecommerce-sample) — reference Java/Spring implementation
 
 This marketplace turns those principles into Claude Code tooling.
 
