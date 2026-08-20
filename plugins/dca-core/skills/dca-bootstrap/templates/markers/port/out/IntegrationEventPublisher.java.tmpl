@@ -6,7 +6,7 @@ import {{sharedKernelPackage}}.tactical.IntegrationEvent;
  * Outbound port for publishing integration events across bounded-context boundaries.
  *
  * <p>Use cases publish boundary-crossing facts through this port; the implementation (e.g. a
- * transactional-outbox adapter, see ADR-026) decides how the event becomes durable and reaches
+ * transactional-outbox adapter) decides how the event becomes durable and reaches
  * external consumers. This keeps the application layer free of delivery concerns.
  *
  * <p>Distinct from {@link DomainEventPublisher}: that port publishes in-context {@code
