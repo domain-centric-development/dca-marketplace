@@ -50,8 +50,6 @@ All non-base tests extend `BaseArchUnitTest` and inherit its constants and helpe
 | `getBoundedContextAdapterPatterns()` | Tactical |
 | `allDomainPatternsWithSharedKernel()` | Layered, Onion, UseCase |
 | `allDomainModelPatternsWithSharedKernel()` | Onion, Advanced |
-| `allApplicationPatterns()` | Layered, UseCase |
-| `allAdapterPatterns()` | NamingConventions |
 | `allIncomingAdapterPatterns()` | UseCasePatterns (`*Response` rule) — includes the `@SharedKernel`-annotated module's adapter |
 | `allOutgoingAdapterPatterns()` | available for future rules that span all outgoing adapters |
 
@@ -61,13 +59,13 @@ All non-base tests extend `BaseArchUnitTest` and inherit its constants and helpe
 |---|---|---|---|---|---|
 | PackageCycles | — | — | — | — | — |
 | HexagonalArchitecture | `OUTPUT_PORT_MARKER` | `BOUNDED_CONTEXT_ANNOTATION` | `DOMAIN_MODEL_PACKAGE`, `APPLICATION_PACKAGE`, `ADAPTER_PACKAGE`, `INCOMING_ADAPTER_PACKAGE`, `OUTGOING_ADAPTER_PACKAGE` | `discoverBoundedContextPackages()` | — |
-| LayeredArchitecture | `VALUE_MARKER` | — | — | `allDomainPatternsWithSharedKernel()`, `allApplicationPatterns()` | — |
+| LayeredArchitecture | `VALUE_MARKER` | — | `APPLICATION_PACKAGE` | `allDomainPatternsWithSharedKernel()` | — |
 | OnionArchitecture | — | — | — | `allDomainPatternsWithSharedKernel()`, `allDomainModelPatternsWithSharedKernel()`, `getBoundedContextApplicationPatterns()` | — |
-| NamingConventions | `USE_CASE_MARKER`, `INPUT_PORT_MARKER`, `REPOSITORY_MARKER` | — | `APPLICATION_PACKAGE`, `INCOMING_ADAPTER_PACKAGE`, `ADAPTER_PACKAGE` | `allApplicationPatterns()`, `allAdapterPatterns()` | `USE_CASE_IMPL_SUFFIX`, `REST_CONTROLLER_SUFFIX` |
+| NamingConventions | `USE_CASE_MARKER`, `INPUT_PORT_MARKER`, `REPOSITORY_MARKER` | — | `APPLICATION_PACKAGE`, `INCOMING_ADAPTER_PACKAGE`, `ADAPTER_PACKAGE` | — | `USE_CASE_IMPL_SUFFIX`, `REST_CONTROLLER_SUFFIX` |
 | DddTacticalPatterns | `AGGREGATE_ROOT_MARKER`, `ENTITY_MARKER`, `VALUE_MARKER`, `REPOSITORY_MARKER`, `FACTORY_MARKER` | — | `DOMAIN_MODEL_PACKAGE` | `allDomainModelPatternsWithSharedKernel()`, `allDomainPatternsWithSharedKernel()`, `getBoundedContextApplicationPatterns()`, `getBoundedContextAdapterPatterns()` | — |
 | DddStrategicPatterns | `INTEGRATION_EVENT_MARKER` | `BOUNDED_CONTEXT_ANNOTATION`, `OPEN_HOST_SERVICE_ANNOTATION` | — | `discoverBoundedContextPackages()`, `discoverSharedKernelPackage()`, `extractContextName()` | — |
 | DddAdvancedPatterns | `DOMAIN_EVENT_MARKER`, `INTEGRATION_EVENT_MARKER`, `DOMAIN_SERVICE_MARKER`, `FACTORY_MARKER`, `SPECIFICATION_MARKER` | — | — | `allDomainPatternsWithSharedKernel()`, `allDomainModelPatternsWithSharedKernel()` | — |
-| UseCasePatterns | `VALUE_MARKER` | `BOUNDED_CONTEXT_ANNOTATION` | — | `discoverBoundedContextPackages()`, `allDomainPatternsWithSharedKernel()`, `allApplicationPatterns()` | — |
+| UseCasePatterns | `VALUE_MARKER` | `BOUNDED_CONTEXT_ANNOTATION` | `APPLICATION_PACKAGE` | `discoverBoundedContextPackages()`, `allDomainPatternsWithSharedKernel()` | — |
 | SpringModulith | — | — | — | — | — |
 
 ### Multi-module ImportOptions
@@ -89,7 +87,6 @@ The most important ones inside these templates:
 - `{{aggregateRootMarkerFqn}}` and friends — marker FQNs (project-existing or DCA-installed)
 - `{{domainSubpackage}}`, `{{appSubpackage}}`, `{{adapterSubpackage}}`, `{{infrastructureSubpackage}}` — layer folder names
 - `{{sharedKernelRoot}}` — sharedkernel root folder (typically `sharedkernel`, but the project may use `common`/`shared`)
-- `{{extraApplicationPackages}}`, `{{extraAdapterPackages}}` — comma-separated quoted strings for non-context modules (e.g. `"${BASE_PACKAGE}.backoffice.application.."`)
 
 ## Things to know about the templates
 
@@ -101,14 +98,12 @@ The most important ones inside these templates:
   - *Context rules* — the ones that need the boundary as a concept, such as cross-context isolation —
     use `discoverBoundedContextPackages()` and `discoverSharedKernelPackage()`, so they apply to
     whatever contexts the project declares via `@BoundedContext` / `@SharedKernel`.
-  Several layer rules in these templates still take the discovery route, which is why
-  `{{extraApplicationPackages}}` exists — a list of non-context modules to patch back in. Converting
-  those rules to wildcards would remove the need for that placeholder entirely.
+  Layer rules in these templates use the wildcard patterns; only context rules use discovery.
 - **Marker classes via constants.** Templates never `import` marker classes by FQN; they reference `BaseArchUnitTest`'s `*_MARKER` static fields. This lets the bootstrap skill point those at the user's existing markers (decision A in the SKILL.md workflow).
 - **`@SharedKernel`-annotated package is also discovered**, not hardcoded. So if the user's sharedkernel lives at `com.acme.shop.common` instead of `.../sharedkernel`, the rules still find it via the package-info annotation.
 
 ## Known caveats
 
-- `BACKOFFICE_*` from the original dca-ecommerce-sample is replaced with literal patterns inside `EXTRA_APPLICATION_PACKAGES` / `EXTRA_ADAPTER_PACKAGES` in `BaseArchUnitTest`. If the user's project doesn't have a backoffice module, leave those lists empty and the rules collapse cleanly.
+- Non-context modules with standard layering (e.g. a backoffice/admin module directly under the base package) are covered automatically by the wildcard layer patterns (`${BASE_PACKAGE}.*.application..` etc.) — no extra configuration needed. A module with a non-standard layout needs its layer subpackage names aligned via the `{{...Subpackage}}` placeholders.
 - `SpringModulithVerificationTest` will fail to compile if `spring-modulith-starter-test` isn't on the classpath. Only install when Spring Modulith is in use.
 - The templates assume Java 21+ for record support. On older Java, a few rules ("must be a record") will fail with informative errors — adjust by removing those specific rules.

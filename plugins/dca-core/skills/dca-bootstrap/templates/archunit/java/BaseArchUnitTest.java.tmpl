@@ -73,9 +73,6 @@ public abstract class BaseArchUnitTest {
       "org.jspecify.annotations.."
   );
 
-  protected static final List<String> EXTRA_APPLICATION_PACKAGES = List.of({{extraApplicationPackages}});
-  protected static final List<String> EXTRA_ADAPTER_PACKAGES     = List.of({{extraAdapterPackages}});
-
   // ============================================================================
   // DERIVED PATTERNS
   // ============================================================================
@@ -251,18 +248,6 @@ public abstract class BaseArchUnitTest {
   protected String[] allDomainPatternsWithSharedKernel() {
     List<String> patterns = new ArrayList<>(Arrays.asList(getBoundedContextDomainPatterns()));
     patterns.add(SHAREDKERNEL_DOMAIN_PACKAGE);
-    return patterns.toArray(new String[0]);
-  }
-
-  protected String[] allApplicationPatterns() {
-    List<String> patterns = new ArrayList<>(Arrays.asList(getBoundedContextApplicationPatterns()));
-    patterns.addAll(EXTRA_APPLICATION_PACKAGES);
-    return patterns.toArray(new String[0]);
-  }
-
-  protected String[] allAdapterPatterns() {
-    List<String> patterns = new ArrayList<>(Arrays.asList(getBoundedContextAdapterPatterns()));
-    patterns.addAll(EXTRA_ADAPTER_PACKAGES);
     return patterns.toArray(new String[0]);
   }
 

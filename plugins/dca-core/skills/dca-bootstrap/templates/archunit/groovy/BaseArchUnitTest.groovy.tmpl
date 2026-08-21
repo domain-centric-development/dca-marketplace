@@ -245,14 +245,6 @@ abstract class BaseArchUnitTest extends Specification {
     return discoverBoundedContextPackages().keySet().collect { "${it}.${ADAPTER_SUBPKG}..".toString() }.toArray(new String[0])
   }
 
-  /**
-   * Extra non-context application packages (e.g. a "backoffice" or "admin" module that has
-   * application code but is not modeled as a bounded context). Populated by the dca-bootstrap
-   * skill when the project has such modules; empty by default.
-   */
-  protected static final List<String> EXTRA_APPLICATION_PACKAGES = List.of({{extraApplicationPackages}})
-  protected static final List<String> EXTRA_ADAPTER_PACKAGES     = List.of({{extraAdapterPackages}})
-
   /** Sharedkernel domain package pattern (universal — present in every DCA project). */
   protected static final String SHAREDKERNEL_DOMAIN_PACKAGE = "${BASE_PACKAGE}.{{sharedKernelRoot}}.${DOMAIN_SUBPKG}.."
 
@@ -267,20 +259,6 @@ abstract class BaseArchUnitTest extends Specification {
   protected String[] allDomainPatternsWithSharedKernel() {
     def patterns = getBoundedContextDomainPatterns().toList()
     patterns.add(SHAREDKERNEL_DOMAIN_PACKAGE)
-    return patterns.toArray(new String[0])
-  }
-
-  /** Application patterns for all contexts plus extra modules (e.g. backoffice). */
-  protected String[] allApplicationPatterns() {
-    def patterns = getBoundedContextApplicationPatterns().toList()
-    patterns.addAll(EXTRA_APPLICATION_PACKAGES)
-    return patterns.toArray(new String[0])
-  }
-
-  /** Adapter patterns for all contexts plus extra modules. */
-  protected String[] allAdapterPatterns() {
-    def patterns = getBoundedContextAdapterPatterns().toList()
-    patterns.addAll(EXTRA_ADAPTER_PACKAGES)
     return patterns.toArray(new String[0])
   }
 

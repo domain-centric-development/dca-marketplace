@@ -54,7 +54,7 @@ class LayeredArchitectureArchUnitTest extends BaseArchUnitTest {
   def "Application Services must only use outbound ports (not infrastructure implementations)"() {
     expect:
     noClasses()
-      .that().resideInAnyPackage(allApplicationPatterns())
+      .that().resideInAnyPackage(APPLICATION_PACKAGE)
       .should().dependOnClassesThat(INFRASTRUCTURE_IMPLEMENTATION)
       .because("Application services should only use outbound ports declared as interfaces (sharedkernel.marker.port.out), not infrastructure implementation details")
       .allowEmptyShould(true)
@@ -71,14 +71,14 @@ class LayeredArchitectureArchUnitTest extends BaseArchUnitTest {
     def transactionalMethods = methods()
       .that().areAnnotatedWith("org.springframework.transaction.annotation.Transactional")
       .should().beDeclaredInClassesThat().resideInAnyPackage(
-        (allApplicationPatterns().toList() + ["..${ADAPTER_SUBPKG}.${OUTGOING_SUBFOLDER}..".toString()]) as String[])
+        [APPLICATION_PACKAGE, "..${ADAPTER_SUBPKG}.${OUTGOING_SUBFOLDER}..".toString()] as String[])
       .because("Transactions are an application-layer concern - domain and incoming adapters must not manage them")
       .allowEmptyShould(true)
 
     def transactionalClasses = classes()
       .that().areAnnotatedWith("org.springframework.transaction.annotation.Transactional")
       .should().resideInAnyPackage(
-        (allApplicationPatterns().toList() + ["..${ADAPTER_SUBPKG}.${OUTGOING_SUBFOLDER}..".toString()]) as String[])
+        [APPLICATION_PACKAGE, "..${ADAPTER_SUBPKG}.${OUTGOING_SUBFOLDER}..".toString()] as String[])
       .because("Transactions are an application-layer concern - domain and incoming adapters must not manage them")
       .allowEmptyShould(true)
 
