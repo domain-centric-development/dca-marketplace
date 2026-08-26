@@ -1,5 +1,7 @@
 package {{basePackage}}
 
+import com.tngtech.archunit.base.DescribedPredicate
+import com.tngtech.archunit.core.domain.JavaClass
 import org.springframework.modulith.core.ApplicationModules
 import spock.lang.Shared
 import spock.lang.Specification
@@ -14,8 +16,17 @@ import spock.lang.Specification
  */
 class SpringModulithVerificationTest extends Specification {
 
+  // Test classes living directly in the base package (this test, the ArchUnit suite, the
+  // Initializr smoke test) would otherwise be picked up as a synthetic "root" module.
+  // Match on the full name incl. inner/closure classes (FooTest$1, FooTest$_check_closure1):
+  // a simpleName check misses them and Modulith then reports the root module depending on
+  // non-exposed sharedkernel types.
   @Shared
-  ApplicationModules modules = ApplicationModules.of("{{basePackage}}")
+  ApplicationModules modules = ApplicationModules.of(
+    "{{basePackage}}",
+    DescribedPredicate.describe("test classes", { JavaClass c ->
+      c.name.matches(/.*Tests?(\$.*)?/)
+    } as java.util.function.Predicate))
 
   def "Application module structure should be valid"() {
     expect:
@@ -26,15 +37,18 @@ class SpringModulithVerificationTest extends Specification {
     when:
     def moduleList = modules.stream().toList()
 
-    then:
+    // Printing stays in when: — `.each {}` in then: would be asserted and an empty list is falsy
     println "=== Spring Modulith Application Modules ==="
     moduleList.each { module ->
-      println "  ${module.name}: ${module.basePackage}"
+      println "  ${module.displayName}: ${module.basePackage}"
       module.namedInterfaces.each { ni ->
         println "    Named Interface: ${ni.name} -> ${ni}"
       }
     }
     println "============================================"
-    moduleList.size() >= 1
+
+    then:
+    // Zero modules is legitimate right after bootstrap (no bounded contexts yet)
+    moduleList != null
   }
 }
