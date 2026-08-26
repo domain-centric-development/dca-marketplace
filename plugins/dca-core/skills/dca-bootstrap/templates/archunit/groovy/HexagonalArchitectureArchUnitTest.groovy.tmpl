@@ -150,8 +150,11 @@ class HexagonalArchitectureArchUnitTest extends BaseArchUnitTest {
     classes()
       .that().resideInAPackage("..application.shared..")
       .and().areInterfaces()
+      .and().areTopLevelClasses()
+      .and().haveSimpleNameNotEndingWith("package-info")
       .should().beAssignableTo(OUTPUT_PORT_MARKER)
-      .because("Interfaces in application.shared are output ports and must extend OutputPort to be part of the port hierarchy")
+      .because("Top-level interfaces in application.shared are output ports and must extend OutputPort to be part of the port hierarchy. " +
+      "Nested interfaces are part of their enclosing port's contract, not ports themselves")
       .allowEmptyShould(true)
       .check(allClasses)
   }
