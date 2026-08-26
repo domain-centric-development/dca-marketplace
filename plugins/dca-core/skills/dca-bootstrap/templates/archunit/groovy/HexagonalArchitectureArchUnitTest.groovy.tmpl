@@ -97,7 +97,10 @@ class HexagonalArchitectureArchUnitTest extends BaseArchUnitTest {
     Map<String, ?> boundedContexts = discoverBoundedContextPackages()
     List<String> contextPackages = boundedContexts.keySet().toList()
 
-    expect:
+    when:
+    // when:/then: instead of expect: — the last statement of the block is `.each {}`, which
+    // returns the (possibly empty) collection. An empty map is falsy in Groovy, so a project
+    // with zero bounded contexts would fail here for the wrong reason.
     // Dynamically check each bounded context's incoming adapters
     // They must not access any other bounded context
     // Exception: Event consumers may access other contexts' integration events
@@ -121,6 +124,9 @@ class HexagonalArchitectureArchUnitTest extends BaseArchUnitTest {
           .check(allClasses)
       }
     }
+
+    then:
+    noExceptionThrown()
   }
 
   // Note: that outgoing adapters MAY access other contexts' Open Host Services is not a
@@ -161,7 +167,7 @@ class HexagonalArchitectureArchUnitTest extends BaseArchUnitTest {
       .that().areAssignableTo(OUTPUT_PORT_MARKER)
       .and().areInterfaces()
       .should().resideInAPackage(DOMAIN_PACKAGE)
-      .because("output ports (Repository, Store, OutputPort) are an application-layer concern and must live in application/shared/, not domain/ - see use-case-pattern.md #6 'Output-Port im Domain-Layer'")
+      .because("output ports (Repository, Store, OutputPort) are an application-layer concern and must live in application/shared/, not domain/")
       .allowEmptyShould(true)
       .check(allClasses)
   }
