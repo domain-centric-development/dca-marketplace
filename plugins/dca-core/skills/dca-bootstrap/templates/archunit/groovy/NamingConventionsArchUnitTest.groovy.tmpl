@@ -5,7 +5,6 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
 import org.springframework.stereotype.Service
 import org.springframework.stereotype.Controller
-import org.springframework.web.bind.annotation.RestController
 
 /**
  * ArchUnit tests for Naming Conventions.
@@ -90,7 +89,9 @@ class NamingConventionsArchUnitTest extends BaseArchUnitTest {
     expect:
     classes()
       .that().resideInAPackage(INCOMING_ADAPTER_PACKAGE)
-      .and().areAnnotatedWith(RestController.class)
+      // String FQN, not a class reference: spring-web is optional, a class import would break
+      // compilation of the whole suite in a project without spring-boot-starter-web(mvc).
+      .and().areAnnotatedWith("org.springframework.web.bind.annotation.RestController")
       .should().haveSimpleNameEndingWith(REST_CONTROLLER_SUFFIX)
       .because("@RestController annotated classes should end with '" + REST_CONTROLLER_SUFFIX + "' following naming conventions")
       .allowEmptyShould(true)
