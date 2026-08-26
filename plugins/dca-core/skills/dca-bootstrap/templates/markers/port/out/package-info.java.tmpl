@@ -20,8 +20,7 @@
  * <pre>
  * OutputPort (marker)
  *   ├── Repository&lt;T, ID&gt;
- *   ├── DomainEventPublisher
- *   └── IdentityProvider
+ *   └── DomainEventPublisher
  * </pre>
  *
  * <p><b>Note:</b> Context-specific output ports (like TokenService and IdentitySession for the
