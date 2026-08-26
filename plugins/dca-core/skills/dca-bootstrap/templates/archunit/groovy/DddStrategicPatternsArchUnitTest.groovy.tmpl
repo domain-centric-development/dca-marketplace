@@ -63,7 +63,8 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
     Map<String, ?> contexts = discoverBoundedContextPackages()
     String sharedKernel = discoverSharedKernelPackage()
 
-    then:
+    // Printing stays in when: — in then: every top-level expression is an implicit assertion,
+    // and `.each {}` returns the (possibly empty, thus falsy) map.
     println "=== Discovered Bounded Contexts ==="
     contexts.each { pkg, annotation ->
       println "  ${annotation.name()}: ${pkg}"
@@ -75,8 +76,9 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
     println "  Package: ${sharedKernel}"
     println "=================================="
 
-    // Verify we discovered the expected contexts
-    contexts.size() >= 1
+    then:
+    // Discovery must work; zero contexts is legitimate right after bootstrap (skeleton only)
+    contexts != null
     sharedKernel != null
   }
 
@@ -89,7 +91,10 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
     String sharedKernelPackage = discoverSharedKernelPackage()
     Map<String, ?> boundedContexts = discoverBoundedContextPackages()
 
-    expect:
+    when:
+    // when:/then: instead of expect: — the last statement of the block is `.each {}`, which
+    // returns the (possibly empty) collection. An empty map is falsy in Groovy, so a project
+    // with zero bounded contexts would fail here for the wrong reason.
     // The Shared Kernel should be truly shared - no dependencies on specific contexts
     // Dynamically check against all discovered bounded contexts
     boundedContexts.each { contextPackage, annotation ->
@@ -100,6 +105,9 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
         .because("Shared Kernel must not depend on bounded context '${annotation.name()}' (${contextPackage}) - Shared Kernel must be context-independent")
         .check(allClasses)
     }
+
+    then:
+    noExceptionThrown()
   }
 
   // ============================================================================
@@ -111,7 +119,10 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
     Map<String, ?> boundedContexts = discoverBoundedContextPackages()
     List<String> contextPackages = boundedContexts.keySet().toList()
 
-    expect:
+    when:
+    // when:/then: instead of expect: — the last statement of the block is `.each {}`, which
+    // returns the (possibly empty) collection. An empty map is falsy in Groovy, so a project
+    // with zero bounded contexts would fail here for the wrong reason.
     // For each bounded context, verify its application layer does not access any other bounded context
     // Exceptions:
     // 1. Event consumers (..adapter.incoming.event..) may access other contexts' events
@@ -143,6 +154,9 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
           .check(allClasses)
       }
     }
+
+    then:
+    noExceptionThrown()
   }
 
   def "Bounded contexts must not access each other in the domain layer"() {
@@ -150,7 +164,10 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
     Map<String, ?> boundedContexts = discoverBoundedContextPackages()
     List<String> contextPackages = boundedContexts.keySet().toList()
 
-    expect:
+    when:
+    // when:/then: instead of expect: — the last statement of the block is `.each {}`, which
+    // returns the (possibly empty) collection. An empty map is falsy in Groovy, so a project
+    // with zero bounded contexts would fail here for the wrong reason.
     // Stricter than the application-layer rule above, and deliberately without exceptions: a
     // domain layer talks to its own context and the shared kernel, nothing else. Not even the
     // other context's api/ — reaching an Open Host Service is the job of the application layer
@@ -177,6 +194,9 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
           .check(allClasses)
       }
     }
+
+    then:
+    noExceptionThrown()
   }
 
   // Note: Shared Kernel Pattern (Eric Evans, DDD Chapter 14)
@@ -217,7 +237,10 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
     Map<String, ?> boundedContexts = discoverBoundedContextPackages()
     List<String> contextPackages = boundedContexts.keySet().toList()
 
-    expect:
+    when:
+    // when:/then: instead of expect: — the last statement of the block is `.each {}`, which
+    // returns the (possibly empty) collection. An empty map is falsy in Groovy, so a project
+    // with zero bounded contexts would fail here for the wrong reason.
     // For each bounded context's outgoing adapters, verify they only access
     // @OPEN_HOST_SERVICE_ANNOTATION annotated classes (or Shared Kernel) from other contexts
     // Exception: Documented ACL patterns in ALLOWED_ADAPTER_CROSS_CONTEXT_ACCESS
@@ -261,6 +284,9 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
         }
       }
     }
+
+    then:
+    noExceptionThrown()
   }
 
   // ============================================================================
