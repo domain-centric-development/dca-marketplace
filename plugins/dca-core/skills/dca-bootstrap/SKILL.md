@@ -171,7 +171,7 @@ H. **Catalog wiring (CLAUDE.md)** — wire the project's coding agent to the DCA
      `catalog_path:` pointing at a locally regenerable `dca-knowledge-catalog/bundle` (ask
      for the path; verify it exists and contains `index.md` + `log.md`)
    - `No` — skip; the user wires it later (point them to the catalog template
-     `template/project-starter-claude-md.md` via `/dca-knowledge`)
+     `template/project-starter-agent-instructions.md` via `/dca-knowledge`)
 
 ### Phase 3 — Generation
 
