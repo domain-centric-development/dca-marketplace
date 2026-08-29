@@ -4,6 +4,7 @@ title: "@OpenHostService"
 category: strategic
 kind: annotation
 signature: "public @interface OpenHostService"
+package: dev.domaincentric.dca.buildingblocks.ddd.strategic.relationships
 methods: ["String context()", "String description()"]
 tags: [strategic, marker]
 ---

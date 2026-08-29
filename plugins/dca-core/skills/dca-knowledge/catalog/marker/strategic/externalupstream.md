@@ -4,6 +4,7 @@ title: "@ExternalUpstream"
 category: strategic
 kind: annotation
 signature: "public @interface ExternalUpstream"
+package: dev.domaincentric.dca.buildingblocks.ddd.strategic.relationships
 methods: ["String name()", "Upstream.Translation translation()", "Interaction interaction()", "String protocol()", "String exchanges()", "String rationale()", "Upstream.Status status()"]
 tags: [strategic, marker]
 ---

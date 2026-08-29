@@ -4,6 +4,7 @@ title: "UseCase<INPUT, OUTPUT>"
 category: port-in
 kind: interface
 signature: "public interface UseCase<INPUT, OUTPUT> extends InputPort"
+package: dev.domaincentric.dca.buildingblocks.hexagonal.port.in
 extends: [InputPort]
 methods: ["OUTPUT execute(INPUT input)"]
 tags: [port-in, marker]
@@ -19,8 +20,6 @@ Marker interface for Input Ports (Hexagonal Architecture) / Use Cases (Clean Arc
 
 - [Application layer InputPort implementations must end with 'UseCase'](/rule/naming/application-layer-inputport-implementations-must-end-with-usecase.md)
 - [InputPort interfaces must end with 'InputPort'](/rule/naming/inputport-interfaces-must-end-with-inputport.md)
-- [Use case classes must be annotated with @Service](/rule/naming/use-case-classes-must-be-annotated-with-service.md)
-- [Use cases that save an aggregate must publish its domain events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md)
 
 ## Discussed in
 

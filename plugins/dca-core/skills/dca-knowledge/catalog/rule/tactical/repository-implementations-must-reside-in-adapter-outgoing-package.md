@@ -1,23 +1,30 @@
 ---
 type: Rule
+id: DCA-TAC-015
 title: Repository Implementations must reside in adapter.outgoing package
 rule: Repository implementations are outgoing adapters in bounded contexts.
 constraint: Repository Implementations must reside in adapter.outgoing package.
-enforced_by: "DddTacticalPatternsArchUnitTest#Repository Implementations must reside in adapter.outgoing package"
+enforced_by: "TacticalPatternRules#DCA-TAC-015"
 status: enforced
-test_class: DddTacticalPatternsArchUnitTest
+rule_set: tactical
+implementations: [java]
 tags: [tactical, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().areNotInterfaces()
-  .and().areAssignableTo(Repository.class)
-  .should().resideInAPackage(OUTGOING_ADAPTER_PACKAGE)
-  .because("Repository implementations are outgoing adapters in bounded contexts")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-TAC-015",
+    "Repository Implementations must reside in adapter.outgoing package",
+    "Repository implementations are outgoing adapters in bounded contexts",
+    arch ->
+        classes()
+            .that()
+            .areNotInterfaces()
+            .and()
+            .areAssignableTo(Repository.class)
+            .should()
+            .resideInAPackage(layout.outgoingAdapterPattern())
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

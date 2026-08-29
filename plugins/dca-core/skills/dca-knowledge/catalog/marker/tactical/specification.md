@@ -4,6 +4,7 @@ title: "Specification<T>"
 category: tactical
 kind: interface
 signature: "public interface Specification<T>"
+package: dev.domaincentric.dca.buildingblocks.ddd.tactical
 methods: ["boolean isSatisfiedBy(T candidate)"]
 tags: [tactical, marker]
 ---

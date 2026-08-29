@@ -1,19 +1,28 @@
 ---
 type: Rule
+id: DCA-ONI-001
 title: "Domain must not access Application Services (Onion Architecture - Domain is innermost layer)"
 rule: Domain is the innermost layer in onion architecture and should not depend on application services.
 constraint: "Domain must not access Application Services (Onion Architecture - Domain is innermost layer)."
-enforced_by: "OnionArchitectureArchUnitTest#Domain must not access Application Services (Onion Architecture - Domain is innermost layer)"
+enforced_by: "OnionRules#DCA-ONI-001"
 status: enforced
-test_class: OnionArchitectureArchUnitTest
+rule_set: onion
+implementations: [java]
 tags: [onion, archunit]
 ---
 
-```groovy
-expect:
-noClasses()
-.that().resideInAnyPackage(DOMAIN_PACKAGE)
-.should().dependOnClassesThat().resideInAnyPackage(APPLICATION_PACKAGE)
-.because("Domain is the innermost layer in onion architecture and should not depend on application services")
-.check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ONI-001",
+    "Domain must not access Application Services (Onion Architecture - Domain is innermost"
+        + " layer)",
+    "Domain is the innermost layer in onion architecture and should not depend on application"
+        + " services",
+    arch ->
+        noClasses()
+            .that()
+            .resideInAnyPackage(layout.domainPattern())
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(layout.applicationPattern()))
 ```

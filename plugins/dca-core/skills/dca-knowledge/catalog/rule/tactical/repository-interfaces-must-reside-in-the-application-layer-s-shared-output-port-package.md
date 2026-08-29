@@ -1,26 +1,33 @@
 ---
 type: Rule
+id: DCA-TAC-014
 title: Repository interfaces must reside in the application layer's shared output-port package
 rule: "Repository interfaces are output ports in the application layer (Hexagonal Architecture)."
 constraint: Repository interfaces must reside in the application layer's shared output-port package.
-enforced_by: "DddTacticalPatternsArchUnitTest#Repository interfaces must reside in the application layer's shared output-port package"
+enforced_by: "TacticalPatternRules#DCA-TAC-014"
 status: enforced
-test_class: DddTacticalPatternsArchUnitTest
+rule_set: tactical
+implementations: [java]
 tags: [tactical, archunit]
 ---
 
-```groovy
-expect:
-// areAssignableTo, not implement: ArchUnit's implement() matches non-interfaces only, so
-// implement(Repository) AND areInterfaces() is an empty subject set for any codebase.
-classes()
-  .that().areInterfaces()
-  .and().areAssignableTo(Repository.class)
-  .and().doNotHaveSimpleName("Repository")
-  .should().resideInAPackage(SHARED_OUTPUT_PORT_PACKAGE)
-  .because("Repository interfaces are output ports in the application layer (Hexagonal Architecture)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-TAC-014",
+    "Repository interfaces must reside in the application layer's shared output-port package",
+    "Repository interfaces are output ports in the application layer (Hexagonal Architecture)",
+    arch ->
+        // areAssignableTo, not implement: ArchUnit's implement() matches non-interfaces only.
+        classes()
+            .that()
+            .areInterfaces()
+            .and()
+            .areAssignableTo(Repository.class)
+            .and()
+            .doNotHaveSimpleName(REPOSITORY_SUFFIX)
+            .should()
+            .resideInAPackage(layout.sharedOutputPortPattern())
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

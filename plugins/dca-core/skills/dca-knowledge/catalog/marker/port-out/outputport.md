@@ -4,6 +4,7 @@ title: OutputPort
 category: port-out
 kind: interface
 signature: public interface OutputPort
+package: dev.domaincentric.dca.buildingblocks.hexagonal.port.out
 tags: [port-out, marker]
 ---
 

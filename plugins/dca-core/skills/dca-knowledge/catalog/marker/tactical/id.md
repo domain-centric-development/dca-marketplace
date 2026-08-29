@@ -4,6 +4,7 @@ title: Id
 category: tactical
 kind: interface
 signature: public interface Id
+package: dev.domaincentric.dca.buildingblocks.ddd.tactical
 tags: [tactical, marker]
 ---
 
@@ -11,7 +12,7 @@ Marker for Id.
 
 ## Governed by
 
-- [Repository methods must not return non-root Entities](/rule/tactical/repository-methods-must-not-return-non-root-entities.md)
+- [Entities must have an ID field](/rule/tactical/entities-must-have-an-id-field.md)
 
 ## Discussed in
 

@@ -4,6 +4,7 @@ title: DomainGateway
 category: tactical
 kind: interface
 signature: public interface DomainGateway
+package: dev.domaincentric.dca.buildingblocks.ddd.tactical
 tags: [tactical, marker]
 ---
 

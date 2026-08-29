@@ -1,27 +1,32 @@
 ---
 type: Rule
+id: DCA-ADV-005
 title: Integration Events must be annotated with IntegrationEventType
-rule: "@IntegrationEventType(name, version) is the contract identity of every ."
+rule: "@IntegrationEventType(name, version) is the contract identity of every integration event — the serializer keys (name, version) to the class and stamps both onto the wire envelope."
 constraint: Integration Events must be annotated with IntegrationEventType.
-enforced_by: "DddAdvancedPatternsArchUnitTest#Integration Events must be annotated with IntegrationEventType"
+enforced_by: "AdvancedPatternRules#DCA-ADV-005"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-// The annotation carries the stable logical name + schema version as a class property —
-// the single source of truth for an event's contract identity.
-classes()
-  .that().areAssignableTo(IntegrationEvent.class)
-  .and().areNotInterfaces()
-  .should().beAnnotatedWith(IntegrationEventType.class)
-  .because("@IntegrationEventType(name, version) is the contract identity of every " +
-           "integration event — the serializer keys (name, version) to the class and stamps " +
-           "both onto the wire envelope")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-005",
+    "Integration Events must be annotated with IntegrationEventType",
+    "@IntegrationEventType(name, version) is the contract identity of every integration event"
+        + " — the serializer keys (name, version) to the class and stamps both onto the wire"
+        + " envelope",
+    arch ->
+        classes()
+            .that()
+            .areAssignableTo(IntegrationEvent.class)
+            .and()
+            .areNotInterfaces()
+            .should()
+            .beAnnotatedWith(IntegrationEventType.class)
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

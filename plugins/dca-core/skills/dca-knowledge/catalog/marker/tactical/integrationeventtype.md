@@ -4,6 +4,7 @@ title: "@IntegrationEventType"
 category: tactical
 kind: annotation
 signature: "public @interface IntegrationEventType"
+package: dev.domaincentric.dca.buildingblocks.ddd.tactical
 methods: ["String name()", "int version()"]
 tags: [tactical, marker]
 ---

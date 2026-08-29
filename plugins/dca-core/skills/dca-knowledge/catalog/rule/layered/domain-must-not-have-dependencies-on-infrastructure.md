@@ -1,19 +1,26 @@
 ---
 type: Rule
+id: DCA-LAY-002
 title: Domain must not have dependencies on Infrastructure
 rule: "Domain should not depend on infrastructure concerns (Dependency Inversion Principle)."
 constraint: Domain must not have dependencies on Infrastructure.
-enforced_by: "LayeredArchitectureArchUnitTest#Domain must not have dependencies on Infrastructure"
+enforced_by: "LayeredRules#DCA-LAY-002"
 status: enforced
-test_class: LayeredArchitectureArchUnitTest
+rule_set: layered
+implementations: [java]
 tags: [layered, archunit]
 ---
 
-```groovy
-expect:
-noClasses()
-  .that().resideInAnyPackage(DOMAIN_PACKAGE)
-  .should().dependOnClassesThat().resideInAPackage(INFRASTRUCTURE_PACKAGE)
-  .because("Domain should not depend on infrastructure concerns (Dependency Inversion Principle)")
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-LAY-002",
+    "Domain must not have dependencies on Infrastructure",
+    "Domain should not depend on infrastructure concerns (Dependency Inversion Principle)",
+    arch ->
+        noClasses()
+            .that()
+            .resideInAnyPackage(layout.domainPattern())
+            .should()
+            .dependOnClassesThat()
+            .resideInAPackage(layout.infrastructurePattern()))
 ```

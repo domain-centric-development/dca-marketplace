@@ -1,23 +1,20 @@
 ---
 type: Rule
+id: DCA-USE-007
 title: "Use Case Result Models should be immutable (final or records)"
 rule: "Use case result models should be immutable (value objects)."
 constraint: "Use Case Result Models should be immutable (final or records)."
-enforced_by: "UseCasePatternsArchUnitTest#Use Case Result Models should be immutable (final or records)"
+enforced_by: "UseCaseRules#DCA-USE-007"
 status: enforced
-test_class: UseCasePatternsArchUnitTest
+rule_set: usecase
+implementations: [java]
 tags: [usecase, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().haveSimpleNameEndingWith("Result")
-  .and().resideInAnyPackage(APPLICATION_PACKAGE)
-  .and().areNotInterfaces()
-  .and().areNotRecords()
-  .should().haveModifier(JavaModifier.FINAL)
-  .because("Use case result models should be immutable (value objects)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-USE-007",
+    "Use Case Result Models should be immutable (final or records)",
+    "Use case result models should be immutable (value objects)",
+    arch -> immutableApplicationModels(layout, "Result"))
 ```

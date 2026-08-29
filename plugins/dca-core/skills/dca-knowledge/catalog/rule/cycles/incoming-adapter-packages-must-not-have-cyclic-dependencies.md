@@ -1,19 +1,30 @@
 ---
 type: Rule
+id: DCA-CYC-004
 title: Incoming Adapter Packages must not have cyclic dependencies
 rule: Incoming adapters should have clear boundaries and no cycles.
 constraint: Incoming Adapter Packages must not have cyclic dependencies.
-enforced_by: "PackageCyclesArchUnitTest#Incoming Adapter Packages must not have cyclic dependencies"
+enforced_by: "CycleRules#DCA-CYC-004"
 status: enforced
-test_class: PackageCyclesArchUnitTest
+rule_set: cycles
+implementations: [java]
 tags: [cycles, archunit]
 ---
 
-```groovy
-expect:
-slices()
-  .matching("${BASE_PACKAGE}.(*).adapter.incoming..")
-  .should().beFreeOfCycles()
-  .because("Incoming adapters should have clear boundaries and no cycles")
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-CYC-004",
+    "Incoming Adapter Packages must not have cyclic dependencies",
+    "Incoming adapters should have clear boundaries and no cycles",
+    arch ->
+        slices()
+            .matching(
+                layout.basePackage()
+                    + ".(*)."
+                    + layout.adapterSubpackage()
+                    + "."
+                    + layout.incomingSubpackage()
+                    + "..")
+            .should()
+            .beFreeOfCycles())
 ```

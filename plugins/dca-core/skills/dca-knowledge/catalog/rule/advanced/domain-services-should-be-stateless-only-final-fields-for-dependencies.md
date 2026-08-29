@@ -1,23 +1,30 @@
 ---
 type: Rule
+id: DCA-ADV-012
 title: "Domain Services should be stateless (only final fields for dependencies)"
 rule: "Domain services should be stateless (only final fields for dependencies)."
 constraint: "Domain Services should be stateless (only final fields for dependencies)."
-enforced_by: "DddAdvancedPatternsArchUnitTest#Domain Services should be stateless (only final fields for dependencies)"
+enforced_by: "AdvancedPatternRules#DCA-ADV-012"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().implement(DomainService.class)
-  .and().resideInAnyPackage(DOMAIN_PACKAGE)
-  .should().haveOnlyFinalFields()
-  .because("Domain services should be stateless (only final fields for dependencies)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-012",
+    "Domain Services should be stateless (only final fields for dependencies)",
+    "Domain services should be stateless (only final fields for dependencies)",
+    arch ->
+        classes()
+            .that()
+            .implement(DomainService.class)
+            .and()
+            .resideInAnyPackage(layout.domainPattern())
+            .should()
+            .haveOnlyFinalFields()
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

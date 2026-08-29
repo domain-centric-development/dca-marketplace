@@ -1,23 +1,20 @@
 ---
 type: Rule
+id: DCA-USE-004
 title: "Use Case Commands should be immutable (final or records)"
 rule: "Use case commands should be immutable (value objects)."
 constraint: "Use Case Commands should be immutable (final or records)."
-enforced_by: "UseCasePatternsArchUnitTest#Use Case Commands should be immutable (final or records)"
+enforced_by: "UseCaseRules#DCA-USE-004"
 status: enforced
-test_class: UseCasePatternsArchUnitTest
+rule_set: usecase
+implementations: [java]
 tags: [usecase, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().haveSimpleNameEndingWith("Command")
-  .and().resideInAnyPackage(APPLICATION_PACKAGE)
-  .and().areNotInterfaces()
-  .and().areNotRecords()
-  .should().haveModifier(JavaModifier.FINAL)
-  .because("Use case commands should be immutable (value objects)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-USE-004",
+    "Use Case Commands should be immutable (final or records)",
+    "Use case commands should be immutable (value objects)",
+    arch -> immutableApplicationModels(layout, "Command"))
 ```

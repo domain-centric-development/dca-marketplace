@@ -1,25 +1,34 @@
 ---
 type: Rule
+id: DCA-TAC-013
 title: Repository Interfaces should extend Repository Marker Interface
 rule: Repository interfaces should extend Repository marker interface.
 constraint: Repository Interfaces should extend Repository Marker Interface.
-enforced_by: "DddTacticalPatternsArchUnitTest#Repository Interfaces should extend Repository Marker Interface"
+enforced_by: "TacticalPatternRules#DCA-TAC-013"
 status: enforced
-test_class: DddTacticalPatternsArchUnitTest
+rule_set: tactical
+implementations: [java]
 tags: [tactical, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().resideInAPackage(APPLICATION_PACKAGE)
-  .and().areInterfaces()
-  .and().haveSimpleNameEndingWith("Repository")
-  .and().doNotHaveSimpleName("Repository")
-  .should().beAssignableTo(Repository.class)
-  .because("Repository interfaces should extend Repository marker interface")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-TAC-013",
+    "Repository Interfaces should extend Repository Marker Interface",
+    "Repository interfaces should extend Repository marker interface",
+    arch ->
+        classes()
+            .that()
+            .resideInAPackage(layout.applicationPattern())
+            .and()
+            .areInterfaces()
+            .and()
+            .haveSimpleNameEndingWith(REPOSITORY_SUFFIX)
+            .and()
+            .doNotHaveSimpleName(REPOSITORY_SUFFIX)
+            .should()
+            .beAssignableTo(Repository.class)
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

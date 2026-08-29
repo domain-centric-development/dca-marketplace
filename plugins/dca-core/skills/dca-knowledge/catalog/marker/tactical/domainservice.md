@@ -4,6 +4,7 @@ title: DomainService
 category: tactical
 kind: interface
 signature: public interface DomainService
+package: dev.domaincentric.dca.buildingblocks.ddd.tactical
 tags: [tactical, marker]
 ---
 

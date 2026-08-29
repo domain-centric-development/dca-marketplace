@@ -4,6 +4,7 @@ title: DomainEvent
 category: tactical
 kind: interface
 signature: public interface DomainEvent
+package: dev.domaincentric.dca.buildingblocks.ddd.tactical
 methods: ["UUID eventId()", "Instant occurredOn()"]
 tags: [tactical, marker]
 ---

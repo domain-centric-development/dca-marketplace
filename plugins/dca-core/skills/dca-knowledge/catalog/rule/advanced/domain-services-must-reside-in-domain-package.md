@@ -1,22 +1,28 @@
 ---
 type: Rule
+id: DCA-ADV-010
 title: Domain Services must reside in domain package
 rule: "Domain services are part of the domain layer, not application layer."
 constraint: Domain Services must reside in domain package.
-enforced_by: "DddAdvancedPatternsArchUnitTest#Domain Services must reside in domain package"
+enforced_by: "AdvancedPatternRules#DCA-ADV-010"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().implement(DomainService.class)
-  .should().resideInAnyPackage(DOMAIN_PACKAGE)
-  .because("Domain services are part of the domain layer, not application layer")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-010",
+    "Domain Services must reside in domain package",
+    "Domain services are part of the domain layer, not application layer",
+    arch ->
+        classes()
+            .that()
+            .implement(DomainService.class)
+            .should()
+            .resideInAnyPackage(layout.domainPattern())
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

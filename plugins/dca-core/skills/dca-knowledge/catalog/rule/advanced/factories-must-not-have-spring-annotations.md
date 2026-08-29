@@ -1,24 +1,32 @@
 ---
 type: Rule
+id: DCA-ADV-015
 title: Factories must not have Spring annotations
 rule: Factories should be framework-independent.
 constraint: Factories must not have Spring annotations.
-enforced_by: "DddAdvancedPatternsArchUnitTest#Factories must not have Spring annotations"
+enforced_by: "AdvancedPatternRules#DCA-ADV-015"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-noClasses()
-  .that().implement(Factory.class)
-  .and().resideInAnyPackage(DOMAIN_PACKAGE)
-  .should().beAnnotatedWith(Component.class)
-  .orShould().beAnnotatedWith(Service.class)
-  .because("Factories should be framework-independent")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-015",
+    "Factories must not have Spring annotations",
+    "Factories should be framework-independent",
+    arch ->
+        noClasses()
+            .that()
+            .implement(Factory.class)
+            .and()
+            .resideInAnyPackage(layout.domainPattern())
+            .should()
+            .beAnnotatedWith(layout.frameworkAnnotations().component())
+            .orShould()
+            .beAnnotatedWith(layout.frameworkAnnotations().service())
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

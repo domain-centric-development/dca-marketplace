@@ -1,22 +1,28 @@
 ---
 type: Rule
+id: DCA-ADV-014
 title: Factories must reside in domain package
 rule: "Factories are part of the domain layer (complex aggregate creation logic)."
 constraint: Factories must reside in domain package.
-enforced_by: "DddAdvancedPatternsArchUnitTest#Factories must reside in domain package"
+enforced_by: "AdvancedPatternRules#DCA-ADV-014"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().implement(Factory.class)
-  .should().resideInAnyPackage(DOMAIN_PACKAGE)
-  .because("Factories are part of the domain layer (complex aggregate creation logic)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-014",
+    "Factories must reside in domain package",
+    "Factories are part of the domain layer (complex aggregate creation logic)",
+    arch ->
+        classes()
+            .that()
+            .implement(Factory.class)
+            .should()
+            .resideInAnyPackage(layout.domainPattern())
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

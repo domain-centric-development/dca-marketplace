@@ -1,21 +1,28 @@
 ---
 type: Rule
+id: DCA-NAM-007
 title: "DTOs must reside in the adapter layer, not in domain or application"
 rule: "DTOs are adapter concerns (presentation or external API) - not in domain or application."
 constraint: "DTOs must reside in the adapter layer, not in domain or application."
-enforced_by: "NamingConventionsArchUnitTest#DTOs must reside in the adapter layer, not in domain or application"
+enforced_by: "NamingRules#DCA-NAM-007"
 status: enforced
-test_class: NamingConventionsArchUnitTest
+rule_set: naming
+implementations: [java]
 tags: [naming, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().haveSimpleNameEndingWith("Dto")
-  .and().resideInAnyPackage(BASE_PACKAGE + "..")
-  .should().resideInAPackage(ADAPTER_PACKAGE)
-  .because("DTOs are adapter concerns (presentation or external API) - not in domain or application")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-NAM-007",
+    "DTOs must reside in the adapter layer, not in domain or application",
+    "DTOs are adapter concerns (presentation or external API) - not in domain or application",
+    arch ->
+        classes()
+            .that()
+            .haveSimpleNameEndingWith("Dto")
+            .and()
+            .resideInAnyPackage(layout.basePackage() + "..")
+            .should()
+            .resideInAPackage(layout.adapterPattern())
+            .allowEmptyShould(true))
 ```

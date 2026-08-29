@@ -1,23 +1,30 @@
 ---
 type: Rule
+id: DCA-ADV-016
 title: "Factories should be stateless (only final fields for dependencies)"
 rule: "Factories should be stateless (only final fields for dependencies)."
 constraint: "Factories should be stateless (only final fields for dependencies)."
-enforced_by: "DddAdvancedPatternsArchUnitTest#Factories should be stateless (only final fields for dependencies)"
+enforced_by: "AdvancedPatternRules#DCA-ADV-016"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().implement(Factory.class)
-  .and().resideInAnyPackage(DOMAIN_PACKAGE)
-  .should().haveOnlyFinalFields()
-  .because("Factories should be stateless (only final fields for dependencies)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-016",
+    "Factories should be stateless (only final fields for dependencies)",
+    "Factories should be stateless (only final fields for dependencies)",
+    arch ->
+        classes()
+            .that()
+            .implement(Factory.class)
+            .and()
+            .resideInAnyPackage(layout.domainPattern())
+            .should()
+            .haveOnlyFinalFields()
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

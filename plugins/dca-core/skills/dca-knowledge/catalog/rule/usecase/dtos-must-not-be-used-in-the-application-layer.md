@@ -1,20 +1,28 @@
 ---
 type: Rule
+id: DCA-USE-011
 title: DTOs must not be used in the Application Layer
 rule: "Application layer should use Command/Query/Response models, not presentation DTOs (Clean Architecture)."
 constraint: DTOs must not be used in the Application Layer.
-enforced_by: "UseCasePatternsArchUnitTest#DTOs must not be used in the Application Layer"
+enforced_by: "UseCaseRules#DCA-USE-011"
 status: enforced
-test_class: UseCasePatternsArchUnitTest
+rule_set: usecase
+implementations: [java]
 tags: [usecase, archunit]
 ---
 
-```groovy
-expect:
-noClasses()
-  .that().resideInAnyPackage(APPLICATION_PACKAGE)
-  .should().dependOnClassesThat().haveSimpleNameEndingWith("Dto")
-  .because("Application layer should use Command/Query/Response models, not presentation DTOs (Clean Architecture)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-USE-011",
+    "DTOs must not be used in the Application Layer",
+    "Application layer should use Command/Query/Response models, not presentation DTOs (Clean"
+        + " Architecture)",
+    arch ->
+        noClasses()
+            .that()
+            .resideInAnyPackage(layout.applicationPattern())
+            .should()
+            .dependOnClassesThat()
+            .haveSimpleNameEndingWith("Dto")
+            .allowEmptyShould(true))
 ```

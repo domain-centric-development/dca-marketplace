@@ -4,6 +4,7 @@ title: Factory
 category: tactical
 kind: interface
 signature: public interface Factory
+package: dev.domaincentric.dca.buildingblocks.ddd.tactical
 tags: [tactical, marker]
 ---
 

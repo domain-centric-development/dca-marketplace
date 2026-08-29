@@ -4,16 +4,12 @@ title: "@SharedKernel"
 category: strategic
 kind: annotation
 signature: "public @interface SharedKernel"
+package: dev.domaincentric.dca.buildingblocks.ddd.strategic.relationships
 methods: ["String description()"]
 tags: [strategic, marker]
 ---
 
 Marks a package as the Shared Kernel in Domain-Driven Design.
-
-## Governed by
-
-- [Bounded contexts must not access each other in the domain layer](/rule/strategic/bounded-contexts-must-not-access-each-other-in-the-domain-layer.md)
-- [HTTP Response Models must end with 'Response' and reside in adapter incoming package](/rule/usecase/http-response-models-must-end-with-response-and-reside-in-adapter-incoming-package.md)
 
 ## Discussed in
 

@@ -1,25 +1,34 @@
 ---
 type: Rule
+id: DCA-TAC-001
 title: "Aggregate Roots must implement AggregateRoot<T, ID>"
 rule: "Classes named *AggregateRoot must implement AggregateRoot interface (DDD pattern)."
 constraint: "Aggregate Roots must implement AggregateRoot<T, ID>."
-enforced_by: "DddTacticalPatternsArchUnitTest#Aggregate Roots must implement AggregateRoot<T, ID>"
+enforced_by: "TacticalPatternRules#DCA-TAC-001"
 status: enforced
-test_class: DddTacticalPatternsArchUnitTest
+rule_set: tactical
+implementations: [java]
 tags: [tactical, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().resideInAnyPackage(DOMAIN_MODEL_PACKAGE, SHAREDKERNEL_DOMAIN_PACKAGE)
-  .and().haveSimpleNameEndingWith("AggregateRoot")
-  .and().areNotInterfaces()
-  .and().doNotHaveSimpleName("AggregateRoot") // Exclude the marker interface itself
-  .should().implement(AggregateRoot.class)
-  .because("Classes named *AggregateRoot must implement AggregateRoot interface (DDD pattern)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-TAC-001",
+    "Aggregate Roots must implement AggregateRoot<T, ID>",
+    "Classes named *AggregateRoot must implement AggregateRoot interface (DDD pattern)",
+    arch ->
+        classes()
+            .that()
+            .resideInAnyPackage(layout.domainModelPattern(), layout.sharedKernelDomainPattern())
+            .and()
+            .haveSimpleNameEndingWith("AggregateRoot")
+            .and()
+            .areNotInterfaces()
+            .and()
+            .doNotHaveSimpleName("AggregateRoot")
+            .should()
+            .implement(AggregateRoot.class)
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

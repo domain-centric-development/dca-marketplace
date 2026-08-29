@@ -1,22 +1,28 @@
 ---
 type: Rule
+id: DCA-ADV-002
 title: Domain Events must reside in domain package
 rule: "Domain events are part of the domain layer (named in past tense)."
 constraint: Domain Events must reside in domain package.
-enforced_by: "DddAdvancedPatternsArchUnitTest#Domain Events must reside in domain package"
+enforced_by: "AdvancedPatternRules#DCA-ADV-002"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().implement(DomainEvent.class)
-  .should().resideInAnyPackage(DOMAIN_PACKAGE)
-  .because("Domain events are part of the domain layer (named in past tense)")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-002",
+    "Domain Events must reside in domain package",
+    "Domain events are part of the domain layer (named in past tense)",
+    arch ->
+        classes()
+            .that()
+            .implement(DomainEvent.class)
+            .should()
+            .resideInAnyPackage(layout.domainPattern())
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

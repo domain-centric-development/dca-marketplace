@@ -1,22 +1,28 @@
 ---
 type: Rule
+id: DCA-ADV-013
 title: Factories should implement Factory Marker Interface
 rule: Classes implementing Factory marker should have 'Factory' in their name.
 constraint: Factories should implement Factory Marker Interface.
-enforced_by: "DddAdvancedPatternsArchUnitTest#Factories should implement Factory Marker Interface"
+enforced_by: "AdvancedPatternRules#DCA-ADV-013"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-classes()
-  .that().implement(Factory.class)
-  .should().haveSimpleNameEndingWith("Factory")
-  .because("Classes implementing Factory marker should have 'Factory' in their name")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-013",
+    "Factories should implement Factory Marker Interface",
+    "Classes implementing Factory marker should have 'Factory' in their name",
+    arch ->
+        classes()
+            .that()
+            .implement(Factory.class)
+            .should()
+            .haveSimpleNameEndingWith("Factory")
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

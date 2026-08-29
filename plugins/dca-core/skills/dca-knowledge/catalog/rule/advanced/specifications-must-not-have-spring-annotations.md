@@ -1,24 +1,32 @@
 ---
 type: Rule
+id: DCA-ADV-018
 title: Specifications must not have Spring annotations
 rule: Specifications should be framework-independent value objects.
 constraint: Specifications must not have Spring annotations.
-enforced_by: "DddAdvancedPatternsArchUnitTest#Specifications must not have Spring annotations"
+enforced_by: "AdvancedPatternRules#DCA-ADV-018"
 status: enforced
-test_class: DddAdvancedPatternsArchUnitTest
+rule_set: advanced
+implementations: [java]
 tags: [advanced, archunit]
 ---
 
-```groovy
-expect:
-noClasses()
-  .that().haveSimpleNameEndingWith("Specification")
-  .and().resideInAnyPackage(DOMAIN_PACKAGE)
-  .should().beAnnotatedWith(Component.class)
-  .orShould().beAnnotatedWith(Service.class)
-  .because("Specifications should be framework-independent value objects")
-  .allowEmptyShould(true)
-  .check(allClasses)
+```java
+DcaRule.of(
+    "DCA-ADV-018",
+    "Specifications must not have Spring annotations",
+    "Specifications should be framework-independent value objects",
+    arch ->
+        noClasses()
+            .that()
+            .haveSimpleNameEndingWith("Specification")
+            .and()
+            .resideInAnyPackage(layout.domainPattern())
+            .should()
+            .beAnnotatedWith(layout.frameworkAnnotations().component())
+            .orShould()
+            .beAnnotatedWith(layout.frameworkAnnotations().service())
+            .allowEmptyShould(true))
 ```
 
 ## Applies to markers

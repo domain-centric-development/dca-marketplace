@@ -4,6 +4,7 @@ title: "@Partnership"
 category: strategic
 kind: annotation
 signature: "public @interface Partnership"
+package: dev.domaincentric.dca.buildingblocks.ddd.strategic.relationships
 methods: ["String context()", "String rationale()"]
 tags: [strategic, marker]
 ---
