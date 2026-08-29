@@ -126,6 +126,29 @@ Bounded-context rules.
 
 ---
 
+
+## Module: ContextMapArchUnitTest (DDD-specific)
+
+Executable context map: `@Upstream`, `@ExternalUpstream` and `@Partnership` on `package-info.java`
+are the single source of truth for context relationships; these rules keep declarations and code in
+agreement. `ContextMapDocumentationTest` renders `docs/context-map.md` from the same annotations.
+
+| # | Rule | Why |
+|---|---|---|
+| 1 | `@Upstream`, `@ExternalUpstream`, `@Partnership` only on `@BoundedContext` packages | Relationships belong to contexts, not to arbitrary packages |
+| 2 | `@ExternalUpstream` well-formed and unique per name + interaction | One declaration per external channel |
+| 3 | Distinct external system names must not collide after Mermaid id normalization | Rendered diagram stays unambiguous |
+| 4 | `@Upstream.context` names an existing context, never the declaring one | Dead or self-referential declarations |
+| 5 | `@Upstream` unique per context + channel; `via` not empty | One declaration per channel |
+| 6 | `@Upstream` declarations and Spring Modulith `allowedDependencies` agree | Two sources of truth would drift |
+| 7 | `status = IMPLEMENTED` upstreams are backed by an actual code dependency | No aspirational declarations — use `PLANNED` |
+| 8 | ACL: upstream contract types stay inside the matching adapter | Translation happens at the edge |
+| 9 | Conformist: upstream contract types never reach the domain layer | Conformism does not suspend domain purity |
+| 10 | External contract types respect declared translation + interaction | Same as 8/9 for external systems |
+| 11 | Cross-context dependencies on published interfaces require an `@Upstream` declaration | No undeclared coupling |
+| 12 | `@Partnership` names an existing context, never itself, and is symmetric | Partnership is mutual by definition |
+| 13 | Diagnostic: display declared context map | Human-readable dump, never fails |
+
 ## Module: DddAdvancedPatternsArchUnitTest (DDD-specific)
 
 | # | Rule | Why |
