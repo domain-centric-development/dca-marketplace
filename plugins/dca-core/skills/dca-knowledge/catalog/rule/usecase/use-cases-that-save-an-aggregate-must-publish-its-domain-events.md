@@ -7,7 +7,7 @@ constraint: Use cases that save an aggregate must publish its domain events.
 enforced_by: "UseCaseRules#DCA-USE-009"
 status: enforced
 rule_set: usecase
-implementations: [java]
+implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 

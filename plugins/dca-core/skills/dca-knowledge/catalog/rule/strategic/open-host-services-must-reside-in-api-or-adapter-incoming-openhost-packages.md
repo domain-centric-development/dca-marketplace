@@ -7,7 +7,7 @@ constraint: Open Host Services must reside in api or adapter.incoming.openhost p
 enforced_by: "StrategicPatternRules#DCA-STR-005"
 status: enforced
 rule_set: strategic
-implementations: [java]
+implementations: [java, dotnet]
 tags: [strategic, archunit]
 ---
 

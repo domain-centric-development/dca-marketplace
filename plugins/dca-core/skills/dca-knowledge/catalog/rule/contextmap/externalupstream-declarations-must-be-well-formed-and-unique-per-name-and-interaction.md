@@ -7,7 +7,7 @@ constraint: ExternalUpstream declarations must be well-formed and unique per nam
 enforced_by: "ContextMapRules#DCA-MAP-002"
 status: enforced
 rule_set: contextmap
-implementations: [java]
+implementations: [java, dotnet]
 tags: [contextmap, archunit]
 ---
 

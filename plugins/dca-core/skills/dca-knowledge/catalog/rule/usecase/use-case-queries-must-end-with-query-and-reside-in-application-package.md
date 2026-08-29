@@ -7,7 +7,7 @@ constraint: Use Case Queries must end with 'Query' and reside in application pac
 enforced_by: "UseCaseRules#DCA-USE-003"
 status: enforced
 rule_set: usecase
-implementations: [java]
+implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 

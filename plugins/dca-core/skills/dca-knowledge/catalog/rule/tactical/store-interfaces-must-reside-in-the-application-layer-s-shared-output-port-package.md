@@ -7,7 +7,7 @@ constraint: Store interfaces must reside in the application layer's shared outpu
 enforced_by: "TacticalPatternRules#DCA-TAC-019"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

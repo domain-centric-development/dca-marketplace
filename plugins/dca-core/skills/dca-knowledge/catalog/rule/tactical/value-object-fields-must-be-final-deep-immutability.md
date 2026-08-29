@@ -7,7 +7,7 @@ constraint: "Value Object fields must be final (deep immutability)."
 enforced_by: "TacticalPatternRules#DCA-TAC-010"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

@@ -7,7 +7,7 @@ constraint: "Use Case Result Models should be immutable (final or records)."
 enforced_by: "UseCaseRules#DCA-USE-007"
 status: enforced
 rule_set: usecase
-implementations: [java]
+implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 

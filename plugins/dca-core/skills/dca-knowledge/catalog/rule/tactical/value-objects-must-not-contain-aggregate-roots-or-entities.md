@@ -7,7 +7,7 @@ constraint: Value Objects must not contain Aggregate Roots or Entities.
 enforced_by: "TacticalPatternRules#DCA-TAC-008"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

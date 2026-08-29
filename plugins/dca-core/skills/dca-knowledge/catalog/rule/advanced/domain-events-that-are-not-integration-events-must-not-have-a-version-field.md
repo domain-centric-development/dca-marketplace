@@ -7,7 +7,7 @@ constraint: Domain Events that are not Integration Events must not have a versio
 enforced_by: "AdvancedPatternRules#DCA-ADV-007"
 status: enforced
 rule_set: advanced
-implementations: [java]
+implementations: [java, dotnet]
 tags: [advanced, archunit]
 ---
 

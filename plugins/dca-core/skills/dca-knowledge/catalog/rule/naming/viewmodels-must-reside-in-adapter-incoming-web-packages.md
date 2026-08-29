@@ -7,7 +7,7 @@ constraint: ViewModels must reside in adapter.incoming.web packages.
 enforced_by: "NamingRules#DCA-NAM-011"
 status: enforced
 rule_set: naming
-implementations: [java]
+implementations: [java, dotnet]
 tags: [naming, archunit]
 ---
 

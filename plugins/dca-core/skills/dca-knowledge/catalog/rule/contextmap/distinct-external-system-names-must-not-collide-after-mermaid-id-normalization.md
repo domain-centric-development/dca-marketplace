@@ -7,7 +7,7 @@ constraint: Distinct external system names must not collide after mermaid id nor
 enforced_by: "ContextMapRules#DCA-MAP-003"
 status: enforced
 rule_set: contextmap
-implementations: [java]
+implementations: [java, dotnet]
 tags: [contextmap, archunit]
 ---
 

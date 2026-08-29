@@ -7,7 +7,7 @@ constraint: "Aggregate Roots must implement AggregateRoot<T, ID>."
 enforced_by: "TacticalPatternRules#DCA-TAC-001"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

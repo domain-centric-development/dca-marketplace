@@ -7,7 +7,7 @@ constraint: Integration Events must be in events or adapter outgoing event packa
 enforced_by: "StrategicPatternRules#DCA-STR-007"
 status: enforced
 rule_set: strategic
-implementations: [java]
+implementations: [java, dotnet]
 tags: [strategic, archunit]
 ---
 

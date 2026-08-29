@@ -7,7 +7,7 @@ constraint: Application Services should not access port adapters.
 enforced_by: "HexagonalRules#DCA-HEX-002"
 status: enforced
 rule_set: hexagonal
-implementations: [java]
+implementations: [java, dotnet]
 tags: [hexagonal, archunit]
 ---
 

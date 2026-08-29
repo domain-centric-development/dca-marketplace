@@ -7,7 +7,7 @@ constraint: Use Case Commands must end with 'Command' and reside in application 
 enforced_by: "UseCaseRules#DCA-USE-002"
 status: enforced
 rule_set: usecase
-implementations: [java]
+implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 

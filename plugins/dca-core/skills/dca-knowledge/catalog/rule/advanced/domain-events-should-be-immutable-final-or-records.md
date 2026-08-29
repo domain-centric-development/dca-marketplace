@@ -7,7 +7,7 @@ constraint: "Domain Events should be immutable (final or records)."
 enforced_by: "AdvancedPatternRules#DCA-ADV-003"
 status: enforced
 rule_set: advanced
-implementations: [java]
+implementations: [java, dotnet]
 tags: [advanced, archunit]
 ---
 

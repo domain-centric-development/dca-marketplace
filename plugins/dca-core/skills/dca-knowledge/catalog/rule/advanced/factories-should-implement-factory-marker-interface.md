@@ -7,7 +7,7 @@ constraint: Factories should implement Factory Marker Interface.
 enforced_by: "AdvancedPatternRules#DCA-ADV-013"
 status: enforced
 rule_set: advanced
-implementations: [java]
+implementations: [java, dotnet]
 tags: [advanced, archunit]
 ---
 

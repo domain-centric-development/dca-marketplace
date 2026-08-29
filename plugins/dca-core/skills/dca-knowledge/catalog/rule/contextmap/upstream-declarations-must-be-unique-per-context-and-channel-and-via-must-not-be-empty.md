@@ -7,7 +7,7 @@ constraint: "Upstream declarations must be unique per context and channel, and v
 enforced_by: "ContextMapRules#DCA-MAP-005"
 status: enforced
 rule_set: contextmap
-implementations: [java]
+implementations: [java, dotnet]
 tags: [contextmap, archunit]
 ---
 

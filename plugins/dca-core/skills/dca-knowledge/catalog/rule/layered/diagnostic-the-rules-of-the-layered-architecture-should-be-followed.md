@@ -7,7 +7,7 @@ constraint: "Diagnostic: The rules of the Layered Architecture should be followe
 enforced_by: "LayeredRules#DCA-LAY-001"
 status: informational
 rule_set: layered
-implementations: [java]
+implementations: [java, dotnet]
 tags: [layered, archunit]
 ---
 

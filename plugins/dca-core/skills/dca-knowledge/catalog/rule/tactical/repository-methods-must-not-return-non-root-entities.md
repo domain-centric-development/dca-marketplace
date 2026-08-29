@@ -7,7 +7,7 @@ constraint: Repository methods must not return non-root Entities.
 enforced_by: "TacticalPatternRules#DCA-TAC-017"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

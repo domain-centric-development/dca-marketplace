@@ -7,7 +7,7 @@ constraint: The Domain Model should be framework independent and should not use 
 enforced_by: "OnionRules#DCA-ONI-002"
 status: enforced
 rule_set: onion
-implementations: [java]
+implementations: [java, dotnet]
 tags: [onion, archunit]
 ---
 

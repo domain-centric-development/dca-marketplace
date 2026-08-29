@@ -7,7 +7,7 @@ constraint: Domain must not have dependencies on Infrastructure.
 enforced_by: "LayeredRules#DCA-LAY-002"
 status: enforced
 rule_set: layered
-implementations: [java]
+implementations: [java, dotnet]
 tags: [layered, archunit]
 ---
 

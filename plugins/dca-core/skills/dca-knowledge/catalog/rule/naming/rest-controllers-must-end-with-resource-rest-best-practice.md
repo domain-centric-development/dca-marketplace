@@ -7,7 +7,7 @@ constraint: "REST Controllers must end with 'Resource' (REST best practice)."
 enforced_by: "NamingRules#DCA-NAM-006"
 status: enforced
 rule_set: naming
-implementations: [java]
+implementations: [java, dotnet]
 tags: [naming, archunit]
 ---
 

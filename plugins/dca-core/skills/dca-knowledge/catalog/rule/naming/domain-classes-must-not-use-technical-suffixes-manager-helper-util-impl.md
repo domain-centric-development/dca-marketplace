@@ -7,7 +7,7 @@ constraint: "Domain classes must not use technical suffixes (Manager, Helper, Ut
 enforced_by: "NamingRules#DCA-NAM-010"
 status: enforced
 rule_set: naming
-implementations: [java]
+implementations: [java, dotnet]
 tags: [naming, archunit]
 ---
 

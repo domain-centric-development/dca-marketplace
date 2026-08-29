@@ -7,7 +7,7 @@ constraint: Domain Packages must not have cyclic dependencies.
 enforced_by: "CycleRules#DCA-CYC-001"
 status: enforced
 rule_set: cycles
-implementations: [java]
+implementations: [java, dotnet]
 tags: [cycles, archunit]
 ---
 

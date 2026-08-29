@@ -7,7 +7,7 @@ constraint: Repository Interfaces should extend Repository Marker Interface.
 enforced_by: "TacticalPatternRules#DCA-TAC-013"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

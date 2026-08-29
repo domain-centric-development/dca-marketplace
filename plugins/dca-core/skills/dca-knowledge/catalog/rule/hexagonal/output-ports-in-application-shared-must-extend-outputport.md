@@ -7,7 +7,7 @@ constraint: Output Ports in application.shared must extend OutputPort.
 enforced_by: "HexagonalRules#DCA-HEX-009"
 status: enforced
 rule_set: hexagonal
-implementations: [java]
+implementations: [java, dotnet]
 tags: [hexagonal, archunit]
 ---
 

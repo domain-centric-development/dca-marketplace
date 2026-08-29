@@ -7,7 +7,7 @@ constraint: Domain Events must implement DomainEvent Marker Interface and be rec
 enforced_by: "AdvancedPatternRules#DCA-ADV-001"
 status: enforced
 rule_set: advanced
-implementations: [java]
+implementations: [java, dotnet]
 tags: [advanced, archunit]
 ---
 

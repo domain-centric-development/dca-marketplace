@@ -7,7 +7,7 @@ constraint: Repository Interfaces must end with 'Repository'.
 enforced_by: "NamingRules#DCA-NAM-004"
 status: enforced
 rule_set: naming
-implementations: [java]
+implementations: [java, dotnet]
 tags: [naming, archunit]
 ---
 

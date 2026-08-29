@@ -9,6 +9,7 @@ status: enforced
 rule_set: contextmap
 implementations: [java]
 tags: [contextmap, archunit]
+not_applicable_dotnet: Upstream declarations and Spring Modulith allowedDependencies must agree — .NET has no module system annotation; project boundaries take that role
 ---
 
 ```java

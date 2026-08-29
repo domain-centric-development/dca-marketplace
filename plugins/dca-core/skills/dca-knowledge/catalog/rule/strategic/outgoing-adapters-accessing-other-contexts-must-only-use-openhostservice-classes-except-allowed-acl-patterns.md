@@ -7,7 +7,7 @@ constraint: "Outgoing adapters accessing other contexts must only use OpenHostSe
 enforced_by: "StrategicPatternRules#DCA-STR-006"
 status: enforced
 rule_set: strategic
-implementations: [java]
+implementations: [java, dotnet]
 tags: [strategic, archunit]
 ---
 

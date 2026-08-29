@@ -7,7 +7,7 @@ constraint: The shared kernel's output-port markers must all be interfaces.
 enforced_by: "LayeredRules#DCA-LAY-005"
 status: enforced
 rule_set: layered
-implementations: [java]
+implementations: [java, dotnet]
 tags: [layered, archunit]
 ---
 

@@ -7,7 +7,7 @@ constraint: Repository Implementations must reside in adapter.outgoing package.
 enforced_by: "TacticalPatternRules#DCA-TAC-015"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

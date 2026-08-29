@@ -7,7 +7,7 @@ constraint: Integration Events should be immutable records.
 enforced_by: "StrategicPatternRules#DCA-STR-008"
 status: enforced
 rule_set: strategic
-implementations: [java]
+implementations: [java, dotnet]
 tags: [strategic, archunit]
 ---
 

@@ -7,7 +7,7 @@ constraint: "Domain must not access Application Services (Onion Architecture - D
 enforced_by: "OnionRules#DCA-ONI-001"
 status: enforced
 rule_set: onion
-implementations: [java]
+implementations: [java, dotnet]
 tags: [onion, archunit]
 ---
 

@@ -7,7 +7,7 @@ constraint: Entities must not be instantiated directly from outside the aggregat
 enforced_by: "TacticalPatternRules#DCA-TAC-005"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

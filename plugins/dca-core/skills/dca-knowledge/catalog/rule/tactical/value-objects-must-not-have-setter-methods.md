@@ -7,7 +7,7 @@ constraint: Value Objects must not have setter methods.
 enforced_by: "TacticalPatternRules#DCA-TAC-011"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

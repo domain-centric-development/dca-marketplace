@@ -7,7 +7,7 @@ constraint: Store interfaces must not declare findById or save methods.
 enforced_by: "TacticalPatternRules#DCA-TAC-021"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

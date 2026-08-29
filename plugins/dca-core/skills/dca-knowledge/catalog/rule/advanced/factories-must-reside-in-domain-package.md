@@ -7,7 +7,7 @@ constraint: Factories must reside in domain package.
 enforced_by: "AdvancedPatternRules#DCA-ADV-014"
 status: enforced
 rule_set: advanced
-implementations: [java]
+implementations: [java, dotnet]
 tags: [advanced, archunit]
 ---
 

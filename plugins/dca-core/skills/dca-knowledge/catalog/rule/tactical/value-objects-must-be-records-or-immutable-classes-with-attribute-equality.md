@@ -7,7 +7,7 @@ constraint: Value Objects must be records or immutable classes with attribute eq
 enforced_by: "TacticalPatternRules#DCA-TAC-012"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

@@ -7,7 +7,7 @@ constraint: HTTP Response Models must end with 'Response' and reside in adapter 
 enforced_by: "UseCaseRules#DCA-USE-008"
 status: enforced
 rule_set: usecase
-implementations: [java]
+implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 

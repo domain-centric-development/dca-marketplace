@@ -7,7 +7,7 @@ constraint: DTOs must not be used in the Domain Layer.
 enforced_by: "UseCaseRules#DCA-USE-010"
 status: enforced
 rule_set: usecase
-implementations: [java]
+implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 

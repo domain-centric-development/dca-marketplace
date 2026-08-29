@@ -7,7 +7,7 @@ constraint: Repositories must only exist for Aggregate Roots.
 enforced_by: "TacticalPatternRules#DCA-TAC-016"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

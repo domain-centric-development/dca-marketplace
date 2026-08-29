@@ -7,7 +7,7 @@ constraint: "Store interfaces must extend the Store marker, not Repository."
 enforced_by: "TacticalPatternRules#DCA-TAC-018"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

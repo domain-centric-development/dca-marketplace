@@ -7,7 +7,7 @@ constraint: External system contract types must respect the declared translation
 enforced_by: "ContextMapRules#DCA-MAP-010"
 status: enforced
 rule_set: contextmap
-implementations: [java]
+implementations: [java, dotnet]
 tags: [contextmap, archunit]
 ---
 

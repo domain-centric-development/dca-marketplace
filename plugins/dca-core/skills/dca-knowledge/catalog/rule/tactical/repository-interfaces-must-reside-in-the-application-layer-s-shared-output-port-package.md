@@ -7,7 +7,7 @@ constraint: Repository interfaces must reside in the application layer's shared 
 enforced_by: "TacticalPatternRules#DCA-TAC-014"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

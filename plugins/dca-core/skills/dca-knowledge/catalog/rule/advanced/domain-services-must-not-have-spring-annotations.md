@@ -7,7 +7,7 @@ constraint: Domain Services must not have Spring annotations.
 enforced_by: "AdvancedPatternRules#DCA-ADV-011"
 status: enforced
 rule_set: advanced
-implementations: [java]
+implementations: [java, dotnet]
 tags: [advanced, archunit]
 ---
 

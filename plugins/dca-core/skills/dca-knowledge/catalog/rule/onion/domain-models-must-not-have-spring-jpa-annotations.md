@@ -7,7 +7,7 @@ constraint: Domain Models must not have Spring/JPA annotations.
 enforced_by: "OnionRules#DCA-ONI-003"
 status: enforced
 rule_set: onion
-implementations: [java]
+implementations: [java, dotnet]
 tags: [onion, archunit]
 ---
 

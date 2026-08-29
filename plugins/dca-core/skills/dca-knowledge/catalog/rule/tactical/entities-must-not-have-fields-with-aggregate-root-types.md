@@ -7,7 +7,7 @@ constraint: Entities must not have fields with Aggregate Root types.
 enforced_by: "TacticalPatternRules#DCA-TAC-007"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

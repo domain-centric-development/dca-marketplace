@@ -7,7 +7,7 @@ constraint: Enriched Domain Models must be Value Object records.
 enforced_by: "TacticalPatternRules#DCA-TAC-022"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

@@ -9,6 +9,7 @@ status: enforced
 rule_set: naming
 implementations: [java]
 tags: [naming, archunit]
+not_applicable_dotnet: ".NET has no @Service stereotype — use cases are registered in the DI container by code, there is no attribute to check"
 ---
 
 ```java

@@ -7,7 +7,7 @@ constraint: Domain model classes must not have public setter methods.
 enforced_by: "TacticalPatternRules#DCA-TAC-006"
 status: enforced
 rule_set: tactical
-implementations: [java]
+implementations: [java, dotnet]
 tags: [tactical, archunit]
 ---
 

@@ -7,7 +7,7 @@ constraint: Domain Events must reside in domain package.
 enforced_by: "AdvancedPatternRules#DCA-ADV-002"
 status: enforced
 rule_set: advanced
-implementations: [java]
+implementations: [java, dotnet]
 tags: [advanced, archunit]
 ---
 

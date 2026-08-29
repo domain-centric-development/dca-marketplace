@@ -7,7 +7,7 @@ constraint: Specifications must end with 'Specification'.
 enforced_by: "AdvancedPatternRules#DCA-ADV-017"
 status: enforced
 rule_set: advanced
-implementations: [java]
+implementations: [java, dotnet]
 tags: [advanced, archunit]
 ---
 

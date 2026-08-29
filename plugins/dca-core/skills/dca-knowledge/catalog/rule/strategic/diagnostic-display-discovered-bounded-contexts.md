@@ -7,7 +7,7 @@ constraint: "Diagnostic: Display discovered bounded contexts."
 enforced_by: "StrategicPatternRules#DCA-STR-001"
 status: informational
 rule_set: strategic
-implementations: [java]
+implementations: [java, dotnet]
 tags: [strategic, archunit]
 ---
 
