@@ -2,6 +2,17 @@
 
 Use this guide to recommend modules during the bootstrap workflow.
 
+**Two ways to act on a recommendation.** With the shipped templates, selecting a module means writing
+its test class and leaving the others out. With the `dev.domaincentric:dca-archunit` library, the same
+recommendation becomes a rule selection — `dca.rules.sets` in `dca-archunit.properties`, or
+`DcaRuleSelection.onlySets(...)` in the test — and individual rules can be lowered to a warning
+(`dca.rules.warn`) or switched off with a recorded reason (`dca.rules.off` plus
+`dca.rule.<id>.reason`) instead of dropping a whole module. Module-to-rule-set mapping: PackageCycles
+→ `cycles`, LayeredArchitecture → `layered`, OnionArchitecture → `onion`, HexagonalArchitecture →
+`hexagonal`, NamingConventions → `naming`, DddTacticalPatterns → `tactical`, DddStrategicPatterns →
+`strategic`, ContextMap → `contextmap`, DddAdvancedPatterns → `advanced`, UseCasePatterns →
+`usecase`.
+
 ## By project profile
 
 | Profile | Recommended modules |

@@ -141,6 +141,18 @@ D. **ArchUnit modules** — multi-select from:
    DDD-Tactical/Advanced). Record the choice in a pattern-selection ADR (cf. ADR-025
    in the reference implementation).
 
+   **If the project consumes the rule library instead of these templates**
+   (`dev.domaincentric:dca-archunit`, one `DcaArchitectureTest` subclass rather than eleven test
+   classes), the same decision is expressed as a rule selection — in code via `DcaRuleSelection`, or
+   in `dca-archunit.properties` on the test class path. One module maps to one rule set:
+   `PackageCycles` → `cycles`, `LayeredArchitecture` → `layered`, `OnionArchitecture` → `onion`,
+   `HexagonalArchitecture` → `hexagonal`, `NamingConventions` → `naming`, `DddTacticalPatterns` →
+   `tactical`, `DddStrategicPatterns` → `strategic`, `ContextMap` → `contextmap`,
+   `DddAdvancedPatterns` → `advanced`, `UseCasePatterns` → `usecase`. Not installing a module becomes
+   `dca.rules.sets = …`; an individual rule the team rejects becomes `dca.rules.off` with a
+   `dca.rule.<id>.reason`, and one they are working towards becomes `dca.rules.warn`. Both stay
+   visible in the report with their reason — prefer that over dropping a rule silently.
+
 E. **Layer-folder naming** — if the project uses different folder names (e.g. `service/` instead of `application/`):
    - `Adopt DCA naming` (skill writes `application/`, asks user to migrate manually later)
    - `Match existing` (skill writes constants `APP_SUBPACKAGE = "service"` so rules apply to existing folders)
