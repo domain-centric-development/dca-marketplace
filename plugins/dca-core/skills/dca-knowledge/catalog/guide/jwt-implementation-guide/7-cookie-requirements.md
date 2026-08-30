@@ -34,7 +34,7 @@ ResponseCookie.from("shop-session", token)
     .build();
 ```
 
-**Status in `dca-ecommerce-sample`:**
+**Status in `dca-ecommerce-sample-java`:**
 
 | | |
 |---|---|
