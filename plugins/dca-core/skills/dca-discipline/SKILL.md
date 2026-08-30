@@ -136,6 +136,12 @@ When writing or editing domain model classes:
 - **`@Transactional` only on application-layer use cases.** Outgoing
   persistence adapters are an allowed exception; never on domain classes or
   incoming adapters.
+- **No remote call inside the transaction.** A use case that calls a port
+  which may leave the process (another context's API, a payment provider)
+  drops the class-level annotation: remote reads first, then
+  `unitOfWork.run(() -> { load; mutate; save; publish; })` — the `UnitOfWork`
+  output port of the building blocks. Remote *effects* go after the commit,
+  as a reaction to an integration event.
 
 > **Note:** invariant strictness follows the context's declared pattern style
 > (see the project's pattern-selection ADR, if any). Contexts implemented as

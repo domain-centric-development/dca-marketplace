@@ -105,6 +105,10 @@ Audit each domain/ and application/ file:
 - `@Transactional` on incoming adapters or in `domain/` — transaction
   demarcation belongs on application-layer use cases; the only allowed
   exception is an outgoing persistence adapter.
+- A `@Transactional` use case calling a remote-capable output port (another
+  context's API, payment provider, mail gateway) — the connection is held for
+  the remote round trip. Fetch remote data first, then draw the boundary with
+  `UnitOfWork.run(...)` around load/mutate/save/publish (`DCA-USE-013`).
 
 Note: `@Service`, `@Transactional` on use-case impls in `application/` is
 fine (the use-case impl is the seam between framework and pure domain) —

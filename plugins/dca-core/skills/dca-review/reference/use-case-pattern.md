@@ -90,6 +90,10 @@ public class PlaceOrderUseCase implements PlaceOrderInputPort {
 - **`@Service`** auf der Impl, niemals auf dem Interface, niemals in `domain/`.
 - **`@Transactional`** nur für **Commands** (Writes). Queries sind read-only — `@Transactional(readOnly = true)`
   ist optional, aber sinnvoll wenn das Projekt es konsistent nutzt.
+- **Kein Remote-Port in der Transaktion.** Ruft der Use Case einen Output-Port, der den Prozess verlassen kann
+  (API eines anderen Kontexts, Payment-Provider, Mail-Gateway), dann kein Klassen-`@Transactional`: Remote-Read
+  zuerst, danach `unitOfWork.run(() -> { load; mutate; save; publish; })` (`UnitOfWork`-Port der Building
+  Blocks). Sonst hält die Transaktion die DB-Connection für den Remote-Roundtrip (`DCA-USE-013`).
 - **Konstruktor-Injection.** Kein `@Autowired` auf Feldern. Records oder
   `@RequiredArgsConstructor` (Lombok) sind erlaubt.
 - **Nur via Output-Ports.** Niemals direkter Zugriff auf `EntityManager`, `JdbcTemplate`,
