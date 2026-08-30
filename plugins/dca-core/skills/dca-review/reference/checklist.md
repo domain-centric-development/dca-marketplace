@@ -88,6 +88,8 @@ Apply only the checks for each file's layer.
 - [ ] **Anti-pattern flag — God use case:** more than 5 output ports → consider splitting
 - [ ] **Anti-pattern flag — Leaking infrastructure:** depends on JDBC/JPA/Kafka classes directly (must go through ports)
 - [ ] Uses domain methods, not raw field access (e.g. `order.cancel(reason)`, not `order.setStatus(CANCELLED)`)
+- [ ] Order inside the use case: `save`, then `publishAndClearEvents` — never publish before the save; the publisher dispatches first and clears afterwards (clear = acknowledgement)
+- [ ] Integration events go through a transactional outbox registered *inside* the transaction and released after commit; consumers idempotent
 - [ ] Publishes domain events after persistence
 - [ ] Maps domain output to a `*Result` record
 
@@ -180,6 +182,8 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 - [ ] Maps `*Result` → `*Response` (separate adapter-layer DTO)
 - [ ] No domain types in the public method signatures (no `Order` returned by REST)
 - [ ] Per-use-case methods, not "kitchen sink" controllers
+- [ ] No state-changing use case behind `@GetMapping` — writes use `POST`/`PUT`/`DELETE`; links never create sessions, carts or orders
+- [ ] Every state-changing browser form carries the CSRF token; an API exempt from CSRF authenticates by `Authorization: Bearer` only and never reads or sets cookies
 
 ### Event consumers
 
