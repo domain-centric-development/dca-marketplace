@@ -187,7 +187,7 @@ agreement. `ContextMapDocumentationTest` renders `docs/context-map.md` from the 
 | 9 | DTOs not used in domain layer | Pure model |
 | 10 | DTOs not used in application layer | (same) — DTOs are an adapter concern |
 | 11 | A use case that saves an aggregate publishes its domain events | Unpublished events are lost, and events stored on the instance may later be published out of context |
-| 12 | A use case that publishes domain events runs inside a transaction boundary (`@Transactional` or `TransactionBoundary.run`) | After-commit listeners are skipped silently without an active transaction |
+| 12 | A use case that publishes domain events runs inside a transaction boundary (`@Transactional` or `TransactionBoundary.inTransaction`) | After-commit listeners are skipped silently without an active transaction |
 | 13 | A `@Transactional` use case calls no remote-capable output port (only `Repository`, `Store`, event publishers, `TransactionBoundary`) | A remote round trip inside the transaction holds the connection; a rollback cannot undo it |
 
 ---
