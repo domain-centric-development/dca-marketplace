@@ -82,7 +82,7 @@ Apply only the checks for each file's layer.
 
 - [ ] `@Service` (and `@Transactional` for write use cases)
 - [ ] `@Transactional` only in the application layer — never on domain classes or incoming adapters (outgoing persistence adapters are the allowed exception)
-- [ ] No remote-capable output port (another context's API, payment provider, mail gateway) called inside a `@Transactional` use case — such use cases fetch remote data first and wrap save + publish in `UnitOfWork.run(...)` (`DCA-USE-013`)
+- [ ] No remote-capable output port (another context's API, payment provider, mail gateway) called inside a `@Transactional` use case — such use cases fetch remote data first and wrap save + publish in `TransactionBoundary.inTransaction(...)` (`DCA-USE-013`)
 - [ ] Constructor injection only (no `@Autowired` field injection)
 - [ ] Implements the input port
 - [ ] **Anti-pattern flag — God use case:** more than 5 output ports → consider splitting

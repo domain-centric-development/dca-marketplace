@@ -139,7 +139,7 @@ When writing or editing domain model classes:
 - **No remote call inside the transaction.** A use case that calls a port
   which may leave the process (another context's API, a payment provider)
   drops the class-level annotation: remote reads first, then
-  `unitOfWork.run(() -> { load; mutate; save; publish; })` — the `UnitOfWork`
+  `transactionBoundary.inTransaction(() -> { load; mutate; save; publish; })` — the `TransactionBoundary`
   output port of the building blocks. Remote *effects* go after the commit,
   as a reaction to an integration event.
 
