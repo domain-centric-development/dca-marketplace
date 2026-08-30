@@ -32,6 +32,7 @@ module-selection options in the bootstrap workflow.
 | 7 | Repository implementations must reside in `adapter.outgoing` | `*Repository` classes outside that package | Naming and location must match. |
 | 8 | Output ports in `application.shared` must extend `OutputPort` | A `*Repository` interface that doesn't extend the marker | Architectural traceability — every output dependency is explicit. |
 | 9 | Output ports must not reside in `domain.*` | A `Repository`/`Store`/`OutputPort`-assignable interface declared in `domain.model` next to the aggregate instead of `application/shared/` | Rule 8 only scopes `application.shared` and passes silently when the port isn't there at all — this rule closes that gap so a misplaced port fails loudly instead of being missed. |
+| 10 | Incoming adapters must depend on input ports, not on use case classes | A controller or resource injecting `CreateOrderUseCase` instead of `CreateOrderInputPort` | The port is what the adapter is supposed to drive. Injecting the implementation couples the adapter to one realisation, defeats the Dependency Inversion Principle the port exists for, and makes the adapter untestable without the real use case and everything it depends on. Rule 5a stops an adapter at the repository; this one stops it one step earlier. |
 
 ---
 
