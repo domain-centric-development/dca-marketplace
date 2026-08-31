@@ -66,3 +66,10 @@ This marketplace turns those principles into Claude Code tooling.
 ## Author
 
 Christoph Bloemer
+
+*Written with AI assistance — drafted mainly by Claude, reviewed and directed by the author
+since 2025.*
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
