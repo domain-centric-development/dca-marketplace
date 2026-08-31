@@ -179,7 +179,7 @@ Read `<project-root>/.claude/dca/conventions.md` for:
   domain")
 
 If no conventions file: use DCA defaults from
-`implementing-domain-centric-architecture/README.md`.
+`dca-guide/README.md`.
 
 ## What this skill does NOT do
 

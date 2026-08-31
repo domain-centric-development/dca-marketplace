@@ -60,7 +60,7 @@ It can override:
 - `catalog_path` — location of the OKF knowledge bundle for `/dca-knowledge`
 
 Falls back to `<project-root>/CLAUDE.md`, then to DCA defaults from
-[implementing-domain-centric-architecture](https://github.com/chbloemer/domain-centric-architecture).
+[dca-guide](https://github.com/domain-centric-development/dca-guide).
 
 ## Composability matrix (within dca-core)
 
