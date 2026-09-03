@@ -9,17 +9,22 @@ import java.lang.annotation.Target;
 /**
  * Marks a class as an Open Host Service in Domain-Driven Design.
  *
- * <p>An Open Host Service is a public API that a bounded context exposes for other bounded contexts
- * to consume. It acts as an incoming adapter that translates domain objects to DTOs, similar to how
- * REST controllers translate domain objects to JSON.
+ * <p>An Open Host Service is the protocol a bounded context publishes for other bounded contexts to
+ * consume — a relationship pattern, not a transport. In-process it is the context's {@code api}
+ * package; over the network it is an incoming adapter (REST, gRPC, MCP, ...). Either way it
+ * translates domain objects into a published language (DTOs), the way a REST controller translates
+ * domain objects to JSON.
  *
  * <p><b>Architectural rules:</b>
  *
  * <ul>
- *   <li>Open Host Services must be placed in {@code adapter/incoming/openhost/}
+ *   <li>Open Host Services live at the context boundary: in {@code api/} or anywhere under {@code
+ *       adapter/incoming/} — never in the domain or application layer
  *   <li>They must return DTOs, never domain objects
- *   <li>Outgoing adapters from other contexts may ONLY import from Open Host Services
- *   <li>Application layer use cases must NEVER import from Open Host Services directly
+ *   <li>Outgoing adapters of other contexts may only depend on a context's published {@code api/}
+ *       and {@code events/} packages
+ *   <li>Application-layer use cases never import another context's Open Host Service directly —
+ *       they go through their own output ports
  * </ul>
  *
  * <p><b>Usage:</b>

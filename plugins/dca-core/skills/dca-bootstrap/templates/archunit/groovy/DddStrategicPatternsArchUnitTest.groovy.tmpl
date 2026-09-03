@@ -222,13 +222,13 @@ class DddStrategicPatternsArchUnitTest extends BaseArchUnitTest {
   // OPEN HOST SERVICE PATTERN
   // ============================================================================
 
-  def "Open Host Services must reside in api or adapter.incoming.openhost packages"() {
+  def "Open Host Services must be published: in the api package or as an incoming adapter"() {
     expect:
     classes()
       .that().areAnnotatedWith(OPEN_HOST_SERVICE_ANNOTATION)
-      .should().resideInAnyPackage("..api..", "..${ADAPTER_SUBPKG}.${INCOMING_SUBFOLDER}.openhost..")
+      .should().resideInAnyPackage("..api..", "..${ADAPTER_SUBPKG}.${INCOMING_SUBFOLDER}..")
       .allowEmptyShould(true)
-      .because("Open Host Services expose context capabilities via api/ packages (Spring Modulith @NamedInterface) or adapter.incoming.openhost/ packages")
+      .because("An Open Host Service is the protocol a context publishes for other contexts - in-process as its api/ package, over the network as an incoming adapter (REST, gRPC, MCP); the adapter's sub-package is irrelevant")
       .check(allClasses)
   }
 

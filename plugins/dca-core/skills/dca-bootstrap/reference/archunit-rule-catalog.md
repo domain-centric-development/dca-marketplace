@@ -114,7 +114,7 @@ Bounded-context rules.
 | 1 | Shared Kernel doesn't depend on bounded contexts | Otherwise it isn't shared |
 | 2 | Application layer of context A doesn't reach context B directly | Boundary integrity |
 | 2a | Domain layer of context A doesn't reach context B at all — not even its `api/` | Stricter than rule 2 and without exceptions: translating an Open Host Service is the application layer's or an adapter's job. The shared kernel is not a foreign context (different marker), so it needs no allow-list |
-| 3 | `@OpenHostService` classes live in `api/` or `adapter.incoming.openhost` | Spring Modulith `@NamedInterface("api")` convention |
+| 3 | `@OpenHostService` classes live in the context's published `api/` package or anywhere under `adapter.incoming` | An Open Host Service is the published relationship, not a transport: in-process it is `api/`, over the network an incoming adapter (REST, gRPC, MCP) — the adapter's sub-package is irrelevant |
 | 4 | Outgoing adapters of context A access context B only via `api/` packages | Same boundary, different direction |
 | 5 | Integration Events live in `events/` or `adapter.outgoing.event` | Spring Modulith `@NamedInterface` convention |
 | 6 | Integration Events are immutable records | Wire-format stability |
