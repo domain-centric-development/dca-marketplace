@@ -19,7 +19,7 @@ DcaRule.of(
     arch ->
         noClasses()
             .that()
-            .resideInAnyPackage(layout.domainModelPattern(), layout.sharedKernelDomainPattern())
+            .resideInAnyPackage(arch.allDomainModelPatterns())
             .should()
             .beAnnotatedWith(layout.frameworkAnnotations().component())
             .orShould()
@@ -27,5 +27,6 @@ DcaRule.of(
             .orShould()
             .beAnnotatedWith("jakarta.persistence.Entity")
             .orShould()
-            .beAnnotatedWith("jakarta.persistence.Table"))
+            .beAnnotatedWith("jakarta.persistence.Table")
+            .allowEmptyShould(true))
 ```

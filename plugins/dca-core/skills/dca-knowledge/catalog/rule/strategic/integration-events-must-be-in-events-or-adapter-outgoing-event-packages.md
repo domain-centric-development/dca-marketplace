@@ -22,7 +22,8 @@ DcaRule.of(
             .that()
             .implement(IntegrationEvent.class)
             .should()
-            .resideInAnyPackage("..events..", outgoingEventAdapterPattern())
+            .resideInAnyPackage(
+                ".." + layout.eventsSubpackage() + "..", outgoingEventAdapterPattern())
             .allowEmptyShould(true))
 ```
 

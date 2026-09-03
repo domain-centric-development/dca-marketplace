@@ -19,8 +19,9 @@ DcaRule.of(
     arch ->
         noClasses()
             .that()
-            .resideInAPackage(layout.domainModelPattern())
+            .resideInAnyPackage(arch.allDomainModelPatterns())
             .should()
             .dependOnClassesThat()
-            .resideInAPackage(layout.adapterPattern()))
+            .resideInAnyPackage(arch.allAdapterPatterns())
+            .allowEmptyShould(true))
 ```

@@ -21,7 +21,7 @@ DcaRule.of(
             .that()
             .implement(DomainService.class)
             .should()
-            .resideInAnyPackage(layout.domainPattern())
+            .resideInAnyPackage(arch.allDomainPatterns())
             .allowEmptyShould(true))
 ```
 

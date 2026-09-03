@@ -19,7 +19,7 @@ DcaRule.check(
     arch -> {
       System.out.println("=== Context Map (declared) ===");
       for (String pkg : arch.boundedContextPackages()) {
-        String source = shortName(pkg);
+        String source = arch.contextName(pkg);
         for (Upstream u : arch.packageAnnotations(pkg, Upstream.class)) {
           for (Upstream.Consumes channel : u.via()) {
             System.out.println(
@@ -28,7 +28,7 @@ DcaRule.check(
                     + " --["
                     + u.translation()
                     + " / "
-                    + channelName(channel)
+                    + channelName(arch, channel)
                     + "]--> "
                     + u.context());
           }

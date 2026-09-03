@@ -18,13 +18,16 @@ DcaRule.of(
     "Incoming adapters should have clear boundaries and no cycles",
     arch ->
         slices()
-            .matching(
-                layout.basePackage()
-                    + ".(*)."
-                    + layout.adapterSubpackage()
-                    + "."
-                    + layout.incomingSubpackage()
-                    + "..")
+            .assignedFrom(
+                moduleLayerSlices(
+                    arch,
+                    root ->
+                        root
+                            + "."
+                            + layout.adapterSubpackage()
+                            + "."
+                            + layout.incomingSubpackage()))
             .should()
-            .beFreeOfCycles())
+            .beFreeOfCycles()
+            .allowEmptyShould(true))
 ```

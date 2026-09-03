@@ -16,5 +16,5 @@ DcaRule.of(
     "DCA-USE-005",
     "Use Case Queries should be immutable (final or records)",
     "Use case queries should be immutable (value objects)",
-    arch -> immutableApplicationModels(layout, "Query"))
+    arch -> immutableApplicationModels(arch, "Query"))
 ```

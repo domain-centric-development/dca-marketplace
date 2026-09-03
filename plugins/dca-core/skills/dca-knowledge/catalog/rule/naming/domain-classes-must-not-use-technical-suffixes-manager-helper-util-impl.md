@@ -20,7 +20,7 @@ DcaRule.of(
     arch ->
         noClasses()
             .that()
-            .resideInAPackage(layout.domainPattern())
+            .resideInAnyPackage(arch.allDomainPatterns())
             .should()
             .haveSimpleNameEndingWith("Manager")
             .orShould()

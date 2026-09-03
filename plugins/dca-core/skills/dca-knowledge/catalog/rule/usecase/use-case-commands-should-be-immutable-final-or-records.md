@@ -16,5 +16,5 @@ DcaRule.of(
     "DCA-USE-004",
     "Use Case Commands should be immutable (final or records)",
     "Use case commands should be immutable (value objects)",
-    arch -> immutableApplicationModels(layout, "Command"))
+    arch -> immutableApplicationModels(arch, "Command"))
 ```

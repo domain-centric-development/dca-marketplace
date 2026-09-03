@@ -13,7 +13,7 @@ package {basePackage}.{context}.adapter.incoming.openhost;
 
 import {basePackage}.{context}.application.get{thing}byid.Get{Thing}ByIdInputPort;
 import {basePackage}.{context}.application.get{thing}byid.Get{Thing}ByIdQuery;
-import {basePackage}.sharedkernel.marker.strategic.OpenHostService;
+import dev.domaincentric.dca.buildingblocks.ddd.strategic.relationships.OpenHostService;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 

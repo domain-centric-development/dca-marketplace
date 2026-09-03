@@ -24,7 +24,7 @@ DcaRule.of(
             .and()
             .areInterfaces()
             .should()
-            .resideInAPackage(layout.domainPattern())
+            .resideInAnyPackage(arch.allDomainPatterns())
             .allowEmptyShould(true))
 ```
 

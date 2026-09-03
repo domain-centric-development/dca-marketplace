@@ -22,7 +22,7 @@ DcaRule.of(
             .that()
             .haveSimpleNameStartingWith("Enriched")
             .and()
-            .resideInAPackage(layout.domainModelPattern())
+            .resideInAnyPackage(arch.allDomainModelPatterns())
             .and()
             .doNotImplement(Factory.class)
             .should()

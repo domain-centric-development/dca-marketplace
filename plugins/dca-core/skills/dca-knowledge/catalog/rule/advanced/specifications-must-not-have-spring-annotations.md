@@ -21,7 +21,7 @@ DcaRule.of(
             .that()
             .haveSimpleNameEndingWith("Specification")
             .and()
-            .resideInAnyPackage(layout.domainPattern())
+            .resideInAnyPackage(arch.allDomainPatterns())
             .should()
             .beAnnotatedWith(layout.frameworkAnnotations().component())
             .orShould()

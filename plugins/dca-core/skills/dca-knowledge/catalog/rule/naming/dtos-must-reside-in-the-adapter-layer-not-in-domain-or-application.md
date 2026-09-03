@@ -23,6 +23,6 @@ DcaRule.of(
             .and()
             .resideInAnyPackage(layout.basePackage() + "..")
             .should()
-            .resideInAPackage(layout.adapterPattern())
+            .resideInAnyPackage(arch.allAdapterPatterns())
             .allowEmptyShould(true))
 ```

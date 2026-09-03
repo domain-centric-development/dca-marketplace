@@ -19,7 +19,10 @@ DcaRule.of(
         + " Principle)",
     arch ->
         slices()
-            .matching(layout.basePackage() + ".(*)." + layout.domainSubpackage() + ".model..")
+            .assignedFrom(
+                moduleLayerSlices(
+                    arch, root -> root + "." + layout.domainSubpackage() + ".model"))
             .should()
-            .beFreeOfCycles())
+            .beFreeOfCycles()
+            .allowEmptyShould(true))
 ```

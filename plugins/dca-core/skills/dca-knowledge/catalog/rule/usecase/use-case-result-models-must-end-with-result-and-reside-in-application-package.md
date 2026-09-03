@@ -26,7 +26,7 @@ DcaRule.of(
             .and()
             .doNotImplement(Value.class)
             .should()
-            .resideInAnyPackage(layout.applicationPattern())
+            .resideInAnyPackage(arch.allApplicationPatterns())
             .allowEmptyShould(true))
 ```
 
