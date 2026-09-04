@@ -115,7 +115,7 @@ Apply only the checks for each file's layer.
 ### Basics
 
 - [ ] Interfaces only (no implementations)
-- [ ] Extends `Repository<T, ID>`, `Store`, `OutputPort`, or domain-specific marker (`EventPublisher`, `IdentityProvider`)
+- [ ] Extends `Repository<T, ID>`, `Store`, `DomainEventPublisher`/`IntegrationEventPublisher`, or plain `OutputPort` for a project-specific port (`IdentityProvider`, `Clock`) — these are ports, not markers
 - [ ] Lives in the application layer — never in `domain/`
 - [ ] **Anti-pattern flag — Leaky port (technology in name):** name reveals technology (`OrderJpaRepository`, `KafkaOrderEventPublisher` as the *port* — not the impl). The port should be technology-agnostic; the *implementation* in `adapter/outgoing/` carries the tech prefix.
 - [ ] **Anti-pattern flag — Per-use-case repository:** if every use case has its own bespoke `*Repository` instead of reusing one per aggregate, consolidate into a shared `*Repository` in `application/shared/`.
@@ -154,6 +154,18 @@ The shape of the port is as important as its existence. Run these checks on ever
 - [ ] **Anti-pattern flag — Premature local port:** a port lives in `{usecasename}/` but is imported by another use case → must move to `application/shared/` (cross-use-case imports inside `application/` are a smell).
 - [ ] **Anti-pattern flag — Over-shared port:** a port lives in `application/shared/` but only one use case imports it AND no plausible second caller exists → consider moving to the use case's folder.
 - [ ] **Tie-breaker rule:** when uncertain, default to `application/shared/` — moving shared→local is cheap, moving local→shared is costly.
+
+### Identity and authorization (the identity port)
+
+- [ ] The identity port (`IdentityProvider`) is an `OutputPort` in `application/shared/` (shared kernel or one context), implemented in the authenticating context's `adapter/outgoing/security/`. Never a domain type, never a marker.
+- [ ] A use case acting on a caller's resource takes the caller **as a command/query field** (`GetCartByIdQuery(cartId, customerId)`). The incoming adapter fills it from the port; the use case does not call the identity port to learn on whose behalf it runs.
+  - Symptom: `identityProvider.getCurrentIdentity()` inside a `*UseCase`; or a command that names a resource id but not whose it is while sibling use cases in the same context carry the caller.
+- [ ] The repository is asked a **scoped question** (`findByIdForCustomer`) — not `findById` followed by an ownership `if`.
+- [ ] A **claims-only gate** (role on the token) may sit in the incoming adapter. Anything that needs the loaded resource must not.
+- [ ] The **domain never sees the caller**: no `User`/identity parameter on aggregate methods, no role check in domain code, no security-framework type in `domain/`.
+- [ ] The authentication filter **enriches, never gates** — no blanket `authenticated()` rule guards a use case.
+- [ ] A use case with no caller (event consumer, scheduled job) is unscoped **and says so** in a comment.
+- [ ] Refusals are rendered in the adapter (`403` vs `404` is a protocol decision); the use case returns "nothing here for you".
 
 See [use-case-pattern.md §3](use-case-pattern.md#3-decision-guide-lokaler-vs-shared-output-port) for the full decision guide.
 
