@@ -28,6 +28,16 @@ com.example.shop/orders/application/placeorder/
 └── PlaceOrderResult.java      # record(OrderId orderId, Instant placedAt)
 ```
 
+### Flach oder nach Feature gruppiert
+
+Ein kleiner Kontext hält `application/{usecasename}/`. Wächst die flache Liste über ein Dutzend Einträge und
+bilden sich kohärente Gruppen, kommt die optionale Ebene **Feature** dazwischen:
+`application/{feature}/{usecasename}/` — ein fachlich benannter Navigationsrahmen unterhalb der Schicht
+(`session`, `cartrecovery`, `checkoutcompletion`), kein Modul, kein Aggregat-Eigentümer. Innerhalb eines Kontexts
+gilt genau eine Form (`DCA-USE-014`); die Feature-Pakete dürfen keinen Zyklus bilden (`DCA-CYC-005`);
+`application/shared/` bleibt kontextweit — kein `application/{feature}/shared/`. Die Domäne wird nicht pro Feature
+gespiegelt. Ein vertikaler Schnitt `{context}/{feature}/{domain,application,adapter}` ist **kein** Feature.
+
 ### Folder-Name (lowercase, kein Separator)
 
 Der Folder-Name ist **immer lowercase ohne Separator**: `placeorder`, `getorderbyid`,

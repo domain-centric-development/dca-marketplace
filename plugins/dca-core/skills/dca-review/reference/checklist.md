@@ -241,6 +241,20 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 
 - [ ] Packages named by domain concept, not technical role
 - [ ] **Anti-pattern flag:** technical bucket packages — `entities/`, `valueobjects/`, `helpers/`, `util/`
+- [ ] Use cases of one context are either all flat (`application/{usecase}/`) or all grouped into features
+      (`application/{feature}/{usecase}/`) — never both (`DCA-USE-014`); no use case directly in `application/`,
+      none nested deeper than a feature
+- [ ] Feature names are lowercase terms of the ubiquitous language (`cartrecovery`, `checkoutcompletion`)
+- [ ] **Anti-pattern flag — technical bucket as feature:** `commands/`, `queries/`, `handlers/`, `services/`,
+      `web/`, `api/` directly below `application/`
+- [ ] **Anti-pattern flag — vertical slice disguised as feature:** `{context}/{feature}/{domain,application,adapter}`
+      — a layer below the feature makes it a module; either it is a bounded context or the slice must go
+- [ ] No `application/{feature}/shared/` — repositories and stores stay in the context-wide `application/shared/`
+- [ ] The domain is not mirrored by feature (no `domain/{feature}/`); a feature owns no aggregate
+- [ ] Feature (or, in a flat context, use-case) packages form no dependency cycle (`DCA-CYC-005`); a
+      one-directional dependency between two features is acceptable
+- [ ] Incoming adapters that mirror features keep the protocol first: `adapter/incoming/web/{feature}/`, never
+      `adapter/incoming/{feature}/web/`
 
 ### DTOs
 

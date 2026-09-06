@@ -15,6 +15,7 @@ module-selection options in the bootstrap workflow.
 | 2 | Application packages must be cycle-free | A→B→A between use-case slices | Use cases should be independent vertical slices. |
 | 3 | Outgoing-adapter packages must be cycle-free | A→B→A between persistence/external adapters | Adapters are leaves of the dependency graph. |
 | 4 | Incoming-adapter packages must be cycle-free | A→B→A between controllers/event consumers | Same. |
+| 5 | Feature (or use-case) packages inside one module's application layer must be cycle-free (`DCA-CYC-005`) | A→B→A between the packages directly below `application/` — features in a grouped context, use cases in a flat one; `application/shared` is not a slice | A cycle between two features means the grouping does not carry its weight; a one-directional dependency is fine. Features are optional and the rule infers nothing about contexts or aggregates. |
 
 ---
 
@@ -190,6 +191,7 @@ agreement. `ContextMapDocumentationTest` renders `docs/context-map.md` from the 
 | 11 | A use case that saves an aggregate publishes its domain events | Unpublished events are lost, and events stored on the instance may later be published out of context |
 | 12 | A use case that publishes domain events runs inside a transaction boundary (`@Transactional` or `TransactionBoundary.inTransaction`) | After-commit listeners are skipped silently without an active transaction |
 | 13 | A `@Transactional` use case calls no remote-capable output port (only `Repository`, `Store`, event publishers, `TransactionBoundary`) | A remote round trip inside the transaction holds the connection; a rollback cannot undo it |
+| 14 | Use-case packages within one module use one consistent depth — all `application.<usecase>` or all `application.<feature>.<usecase>` (`DCA-USE-014`) | A *feature* is an optional, domain-named group of use cases below the layer. Mixing both forms, a use case directly in `application`, or one nested deeper than a feature makes the tree unreadable. Legibility only — nothing is inferred about bounded contexts or aggregate ownership |
 
 ---
 

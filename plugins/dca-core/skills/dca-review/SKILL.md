@@ -56,6 +56,7 @@ For each file, determine its DCA layer from path:
 **/domain/event/**       → domain.event
 **/domain/service/**     → domain.service
 **/application/{usecasename}/**  → application.usecase
+**/application/{feature}/{usecasename}/**  → application.usecase (feature-grouped context)
 **/application/shared/** → application.outputports
 **/adapter/{in,incoming}/**  → adapter.incoming
 **/adapter/{out,outgoing}/** → adapter.outgoing

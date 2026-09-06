@@ -2,6 +2,10 @@ package {{basePackage}}
 
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices
 
+import com.tngtech.archunit.core.domain.JavaClass
+import com.tngtech.archunit.library.dependencies.SliceAssignment
+import com.tngtech.archunit.library.dependencies.SliceIdentifier
+
 /**
  * ArchUnit tests for Package Cycle Detection.
  *
@@ -45,6 +49,48 @@ class PackageCyclesArchUnitTest extends BaseArchUnitTest {
       .allowEmptyShould(true)
       .because("Outgoing adapters should have clear boundaries and no cycles")
       .check(allClasses)
+  }
+
+  // DCA-CYC-005 — inside one module: the packages directly below application/ (features in a grouped
+  // layout, use cases in a flat one) must not depend on each other in a circle. Slices are assigned from
+  // each class's module root — the shortest package prefix whose next segment is a layer — so a context
+  // nested below the base package (com.acme.sales.order) is sliced too; a one-segment pattern would skip
+  // it silently. application.shared is the context-wide port package and belongs to no slice.
+  def "Feature and use case packages within a module's application layer must not have cyclic dependencies"() {
+    expect:
+    slices()
+      .assignedFrom(applicationChildSlices())
+      .should().beFreeOfCycles()
+      .allowEmptyShould(true)
+      .because("A cycle between two features means the grouping does not carry its weight - the shared concept belongs in application.shared, in the domain, or in one of the two")
+      .check(allClasses)
+  }
+
+  private static String moduleRootOf(String packageName) {
+    if (!packageName.startsWith("${BASE_PACKAGE}.")) return null
+    def layers = [DOMAIN_SUBPKG, APP_SUBPKG, ADAPTER_SUBPKG] as Set
+    def root = new StringBuilder(BASE_PACKAGE)
+    for (segment in packageName.substring(BASE_PACKAGE.length() + 1).split("\\.")) {
+      if (layers.contains(segment)) return root.toString()
+      root.append('.').append(segment)
+    }
+    return null
+  }
+
+  private SliceAssignment applicationChildSlices() {
+    return new SliceAssignment() {
+      SliceIdentifier getIdentifierOf(JavaClass javaClass) {
+        def root = moduleRootOf(javaClass.packageName)
+        if (root == null) return SliceIdentifier.ignore()
+        def application = "${root}.${APP_SUBPKG}"
+        def pkg = javaClass.packageName
+        if (!pkg.startsWith("${application}.")) return SliceIdentifier.ignore()
+        def child = pkg.substring(application.length() + 1).split("\\.")[0]
+        return child == "shared" ? SliceIdentifier.ignore() : SliceIdentifier.of("${application}.${child}")
+      }
+
+      String getDescription() { "feature or use case packages" }
+    }
   }
 
   def "Incoming Adapter Packages must not have cyclic dependencies"() {

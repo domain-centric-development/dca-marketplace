@@ -136,7 +136,9 @@ Don't impose patterns the project doesn't use.
 
 ### Repositories
 
-- Interface in `{context}/application/shared/`.
+- Interface in `{context}/application/shared/` (context-wide — never in a feature folder; when the
+  context groups its use cases into features, `application/{feature}/{usecase}/`, the repository still
+  lives in the one `shared/`).
 - Extends the project's `Repository<T extends AggregateRoot<T, ID>, ID>` (or
   matching marker).
 - Inherited methods typically: `findById()`, `save()`, `deleteById()`.

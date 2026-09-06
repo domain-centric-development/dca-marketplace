@@ -122,9 +122,32 @@ Build a `conventions` summary and (if anything is ambiguous) confirm with the us
 - **Type:** Command (write — modifies state) or Query (read — pure data fetch)
 - **Output ports needed:** which existing repositories/data ports does it need? Or ask the skill to auto-create a fresh `*Repository` if a new aggregate is in play.
 
+### Placement: flat or feature-grouped context
+
+Before writing, look at the packages directly below `{context}/application/` (ignore `shared`):
+
+```bash
+find src/main/java/{basePackage//.//}/{context}/application -mindepth 1 -maxdepth 1 -type d -not -name shared
+```
+
+- If those folders contain use cases directly (`*InputPort`, `*UseCase` files) → the context is **flat**: the
+  new use case goes to `application/{usecasename}/`.
+- If they contain further folders which hold the use cases → the context is **grouped by feature**
+  (`application/{feature}/{usecasename}/`). A *feature* is an optional, domain-named group of related use cases —
+  a navigation boundary below the layer, not a module or aggregate owner. Ask the user which feature the new use
+  case belongs to (offer the existing ones); if none fits, take a new lowercase name **from the ubiquitous
+  language** (`cartrecovery`, `checkoutcompletion`). Reject technical buckets (`commands`, `queries`, `handlers`,
+  `services`, `utils`) and delivery mechanisms (`web`, `api`) as feature names.
+- Never mix: a flat use case in a grouped context (or vice versa) violates `DCA-USE-014`. If the user wants to
+  *introduce* features into a flat context, move **all** its use cases in one refactoring, not just the new one.
+- `application/shared/` stays context-wide in both forms — never create `application/{feature}/shared/`.
+- A vertical slice `{context}/{feature}/{domain,application,adapter}` is **not** a feature (the layer must stay
+  above the feature); refuse to scaffold it and point to the bounded-context mode instead.
+
 ### Generated files
 
-In `src/main/java/{basePackage}/{context}/application/{usecasename}/` (lowercase, no separator):
+In `src/main/java/{basePackage}/{context}/application/{usecasename}/` (lowercase, no separator) — or
+`application/{feature}/{usecasename}/` in a grouped context:
 
 | File | Generated from | Notes |
 |---|---|---|
@@ -353,6 +376,7 @@ See `templates/` for the actual `.java.tmpl` files.
 Common placeholders:
 - `{{basePackage}}`, `{{context}}` — base package + bounded context name
 - `{{usecasename}}` (lowercase, no separator) — for use case folder
+- `{{featureSegment}}` — empty in a flat context, `{feature}.` in a grouped one (so the package reads `application.{{featureSegment}}{{usecasename}}`)
 - `{{Name}}` — PascalCase name (e.g. `PlaceOrder`, `Order`)
 - `{{commandOrQuery}}` — `Command` or `Query`
 - `{{useCaseImplSuffix}}` — `UseCase` (default) or `ApplicationService` etc.

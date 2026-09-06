@@ -203,4 +203,41 @@ class UseCasePatternsArchUnitTest extends BaseArchUnitTest {
       .allowEmptyShould(true)
       .check(allClasses)
   }
+
+  // ============================================================================
+  // FEATURE LAYOUT (DCA-USE-014)
+  // ============================================================================
+
+  // Use cases live at one of two depths below a context's application package: application.<usecase>
+  // (flat) or application.<feature>.<usecase> (grouped). A feature is an optional, domain-named group of
+  // use cases — a navigation boundary below the layer, not a module or aggregate owner. One form per
+  // context; application.shared, abstract classes and nested types are ignored. Legibility only: nothing is inferred about
+  // bounded contexts or aggregate ownership.
+  def "Use case packages within a module must use one consistent depth (flat or grouped by feature)"() {
+    given:
+    def violations = []
+    def byModule = allClasses
+      .findAll { !it.isInterface() && !it.modifiers.contains(JavaModifier.ABSTRACT) && !it.isNestedClass() && it.simpleName.endsWith(USE_CASE_IMPL_SUFFIX) }
+      .findAll { it.packageName.startsWith("${BASE_PACKAGE}.") && (it.packageName.endsWith(".${APP_SUBPKG}") || it.packageName.contains(".${APP_SUBPKG}.")) }
+      .groupBy { it.packageName.substring(0, (it.packageName + ".").indexOf(".${APP_SUBPKG}.")) }  // module root: everything before the layer segment, at any depth
+
+    byModule.each { module, useCases ->
+      def application = "${module}.${APP_SUBPKG}"
+      def depths = [:]
+      useCases.each { useCase ->
+        def pkg = useCase.packageName
+        if (pkg == "${application}.shared" || pkg.startsWith("${application}.shared.")) return
+        def depth = pkg == application ? 0 : pkg.substring(application.length() + 1).split("\\.").length
+        depths.computeIfAbsent(depth) { new TreeSet<String>() }.add(pkg)
+      }
+      (depths[0] ?: []).each { violations << "Module ${module}: use case directly in the application package ${it}" }
+      depths.findAll { d, pkgs -> d > 2 }.each { d, pkgs -> pkgs.each { violations << "Module ${module}: use case package ${it} is nested deeper than application.<feature>.<usecase>" } }
+      if (depths.containsKey(1) && depths.containsKey(2)) {
+        violations << "Module ${module} mixes flat use case packages ${depths[1]} with feature-grouped ones ${depths[2]} - finish the migration in one direction"
+      }
+    }
+
+    expect:
+    assert violations.isEmpty(), violations.join("\n")
+  }
 }

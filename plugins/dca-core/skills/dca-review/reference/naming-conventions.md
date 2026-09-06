@@ -23,6 +23,11 @@ deviations as findings.
 
 **Use-case folder names:** lowercase, no separator (`placeorder`, `getorderbyid`, not `placeOrder` or `place-order`).
 
+**Feature folder names** (optional group of use cases, `application/{feature}/{usecasename}/`): lowercase terms of
+the ubiquitous language (`ordering`, `cartrecovery`, `checkoutcompletion`) — never technical buckets (`commands`,
+`queries`, `handlers`, `services`, `utils`) and never delivery mechanisms (`web`, `api`). A context is flat or
+grouped, never both.
+
 ## Domain layer
 
 | Pattern | Purpose |
@@ -84,5 +89,5 @@ deviations as findings.
 |---|---|
 | `adapter/incoming/` | `adapter/in/` |
 | `adapter/outgoing/` | `adapter/out/` |
-| `application/{usecasename}/` | `application/service/` (flat) + `application/port/in/` + `application/port/out/` |
+| `application/{usecasename}/` — or `application/{feature}/{usecasename}/` once grouped | `application/service/` (flat) + `application/port/in/` + `application/port/out/` |
 | `sharedkernel/` | `shared/`, `common/`, `core/` |
