@@ -34,6 +34,7 @@ module-selection options in the bootstrap workflow.
 | 8 | Output ports in `application.shared` must extend `OutputPort` | A `*Repository` interface that doesn't extend the marker | Architectural traceability — every output dependency is explicit. |
 | 9 | Output ports must not reside in `domain.*` | A `Repository`/`Store`/`OutputPort`-assignable interface declared in `domain.model` next to the aggregate instead of `application/shared/` | Rule 8 only scopes `application.shared` and passes silently when the port isn't there at all — this rule closes that gap so a misplaced port fails loudly instead of being missed. |
 | 10 | Incoming adapters must depend on input ports, not on use case classes | A controller or resource injecting `CreateOrderUseCase` instead of `CreateOrderInputPort` | The port is what the adapter is supposed to drive. Injecting the implementation couples the adapter to one realisation, defeats the Dependency Inversion Principle the port exists for, and makes the adapter untestable without the real use case and everything it depends on. Rule 5a stops an adapter at the repository; this one stops it one step earlier. |
+| 11 | Incoming adapters must not depend on domain services (`DCA-HEX-012`) | A controller, view model or event consumer injecting or calling a `DomainService` (`CheckoutStepValidator`, `TaxCalculator`) | An incoming adapter translates external input, calls an input port and formats its result. Injecting or invoking a domain service bypasses the application boundary; the use case owns that collaboration and puts its outcome into the result. Outgoing adapters are outside this rule — repositories construct and reconstitute domain objects while implementing output ports. |
 
 ---
 
@@ -192,6 +193,7 @@ agreement. `ContextMapDocumentationTest` renders `docs/context-map.md` from the 
 | 12 | A use case that publishes domain events runs inside a transaction boundary (`@Transactional` or `TransactionBoundary.inTransaction`) | After-commit listeners are skipped silently without an active transaction |
 | 13 | A `@Transactional` use case calls no remote-capable output port (only `Repository`, `Store`, event publishers, `TransactionBoundary`) | A remote round trip inside the transaction holds the connection; a rollback cannot undo it |
 | 14 | Use-case packages within one module use one consistent depth — all `application.<usecase>` or all `application.<feature>.<usecase>` (`DCA-USE-014`) | A *feature* is an optional, domain-named group of use cases below the layer. Mixing both forms, a use case directly in `application`, or one nested deeper than a feature makes the tree unreadable. Legibility only — nothing is inferred about bounded contexts or aggregate ownership |
+| 15 | `*Result` must not expose aggregate roots or entities (`DCA-USE-015`) | A result is the use case's answer, not a handle on the model: identity and behaviour stay behind the port; values, enriched models and read models may cross. Checked transitively through nested records, part records anywhere in the application layer (`application.shared` included) and generic type arguments (`List<T>`, `Optional<T>`, `Map<K,V>`) |
 
 ---
 

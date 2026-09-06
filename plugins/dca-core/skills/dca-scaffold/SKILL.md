@@ -153,7 +153,7 @@ In `src/main/java/{basePackage}/{context}/application/{usecasename}/` (lowercase
 |---|---|---|
 | `{Name}InputPort.java` | `templates/use-case/InputPort.java.tmpl` | Interface extending `UseCase<{Name}Command|Query, {Name}Result>` |
 | `{Name}Command.java` _or_ `{Name}Query.java` | `templates/use-case/Command.java.tmpl` / `Query.java.tmpl` | Java record with the fields the user named |
-| `{Name}Result.java` | `templates/use-case/Result.java.tmpl` | Java record with the result fields |
+| `{Name}Result.java` | `templates/use-case/Result.java.tmpl` | Java record with the result fields and a static `from(...)` factory. Values only — no aggregate root or entity, also not via `List<T>`/`Optional<T>` (`DCA-USE-015`); part records named by content, never `*Result`; a command's result stays small (ids, status, next step) |
 | `{Name}{ImplSuffix}.java` | `templates/use-case/UseCase.java.tmpl` | `@Service @Transactional` impl. ImplSuffix from convention discovery (default `UseCase`, but can be `ApplicationService`, etc.) |
 
 ### Wiring

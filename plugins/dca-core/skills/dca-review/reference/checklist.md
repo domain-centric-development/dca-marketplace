@@ -105,7 +105,11 @@ Apply only the checks for each file's layer.
 
 - [ ] Record
 - [ ] Lives in the same package as the use case
-- [ ] Doesn't expose domain entities directly (use IDs and primitives)
+- [ ] Carries values, never identities: primitives, nested part records, value objects (shared kernel included), enriched domain models and read models (`Value`) — no field, part record or generic argument (`List<T>`, `Optional<T>`, `Map<K,V>`) assignable to `AggregateRoot` or `Entity` (`DCA-USE-015`, checked transitively)
+- [ ] Part records are named by content (`CartItemSummary`, `LineItemData`, `ProfileView`) and nested in the result; `*Result` is the top level only; a part shared by several use cases lives in `application/shared`
+- [ ] Command results are small — ids, status/outcome, what the caller needs next; the view comes from a query or read model. A command returning a whole read model is the documented round-trip exception and then returns the read-model `Value`, never a parade of primitives
+- [ ] Large aggregates hand out a snapshot (`Value` in `domain/readmodel`, `Snapshot.from(aggregate)`) that *is* the result field — no second flattening in the use case
+- [ ] Assembled in the application layer, in order of effort: static `from(...)` on the result → use-case body when several ports feed the projection → `*Assembler` in the use-case folder or `application/shared` when it grows or is shared. Never `*Mapper`/`*Converter`/`*Helper` in `application/`
 - [ ] **Anti-pattern flag:** if Result has same fields as the aggregate → consider whether the use case is doing meaningful transformation
 
 ---
@@ -193,6 +197,9 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 - [ ] Depends on the input port interface, not the implementation
 - [ ] Maps `*Result` → `*Response` (separate adapter-layer DTO)
 - [ ] No domain types in the public method signatures (no `Order` returned by REST)
+- [ ] Derives no business facts: reads and formats what the `*Result` delivers. Calling the own, parameterless queries of a delivered value or read model (`lineTotal()`, `isValidForCheckout()`) is reading; combining values from several sources into a new fact, or needing a domain service to derive one, means the result is too poor — move the value into the result or read model
+- [ ] Obtains no domain collaborator: no `DomainService` injected or invoked (`DCA-HEX-012`); the use case owns that collaboration and puts its outcome into the result
+- [ ] Constructs no domain object (aggregate, entity, domain value) and triggers no behaviour with side effects — raw request data goes into the `Command`/`Query`, the use case builds the domain types
 - [ ] Per-use-case methods, not "kitchen sink" controllers
 - [ ] No state-changing use case behind `@GetMapping` — writes use `POST`/`PUT`/`DELETE`; links never create sessions, carts or orders
 - [ ] Every state-changing browser form carries the CSRF token; an API exempt from CSRF authenticates by `Authorization: Bearer` only and never reads or sets cookies
@@ -213,6 +220,7 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 - [ ] In `adapter/outgoing/persistence/`
 - [ ] Implements the output port from `application/shared/`
 - [ ] No business logic — only persistence
+- [ ] Mapping, construction and reconstitution of domain objects is allowed and expected here (`reconstitute` factories, row → aggregate); it restores state and makes no new business decision
 
 ### Integration event publishers
 

@@ -149,8 +149,24 @@ public record PlaceOrderResult(
 
 - **`record`**.
 - **Lebt im selben Package** wie die Use Case — nicht in einem geteilten `dto/`-Ordner.
-- **Exponiert keine Aggregate.** Niemals `Order order` als Result-Feld — stattdessen
-  IDs, Value Objects, Primitives.
+- **Trägt Werte, keine Identitäten.** Erlaubt: Primitives, verschachtelte Part-Records, Value Objects
+  (auch aus dem Shared Kernel: `Money`, `ProductId`), Enriched Domain Models und Read Models (`Value`-Records
+  aus `domain/model` bzw. `domain/readmodel`). Verboten: alles, was `AggregateRoot` oder `Entity` ist — auch
+  transitiv über Part-Records und `List<T>`/`Optional<T>`/`Map<K,V>` (`DCA-USE-015`). Niemals `Order order`
+  als Result-Feld.
+- **Part-Records heißen nach Inhalt** (`CartItemSummary`, `LineItemData`, `ProfileView`), nie `*Result`;
+  `*Result` ist nur die oberste Ebene. Parts liegen im Result verschachtelt; teilen sich mehrere Use Cases
+  einen Part, wandert er nach `application/shared`.
+- **Command-Results sind klein:** IDs, Status/Outcome, was der Aufrufer für den nächsten Schritt braucht.
+  Die Ansicht liefert eine Query oder ein Read Model. Ein Command, der das ganze Read Model zurückgibt, ist
+  die dokumentierte Ausnahme (spart einem Remote-Aufrufer einen Roundtrip) — und liefert dann den
+  Read-Model-`Value`, keine Parade von Primitives.
+- **Große Aggregate geben einen Snapshot heraus** (`Value` in `domain/readmodel`, `Snapshot.from(aggregate)`);
+  der Snapshot *ist* das Result-Feld, der Use Case flacht ihn nicht ein zweites Mal.
+- **Wer baut das Result:** die Application-Schicht, nach Aufwand geordnet — (a) statische Factory `from(...)`
+  am Result, Parts mit eigenem `from`; (b) braucht die Projektion mehrere Ports, ist sie Orchestrierung und
+  gehört in den Use-Case-Body; (c) wächst sie oder brauchen sie mehrere Use Cases, ein `*Assembler` im
+  Use-Case-Ordner oder in `application/shared`. Nie `*Mapper`, `*Converter` (`DCA-NAM-008`), nie `*Helper`.
 - **Anti-Pattern:** Result hat **dieselben Felder wie das Aggregat** → fragwürdig.
   Entweder die Use Case macht keine sinnvolle Transformation (dann brauchst du sie
   vielleicht nicht), oder der Adapter sollte direkt das Aggregat-Snapshot abrufen.
@@ -280,6 +296,8 @@ Die folgenden Regeln validieren das Use-Case-Pattern statisch (installierbar via
 | `inputPortsShouldExtendUseCaseMarker` | Alle `*InputPort`-Interfaces extenden `UseCase<I, O>` |
 | `commandsAndQueriesShouldBeRecords` | `*Command` und `*Query` sind `record` oder `final` |
 | `resultsShouldBeRecords` | `*Result` ist `record` |
+| `resultsShouldNotExposeAggregateRootsOrEntities` | Kein Feld, Part-Record oder Generic-Argument eines `*Result` ist `AggregateRoot`/`Entity` (`DCA-USE-015`, transitiv) |
+| `incomingAdaptersShouldNotDependOnDomainServices` | Kein `DomainService` in `adapter/incoming/` injiziert oder aufgerufen (`DCA-HEX-012`) |
 | `noSpringAnnotationsOnCommandsQueriesResults` | Kein `@Component`/`@Service`/... auf Input/Output-Records |
 | `useCasesShouldNotDependOnAdapters` | `application/` darf nicht aus `adapter/` importieren |
 | `useCasesShouldNotDependOnInfrastructureFrameworks` | Keine `javax.persistence`-/`org.springframework.jdbc`-Imports in `application/` |
@@ -297,7 +315,9 @@ Implementierung der Tests.
 |---|---|---|
 | Use Case als `@Component` statt `@Service` | Klassifikation unklar | `@Service` benutzen — Spring-Konvention für Use Cases |
 | Command mutiert Daten | Setter, nicht-finale Felder, normale Klasse | In `record` umwandeln, defensive Copies in compact constructor |
-| Result enthält Aggregat | `record PlaceOrderResult(Order order)` | Auf IDs/Primitives reduzieren: `record PlaceOrderResult(OrderId orderId, Money total)` |
+| Result enthält Aggregat | `record PlaceOrderResult(Order order)` — auch versteckt in `List<Order>` oder einem Part-Record | Auf Werte reduzieren: `record PlaceOrderResult(OrderId orderId, Money total)`; für große Aggregate einen Snapshot (`Value` in `domain/readmodel`) liefern |
+| Command-Result trägt die ganze Ansicht | `SubmitDeliveryResult` mit 14 String-/Decimal-Feldern, die kein Controller liest | Auf `(sessionId, currentStep, status)` verkleinern; die nächste Seite fragt die Query |
+| Incoming Adapter rechnet nach | `*PageViewModel` injiziert `TaxCalculator`/`CartTotalCalculator`, um aus dem Result einen Wert abzuleiten | Wert ins Result oder Read Model aufnehmen; der Adapter liest und formatiert (`DCA-HEX-012`) |
 | Use Case hat 2 öffentliche Methoden | `placeOrder()` + `placeOrderUrgent()` | Aufsplitten in zwei Use Cases oder per Command-Feld parametrisieren |
 | Folder ist `place-order` oder `placeOrder` | Compile-Fehler oder Konvention-Drift | Auf `placeorder` umbenennen |
 | Output-Port im Domain-Layer | `domain/port/OrderRepository.java` | Nach `application/shared/` verschieben (Ports gehören zur Application-Layer) |

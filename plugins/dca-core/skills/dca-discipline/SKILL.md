@@ -164,7 +164,7 @@ Before any write or edit, Claude:
 | `domain/` | 1, 2, 3, 4, 5 |
 | `application/{usecase}/` — or `application/{feature}/{usecase}/` in a feature-grouped context (one form per context, `DCA-USE-014`; no feature cycles, `DCA-CYC-005`) | 2, 3, 4, 5 (`@Transactional` lives here) |
 | `application/shared/` | 2 (interfaces only — no impls) |
-| `adapter/incoming/` | 3 (must not bypass application layer to reach domain), 5 (no `@Transactional`) |
+| `adapter/incoming/` | 3 (must not bypass application layer to reach domain: no `DomainService` injected or invoked, `DCA-HEX-012`; reads and formats the `*Result` — a delivered read model's own queries included — constructs no domain object, combines nothing into a new business fact), 5 (no `@Transactional`) |
 | `adapter/outgoing/` | 3 (must implement a port, not introduce new domain concepts); `@Transactional` allowed on persistence adapters |
 | `infrastructure/` | — (framework code belongs here) |
 

@@ -5,7 +5,18 @@ package {{basePackage}}.{{context}}.application.{{featureSegment}}{{usecasename}
  *
  * <p>Application-layer output model — adapter layer maps this to a {@code *Response}
  * (e.g. JSON DTO) before exposing it externally.
+ *
+ * <p>Carries values, never identities: primitives, nested part records (named by content, e.g.
+ * {@code LineItemSummary}), value objects and read models — no aggregate root or entity, also not
+ * inside a {@code List} or {@code Optional}. A command's result stays small (ids, status, what the
+ * caller needs next); the view comes from a query. The static factory keeps the assembly in the
+ * application layer.
  */
 public record {{Name}}Result(
 {{resultFields}}
-) {}
+) {
+
+    public static {{Name}}Result from(/* the aggregate or read model */ Object source) {
+        throw new UnsupportedOperationException("Map values from the source, never expose it");
+    }
+}
