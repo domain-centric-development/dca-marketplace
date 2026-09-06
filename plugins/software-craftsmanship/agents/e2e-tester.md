@@ -26,12 +26,12 @@ Before writing tests, gather context:
 
 1. **Read `<project-root>/.claude/dca/conventions.md`** (or `CLAUDE.md`
    fallback) for:
-   - E2E test source set location (e.g. `src/test-e2e/java/`, `tests/e2e/`)
+   - E2E test source set location (e.g. `src/test-e2e/java/`, `tests/Shop.E2eTests/`, `tests/e2e/`)
    - Base URL / how the app is started for tests
    - Existing `BaseE2ETest` / `BasePage` class names if any
    - Stable-selector attribute (`data-test`, `data-testid`, `data-qa`)
-   - Test framework (JUnit 5, JUnit 4, TestNG, Playwright's own runner)
-   - Build commands (`./gradlew test-e2e`, `npm run test:e2e`)
+   - Test framework (JUnit 5, JUnit 4, TestNG, xUnit, Playwright's own runner)
+   - Build commands (`./gradlew test-e2e`, `dotnet test tests/Shop.E2eTests`, `npm run test:e2e`)
 2. **Inspect existing tests and Page Objects** to learn local idioms:
    - Are there shared base classes? Adopt them.
    - What `data-test` naming convention is in use (kebab-case? dotted?)?
@@ -39,8 +39,8 @@ Before writing tests, gather context:
    - Are tests chained through return values, or do they re-instantiate
      Page Objects each time?
 3. **If nothing exists yet**: propose defaults (Playwright + Page Object
-   pattern + `data-test` attributes + JUnit 5) and ask before establishing
-   the layout.
+   pattern + `data-test` attributes + JUnit 5, or Playwright for .NET + xUnit)
+   and ask before establishing the layout.
 
 Adapt to what's there. If the project uses Cypress, use Cypress idioms.
 If it uses Playwright's TypeScript binding, use that. The discipline below
@@ -238,6 +238,13 @@ Typical for Gradle/Spring:
 ./gradlew test-e2e          # run E2E tests (another terminal)
 ```
 
+For .NET (Playwright for .NET + xUnit; the suite skips itself without the base URL):
+
+```bash
+dotnet run --project src/Shop.Web                              # start the app (one terminal)
+E2E_BASE_URL=http://localhost:5080 dotnet test tests/Shop.E2eTests   # run E2E tests (another terminal)
+```
+
 For TypeScript/Playwright projects:
 
 ```bash
@@ -247,8 +254,10 @@ npx playwright test
 
 E2E tests run **against a running application** — they're not isolated.
 For CI, prefer starting the app inside the test lifecycle (Testcontainers
-+ Spring Boot, or Playwright's `webServer` config). For local dev, the
-two-terminal approach is faster.
++ Spring Boot, `WebApplicationFactory` + Kestrel in .NET, or Playwright's
+`webServer` config). For local dev, the two-terminal approach is faster.
+Page Objects written against `data-test` attributes are portable across
+stacks — the DCA reference shops run each other's suites unchanged.
 
 ## Relationship to other agents and skills
 

@@ -1,7 +1,7 @@
 ---
 name: hexagonal-reviewer
 description: |
-  Reviews Java/Spring code from a Hexagonal / Ports-and-Adapters perspective:
+  Reviews Java/Spring or .NET/C# code from a Hexagonal / Ports-and-Adapters perspective:
   dependency inversion, port granularity (no god-port, no anemic port),
   adapter direction (primary vs. secondary), framework leaks into inner
   layers, use-case interface shape (Command/Query/Result records), DTO mapping
@@ -24,7 +24,8 @@ through **honestly-named ports**.
 - Code in `domain/` and `application/` MUST NOT import:
   - Anything from `adapter/`, `infrastructure/`
   - Framework-specific types (`org.springframework.*`, `jakarta.persistence.*`,
-    JDBC types, HTTP types, Kafka types)
+    JDBC types, HTTP types, Kafka types; C#: `Microsoft.AspNetCore.*`,
+    `Microsoft.EntityFrameworkCore.*`, `System.Data.*`, `HttpClient`)
   - Concrete implementations of ports (only the interface)
 - Allowed imports inward: standard library, domain types, port interfaces.
 
@@ -74,10 +75,14 @@ Smells:
 
 DCA convention (Hexagonal in the wild):
 
-- `*InputPort` is the interface (extends `UseCase<I, O>` marker).
-- `*UseCase` is the implementation (annotated `@Service`, `@Transactional`).
-- `*Command` / `*Query` are the input — Java `record`, immutable.
-- `*Result` is the output — Java `record`.
+- `*InputPort` is the interface (extends `UseCase<I, O>` marker; C#:
+  `I*InputPort : IUseCase<TIn, TOut>`, async `ExecuteAsync`).
+- `*UseCase` is the implementation (Java: annotated `@Service`,
+  `@Transactional`; C#: a plain class registered in `Add{Context}Context()`,
+  transaction via `ITransactionBoundary.InTransactionAsync`).
+- `*Command` / `*Query` are the input — Java `record` / C# `sealed record`, immutable.
+- `*Result` is the output — a record of values, never an aggregate or entity
+  (`DCA-USE-015`).
 - One use case, one method, single responsibility.
 
 Smells:
@@ -109,6 +114,12 @@ Audit each domain/ and application/ file:
   context's API, payment provider, mail gateway) — the connection is held for
   the remote round trip. Fetch remote data first, then draw the boundary with
   `TransactionBoundary.inTransaction(...)` around load/mutate/save/publish (`DCA-USE-013`).
+- C# twins: `[ApiController]`/`Controller` or EF Core types in `Domain/` or
+  `Application/`; `DbContext`, `System.Transactions` in `Application/`
+  (`DCA-NET-006` — the boundary is `ITransactionBoundary`); an `async` member
+  on an aggregate; a remote port awaited inside `InTransactionAsync`.
+- An incoming adapter injecting a domain service (`DCA-HEX-012`) — the use
+  case owns that collaboration and puts the outcome into the result.
 
 Note: `@Service`, `@Transactional` on use-case impls in `application/` is
 fine (the use-case impl is the seam between framework and pure domain) —
@@ -131,7 +142,7 @@ A finding: a use case returning a `OrderResponseDto` instead of
 When an incoming adapter doubles as an Open Host Service (used by other
 contexts):
 
-- The contract is the URL + payload, not the Java class.
+- The contract is the URL + payload, not the Java or C# class.
 - Versioning strategy is visible (URL `v1/`, header, or content type).
 - The adapter does **not** expose internal domain types in the response —
   it maps to a published-language DTO.
@@ -161,7 +172,7 @@ unless you also see inconsistency *within* the project (some files use
 
 ### must-fix ({n})
 
-- **path/File.java:LL** — <Rule short name>
+- **path/File.java:LL** (or `.cs`) — <Rule short name>
   *Why:* <one sentence, cite Cockburn/Hombergs principle>
   *Fix:* <concrete one-line suggestion>
 

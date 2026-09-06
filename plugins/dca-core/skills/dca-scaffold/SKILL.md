@@ -2,27 +2,33 @@
 name: dca-scaffold
 disable-model-invocation: true
 description: |
-  Scaffolds new Domain-Centric Architecture (DCA) code into Java/Spring projects: bounded
-  contexts, use cases (Command/Query + InputPort + Result + Impl), and aggregate roots
+  Scaffolds new Domain-Centric Architecture (DCA) code into Java/Spring or .NET/C# projects:
+  bounded contexts, use cases (Command/Query + InputPort + Result + Impl), and aggregate roots
   (with Id, Repository, and Created event). Use when the user asks to "create a new bounded
   context", "scaffold a use case", "add an aggregate root", "generate DCA structure for
-  feature X", or "/dca-scaffold". Adapts to existing project conventions: reads BaseArchUnitTest
-  constants (if dca-bootstrap was installed) and existing code style. Never overwrites files.
+  feature X", or "/dca-scaffold". Adapts to existing project conventions: reads the project's
+  DcaLayout (architecture test) and `.claude/dca/conventions.md`, plus existing code style.
+  Never overwrites files.
 ---
 
 # dca-scaffold
 
-Generates DCA-compliant code in three modes: **bounded context**, **use case**, **aggregate root**.
+Generates DCA-compliant code in four modes: **bounded context**, **use case**, **aggregate root**, **store** —
+in **Java** (Spring) or **C#** (.NET). Templates exist for both: `*.java.tmpl` and `*.cs.tmpl` side by side.
 
-This is the second skill in the DCA suite. Use after `dca-bootstrap` has installed markers
-and the ArchUnit governance — but `dca-scaffold` also works standalone (it adapts to the
+This is the second skill in the DCA suite. Use after `dca-bootstrap` has added the DCA packages
+(`dev.domaincentric:dca-building-blocks` + `dca-archunit`, or `DomainCentric.BuildingBlocks` +
+`DomainCentric.ArchRules`) and the architecture test — but `dca-scaffold` also works standalone (it adapts to the
 project's existing conventions either way).
 
 ## Core principle: read first, generate second
 
 Before generating anything, **inspect the project** to find:
-1. Whether `dca-bootstrap` ran (look for `BaseArchUnitTest` — it encodes the conventions)
-2. Otherwise: existing markers, layer naming, use-case-class suffix, lombok-or-records preference
+1. The language: `build.gradle(.kts)`/`pom.xml` → Java branch; `*.sln`/`*.csproj` → C# branch.
+2. The project's `DcaLayout` — the architecture test that `dca-bootstrap` generated encodes the conventions
+   (`class … extends DcaArchitectureTest` / `class … : DcaArchitectureTest`).
+3. `.claude/dca/conventions.md`, if present.
+4. Otherwise: existing markers, layer naming, use-case-class suffix, lombok-or-records preference.
 
 Generate code that matches what's already there. Don't impose DCA defaults if the project
 follows different (but consistent) conventions.
@@ -45,26 +51,34 @@ If unclear, ask via `AskUserQuestion`.
 ## Convention discovery (run before any mode)
 
 ```bash
-# 1. Check for BaseArchUnitTest — if present, read it for the canonical project conventions
-find . -name 'BaseArchUnitTest.*' -not -path '*/build/*' -not -path '*/target/*'
+# 1. The project's DcaLayout — the architecture test is the single source of the layout conventions
+grep -rn "DcaLayout\." --include='*.java' --include='*.cs' . | grep -v '/build/\|/bin/\|/obj/'
 ```
 
-If found: `Read` it. Extract:
-- `BASE_PACKAGE`
-- `DOMAIN_SUBPKG`, `APP_SUBPKG`, `ADAPTER_SUBPKG`, `INCOMING_SUBFOLDER`, `OUTGOING_SUBFOLDER`
-- Marker FQNs (`AGGREGATE_ROOT_MARKER`, `USE_CASE_MARKER`, `REPOSITORY_MARKER`, etc.)
-- Use-case-impl-suffix from custom constants like `APPLICATION_SERVICE_SUFFIX`
+If found: `Read` the test. The `DcaLayout` builder chain **is** the convention list — every `with…`/`With…` call
+is a deviation from the DCA default:
+- `forBasePackage("com.acme.shop")` / `ForRootNamespace("Acme.Shop")` → `{{basePackage}}` / `{{rootNamespace}}`
+- `withIncomingSubpackage("in")`, `withOutgoingSubpackage("out")` / `WithIncomingSegment`, `WithOutgoingSegment`
+  → adapter sub-folders
+- `withUseCaseSuffix("ApplicationService")` / `WithUseCaseSuffix(...)` → `{{useCaseImplSuffix}}`
+- `withRestControllerSuffix(...)` / `WithRestControllerSuffix(...)` → REST adapter suffix
+- `withDomainSubpackage`, `withApplicationSubpackage`, `withAdapterSubpackage` (rare) → layer names
+The marker types are the library's (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`);
+`.claude/dca/conventions.md` may override any of it. Also read `dca-archunit.properties` (test class path /
+next to the test assembly) — a rule set switched off there tells you which patterns the project deliberately
+does not use (e.g. no `tactical` → do not scaffold a rich aggregate without asking).
 
-If not found: scan the project directly:
+If no architecture test exists: scan the project directly:
 ```bash
-# Find existing aggregate root style
+# Java — existing aggregate root style, use case style, adapter folders
 grep -rln --include='*.java' -E 'extends BaseAggregateRoot|implements AggregateRoot' src/main/java
-
-# Find existing use case style — interface/impl naming
 grep -rln --include='*.java' -E 'implements\s+\w+UseCase|class\s+\w+(UseCase|ApplicationService)' src/main/java
-
-# Find existing adapter folders
 find . -type d \( -name incoming -o -name outgoing -o -name in -o -name out \) -path '*/adapter/*' -not -path '*/build/*'
+
+# C# — same questions
+grep -rln --include='*.cs' -E ': AggregateRootBase<|: IAggregateRoot<' src
+grep -rln --include='*.cs' -E ': I\w+InputPort|class \w+(UseCase|ApplicationService)\b' src
+find . -type d \( -name Incoming -o -name Outgoing -o -name In -o -name Out \) -path '*/Adapter/*' -not -path '*/bin/*' -not -path '*/obj/*'
 ```
 
 Build a `conventions` summary and (if anything is ambiguous) confirm with the user before generating.
@@ -83,8 +97,11 @@ Build a `conventions` summary and (if anything is ambiguous) confirm with the us
 
 1. **Validate:** the context name must be lowercase, single word (no hyphens). E.g. `orders`, `inventory`. If hyphenated, the user means a multi-word concept — ask whether to use `customeraccount` (concatenated) or `customer-account` (Gradle module name) — these are different.
 2. **Decide install location.** Two common patterns:
-   - **Single-module project:** create the package directly under `src/main/java/{basePackage}/{context}/`.
+   - **Single-module project:** create the package directly under `src/main/java/{basePackage}/{context}/`
+     (C#: the namespace `{rootNamespace}.{Context}` inside the existing project).
    - **Multi-module Gradle:** create a new sub-project `{context}/` with its own `build.gradle.kts`. Ask the user which mode applies.
+   - **.NET, one project per context** (the .NET reference layout): create `src/{rootNamespace}.{Context}/` from
+     `templates/bounded-context/Context.csproj.tmpl`, add it with `dotnet sln add`.
 3. **Generate the directory tree** (per `templates/bounded-context/`):
    ```
    {basePackage}/{context}/
@@ -96,7 +113,7 @@ Build a `conventions` summary and (if anything is ambiguous) confirm with the us
        shared/               # shared output ports across use cases (Repository, etc.)
        # use cases get their own subdirectory each via Mode B
      adapter/
-       {incoming}/           # honors INCOMING_SUBFOLDER from BaseArchUnitTest
+       {incoming}/           # honors the DcaLayout incoming segment (incoming / in)
          api/                # REST resources
          event/              # event consumers
          web/                # MVC controllers + ViewModels (if applicable)
@@ -105,7 +122,12 @@ Build a `conventions` summary and (if anything is ambiguous) confirm with the us
          event/              # integration event publishers
      package-info.java       # @BoundedContext("name")
    ```
-4. **Write `package-info.java`** with `@BoundedContext` annotation. Use the FQN of the project's existing `BoundedContext` annotation (from convention discovery).
+   C#: PascalCase segments (`Domain/Model`, `Application/Shared`, `Adapter/Incoming/Web`, `Adapter/Outgoing/Persistence`,
+   `Infrastructure/`).
+4. **Declare the context.** Java: `package-info.java` with `@BoundedContext` (`templates/bounded-context/package-info.java.tmpl`).
+   C# has no `package-info`: write the marker class `{Context}Context` in the context root namespace
+   (`templates/bounded-context/Context.cs.tmpl`) and the DI extension `Add{Context}Context()` in `Infrastructure/`
+   (`ContextRegistration.cs.tmpl`); tell the user to call it from the host's `Program.cs`.
 5. **Add Gradle module** if multi-module: create `build.gradle.kts` from `templates/bounded-context/build.gradle.kts.tmpl` and add `include("{context}")` to `settings.gradle.kts`.
 6. **Verify:** run the architecture tests if they exist. The new (empty) context should not break anything.
 
@@ -147,14 +169,15 @@ find src/main/java/{basePackage//.//}/{context}/application -mindepth 1 -maxdept
 ### Generated files
 
 In `src/main/java/{basePackage}/{context}/application/{usecasename}/` (lowercase, no separator) — or
-`application/{feature}/{usecasename}/` in a grouped context:
+`application/{feature}/{usecasename}/` in a grouped context. C#: `Application/{Name}/` (PascalCase folder = last
+namespace segment) or `Application/{Feature}/{Name}/`.
 
-| File | Generated from | Notes |
+| File (Java / C#) | Generated from | Notes |
 |---|---|---|
-| `{Name}InputPort.java` | `templates/use-case/InputPort.java.tmpl` | Interface extending `UseCase<{Name}Command|Query, {Name}Result>` |
-| `{Name}Command.java` _or_ `{Name}Query.java` | `templates/use-case/Command.java.tmpl` / `Query.java.tmpl` | Java record with the fields the user named |
-| `{Name}Result.java` | `templates/use-case/Result.java.tmpl` | Java record with the result fields and a static `from(...)` factory. Values only — no aggregate root or entity, also not via `List<T>`/`Optional<T>` (`DCA-USE-015`); part records named by content, never `*Result`; a command's result stays small (ids, status, next step) |
-| `{Name}{ImplSuffix}.java` | `templates/use-case/UseCase.java.tmpl` | `@Service @Transactional` impl. ImplSuffix from convention discovery (default `UseCase`, but can be `ApplicationService`, etc.) |
+| `{Name}InputPort.java` / `I{Name}InputPort.cs` | `templates/use-case/InputPort.{java,cs}.tmpl` | Interface extending `UseCase<{Name}Command|Query, {Name}Result>` / `IUseCase<…>` (async: `Task<TOut> ExecuteAsync(TIn, CancellationToken)`) |
+| `{Name}Command` _or_ `{Name}Query` | `templates/use-case/Command.*.tmpl` / `Query.*.tmpl` | Record with the fields the user named (`sealed record` in C#) |
+| `{Name}Result` | `templates/use-case/Result.*.tmpl` | Record with the result fields and a static `from(...)`/`From(...)` factory. Values only — no aggregate root or entity, also not via `List<T>`/`Optional<T>` / `IReadOnlyList<T>`/`T?` (`DCA-USE-015`); part records named by content, never `*Result`; a command's result stays small (ids, status, next step) |
+| `{Name}{ImplSuffix}` | `templates/use-case/UseCase.*.tmpl` | Java: `@Service @Transactional` impl. C#: plain class, registered in `Add{Context}Context()`; writes wrap load–mutate–save–publish in `ITransactionBoundary.InTransactionAsync`. ImplSuffix from convention discovery (default `UseCase`, but can be `ApplicationService`, etc.) |
 
 ### Wiring
 
@@ -162,8 +185,9 @@ The implementation gets:
 - Constructor injection of all needed output ports (declared explicitly by the user or detected)
 - A `// TODO: implement` body — the skill doesn't try to write business logic
 - Proper imports (using project conventions: lombok `@RequiredArgsConstructor` if project uses lombok elsewhere; otherwise explicit constructor)
+- C#: add the `services.AddScoped<I{Name}InputPort, {Name}UseCase>()` line to the context's `Add{Context}Context()`
 
-If the user named output ports that don't exist yet, scaffold them in `application/shared/` as interfaces extending `Repository` or `OutputPort` (depending on intent).
+If the user named output ports that don't exist yet, scaffold them in `application/shared/` (`Application/Shared/`) as interfaces extending `Repository` or `OutputPort` (`IRepository` / `IOutputPort`, async methods) depending on intent.
 
 ### Naming check
 
@@ -301,19 +325,19 @@ Siehe [use-case-pattern.md §4](../dca-review/reference/use-case-pattern.md#4-ad
 
 ### Generated files
 
-In `src/main/java/{basePackage}/{context}/domain/model/`:
+In `src/main/java/{basePackage}/{context}/domain/model/` (C#: `Domain/Model/`):
+
+| File (Java / C#) | Notes |
+|---|---|
+| `{Name}.java` / `{Name}.cs` | `extends BaseAggregateRoot<{Name}, {Name}Id>` / `: AggregateRootBase<{Name}, {Name}Id>`. Has `id()` / `Id`, factory `create(...)` / `Create(...)`, and a TODO for business methods. The C# aggregate is synchronous — the domain never awaits. |
+| `{Name}Id.java` / `{Name}Id.cs` | Java record `implements Id` / C# `readonly record struct : IId`. Type matches the chosen ID type (UUID/Long/String — `Guid`/`long`/`string`). |
+| `{Name}Created` (in `domain/event/` / `Domain/Event/`) | Record implementing `DomainEvent` / `IDomainEvent`. Has `aggregateId`, `occurredAt` (C#: `EventId`, `OccurredOn`, `AggregateId` + `Now(...)` factory). |
+
+In `src/main/java/{basePackage}/{context}/application/shared/` (C#: `Application/Shared/`):
 
 | File | Notes |
 |---|---|
-| `{Name}.java` | `extends BaseAggregateRoot<{Name}, {Name}Id>` if available, otherwise `implements AggregateRoot<{Name}, {Name}Id>`. Has `id()`, factory method `create(...)`, and a TODO for business methods. |
-| `{Name}Id.java` | Java record `implements Id`. Type matches the chosen ID type (UUID/Long/String). |
-| `{Name}Created.java` (in `domain/event/`) | Java record `implements DomainEvent`. Has `aggregateId`, `occurredAt`. |
-
-In `src/main/java/{basePackage}/{context}/application/shared/`:
-
-| File | Notes |
-|---|---|
-| `{Name}Repository.java` | Interface `extends Repository<{Name}, {Name}Id>`. Methods: `findById`, `save`. |
+| `{Name}Repository.java` / `I{Name}Repository.cs` | Interface `extends Repository<{Name}, {Name}Id>` / `: IRepository<{Name}, {Name}Id>`. Java declares `findById`, `save`; the C# base interface already carries `FindByIdAsync`, `SaveAsync`. |
 
 If the project uses lombok: use `@Getter`, `@AllArgsConstructor` etc. Otherwise explicit accessors.
 
@@ -360,6 +384,7 @@ If the user is unsure, ask: "Will you ever call `findById` on a `{StoredType}`? 
 In `src/main/java/{basePackage}/{context}/application/shared/`:
 
 - `{Name}Store.java` (from `templates/store/Store.java.tmpl`) — interface `extends Store`. Has `record(...)` plus the user-named query methods.
+- C#: `I{Name}Store.cs` (from `templates/store/Store.cs.tmpl`) — `: IStore` with `RecordAsync(...)` and async query methods, in `Application/Shared/`.
 
 The skill does NOT generate a `findById` or `save` method — those are Repository semantics.
 
@@ -371,10 +396,13 @@ If the user names the new port `*Repository` but the stored type is a Value Obje
 
 ## Templates and substitutions
 
-See `templates/` for the actual `.java.tmpl` files.
+See `templates/` for the actual `.java.tmpl` and `.cs.tmpl` files — one twin per artefact, pick by language.
 
 Common placeholders:
-- `{{basePackage}}`, `{{context}}` — base package + bounded context name
+- `{{basePackage}}`, `{{context}}` — base package + bounded context name (Java, lowercase)
+- `{{rootNamespace}}`, `{{Context}}`, `{{contextDisplayName}}` — root namespace + PascalCase context segment + the
+  display name in `[BoundedContext("…")]` (C#)
+- `{{FeatureSegment}}`, `{{IncomingSegment}}`, `{{OutgoingSegment}}` — PascalCase twins of the Java segments (C#)
 - `{{usecasename}}` (lowercase, no separator) — for use case folder
 - `{{featureSegment}}` — empty in a flat context, `{feature}.` in a grouped one (so the package reads `application.{{featureSegment}}{{usecasename}}`)
 - `{{Name}}` — PascalCase name (e.g. `PlaceOrder`, `Order`)
@@ -399,8 +427,8 @@ if Path(target).exists():
 
 Run the architecture tests if they exist:
 ```bash
-./gradlew test-architecture     # if dca-bootstrap was used
-./gradlew :{context}:test       # otherwise the regular test task for this module
+./gradlew test-architecture     # Java (dca-bootstrap's source set), otherwise ./gradlew :{context}:test
+dotnet test tests/*.ArchitectureTests   # .NET (Debug build — ArchUnitNET needs it)
 ```
 
 Any failures should be findings, not skill bugs. Print:
@@ -419,5 +447,9 @@ Next:
 - **Don't write business logic.** The skill scaffolds structure. The user's domain expertise fills it.
 - **Don't impose conventions** the project doesn't follow. If they use `*ApplicationService`, scaffold `*ApplicationService` — not `*UseCase`.
 - **Don't auto-generate Repository methods beyond `findById`/`save`.** Specific finders are project decisions.
-- **Don't add Spring `@Component` to domain classes.** Domain stays framework-free (DCA invariant).
+- **Don't add Spring `@Component` to domain classes.** Domain stays framework-free (DCA invariant). Same in C#: no
+  `[Table]`, no ASP.NET or EF Core attribute in `Domain/`.
 - **Don't generate package-info.java for sub-packages** (only for the bounded context root) — keeps the tree clean.
+  C#: one `{Context}Context` marker class per context, never per layer.
+- **Don't make the C# domain async.** Ports are `Task`-based; aggregates, value objects and domain services stay
+  synchronous — a rule of the .NET catalog enforces it.

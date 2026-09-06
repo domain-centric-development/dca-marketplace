@@ -47,11 +47,11 @@ Cycle length: minutes, not hours. If a cycle takes >15 min, the step is too big.
 
 | Layer | TDD applies? | Notes |
 |---|---|---|
-| `domain/` | **Yes, primary** | Pure Java, no Spring — fast feedback. Domain invariants and aggregate behavior. |
+| `domain/` | **Yes, primary** | Pure Java / pure C#, no framework — fast feedback. Domain invariants and aggregate behavior. |
 | `application/` (use cases) | **Yes** | Mock the output ports. Test orchestration logic. |
 | `adapter/incoming/` (REST, MCP) | **Sometimes** | Thin adapters often don't justify TDD; cover with integration tests. |
 | `adapter/outgoing/` (Repo impls) | **Integration tests, not TDD** | The interesting failure mode is the boundary with the real DB — Testcontainers, not mocks. |
-| ArchUnit / Spring-Modulith verification | **No** | These are governance checks, not behavior. They run *after* code exists. |
+| ArchUnit / ArchUnitNET / Spring-Modulith verification | **No** | These are governance checks, not behavior. They run *after* code exists. |
 
 ## Anti-patterns this skill flags
 
@@ -73,11 +73,12 @@ Read `<project-root>/.claude/dca/conventions.md` (or fall back to
 `<project-root>/CLAUDE.md`) for:
 
 - Test source set paths (`src/test/`, `src/test-integration/`, etc.)
-- Test framework choice (JUnit 5 vs. Spock)
+- Test framework choice (JUnit 5 vs. Spock; xUnit in .NET)
 - Project-specific naming for test classes
 
-If no conventions file: default to JUnit 5 in `src/test/java/`, mirror the
-production package structure, suffix test classes with `Test`.
+If no conventions file: default to JUnit 5 in `src/test/java/` (Java) or xUnit
+in `tests/{Root}.UnitTests/` (.NET), mirror the production package/namespace
+structure, suffix test classes with `Test`.
 
 ## Commands the user might run
 
@@ -86,6 +87,9 @@ production package structure, suffix test classes with `Test`.
 ./gradlew test --tests '*OrderTest*'      # one class
 ./gradlew test --tests '*.shouldPlace*'   # one method pattern
 ./gradlew test -Pfilter=Cart              # if project supports it
+
+dotnet test tests/Shop.UnitTests                                   # .NET: all unit tests
+dotnet test tests/Shop.UnitTests --filter "FullyQualifiedName~Order"   # one class / pattern
 ```
 
 After Green, before Refactor, **run the relevant tests once** to confirm green.

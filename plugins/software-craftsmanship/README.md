@@ -1,7 +1,7 @@
 # software-craftsmanship
 
 Project-agnostic craftsmanship skills and a reviewer agent. Usable on any
-Java/Spring project — **no DCA assumptions**. Pairs naturally with
+Java or .NET project — **no DCA assumptions**. Pairs naturally with
 [dca-core](../dca-core/) for the full Domain-Centric Architecture practice,
 but stands on its own.
 
@@ -19,7 +19,7 @@ but stands on its own.
 
 | Agent | Role | Sources |
 |---|---|---|
-| `e2e-tester` | **Builder** — Playwright E2E tests + Page Objects with stable `data-test` selectors, one-flow-per-test, no `Thread.sleep` | Playwright docs + Page Object Pattern |
+| `e2e-tester` | **Builder** — Playwright E2E tests + Page Objects (Playwright for Java or for .NET) with stable `data-test` selectors, one-flow-per-test, no sleeps | Playwright docs + Page Object Pattern |
 | `clean-code-reviewer` | **Reviewer** — SOLID, naming, function size, smells, DRY with judgment, named refactorings | Martin, Hunt/Thomas, Fowler |
 
 ## Why these are separate from dca-core
@@ -27,7 +27,7 @@ but stands on its own.
 These four bricks are **valuable independent of DCA**:
 
 - `/tdd` works in any codebase with a test runner.
-- `/clean-code` and `clean-code-reviewer` apply to any Java/Spring code,
+- `/clean-code` and `clean-code-reviewer` apply to any Java or C# code,
   whether the architecture is hexagonal, layered, MVC, or none of the above.
 - `/adr` is a project-management practice — useful even on a quick-and-dirty
   service.
@@ -62,8 +62,8 @@ file works for both plugins.)
 
 It can override:
 - Test source set paths (`src/test/`, `src/test-integration/`, etc.)
-- Test framework choice (JUnit 5, Spock)
-- Formatter command (e.g. `./gradlew spotlessApply`)
+- Test framework choice (JUnit 5, Spock, xUnit)
+- Formatter command (e.g. `./gradlew spotlessApply`, `dotnet format`)
 - ADR storage path
 
 Falls back to `<project-root>/CLAUDE.md`, then to sensible defaults.
@@ -78,7 +78,7 @@ Falls back to `<project-root>/CLAUDE.md`, then to sensible defaults.
 ## Installation
 
 ```
-/plugin marketplace add chbloemer/dca-marketplace
+/plugin marketplace add domain-centric-development/dca-marketplace
 /plugin install software-craftsmanship@dca-marketplace
 /plugin install dca-core@dca-marketplace                  # optional companion
 ```

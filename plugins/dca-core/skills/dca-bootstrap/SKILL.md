@@ -2,321 +2,294 @@
 name: dca-bootstrap
 disable-model-invocation: true
 description: |
-  Installs the Domain-Centric Architecture (DCA) marker interfaces and ArchUnit governance
-  test suite into a Java/Spring project. Use when the user wants to introduce DCA conventions
-  into a new or existing codebase — e.g. "add ArchUnit tests for DCA", "set up DCA governance",
-  "install DCA marker interfaces", "bootstrap DCA in this project". Adapts to the project's
-  existing structure: detects existing marker-like interfaces, parameterizes test constants
-  to the real package layout, and never overwrites existing files.
+  Installs Domain-Centric Architecture (DCA) into a Java or .NET project by adding the published
+  packages — `dev.domaincentric:dca-building-blocks` + `dca-archunit`, or `DomainCentric.BuildingBlocks`
+  + `DomainCentric.ArchRules.Xunit` — and generating one thin architecture test that runs the DCA
+  rule catalog. Use when the user wants to introduce DCA conventions into a new or existing codebase —
+  e.g. "set up DCA governance", "add the DCA architecture rules", "bootstrap DCA in this project".
+  Inspects the project first, maps its layout onto `DcaLayout`, migrates or aliases existing
+  marker-like interfaces, and never overwrites existing files.
 ---
 
 # dca-bootstrap
 
-Installs Domain-Centric Architecture (DCA) **marker interfaces** + **ArchUnit governance suite** into the current Java/Spring project. Works for both greenfield and retrofit.
+Installs Domain-Centric Architecture (DCA) into the current project: the **building blocks** the
+production code implements (`AggregateRoot`, `UseCase`, `Repository`, `DomainEvent`, …) come from a
+published package, the **rule catalog** from a second one, and the skill generates the one test
+class that runs it. Java (Gradle or Maven, JUnit 5) and .NET (xUnit) are supported.
 
-DCA = synthesis of DDD, Hexagonal Architecture, and Clean Architecture. The marker interfaces (`AggregateRoot`, `UseCase`, `Repository`, `DomainEvent`, etc.) are what the ArchUnit rules pin to.
+DCA = synthesis of DDD, Hexagonal Architecture and Clean Architecture. The rule libraries pin to the
+package markers, so a project must implement *those* markers — the retrofit path for existing
+marker-like interfaces is below.
+
+| | Java | .NET |
+|---|---|---|
+| Production dependency | `dev.domaincentric:dca-building-blocks` | `DomainCentric.BuildingBlocks` |
+| Test dependency | `dev.domaincentric:dca-archunit` (brings ArchUnit) | `DomainCentric.ArchRules.Xunit` (brings `DomainCentric.ArchRules`, ArchUnitNET) |
+| Base class | `dev.domaincentric.dca.archunit.junit.DcaArchitectureTest` | `DomainCentric.ArchRules.Xunit.DcaArchitectureTest` |
+| Layout | `DcaLayout.forBasePackage(..)` | `DcaLayout.ForRootNamespace(..)` |
+| Context declaration | `@BoundedContext` on `package-info.java` | `[BoundedContext]` on a marker class in the context root namespace |
+| Rule selection | `dca-archunit.properties` on the test class path | `dca-archunit.properties` copied next to the test assembly |
+| Run | `./gradlew test-architecture` / `mvn test` | `dotnet test` (Debug) |
 
 ## Core principle: adapt, don't overwrite
 
-This skill ships **templates and rules**, not a deterministic generator. Before writing anything, you (Claude) **inspect the project** and **ask the user** about deviations. Templates are extracted verbatim from the DCA reference implementation but must be adapted to the project's real package layout, naming, and stack.
-
-**Never overwrite an existing file.** If a target path is occupied, stop and ask.
+Before writing anything, **inspect the project** and **ask the user** about deviations. The
+templates under `templates/` are skeletons with placeholders, not a generator's output. **Never
+overwrite an existing file** — if a target path is occupied, stop and ask.
 
 ## Workflow
 
-Follow these phases in order. Do not skip the inspection phase.
-
 ### Phase 1 — Inspection
 
-Use `Glob`, `Read`, `Grep`, and `Bash` (for `find`) to determine:
+Use `Glob`, `Read`, `Grep` and `Bash` to determine:
 
-1. **Build tool & versions:**
-   - `build.gradle` / `build.gradle.kts` / `pom.xml`?
-   - Java version (look for `sourceCompatibility`, `<java.version>`, `toolchain`)?
-   - Spring Boot version? Spring Modulith already present?
-   - Existing test plugins (Spock? JUnit5?)
+1. **Language and build system.** `build.gradle(.kts)` / `pom.xml` → Java branch; `*.sln` /
+   `*.csproj` → .NET branch. Read the Java version (`toolchain`, `sourceCompatibility`,
+   `<java.version>`), Spring Boot version, whether Spring Modulith is present; or the
+   `TargetFramework`, the test framework already in use (xUnit / NUnit / MSTest), and whether a
+   `Directory.Build.props` exists.
 
-   **Greenfield (no build file yet):** don't propose a Java/Spring Boot version from training-data
-   memory — it goes stale (a newer major line ships every year; e.g. Spring Boot 4 exists as of
-   2026 and training data may still anchor on 3.x). Look up the current stable line first —
-   `context7` (`resolve-library-id` + `query-docs` for "Spring Boot") or `WebSearch`/`WebFetch`
-   against spring.io — then offer that as the recommended default in the version question (decision
-   in Phase 2), with the previous stable line as the fallback option. Same for Spring Modulith and
-   ArchUnit versions if Spring Modulith / a specific ArchUnit baseline is in play. Re-verify at
-   bootstrap time even if you "know" the current version from a recent session — don't cache it
-   across projects.
+2. **Versions — look them up, never recall them.** Package and framework versions go stale in
+   training data. At bootstrap time resolve:
+   - `{{dcaJavaVersion}}` — the latest release of `dev.domaincentric:dca-archunit` (Maven Central
+     search or mvnrepository via `WebFetch`); `dca-building-blocks` shares the version line.
+   - `{{dcaDotnetVersion}}` — the latest `DomainCentric.ArchRules.Xunit` on NuGet.org. If the
+     package is not found there, the libraries are not yet published: say so, and offer the
+     conditional `ProjectReference` fallback (`templates/dotnet/Directory.Build.props-local-fallback.tmpl`)
+     against a sibling `dca-dotnet` checkout the user names.
+   - Greenfield projects: also the current stable Spring Boot / .NET line (spring.io, dotnet.microsoft.com),
+     offered as the recommended default with the previous stable line as fallback.
+   Re-verify per project; do not carry a version over from another session.
 
-2. **Source layout:**
-   - Source root (usually `src/main/java`, but could be `app/src/...` in Android-style multi-module)
-   - Top-level base package (read a few `package` declarations under `src/main/java`)
-   - Existing modules / multi-project setup (`settings.gradle`)
+3. **Source layout.** Source root, base package (Java: a few `package` declarations under
+   `src/main/java`) or root namespace (.NET: `RootNamespace` or the first namespace segments of the
+   production projects); multi-module (`settings.gradle` `include`, Maven modules, several
+   `*.csproj`). In multi-module Java builds the module hosting `src/test-architecture` must depend
+   on every production module, or `DcaArchitecture.load(layout)` imports only part of the base
+   package; in .NET, list every production project in the test project and every assembly in
+   `Assemblies`.
 
-2b. **Multi-module project structure:**
-   - Check `settings.gradle` / `settings.gradle.kts` for `include` statements
-   - Identify which modules contain production source code vs. test-only code
-   - Check if modules publish `testArtifacts` (test JARs) — these affect ImportOption configuration
-   - In multi-module projects, the `ClassFileImporter` must include project module JARs but exclude third-party JARs and test JARs. The standard `DO_NOT_INCLUDE_JARS`/`DO_NOT_INCLUDE_ARCHIVES` ImportOptions will break bounded context discovery because they exclude all JARs, including sibling module JARs.
-
-3. **Existing ArchUnit setup:**
-
-   ```bash
-   # Find existing ArchUnit tests so we don't overwrite or duplicate them
-   grep -rln --include='*.java' --include='*.groovy' -E '\b(import com\.tngtech\.archunit|extends BaseArchUnitTest|new ClassFileImporter)' .
-   ```
-
-   For each hit, `Read` the file. Extract:
-   - What rules does it already enforce? (parse `@Test` method names + `@DisplayName`)
-   - What constants does it use? (e.g. `APPLICATION_SERVICE_SUFFIX = "ApplicationService"` reveals the project's use-case-impl convention)
-   - Which test source set does it live in?
-
-   **Use this map in Phase 2:** if a DCA module would duplicate existing rules, recommend SKIP for that module. Don't install rules the user already has — they likely encode project-specific decisions you'd be silently overriding.
-
-4. **Existing structure conventions:**
-   - Does the project already have layer-like folders? Look for: `domain/`, `application/`, `adapter/`, `infrastructure/`, `service/`, `controller/`, `repository/`, `usecase/`, `port/`
-   - Does it use `Records` or Lombok `@Value`?
-   - Does it use `@RestController`, `@Controller`, or both?
-   - Are there `package-info.java` files anywhere?
-   - If `package-info.java` files exist with `@BoundedContext` or `@SharedKernel` annotations, record them — the bootstrap should NOT create new ones.
-   - If no `package-info.java` files exist, identify the root packages of each bounded context (one level below `basePackage`) — these will need `package-info.java` with `@BoundedContext` annotations for the ArchUnit tests to discover contexts at runtime.
-
-4. **Existing marker-like interfaces and annotations (critical):**
-
-   Run these greps separately — markers can be either `interface` (tactical/port markers) OR `@interface` (strategic annotations like `@BoundedContext`):
+4. **Existing architecture tests.**
 
    ```bash
-   # Tactical / port markers (Java interfaces)
-   grep -rln --include='*.java' -E '\b(public\s+)?interface\s+(AggregateRoot|Aggregate|BaseAggregateRoot|Entity|IEntity|Value|ValueObject|Id|Identifier|Repository|UseCase|NoResultUseCase|InputPort|OutputPort|DomainEvent|IntegrationEvent|DomainService|Factory|Specification)\b' .
-
-   # Strategic markers (Java annotations)
-   grep -rln --include='*.java' -E '\b(public\s+)?@interface\s+(BoundedContext|SharedKernel|OpenHostService|Aggregate|DomainEvent|ValueObject|Module|NamedInterface)\b' .
+   grep -rln --include='*.java' --include='*.kt' --include='*.groovy' --include='*.cs' \
+     -E 'com\.tngtech\.archunit|ArchUnitNET|extends DcaArchitectureTest|: DcaArchitectureTest' .
    ```
 
-   For each hit, `Read` the file. Don't assume — verify the role by looking at the contents (a class named `Entity` could be a JPA `@Entity` instead of a DCA marker).
+   Read each hit: which rules does it enforce, which conventions do its constants reveal
+   (`APPLICATION_SERVICE_SUFFIX = "ApplicationService"` is a decision), which source set does it
+   live in. A project that already extends `DcaArchitectureTest` is bootstrapped — switch to
+   tuning its `dca-archunit.properties` instead of installing a second test. Hand-written rules
+   that a catalog set duplicates: recommend leaving that set out (`dca.rules.sets`) rather than
+   enforcing the same thing twice.
 
-   **Also check the project's existing strategic-marker FQNs.** Annotations like `@BoundedContext` may have been placed on `package-info.java` files; if they exist, the bootstrap should reuse them rather than installing new ones.
+5. **Existing structure conventions.** Layer-like folders (`domain/`, `application/`, `adapter/`,
+   `infrastructure/`, or `service/`, `controller/`, `repository/`, `usecase/`, `port/`); records vs
+   Lombok; `@RestController` vs `@Controller`; existing `package-info.java` / context marker classes
+   with `@BoundedContext` / `@SharedKernel` (reuse, never duplicate); the root packages of the
+   bounded contexts if none are declared yet.
 
-   **Strong-signal heuristic:** find empty or near-empty interfaces / annotations under a `common/`, `core/`, `foundation/`, `shared/`, or `sharedkernel/` package — these are likely existing markers.
+6. **Existing marker-like interfaces and annotations (critical).**
 
-   **Don't stop early.** Even if some markers are found, keep scanning — projects often have a partial set (e.g. tactical markers but not strategic, or one role missing). Phase 2 needs to know which roles are filled and which aren't.
+   ```bash
+   # Tactical / port markers
+   grep -rln --include='*.java' --include='*.cs' -E '\b(public\s+)?interface\s+I?(AggregateRoot|Aggregate|BaseAggregateRoot|Entity|Value|ValueObject|Id|Identifier|Repository|UseCase|InputPort|OutputPort|DomainEvent|IntegrationEvent|DomainService|Factory|Specification)\b' .
+   # Strategic markers
+   grep -rln --include='*.java' --include='*.cs' -E '(@interface\s+|class\s+)(BoundedContext|SharedKernel|OpenHostService|Upstream|Partnership)(Attribute)?\b' .
+   ```
 
-5. Summarize findings to the user **before** asking questions. Example:
-   > Found:
-   > - Build: Gradle 8.5, Java 21, Spring Boot 3.3.4, no Spring Modulith
-   > - Base package: `com.acme.shop`
-   > - Source layout: `src/main/java/com/acme/shop/{order,customer,product}/...` — looks like bounded contexts already
-   > - Existing markers: `com.acme.shop.common.BaseAggregate` (8 classes extend it), `com.acme.shop.common.Identifier`
-   > - No ArchUnit setup yet
-   > - Lombok in use; no records
+   Read each hit and verify its role (a class named `Entity` may be a JPA `@Entity`). Look for
+   near-empty interfaces under `common/`, `core/`, `shared/`, `sharedkernel/`. Keep scanning after
+   the first find — projects have partial sets. The rule libraries recognise **only their own
+   markers**; every hit becomes a migrate-or-alias decision in Phase 2.
+
+7. **Summarize** to the user before asking anything:
+   > Found: Gradle 9, Java 25, Spring Boot 4.0, Spring Modulith present · base package `com.acme.shop`
+   > · contexts `order`, `customer`, `product` (no `package-info.java`) · existing marker
+   > `com.acme.shop.common.BaseAggregate` (8 subclasses), `com.acme.shop.common.Identifier` · no
+   > architecture tests · Lombok, no records.
 
 ### Phase 2 — Decisions (ask the user)
 
-Use `AskUserQuestion` for each decision that has more than one reasonable answer. Bundle related questions in one call.
+Use `AskUserQuestion`; bundle related questions.
 
-**Required decisions:**
+A. **Marker policy** — per existing marker-like type:
+   - `Migrate` — replace it with the package marker (`extends BaseAggregateRoot<T, ID>`,
+     `implements Value`, …); mechanical, the old type is deleted.
+   - `Alias` — keep the type, make it extend or implement the package marker
+     (`interface Aggregate<T, ID> extends AggregateRoot<T, ID>`); existing code compiles unchanged and
+     the rules see every implementor. Recommend this for large code bases; note that the rules
+     still report the class by *its* markers, so an alias must carry the same generics.
 
-A. **Marker policy** — for each existing marker found:
-   - `Adopt` (DCA tests reference the user's existing interface)
-   - `Install alongside` (DCA marker added in a separate package, both coexist)
-   - `Migrate` (DCA marker becomes new standard; tests warn but don't fail on the old one — optional, only if user asks)
+B. **Layout** — every deviation from the DCA defaults becomes a `DcaLayout` builder call
+   (Java / .NET):
+   - `adapter/in`, `adapter/out` → `withIncomingSubpackage("in")`, `withOutgoingSubpackage("out")` /
+     `WithIncomingSegment("In")`, `WithOutgoingSegment("Out")`
+   - published contract package other than `api` / `events` → `withApiSubpackage`, `withEventsSubpackage`
+     / `WithApiSegment`, `WithEventsSegment`
+   - third-party packages the domain may use → `allowingInDomain("org.jmolecules..")` / `AllowingInDomain("NodaTime")`
+   - non-Spring / non-ASP.NET frameworks → `withFrameworkAnnotations(...)` / `WithFrameworkTypes(...)`
+   Folder names the layout cannot express (`service/` instead of `application/`, flat
+   `controller/`–`service/`–`repository/`) are a migration, not a configuration: offer `Adopt DCA
+   naming` (the user moves code later; expect violations until then) or leaving the affected sets
+   out for now.
 
-B. **Sharedkernel location** — where do new marker interfaces go?
-   - `{basePackage}.sharedkernel.marker` (DCA default) — recommend this if no existing `common`/`shared` package
-   - `{basePackage}.{existingCommonPkg}` — if the project already has one
+C. **Rule sets** — multi-select; the answer is the `dca.rules.sets` line:
+   - **Always:** `cycles`
+   - **Recommended:** `layered`, `onion`, `hexagonal`, `naming`
+   - **DDD-specific:** `tactical`, `strategic`, `contextmap`, `advanced`
+   - **DCA-specific:** `usecase`
+   - **.NET only, always on the .NET branch:** `dotnet`
+   Share `reference/module-selection-guide.md` for the recommendation by project profile and
+   subdomain type. Strictness varies by subdomain: core contexts run the full catalog, supporting
+   and generic contexts may run the structural baseline only — record that in a pattern-selection
+   ADR. A single rule the team rejects becomes `dca.rules.off` + `dca.rule.<id>.reason`; one they
+   are working towards `dca.rules.warn`. Both stay visible in the report — prefer that over a
+   silent gap.
 
-C. **Test style** — Spock+Groovy or JUnit5+Java? No default; ask explicitly. Mention trade-offs:
-   - Spock+Groovy: 1:1 with the DCA reference; readable BDD-style; needs Groovy plugin
-   - JUnit5+Java: zero extra setup; verbose
+D. **Suffix conventions** — DCA's defaults are `*UseCase` for the use-case class, `*InputPort` for its
+   interface, `*Resource` for REST adapters (.NET default `Controller`). `*ApplicationService` /
+   `*Service` → `withUseCaseSuffix(...)`; `*Controller` / `*Endpoint` → `withRestControllerSuffix(...)`.
+   The `naming` set then holds the project to *its* convention.
 
-D. **ArchUnit modules** — multi-select from:
-   - **Always installed:** `BaseArchUnitTest`, `PackageCyclesArchUnitTest`
-   - **Recommended defaults:** `LayeredArchitectureArchUnitTest`, `OnionArchitectureArchUnitTest`, `HexagonalArchitectureArchUnitTest`, `NamingConventionsArchUnitTest`
-   - **DDD-specific:** `DddTacticalPatternsArchUnitTest`, `DddStrategicPatternsArchUnitTest`, `DddAdvancedPatternsArchUnitTest`
-   - **DCA-specific:** `UseCasePatternsArchUnitTest`
-   - **Conditional:** `SpringModulithVerificationTest` — auto-include if Spring Modulith detected; otherwise ask
+E. **Spring Modulith** (Java, only when detected) — install `SpringModulithVerificationTest` as well?
+   It is Modulith's own analyzer, not an ArchUnit rule, and the one remaining template of this skill
+   until an optional `dca-archunit-modulith` artifact ships it. Requires `spring-modulith-starter-test`.
 
-   See `reference/module-selection-guide.md` for guidance to share with the user.
+F. **Context map** — install `ContextMapDocumentationTest`, which renders `docs/context-map.md`
+   from the `@BoundedContext` / `@Upstream` / `@Partnership` declarations and fails when the committed
+   file is stale? Recommend yes for more than one context.
 
-   **Rule strictness varies by subdomain type:** core contexts get the full tactical
-   rule set; supporting/generic contexts may run only the structural baseline (skip
-   DDD-Tactical/Advanced). Record the choice in a pattern-selection ADR (cf. ADR-025
-   in the reference implementation).
-
-   **If the project consumes the rule library instead of these templates**
-   (`dev.domaincentric:dca-archunit`, one `DcaArchitectureTest` subclass rather than eleven test
-   classes), the same decision is expressed as a rule selection — in code via `DcaRuleSelection`, or
-   in `dca-archunit.properties` on the test class path. One module maps to one rule set:
-   `PackageCycles` → `cycles`, `LayeredArchitecture` → `layered`, `OnionArchitecture` → `onion`,
-   `HexagonalArchitecture` → `hexagonal`, `NamingConventions` → `naming`, `DddTacticalPatterns` →
-   `tactical`, `DddStrategicPatterns` → `strategic`, `ContextMap` → `contextmap`,
-   `DddAdvancedPatterns` → `advanced`, `UseCasePatterns` → `usecase`. Not installing a module becomes
-   `dca.rules.sets = …`; an individual rule the team rejects becomes `dca.rules.off` with a
-   `dca.rule.<id>.reason`, and one they are working towards becomes `dca.rules.warn`. Both stay
-   visible in the report with their reason — prefer that over dropping a rule silently.
-
-E. **Layer-folder naming** — if the project uses different folder names (e.g. `service/` instead of `application/`):
-   - `Adopt DCA naming` (skill writes `application/`, asks user to migrate manually later)
-   - `Match existing` (skill writes constants `APP_SUBPACKAGE = "service"` so rules apply to existing folders)
-
-   Common deviations to detect and ask about:
-   - `adapter.in` / `adapter.out` (vs DCA's `adapter.incoming` / `adapter.outgoing`)
-   - `application/service` + `application/port/in,out` (vs DCA's `application/{usecasename}/`)
-   - Sharedkernel under `shared/` or `common/` (vs DCA's `sharedkernel/`)
-
-F. **Use-case class-suffix convention** — DCA's default is `*UseCase` for the implementing class and `*InputPort` for the interface. Some teams flip this:
-   - `*ApplicationService` (impl) + `*UseCase` (interface) — common in Hombergs-style hexagonal
-   - `*Service` (impl) + `*UseCase` (interface) — Spring-tradition
-   - `*UseCase` (impl) + `*InputPort` (interface) — DCA default
-
-   If `NamingConventionsArchUnitTest` is selected, the rule must match the project's convention. Add a `{{useCaseImplSuffix}}` placeholder (default `UseCase`) that the user can override. If the project's convention differs and the user doesn't want to migrate, suggest skipping `NamingConventionsArchUnitTest` rather than installing a rule that will fail.
-
-G. **REST controller class-suffix convention** — DCA's default is `*Resource` (JAX-RS style). Many Spring projects use `*Controller`:
-   - `*Resource` — DCA default (JAX-RS convention)
-   - `*Controller` — Spring convention
-
-   If `NamingConventionsArchUnitTest` is selected, this suffix determines which naming rule applies to REST endpoint classes. Add a `{{restControllerSuffix}}` placeholder (default `Resource`) that the user can override.
-
-H. **Catalog wiring (CLAUDE.md)** — wire the project's coding agent to the DCA knowledge catalog?
-   - `Yes, vendored catalog` (default) — append the DCA architecture section to the project's
-     `CLAUDE.md`; `/dca-knowledge` resolves the catalog vendored with this plugin, works for
-     every teammate/CI with no extra setup
-   - `Yes, live catalog` — additionally write `.claude/dca/conventions.md` with a
-     `catalog_path:` pointing at a locally regenerable `dca-knowledge-catalog/bundle` (ask
-     for the path; verify it exists and contains `index.md` + `log.md`)
-   - `No` — skip; the user wires it later (point them to the catalog template
-     `template/project-starter-agent-instructions.md` via `/dca-knowledge`)
+G. **Catalog wiring (`CLAUDE.md`)** — wire the project's coding agent to the DCA knowledge catalog?
+   - `Yes, vendored catalog` (default) — append the DCA section to `CLAUDE.md`; `/dca-knowledge`
+     resolves the catalog vendored with this plugin.
+   - `Yes, live catalog` — additionally write `.claude/dca/conventions.md` with a `catalog_path:`
+     pointing at a locally regenerable `dca-knowledge-catalog/bundle` (verify it holds `index.md` and `log.md`).
+   - `No`.
 
 ### Phase 3 — Generation
 
-Generate files **only after** Phase 2 decisions. Substitution rules:
+Only after Phase 2. Placeholders use `{{name}}`; `{{#if}}` / `{{#each}}` blocks are resolved by you.
+Before each write: if the target exists, ask *overwrite / skip / abort* (default skip).
 
-- `{{basePackage}}` → the detected base package (e.g. `com.acme.shop`)
-- `{{sharedKernelPackage}}` → chosen sharedkernel location (e.g. `com.acme.shop.sharedkernel.marker` or `com.acme.shop.common`)
-- `{{aggregateRootMarkerFqn}}`, `{{entityMarkerFqn}}`, ... → either the DCA-installed FQN or the user's existing one (from decision A)
-- `{{domainSubpackage}}`, `{{appSubpackage}}`, `{{adapterSubpackage}}` → from decision E
+**Java**
 
-**Generation order:**
+1. `templates/gradle/build-snippet.gradle.tmpl` → add `dca-building-blocks` to the production
+   `dependencies` (Groovy or Kotlin DSL as the build uses). Maven: `templates/maven/pom-snippet.xml.tmpl`
+   (both dependencies; the test then lives in `src/test/java` and `src/test/resources`).
+2. `templates/gradle/test-architecture.gradle.tmpl` → `gradle/plugins/test-architecture.gradle`, plus
+   `apply from: "gradle/plugins/test-architecture.gradle"` in `build.gradle`. Creates the
+   `testArchitecture` source set and the `test-architecture` task, wired into `check`.
+3. `templates/java/ArchitectureTest.java.tmpl` → `src/test-architecture/java/{{basePackagePath}}/ArchitectureTest.java`
+   with the `DcaLayout` calls from decisions B and D (`{{layoutCalls}}` — none for a default layout).
+4. `templates/java/dca-archunit.properties.tmpl` → `src/test-architecture/resources/dca-archunit.properties`
+   with `dca.rules.sets` from decision C (omit the key when every set was chosen).
+5. `templates/java/package-info.java.tmpl` → one per bounded-context root package
+   (`@BoundedContext(name, description)`) and one for the shared kernel (`@SharedKernel`; with
+   Modulith also `@ApplicationModule(type = OPEN)`, otherwise Modulith closes the kernel and the
+   markers it re-exports become invisible). Skip where a `package-info.java` exists.
+6. Decision A: apply the migrate/alias edits to the existing marker types.
+7. Decision F: `templates/java/ContextMapDocumentationTest.java.tmpl` (`{{contextMapPath}}`, default
+   `docs/context-map.md`). Decision E: `templates/java/SpringModulithVerificationTest.java.tmpl`.
+8. Decision G: `templates/claude/CLAUDE-dca-section.md.tmpl` **appended** to `CLAUDE.md`
+   (`{{verifyCommand}}` = `./gradlew test-architecture` or `mvn test`); idempotent — skip when a line
+   starting with `## Architecture: Domain-Centric Architecture` exists. `conventions.md.tmpl` →
+   `.claude/dca/conventions.md` only for `live catalog`.
 
-1. **Marker interfaces** (`templates/markers/`) — copy as `.java` to `src/main/java/{{sharedKernelPackage path}}/...`. Skip any whose role was filled by an existing user marker (decision A = `Adopt`).
-1a. **`package-info.java` files for bounded context discovery** — For each identified bounded context root package, generate a `package-info.java` with `@BoundedContext(name = "...", description = "...")`. For the shared kernel root package, generate one with `@SharedKernel(description = "...")`. If Spring Modulith is in play, additionally annotate it with `@org.springframework.modulith.ApplicationModule(type = ApplicationModule.Type.OPEN)` — otherwise Modulith treats the shared kernel as a closed module, its `marker.*` subpackages are not exposed, and `modules.verify()` fails as soon as a bounded context imports a marker. These annotations are required for runtime discovery by `BaseArchUnitTest.discoverBoundedContextPackages()`. Place them in the correct source module (each module's `src/main/java/...`). **Skip if `package-info.java` already exists** at that location.
-2. **Gradle plugin** (`templates/gradle/test-architecture.gradle.tmpl`) — write to `gradle/plugins/test-architecture.gradle`. Add `apply from: "gradle/plugins/test-architecture.gradle"` to `build.gradle`. (Maven: insert profile/dependency block into `pom.xml` instead — see `templates/maven/`.)
-3. **`BaseArchUnitTest`** — generate first. This file holds the central constants block:
-   ```groovy
-   static final String BASE_PACKAGE = "{{basePackage}}"
-   static final Class<?> AGGREGATE_ROOT_MARKER = {{aggregateRootMarkerFqn}}.class
-   // ... etc.
-   ```
-4. **Other ArchUnit test classes** (only those selected in decision D). All reference the constants from `BaseArchUnitTest`; no class-FQN should be hardcoded inside them.
-5. **Catalog wiring** (decision H, unless `No`) — from `templates/claude/`:
-   - `CLAUDE-dca-section.md.tmpl` → **append** to the project's `CLAUDE.md` (create the file
-     if missing). `{{verifyCommand}}` = the project's architecture-test command
-     (`./gradlew test-architecture` or the Maven equivalent from step 2).
-     **Idempotent:** if `CLAUDE.md` already contains a line starting with
-     `## Architecture: Domain-Centric Architecture`, skip and say so — never duplicate or
-     rewrite the user's existing section.
-   - `conventions.md.tmpl` → `.claude/dca/conventions.md` **only** for decision H =
-     `live catalog`, with `{{catalogPath}}` = the validated bundle path. Skip if the file
-     exists (ask: overwrite / skip).
+**.NET**
 
-**Critical: `allowEmptyShould(true)` on every rule.** Since ArchUnit 1.4.0, rules fail by default when `that()` matches no classes. In a project with sparse bounded contexts or during early adoption, many rules will match zero classes. Every generated rule MUST include `.allowEmptyShould(true)` before `.check(allClasses)`. This is not optional — without it, rules produce false-positive failures that look like skill bugs, not architecture findings.
-
-**Idempotency check before each write:**
-```
-if Path(target).exists():
-    ask user: "{path} already exists. Overwrite / skip / abort?"
-    default action: skip
-```
+1. `dotnet add package DomainCentric.BuildingBlocks` in every production project (or the
+   conditional `ProjectReference` pair from `templates/dotnet/Directory.Build.props-local-fallback.tmpl`
+   while the packages are not on NuGet.org).
+2. `templates/dotnet/ArchitectureTests.csproj.tmpl` → `tests/{{solutionName}}.ArchitectureTests/`
+   with a `ProjectReference` per production project; add it to the solution (`dotnet sln add`).
+   Test SDK / xUnit versions: look them up like every other version.
+3. `templates/dotnet/ArchitectureTest.cs.tmpl` — `Layout` with the calls from decisions B and D,
+   `Assemblies` with one `typeof(<ContextMarkerClass>).Assembly` per production assembly.
+4. `templates/dotnet/dca-archunit.properties.tmpl` next to the csproj (the csproj copies it to the
+   output directory).
+5. `templates/dotnet/Context.cs.tmpl` → `{{ContextClassName}}.cs` in each context's root namespace,
+   `templates/dotnet/SharedKernelContext.cs.tmpl` for the shared kernel. Skip where a class with
+   `[BoundedContext]` / `[SharedKernel]` exists.
+6. Decision A as for Java (`: IAggregateRoot<T, TId>`, `: IValue`, …). Decision G as for Java with
+   `{{verifyCommand}}` = `dotnet test tests/{{solutionName}}.ArchitectureTests`.
 
 ### Phase 4 — Verification
 
-After generation, run:
 ```bash
-./gradlew test-architecture --info  # or: mvn test -Dtest='*ArchUnitTest'
+./gradlew test-architecture          # Java, Gradle
+mvn test -Dtest='ArchitectureTest'   # Java, Maven
+dotnet test tests/<Solution>.ArchitectureTests   # .NET — Debug; the rules refuse Release builds
 ```
 
-Report:
-- Which tests passed
-- Which failed (and why — usually because existing code violates DCA rules; that's a finding, not a skill bug)
-- Suggest follow-up: `dca-scaffold` for new contexts, `dca-review` to triage existing violations
+Report which rules passed and which failed. In a retrofit, failures are findings about the existing
+code, not bootstrap bugs: point the user to `dca.rules.warn` / `dca.rules.freeze` (Java) for a
+staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that complies from the start.
 
-## Template substitution
-
-Templates use `{{placeholder}}` syntax. Available placeholders:
+## Placeholders
 
 | Placeholder | Source | Example |
 |---|---|---|
-| `{{basePackage}}` | detected | `com.acme.shop` |
-| `{{basePackagePath}}` | derived | `com/acme/shop` |
-| `{{sharedKernelPackage}}` | decision B | `com.acme.shop.sharedkernel.marker` |
-| `{{sharedKernelPackagePath}}` | derived | `com/acme/shop/sharedkernel/marker` |
-| `{{aggregateRootMarkerFqn}}` | decision A | `com.acme.shop.sharedkernel.marker.tactical.AggregateRoot` |
-| `{{entityMarkerFqn}}`, `{{valueMarkerFqn}}`, `{{idMarkerFqn}}`, `{{repositoryMarkerFqn}}`, `{{storeMarkerFqn}}`, `{{useCaseMarkerFqn}}`, `{{inputPortMarkerFqn}}`, `{{outputPortMarkerFqn}}`, `{{domainEventMarkerFqn}}`, `{{integrationEventMarkerFqn}}`, `{{domainServiceMarkerFqn}}`, `{{factoryMarkerFqn}}`, `{{specificationMarkerFqn}}` | decision A | analogous |
-| `{{boundedContextAnnotationFqn}}`, `{{sharedKernelAnnotationFqn}}` | decision A | `com.acme.shop.sharedkernel.marker.strategic.BoundedContext` |
-| `{{domainSubpackage}}`, `{{appSubpackage}}`, `{{adapterSubpackage}}`, `{{infrastructureSubpackage}}` | decision E | `domain` / `application` / `adapter` / `infrastructure` |
-| `{{incomingSubfolder}}`, `{{outgoingSubfolder}}` | decision E | `incoming` / `outgoing` (DCA default) or `in` / `out` (Hombergs-style) |
-| `{{useCaseImplSuffix}}` | decision F | `UseCase` (DCA default) or `ApplicationService` or `Service` |
-| `{{restControllerSuffix}}` | decision G | `Resource` (DCA default) or `Controller` (Spring) |
-| `{{sharedKernelRoot}}` | derived from decision B | `shared` or `sharedkernel` — the root package name (not FQN) used in `SHAREDKERNEL_DOMAIN_PACKAGE` |
-| `{{openHostServiceAnnotationFqn}}` | decision A | `com.acme.shop.sharedkernel.marker.strategic.OpenHostService` |
-| `{{archunitVersion}}` | reference (1.4.1+) | `1.4.1` |
+| `{{basePackage}}` / `{{basePackagePath}}` | detected | `com.acme.shop` / `com/acme/shop` |
+| `{{rootNamespace}}`, `{{solutionName}}` | detected | `Acme.Shop`, `AcmeShop` |
+| `{{dcaJavaVersion}}`, `{{dcaDotnetVersion}}` | looked up at bootstrap time | `0.1.0` |
+| `{{junitVersion}}`, `{{testSdkVersion}}`, `{{xunitVersion}}`, `{{xunitRunnerVersion}}`, `{{targetFramework}}` | looked up / detected | `5.11.4`, `net10.0` |
+| `{{layoutCalls}}` | decisions B, D | `withIncomingSubpackage("in")`, `withUseCaseSuffix("ApplicationService")` |
+| `{{ruleSets}}` | decision C | `cycles,layered,hexagonal,naming` |
 | `{{springModulithEnabled}}` | detected | `true` / `false` |
-| `{{verifyCommand}}` | detected build tool | `./gradlew test-architecture` |
-| `{{catalogPath}}` | decision H (`live catalog` only) | `~/…/dca-knowledge-catalog/bundle` |
+| `{{contextName}}`, `{{description}}`, `{{packageName}}` / `{{contextNamespace}}`, `{{contextClassName}}` | detected contexts | `Shopping Cart`, `com.acme.shop.cart`, `CartContext` |
+| `{{productionProjects}}`, `{{assemblyAnchors}}` | detected (.NET) | `../../src/Acme.Shop.Cart/Acme.Shop.Cart.csproj`, `Cart.CartContext` |
+| `{{contextMapPath}}` | decision F | `docs/context-map.md` |
+| `{{verifyCommand}}` | build system | `./gradlew test-architecture` |
+| `{{catalogPath}}` | decision G (`live catalog`) | `~/…/dca-knowledge-catalog/bundle` |
 
 ## After bootstrap — for the user
 
-Print this final summary:
-
 ```
 ✓ DCA bootstrap complete
-  - Marker interfaces installed: {N} (skipped {M} — existing)
-  - ArchUnit modules installed: {list}
-  - Gradle task: ./gradlew test-architecture
-  - Test style: {spock-groovy|junit5-java}
-  - Catalog wiring: {CLAUDE.md section appended | + conventions.md (live catalog) | skipped}
+  - Packages: dev.domaincentric:dca-building-blocks + dca-archunit {version}   (or DomainCentric.*)
+  - Architecture test: {path}; rule sets: {dca.rules.sets or "all"}
+  - Contexts declared: {N} (@BoundedContext), shared kernel: {yes|no}
+  - Markers: {migrated|aliased|none found}
+  - Extras: {ContextMapDocumentationTest | SpringModulithVerificationTest | —}
+  - Catalog wiring: {CLAUDE.md section appended | + conventions.md (live) | skipped}
 
 Next steps:
-  - Run ./gradlew test-architecture to see the current baseline.
-  - Build with the catalog: /dca-knowledge build <thing> (task router + recipes + rule checklists).
-  - Use /dca-scaffold to add bounded contexts and use cases following DCA conventions.
-  - Use /dca-review to audit existing code against DCA conventions.
+  - Run {verifyCommand} for the baseline; tune dca-archunit.properties, never delete a rule silently.
+  - Build with the catalog: /dca-knowledge build <thing>.
+  - /dca-scaffold adds contexts and use cases; /dca-review triages existing violations.
 ```
 
-## Test-style note: Java port is on-the-fly
+## For the other skills
 
-When the user picks `junit5-java`:
-- Use `templates/archunit/java/BaseArchUnitTest.java.tmpl` as-is (substituted).
-- For each selected ArchUnit module, **read the Groovy template** from `templates/archunit/groovy/`
-  and translate it to Java per `templates/archunit/java/PORTING_GUIDE.md`.
-- After writing, run `./gradlew compileTestArchitectureJava` to verify the port compiles.
-
-This avoids shipping ~3000 lines of pre-baked Java twins and keeps the canonical rules in one place.
-
-### Multi-module ImportOption handling
-
-In multi-module projects, the `BaseArchUnitTest` must use custom `ImportOption` implementations instead of `DO_NOT_INCLUDE_JARS`:
-
-- **`DoNotIncludeTestCode`**: Excludes test JARs (pattern: `.*-test\\.jar!.*`) and test build output (pattern: `.*/build/classes/([^/]+/)?test.*/.*`)
-- **`OnlyProjectJars`**: Excludes third-party JARs from Gradle caches (pattern: `.*/caches|wrapper/.*\\.jar!.*`) while allowing project module JARs
-
-The Java template already has a `DoNotIncludeArchitectureTests` ImportOption — in multi-module projects, replace it with both custom ImportOptions above. The Groovy templates that create their own `ClassFileImporter` (OnionArchitecture, LayeredArchitecture) must be updated to use the shared `allClasses` instance instead.
+`/dca-scaffold`, `/dca-review` and `/dca-discipline` read the project's conventions from the
+generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, suffixes) and from
+`.claude/dca/conventions.md` when present. There is no constants class to consult.
 
 ## Reference materials
 
-- `reference/archunit-rule-catalog.md` — every rule, what it enforces, and why
-- `reference/module-selection-guide.md` — which ArchUnit modules to pick for which project type
+- `reference/archunit-rule-catalog.md` — every rule of both libraries (generated from the rule
+  catalogs; regenerate with `python3 scripts/render-rule-catalog.py` from the marketplace root)
+- `reference/module-selection-guide.md` — which rule sets to pick for which project and subdomain
 
 ## Anti-patterns to avoid
 
-- **Don't** write templates verbatim without inspecting the project. The whole point is adaptation.
+- **Don't** write templates without inspecting the project. The point is adaptation.
 - **Don't** silently overwrite. If unsure, ask.
-- **Don't** hardcode FQNs in generated test classes. They must reference `BaseArchUnitTest` constants.
-- **Don't** install `SpringModulithVerificationTest` if Spring Modulith is not on the classpath — it will fail to compile.
-- **Don't** assume the project follows DCA's idealized package layout. Many projects mix layers (`controller/`, `service/`, `repository/` flat). Either adapt the rules to that layout (option E = `Match existing`) or document the mismatch as findings.
-- **Don't** use `DO_NOT_INCLUDE_JARS` or `DO_NOT_INCLUDE_ARCHIVES` in multi-module projects. These exclude sibling module JARs and break bounded context discovery. Instead, use custom `ImportOption` implementations that exclude only third-party JARs (from Gradle caches/wrapper) and test JARs (matching `*-test.jar`).
-- **Don't** omit `allowEmptyShould(true)` from any rule. Without it, rules produce false-positive failures when no classes match the `that()` predicate — common during early adoption or in projects with sparse bounded contexts.
-- **Don't** skip `package-info.java` generation. Without `@BoundedContext` annotations on package-info files, `discoverBoundedContextPackages()` returns an empty map and all context-scoped rules silently pass (no classes checked = no findings).
-- **Don't** reference an annotation class from an optional Spring module in a rule. Only spring-context types (`@Component`, `@Service`, `@Controller`, `@EventListener`) are guaranteed by plain `spring-boot-starter`. For anything else, name the annotation as a fully qualified String, as `NamingConventionsArchUnitTest` does for `@RestController` (spring-web). A class reference makes the generated suite fail to compile in a project without that starter.
-- **Don't** end a Spock `expect:`/`then:` block with `.each { }`. Spock asserts every top-level expression there; `.each` returns the receiver, and an empty collection is falsy — a project with zero bounded contexts fails for the wrong reason. Loop in `when:` and assert `noExceptionThrown()` in `then:`.
-- **Don't** hardcode bounded context package names in templates. Use `discoverBoundedContextPackages()` for dynamic discovery. Hardcoded names break when applied to any project that doesn't share those exact context names.
-- **Don't** use `Package.getPackage()` or `Class.forName()` for loading `package-info` classes. Use `Thread.currentThread().getContextClassLoader().loadClass()` — this works reliably in multi-module Gradle builds where the classloader hierarchy differs from single-module projects.
-- **Don't freehand-scaffold example bounded contexts, aggregates, use cases, or ports as part of bootstrap.** `dca-bootstrap`'s job ends at markers + ArchUnit governance + `package-info.java` skeletons. If the user's request implies "also build me a first context" (e.g. "build a new app with context for X"), hand that generation off to `/dca-scaffold` — it owns the canonical placement rules (e.g. output ports go in `application/shared/`, never in `domain/model/`, see `dca-scaffold/reference/use-case-pattern.md` §6) and knows the shared-vs-local port decision guide. Writing example domain code inline here, without consulting `dca-scaffold` or `/dca-knowledge`, is how structural mistakes silently ship even when the freshly-installed ArchUnit suite passes — the generic modules don't cover every placement mistake (see rule catalog #9 for one gap that was closed after exactly this happened). If in doubt about a placement decision instead of guessing, ask the user or consult `/dca-knowledge`.
+- **Don't** hardcode package or framework versions from memory. Look them up at bootstrap time.
+- **Don't** hand-write ArchUnit rules that the catalog already contains. Select sets, tune with
+  `off`/`warn`/`ignore`, record reasons.
+- **Don't** install `SpringModulithVerificationTest` without Spring Modulith on the class path — it
+  does not compile.
+- **Don't** let the .NET architecture test run against Release assemblies; `DcaArchitecture.Load`
+  refuses them because ArchUnitNET drops the compiler's async state machines there.
+- **Don't** skip context declarations. Without `@BoundedContext` / `[BoundedContext]` the context-scoped
+  rules and the context map see no contexts and check nothing.
+- **Don't** invent a third marker policy. A project either migrates to the package markers or aliases
+  its own types onto them; rules pinned to unrelated interfaces see nothing.
+- **Don't freehand-scaffold example bounded contexts, aggregates, use cases or ports.** Bootstrap
+  ends at packages + architecture test + context declarations. Hand "also build me a first context"
+  to `/dca-scaffold`, which owns the placement rules (output ports in `application/shared/`, never
+  `domain/model/`, the shared-vs-local port decision). Writing example domain code inline here is how
+  structural mistakes ship even though the freshly installed suite passes.

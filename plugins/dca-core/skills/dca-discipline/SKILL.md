@@ -2,7 +2,7 @@
 name: dca-discipline
 description: |
   Applies Domain-Centric Architecture invariants while writing or editing
-  Java/Spring code: framework-free domain, dependency inversion (interfaces in
+  Java/Spring or .NET/C# code: framework-free domain, dependency inversion (interfaces in
   app/domain, impls in adapters), bounded-context isolation (no raw cross-context
   imports), domain-event hygiene (publish + clear). Use during edits to
   domain/, application/, or adapter/ folders.
@@ -28,6 +28,10 @@ Files under `**/domain/**` MUST NOT import:
 - `com.fasterxml.jackson.*`
 - Any other framework-specific package
 
+C# (`**/Domain/**`): no `Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*`, `System.Data.*`,
+`System.Transactions.*`, `System.Text.Json.Serialization` attributes, `Microsoft.Extensions.*` — and no
+`async` member: ports are async, the domain is not.
+
 **What to do when the user asks for a forbidden import:**
 
 > The annotation `@Component` would put framework code into the domain. The
@@ -52,7 +56,7 @@ Code in `domain/` and `application/` may only depend on:
 It MAY NOT import:
 
 - Classes from `adapter/`, `infrastructure/`
-- Concrete clients (`RestTemplate`, `JdbcTemplate`, `KafkaProducer`, etc.)
+- Concrete clients (`RestTemplate`, `JdbcTemplate`, `KafkaProducer`, `HttpClient`, `DbContext`, etc.)
 - Framework annotations on the **API surface** of a use case (return types,
   parameters)
 
@@ -112,15 +116,29 @@ public Result execute(Command cmd) {
 }
 ```
 
+C# — the same discipline with the library's publisher, which clears after dispatching:
+
+```csharp
+public Task<Result> ExecuteAsync(Command cmd, CancellationToken ct = default) =>
+    _transaction.InTransactionAsync(async innerCt =>
+    {
+        var aggregate = await _repository.FindByIdAsync(new Id(cmd.Id), innerCt) ?? throw new ArgumentException(...);
+        aggregate.DoSomething(cmd.Payload);                       // registers event(s) internally
+        await _repository.SaveAsync(aggregate, innerCt);          // persist first
+        await _events.PublishAndClearEventsAsync(aggregate, innerCt);   // then publish + clear
+        return Result.From(aggregate);
+    }, ct);
+```
+
 If the project uses Spring Modulith's `ApplicationEventPublisher` plus
 `AggregateRoot.andEvents()` or a `BaseAggregateRoot` that handles clearing
 automatically, skip the explicit clear but verify the abstraction handles it.
 
 **Event shape rules** (all four required):
 
-1. **Immutable**: Java `record`, no setters, no mutable fields.
+1. **Immutable**: Java `record` / C# `sealed record`, no setters, no mutable fields.
 2. **Past tense name**: `OrderPlaced`, not `PlaceOrder` or `OrderPlacement`.
-3. **`occurredOn` field** of type `Instant` (or matching convention).
+3. **`occurredOn` field** of type `Instant` / `DateTimeOffset` (or matching convention).
 4. **Carries IDs and value objects only**, no aggregate references.
 
 ### 5. Domain-model and transaction discipline
@@ -135,7 +153,10 @@ When writing or editing domain model classes:
   a method parameter.
 - **`@Transactional` only on application-layer use cases.** Outgoing
   persistence adapters are an allowed exception; never on domain classes or
-  incoming adapters.
+  incoming adapters. C# has no such attribute: the boundary is
+  `ITransactionBoundary.InTransactionAsync` (or a decorator around `IUseCase`)
+  in the use case, and EF Core / `System.Transactions` stay out of
+  `Application/` (`DCA-NET-006`).
 - **No remote call inside the transaction.** A use case that calls a port
   which may leave the process (another context's API, a payment provider)
   drops the class-level annotation: remote reads first, then
@@ -162,19 +183,24 @@ Before any write or edit, Claude:
 | Layer | Rules applied |
 |---|---|
 | `domain/` | 1, 2, 3, 4, 5 |
-| `application/{usecase}/` — or `application/{feature}/{usecase}/` in a feature-grouped context (one form per context, `DCA-USE-014`; no feature cycles, `DCA-CYC-005`) | 2, 3, 4, 5 (`@Transactional` lives here) |
+| `application/{usecase}/` — or `application/{feature}/{usecase}/` in a feature-grouped context (one form per context, `DCA-USE-014`; no feature cycles, `DCA-CYC-005`) | 2, 3, 4, 5 (`@Transactional` / `InTransactionAsync` lives here) |
 | `application/shared/` | 2 (interfaces only — no impls) |
 | `adapter/incoming/` | 3 (must not bypass application layer to reach domain: no `DomainService` injected or invoked, `DCA-HEX-012`; reads and formats the `*Result` — a delivered read model's own queries included — constructs no domain object, combines nothing into a new business fact), 5 (no `@Transactional`) |
 | `adapter/outgoing/` | 3 (must implement a port, not introduce new domain concepts); `@Transactional` allowed on persistence adapters |
-| `infrastructure/` | — (framework code belongs here) |
+| `infrastructure/` | — (framework code belongs here; C#: DI registration `Add{Context}Context()`) |
+
+The same table applies to the C# folders in PascalCase (`Domain/`, `Application/{UseCase}/`,
+`Adapter/Incoming/`, `Adapter/Outgoing/`, `Infrastructure/`).
 
 ## Conventions overlay
 
 Read `<project-root>/.claude/dca/conventions.md` for:
 
-- The actual base package and marker FQNs
+- The actual base package / root namespace; markers come from the library
+  (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`)
 - Whether the project's layer folders use the DCA defaults (`incoming` /
-  `outgoing`) or alternatives (`in` / `out`)
+  `outgoing`) or alternatives (`in` / `out`) — also readable from the
+  `DcaLayout` builder in the architecture test
 - Project-specific exceptions (e.g. "Bean Validation annotations allowed in
   domain")
 

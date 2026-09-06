@@ -1,0 +1,19 @@
+namespace {{rootNamespace}}.{{Context}}.Application.{{FeatureSegment}}{{Name}};
+
+/// <summary>
+/// Result of the {{Name}} use case — the application-layer output model; the adapter maps it to a
+/// <c>*Response</c> or view model before exposing it.
+/// </summary>
+/// <remarks>
+/// Carries values, never identities: primitives, nested part records (named by content, e.g.
+/// <c>LineItemSummary</c>), value objects and read models — no aggregate root or entity, also not inside an
+/// <c>IReadOnlyList&lt;T&gt;</c> or a nullable. A command's result stays small (ids, status, what the caller needs
+/// next); the view comes from a query. The static factory keeps the assembly in the application layer.
+/// </remarks>
+public sealed record {{Name}}Result(
+{{resultFields}}
+)
+{
+    public static {{Name}}Result From(/* the aggregate or read model */ object source) =>
+        throw new NotImplementedException("Map values from the source, never expose it");
+}

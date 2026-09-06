@@ -15,7 +15,23 @@ disable-model-invocation: false
 
 The context map is DDD's strategic-design centerpiece: which bounded contexts
 exist, how they relate, who's upstream/downstream, and *what pattern* governs
-each relationship. This skill keeps the map in sync with the code.
+each relationship. This skill keeps the map in sync with the code — in one of
+two modes:
+
+- **Declared mode** (projects on the DCA packages): the relationships are
+  *declared in code* on the context root — `@Upstream`, `@ExternalUpstream`,
+  `@Partnership` on `package-info.java` (Java) or `[Upstream]`,
+  `[ExternalUpstream]`, `[Partnership]` on the `XContext` marker class (C#).
+  The `contextmap` rule set (`DCA-MAP-*`) fails the build when a declaration
+  and the real dependencies disagree, and `ContextMapRenderer` renders
+  `docs/context-map.md` from an opt-in test. The skill **edits the
+  declarations and runs that test**; it never hand-edits the rendered file.
+- **Manual mode** (no packages): the skill maintains `docs/context-map.md`
+  itself from the heuristics below.
+
+Detect the mode first: `grep -rln "@Upstream\|\[Upstream\|@BoundedContext\|\[BoundedContext" --include=*.java --include=*.cs`.
+Declarations found → declared mode. Otherwise Modulith `@ApplicationModule`
+metadata, then the event/ACL heuristics.
 
 ## Map location
 
@@ -138,6 +154,47 @@ dimensions — subdomain type and integration pattern — stay distinguishable.)
 | Shared Kernel | dashed bidirectional `<-.->` | dashed bidir |
 | Separate Ways | (omit edge) | — |
 
+## Declared mode: the annotations and the renderer
+
+```java
+// cart/package-info.java
+@BoundedContext(name = "Shopping Cart", description = "Carts and their items")
+@Upstream(context = "product", translation = Upstream.Translation.ANTI_CORRUPTION_LAYER,
+          via = Upstream.Consumes.API, rationale = "Product data is translated into cart's own types")
+@Partnership(context = "checkout", rationale = "Cart owns the trigger contract checkout implements")
+package com.acme.shop.cart;
+```
+
+```csharp
+// Cart/CartContext.cs
+[BoundedContext("Shopping Cart", Description = "Carts and their items")]
+[Upstream("Product", Translation.AntiCorruptionLayer, Consumes.Api, Rationale = "…")]
+[Partnership("Checkout", Rationale = "…")]
+public static class CartContext { }
+```
+
+`translation` is the pattern (`ANTI_CORRUPTION_LAYER`, `CONFORMIST`, `OPEN_HOST_SERVICE`, …), `via` the
+channel (`API`, `EVENTS`); `@ExternalUpstream` names a system outside the code base. Rendering is opt-in — a
+test the project owns:
+
+```java
+@Test
+void renderContextMap() {
+  ContextMapRenderer.of(architecture()).writeTo(Path.of("docs/context-map.md"));
+}
+```
+
+```csharp
+var markdown = ContextMapRenderer.Of(arch).WithTitle("Shop Context Map").Render();
+File.WriteAllText(Path.Combine(repoRoot, "docs", "context-map.md"), markdown);
+```
+
+In this mode `init` writes the declarations for the relationships it finds and asks the user to add the
+render test if none exists; `update` proposes declaration changes; `validate` is the `contextmap` rule set
+plus the subdomain checks below — run `./gradlew test-architecture` / `dotnet test tests/*.ArchitectureTests`.
+The subdomain classification (Core/Supporting/Generic) is not declared in code; it stays in the
+pattern-selection ADR and in the rendered document's context table.
+
 ## Operations
 
 ### `/context-map init`
@@ -145,10 +202,12 @@ dimensions — subdomain type and integration pattern — stay distinguishable.)
 First-time generation.
 
 1. Scan repo for bounded contexts:
-   - Look for `@BoundedContext` annotations on `package-info.java`.
+   - Look for `@BoundedContext` annotations on `package-info.java` (Java) or
+     `[BoundedContext]` on a marker class in a context root namespace (C#).
    - Look for `@ApplicationModule` annotations (Spring Modulith).
    - Fall back to: each directory under `{basePackage}/` that contains
-     `domain/` + `application/` + `adapter/`.
+     `domain/` + `application/` + `adapter/` (C#: `Domain/` + `Application/` +
+     `Adapter/`, usually one project per context).
 2. Classify each context's subdomain type:
    - Read the project's pattern-selection ADR (`docs/architecture/adr/`,
      look for "pattern selection" / "subdomain") if one exists.
@@ -214,10 +273,12 @@ we change the upstream's event schema".
 
 | Signal | Implies pattern |
 |---|---|
+| `@Upstream(translation = …)` / `[Upstream(…)]` on the context root | exactly what it says — declared mode, verified by `DCA-MAP-*` |
 | `@ApplicationModule(allowedDependencies = {"X"})` | A consumes X; check what kind |
 | `*Mapper` in B/adapter that imports A | ACL |
 | `@TransactionalEventListener` on A's event in B | Published Language |
 | B's controller calls `/api/...` of A | OHS |
+| B's `Adapter/Outgoing/A/*Adapter.cs` calls A's `Api/` service or `Events/` trigger interface (C#) | OHS or Published Language |
 | B's domain has direct import of A's domain | Conformist (flag for review!) |
 | Module marked `Type.OPEN` exporting value objects | Shared Kernel |
 | Two contexts in same module / no boundary | Big Ball of Mud (flag!) |
@@ -245,8 +306,8 @@ we change the upstream's event schema".
 `<project-root>/.claude/dca/conventions.md` may set:
 
 - Alternative map path
-- Module-discovery overrides (if the project doesn't use Spring Modulith
-  annotations)
+- Module-discovery overrides (if the project uses neither the DCA
+  declarations nor Spring Modulith annotations)
 - Custom relationship column (e.g. "SLA", "Sync/Async", "Versioning")
 
 ## What this skill does NOT do

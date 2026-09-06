@@ -3,12 +3,12 @@
   "name": "dca-marketplace",
   "description": "Claude Code plugins for Domain-Centric Architecture (DCA) and general software craftsmanship — composable skills and reviewer agents for daily practice.",
   "owner": {
-    "name": "Christoph Bloemer"
+    "name": "domain-centric-development"
   },
   "plugins": [
     {
       "name": "dca-core",
-      "description": "DCA-specific skills and agents: framework-free domain discipline, ubiquitous language glossaries, strategic context maps, plus DDD and Hexagonal reviewer agents. Pairs well with software-craftsmanship.",
+      "description": "DCA-specific skills and agents for Java/Spring and .NET/C#: bootstrap that adds the published dca-building-blocks/dca-archunit or DomainCentric.BuildingBlocks/ArchRules packages and generates one architecture test, framework-free domain discipline, ubiquitous language glossaries, strategic context maps, scaffolding and semantic review, plus DDD and Hexagonal reviewer agents. Pairs well with software-craftsmanship.",
       "author": {
         "name": "Christoph Bloemer"
       },
@@ -17,7 +17,7 @@
     },
     {
       "name": "software-craftsmanship",
-      "description": "Project-agnostic craftsmanship skills and agents: Test-Driven Development workflow, Clean Code principles while writing, Architecture Decision Records, and a Clean-Code reviewer. Usable on any Java/Spring project — no DCA assumptions.",
+      "description": "Project-agnostic craftsmanship skills and agents: Test-Driven Development workflow, Clean Code principles while writing, Architecture Decision Records, and a Clean-Code reviewer. Usable on any Java or .NET project — no DCA assumptions.",
       "author": {
         "name": "Christoph Bloemer"
       },

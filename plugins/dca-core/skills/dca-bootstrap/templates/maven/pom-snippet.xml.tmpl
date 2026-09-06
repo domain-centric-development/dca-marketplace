@@ -1,0 +1,39 @@
+<!-- dca-bootstrap: DCA building blocks + rule catalog (Maven).
+     Insert into pom.xml. The architecture test lives in src/test/java/{{basePackagePath}}/ArchitectureTest.java
+     and dca-archunit.properties in src/test/resources/. -->
+
+<properties>
+  <dca.version>{{dcaJavaVersion}}</dca.version>
+</properties>
+
+<dependencies>
+  <!-- The building blocks the production code implements -->
+  <dependency>
+    <groupId>dev.domaincentric</groupId>
+    <artifactId>dca-building-blocks</artifactId>
+    <version>${dca.version}</version>
+  </dependency>
+  <!-- The rule catalog; brings ArchUnit transitively -->
+  <dependency>
+    <groupId>dev.domaincentric</groupId>
+    <artifactId>dca-archunit</artifactId>
+    <version>${dca.version}</version>
+    <scope>test</scope>
+  </dependency>
+  <dependency>
+    <groupId>org.junit.jupiter</groupId>
+    <artifactId>junit-jupiter</artifactId>
+    <scope>test</scope>
+  </dependency>
+{{#if springModulithEnabled}}
+  <dependency>
+    <groupId>org.springframework.modulith</groupId>
+    <artifactId>spring-modulith-starter-test</artifactId>
+    <scope>test</scope>
+  </dependency>
+{{/if}}
+</dependencies>
+
+<!-- Surefire runs *Test classes by default, so ArchitectureTest, ContextMapDocumentationTest and
+     SpringModulithVerificationTest need no extra include. To run only the architecture rules:
+       mvn test -Dtest='ArchitectureTest' -->

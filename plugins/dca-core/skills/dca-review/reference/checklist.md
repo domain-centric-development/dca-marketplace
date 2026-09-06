@@ -14,8 +14,8 @@ Apply only the checks for each file's layer.
 - [ ] Mutators are intent-revealing methods, not setters (`markCompleted()`, not `setStatus(COMPLETED)`)
 - [ ] Each mutator validates invariants OR delegates to a Specification
 - [ ] Aggregate references other aggregates by ID, not direct field
-- [ ] No Spring/JPA annotations (`@Entity`, `@Component`, `@Service`, `@Table`)
-- [ ] No setters
+- [ ] No Spring/JPA annotations (`@Entity`, `@Component`, `@Service`, `@Table`); C#: no EF Core/ASP.NET attributes, no `async` member (the domain stays synchronous)
+- [ ] No setters (C#: no public `set`/`init` on state that carries an invariant)
 - [ ] `domainEvents()` and `clearDomainEvents()` exposed
 - [ ] **Anti-pattern flag:** if aggregate has only getters/setters → anemic
 
@@ -80,9 +80,10 @@ Apply only the checks for each file's layer.
 
 ### Implementation class
 
-- [ ] `@Service` (and `@Transactional` for write use cases)
-- [ ] `@Transactional` only in the application layer — never on domain classes or incoming adapters (outgoing persistence adapters are the allowed exception)
-- [ ] No remote-capable output port (another context's API, payment provider, mail gateway) called inside a `@Transactional` use case — such use cases fetch remote data first and wrap save + publish in `TransactionBoundary.inTransaction(...)` (`DCA-USE-013`)
+- [ ] `@Service` (and `@Transactional` for write use cases); C#: plain class registered behind its input port in `Add{Context}Context()`, no framework attribute
+- [ ] `@Transactional` only in the application layer — never on domain classes or incoming adapters (outgoing persistence adapters are the allowed exception); C#: the boundary is `ITransactionBoundary.InTransactionAsync` or a decorator — EF Core, `System.Data`, `System.Transactions` stay out of `Application/` (`DCA-NET-006`)
+- [ ] No remote-capable output port (another context's API, payment provider, mail gateway) called inside a `@Transactional` use case — such use cases fetch remote data first and wrap save + publish in `TransactionBoundary.inTransaction(...)` (`DCA-USE-013`); C#: remote reads before `InTransactionAsync`, never inside
+- [ ] C#: ports are async (`Task<TOut> ExecuteAsync(TIn, CancellationToken)`), the domain they call is not — no `.Result`/`.Wait()` bridging
 - [ ] Constructor injection only (no `@Autowired` field injection)
 - [ ] Implements the input port
 - [ ] **Anti-pattern flag — God use case:** more than 5 output ports → consider splitting
@@ -245,6 +246,12 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 - [ ] **Never** on `domain/` classes
 - [ ] **Never** on `*Command`, `*Query`, `*Result`, `*DomainEvent`, `*IntegrationEvent`
 
+### Framework placement (.NET)
+
+- [ ] `[ApiController]`, `Controller`, `[Route]`, EF Core types only in `Adapter/` or `Infrastructure/`; DI registration in `Infrastructure/`
+- [ ] **Never** in `Domain/` or on `*Command`, `*Query`, `*Result`, events
+- [ ] Architecture tests run against a **Debug** build — an optimized build hides async state machines from ArchUnitNET, so a green Release run proves nothing
+
 ### Package structure
 
 - [ ] Packages named by domain concept, not technical role
@@ -269,8 +276,13 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 - [ ] Live only in `adapter/`
 - [ ] **Anti-pattern flag:** `*Dto` found in `domain/` or `application/`
 
-### Lombok usage
+### Lombok usage (Java)
 
 - [ ] If project uses Lombok: prefer `@Value`/`@RequiredArgsConstructor` over hand-written boilerplate
 - [ ] Records are valid alternatives — both styles allowed
 - [ ] **Anti-pattern flag:** `@Data` on domain classes (mutable, generates setters)
+
+### Records (C#)
+
+- [ ] `sealed record` for commands, queries, results, events; `readonly record struct` for ids and small values
+- [ ] **Anti-pattern flag:** a `record` with `{ get; set; }` or `init` on domain state that carries an invariant — a record spelled mutable is a class with setters

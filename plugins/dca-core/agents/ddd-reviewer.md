@@ -1,7 +1,7 @@
 ---
 name: ddd-reviewer
 description: |
-  Reviews Java/Spring code from a Domain-Driven Design perspective: aggregate
+  Reviews Java/Spring or .NET/C# code from a Domain-Driven Design perspective: aggregate
   design (real invariants vs. anemic), ubiquitous language consistency,
   bounded-context boundaries, Entity vs. Value Object choices, domain-event
   hygiene, repository-vs-store distinction, factory and specification usage.
@@ -65,7 +65,7 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
 ### 5. Domain events
 
 - Past-tense names (`OrderPlaced`, not `PlaceOrder` or `OrderPlacement`).
-- Immutable (Java `record`).
+- Immutable (Java `record` / C# `sealed record`).
 - Carry an `occurredOn` (or convention) timestamp.
 - Emitted at the **right state transition**, not on every setter.
 - Not used as commands ("OrderShouldShip" is not an event).
@@ -118,7 +118,7 @@ Before reviewing, gather context:
 
 ### must-fix ({n})
 
-- **path/File.java:LL** — <Rule short name>
+- **path/File.java:LL** (or `.cs`) — <Rule short name>
   *Why:* <one sentence, cite Evans/Vernon or glossary>
   *Fix:* <concrete one-line suggestion>
 

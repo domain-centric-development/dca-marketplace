@@ -327,6 +327,54 @@ Implementierung der Tests.
 
 ---
 
+## 6a. Dasselbe Muster in C# (.NET)
+
+Der Use-Case-Folder ist identisch aufgebaut, nur die Schreibweise wechselt: `Application/PlaceOrder/` (oder
+`Application/{Feature}/PlaceOrder/`), Ports mit `I`-Präfix und asynchron, kein Framework-Attribut auf der Impl.
+
+```csharp
+public interface IPlaceOrderInputPort : IUseCase<PlaceOrderCommand, PlaceOrderResult> { }
+
+public sealed record PlaceOrderCommand(Guid CustomerId, IReadOnlyList<LineItem> Items);
+
+public sealed record PlaceOrderResult(Guid OrderId, DateTimeOffset PlacedAt)
+{
+    public static PlaceOrderResult From(Order order) => new(order.Id.Value, order.PlacedAt);
+}
+
+public sealed class PlaceOrderUseCase : IPlaceOrderInputPort
+{
+    private readonly IOrderRepository _orders;
+    private readonly IDomainEventPublisher _events;
+    private readonly ITransactionBoundary _transaction;
+
+    public PlaceOrderUseCase(IOrderRepository orders, IDomainEventPublisher events, ITransactionBoundary transaction)
+    { _orders = orders; _events = events; _transaction = transaction; }
+
+    public Task<PlaceOrderResult> ExecuteAsync(PlaceOrderCommand cmd, CancellationToken ct = default) =>
+        _transaction.InTransactionAsync(async innerCt =>
+        {
+            var order = Order.Place(new CustomerId(cmd.CustomerId), cmd.Items);
+            await _orders.SaveAsync(order, innerCt);
+            await _events.PublishAndClearEventsAsync(order, innerCt);
+            return PlaceOrderResult.From(order);
+        }, ct);
+}
+```
+
+- **Registrierung** statt Component-Scan: `services.AddScoped<IPlaceOrderInputPort, PlaceOrderUseCase>()` in
+  `Infrastructure/Add{Context}Context()`.
+- **Transaktionsgrenze** ist ein Aufruf (`ITransactionBoundary.InTransactionAsync`) oder ein Decorator um
+  `IUseCase<,>`, kein Attribut; `DCA-NET-006` hält EF Core / `System.Transactions` aus `Application/` heraus
+  (`DCA-USE-012/013` gelten deshalb nicht in .NET).
+- **Ports async, Domäne synchron:** der Aggregat-Aufruf `order.Place(...)` blockiert nicht, `await` gibt es nur
+  an den Ports.
+- **Output-Ports** in `Application/Shared/` als `I*Repository : IRepository<T,TId>` bzw. `I*Store : IStore`;
+  `FindByIdAsync`/`SaveAsync` erbt das Repository-Interface bereits.
+- **Architekturtests** laufen gegen den Debug-Build (`dotnet test tests/*.ArchitectureTests`).
+
+---
+
 ## 7. Verwandte Referenzen
 
 - [checklist.md](checklist.md) — Per-Layer-Audit-Checks (Application — Use Cases, Application — Output Ports)

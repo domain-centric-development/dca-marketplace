@@ -1,0 +1,41 @@
+package {{basePackage}};
+
+import dev.domaincentric.dca.archunit.DcaLayout;
+import dev.domaincentric.dca.archunit.DcaRuleSelection;
+import dev.domaincentric.dca.archunit.junit.DcaArchitectureTest;
+
+/**
+ * The Domain-Centric Architecture rule catalog from {@code dev.domaincentric:dca-archunit}, one
+ * dynamic test per rule, grouped by rule set. The rules pin to the {@code dca-building-blocks}
+ * markers the production code implements.
+ *
+ * <p>Which rules run, and how strictly, is decided in {@code dca-archunit.properties} on the test
+ * class path (the base) and in {@link #additionalSelection()} (applied on top).
+ */
+class ArchitectureTest extends DcaArchitectureTest {
+
+  static final String BASE_PACKAGE = "{{basePackage}}";
+
+  @Override
+  protected DcaLayout layout() {
+    return DcaLayout.forBasePackage(BASE_PACKAGE){{#each layoutCalls}}
+        .{{this}}{{/each}};
+  }
+
+  /**
+   * Everything a project may need, applied on top of {@code dca-archunit.properties}:
+   *
+   * <pre>{@code
+   * return DcaRuleSelection.all()
+   *     .onlySets("cycles", "layered", "hexagonal")     // adopt the catalog in stages
+   *     .excluding("DCA-NAM-002", "no DI framework")    // reported as skipped, with the reason
+   *     .warning("DCA-TAC-009", "being made final")     // reported, but does not fail the build
+   *     .ignoringViolationsMatching("DCA-STR-003", ".*legacy.*")   // documented exception
+   *     .frozen("DCA-ONI-002");                         // baseline: only new violations fail
+   * }</pre>
+   */
+  @Override
+  protected DcaRuleSelection additionalSelection() {
+    return DcaRuleSelection.all();
+  }
+}

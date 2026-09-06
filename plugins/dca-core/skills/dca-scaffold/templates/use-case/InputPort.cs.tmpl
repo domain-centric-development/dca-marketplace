@@ -1,0 +1,15 @@
+using DomainCentric.BuildingBlocks.Hexagonal.Ports.In;
+
+namespace {{rootNamespace}}.{{Context}}.Application.{{FeatureSegment}}{{Name}};
+
+/// <summary>
+/// Input port for the {{Name}} use case — {{useCaseDescription}}
+/// </summary>
+/// <remarks>
+/// Hexagonal Architecture: this is a driving/primary port for {{commandOrQueryNoun}} operations. Ports are
+/// async: <c>Task&lt;{{Name}}Result&gt; ExecuteAsync({{Name}}{{CommandOrQuery}}, CancellationToken)</c> is
+/// inherited from <see cref="IUseCase{TIn,TOut}"/>.
+/// </remarks>
+public interface I{{Name}}InputPort : IUseCase<{{Name}}{{CommandOrQuery}}, {{Name}}Result>
+{
+}

@@ -1,0 +1,17 @@
+// Add to the dependencies block of build.gradle (Groovy DSL) — the building blocks the
+// production code implements: AggregateRoot, Entity, Value, DomainEvent, UseCase, Repository, …
+dependencies {
+  implementation 'dev.domaincentric:dca-building-blocks:{{dcaJavaVersion}}'
+}
+
+// build.gradle.kts (Kotlin DSL)
+// dependencies {
+//   implementation("dev.domaincentric:dca-building-blocks:{{dcaJavaVersion}}")
+// }
+
+// Multi-module builds: the module that hosts src/test-architecture must see every production
+// module on its class path, or DcaArchitecture.load(...) imports only part of the base package.
+// dependencies {
+//   testArchitectureImplementation project(':orders')
+//   testArchitectureImplementation project(':customers')
+// }

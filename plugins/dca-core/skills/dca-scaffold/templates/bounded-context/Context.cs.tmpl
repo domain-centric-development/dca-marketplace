@@ -1,0 +1,16 @@
+using DomainCentric.BuildingBlocks.Ddd.Strategic;
+using DomainCentric.BuildingBlocks.Ddd.Strategic.Relationships;
+
+namespace {{rootNamespace}}.{{Context}};
+
+/// <summary>{{Context}} bounded context — {{contextDescription}}</summary>
+/// <remarks>
+/// C# has no <c>package-info</c>: this marker class in the context's root namespace declares the context and,
+/// as the map grows, its relationships (<c>[Upstream]</c>, <c>[ExternalUpstream]</c>, <c>[Partnership]</c>).
+/// Layout: <c>Domain/</c>, <c>Application/</c>, <c>Adapter/{{IncomingSegment}}/</c>, <c>Adapter/{{OutgoingSegment}}/</c>,
+/// <c>Infrastructure/</c>.
+/// </remarks>
+[BoundedContext("{{contextDisplayName}}", Description = "{{contextDescription}}")]
+public static class {{Context}}Context
+{
+}

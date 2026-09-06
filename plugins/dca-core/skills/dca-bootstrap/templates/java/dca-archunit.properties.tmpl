@@ -1,0 +1,23 @@
+# Domain-Centric Architecture rule selection (dev.domaincentric:dca-archunit).
+# Read by DcaArchitectureTest from the test class path; ArchitectureTest.additionalSelection()
+# is merged on top, the later entry wins per rule id. An unknown id or set name fails the run.
+#
+# Sets: cycles, layered, onion, hexagonal, naming, tactical, strategic, contextmap, advanced, usecase.
+
+# Which sets run (omit the key to run the whole catalog).
+dca.rules.sets = {{ruleSets}}
+
+# Switched off, with the reason — stays in the report as skipped.
+#dca.rules.off               = DCA-NAM-002
+#dca.rule.DCA-NAM-002.reason = no DI framework in this project
+
+# Reported but not failing the build — for rules the team is working towards.
+#dca.rules.warn              = DCA-TAC-009
+#dca.rules.warn.sets         = naming
+
+# A documented exception: violations matching the pattern are ignored for that rule.
+#dca.rule.DCA-STR-003.ignore = .*legacy.*
+
+# Baseline: existing violations are frozen, only new ones fail (single ArchUnit rules only).
+#dca.rules.freeze            = DCA-ONI-002
+#dca.rules.freeze.store      = arch/frozen

@@ -1,0 +1,13 @@
+using {{rootNamespace}}.{{Context}}.Domain.Model;
+using DomainCentric.BuildingBlocks.Hexagonal.Ports.Out;
+
+namespace {{rootNamespace}}.{{Context}}.Application.Shared;
+
+/// <summary>
+/// Output port: persistence for the {{Name}} aggregate. Implementations live in
+/// <c>Adapter/{{OutgoingSegment}}/Persistence/</c>. <c>FindByIdAsync</c> and <c>SaveAsync</c> are inherited from
+/// <see cref="IRepository{T,TId}"/>; add finders here as the use cases need them — one repository per aggregate root.
+/// </summary>
+public interface I{{Name}}Repository : IRepository<{{Name}}, {{Name}}Id>
+{
+}

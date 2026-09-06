@@ -1,89 +1,81 @@
-# ArchUnit Module Selection Guide
+# Rule Set Selection Guide
 
-Use this guide to recommend modules during the bootstrap workflow.
+Use this guide to recommend rule sets during the bootstrap workflow. A recommendation is a
+`dca.rules.sets` line in `dca-archunit.properties` — the same key in Java (`dca-archunit`) and .NET
+(`DomainCentric.ArchRules`). Omit the key to run the whole catalog. A single rule the team rejects
+becomes `dca.rules.off` with a `dca.rule.<id>.reason`; one the team is working towards becomes
+`dca.rules.warn`. Both stay in the report with their reason — prefer that over leaving a set out.
 
-**Two ways to act on a recommendation.** With the shipped templates, selecting a module means writing
-its test class and leaving the others out. With the `dev.domaincentric:dca-archunit` library, the same
-recommendation becomes a rule selection — `dca.rules.sets` in `dca-archunit.properties`, or
-`DcaRuleSelection.onlySets(...)` in the test — and individual rules can be lowered to a warning
-(`dca.rules.warn`) or switched off with a recorded reason (`dca.rules.off` plus
-`dca.rule.<id>.reason`) instead of dropping a whole module. Module-to-rule-set mapping: PackageCycles
-→ `cycles`, LayeredArchitecture → `layered`, OnionArchitecture → `onion`, HexagonalArchitecture →
-`hexagonal`, NamingConventions → `naming`, DddTacticalPatterns → `tactical`, DddStrategicPatterns →
-`strategic`, ContextMap → `contextmap`, DddAdvancedPatterns → `advanced`, UseCasePatterns →
-`usecase`.
+Sets: `cycles`, `layered`, `onion`, `hexagonal`, `naming`, `tactical`, `strategic`, `contextmap`,
+`advanced`, `usecase`; on .NET additionally `dotnet` (always on — async ports, synchronous domain,
+framework-free application layer).
 
 ## By project profile
 
-| Profile | Recommended modules |
+| Profile | `dca.rules.sets` |
 |---|---|
-| **Greenfield DCA project** (designing for full DCA from day 1) | All except SpringModulithVerification (unless using Modulith) |
-| **Brownfield retrofit** (introducing DCA into legacy code) | Mandatory + Hexagonal + Naming + UseCase. Skip strict DDD-tactical until classes have been refactored to use the markers. |
-| **CRUD app, layered but not DDD** | Mandatory + Layered + Onion + Naming + Hexagonal. Skip DDD-Tactical/Strategic/Advanced unless you actually use aggregates and bounded contexts. |
-| **Spring Modulith project** | Same as greenfield + SpringModulithVerification |
-| **Microservice (single bounded context)** | Mandatory + Hexagonal + Layered + Onion + Naming + UseCase. Skip DddStrategic (it's about cross-context). |
-| **Mono-repo monolith with multiple contexts** | All recommended + DDD-Strategic. SpringModulithVerification if using Modulith. |
-| **Just want layer enforcement, no DDD jargon** | Mandatory + Layered + Onion + Hexagonal + Naming |
+| **Greenfield DCA project** (designing for full DCA from day 1) | *(omit — whole catalog)* |
+| **Brownfield retrofit** (introducing DCA into legacy code) | `cycles,hexagonal,naming,usecase` — add `tactical` once classes implement the markers; freeze (`dca.rules.freeze`, Java) or warn on the rest meanwhile |
+| **CRUD app, layered but not DDD** | `cycles,layered,onion,hexagonal,naming` |
+| **Spring Modulith project** | whole catalog + `SpringModulithVerificationTest` |
+| **Microservice (single bounded context)** | `cycles,layered,onion,hexagonal,naming,usecase,tactical,advanced` — `strategic` and `contextmap` are no-ops with one context |
+| **Modulith with several contexts** | whole catalog; `contextmap` keeps the `@Upstream` / `@Partnership` declarations honest |
+| **Layer enforcement only, no DDD vocabulary** | `cycles,layered,onion,hexagonal,naming` |
 
 ## By subdomain type
 
-Pattern choice per subdomain (record it in a pattern-selection ADR, cf. ADR-025 in the DCA reference implementation):
+Pattern choice per subdomain — record it in a pattern-selection ADR:
 
-| Subdomain type | Recommended modules |
+| Subdomain type | `dca.rules.sets` |
 |---|---|
-| **Core** (competitive differentiator — full tactical DDD) | All modules |
-| **Supporting** (transaction script / active record is fine) | Mandatory + Layered + Onion + Hexagonal + Naming. Skip DDD-Tactical/Advanced — structural baseline only. |
-| **Generic** (buy/adopt off-the-shelf, thin integration) | Mandatory + Hexagonal + Naming — boundary protection only. |
+| **Core** (competitive differentiator — full tactical DDD) | *(omit — whole catalog)* |
+| **Supporting** (transaction script / active record is fine) | `cycles,layered,onion,hexagonal,naming,usecase` — structural baseline, no `tactical` / `advanced` |
+| **Generic** (adopted off the shelf, thin integration) | `cycles,hexagonal,naming` — boundary protection only |
+
+One selection applies to the whole test class. A project with contexts of different types either
+runs the strictest selection and records the exceptions per rule (`dca.rule.<id>.ignore` with a
+package pattern), or runs one architecture test per group of contexts with its own properties file.
 
 ## By concern
 
-> "I want to keep my domain framework-free"
-- Onion + Layered
-
-> "I want to ensure adapters and domain don't bleed"
-- Hexagonal + Layered
-
-> "I want naming consistency across the team"
-- Naming
-
-> "I want to make sure use cases follow Command/Query/Result pattern"
-- UseCase
-
-> "I want to enforce aggregate boundaries"
-- DDD-Tactical
-
-> "I want to ensure bounded contexts don't leak into each other"
-- DDD-Strategic + Hexagonal (rule 6)
-
-> "I want events to follow conventions (records, timestamps, versioning)"
-- DDD-Advanced
+| "I want to …" | Sets |
+|---|---|
+| keep my domain framework-free | `onion`, `layered` |
+| make sure adapters and domain don't bleed | `hexagonal`, `layered` |
+| naming consistency across the team | `naming` |
+| use cases follow Command/Query/Result, results carry values not aggregates | `usecase` |
+| enforce aggregate boundaries | `tactical` |
+| bounded contexts don't leak into each other | `strategic`, `hexagonal` |
+| declared context relationships match the code | `contextmap` |
+| events follow conventions (records, timestamps, versioning) | `advanced` |
 
 ## Order of strictness
 
-If you can only run one module to start: **PackageCycles**. It's the cheapest and catches the worst structural problems.
+If you can only run one set to start: **`cycles`**. It is the cheapest and catches the worst
+structural problems. Raise the bar in this order:
 
-Add in this order if you're slowly raising the bar:
+1. `cycles`
+2. `hexagonal`
+3. `layered`
+4. `naming`
+5. `usecase`
+6. `onion`
+7. `tactical`
+8. `strategic`, `contextmap`
+9. `advanced`
 
-1. PackageCycles
-2. Hexagonal (rules 1–4)
-3. Layered (rule 1: domain free of infrastructure)
-4. Naming
-5. UseCase
-6. Onion
-7. DDD-Tactical
-8. DDD-Strategic
-9. DDD-Advanced
+## Common reasons to leave a set out
 
-## Common reasons to NOT install a module
-
-- **DDD-Tactical**: Your classes don't extend marker interfaces yet. Either install the markers and migrate, or skip until they do.
-- **DDD-Strategic**: You only have one bounded context. The rules will be no-ops.
-- **SpringModulithVerification**: `spring-modulith-starter-test` isn't on the classpath. Will fail to compile.
-- **Naming**: Your team has firm conventions that differ (e.g. `*Endpoint` instead of `*Resource`). Either edit the rule or skip.
+- **`tactical`**: the classes do not implement the markers yet. Migrate or alias them first, or run
+  the set at `warn` while migrating.
+- **`strategic`, `contextmap`**: a single bounded context — the rules check nothing.
+- **`naming`**: the team's suffixes differ. Configure them first (`withUseCaseSuffix`,
+  `withRestControllerSuffix`); leave the set out only for conventions the layout cannot express.
+- **`SpringModulithVerificationTest`**: `spring-modulith-starter-test` is not on the class path — it
+  does not compile.
 
 ## After install
 
-Run once to see the baseline: `./gradlew test-architecture --info`
-
-Expect failures in retrofit projects — those failures are findings, not bugs. Use `/dca-review`
-to triage and `/dca-scaffold` for new code that should comply from the start.
+Run once for the baseline: `./gradlew test-architecture`, `mvn test -Dtest='ArchitectureTest'` or
+`dotnet test` (Debug). Expect failures in retrofit projects — those are findings, not bugs. Use
+`/dca-review` to triage and `/dca-scaffold` for new code that complies from the start.

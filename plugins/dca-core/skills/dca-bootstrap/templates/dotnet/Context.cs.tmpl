@@ -1,0 +1,14 @@
+using DomainCentric.BuildingBlocks.Ddd.Strategic;
+
+namespace {{contextNamespace}};
+
+/// <summary>{{description}}</summary>
+/// <remarks>
+/// C# has no <c>package-info</c>; this marker class in the context's root namespace declares the bounded
+/// context the rules and the context map discover. Relationships to other contexts are declared here too:
+/// <c>[Upstream("Product", Translation.AntiCorruptionLayer, Consumes.Api, Rationale = "…")]</c>.
+/// </remarks>
+[BoundedContext("{{contextName}}", Description = "{{description}}")]
+public static class {{contextClassName}}
+{
+}

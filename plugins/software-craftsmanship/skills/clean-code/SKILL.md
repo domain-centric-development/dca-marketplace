@@ -39,7 +39,7 @@ Fowler's *Refactoring* (smells + named techniques).
   function is genuinely linear and reads top-to-bottom, leave it. If a
   15-line function has three nested ifs, split it.
 - **Few parameters.** 0-2 is fine, 3 is borderline, 4+ suggests a Parameter
-  Object (Java record / value object).
+  Object (Java or C# record / value object).
 - **No flag parameters.** `process(item, /*async=*/ true)` should be
   `processAsync(item)` and `processSync(item)`.
 - **No hidden side effects.** A function called `validate` should not also
@@ -146,7 +146,7 @@ Leave touched code a little cleaner than you found it. Bounds:
 This skill does **not** auto-reformat. It works alongside whatever formatter
 the project has configured. Read
 `<project-root>/.claude/dca/conventions.md` for the project's formatter
-command (e.g. `./gradlew spotlessApply`); offer to run it at the end of a
+command (e.g. `./gradlew spotlessApply`, `dotnet format`); offer to run it at the end of a
 larger edit, but don't reformat invisibly mid-edit.
 
 ## What this skill flags during editing

@@ -1,0 +1,10 @@
+using {{rootNamespace}}.{{Context}}.Domain.Model;
+using DomainCentric.BuildingBlocks.Ddd.Tactical;
+
+namespace {{rootNamespace}}.{{Context}}.Domain.Event;
+
+/// <summary>A new {{Name}} was created. Past tense on purpose — domain events describe what already happened.</summary>
+public sealed record {{Name}}Created(Guid EventId, DateTimeOffset OccurredOn, {{Name}}Id AggregateId) : IDomainEvent
+{
+    public static {{Name}}Created Now({{Name}}Id aggregateId) => new(Guid.NewGuid(), DateTimeOffset.UtcNow, aggregateId);
+}

@@ -23,7 +23,8 @@ Default: one `glossary.md` per bounded context, co-located with the domain
 code:
 
 ```
-{basePackagePath}/{context}/domain/glossary.md
+{basePackagePath}/{context}/domain/glossary.md      # Java
+src/{RootNamespace}.{Context}/Domain/glossary.md    # .NET (one project per context)
 ```
 
 Alternative path can be set in `<project-root>/.claude/dca/conventions.md`.
@@ -78,7 +79,7 @@ Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Operations`, `Notes`
 
 Default scope: changed files (git diff). Optional explicit path.
 
-For each Java file:
+For each source file (`*.java`, `*.cs`):
 
 1. Determine the context (from path).
 2. Read the context's `glossary.md`.

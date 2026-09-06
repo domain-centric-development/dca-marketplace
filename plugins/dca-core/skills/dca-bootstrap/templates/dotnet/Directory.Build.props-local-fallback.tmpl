@@ -1,0 +1,19 @@
+<!-- dca-bootstrap: local fallback while DomainCentric.* is not on NuGet.org.
+     Merge into the solution's Directory.Build.props. With a sibling dca-dotnet checkout the
+     packages are consumed as project references; without it the PackageReference applies. -->
+<Project>
+  <PropertyGroup>
+    <DcaDotnetDir>$(MSBuildThisFileDirectory)../dca-dotnet/src/</DcaDotnetDir>
+    <UseLocalDcaDotnet Condition="Exists('$(DcaDotnetDir)DomainCentric.BuildingBlocks/DomainCentric.BuildingBlocks.csproj')">true</UseLocalDcaDotnet>
+    <DcaDotnetVersion>{{dcaDotnetVersion}}</DcaDotnetVersion>
+  </PropertyGroup>
+</Project>
+
+<!-- In each csproj, replace the plain PackageReference with the conditional pair:
+  <ItemGroup Condition="'$(UseLocalDcaDotnet)' == 'true'">
+    <ProjectReference Include="$(DcaDotnetDir)DomainCentric.BuildingBlocks/DomainCentric.BuildingBlocks.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseLocalDcaDotnet)' != 'true'">
+    <PackageReference Include="DomainCentric.BuildingBlocks" Version="$(DcaDotnetVersion)" />
+  </ItemGroup>
+  (same pair for DomainCentric.ArchRules.Xunit in the architecture test project) -->

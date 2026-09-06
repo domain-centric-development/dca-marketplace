@@ -1,0 +1,16 @@
+{{#if isSharedKernel}}
+/** Building blocks and value objects every bounded context may depend on. */
+@SharedKernel(description = "{{description}}")
+{{#if springModulithEnabled}}
+@org.springframework.modulith.ApplicationModule(type = org.springframework.modulith.ApplicationModule.Type.OPEN)
+{{/if}}
+package {{packageName}};
+
+import dev.domaincentric.dca.buildingblocks.ddd.strategic.relationships.SharedKernel;
+{{else}}
+/** {{description}} */
+@BoundedContext(name = "{{contextName}}", description = "{{description}}")
+package {{packageName}};
+
+import dev.domaincentric.dca.buildingblocks.ddd.strategic.BoundedContext;
+{{/if}}

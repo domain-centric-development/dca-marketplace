@@ -1,0 +1,15 @@
+using Microsoft.Extensions.DependencyInjection;
+
+namespace {{rootNamespace}}.{{Context}}.Infrastructure;
+
+/// <summary>Wires the {{Context}} context: use cases behind their input ports, adapters behind their output ports.</summary>
+public static class {{Context}}ContextRegistration
+{
+    public static IServiceCollection Add{{Context}}Context(this IServiceCollection services)
+    {
+        // Domain services and factories: services.AddSingleton<...>();
+        // Use cases (input ports): services.AddScoped<I{Name}InputPort, {Name}UseCase>();
+        // Outgoing adapters (output ports): services.AddSingleton<I{Aggregate}Repository, InMemory{Aggregate}Repository>();
+        return services;
+    }
+}

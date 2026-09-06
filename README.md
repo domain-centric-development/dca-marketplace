@@ -11,19 +11,22 @@ DCA-specific skills and agents:
 
 - **Skills:** `/dca-discipline`, `/ubiquitous-language`, `/context-map`, `/dca-bootstrap`, `/dca-scaffold`, `/dca-review`, `/dca-knowledge`
 - **Agents:** `ddd-expert` (builder), `ddd-reviewer`, `hexagonal-reviewer`
-- **Knowledge:** a vendored OKF knowledge catalog (~740 markdown nodes: DCA guide
-  text, marker contracts, ArchUnit rules, ADRs, recipes, decisions, pitfalls,
+- **Knowledge:** a vendored OKF knowledge catalog (~350 markdown nodes: DCA guide
+  text, marker contracts, architecture rules, recipes, decisions, pitfalls,
   templates) ships inside `/dca-knowledge`, so grounded Q&A and the recipe-driven
   build loop work in any project with zero setup
 
 For projects that follow Domain-Driven Design + Hexagonal Architecture
-conventions. `/dca-bootstrap` installs the marker interfaces + ArchUnit suite
-into a fresh or existing project and wires its `CLAUDE.md` to the catalog, so a
-coding agent builds from recipes and rule checklists instead of from memory.
+conventions, in Java/Spring or .NET/C#. `/dca-bootstrap` adds the published
+packages — `dev.domaincentric:dca-building-blocks` + `dca-archunit`, or
+`DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit` — generates one
+architecture test that runs the whole rule catalog against the project's layout,
+and wires its `CLAUDE.md` to the catalog, so a coding agent builds from recipes
+and rule checklists instead of from memory.
 
 ### [software-craftsmanship](plugins/software-craftsmanship/)
 
-Project-agnostic craftsmanship — usable on any Java/Spring project:
+Project-agnostic craftsmanship — usable on any Java or .NET project:
 
 - **Skills:** `/tdd`, `/clean-code`, `/adr`
 - **Agents:** `e2e-tester` (builder), `clean-code-reviewer`
@@ -42,11 +45,15 @@ architecture style. Splitting them out means:
 ## Installation
 
 ```
-/plugin marketplace add chbloemer/dca-marketplace
+/plugin marketplace add domain-centric-development/dca-marketplace
 
 /plugin install dca-core@dca-marketplace
 /plugin install software-craftsmanship@dca-marketplace
 ```
+
+Acceptance: bootstrapping a fresh Gradle project ends with the DCA rule catalog running from the published
+packages (checked against `dca-archunit` 0.1.0; empty-selection failures in that release are fixed in the next
+one). The .NET path is verified against a local `dca-dotnet` checkout until the NuGet packages are released.
 
 Working from a local clone instead (e.g. for plugin development):
 
@@ -59,7 +66,10 @@ Working from a local clone instead (e.g. for plugin development):
 DCA is described in:
 
 - [dca-guide](https://github.com/domain-centric-development/dca-guide) — compact reference
+- [dca-java](https://github.com/domain-centric-development/dca-java) — `dca-building-blocks` (markers) and `dca-archunit` (rules) for Java
+- [dca-dotnet](https://github.com/domain-centric-development/dca-dotnet) — `DomainCentric.BuildingBlocks` and `DomainCentric.ArchRules` for .NET
 - [dca-ecommerce-sample-java](https://github.com/domain-centric-development/dca-ecommerce-sample-java) — reference Java/Spring implementation
+- [dca-ecommerce-sample-dotnet](https://github.com/domain-centric-development/dca-ecommerce-sample-dotnet) — reference .NET implementation
 
 This marketplace turns those principles into Claude Code tooling.
 

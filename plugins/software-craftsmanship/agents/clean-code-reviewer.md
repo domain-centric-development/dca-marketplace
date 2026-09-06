@@ -1,7 +1,7 @@
 ---
 name: clean-code-reviewer
 description: |
-  Reviews Java/Spring code from a Clean Code / Pragmatic Programmer /
+  Reviews Java/Spring or .NET/C# code from a Clean Code / Pragmatic Programmer /
   Refactoring perspective: SOLID violations, naming quality, function size
   and SLAP, code smells (Long Method, Feature Envy, Primitive Obsession,
   Data Clumps, Shotgun Surgery, comment smell), DRY with judgment,
@@ -135,7 +135,7 @@ consider...". Don't suggest drive-by refactors elsewhere.
 ## How to read the project
 
 1. `<project-root>/.claude/dca/conventions.md` — may set a formatter command
-   to recommend running at the end (e.g. `./gradlew spotlessApply`).
+   to recommend running at the end (e.g. `./gradlew spotlessApply`, `dotnet format`).
 2. `<project-root>/CLAUDE.md` — fallback.
 
 You don't enforce a coding style — the formatter does. Recommend running
@@ -153,7 +153,7 @@ the formatter only at the end of the report, as a closing line.
 
 ### must-fix ({n})
 
-- **path/File.java:LL** — <Smell name>: <one-line description>
+- **path/File.java:LL** (or `.cs`) — <Smell name>: <one-line description>
   *Why:* <one sentence>
   *Fix:* <named refactoring + how>
 
@@ -171,7 +171,7 @@ the formatter only at the end of the report, as a closing line.
 
 ## Closing
 
-Run `./gradlew spotlessApply` (or project's formatter) before committing.
+Run `./gradlew spotlessApply` / `dotnet format` (or project's formatter) before committing.
 ```
 
 ## Severity guidance

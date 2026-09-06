@@ -1,0 +1,38 @@
+using {{rootNamespace}}.{{Context}}.Domain.Event;
+using DomainCentric.BuildingBlocks.Ddd.Tactical;
+{{additionalUsings}}
+
+namespace {{rootNamespace}}.{{Context}}.Domain.Model;
+
+/// <summary>
+/// {{Name}} aggregate root — {{aggregateDescription}}
+/// </summary>
+/// <remarks>
+/// The consistency boundary for {{Name}}-related state. All mutations go through methods on this class — never
+/// via setters or direct field access from outside. Synchronous: the domain never awaits.
+/// </remarks>
+public sealed class {{Name}} : AggregateRootBase<{{Name}}, {{Name}}Id>
+{
+{{aggregateFields}}
+
+    private {{Name}}({{Name}}Id id{{constructorExtraParameters}})
+    {
+        Id = id;
+{{constructorBody}}
+    }
+
+    public override {{Name}}Id Id { get; }
+
+{{aggregateAccessors}}
+
+    /// <summary>Factory — raises a <see cref="{{Name}}Created"/> domain event.</summary>
+    public static {{Name}} Create({{factoryParameters}})
+    {
+        // TODO: validate invariants here.
+        var aggregate = new {{Name}}({{factoryArguments}});
+        aggregate.RegisterEvent({{Name}}Created.Now(aggregate.Id));
+        return aggregate;
+    }
+
+    // TODO: add business methods that enforce invariants and register domain events.
+}

@@ -1,11 +1,11 @@
 {
   "name": "dca-core",
-  "description": "DCA-specific skills and reviewer agents: framework-free domain discipline, ubiquitous language glossaries, strategic context maps. DDD and Hexagonal review perspectives. Pairs with software-craftsmanship plugin for a complete daily-practice setup.",
-  "version": "0.1.0",
+  "description": "DCA-specific skills and reviewer agents for Java/Spring and .NET/C#: bootstrap via the published building-block and rule packages with one generated architecture test, framework-free domain discipline, ubiquitous language glossaries, strategic context maps, scaffolding, semantic review. DDD and Hexagonal review perspectives. Pairs with software-craftsmanship plugin for a complete daily-practice setup.",
+  "version": "0.2.0",
   "author": {
     "name": "Christoph Bloemer"
   },
-  "homepage": "https://github.com/chbloemer/dca-marketplace",
+  "homepage": "https://github.com/domain-centric-development/dca-marketplace",
   "keywords": [
     "dca",
     "domain-centric-architecture",

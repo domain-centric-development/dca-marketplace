@@ -1,7 +1,7 @@
 ---
 name: dca-review
 description: |
-  Reviews Java/Spring code against Domain-Centric Architecture (DCA) conventions. Complements
+  Reviews Java/Spring or .NET/C# code against Domain-Centric Architecture (DCA) conventions. Complements
   ArchUnit by checking semantic aspects that static rules can't: aggregate-design quality,
   use-case granularity, port semantics, domain-event hygiene, cross-context boundaries, naming
   consistency. Use when the user asks to "review my DCA code", "is this DCA-compliant", "audit
@@ -15,8 +15,9 @@ Reviews changed code (or specific paths) for **DCA compliance** — focusing on 
 ArchUnit rules can't detect because they are semantic, not structural.
 
 This is the third skill in the DCA suite. It assumes `dca-bootstrap` may or may not have run.
-If it ran, the review reuses the BaseArchUnitTest constants for naming conventions; otherwise
-it falls back to defaults.
+If it ran, the review reads the project's `DcaLayout` from the architecture test (and
+`.claude/dca/conventions.md`) for naming conventions; otherwise it falls back to defaults. Java and C# are
+reviewed against the same checklist — `reference/naming-conventions.md` carries the language mapping.
 
 ## Where ArchUnit ends and dca-review begins
 
@@ -41,7 +42,7 @@ git diff --name-only main...HEAD                  # commits on this branch
 git diff --name-only HEAD                         # uncommitted (modified + staged)
 git diff --name-only --diff-filter=A main...HEAD  # added in this branch
 ```
-Combine to get all changed `*.java` files. If no git repo or no diff, fall back to:
+Combine to get all changed `*.java` / `*.cs` files. If no git repo or no diff, fall back to:
 
 **User-specified paths.** If the user passed explicit paths (files or directories), review those instead.
 
@@ -61,6 +62,9 @@ For each file, determine its DCA layer from path:
 **/adapter/{in,incoming}/**  → adapter.incoming
 **/adapter/{out,outgoing}/** → adapter.outgoing
 ```
+
+C# uses the same segments in PascalCase (`Domain/Model`, `Application/{UseCase}`, `Application/Shared`,
+`Adapter/Incoming`, `Adapter/Outgoing`); match case-insensitively.
 
 Files outside these patterns: report as "uncategorized" — could be infra or shared kernel.
 
@@ -178,7 +182,9 @@ like `entities/`, `valueobjects/`, `helpers/`, `util/`.
 Why: technical names signal a missing domain concept; packages are named by domain concept.
 
 ### Spring annotation on domain class
-Why: domain stays framework-free (DCA invariant).
+Why: domain stays framework-free (DCA invariant). The C# twin: an ASP.NET, EF Core (`[Table]`, `DbContext`)
+or `System.Text.Json` attribute on a class in `Domain/`, or an `async` member on an aggregate — the .NET
+catalog keeps the domain synchronous and framework-free (`DCA-NET-00x`).
 
 ### Cross-context import not via api/
 Symptoms: file in `contextA/...` imports from `contextB/domain/...` directly.
@@ -215,10 +221,14 @@ cannot see: a `*Repository` whose stored type has no aggregate lifecycle.
 
 ## Reading dca-bootstrap conventions (if installed)
 
-If `BaseArchUnitTest` exists in the project, read it to extract:
-- The use-case-impl suffix (default `UseCase`, but may be `ApplicationService`)
-- The adapter sub-folder names (`incoming`/`outgoing` or `in`/`out`)
-- Marker FQNs to compare against during review
+Find the architecture test (`grep -rn "DcaLayout\." --include='*.java' --include='*.cs'`) and read its
+`DcaLayout` builder chain — every `with…`/`With…` call is a deviation from the DCA default:
+- The use-case-impl suffix (`withUseCaseSuffix` — default `UseCase`, but may be `ApplicationService`)
+- The adapter sub-folder names (`withIncomingSubpackage`/`withOutgoingSubpackage` — `incoming`/`outgoing` or `in`/`out`)
+- The REST adapter suffix (`withRestControllerSuffix` — `Resource` or `Controller`)
+- `dca-archunit.properties`: rule sets switched off there mark patterns the project deliberately does not use
+  (a context without `tactical` is not an anemic-model finding)
+The markers are the library's (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`).
 
 This makes the review match the project's actual conventions, not DCA defaults.
 

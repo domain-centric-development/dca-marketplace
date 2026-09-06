@@ -1,0 +1,22 @@
+# Domain-Centric Architecture rule selection (DomainCentric.ArchRules).
+# Read by DcaArchitectureTest next to the test assembly (copied to the output directory by the
+# csproj); ArchitectureTest.AdditionalSelection is merged on top, the later entry wins per rule id.
+# An unknown id or set name fails the run. Only the file shapes the report (theory names, count).
+#
+# Sets: cycles, layered, onion, hexagonal, naming, tactical, strategic, contextmap, advanced, usecase, dotnet.
+
+# Which sets run (omit the key to run the whole catalog).
+dca.rules.sets = {{ruleSets}}
+
+# Switched off, with the reason — the theory is named "… [OFF: reason]".
+#dca.rules.off               = DCA-NAM-005
+#dca.rule.DCA-NAM-005.reason = no MVC controllers here
+
+# Reported but not failing the build — for rules the team is working towards.
+#dca.rules.warn              = DCA-TAC-009
+#dca.rules.warn.sets         = naming
+
+# A documented exception: violations matching the pattern are ignored for that rule.
+#dca.rule.DCA-STR-003.ignore = .*Legacy.*
+
+# No baseline dial here: ArchUnitNET has no FreezingArchRule; dca.rules.freeze is rejected.

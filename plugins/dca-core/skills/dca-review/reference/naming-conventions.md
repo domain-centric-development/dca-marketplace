@@ -28,6 +28,30 @@ the ubiquitous language (`ordering`, `cartrecovery`, `checkoutcompletion`) — n
 `queries`, `handlers`, `services`, `utils`) and never delivery mechanisms (`web`, `api`). A context is flat or
 grouped, never both.
 
+## Java ↔ C# mapping
+
+The conventions are one set; the two languages spell them differently. Review either against the same checklist.
+
+| Concept | Java (Spring) | C# (.NET) |
+|---|---|---|
+| Module boundary | package `com.acme.shop.cart` | namespace `Acme.Shop.Cart` (typically one project per context) |
+| Context declaration | `@BoundedContext` on `package-info.java` | `[BoundedContext]` on marker class `CartContext` in the root namespace |
+| Context-map relations | `@Upstream`, `@Partnership`, `@ExternalUpstream` on `package-info` | same attributes on the marker class |
+| Layer folders | `domain/model`, `application/shared`, `adapter/incoming/web` | `Domain/Model`, `Application/Shared`, `Adapter/Incoming/Web` |
+| Feature folders | `application/{feature}/{usecase}` | `Application/{Feature}/{UseCase}` |
+| Input port | `PlaceOrderInputPort extends UseCase<Cmd, Result>` | `IPlaceOrderInputPort : IUseCase<Cmd, Result>` — async `ExecuteAsync(cmd, ct)` |
+| Use case impl | `PlaceOrderUseCase` (`@Service`, `@Transactional`) | `PlaceOrderUseCase` (plain class, registered in `AddCartContext()`) |
+| Command / Query / Result | Java `record` | `sealed record` |
+| Identifier | `record OrderId(UUID value) implements Id` | `readonly record struct OrderId(Guid Value) : IId` |
+| Aggregate root | `extends BaseAggregateRoot<T, ID>` | `: AggregateRootBase<T, TId>`; domain synchronous |
+| Markers | `AggregateRoot`, `Entity`, `Value`, `DomainEvent`, `DomainService`, … | `IAggregateRoot`, `IEntity`, `IValue`, `IDomainEvent`, `IDomainService`, … |
+| Output ports | `Repository<T,ID>`, `Store`, `OutputPort` | `IRepository<T,TId>`, `IStore`, `IOutputPort` — all methods `Task`-based |
+| Transaction boundary | `@Transactional` or `TransactionBoundary.inTransaction(...)` | `ITransactionBoundary.InTransactionAsync(...)` or a decorator around `IUseCase` — no attribute |
+| REST adapter | `*Resource` (`@RestController`) | `*Resource` or `*Controller` (`[ApiController]`) — layout option |
+| MVC adapter | `*PageController` | `*PageController : Controller` |
+| DI wiring | Spring component scan | `services.AddScoped<IXInputPort, XUseCase>()` in `Infrastructure/` |
+| Architecture test | `class ArchitectureTest extends DcaArchitectureTest` (JUnit 5) | `class ArchitectureTest : DcaArchitectureTest` (xUnit), Debug build |
+
 ## Domain layer
 
 | Pattern | Purpose |

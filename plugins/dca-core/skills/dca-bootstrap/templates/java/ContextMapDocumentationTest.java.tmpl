@@ -1,0 +1,39 @@
+package {{basePackage}};
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import dev.domaincentric.dca.archunit.DcaArchitecture;
+import dev.domaincentric.dca.archunit.DcaLayout;
+import dev.domaincentric.dca.archunit.contextmap.ContextMapRenderer;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+
+/**
+ * Renders {@code {{contextMapPath}}} from the {@code @BoundedContext}, {@code @Upstream},
+ * {@code @ExternalUpstream} and {@code @Partnership} package annotations — the context map as a
+ * fully derived view. The test regenerates the file on every run and fails if it was stale, so CI
+ * catches a map that drifted from the declarations; the fix is to commit the regenerated file.
+ */
+class ContextMapDocumentationTest {
+
+  private static final Path CONTEXT_MAP = Path.of("{{contextMapPath}}");
+
+  @Test
+  void contextMapDocumentMatchesTheDeclaredContextMap() throws IOException {
+    DcaArchitecture architecture =
+        DcaArchitecture.load(DcaLayout.forBasePackage(ArchitectureTest.BASE_PACKAGE));
+    String generated = ContextMapRenderer.of(architecture).render();
+    String existing = Files.exists(CONTEXT_MAP) ? Files.readString(CONTEXT_MAP) : null;
+
+    Files.createDirectories(CONTEXT_MAP.getParent());
+    Files.writeString(CONTEXT_MAP, generated);
+
+    assertEquals(
+        generated,
+        existing,
+        CONTEXT_MAP + " was stale and has been regenerated from the package annotations — review"
+            + " and commit it");
+  }
+}

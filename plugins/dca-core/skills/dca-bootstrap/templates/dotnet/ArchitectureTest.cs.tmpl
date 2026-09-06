@@ -1,0 +1,42 @@
+using System.Reflection;
+using DomainCentric.ArchRules;
+using DomainCentric.ArchRules.Xunit;
+
+namespace {{rootNamespace}}.ArchitectureTests;
+
+/// <summary>
+/// The Domain-Centric Architecture rule catalog from <c>DomainCentric.ArchRules</c> against every production
+/// assembly — one theory case per rule, named by its set (<c>tactical / DCA-TAC-001</c>). The rules pin to the
+/// <c>DomainCentric.BuildingBlocks</c> markers the production code implements.
+/// </summary>
+/// <remarks>
+/// Which rules run, and how strictly, is decided in <c>dca-archunit.properties</c> next to the test assembly
+/// (the base) and in <see cref="AdditionalSelection"/> (applied on top). Only the file shapes the report —
+/// theory names and the test count — so a decision that should be visible there belongs in the file.
+/// </remarks>
+public sealed class ArchitectureTest : DcaArchitectureTest
+{
+    protected override DcaLayout Layout =>
+        DcaLayout.ForRootNamespace("{{rootNamespace}}"){{#each layoutCalls}}
+            .{{this}}{{/each}};
+
+    /// <summary>
+    /// Everything a project may need, applied on top of <c>dca-archunit.properties</c>:
+    /// <code>
+    /// DcaRuleSelection.All()
+    ///     .OnlySets("cycles", "layered", "hexagonal")            // adopt the catalog in stages
+    ///     .Excluding("DCA-NAM-005", "no MVC controllers here")   // off, with the reason
+    ///     .Warning("DCA-TAC-009", "being made sealed")           // reported, does not fail the build
+    ///     .IgnoringViolationsMatching("DCA-STR-003", ".*Legacy.*");   // documented exception
+    /// </code>
+    /// </summary>
+    protected override DcaRuleSelection AdditionalSelection => DcaRuleSelection.All();
+
+    /// <summary>One assembly per bounded context is fine — the rules work on namespaces.</summary>
+    protected override IEnumerable<Assembly> Assemblies => new[]
+    {
+{{#each assemblyAnchors}}
+        typeof({{this}}).Assembly,
+{{/each}}
+    };
+}

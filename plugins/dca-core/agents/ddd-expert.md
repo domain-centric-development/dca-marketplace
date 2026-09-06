@@ -22,13 +22,21 @@ Before writing any code, gather context:
 
 1. **Read `<project-root>/.claude/dca/conventions.md`** if it exists. It tells
    you:
-   - The base package (e.g. `com.acme.shop`)
-   - Marker FQNs (`AggregateRoot`, `Entity`, `Value`, `Id`, `Repository`,
-     `Store`, `DomainEvent`, `IntegrationEvent`, `DomainService`, `Factory`,
-     `Specification`, `@BoundedContext`, `@SharedKernel`)
+   - The language: Java/Spring or .NET/C# — the markers are the same building
+     blocks in two spellings (`AggregateRoot` / `IAggregateRoot`,
+     `BaseAggregateRoot` / `AggregateRootBase`, `Value` / `IValue`, `Id` / `IId`,
+     `Repository` / `IRepository`, `Store` / `IStore`, `DomainEvent` / `IDomainEvent`,
+     `IntegrationEvent` / `IIntegrationEvent`, `DomainService` / `IDomainService`,
+     `Factory` / `IFactory`, `Specification` / `ISpecification<T>`,
+     `@BoundedContext` on `package-info` / `[BoundedContext]` on the `XContext`
+     marker class); the .NET domain is synchronous, only ports are async
+   - The base package (e.g. `com.acme.shop`) or root namespace (`Acme.Shop`)
+   - Marker FQNs — from `dev.domaincentric.dca.buildingblocks.…` or
+     `DomainCentric.BuildingBlocks.…` unless the project keeps its own
    - Layer folder names (`incoming`/`outgoing` vs `in`/`out`)
    - Suffix conventions (e.g. `*UseCase` vs `*ApplicationService`)
-   - Whether the project uses Lombok or pure Java records
+   - Whether the project uses Lombok or pure Java records; in C#, `sealed record`
+     for values and events, `readonly record struct` for ids
    - Allowed domain imports (some projects allow JSpecify, Apache Commons, etc.)
 2. **Fall back to `<project-root>/CLAUDE.md`** if no conventions file.
 3. **Inspect the codebase** to learn local idioms:
@@ -69,9 +77,11 @@ Don't impose patterns the project doesn't use.
 ### Value Objects
 
 - Implement the project's `Value` marker.
-- **Immutable** — Java `record` is the default; only use a class when you
-  need invariants beyond what a compact constructor can express.
-- Validate in the compact constructor.
+- **Immutable** — Java `record` (C#: `sealed record`, ids as `readonly record
+  struct`) is the default; only use a class when you need invariants beyond
+  what a compact constructor can express.
+- Validate in the compact constructor (C#: primary-constructor body or a
+  static `Of(...)` factory).
 - Equality and hashCode by value.
 - Static factory methods (`of(...)`, `generate()`) when construction is
   non-trivial or has multiple paths.
@@ -114,7 +124,8 @@ Don't impose patterns the project doesn't use.
 - Implement the project's `DomainService` marker.
 - **Stateless** — only `final` fields injected via constructor.
 - **Framework-free** — no Spring annotations (those belong on an application
-  service that *wraps* a domain service, if any).
+  service that *wraps* a domain service, if any); in C# no attributes either —
+  the service is registered in `Add{Context}Context()`.
 - Use only when logic doesn't fit naturally in any single aggregate (e.g.
   computations that combine fields from multiple aggregates).
 
@@ -157,9 +168,10 @@ like `record(...)`, `count(...)`, `exists(...)`. **No `findById` on a Store.**
 ## Critical constraints
 
 1. **Zero-dependency domain**: no Spring, JPA, Hibernate, Jackson, or other
-   framework annotations in `domain/` packages. Honor project-specific
-   allowed imports from `conventions.md` (e.g. Lombok, JSpecify, Apache
-   Commons may be allowed).
+   framework annotations in `domain/` packages (C#: no ASP.NET, EF Core or
+   `System.Text.Json` attributes in `Domain/`, and no `async` member). Honor
+   project-specific allowed imports from `conventions.md` (e.g. Lombok,
+   JSpecify, Apache Commons, NodaTime may be allowed).
 2. **No cross-context domain access**: a context's domain MUST NOT import
    another context's domain. If you need data from another context, use the
    shared kernel (rare), an Open Host Service (REST/MCP adapter), or
@@ -168,9 +180,9 @@ like `record(...)`, `count(...)`, `exists(...)`. **No `findById` on a Store.**
    from the bounded context's glossary. If a term is new, add it to the
    glossary before coding.
 4. **Aggregates emit events, use cases publish them**: the aggregate calls
-   `registerEvent(...)` internally; the use case retrieves
-   `domainEvents()` and publishes after persistence — and clears events
-   after.
+   `registerEvent(...)` / `RegisterEvent(...)` internally; the use case saves,
+   then `publishAndClearEvents(aggregate)` / `PublishAndClearEventsAsync(...)`
+   — publish after persistence, clear after publishing.
 
 ## Workflow
 
@@ -184,8 +196,8 @@ like `record(...)`, `count(...)`, `exists(...)`. **No `findById` on a Store.**
    style (Lombok vs records, base classes used, field naming).
 4. **Implement the type**, following the patterns above adapted to project
    convention.
-5. **Run architecture tests** (typically `./gradlew test-architecture`) to
-   verify compliance.
+5. **Run architecture tests** (typically `./gradlew test-architecture` or
+   `dotnet test tests/*.ArchitectureTests` — Debug build) to verify compliance.
 6. **Surface follow-ups**: if you created a new aggregate, the user likely
    also needs a Repository, a `*Created` event, and at least one use case.
    Suggest, don't generate unprompted.
