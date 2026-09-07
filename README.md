@@ -52,8 +52,8 @@ architecture style. Splitting them out means:
 ```
 
 Acceptance: bootstrapping a fresh project ends with the DCA rule catalog running from the published
-packages — Java against `dev.domaincentric:dca-archunit` 0.1.0 on Maven Central (empty-selection failures in
-that release are fixed in the next one), .NET against `DomainCentric.ArchRules.Xunit` 0.1.0 on NuGet.org.
+packages — Java against `dev.domaincentric:dca-archunit` 0.2.0 on Maven Central, .NET against
+`DomainCentric.ArchRules.Xunit` 0.2.0 on NuGet.org (both released 2026-09-07).
 
 Working from a local clone instead (e.g. for plugin development):
 
