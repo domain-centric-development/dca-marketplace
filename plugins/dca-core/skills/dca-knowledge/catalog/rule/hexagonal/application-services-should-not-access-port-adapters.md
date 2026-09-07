@@ -22,5 +22,6 @@ DcaRule.of(
             .resideInAnyPackage(arch.allApplicationPatterns())
             .should()
             .dependOnClassesThat()
-            .resideInAnyPackage(arch.allAdapterPatterns()))
+            .resideInAnyPackage(arch.allAdapterPatterns())
+            .allowEmptyShould(true))
 ```

@@ -23,6 +23,6 @@ DcaRule.of(
             .and()
             .resideInAnyPackage(layout.basePackage() + "..")
             .should()
-            .resideInAPackage(incomingWebPattern)
+            .resideInAnyPackage(incomingWebAdapterPatterns(arch))
             .allowEmptyShould(true))
 ```

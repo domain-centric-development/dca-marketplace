@@ -26,5 +26,6 @@ DcaRule.of(
             .resideOutsideOfPackage(eventConsumerPattern())
             .should()
             .dependOnClassesThat()
-            .resideInAnyPackage(arch.allOutgoingAdapterPatterns()))
+            .resideInAnyPackage(arch.allOutgoingAdapterPatterns())
+            .allowEmptyShould(true))
 ```

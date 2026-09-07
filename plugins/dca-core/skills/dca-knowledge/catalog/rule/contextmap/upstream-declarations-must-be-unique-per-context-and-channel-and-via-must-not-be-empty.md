@@ -18,11 +18,12 @@ DcaRule.check(
     "The identity of an @Upstream declaration is (context, via); different translations per"
         + " channel require separate annotations",
     arch -> {
+      CollectedViolations violations = CollectedViolations.withoutHeader();
       for (String pkg : arch.boundedContextPackages()) {
         String source = arch.contextName(pkg);
         List<String> edges = new ArrayList<>();
         for (Upstream u : arch.packageAnnotations(pkg, Upstream.class)) {
-          require(
+          violations.require(
               u.via().length > 0,
               "Context '"
                   + source
@@ -31,7 +32,7 @@ DcaRule.check(
                   + "\") declares no channel — via must not be empty");
           for (Upstream.Consumes channel : u.via()) {
             String edge = u.context() + " :: " + channelName(arch, channel);
-            require(
+            violations.require(
                 !edges.contains(edge),
                 "Context '"
                     + source
@@ -44,6 +45,7 @@ DcaRule.check(
           }
         }
       }
+      violations.throwIfAny();
     })
 ```
 
