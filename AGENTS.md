@@ -54,8 +54,8 @@ the sources, not the copies, when a rule text looks wrong.
   `test-architecture` source set, `ArchitectureTest extends DcaArchitectureTest` with the project's `DcaLayout`, and
   `dca-archunit.properties` for the rule selection.
 - .NET: `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit`, a `*.ArchitectureTests` project with
-  `DcaArchitectureTests : DcaArchitectureTest` (Debug builds). Until the NuGet release the bootstrap offers a local
-  project reference to a `dca-dotnet` checkout.
+  `DcaArchitectureTests : DcaArchitectureTest` (Debug builds), from NuGet.org (0.1.0 since 2026-09-07). A
+  conditional project reference to a sibling `dca-dotnet` checkout is offered only on request, for unreleased rules.
 
 It ships no marker or rule templates. The single remaining template is the Spring Modulith verification test,
 installed only when Modulith is present. Retrofit follows "adapt, don't overwrite": existing marker-like

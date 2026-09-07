@@ -54,10 +54,13 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
    training data. At bootstrap time resolve:
    - `{{dcaJavaVersion}}` — the latest release of `dev.domaincentric:dca-archunit` (Maven Central
      search or mvnrepository via `WebFetch`); `dca-building-blocks` shares the version line.
-   - `{{dcaDotnetVersion}}` — the latest `DomainCentric.ArchRules.Xunit` on NuGet.org. If the
-     package is not found there, the libraries are not yet published: say so, and offer the
-     conditional `ProjectReference` fallback (`templates/dotnet/Directory.Build.props-local-fallback.tmpl`)
-     against a sibling `dca-dotnet` checkout the user names.
+   - `{{dcaDotnetVersion}}` — the latest `DomainCentric.ArchRules.Xunit` on NuGet.org
+     (`https://api.nuget.org/v3-flatcontainer/domaincentric.archrules.xunit/index.json` lists the
+     versions); `DomainCentric.BuildingBlocks` is versioned independently — take the version the chosen
+     `ArchRules` package depends on. Only when the user says they work against unreleased rules from a
+     sibling `dca-dotnet` checkout, offer the conditional `ProjectReference` switch
+     (`templates/dotnet/Directory.Build.props-local-fallback.tmpl`) — the .NET counterpart of the Java
+     sample's `-PwithDcaJava`.
    - Greenfield projects: also the current stable Spring Boot / .NET line (spring.io, dotnet.microsoft.com),
      offered as the recommended default with the previous stable line as fallback.
    Re-verify per project; do not carry a version over from another session.
@@ -199,9 +202,9 @@ Before each write: if the target exists, ask *overwrite / skip / abort* (default
 
 **.NET**
 
-1. `dotnet add package DomainCentric.BuildingBlocks` in every production project (or the
-   conditional `ProjectReference` pair from `templates/dotnet/Directory.Build.props-local-fallback.tmpl`
-   while the packages are not on NuGet.org).
+1. `dotnet add package DomainCentric.BuildingBlocks` in every production project (the conditional
+   `ProjectReference` pair from `templates/dotnet/Directory.Build.props-local-fallback.tmpl` only on
+   request, for work against an unreleased sibling `dca-dotnet` checkout).
 2. `templates/dotnet/ArchitectureTests.csproj.tmpl` → `tests/{{solutionName}}.ArchitectureTests/`
    with a `ProjectReference` per production project; add it to the solution (`dotnet sln add`).
    Test SDK / xUnit versions: look them up like every other version.

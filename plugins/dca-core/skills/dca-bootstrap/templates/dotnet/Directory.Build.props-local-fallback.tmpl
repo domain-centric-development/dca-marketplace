@@ -1,6 +1,7 @@
-<!-- dca-bootstrap: local fallback while DomainCentric.* is not on NuGet.org.
-     Merge into the solution's Directory.Build.props. With a sibling dca-dotnet checkout the
-     packages are consumed as project references; without it the PackageReference applies. -->
+<!-- dca-bootstrap: opt-in switch for working against unreleased rules from a sibling dca-dotnet checkout
+     (the .NET counterpart of the Java sample's -PwithDcaJava). Merge into the solution's
+     Directory.Build.props. With the checkout present the packages are consumed as project references;
+     without it the PackageReference to the released DomainCentric.* packages applies. -->
 <Project>
   <PropertyGroup>
     <DcaDotnetDir>$(MSBuildThisFileDirectory)../dca-dotnet/src/</DcaDotnetDir>

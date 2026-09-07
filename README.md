@@ -51,9 +51,9 @@ architecture style. Splitting them out means:
 /plugin install software-craftsmanship@dca-marketplace
 ```
 
-Acceptance: bootstrapping a fresh Gradle project ends with the DCA rule catalog running from the published
-packages (checked against `dca-archunit` 0.1.0; empty-selection failures in that release are fixed in the next
-one). The .NET path is verified against a local `dca-dotnet` checkout until the NuGet packages are released.
+Acceptance: bootstrapping a fresh project ends with the DCA rule catalog running from the published
+packages — Java against `dev.domaincentric:dca-archunit` 0.1.0 on Maven Central (empty-selection failures in
+that release are fixed in the next one), .NET against `DomainCentric.ArchRules.Xunit` 0.1.0 on NuGet.org.
 
 Working from a local clone instead (e.g. for plugin development):
 

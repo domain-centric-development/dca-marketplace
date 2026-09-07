@@ -1,7 +1,7 @@
 {
   "name": "dca-core",
   "description": "DCA-specific skills and reviewer agents for Java/Spring and .NET/C#: bootstrap via the published building-block and rule packages with one generated architecture test, framework-free domain discipline, ubiquitous language glossaries, strategic context maps, scaffolding, semantic review. DDD and Hexagonal review perspectives. Pairs with software-craftsmanship plugin for a complete daily-practice setup.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "Christoph Bloemer"
   },
