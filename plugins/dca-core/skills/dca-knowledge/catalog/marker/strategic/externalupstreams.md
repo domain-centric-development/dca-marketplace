@@ -9,4 +9,6 @@ methods: ["ExternalUpstream[] value()"]
 tags: [strategic, marker]
 ---
 
-Container annotation for repeatable ExternalUpstream declarations.
+Container annotation for repeatable `m` declarations.
+
+Not used directly — apply multiple `@ExternalUpstream` annotations instead.

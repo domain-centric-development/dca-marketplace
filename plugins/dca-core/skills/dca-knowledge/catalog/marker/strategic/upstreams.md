@@ -9,4 +9,6 @@ methods: ["Upstream[] value()"]
 tags: [strategic, marker]
 ---
 
-Container annotation for repeatable Upstream declarations.
+Container annotation for repeatable `m` declarations.
+
+Not used directly — apply multiple `@Upstream` annotations instead.

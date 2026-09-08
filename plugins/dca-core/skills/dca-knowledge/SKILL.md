@@ -75,6 +75,7 @@ without reading everything.
 | `Marker` | `marker/<cat>/` | interface signature, `extends`, methods | `## Extends`, `## Governed by` (rules), `## Discussed in` (sections) |
 | `Rule` | `rule/<cat>/` | ArchUnit/Spock body, `enforced_by`, `status` | `## Applies to markers` |
 | `Process` | `process/` | how-to (e.g. writing an ADR) | → any |
+| `Reference` | `reference/` | `DcaLayout` (settings, defaults, patterns, framework names) and `DcaArchitecture` (how contexts and module roots are discovered, every query the rules select through) — Java and .NET | ← every rule ("Configured by") |
 | `Recipe`/`Decision`/`Pitfall`/`Template`/`Note` | `recipe/` … `note/` (**extensible zone**) | authored playbooks, design-fork guides, anti-patterns, code skeletons, saved query answers | links into the skeleton |
 
 **Link format:** bundle-relative, leading `/`, `.md` suffix — e.g. `/marker/port-in/usecase.md`.
@@ -225,7 +226,7 @@ to confirm the new node is wired into the graph (no `unanchored-authored`/`orpha
 
 ## What this skill does NOT do
 
-- **Doesn't edit the generated zone.** `guide/ marker/ rule/ process/` are
+- **Doesn't edit the generated zone.** `guide/ marker/ rule/ process/ reference/` are
   derived from the sources (see the generator in `dca-knowledge-catalog/`) — the only
   writes this skill performs are `save` operations into the authored **extensible zone**
   (`recipe/ decision/ pitfall/ template/ note/`).

@@ -64,6 +64,7 @@ def render(java: list[dict], dotnet: list[dict]) -> str:
         "",
         "| Column | Meaning |",
         "|---|---|",
+        "| Selects / Checks | which classes the rule looks at, and what it asserts about them (what does not count included) |",
         "| Java | `dev.domaincentric:dca-archunit` implements the rule |",
         "| .NET | `DomainCentric.ArchRules` implements the rule; *n/a* names why it has no .NET reading |",
         "",
@@ -83,8 +84,8 @@ def render(java: list[dict], dotnet: list[dict]) -> str:
         lines += [
             f"## `{set_name}` — {SET_TITLES.get(set_name, set_name)}",
             "",
-            "| Id | Rule | Rationale | Java | .NET |",
-            "|---|---|---|---|---|",
+            "| Id | Rule | Rationale | Selects | Checks | Java | .NET |",
+            "|---|---|---|---|---|---|---|",
         ]
         for r in rows:
             rid = r["id"]
@@ -98,8 +99,10 @@ def render(java: list[dict], dotnet: list[dict]) -> str:
                 net = "✓"
             title = cell(r.get("title") or (d or {}).get("title", ""))
             rationale = cell(r.get("rationale") or (d or {}).get("rationale", ""))
+            selects = cell(r.get("selects") or (d or {}).get("selects", ""))
+            checks = cell(r.get("checks") or (d or {}).get("checks", ""))
             lines.append(
-                f"| `{rid}` | {title} | {rationale} | {'✓' if in_java else '—'} | {net} |"
+                f"| `{rid}` | {title} | {rationale} | {selects} | {checks} | {'✓' if in_java else '—'} | {net} |"
             )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
