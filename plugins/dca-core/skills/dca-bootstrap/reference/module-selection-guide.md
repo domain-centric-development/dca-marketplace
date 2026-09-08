@@ -70,7 +70,7 @@ structural problems. Raise the bar in this order:
   the set at `warn` while migrating.
 - **`strategic`, `contextmap`**: a single bounded context — the rules check nothing.
 - **`naming`**: the team's suffixes differ. Configure them first (`withUseCaseSuffix`,
-  `withRestControllerSuffix`); leave the set out only for conventions the layout cannot express.
+  `withControllerSuffix`, `withRestControllerSuffix`); leave the set out only for conventions the layout cannot express.
 - **`SpringModulithVerificationTest`**: `spring-modulith-starter-test` is not on the class path — it
   does not compile.
 

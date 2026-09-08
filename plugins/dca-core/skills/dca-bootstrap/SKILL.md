@@ -152,9 +152,10 @@ C. **Rule sets** — multi-select; the answer is the `dca.rules.sets` line:
    silent gap.
 
 D. **Suffix conventions** — DCA's defaults are `*UseCase` for the use-case class, `*InputPort` for its
-   interface, `*Resource` for REST adapters (.NET default `Controller`). `*ApplicationService` /
-   `*Service` → `withUseCaseSuffix(...)`; `*Controller` / `*Endpoint` → `withRestControllerSuffix(...)`.
-   The `naming` set then holds the project to *its* convention.
+   interface, `*Controller` for MVC (server-rendered) controllers and `*Resource` for REST adapters (.NET
+   default `Controller` for both). `*ApplicationService` / `*Service` → `withUseCaseSuffix(...)`; `*Page` /
+   `*Handler` for MVC controllers → `withControllerSuffix(...)`; `*Controller` / `*Endpoint` for REST →
+   `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention.
 
 E. **Spring Modulith** (Java, only when detected) — install `SpringModulithVerificationTest` as well?
    It is Modulith's own analyzer, not an ArchUnit rule, and the one remaining template of this skill
