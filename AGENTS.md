@@ -50,9 +50,11 @@ the sources, not the copies, when a rule text looks wrong.
 
 `/dca-bootstrap` installs DCA **via the published packages** and generates one thin architecture test:
 
-- Java: `dev.domaincentric:dca-building-blocks` (markers) + `dca-archunit` (rules) from Maven Central, the
-  `test-architecture` source set, `ArchitectureTest extends DcaArchitectureTest` with the project's `DcaLayout`, and
-  `dca-archunit.properties` for the rule selection.
+- Java: `dev.domaincentric:dca-building-blocks` (markers) + `dca-spring` (Spring implementations of
+  `DomainEventPublisher`/`TransactionBoundary`, auto-configured) in production, `dca-archunit` (rules) + with Modulith
+  `dca-archunit-spring-modulith` (`DcaModulithTest`) in the `test-architecture` source set, `ArchitectureTest extends
+  DcaArchitectureTest` with the project's `DcaLayout`, and `dca-archunit.properties` for the rule selection. No
+  templates for adapters or the Modulith test remain; the four artifacts are versioned independently.
 - .NET: `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit`, a `*.ArchitectureTests` project with
   `DcaArchitectureTests : DcaArchitectureTest` (Debug builds), from NuGet.org (0.1.0 since 2026-09-07). A
   conditional project reference to a sibling `dca-dotnet` checkout is offered only on request, for unreleased rules.

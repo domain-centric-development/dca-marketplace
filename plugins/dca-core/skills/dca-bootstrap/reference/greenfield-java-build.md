@@ -59,7 +59,7 @@ versions. The `test-architecture.gradle` template's `testArchitectureImplementat
 | Need | Boot 3 habit | Boot 4 |
 |---|---|---|
 | Spring MVC | `spring-boot-starter-web` | `spring-boot-starter-webmvc` (`spring-boot-starter-web` still exists in 4.0, marked deprecated in favour of the new name) |
-| `@Transactional` on use cases without a data starter | came transitively | `org.springframework:spring-tx` must be declared — no web starter brings it. `DCA-USE-012` demands the annotation on every use case that publishes events, so a greenfield project hits this before it has persistence |
+| `@Transactional` on use cases without a data starter | came transitively, and a manager with it | `org.springframework.boot:spring-boot-transaction` must be declared (it holds `TransactionAutoConfiguration`; `spring-tx` alone only makes the annotation compile) **and** a `PlatformTransactionManager` bean must exist — no web starter brings either. Without both, `@Transactional` is silently inert: no proxy, after-commit listeners skipped, rules green. `DCA-USE-012` demands the annotation on every publishing use case, so a greenfield project hits this before it has persistence; write a small no-op manager in the project as a visible placeholder (`dca-spring` deliberately ships none) and replace it with the data starter's |
 | Test core: JUnit 5, AssertJ, Mockito, `@SpringBootTest`, `@MockitoBean` | `spring-boot-starter-test` | `spring-boot-starter-test` — unchanged, but it no longer carries the slice annotations |
 | MVC slice: `@WebMvcTest`, `@AutoConfigureMockMvc`, `MockMvc`, `MockMvcTester` | in `spring-boot-starter-test` | `spring-boot-starter-webmvc-test` |
 | JDBC slice: `@JdbcTest` | in `spring-boot-starter-test` | `spring-boot-starter-jdbc-test` |
@@ -120,8 +120,9 @@ apply from: "gradle/plugins/test-architecture.gradle"   // from templates/gradle
 dependencies {
   implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
   implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-  implementation 'org.springframework:spring-tx'
-  implementation 'dev.domaincentric:dca-building-blocks:{{dcaJavaVersion}}'
+  implementation 'org.springframework.boot:spring-boot-transaction'   // + a PlatformTransactionManager @Bean until persistence arrives
+  implementation 'dev.domaincentric:dca-building-blocks:{{dcaBuildingBlocksVersion}}'
+  implementation 'dev.domaincentric:dca-spring:{{dcaSpringVersion}}'    // SpringDomainEventPublisher, SpringTransactionBoundary
 
   testImplementation 'org.springframework.boot:spring-boot-starter-test'
   testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'

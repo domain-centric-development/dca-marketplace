@@ -17,7 +17,7 @@ framework-free application layer).
 | **Greenfield DCA project** (designing for full DCA from day 1) | *(omit — whole catalog)* |
 | **Brownfield retrofit** (introducing DCA into legacy code) | `cycles,hexagonal,naming,usecase` — add `tactical` once classes implement the markers; freeze (`dca.rules.freeze`, Java) or warn on the rest meanwhile |
 | **CRUD app, layered but not DDD** | `cycles,layered,onion,hexagonal,naming` |
-| **Spring Modulith project** | whole catalog + `SpringModulithVerificationTest` |
+| **Spring Modulith project** | whole catalog + `dca-archunit-spring-modulith` (`ModulithTest extends DcaModulithTest`) |
 | **Microservice (single bounded context)** | `cycles,layered,onion,hexagonal,naming,usecase,tactical,advanced` — `strategic` and `contextmap` are no-ops with one context |
 | **Modulith with several contexts** | whole catalog; `contextmap` keeps the `@Upstream` / `@Partnership` declarations honest |
 | **Layer enforcement only, no DDD vocabulary** | `cycles,layered,onion,hexagonal,naming` |
@@ -71,8 +71,8 @@ structural problems. Raise the bar in this order:
 - **`strategic`, `contextmap`**: a single bounded context — the rules check nothing.
 - **`naming`**: the team's suffixes differ. Configure them first (`withUseCaseSuffix`,
   `withControllerSuffix`, `withRestControllerSuffix`); leave the set out only for conventions the layout cannot express.
-- **`SpringModulithVerificationTest`**: `spring-modulith-starter-test` is not on the class path — it
-  does not compile.
+- **`dca-archunit-spring-modulith`**: `spring-modulith-starter-test` is not on the class path — the
+  base class does not load.
 
 ## After install
 

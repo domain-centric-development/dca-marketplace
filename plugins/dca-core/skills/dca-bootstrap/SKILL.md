@@ -3,8 +3,9 @@ name: dca-bootstrap
 disable-model-invocation: true
 description: |
   Installs Domain-Centric Architecture (DCA) into a Java or .NET project by adding the published
-  packages — `dev.domaincentric:dca-building-blocks` + `dca-archunit`, or `DomainCentric.BuildingBlocks`
-  + `DomainCentric.ArchRules.Xunit` — and generating one thin architecture test that runs the DCA
+  packages — `dev.domaincentric:dca-building-blocks` + `dca-spring` and `dca-archunit` (+
+  `dca-archunit-spring-modulith` with Modulith), or `DomainCentric.BuildingBlocks` +
+  `DomainCentric.ArchRules.Xunit` — and generating one thin architecture test that runs the DCA
   rule catalog. Use when the user wants to introduce DCA conventions into a new or existing codebase —
   e.g. "set up DCA governance", "add the DCA architecture rules", "bootstrap DCA in this project".
   Inspects the project first, maps its layout onto `DcaLayout`, migrates or aliases existing
@@ -24,8 +25,8 @@ marker-like interfaces is below.
 
 | | Java | .NET |
 |---|---|---|
-| Production dependency | `dev.domaincentric:dca-building-blocks` | `DomainCentric.BuildingBlocks` |
-| Test dependency | `dev.domaincentric:dca-archunit` (brings ArchUnit) | `DomainCentric.ArchRules.Xunit` (brings `DomainCentric.ArchRules`, ArchUnitNET) |
+| Production dependency | `dev.domaincentric:dca-building-blocks` + `dca-spring` (Spring: `SpringDomainEventPublisher`, `SpringTransactionBoundary`, auto-configured) | `DomainCentric.BuildingBlocks` (runtime adapters stay hand-written, see `/dca-scaffold`) |
+| Test dependency | `dev.domaincentric:dca-archunit` (brings ArchUnit); with Spring Modulith also `dca-archunit-spring-modulith` (`DcaModulithTest`) | `DomainCentric.ArchRules.Xunit` (brings `DomainCentric.ArchRules`, ArchUnitNET) |
 | Base class | `dev.domaincentric.dca.archunit.junit.DcaArchitectureTest` | `DomainCentric.ArchRules.Xunit.DcaArchitectureTest` |
 | Layout | `DcaLayout.forBasePackage(..)` | `DcaLayout.ForRootNamespace(..)` |
 | Context declaration | `@BoundedContext` on `package-info.java` | `[BoundedContext]` on a marker class in the context root namespace |
@@ -53,7 +54,9 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
 2. **Versions — look them up, never recall them.** Package and framework versions go stale in
    training data. At bootstrap time resolve:
    - `{{dcaJavaVersion}}` — the latest release of `dev.domaincentric:dca-archunit` (Maven Central
-     search or mvnrepository via `WebFetch`); `dca-building-blocks` shares the version line.
+     search or mvnrepository via `WebFetch`). The four Java artifacts are versioned independently:
+     look up `dca-building-blocks` (`{{dcaBuildingBlocksVersion}}`), `dca-spring` (`{{dcaSpringVersion}}`)
+     and `dca-archunit-spring-modulith` (`{{dcaModulithVersion}}`) the same way.
    - `{{dcaDotnetVersion}}` — the latest `DomainCentric.ArchRules.Xunit` on NuGet.org
      (`https://api.nuget.org/v3-flatcontainer/domaincentric.archrules.xunit/index.json` lists the
      versions); `DomainCentric.BuildingBlocks` is versioned independently — take the version the chosen
@@ -160,9 +163,10 @@ D. **Suffix conventions** — DCA's defaults are `*UseCase` for the use-case cla
    `*Handler` for MVC controllers → `withControllerSuffix(...)`; `*Controller` / `*Endpoint` for REST →
    `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention.
 
-E. **Spring Modulith** (Java, only when detected) — install `SpringModulithVerificationTest` as well?
-   It is Modulith's own analyzer, not an ArchUnit rule, and the one remaining template of this skill
-   until an optional `dca-archunit-modulith` artifact ships it. Requires `spring-modulith-starter-test`.
+E. **Spring Modulith** (Java, only when detected) — add `dev.domaincentric:dca-archunit-spring-modulith`
+   and a second thin test, `class ModulithTest extends DcaModulithTest` with the same layout? It runs
+   Modulith's own analyzer (not an ArchUnit rule) and excludes the architecture tests in the base
+   package from Modulith's root module. Requires `spring-modulith-starter-test` on the class path.
 
 F. **Context map** — install `ContextMapDocumentationTest`, which renders `docs/context-map.md`
    from the `@BoundedContext` / `@Upstream` / `@Partnership` declarations and fails when the committed
@@ -182,12 +186,17 @@ Before each write: if the target exists, ask *overwrite / skip / abort* (default
 
 **Java**
 
-1. `templates/gradle/build-snippet.gradle.tmpl` → add `dca-building-blocks` to the production
-   `dependencies` (Groovy or Kotlin DSL as the build uses). Maven: `templates/maven/pom-snippet.xml.tmpl`
-   (both dependencies; the test then lives in `src/test/java` and `src/test/resources`). A build that
-   has no Spring Boot yet gets the skeleton from `reference/greenfield-java-build.md` first (Boot
-   plugin, BOM as a platform, Boot 4 starters); `@Transactional` on use cases needs `spring-tx`
-   on the class path, which no web starter brings.
+1. `templates/gradle/build-snippet.gradle.tmpl` → add `dca-building-blocks` and (Spring) `dca-spring` to
+   the production `dependencies` (Groovy or Kotlin DSL as the build uses). Maven:
+   `templates/maven/pom-snippet.xml.tmpl` (all dependencies; the test then lives in `src/test/java` and
+   `src/test/resources`). A build that has no Spring Boot yet gets the skeleton from
+   `reference/greenfield-java-build.md` first (Boot plugin, BOM as a platform, Boot 4 starters).
+   **Transactions in an in-memory start:** without a data starter there is no `PlatformTransactionManager`
+   and not even Boot's `TransactionAutoConfiguration` (`spring-boot-transaction`); `@Transactional` is then
+   silently inert and after-commit listeners never fire while every rule stays green. Add
+   `org.springframework.boot:spring-boot-transaction`, a small `PlatformTransactionManager` bean **in the
+   project** (a visible placeholder until a database arrives — `dca-spring` publishes none on purpose) and,
+   with Modulith, `spring-modulith-events-api` for `@ApplicationModuleListener`. Say so in the summary.
 2. `templates/gradle/test-architecture.gradle.tmpl` → `gradle/plugins/test-architecture.gradle`, plus
    `apply from: "gradle/plugins/test-architecture.gradle"` in `build.gradle`. Creates the
    `testArchitecture` source set and the `test-architecture` task, wired into `check`.
@@ -201,7 +210,9 @@ Before each write: if the target exists, ask *overwrite / skip / abort* (default
    markers it re-exports become invisible). Skip where a `package-info.java` exists.
 6. Decision A: apply the migrate/alias edits to the existing marker types.
 7. Decision F: `templates/java/ContextMapDocumentationTest.java.tmpl` (`{{contextMapPath}}`, default
-   `docs/context-map.md`). Decision E: `templates/java/SpringModulithVerificationTest.java.tmpl`.
+   `docs/context-map.md`). Decision E: no template — write the four-line subclass of
+   `dev.domaincentric.dca.archunit.springmodulith.DcaModulithTest` next to `ArchitectureTest`, overriding
+   `layout()` the same way; the dependency comes from the `test-architecture.gradle` / `pom` snippet.
 8. Decision G: `templates/claude/CLAUDE-dca-section.md.tmpl` **appended** to `CLAUDE.md`
    (`{{verifyCommand}}` = `./gradlew test-architecture` or `mvn test`); idempotent — skip when a line
    starting with `## Architecture: Domain-Centric Architecture` exists. `conventions.md.tmpl` →
@@ -259,11 +270,12 @@ staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that comp
 
 ```
 ✓ DCA bootstrap complete
-  - Packages: dev.domaincentric:dca-building-blocks + dca-archunit {version}   (or DomainCentric.*)
+  - Packages: dev.domaincentric:dca-building-blocks + dca-spring, dca-archunit (+ dca-archunit-spring-modulith) {versions}   (or DomainCentric.*)
   - Architecture test: {path}; rule sets: {dca.rules.sets or "all"}
   - Contexts declared: {N} (@BoundedContext), shared kernel: {yes|no}
   - Markers: {migrated|aliased|none found}
-  - Extras: {ContextMapDocumentationTest | SpringModulithVerificationTest | —}
+  - Extras: {ContextMapDocumentationTest | ModulithTest (DcaModulithTest) | —}
+  - Transactions: {data starter present | in-memory: spring-boot-transaction + PlatformTransactionManager bean added, replace with a real manager when persistence arrives}
   - Catalog wiring: {CLAUDE.md section appended | + conventions.md (live) | skipped}
 
 Next steps:
@@ -297,8 +309,10 @@ generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, s
   optional — see `reference/greenfield-java-build.md`.
 - **Don't** hand-write ArchUnit rules that the catalog already contains. Select sets, tune with
   `off`/`warn`/`ignore`, record reasons.
-- **Don't** install `SpringModulithVerificationTest` without Spring Modulith on the class path — it
-  does not compile.
+- **Don't** add `dca-archunit-spring-modulith` without Spring Modulith on the class path — the base
+  class does not load.
+- **Don't** publish or generate a no-op `PlatformTransactionManager` silently. If the project needs one
+  for its in-memory phase, it is a named file with a comment saying what replaces it.
 - **Don't** let the .NET architecture test run against Release assemblies; `DcaArchitecture.Load`
   refuses them because ArchUnitNET drops the compiler's async state machines there.
 - **Don't** skip context declarations. Without `@BoundedContext` / `[BoundedContext]` the context-scoped

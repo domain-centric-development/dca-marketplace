@@ -18,8 +18,8 @@ DCA-specific skills and agents:
 
 For projects that follow Domain-Driven Design + Hexagonal Architecture
 conventions, in Java/Spring or .NET/C#. `/dca-bootstrap` adds the published
-packages — `dev.domaincentric:dca-building-blocks` + `dca-archunit`, or
-`DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit` — generates one
+packages — `dev.domaincentric:dca-building-blocks` + `dca-spring` and `dca-archunit`
+(+ `dca-archunit-spring-modulith`), or `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit` — generates one
 architecture test that runs the whole rule catalog against the project's layout,
 and wires its `CLAUDE.md` to the catalog, so a coding agent builds from recipes
 and rule checklists instead of from memory.
@@ -66,7 +66,7 @@ Working from a local clone instead (e.g. for plugin development):
 DCA is described in:
 
 - [dca-guide](https://github.com/domain-centric-development/dca-guide) — compact reference
-- [dca-java](https://github.com/domain-centric-development/dca-java) — `dca-building-blocks` (markers) and `dca-archunit` (rules) for Java
+- [dca-java](https://github.com/domain-centric-development/dca-java) — `dca-building-blocks` (markers), `dca-spring` (runtime adapters), `dca-archunit` (rules) and `dca-archunit-spring-modulith` (Modulith verification) for Java
 - [dca-dotnet](https://github.com/domain-centric-development/dca-dotnet) — `DomainCentric.BuildingBlocks` and `DomainCentric.ArchRules` for .NET
 - [dca-ecommerce-sample-java](https://github.com/domain-centric-development/dca-ecommerce-sample-java) — reference Java/Spring implementation
 - [dca-ecommerce-sample-dotnet](https://github.com/domain-centric-development/dca-ecommerce-sample-dotnet) — reference .NET implementation

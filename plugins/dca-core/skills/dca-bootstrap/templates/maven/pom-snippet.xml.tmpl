@@ -3,7 +3,10 @@
      and dca-archunit.properties in src/test/resources/. -->
 
 <properties>
-  <dca.version>{{dcaJavaVersion}}</dca.version>
+  <dca-building-blocks.version>{{dcaBuildingBlocksVersion}}</dca-building-blocks.version>
+  <dca-spring.version>{{dcaSpringVersion}}</dca-spring.version>
+  <dca-archunit.version>{{dcaJavaVersion}}</dca-archunit.version>
+  <dca-archunit-spring-modulith.version>{{dcaModulithVersion}}</dca-archunit-spring-modulith.version>
 </properties>
 
 <dependencies>
@@ -11,13 +14,19 @@
   <dependency>
     <groupId>dev.domaincentric</groupId>
     <artifactId>dca-building-blocks</artifactId>
-    <version>${dca.version}</version>
+    <version>${dca-building-blocks.version}</version>
+  </dependency>
+  <!-- Spring: DomainEventPublisher + TransactionBoundary implementations, auto-configured -->
+  <dependency>
+    <groupId>dev.domaincentric</groupId>
+    <artifactId>dca-spring</artifactId>
+    <version>${dca-spring.version}</version>
   </dependency>
   <!-- The rule catalog; brings ArchUnit transitively -->
   <dependency>
     <groupId>dev.domaincentric</groupId>
     <artifactId>dca-archunit</artifactId>
-    <version>${dca.version}</version>
+    <version>${dca-archunit.version}</version>
     <scope>test</scope>
   </dependency>
   <dependency>
@@ -26,6 +35,13 @@
     <scope>test</scope>
   </dependency>
 {{#if springModulithEnabled}}
+  <!-- Spring Modulith verification: ModulithTest extends DcaModulithTest -->
+  <dependency>
+    <groupId>dev.domaincentric</groupId>
+    <artifactId>dca-archunit-spring-modulith</artifactId>
+    <version>${dca-archunit-spring-modulith.version}</version>
+    <scope>test</scope>
+  </dependency>
   <dependency>
     <groupId>org.springframework.modulith</groupId>
     <artifactId>spring-modulith-starter-test</artifactId>
@@ -35,5 +51,5 @@
 </dependencies>
 
 <!-- Surefire runs *Test classes by default, so ArchitectureTest, ContextMapDocumentationTest and
-     SpringModulithVerificationTest need no extra include. To run only the architecture rules:
+     ModulithTest need no extra include. To run only the architecture rules:
        mvn test -Dtest='ArchitectureTest' -->
