@@ -23,6 +23,7 @@ dependencies {
   testArchitectureImplementation sourceSets.main.output
   // The DCA rule catalog; brings ArchUnit transitively
   testArchitectureImplementation "dev.domaincentric:dca-archunit:{{dcaJavaVersion}}"
+  // Drop the version when a Spring Boot BOM platform sits on `implementation` - this configuration inherits it
   testArchitectureImplementation "org.junit.jupiter:junit-jupiter:{{junitVersion}}"
   testArchitectureRuntimeOnly "org.junit.platform:junit-platform-launcher"
 {{#if springModulithEnabled}}

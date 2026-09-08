@@ -62,7 +62,10 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
      (`templates/dotnet/Directory.Build.props-local-fallback.tmpl`) — the .NET counterpart of the Java
      sample's `-PwithDcaJava`.
    - Greenfield projects: also the current stable Spring Boot / .NET line (spring.io, dotnet.microsoft.com),
-     offered as the recommended default with the previous stable line as fallback.
+     offered as the recommended default with the previous stable line as fallback. For a fresh Spring Boot
+     4 build, follow `reference/greenfield-java-build.md` — Boot 4 renamed the web starter, split the
+     test starters per slice and moved the slice annotations into technology packages; training data
+     has the Boot 3 names.
    Re-verify per project; do not carry a version over from another session.
 
 3. **Source layout.** Source root, base package (Java: a few `package` declarations under
@@ -181,7 +184,10 @@ Before each write: if the target exists, ask *overwrite / skip / abort* (default
 
 1. `templates/gradle/build-snippet.gradle.tmpl` → add `dca-building-blocks` to the production
    `dependencies` (Groovy or Kotlin DSL as the build uses). Maven: `templates/maven/pom-snippet.xml.tmpl`
-   (both dependencies; the test then lives in `src/test/java` and `src/test/resources`).
+   (both dependencies; the test then lives in `src/test/java` and `src/test/resources`). A build that
+   has no Spring Boot yet gets the skeleton from `reference/greenfield-java-build.md` first (Boot
+   plugin, BOM as a platform, Boot 4 starters); `@Transactional` on use cases needs `spring-tx`
+   on the class path, which no web starter brings.
 2. `templates/gradle/test-architecture.gradle.tmpl` → `gradle/plugins/test-architecture.gradle`, plus
    `apply from: "gradle/plugins/test-architecture.gradle"` in `build.gradle`. Creates the
    `testArchitecture` source set and the `test-architecture` task, wired into `check`.
@@ -239,6 +245,7 @@ staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that comp
 | `{{rootNamespace}}`, `{{solutionName}}` | detected | `Acme.Shop`, `AcmeShop` |
 | `{{dcaJavaVersion}}`, `{{dcaDotnetVersion}}` | looked up at bootstrap time | `0.1.0` |
 | `{{junitVersion}}`, `{{testSdkVersion}}`, `{{xunitVersion}}`, `{{xunitRunnerVersion}}`, `{{targetFramework}}` | looked up / detected | `5.11.4`, `net10.0` |
+| `{{springBootVersion}}`, `{{javaVersion}}` | looked up / detected (greenfield Java build only) | `4.0.2`, `25` |
 | `{{layoutCalls}}` | decisions B, D | `withIncomingSubpackage("in")`, `withUseCaseSuffix("ApplicationService")` |
 | `{{ruleSets}}` | decision C | `cycles,layered,hexagonal,naming` |
 | `{{springModulithEnabled}}` | detected | `true` / `false` |
@@ -276,12 +283,18 @@ generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, s
 - `reference/archunit-rule-catalog.md` — every rule of both libraries (generated from the rule
   catalogs; regenerate with `python3 scripts/render-rule-catalog.py` from the marketplace root)
 - `reference/module-selection-guide.md` — which rule sets to pick for which project and subdomain
+- `reference/greenfield-java-build.md` — a Spring Boot 4 Gradle build from scratch: plugin, BOM as a
+  platform, the renamed and split starters, the moved slice-annotation packages
 
 ## Anti-patterns to avoid
 
 - **Don't** write templates without inspecting the project. The point is adaptation.
 - **Don't** silently overwrite. If unsure, ask.
 - **Don't** hardcode package or framework versions from memory. Look them up at bootstrap time.
+- **Don't** write a Boot 4 build from Boot 3 memory: `spring-boot-starter-web` is deprecated, `@WebMvcTest`
+  and its siblings each have their own `spring-boot-starter-<technology>-test` starter and package
+  (`org.springframework.boot.webmvc.test.autoconfigure`), and `io.spring.dependency-management` is
+  optional — see `reference/greenfield-java-build.md`.
 - **Don't** hand-write ArchUnit rules that the catalog already contains. Select sets, tune with
   `off`/`warn`/`ignore`, record reasons.
 - **Don't** install `SpringModulithVerificationTest` without Spring Modulith on the class path — it
