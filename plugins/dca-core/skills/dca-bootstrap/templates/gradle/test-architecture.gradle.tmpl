@@ -27,7 +27,7 @@ dependencies {
   testArchitectureImplementation "org.junit.jupiter:junit-jupiter:{{junitVersion}}"
   testArchitectureRuntimeOnly "org.junit.platform:junit-platform-launcher"
 {{#if springModulithEnabled}}
-  // Spring Modulith structure verification: ModulithTest extends DcaModulithTest
+  // Spring Modulith structure verification: ModulithTest extends DcaSpringModulithTest
   testArchitectureImplementation "dev.domaincentric:dca-archunit-spring-modulith:{{dcaModulithVersion}}"
   testArchitectureImplementation "org.springframework.modulith:spring-modulith-starter-test"
 {{/if}}

@@ -52,7 +52,7 @@ the sources, not the copies, when a rule text looks wrong.
 
 - Java: `dev.domaincentric:dca-building-blocks` (markers) + `dca-spring` (Spring implementations of
   `DomainEventPublisher`/`TransactionBoundary`, auto-configured) in production, `dca-archunit` (rules) + with Modulith
-  `dca-archunit-spring-modulith` (`DcaModulithTest`) in the `test-architecture` source set, `ArchitectureTest extends
+  `dca-archunit-spring-modulith` (`DcaSpringModulithTest`) in the `test-architecture` source set, `ArchitectureTest extends
   DcaArchitectureTest` with the project's `DcaLayout`, and `dca-archunit.properties` for the rule selection. No
   templates for adapters or the Modulith test remain; the four artifacts are versioned independently.
 - .NET: `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit`, a `*.ArchitectureTests` project with

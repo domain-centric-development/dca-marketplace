@@ -26,7 +26,7 @@ marker-like interfaces is below.
 | | Java | .NET |
 |---|---|---|
 | Production dependency | `dev.domaincentric:dca-building-blocks` + `dca-spring` (Spring: `SpringDomainEventPublisher`, `SpringTransactionBoundary`, auto-configured) | `DomainCentric.BuildingBlocks` (runtime adapters stay hand-written, see `/dca-scaffold`) |
-| Test dependency | `dev.domaincentric:dca-archunit` (brings ArchUnit); with Spring Modulith also `dca-archunit-spring-modulith` (`DcaModulithTest`) | `DomainCentric.ArchRules.Xunit` (brings `DomainCentric.ArchRules`, ArchUnitNET) |
+| Test dependency | `dev.domaincentric:dca-archunit` (brings ArchUnit); with Spring Modulith also `dca-archunit-spring-modulith` (`DcaSpringModulithTest`) | `DomainCentric.ArchRules.Xunit` (brings `DomainCentric.ArchRules`, ArchUnitNET) |
 | Base class | `dev.domaincentric.dca.archunit.junit.DcaArchitectureTest` | `DomainCentric.ArchRules.Xunit.DcaArchitectureTest` |
 | Layout | `DcaLayout.forBasePackage(..)` | `DcaLayout.ForRootNamespace(..)` |
 | Context declaration | `@BoundedContext` on `package-info.java` | `[BoundedContext]` on a marker class in the context root namespace |
@@ -164,7 +164,7 @@ D. **Suffix conventions** — DCA's defaults are `*UseCase` for the use-case cla
    `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention.
 
 E. **Spring Modulith** (Java, only when detected) — add `dev.domaincentric:dca-archunit-spring-modulith`
-   and a second thin test, `class ModulithTest extends DcaModulithTest` with the same layout? It runs
+   and a second thin test, `class ModulithTest extends DcaSpringModulithTest` with the same layout? It runs
    Modulith's own analyzer (not an ArchUnit rule) and excludes the architecture tests in the base
    package from Modulith's root module. Requires `spring-modulith-starter-test` on the class path.
 
@@ -211,7 +211,7 @@ Before each write: if the target exists, ask *overwrite / skip / abort* (default
 6. Decision A: apply the migrate/alias edits to the existing marker types.
 7. Decision F: `templates/java/ContextMapDocumentationTest.java.tmpl` (`{{contextMapPath}}`, default
    `docs/context-map.md`). Decision E: no template — write the four-line subclass of
-   `dev.domaincentric.dca.archunit.springmodulith.DcaModulithTest` next to `ArchitectureTest`, overriding
+   `dev.domaincentric.dca.archunit.springmodulith.DcaSpringModulithTest` next to `ArchitectureTest`, overriding
    `layout()` the same way; the dependency comes from the `test-architecture.gradle` / `pom` snippet.
 8. Decision G: `templates/claude/CLAUDE-dca-section.md.tmpl` **appended** to `CLAUDE.md`
    (`{{verifyCommand}}` = `./gradlew test-architecture` or `mvn test`); idempotent — skip when a line
@@ -274,7 +274,7 @@ staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that comp
   - Architecture test: {path}; rule sets: {dca.rules.sets or "all"}
   - Contexts declared: {N} (@BoundedContext), shared kernel: {yes|no}
   - Markers: {migrated|aliased|none found}
-  - Extras: {ContextMapDocumentationTest | ModulithTest (DcaModulithTest) | —}
+  - Extras: {ContextMapDocumentationTest | ModulithTest (DcaSpringModulithTest) | —}
   - Transactions: {data starter present | in-memory: spring-boot-transaction + PlatformTransactionManager bean added, replace with a real manager when persistence arrives}
   - Catalog wiring: {CLAUDE.md section appended | + conventions.md (live) | skipped}
 
