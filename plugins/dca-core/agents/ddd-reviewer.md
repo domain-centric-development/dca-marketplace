@@ -102,8 +102,9 @@ Before reviewing, gather context:
    context that the diff touches. Cite specific entries when flagging.
 3. If `docs/context-map.md` exists, read it. Use it to judge whether
    cross-context imports are documented (and thus expected) or smuggled in.
-4. Optionally read `dca-book/` chapters relevant to the finding (Chapters
-   05-08 for tactical patterns, 10-11 for strategic).
+4. Optionally consult the vendored knowledge catalog
+   (`skills/dca-knowledge/catalog/`: `guide/readme/elements.md`, `guide/readme/rules.md`,
+   the `pitfall/` and `decision/` nodes) for the doctrine behind a finding.
 
 ## Output format
 
