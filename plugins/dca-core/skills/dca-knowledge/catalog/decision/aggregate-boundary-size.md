@@ -2,6 +2,9 @@
 type: Decision
 title: "Aggregate boundary: one big aggregate or several small ones"
 tags: [decision, tactical, aggregate, entity]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/aggregateroot.md, /marker/tactical/entity.md, /marker/tactical/id.md, /marker/port-out/repository.md, /rule/tactical/dca-tac-003.md, /rule/tactical/dca-tac-007.md, /rule/tactical/dca-tac-016.md, /rule/tactical/dca-tac-017.md]
 ---
 
 Once you know a concept is an Aggregate Root, the next fork is how much to pull *inside* its boundary. Everything inside an aggregate is loaded, saved, and kept consistent as one unit in one transaction — so the boundary is a design decision about **consistency and transaction scope**, not about how objects happen to relate on a diagram. Draw it too wide and every change locks a large object graph; draw it right and each aggregate stays small, loadable, and independently consistent.
@@ -36,7 +39,7 @@ Ask, in order:
 ## Anchors
 
 - Markers: [AggregateRoot&lt;T, ID&gt;](/marker/tactical/aggregateroot.md) · [Entity&lt;T, ID&gt;](/marker/tactical/entity.md) · [Id](/marker/tactical/id.md) · [Repository&lt;T, ID&gt;](/marker/port-out/repository.md)
-- Rules: [Aggregate Roots must not have fields with other Aggregate Root types](/rule/tactical/aggregate-roots-must-not-have-fields-with-other-aggregate-root-types.md) · [Entities must not have fields with Aggregate Root types](/rule/tactical/entities-must-not-have-fields-with-aggregate-root-types.md) · [Repositories must only exist for Aggregate Roots](/rule/tactical/repositories-must-only-exist-for-aggregate-roots.md) · [Repository methods must not return non-root Entities](/rule/tactical/repository-methods-must-not-return-non-root-entities.md)
+- Rules: [Aggregate Roots must not have fields with other Aggregate Root types](/rule/tactical/dca-tac-003.md) · [Entities must not have fields with Aggregate Root types](/rule/tactical/dca-tac-007.md) · [Repositories must only exist for Aggregate Roots](/rule/tactical/dca-tac-016.md) · [Repository methods must not return non-root Entities](/rule/tactical/dca-tac-017.md)
 - Guide: [Layer elements](/guide/readme/elements.md) · [Layer rules](/guide/readme/rules.md)
 - Recipes: [Add an aggregate](/recipe/add-an-aggregate.md) · [Add a repository with adapter](/recipe/add-a-repository-with-adapter.md)
 - Related decision: [Entity vs Value Object](/decision/entity-vs-value-object.md)

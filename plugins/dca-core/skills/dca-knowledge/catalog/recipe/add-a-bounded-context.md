@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add a bounded context"
+title: Add a bounded context
 tags: [recipe, strategic, bounded-context]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/strategic/dca-str-003.md, /rule/hexagonal/dca-hex-007.md, /rule/strategic/dca-str-006.md, /rule/strategic/dca-str-002.md, /rule/naming/dca-nam-009.md, /rule/cycles/dca-cyc-001.md, /marker/strategic/boundedcontext.md, /marker/strategic/sharedkernel.md]
 ---
 
 Carve out a new top-level context package with its own domain / application / adapter layers and a hard boundary to every other context. A bounded context is the unit of ownership, isolation, and pattern choice — decide its subdomain type before you write a line of code.
@@ -21,12 +24,12 @@ Classify the subdomain: **core** (full tactical set — rich model, ports & adap
 
 ## Rules to satisfy (build-time checklist)
 
-- [Modules must not access each other in the application layer](/rule/strategic/modules-must-not-access-each-other-in-the-application-layer.md)
-- [Incoming adapters must only access their own bounded context](/rule/hexagonal/incoming-adapters-must-only-access-their-own-bounded-context-except-event-consumers-and-open-host-services.md)
-- [Outgoing adapters accessing other modules must only use their published api/ and events/ packages](/rule/strategic/outgoing-adapters-accessing-other-modules-must-only-use-their-published-api-and-events-packages.md)
-- [Shared Kernel must not have dependencies on any bounded context](/rule/strategic/shared-kernel-must-not-have-dependencies-on-any-bounded-context.md)
-- [No technical bucket packages — package by domain concept](/rule/naming/no-technical-bucket-packages-package-by-domain-concept.md)
-- [Domain packages must not have cyclic dependencies](/rule/cycles/domain-packages-must-not-have-cyclic-dependencies.md)
+- [Modules must not access each other in the application layer](/rule/strategic/dca-str-003.md)
+- [Incoming adapters must only access their own bounded context](/rule/hexagonal/dca-hex-007.md)
+- [Outgoing adapters accessing other modules must only use their published api/ and events/ packages](/rule/strategic/dca-str-006.md)
+- [Shared Kernel must not have dependencies on any bounded context](/rule/strategic/dca-str-002.md)
+- [No technical bucket packages — package by domain concept](/rule/naming/dca-nam-009.md)
+- [Domain packages must not have cyclic dependencies](/rule/cycles/dca-cyc-001.md)
 
 ## Anchors
 

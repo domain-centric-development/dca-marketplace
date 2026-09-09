@@ -2,6 +2,9 @@
 type: Pitfall
 title: "God port: one fat input port for many use cases"
 tags: [pitfall, hexagonal, use-case, port]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-in/usecase.md, /rule/naming/dca-nam-003.md, /rule/naming/dca-nam-001.md, /marker/port-in/inputport.md, /guide/architecture-reference-guide/ports-and-adapters.md, /guide/readme/rules.md, /guide/readme/elements.md]
 ---
 
 A single wide input-port interface — `OrderService` with `placeOrder`, `cancelOrder`, `addItem`, `applyDiscount`, `reorder`, … — that every controller depends on. The interface grows with every feature, and every consumer is coupled to methods it never calls. This is the Interface Segregation Principle violated at the application boundary.
@@ -17,8 +20,8 @@ A single wide input-port interface — `OrderService` with `placeOrder`, `cancel
 
 No ArchUnit rule counts methods, so a god port is a **design smell the naming rules make visible** rather than a mechanically blocked construct. It is forbidden by the intent of:
 
-- [InputPort interfaces must end with 'InputPort'](/rule/naming/inputport-interfaces-must-end-with-inputport.md) — each use case gets its *own* named `*InputPort`, not a shared service interface.
-- [Application layer InputPort implementations must end with 'UseCase'](/rule/naming/application-layer-inputport-implementations-must-end-with-usecase.md) — one `*UseCase` implements one `*InputPort`, reinforcing one-operation-per-port.
+- [InputPort interfaces must end with 'InputPort'](/rule/naming/dca-nam-003.md) — each use case gets its *own* named `*InputPort`, not a shared service interface.
+- [Application layer InputPort implementations must end with 'UseCase'](/rule/naming/dca-nam-001.md) — one `*UseCase` implements one `*InputPort`, reinforcing one-operation-per-port.
 
 ## Do instead
 

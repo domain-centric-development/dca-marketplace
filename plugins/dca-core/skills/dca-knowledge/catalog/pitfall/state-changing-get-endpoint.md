@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "State-changing GET endpoint"
+title: State-changing GET endpoint
 tags: [pitfall, adapter, rest, security, use-case]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/readme/rules.md, /guide/jwt-implementation-guide/8-csrf-protection.md, /marker/port-in/usecase.md]
 ---
 
 A `@GetMapping` (or an HTTP GET action) that executes a command use case: a "Proceed to checkout" **link** to `/checkout/start?cartId=…` that creates a checkout session, a `GET /orders/{id}/cancel`, a logout link. Convenient — one `href` instead of a form — and wrong in three independent ways.

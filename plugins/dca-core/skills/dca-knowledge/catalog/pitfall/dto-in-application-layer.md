@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Adapter DTO in the application layer"
+title: Adapter DTO in the application layer
 tags: [pitfall, use-case, application, dto]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-011.md, /rule/naming/dca-nam-007.md, /guide/readme/rules.md, /guide/readme/elements.md, /marker/port-in/usecase.md]
 ---
 
 Passing a presentation or transport DTO — a REST request body, a JSON-bound `*Dto`, a form-backing object — straight into a use case as its input, or returning one as its output. The adapter's serialization type becomes the application's contract, so the boundary between "how data arrives" and "what the use case needs" collapses.
@@ -15,8 +18,8 @@ Passing a presentation or transport DTO — a REST request body, a JSON-bound `*
 
 ## What forbids it
 
-- [DTOs must not be used in the Application Layer](/rule/usecase/dtos-must-not-be-used-in-the-application-layer.md) — the direct, mechanical prohibition.
-- [DTOs must reside in the adapter layer, not in domain or application](/rule/naming/dtos-must-reside-in-the-adapter-layer-not-in-domain-or-application.md) — pins DTOs to the adapter layer where they belong.
+- [DTOs must not be used in the Application Layer](/rule/usecase/dca-use-011.md) — the direct, mechanical prohibition.
+- [DTOs must reside in the adapter layer, not in domain or application](/rule/naming/dca-nam-007.md) — pins DTOs to the adapter layer where they belong.
 
 ## Do instead
 

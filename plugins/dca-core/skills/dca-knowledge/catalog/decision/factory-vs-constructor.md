@@ -2,6 +2,9 @@
 type: Decision
 title: "Factory or constructor: how an aggregate gets created"
 tags: [decision, tactical, factory, aggregate]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/factory.md, /marker/tactical/aggregateroot.md, /marker/tactical/id.md, /rule/advanced/dca-adv-013.md, /rule/advanced/dca-adv-014.md, /rule/advanced/dca-adv-016.md, /rule/advanced/dca-adv-015.md, /rule/tactical/dca-tac-005.md]
 ---
 
 Every aggregate needs a way to come into existence. The fork is how elaborate that creation is: a plain **constructor** (or a static factory method on the aggregate itself) covers the common case, while a dedicated **Factory** (its own domain class) earns its place only when creation is genuinely complex. Reaching for a Factory too early adds a class that does nothing a static method wouldn't; skipping it when creation is complex scatters that logic across use cases.
@@ -37,7 +40,7 @@ A quick tell: if you are copy-pasting the same multi-step assembly into several 
 ## Anchors
 
 - Markers: [Factory](/marker/tactical/factory.md) · [AggregateRoot&lt;T, ID&gt;](/marker/tactical/aggregateroot.md) · [Id](/marker/tactical/id.md)
-- Rules: [Factories should implement Factory Marker Interface](/rule/advanced/factories-should-implement-factory-marker-interface.md) · [Factories must reside in domain package](/rule/advanced/factories-must-reside-in-domain-package.md) · [Factories should be stateless (only final fields for dependencies)](/rule/advanced/factories-should-be-stateless-only-final-fields-for-dependencies.md) · [Factories must not have Spring annotations](/rule/advanced/factories-must-not-carry-container-annotations.md) · [Entities must not be instantiated directly from outside the aggregate](/rule/tactical/entities-must-not-be-instantiated-directly-from-outside-the-aggregate.md)
+- Rules: [Factories should implement Factory Marker Interface](/rule/advanced/dca-adv-013.md) · [Factories must reside in domain package](/rule/advanced/dca-adv-014.md) · [Factories should be stateless (only final fields for dependencies)](/rule/advanced/dca-adv-016.md) · [Factories must not have Spring annotations](/rule/advanced/dca-adv-015.md) · [Entities must not be instantiated directly from outside the aggregate](/rule/tactical/dca-tac-005.md)
 - Guide: [Layer elements](/guide/readme/elements.md) · [Framework annotation rules](/guide/architecture-reference-guide/framework-annotations-rules.md) · [Java package structure](/guide/readme/java-package-structure.md)
 - Recipes: [Add an aggregate](/recipe/add-an-aggregate.md)
 - Template: [Factory skeleton](/template/factory.md)

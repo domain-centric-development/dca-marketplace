@@ -48,6 +48,6 @@ public final class BundleDiscountService implements DomainService {
 
 ---
 
-## Related markers
+## Related mentions (heuristic)
 
 - [DomainService](/marker/tactical/domainservice.md)

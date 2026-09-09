@@ -100,10 +100,11 @@ Don't impose patterns the project doesn't use.
 
 - Implement the project's `DomainEvent` marker.
 - **Past-tense name**: `OrderPlaced`, not `PlaceOrder` or `OrderPlacement`.
-- **`record`** for immutability.
+- Use a record or an immutable class for immutable event data.
 - Required fields per the project's convention; typical: `UUID eventId`,
-  `Instant occurredOn`, sometimes `int version`. Read the project's existing
-  events to match.
+  `Instant occurredOn`. A business revision such as `int version` is legitimate payload; keep its domain name.
+  Schema version is different: integration contracts declare it in `@IntegrationEventType` / `[IntegrationEventType]`,
+  not a per-instance payload field. Do not recommend renaming a business `version`.
 - Provide a `now(...)` static factory that auto-generates `eventId` and
   timestamp.
 - Carry **IDs and value objects only** — never aggregate references.
@@ -115,17 +116,15 @@ Don't impose patterns the project doesn't use.
 - Extend or implement `IntegrationEvent` (often extends `DomainEvent`).
 - **Past-tense + `Event` suffix**: `OrderPlacedEvent`.
 - For cross-context communication; serialized at the wire boundary.
-- Place in the appropriate location per project convention — sometimes
-  `adapter/outgoing/event/`, sometimes `domain/event/` with publishing logic
-  in adapters.
+- Place contracts in the configured `{context}/events/` segment; translators and publishing logic
+  stay in `adapter/outgoing/event/`.
 
 ### Domain Services
 
 - Implement the project's `DomainService` marker.
 - **Stateless** — only `final` fields injected via constructor.
-- **Framework-free** — no Spring annotations (those belong on an application
-  service that *wraps* a domain service, if any); in C# no attributes either —
-  the service is registered in `Add{Context}Context()`.
+- **Framework-free** — no configured container, persistence or transaction metadata on domain services;
+  unclassified metadata is not forbidden by the role checks. Register services in configuration.
 - Use only when logic doesn't fit naturally in any single aggregate (e.g.
   computations that combine fields from multiple aggregates).
 
@@ -163,7 +162,7 @@ Don't impose patterns the project doesn't use.
 
 If the data has no aggregate lifecycle (append-only events, login attempts,
 audit entries, counters), use a **Store** (`extends Store`) with operations
-like `record(...)`, `count(...)`, `exists(...)`. **No `findById` on a Store.**
+like `record(...)`, `count(...)`, `exists(...)`. Lookup by id is allowed on a Store; aggregate lifecycle save/delete belongs to a Repository.
 
 ## Critical constraints
 

@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Raw cross-context import"
+title: Raw cross-context import
 tags: [pitfall, strategic, bounded-context]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/strategic/dca-str-003.md, /rule/hexagonal/dca-hex-007.md, /rule/strategic/dca-str-002.md, /marker/tactical/integrationevent.md, /guide/readme/java-package-structure.md, /guide/readme/integration-patterns.md, /marker/strategic/boundedcontext.md, /marker/strategic/openhostservice.md]
 ---
 
 One bounded context reaching directly into another's internals — `import com.shop.ordering.domain.Order;` from inside the Shipping context, or a Shipping use case calling `OrderRepository` from Ordering. It compiles, it's the shortest path, and it silently fuses two contexts that were supposed to evolve independently.
@@ -15,9 +18,9 @@ One bounded context reaching directly into another's internals — `import com.s
 
 ## What forbids it
 
-- [Modules must not access each other in the application layer](/rule/strategic/modules-must-not-access-each-other-in-the-application-layer.md) — mechanically blocks the application-layer cross-context call.
-- [Incoming adapters must only access their own bounded context (except event consumers and Open Host Services)](/rule/hexagonal/incoming-adapters-must-only-access-their-own-bounded-context-except-event-consumers-and-open-host-services.md)
-- [Shared Kernel must not have dependencies on any bounded context](/rule/strategic/shared-kernel-must-not-have-dependencies-on-any-bounded-context.md) — you can't launder the coupling through the shared kernel either.
+- [Modules must not access each other in the application layer](/rule/strategic/dca-str-003.md) — mechanically blocks the application-layer cross-context call.
+- [Incoming adapters must only access their own bounded context (except event consumers and Open Host Services)](/rule/hexagonal/dca-hex-007.md)
+- [Shared Kernel must not have dependencies on any bounded context](/rule/strategic/dca-str-002.md) — you can't launder the coupling through the shared kernel either.
 
 ## Do instead
 

@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add a store"
+title: Add a store
 tags: [recipe, application, port-out, persistence]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/hexagonal/dca-hex-009.md, /rule/tactical/dca-tac-018.md, /rule/tactical/dca-tac-019.md, /rule/tactical/dca-tac-020.md, /rule/tactical/dca-tac-021.md, /marker/port-out/store.md, /marker/port-out/outputport.md, /marker/port-out/repository.md]
 ---
 
 Give a context a persistence port for operational data that has **no aggregate of its own** — login attempts, an audit trail, metric snapshots, an event log. A Store is the sibling of a Repository: both `extend OutputPort` and keep persistence out of the domain (interface in the application layer, implementation in an outgoing adapter), but a Store *records and queries* rather than *loads, mutates and saves* a managed Aggregate Root. Reach for it when the data is a `record`/Value by nature and there is no identity-based lifecycle to manage. Compare with [Add a repository with adapter](/recipe/add-a-repository-with-adapter.md), which is the aggregate-root counterpart.
@@ -16,11 +19,11 @@ Give a context a persistence port for operational data that has **no aggregate o
 
 ## Rules to satisfy (build-time checklist)
 
-- [Output ports in application.shared must extend OutputPort](/rule/hexagonal/output-ports-in-application-shared-must-extend-outputport.md) *(a Store satisfies this transitively — `Store extends OutputPort`)*
-- [Store interfaces must extend the Store marker, not Repository](/rule/tactical/store-interfaces-must-extend-the-store-marker-not-repository.md)
-- [Store interfaces must reside in the application layer's shared output-port package](/rule/tactical/store-interfaces-must-reside-in-the-application-layer-s-shared-output-port-package.md)
-- [Store implementations must reside in the adapter.outgoing package](/rule/tactical/store-implementations-must-reside-in-the-adapter-outgoing-package.md)
-- [Store interfaces must not declare findById or save methods](/rule/tactical/store-interfaces-must-not-declare-findbyid-or-save-methods.md)
+- [Output ports in application.shared must extend OutputPort](/rule/hexagonal/dca-hex-009.md) *(a Store satisfies this transitively — `Store extends OutputPort`)*
+- [Store interfaces must extend the Store marker, not Repository](/rule/tactical/dca-tac-018.md)
+- [Store interfaces must reside in the application layer's shared output-port package](/rule/tactical/dca-tac-019.md)
+- [Store implementations must reside in the adapter.outgoing package](/rule/tactical/dca-tac-020.md)
+- [Store interfaces must not declare findById or save methods](/rule/tactical/dca-tac-021.md)
 
 ## Anchors
 

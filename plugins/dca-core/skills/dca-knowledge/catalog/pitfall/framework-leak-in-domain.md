@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Framework leak in the domain layer"
+title: Framework leak in the domain layer
 tags: [pitfall, onion, domain, spring]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/onion/dca-oni-002.md, /rule/onion/dca-oni-003.md, /rule/layered/dca-lay-002.md, /guide/architecture-reference-guide/framework-annotations-rules.md, /guide/readme/elements.md, /marker/tactical/aggregateroot.md, /marker/tactical/domainservice.md, /marker/tactical/value.md]
 ---
 
 Domain classes that import Spring or JPA — `@Entity`, `@Component`, `@Service`, `@Autowired`, `@Table`, `jakarta.persistence.*`, `org.springframework.*` — right on the aggregates, value objects, and domain services. It feels convenient ("the aggregate *is* the table row"), but it welds the innermost, most valuable layer to infrastructure it should never know about.
@@ -15,9 +18,9 @@ Domain classes that import Spring or JPA — `@Entity`, `@Component`, `@Service`
 
 ## What forbids it
 
-- [The Domain Model should be framework independent and should not use 3rd party libraries when possible](/rule/onion/the-domain-model-should-be-framework-independent-and-should-not-use-3rd-party-libraries-when-possible.md)
-- [Domain Models must not have Spring/JPA annotations](/rule/onion/domain-models-must-not-carry-container-or-persistence-annotations.md) — mechanically blocks the annotations this anti-pattern relies on.
-- [Domain must not have dependencies on Infrastructure](/rule/layered/domain-must-not-have-dependencies-on-infrastructure.md)
+- [The Domain Model should be framework independent and should not use 3rd party libraries when possible](/rule/onion/dca-oni-002.md)
+- [Domain Models must not have Spring/JPA annotations](/rule/onion/dca-oni-003.md) — mechanically blocks the annotations this anti-pattern relies on.
+- [Domain must not have dependencies on Infrastructure](/rule/layered/dca-lay-002.md)
 
 ## Do instead
 

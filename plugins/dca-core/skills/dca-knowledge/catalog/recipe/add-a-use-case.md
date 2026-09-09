@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add a use case"
+title: Add a use case
 tags: [recipe, application, use-case]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-in/usecase.md, /rule/naming/dca-nam-002.md, /rule/usecase/dca-use-002.md, /rule/usecase/dca-use-003.md, /rule/usecase/dca-use-006.md, /rule/usecase/dca-use-007.md, /rule/usecase/dca-use-015.md, /rule/usecase/dca-use-011.md]
 ---
 
 Add one application-layer use case (a single intention: place an order, add an item, get a product). Self-contained folder, four files, framework only in the implementation.
@@ -20,17 +23,17 @@ Add one application-layer use case (a single intention: place an order, add an i
 ## Rules to satisfy (build-time checklist)
 
 - [Input port extends UseCase and the impl is the InputPort](/marker/port-in/usecase.md)
-- [Use case classes must be annotated with @Service](/rule/naming/use-case-classes-must-carry-the-injectable-stereotype-the-container-needs.md)
-- [Commands must end with `Command` and reside in the application package](/rule/usecase/use-case-commands-must-end-with-command-and-reside-in-application-package.md)
-- [Queries must end with `Query` and reside in the application package](/rule/usecase/use-case-queries-must-end-with-query-and-reside-in-application-package.md)
-- [Result models must end with `Result` and reside in the application package](/rule/usecase/use-case-result-models-must-end-with-result-and-reside-in-application-package.md)
-- [Commands/Queries/Results should be immutable (records)](/rule/usecase/use-case-result-models-should-be-immutable-final-or-records.md)
-- [Results must not expose aggregate roots or entities](/rule/usecase/use-case-result-models-must-not-expose-aggregate-roots-or-entities.md)
-- [DTOs must not be used in the application layer](/rule/usecase/dtos-must-not-be-used-in-the-application-layer.md)
-- [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md)
-- [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/declaratively-transactional-use-cases-must-not-call-remote-capable-output-ports.md)
-- [Use case packages within a module must use one consistent depth — flat or grouped by feature](/rule/usecase/use-case-packages-within-a-module-must-use-one-consistent-depth-flat-or-grouped-by-feature.md)
-- [Feature and use case packages within a module's application layer must not have cyclic dependencies](/rule/cycles/feature-and-use-case-packages-within-a-module-s-application-layer-must-not-have-cyclic-dependencies.md)
+- [Use case classes must be annotated with @Service](/rule/naming/dca-nam-002.md)
+- [Commands must end with `Command` and reside in the application package](/rule/usecase/dca-use-002.md)
+- [Queries must end with `Query` and reside in the application package](/rule/usecase/dca-use-003.md)
+- [Result models must end with `Result` and reside in the application package](/rule/usecase/dca-use-006.md)
+- [Commands/Queries/Results should be immutable (records)](/rule/usecase/dca-use-007.md)
+- [Results must not expose aggregate roots or entities](/rule/usecase/dca-use-015.md)
+- [DTOs must not be used in the application layer](/rule/usecase/dca-use-011.md)
+- [Use cases that publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md)
+- [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/dca-use-013.md)
+- [Use case packages within a module must use one consistent depth — flat or grouped by feature](/rule/usecase/dca-use-014.md)
+- [Feature and use case packages within a module's application layer must not have cyclic dependencies](/rule/cycles/dca-cyc-005.md)
 
 ## Anchors
 

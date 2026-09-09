@@ -177,7 +177,7 @@ namespace segment) or `Application/{Feature}/{Name}/`.
 | `{Name}InputPort.java` / `I{Name}InputPort.cs` | `templates/use-case/InputPort.{java,cs}.tmpl` | Interface extending `UseCase<{Name}Command|Query, {Name}Result>` / `IUseCase<…>` (async: `Task<TOut> ExecuteAsync(TIn, CancellationToken)`) |
 | `{Name}Command` _or_ `{Name}Query` | `templates/use-case/Command.*.tmpl` / `Query.*.tmpl` | Record with the fields the user named (`sealed record` in C#) |
 | `{Name}Result` | `templates/use-case/Result.*.tmpl` | Record with the result fields and a static `from(...)`/`From(...)` factory. Values only — no aggregate root or entity, also not via `List<T>`/`Optional<T>` / `IReadOnlyList<T>`/`T?` (`DCA-USE-015`); part records named by content, never `*Result`; a command's result stays small (ids, status, next step) |
-| `{Name}{ImplSuffix}` | `templates/use-case/UseCase.*.tmpl` | Java: `@Service @Transactional` impl. C#: plain class, registered in `Add{Context}Context()`; writes wrap load–mutate–save–publish in `ITransactionBoundary.InTransactionAsync`. ImplSuffix from convention discovery (default `UseCase`, but can be `ApplicationService`, etc.) |
+| `{Name}{ImplSuffix}` | `templates/use-case/UseCase.*.tmpl` | Java: annotations/imports from the resolved preset and transaction mode. C#: plain class, registered in `Add{Context}Context()`; writes wrap load–mutate–save–publish in `ITransactionBoundary.InTransactionAsync`. ImplSuffix from convention discovery (default `UseCase`, but can be `ApplicationService`, etc.) |
 
 ### Wiring
 
@@ -306,7 +306,7 @@ class OrderEntity { /* JPA-Felder, getter/setter, @Id, @Column ... */ }
 - **Mapper-Logik in der Use Case** — wenn `PlaceOrderUseCase` ein `PlaceOrderRequest` konstruiert oder ein `*Response` baut, ist die Boundary verschoben. Mapper gehören in `adapter/`.
 - **Geteilter `*Dto` für Request *und* Persistence** — derselbe Record erfüllt zwei Rollen; jede Änderung an einer Seite zwingt die andere. Lieber zwei separate Records mit explizitem Mapping.
 - **Mapper in `application/` oder `domain/`** — Mapper sind Adapter-Concern. ArchUnit-Regel `dtosShouldLiveInAdapterLayer` fängt das.
-- **Domain-Event direkt als Kafka-Payload** — DCA-Konvention: Domain-Events bleiben kontextintern. Cross-Context geht über `*IntegrationEvent` (mit `version`-Feld), gemappt im `adapter/outgoing/event/`-Publisher.
+- **Domain-Event direkt als Kafka-Payload** — DCA-Konvention: Domain-Events bleiben kontextintern. Cross-Context geht über `*IntegrationEvent` (Schema-Version in `IntegrationEventType`, fachliches `version` bleibt erlaubt), gemappt im `adapter/outgoing/event/`-Publisher.
 
 Siehe [use-case-pattern.md §4](../dca-review/reference/use-case-pattern.md#4-adapter-wiring-wer-ruft-was) für das vollständige Wiring-Bild und [naming-conventions.md](../dca-review/reference/naming-conventions.md#adapter-layer) für die Adapter-Namens-Tabelle.
 
@@ -370,7 +370,7 @@ Before scaffolding, confirm with the user:
 | is appended/recorded; queried by aggregate (count, exists, sum) | **Store** (this mode) |
 | is a Value Object or `record` | almost always **Store** |
 
-If the user is unsure, ask: "Will you ever call `findById` on a `{StoredType}`? If no, it's a Store."
+Choose by lifecycle: an aggregate collection uses a Repository; operational records use a Store. Lookup by id does not decide between them.
 
 ### Required parameters
 
@@ -386,7 +386,7 @@ In `src/main/java/{basePackage}/{context}/application/shared/`:
 - `{Name}Store.java` (from `templates/store/Store.java.tmpl`) — interface `extends Store`. Has `record(...)` plus the user-named query methods.
 - C#: `I{Name}Store.cs` (from `templates/store/Store.cs.tmpl`) — `: IStore` with `RecordAsync(...)` and async query methods, in `Application/Shared/`.
 
-The skill does NOT generate a `findById` or `save` method — those are Repository semantics.
+A Store may expose lookup by key (`findById` / `FindByIdAsync`). Do not generate aggregate `save` or `delete` lifecycle methods.
 
 ### Anti-pattern guard
 
@@ -453,3 +453,11 @@ Next:
   C#: one `{Context}Context` marker class per context, never per layer.
 - **Don't make the C# domain async.** Ports are `Task`-based; aggregates, value objects and domain services stay
   synchronous — a rule of the .NET catalog enforces it.
+
+Respect `withOperationContainers(...)` / `WithOperationContainers(...)` when a layout
+configures organisational folders. Keep one normalized operation depth per context.
+Place a port used by one operation beside it; shared is the reuse default.
+
+## Resolved configuration
+
+Read the [shared resolved-configuration contract](../dca-bootstrap/reference/resolved-configuration.md). Bootstrap writes the section for every project; scaffold reads and refreshes it from the resolved preset before filling annotation/import placeholders. `none` uses explicit constructor wiring and `Configuration.java.tmpl`, without framework imports.

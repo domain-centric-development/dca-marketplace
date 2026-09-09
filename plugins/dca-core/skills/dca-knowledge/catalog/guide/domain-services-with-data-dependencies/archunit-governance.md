@@ -64,7 +64,7 @@ static final ArchRule functional_interfaces_in_domain_must_be_annotated =
 
 ---
 
-## Related markers
+## Related mentions (heuristic)
 
 - [OutputPort](/marker/port-out/outputport.md)
 - [DomainGateway](/marker/tactical/domaingateway.md)

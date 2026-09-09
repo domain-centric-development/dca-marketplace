@@ -1,7 +1,10 @@
 ---
 type: Decision
-title: "Keep a context in the modulith or extract it to a service"
+title: Keep a context in the modulith or extract it to a service
 tags: [decision, strategic, modulith, bounded-context, migration, integration-event, events]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/spring-modulith/what-is-spring-modulith.md, /guide/spring-modulith/module-communication.md, /guide/deployment-patterns/service-decomposition.md, /marker/strategic/boundedcontext.md, /marker/strategic/openhostservice.md, /marker/tactical/integrationevent.md, /guide/deployment-patterns/migration-path.md, /guide/deployment-patterns/deployment-pattern-comparison.md]
 ---
 
 A bounded context lives inside your modular monolith. The fork is whether to **keep it there** or **extract it into its own deployable service**. Extraction buys independent scaling, technology, and release cycles — and charges you distributed complexity: network failure, eventual consistency, and operational overhead. The mistake almost everyone makes is extracting before the boundary is proven, so the default is to keep, and the interesting question is *what must be true first*.

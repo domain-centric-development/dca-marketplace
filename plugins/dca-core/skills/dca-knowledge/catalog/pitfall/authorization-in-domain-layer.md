@@ -2,6 +2,9 @@
 type: Pitfall
 title: "Authorization in the domain layer: aggregates that decide who may act"
 tags: [pitfall, domain, application, security]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-out/outputport.md, /rule/onion/dca-oni-003.md, /rule/onion/dca-oni-002.md, /rule/layered/dca-lay-002.md, /marker/port-in/usecase.md, /guide/jwt-implementation-guide/7-cookie-requirements.md]
 ---
 
 An aggregate method takes the caller as a parameter and branches on their role or permissions — `order.cancel(user)` that throws `AccessDeniedException` unless `user.hasRole(ADMIN)`. The domain now knows about users, roles, and access control. Authorization ("*may this caller* do this?") has leaked inward, where only invariants ("*is this action legal* for this state?") belong.
@@ -17,9 +20,9 @@ An aggregate method takes the caller as a parameter and branches on their role o
 
 There is no ArchUnit rule that counts a `User` parameter, so authorization-on-an-aggregate is primarily a **design smell** — but the moment it reaches for real access-control machinery it also breaks mechanical rules:
 
-- [Domain Models must not have Spring/JPA annotations](/rule/onion/domain-models-must-not-carry-container-or-persistence-annotations.md) — a `@PreAuthorize` on a domain method fails here.
-- [The Domain Model should be framework independent and should not use 3rd party libraries when possible](/rule/onion/the-domain-model-should-be-framework-independent-and-should-not-use-3rd-party-libraries-when-possible.md) — importing Spring Security's `SecurityContextHolder`/`AccessDeniedException` into the domain is a framework leak.
-- [Domain must not have dependencies on Infrastructure](/rule/layered/domain-must-not-have-dependencies-on-infrastructure.md) — identity resolution is infrastructure, reached only via an output port.
+- [Domain Models must not have Spring/JPA annotations](/rule/onion/dca-oni-003.md) — a `@PreAuthorize` on a domain method fails here.
+- [The Domain Model should be framework independent and should not use 3rd party libraries when possible](/rule/onion/dca-oni-002.md) — importing Spring Security's `SecurityContextHolder`/`AccessDeniedException` into the domain is a framework leak.
+- [Domain must not have dependencies on Infrastructure](/rule/layered/dca-lay-002.md) — identity resolution is infrastructure, reached only via an output port.
 
 ## Do instead
 
@@ -34,7 +37,7 @@ For the full layer split of validation vs. authorization vs. invariants, see [Wh
 ## Anchors
 
 - Markers: [OutputPort](/marker/port-out/outputport.md) · [UseCase&lt;INPUT, OUTPUT&gt;](/marker/port-in/usecase.md)
-- Rules: [Domain Models must not have Spring/JPA annotations](/rule/onion/domain-models-must-not-carry-container-or-persistence-annotations.md) · [The Domain Model should be framework independent](/rule/onion/the-domain-model-should-be-framework-independent-and-should-not-use-3rd-party-libraries-when-possible.md) · [Domain must not have dependencies on Infrastructure](/rule/layered/domain-must-not-have-dependencies-on-infrastructure.md)
+- Rules: [Domain Models must not have Spring/JPA annotations](/rule/onion/dca-oni-003.md) · [The Domain Model should be framework independent](/rule/onion/dca-oni-002.md) · [Domain must not have dependencies on Infrastructure](/rule/layered/dca-lay-002.md)
 - Guide: [Cookie requirements](/guide/jwt-implementation-guide/7-cookie-requirements.md)
 - Decision: [Where authorization and validation live](/decision/where-authorization-and-validation-live.md)
 - Recipe: [Add an identity port](/recipe/add-an-identity-port.md)

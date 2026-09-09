@@ -1,7 +1,10 @@
 ---
 type: Decision
-title: "Where an identifier comes from"
+title: Where an identifier comes from
 tags: [decision, tactical, value-object, aggregate, entity, factory, port-out]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/factory.md, /guide/readme/elements.md, /marker/port-out/outputport.md, /guide/spring-modulith/shared-kernel-in-spring-modulith.md, /marker/tactical/aggregateroot.md, /marker/tactical/entity.md]
 ---
 
 When you create something that has identity, its `Id` has to come from somewhere. The fork is the **source** of that identifier: the **domain generates** it, a **factory assigns** it during complex creation, it is an **externally-owned identity** you receive (the current user, a foreign system's key), or — the anti-pattern — you let the **database** hand back a generated number after the insert. The default in DCA is that identity is a first-class domain concern, minted before persistence, and modelled as a typed Value Object rather than a raw `Long` or `String`.

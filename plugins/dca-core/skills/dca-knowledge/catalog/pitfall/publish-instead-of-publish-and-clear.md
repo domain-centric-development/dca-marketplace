@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Publishing events one by one instead of publishAndClearEvents"
+title: Publishing events one by one instead of publishAndClearEvents
 tags: [pitfall, application, use-case, domain-event, events, port-out]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-009.md, /marker/port-out/domaineventpublisher.md, /marker/tactical/baseaggregateroot.md, /rule/usecase/dca-use-012.md, /guide/readme/rules.md]
 ---
 
 A use case that saves the aggregate and then dispatches its events by hand:
@@ -25,7 +28,7 @@ It reads like the long form of the same thing. It is not: the sanctioned form is
 
 ## What forbids it
 
-- [Use cases that save an aggregate must publish its domain events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md) — `publish(event)`, even followed by `clearDomainEvents()`, does not count as publishing the aggregate's events.
+- [Use cases that save an aggregate must publish its domain events](/rule/usecase/dca-use-009.md) — `publish(event)`, even followed by `clearDomainEvents()`, does not count as publishing the aggregate's events.
 - [DomainEventPublisher](/marker/port-out/domaineventpublisher.md) — the marker's contract names `publishAndClearEvents(aggregate)` as the one operation a use case calls after `save`.
 
 ## Do instead
@@ -44,6 +47,6 @@ The publisher iterates, dispatches and clears; a throwing listener propagates, t
 ## Anchors
 
 - Markers: [DomainEventPublisher](/marker/port-out/domaineventpublisher.md) · [BaseAggregateRoot](/marker/tactical/baseaggregateroot.md)
-- Rules: [Use cases that save an aggregate must publish its domain events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md) · [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md)
+- Rules: [Use cases that save an aggregate must publish its domain events](/rule/usecase/dca-use-009.md) · [Use cases that publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md)
 - Guide: [Layer rules](/guide/readme/rules.md)
 - Template: [Use case skeleton](/template/use-case.md)

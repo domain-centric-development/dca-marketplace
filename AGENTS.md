@@ -131,3 +131,5 @@ architecture test that runs the whole rule catalog. Published installation:
 ## Commit message format
 
 Conventional commits, scope = plugin or skill: `feat(dca-core): …`, `docs: …`, `chore(bootstrap): …`.
+
+2026-09-09 WP-38: shared resolved-preset contract drives bootstrap/scaffold imports and wiring; publisher examples use the published API, event contracts use events/, business version remains valid. Scaffold Spring/none/.NET smoke and canonical/mirror catalog checks passed.

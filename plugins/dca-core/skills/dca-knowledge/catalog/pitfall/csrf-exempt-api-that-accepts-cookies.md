@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "CSRF-exempt API that accepts cookie authentication"
+title: CSRF-exempt API that accepts cookie authentication
 tags: [pitfall, adapter, rest, security, infrastructure]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/jwt-implementation-guide/8-csrf-protection.md, /guide/readme/rules.md]
 ---
 
 The security configuration ignores CSRF for `/api/**` ("APIs are token-based") while the authentication filter still reads the session cookie for every path — first the cookie, then the `Authorization` header as fallback. Often accompanied by `/api/auth/login` *setting* that cookie.

@@ -2,6 +2,11 @@
 type: Template
 title: "Project starter: agent instructions for a catalog-driven DCA project"
 tags: [template, bootstrap, governance]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/archunit-governance/core-rule-categories.md, /guide/readme/java-package-structure.md]
+applies_to: [language-neutral]
+framework: [framework-neutral]
 ---
 
 A drop-in instructions block for a **new project** so a coding agent (any LLM,

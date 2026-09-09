@@ -106,7 +106,7 @@ public class KafkaEventPublisher implements DomainEventPublisher {  // IMPLEMENT
 
 ---
 
-## Related markers
+## Related mentions (heuristic)
 
 - [DomainEventPublisher](/marker/port-out/domaineventpublisher.md)
 - [DomainEvent](/marker/tactical/domainevent.md)

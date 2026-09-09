@@ -1,7 +1,10 @@
 ---
 type: Decision
-title: "Group use cases into features or split the bounded context"
+title: Group use cases into features or split the bounded context
 tags: [decision, strategic, bounded-context, package-structure, feature, application]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-014.md, /rule/cycles/dca-cyc-005.md, /guide/readme/java-package-structure.md, /rule/cycles/dca-cyc-002.md]
 ---
 
 A bounded context's application layer has grown: a dozen or more use-case packages sit in one flat list under `application/`, and the list no longer reads as anything. Two moves relieve that — **group the use cases into features** inside the context, or **split the context** — and they answer different questions. A feature is a navigation and cohesion boundary below the layer; a bounded context is a language and model boundary. Choosing the package move when the real problem is the model (or the reverse) leaves the problem in place.
@@ -24,7 +27,7 @@ When the answers are mixed, group first. A grouping is one move per context and 
 Introduce the optional fourth scale — `system → bounded context → layer → feature → use case` — by moving every use-case package of the context under a domain-named feature package: `application/{feature}/{usecase}/`. The use cases are untouched inside; the domain, `application/shared`, `api`, `events` and the outgoing adapters stay as they are. Incoming adapters may mirror the features *below* their protocol (`adapter/incoming/web/{feature}`).
 
 - **When:** one language, one model, one team; the flat list has become hard to navigate and the groups have domain names.
-- **Rules:** one form per context — flat or grouped, never both after the migration ([Use case packages within a module must use one consistent depth](/rule/usecase/use-case-packages-within-a-module-must-use-one-consistent-depth-flat-or-grouped-by-feature.md)); the feature packages must not form cycles ([Feature and use case packages within a module's application layer must not have cyclic dependencies](/rule/cycles/feature-and-use-case-packages-within-a-module-s-application-layer-must-not-have-cyclic-dependencies.md)); repositories and stores stay in `application/shared` — there is no `application/{feature}/shared`.
+- **Rules:** one form per context — flat or grouped, never both after the migration ([Use case packages within a module must use one consistent depth](/rule/usecase/dca-use-014.md)); the feature packages must not form cycles ([Feature and use case packages within a module's application layer must not have cyclic dependencies](/rule/cycles/dca-cyc-005.md)); repositories and stores stay in `application/shared` — there is no `application/{feature}/shared`.
 - **Not this:** a vertical slice `{context}/{feature}/{domain,application,adapter}`. The layer segment below the feature makes every slice a structural module of its own, and the isolation rules then rightly forbid one slice reaching into another's domain. Do not weaken them to let a shared aggregate span slices.
 - Build it: [Add a use case](/recipe/add-a-use-case.md) — placement in a flat or grouped context.
 
@@ -48,4 +51,4 @@ A feature is not a layer, not a module, not an aggregate owner, not a deployment
 
 - Guide: [Java package structure](/guide/readme/java-package-structure.md) — the canonical grouped tree and the eight rules of the feature scale
 - Related decisions: [New bounded context or extend an existing one](/decision/new-context-vs-extend-existing.md) · [Aggregate boundary and size](/decision/aggregate-boundary-size.md) · [Modulith or microservice extraction](/decision/modulith-vs-microservice-extraction.md)
-- Rules: [One consistent use-case depth per module](/rule/usecase/use-case-packages-within-a-module-must-use-one-consistent-depth-flat-or-grouped-by-feature.md) · [No cycles between feature or use-case packages](/rule/cycles/feature-and-use-case-packages-within-a-module-s-application-layer-must-not-have-cyclic-dependencies.md) · [Application layer must not have cyclic dependencies](/rule/cycles/application-layer-must-not-have-cyclic-dependencies.md)
+- Rules: [One consistent use-case depth per module](/rule/usecase/dca-use-014.md) · [No cycles between feature or use-case packages](/rule/cycles/dca-cyc-005.md) · [Application layer must not have cyclic dependencies](/rule/cycles/dca-cyc-002.md)

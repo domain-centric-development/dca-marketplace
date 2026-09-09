@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Declarative transaction without a transaction manager"
+title: Declarative transaction without a transaction manager
 tags: [pitfall, application, use-case, events, spring, modulith]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-012.md, /marker/application/transactionboundary.md, /marker/port-out/domaineventpublisher.md, /guide/readme/elements.md, /guide/spring-modulith/event-driven-architecture-in-spring-modulith.md]
 ---
 
 A Spring application in its in-memory phase — `spring-boot-starter`, `spring-modulith-starter-core`, repositories over `ConcurrentHashMap`, no data starter — with `@Transactional` on its use cases. Everything compiles, the context starts, the architecture rules are green, and no after-commit listener ever runs.
@@ -17,7 +20,7 @@ A Spring application in its in-memory phase — `spring-boot-starter`, `spring-m
 
 Nothing static can. The rule below makes the *intent* explicit; the runtime configuration has to honour it:
 
-- [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md)
+- [Use cases that publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md)
 
 ## Do instead
 
@@ -34,7 +37,7 @@ Then the `TransactionBoundary` and `DomainEventPublisher` implementations from t
 
 ## Anchors
 
-- Rules: [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md)
+- Rules: [Use cases that publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md)
 - Markers: [TransactionBoundary](/marker/application/transactionboundary.md) · [DomainEventPublisher](/marker/port-out/domaineventpublisher.md)
 - Guide: [Shared kernel and the building-block dependency](/guide/readme/elements.md) · [Event-driven architecture in Spring Modulith](/guide/spring-modulith/event-driven-architecture-in-spring-modulith.md)
 - Recipe: [Bootstrap a new application](/recipe/bootstrap-a-new-application.md)

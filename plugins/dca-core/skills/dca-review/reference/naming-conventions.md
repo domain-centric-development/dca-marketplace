@@ -64,7 +64,7 @@ The conventions are one set; the two languages spell them differently. Review ei
 | `*Factory` | factory for complex aggregate creation |
 | `*Specification` | business rule object |
 
-**Avoid:** `*Manager`, `*Helper`, `*Util`, `*Handler` in the domain — these are vague names.
+**Avoid:** `*Helper`, `*Util`, `*Handler` in the domain — these are vague names.
 
 **Packages:** package by domain concept (`domain/model/`, `domain/event/`) — never technical buckets like `entities/`, `valueobjects/`, `helpers/`, `util/`.
 
@@ -115,3 +115,11 @@ The conventions are one set; the two languages spell them differently. Review ei
 | `adapter/outgoing/` | `adapter/out/` |
 | `application/{usecasename}/` — or `application/{feature}/{usecasename}/` once grouped | `application/service/` (flat) + `application/port/in/` + `application/port/out/` |
 | `sharedkernel/` | `shared/`, `common/`, `core/` |
+
+A domain term such as `PortfolioManager` is valid; the remaining technical suffix
+restrictions still apply. Operation implementations are discovered by InputPort
+assignability or the configured use-case suffix. Optional organisational segments
+are configured with `withOperationContainers(...)` / `WithOperationContainers(...)`
+and removed before measuring flat/grouped operation depth. Supporting subfolders do
+not define operations. One context must still use one depth. A Repository or Store
+used by one use case may live with it; `application/shared` is the reuse default.

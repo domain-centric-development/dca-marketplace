@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add an identity port"
+title: Add an identity port
 tags: [recipe, application, adapter, security, shared-kernel]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-out/outputport.md, /guide/readme/elements.md, /rule/layered/dca-lay-002.md, /rule/layered/dca-lay-003.md, /rule/hexagonal/dca-hex-010.md, /rule/hexagonal/dca-hex-009.md, /rule/hexagonal/dca-hex-011.md, /rule/onion/dca-oni-002.md]
 ---
 
 Give the application a way to learn *who is calling* without letting authentication leak into use cases or the caller leak into the domain. The identity port is a project-specific [OutputPort](/marker/port-out/outputport.md) — deliberately **not** a building block: its contract returns the project's own identifier type and encodes the project's notion of anonymous vs. registered, and a marker only earns its place once a rule needs it. Write it per project, cut as below.
@@ -21,12 +24,12 @@ Give the application a way to learn *who is calling* without letting authenticat
 
 ## Rules to satisfy (build-time checklist)
 
-- [Domain must not have dependencies on Infrastructure](/rule/layered/domain-must-not-have-dependencies-on-infrastructure.md) — identity resolution is infrastructure, reached only through the port
-- [Application Services must only use outbound ports, not infrastructure implementations](/rule/layered/application-services-must-only-use-outbound-ports-not-infrastructure-implementations.md)
-- [Output ports must not reside in the domain layer](/rule/hexagonal/output-ports-must-not-reside-in-the-domain-layer.md)
-- [Output Ports in application shared must extend OutputPort](/rule/hexagonal/output-ports-in-application-shared-must-extend-outputport.md)
-- [Incoming adapters must depend on input port interfaces, not on use case classes](/rule/hexagonal/incoming-adapters-must-depend-on-input-port-interfaces-not-on-use-case-classes.md)
-- [The Domain Model should be framework independent](/rule/onion/the-domain-model-should-be-framework-independent-and-should-not-use-3rd-party-libraries-when-possible.md) — no security framework types in the domain
+- [Domain must not have dependencies on Infrastructure](/rule/layered/dca-lay-002.md) — identity resolution is infrastructure, reached only through the port
+- [Application Services must only use outbound ports, not infrastructure implementations](/rule/layered/dca-lay-003.md)
+- [Output ports must not reside in the domain layer](/rule/hexagonal/dca-hex-010.md)
+- [Output Ports in application shared must extend OutputPort](/rule/hexagonal/dca-hex-009.md)
+- [Incoming adapters must depend on input port interfaces, not on use case classes](/rule/hexagonal/dca-hex-011.md)
+- [The Domain Model should be framework independent](/rule/onion/dca-oni-002.md) — no security framework types in the domain
 
 No rule counts a `User` parameter on an aggregate or a missing `customerId` on a command — steps 4, 5 and 7 are design discipline, checked in review.
 

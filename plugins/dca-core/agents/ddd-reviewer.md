@@ -37,7 +37,7 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
 ### 2. Ubiquitous Language
 
 - Class, method, and event names use **business words**, not technical ones.
-  `OrderHelper`, `ProductManager`, `Data`, `Item`, `Thing` are findings.
+  Review vague names in their domain context; `Manager` is not a forbidden suffix.
 - The same concept is named **consistently**. `OrderLine` in one file,
   `OrderItem` in another → finding.
 - A glossary exists for each context (`{context}/domain/glossary.md`). If
@@ -77,7 +77,7 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
 - **Store** is for operational/append-only data: `record`, `count`, `exists`.
 - A `*Repository` for a value object or non-aggregate-root entity is a finding
   (probably should be a `*Store`).
-- A `*Store` with `findById` is a finding (probably a Repository).
+- A Store may look up operational records by id; `findById` alone is not a finding. Aggregate lifecycle `save`/`delete` belongs to a Repository.
 
 ### 7. Domain Services, Factories, Specifications
 
@@ -168,3 +168,5 @@ source of truth.
   smell). That's `clean-code-reviewer`'s job.
 
 Stay in your lane. Three focused reports beat one diffuse one.
+
+Review default construction, deserialization and reconstitution at aggregate entry points; constructor validation alone may be bypassed. External calculations receive immutable facts in a domain service. Review lookup callbacks manually; TAC-002 field checks do not establish semantic ownership. A DomainGateway exception needs an explicit rationale.

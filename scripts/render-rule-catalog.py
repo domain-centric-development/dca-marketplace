@@ -42,7 +42,16 @@ def cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
-def render(java: list[dict], dotnet: list[dict]) -> str:
+def render(java: list[dict] | dict, dotnet: list[dict] | dict) -> str:
+    retired = {}
+    for document in (java, dotnet):
+        if isinstance(document, dict):
+            for entry in document.get("retired", []):
+                if entry["id"] in retired and retired[entry["id"]] != entry:
+                    raise ValueError(f"inconsistent retired mapping: {entry['id']}")
+                retired[entry["id"]] = entry
+    java = java["rules"] if isinstance(java, dict) else java
+    dotnet = dotnet["rules"] if isinstance(dotnet, dict) else dotnet
     dotnet_by_id = {r["id"]: r for r in dotnet}
     java_by_id = {r["id"]: r for r in java}
     sets: list[str] = []
@@ -79,6 +88,9 @@ def render(java: list[dict], dotnet: list[dict]) -> str:
         "",
     ]
 
+    java_info = sum(r.get("status") == "informational" for r in java)
+    net_info = sum(r.get("status") == "informational" for r in dotnet)
+    lines += [f"Java: {java_total-java_info} enforced, {java_info} informational. .NET: {dotnet_total-net_info} enforced, {net_info} informational. {len(retired)} retired identities.", ""]
     for set_name in sets:
         rows = [r for r in java if r["set"] == set_name] or [r for r in dotnet if r["set"] == set_name]
         lines += [
@@ -97,7 +109,7 @@ def render(java: list[dict], dotnet: list[dict]) -> str:
                 net = f"n/a — {cell(d.get('reason', ''))}"
             else:
                 net = "✓"
-            title = cell(r.get("title") or (d or {}).get("title", ""))
+            title = cell(r.get("title") or (d or {}).get("title", "")) + (" (informational)" if r.get("status") == "informational" else "")
             rationale = cell(r.get("rationale") or (d or {}).get("rationale", ""))
             selects = cell(r.get("selects") or (d or {}).get("selects", ""))
             checks = cell(r.get("checks") or (d or {}).get("checks", ""))
@@ -105,6 +117,9 @@ def render(java: list[dict], dotnet: list[dict]) -> str:
                 f"| `{rid}` | {title} | {rationale} | {selects} | {checks} | {'✓' if in_java else '—'} | {net} |"
             )
         lines.append("")
+    lines += ["## Retired identities", "", "Retired exclusions and severity entries keep loading. Ids are never reused.", ""]
+    for rid, entry in sorted(retired.items()):
+        lines.append(f"- `{rid}` — {entry['reason']}; replacement: {entry['replacement']}; since {entry['since']}")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -117,7 +132,7 @@ def main() -> None:
     java = json.loads(args.java.read_text(encoding="utf-8"))
     dotnet = json.loads(args.dotnet.read_text(encoding="utf-8"))
     args.out.write_text(render(java, dotnet), encoding="utf-8")
-    print(f"{args.out}: {len(java)} Java rules, {len(dotnet)} .NET entries")
+    print(f"{args.out}: {len(java.get('rules', [])) if isinstance(java, dict) else len(java)} Java entries, {len(dotnet.get('rules', [])) if isinstance(dotnet, dict) else len(dotnet)} .NET entries")
 
 
 if __name__ == "__main__":

@@ -4,8 +4,8 @@ package {{basePackage}}.{{context}}.application.{{featureSegment}}{{usecasename}
 {{#if useLombok}}
 import lombok.RequiredArgsConstructor;
 {{/if}}
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+{{injectableImport}}
+{{transactionalImport}}
 
 /**
  * {{Name}} use case implementation.
@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Persisting and publishing domain events (for Commands)
  * </ol>
  */
-@Service
+{{injectableAnnotation}}
 {{transactionalAnnotation}}
 {{#if useLombok}}
 @RequiredArgsConstructor

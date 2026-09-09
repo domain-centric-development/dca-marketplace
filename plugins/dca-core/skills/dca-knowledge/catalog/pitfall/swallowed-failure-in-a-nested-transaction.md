@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Swallowed failure in a nested transaction block"
+title: Swallowed failure in a nested transaction block
 tags: [pitfall, application, use-case, infrastructure, persistence]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/application/transactionboundary.md, /guide/readme/rules.md]
 ---
 
 An outer `inTransaction` block that calls another use case (or helper) which opens its own `inTransaction`, catches the inner exception, and carries on to commit:

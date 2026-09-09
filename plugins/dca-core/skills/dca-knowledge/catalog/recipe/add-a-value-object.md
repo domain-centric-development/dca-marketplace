@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add a value object"
+title: Add a value object
 tags: [recipe, domain, value-object]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/spring-modulith/shared-kernel-in-spring-modulith.md, /rule/tactical/dca-tac-009.md, /rule/tactical/dca-tac-010.md, /rule/tactical/dca-tac-011.md, /rule/tactical/dca-tac-008.md, /rule/tactical/dca-tac-012.md, /rule/naming/dca-nam-010.md, /marker/tactical/value.md]
 ---
 
 Add an immutable value object — a concept defined by its attributes, with no identity (`Money`, `EmailAddress`, a quantity). A Java record implementing the `Value` marker, validated on construction, is the default. When in doubt whether it should be an entity, decide first.
@@ -21,12 +24,12 @@ If the concept has a lifecycle and identity that must be tracked over time, it i
 
 ## Rules to satisfy (build-time checklist)
 
-- [Value object classes should be final (immutability)](/rule/tactical/value-object-classes-should-be-final-immutability.md)
-- [Value object fields must be final (deep immutability)](/rule/tactical/value-object-fields-must-be-final-deep-immutability.md)
-- [Value objects must not have setter methods](/rule/tactical/value-objects-must-not-have-setter-methods.md)
-- [Value objects must not contain aggregate roots or entities](/rule/tactical/value-objects-must-not-contain-aggregate-roots-or-entities.md)
-- [Value Objects must be records or immutable classes with attribute equality](/rule/tactical/value-objects-must-be-records-or-immutable-classes-with-attribute-equality.md)
-- [Domain classes must not use technical suffixes (Manager, Helper, Util, Impl, Implementation)](/rule/naming/domain-classes-must-not-use-technical-suffixes-manager-helper-util-impl-implementation.md)
+- [Value object classes should be final (immutability)](/rule/tactical/dca-tac-009.md)
+- [Value object fields must be final (deep immutability)](/rule/tactical/dca-tac-010.md)
+- [Value objects must not have setter methods](/rule/tactical/dca-tac-011.md)
+- [Value objects must not contain aggregate roots or entities](/rule/tactical/dca-tac-008.md)
+- [Value Objects must be records or immutable classes with attribute equality](/rule/tactical/dca-tac-012.md)
+- [Domain classes must not use technical suffixes (Manager, Helper, Util, Impl, Implementation)](/rule/naming/dca-nam-010.md)
 
 ## Anchors
 

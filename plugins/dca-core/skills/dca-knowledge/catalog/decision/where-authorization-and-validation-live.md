@@ -2,6 +2,9 @@
 type: Decision
 title: "Where authorization and validation live: adapter, use case, or aggregate"
 tags: [decision, security, layered, adapter, application, domain]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-out/outputport.md, /marker/port-in/usecase.md, /rule/onion/dca-oni-003.md, /rule/layered/dca-lay-002.md, /guide/jwt-implementation-guide/7-cookie-requirements.md]
 ---
 
 You have a check to place that guards an operation, and "check" hides three different concerns that are routinely confused: **structural validation** (is the input well-formed?), **authorization** (may *this caller* perform this action?), and **business invariants** (is this action legal for the current state?). Each belongs on a different layer, and collapsing them is how you get controllers that enforce business rules, aggregates that know about roles, and duplicated guards that disagree. This decision sits alongside [Where does the logic live](/decision/where-does-the-logic-live.md) — that one places *behaviour*; this one places *guards*.
@@ -54,7 +57,7 @@ Split authorization once more, by whether the check needs the **resource**:
 ## Anchors
 
 - Markers: [OutputPort](/marker/port-out/outputport.md) · [UseCase&lt;INPUT, OUTPUT&gt;](/marker/port-in/usecase.md)
-- Rules: [Domain Models must not have Spring/JPA annotations](/rule/onion/domain-models-must-not-carry-container-or-persistence-annotations.md) · [Domain must not have dependencies on Infrastructure](/rule/layered/domain-must-not-have-dependencies-on-infrastructure.md)
+- Rules: [Domain Models must not have Spring/JPA annotations](/rule/onion/dca-oni-003.md) · [Domain must not have dependencies on Infrastructure](/rule/layered/dca-lay-002.md)
 - Guide: [Cookie requirements](/guide/jwt-implementation-guide/7-cookie-requirements.md)
 - Recipe: [Add an identity port](/recipe/add-an-identity-port.md) — the port, the command field, the scoped repository question
 - Related decision: [Where does the logic live](/decision/where-does-the-logic-live.md)

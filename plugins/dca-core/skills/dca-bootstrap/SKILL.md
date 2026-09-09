@@ -223,7 +223,7 @@ Before each write: if the target exists, ask *overwrite / skip / abort* (default
 8. Decision G: `templates/claude/CLAUDE-dca-section.md.tmpl` **appended** to `CLAUDE.md`
    (`{{verifyCommand}}` = `./gradlew test-architecture` or `mvn test`); idempotent — skip when a line
    starting with `## Architecture: Domain-Centric Architecture` exists. `conventions.md.tmpl` →
-   `.claude/dca/conventions.md` only for `live catalog`.
+   `.claude/dca/conventions.md` for every project, with the resolved-configuration section; `catalog_path` is optional.
 
 **.NET**
 
@@ -331,3 +331,17 @@ generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, s
   to `/dca-scaffold`, which owns the placement rules (output ports in `application/shared/`, never
   `domain/model/`, the shared-vs-local port decision). Writing example domain code inline here is how
   structural mistakes ship even though the freshly installed suite passes.
+
+### Wiring and metadata review
+
+Check how operations are registered: a stereotype or configuration is equally valid.
+Static references cannot prove runtime wiring; NAM-002 is informational only.
+Presets also configure member roles (`injectionSite`, `persistenceMapping` in Java;
+attribute namespace roles in .NET). Review prohibited roles on types and members,
+including composed annotations/derived attributes; unknown metadata is unclassified
+and allowed by these checks. Outgoing adapters can reuse own/global infrastructure,
+while another module’s infrastructure remains private.
+
+## Resolved configuration
+
+Read the [shared resolved-configuration contract](reference/resolved-configuration.md). Bootstrap writes the section for every project; scaffold reads and refreshes it from the resolved preset before filling annotation/import placeholders. `none` uses explicit constructor wiring and `Configuration.java.tmpl`, without framework imports.

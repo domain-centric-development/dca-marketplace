@@ -2,6 +2,9 @@
 type: Pitfall
 title: "Storing raw domain events in an external (broker) outbox"
 tags: [pitfall, events, outbox]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/strategic/dca-str-007.md, /rule/advanced/dca-adv-005.md, /guide/readme/integration-patterns.md, /marker/tactical/domainevent.md, /marker/tactical/integrationevent.md]
 ---
 
 Serializing raw `DomainEvent` objects into an outbox that relays to a message broker. The tempting shortcut — "I already have the domain events, just persist and send them" — leaks the internal model across the bounded-context boundary.
@@ -27,7 +30,7 @@ Forcing every domain event through an external outbox at all. Most domain events
 
 ## Anchors
 
-- Forbidden by intent of: [Integration Events must be in events or adapter outgoing event packages](/rule/strategic/integration-events-must-be-in-events-or-adapter-outgoing-event-packages.md) · [Integration Events must be annotated with IntegrationEventType](/rule/advanced/integration-events-must-be-annotated-with-integrationeventtype.md)
+- Forbidden by intent of: [Integration Events must be in events or adapter outgoing event packages](/rule/strategic/dca-str-007.md) · [Integration Events must be annotated with IntegrationEventType](/rule/advanced/dca-adv-005.md)
 - Grounded in: [Integration patterns](/guide/readme/integration-patterns.md)
 - Markers: [DomainEvent](/marker/tactical/domainevent.md) · [IntegrationEvent](/marker/tactical/integrationevent.md)
 - Guide: [Integration patterns](/guide/readme/integration-patterns.md)

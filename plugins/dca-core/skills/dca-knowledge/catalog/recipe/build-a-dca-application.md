@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Build a DCA application"
+title: Build a DCA application
 tags: [recipe, bootstrap, bounded-context]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/index.md, /marker/index.md, /guide/readme/java-package-structure.md, /guide/index.md]
 ---
 
 The task router: maps what you are building to the recipe that covers it. Start
@@ -77,3 +80,9 @@ When the task sits on a fork, resolve the decision before picking the recipe:
 - Layer map: [Package structure](/guide/readme/java-package-structure.md)
 - What NOT to do: [pitfall index](/pitfall/index.md)
 - Concepts in depth: [guide index](/guide/index.md)
+
+## Verification by language
+
+Java: `./gradlew test-architecture` (or the project Maven architecture-test target).
+.NET: `dotnet test -c Debug` against the architecture-test project and all production assemblies.
+Read the resolved framework preset; do not add Spring to a .NET or framework-neutral consumer.

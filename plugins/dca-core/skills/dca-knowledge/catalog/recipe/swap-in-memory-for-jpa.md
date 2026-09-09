@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Swap the in-memory adapter for JPA"
+title: Swap the in-memory adapter for JPA
 tags: [recipe, adapter, persistence, repository]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/readme/rules.md, /rule/tactical/dca-tac-014.md, /rule/tactical/dca-tac-015.md, /rule/tactical/dca-tac-013.md, /rule/tactical/dca-tac-017.md, /rule/naming/dca-nam-004.md, /rule/hexagonal/dca-hex-005.md, /rule/hexagonal/dca-hex-003.md]
 ---
 
 Move an aggregate from in-memory storage to a relational database **without touching the output port or the domain**. This is the payoff of the hexagonal boundary: the use cases depend on `{Name}Repository`, so replacing its implementation is invisible to them. The domain aggregate stays persistence-free; a separate JPA entity absorbs all the mapping.
@@ -18,14 +21,14 @@ Move an aggregate from in-memory storage to a relational database **without touc
 
 ## Rules to satisfy (build-time checklist)
 
-- [Repository interfaces must reside in the application output-port package](/rule/tactical/repository-interfaces-must-reside-in-the-application-layer-s-shared-output-port-package.md) — the port stays put
-- [Repository implementations must reside in the adapter.outgoing package](/rule/tactical/repository-implementations-must-reside-in-adapter-outgoing-package.md) — the new JPA adapter lives here
-- [Repository interfaces should extend the Repository marker](/rule/tactical/repository-interfaces-should-extend-repository-marker-interface.md)
-- [Repository methods must not return non-root Entities](/rule/tactical/repository-methods-must-not-return-non-root-entities.md) — the adapter maps entities back to the aggregate, never leaks entities
-- [Repository interfaces must end with `Repository`](/rule/naming/repository-interfaces-must-end-with-repository.md)
-- [Outgoing adapters must only use outbound ports, not infrastructure implementations](/rule/hexagonal/outgoing-adapters-must-only-use-outbound-ports-not-infrastructure-implementations.md)
-- [Controllers and resources must never access repositories directly](/rule/hexagonal/controllers-and-resources-must-never-access-repositories-directly.md)
-- [Output ports in application.shared must extend OutputPort](/rule/hexagonal/output-ports-in-application-shared-must-extend-outputport.md)
+- [Repository interfaces must reside in the application output-port package](/rule/tactical/dca-tac-014.md) — the port stays put
+- [Repository implementations must reside in the adapter.outgoing package](/rule/tactical/dca-tac-015.md) — the new JPA adapter lives here
+- [Repository interfaces should extend the Repository marker](/rule/tactical/dca-tac-013.md)
+- [Repository methods must not return non-root Entities](/rule/tactical/dca-tac-017.md) — the adapter maps entities back to the aggregate, never leaks entities
+- [Repository interfaces must end with `Repository`](/rule/naming/dca-nam-004.md)
+- [Outgoing adapters must only use outbound ports, not infrastructure implementations](/rule/hexagonal/dca-hex-005.md)
+- [Controllers and resources must never access repositories directly](/rule/hexagonal/dca-hex-003.md)
+- [Output ports in application.shared must extend OutputPort](/rule/hexagonal/dca-hex-009.md)
 
 ## Anchors
 
