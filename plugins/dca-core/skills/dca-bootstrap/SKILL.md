@@ -138,7 +138,14 @@ B. **Layout** — every deviation from the DCA defaults becomes a `DcaLayout` bu
    - published contract package other than `api` / `events` → `withApiSubpackage`, `withEventsSubpackage`
      / `WithApiSegment`, `WithEventsSegment`
    - third-party packages the domain may use → `allowingInDomain("org.jmolecules..")` / `AllowingInDomain("NodaTime")`
-   - non-Spring / non-ASP.NET frameworks → `withFrameworkAnnotations(...)` / `WithFrameworkTypes(...)`
+   - framework (Java): write **no** preset call — `DcaLayout.forBasePackage` detects Spring, Jakarta EE, Quarkus or
+     Micronaut from the test class path and the report's first line shows the choice
+     (`framework annotations: quarkus (detected)`). Name a preset only when detection cannot decide (mixed class
+     paths, a hand-wired application → `dca.framework=none` in `dca-archunit.properties`) or when a role differs
+     from the preset (`withFrameworkAnnotations(FrameworkAnnotations.jakarta().withRestController("..."))`). A
+     company platform ships its preset as a `FrameworkAnnotationsProvider` library; then `dca.framework=<name>`.
+   - framework (.NET): `WithFrameworkTypes(FrameworkTypes.None())` for a hand-hosted application, otherwise the
+     ASP.NET Core default, adjusted with a `with` expression where a role differs
    Folder names the layout cannot express (`service/` instead of `application/`, flat
    `controller/`–`service/`–`repository/`) are a migration, not a configuration: offer `Adopt DCA
    naming` (the user moves code later; expect violations until then) or leaving the affected sets
