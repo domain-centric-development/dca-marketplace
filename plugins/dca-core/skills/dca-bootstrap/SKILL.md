@@ -261,7 +261,7 @@ staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that comp
 |---|---|---|
 | `{{basePackage}}` / `{{basePackagePath}}` | detected | `com.acme.shop` / `com/acme/shop` |
 | `{{rootNamespace}}`, `{{solutionName}}` | detected | `Acme.Shop`, `AcmeShop` |
-| `{{dcaJavaVersion}}`, `{{dcaDotnetVersion}}` | looked up at bootstrap time | `0.1.0` |
+| `{{dcaJavaVersion}}`, `{{dcaDotnetVersion}}` | looked up at bootstrap time | `0.4.0` |
 | `{{junitVersion}}`, `{{testSdkVersion}}`, `{{xunitVersion}}`, `{{xunitRunnerVersion}}`, `{{targetFramework}}` | looked up / detected | `5.11.4`, `net10.0` |
 | `{{springBootVersion}}`, `{{javaVersion}}` | looked up / detected (greenfield Java build only) | `4.0.2`, `25` |
 | `{{layoutCalls}}` | decisions B, D | `withIncomingSubpackage("in")`, `withUseCaseSuffix("ApplicationService")` |
