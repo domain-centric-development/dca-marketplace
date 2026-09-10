@@ -366,8 +366,9 @@ public sealed class PlaceOrderUseCase : IPlaceOrderInputPort
   `Infrastructure/Add{Context}Context()`.
 - **Transaktionsgrenze** ist ein Aufruf (`ITransactionBoundary.InTransactionAsync`) oder ein Decorator um
   `IUseCase<,>`, kein Attribut; `DCA-NET-006` hält EF Core / `System.Transactions` aus `Application/` heraus.
-  `DCA-USE-012` prüft auch in .NET, dass jeder Einstiegspfad zu `IDomainEventPublisher` durch eine
-  `InTransactionAsync`-Grenze führt (statische Näherung); nur `DCA-USE-013` ist in .NET n/a.
+  `DCA-USE-012` prüft auch in .NET, dass jeder Einstiegspfad zu `IRepository.SaveAsync`/`DeleteByIdAsync` oder
+  `IDomainEventPublisher` durch eine `InTransactionAsync`-Grenze führt (statische Näherung) — die Grenze ist
+  auch ohne Events Pflicht, weil ein Save mehrere Statements auslösen kann; nur `DCA-USE-013` ist in .NET n/a.
 - **Ports async, Domäne synchron:** der Aggregat-Aufruf `order.Place(...)` blockiert nicht, `await` gibt es nur
   an den Ports.
 - **Output-Ports** in `Application/Shared/` als `I*Repository : IRepository<T,TId>` bzw. `I*Store : IStore`;
