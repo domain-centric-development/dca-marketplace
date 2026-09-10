@@ -50,7 +50,8 @@ dca-marketplace/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
 │   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
-│   └── skills/{factory-backlog,factory-scope}/   # write the backlog; answer a scoping question
+│   ├── skills/{factory-backlog,factory-scope}/   # write the backlog; answer a scoping question
+│   └── skills/factory-verify/                    # scripts/verify.py — 33 cases over gate and runner
 ├── plugins/software-craftsmanship/        # project-agnostic skills + agents (any Java or .NET project)
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
 └── MULTI-HARNESS-PORTABILITY.md           # notes on running the skills outside Claude Code
@@ -121,6 +122,7 @@ interfaces are aliased to the library ones or kept and declared through `DcaLayo
 | Guide text (`dca-guide/*.md`) or authored catalog nodes | regenerate the catalog; the mirror follows |
 | Context-map relationships or renderer options | `context-map/SKILL.md` |
 | Craft that a delivery stage or a review perspective needs (test writing, implementation, a review angle) | the **skill** carries it (portable — every tool reads skills); an agent stays a thin wrapper around that skill for isolated context and a restricted tool set. Knowledge in an agent alone is Claude-only |
+| A gate check, a stage order or the runner changed | run `plugins/dca-factory/skills/factory-verify/scripts/verify.py` and extend it with a case for what changed — the gate is the correctness argument for every stage, so it may not rest on a hand check |
 | Delivery process: backlog fields, stage order, gate checks, file hand-overs | `dca-factory/skills/factory-run/SKILL.md`, its `reference/{backlog-contract,file-contracts}.md`, `scripts/story-gate.py`, and the affected `stage-*/SKILL.md`. A gate check is a script change, never a hook or a stage self-assessment |
 | A stage needs project knowledge (build command, test runner, source set) | it goes into the project's stack profile, never into a skill |
 
