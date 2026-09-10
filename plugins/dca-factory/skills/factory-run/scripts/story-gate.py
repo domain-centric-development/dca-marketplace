@@ -18,9 +18,12 @@ Checks by stage:
            left in draft, its bounded context present in the context map, the round limit not
            reached, and a note when the project instructions are too large for a tool to load
     test   epic + every acceptance criterion mapped to a test in tasks/<story>/tests.md,
-           the test exists in the sources, the test sources compile, every mapped test is red
-    build  epic + mapping + every mapped test is green, plus every extra check the profile
-           declares for this stage (architecture suite, formatter, …)
+           the test exists in the sources, the test sources compile, every mapped test is red.
+           Which selectors were red is recorded in tasks/<story>/.tests-red
+    build  epic + mapping + every mapped test is green **and was recorded red by the test stage**,
+           plus every extra check the profile declares for this stage (architecture suite,
+           formatter, …). Without the record the green run is skipped and named, never taken as
+           evidence: a runner that matched no test at all exits 0 exactly like a passing one
     document  every path, file and identifier the document stage claims actually exists, every
            row of its glossary table names where its definition came from, and every term the plan
            proposed has landed in a glossary
@@ -418,6 +421,7 @@ def check_exists(result, cwd, mapping):
             sources.setdefault(os.path.splitext(name)[0], []).append(
                 os.path.join(root, name)
             )
+    located = {}
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
             cls, method = SELECTOR.match(selector).groups()
@@ -425,9 +429,10 @@ def check_exists(result, cwd, mapping):
             candidates = sources.get(simple, [])
             found = [path for path in candidates if contains(path, method)]
             if found:
+                located[selector] = os.path.relpath(found[0], cwd)
                 result.ok(
                     "tests-exist",
-                    f"{selector} found in {os.path.relpath(found[0], cwd)} ({key})",
+                    f"{selector} found in {located[selector]} ({key})",
                 )
             elif candidates:
                 result.fail(
@@ -442,6 +447,7 @@ def check_exists(result, cwd, mapping):
                     f"test, and a missing test is indistinguishable from a red one at "
                     f"the runner",
                 )
+    return located
 
 
 def contains(path, needle):
@@ -475,6 +481,14 @@ def check_compiles(result, profile, cwd):
 #: A markdown table row, split into its cells. The first cell names the thing, the **last**
 #: names how it was checked — the tables differ in width, so counting from the left is wrong.
 PATHLIKE = re.compile(r"`([\w./-]+\.[A-Za-z0-9]{1,6})`")
+#: A cited path usually carries where in the file it was read: `README.md:149`, `Book.cs:28-31`,
+#: `guide.md#anchor`. The location is not part of the file name, so it is stripped before the file
+#: is looked up — otherwise naming the line makes an existing file look missing.
+LOCATION_SUFFIX = re.compile(r"(?::L?\d+(?:[-–:]\d+)?|#[\w.-]+)$")
+
+
+def bare_path(name):
+    return LOCATION_SUFFIX.sub("", name.strip().strip("`")).strip()
 
 
 def row_cells(line):
@@ -513,7 +527,8 @@ def check_documented(result, tasks, story_id, cwd):
         name, source = cells[0].strip("`"), cells[-1]
         if section == "documents updated":
             files += 1
-            if name and not os.path.exists(os.path.join(cwd, name)):
+            target = bare_path(name)
+            if target and not os.path.exists(os.path.join(cwd, target)):
                 missing.append(name)
             if not source:
                 unsourced.append(f"{name} (no `Verified by`)")
@@ -521,14 +536,17 @@ def check_documented(result, tasks, story_id, cwd):
             unsourced.append(f"glossary term {name!r}")
 
     for name in PATHLIKE.findall(text):
-        if "/" in name and not os.path.exists(os.path.join(cwd, name)):
+        target = bare_path(name)
+        if "/" in target and not os.path.exists(os.path.join(cwd, target)):
             missing.append(name)
 
     if missing:
         result.fail(
             "documented",
             f"{path}: names things that do not exist: {', '.join(sorted(set(missing)))} — a "
-            f"documented path that does not resolve sends the next reader nowhere",
+            f"documented path that does not resolve sends the next reader nowhere. Write every "
+            f"path as it resolves from the project root, not as a package- or namespace-relative "
+            f"shorthand.",
         )
     if unsourced:
         result.fail(
@@ -564,12 +582,56 @@ def check_stage_commands(result, profile, cwd, stage):
             result.fail(key, f"`{command}` failed:\n{tail(output)}")
 
 
-def check_test_state(result, profile, cwd, mapping, expected):
+
+#: Which declared command can run a given test. A mapped test may live in any test project or
+#: source set — the end-user tests in one, the unit tests in another — and running a selector
+#: against the wrong one matches nothing. A runner that matched nothing exits 0, which is
+#: indistinguishable from a passing test, so the choice may not be a guess: it is made from the
+#: file the test was found in.
+TEST_COMMAND_KEYS = ("e2eTest", "test")
+
+
+def test_command_keys(profile):
+    """Every command in the profile that runs tests, most specific first.
+
+    A project has more than two test source sets — unit, integration, end-user — and a mapped
+    test may live in any of them. Beyond the two fixed keys, any `test.<name>:` entry counts, so
+    declaring one more source set is a profile line and never a change to the gate.
+    """
+    extra = sorted(key for key in profile if key.startswith("test."))
+    return extra + list(TEST_COMMAND_KEYS)
+
+
+def command_for(profile, test_path):
+    """The (key, command) whose path or source-set token covers `test_path`, longest match first.
+
+    A command names where it runs: `dotnet test tests/Foo.HttpTests`, `./gradlew test-e2e`
+    (source set `src/test-e2e/java`). Both forms are matched against the file's path segments.
+    """
+    segments = [part for part in test_path.replace("\\", "/").split("/") if part]
+    best = None
+    for key in test_command_keys(profile):
+        command = profile.get(key)
+        if not command:
+            continue
+        for token in command.split():
+            token = token.strip("\"'").lstrip("./")
+            if not token or token.startswith("-"):
+                continue
+            covers = token in segments or ("/" in token and token in "/".join(segments))
+            if covers and (best is None or len(token) > best[2]):
+                best = (key, command, len(token))
+    if best:
+        return best[0], best[1]
+    return None, None
+
+def check_test_state(result, profile, cwd, mapping, expected, located=None, tasks=None, story=None):
     """expected 'red': every mapped test must fail. 'green': all must pass."""
-    command = profile.get("e2eTest") or profile.get("test")
+    fallback = profile.get("e2eTest") or profile.get("test")
     flag = profile.get("filterFlag", "")
     fmt = profile.get("filterFormat", "{class}.{method}")
-    if not command:
+    located = located or {}
+    if not fallback:
         result.skip(
             f"tests-{expected}",
             "no `e2eTest:` or `test:` command in the stack profile",
@@ -577,13 +639,54 @@ def check_test_state(result, profile, cwd, mapping, expected):
         return
     if not mapping:
         return
+    ledger = red_ledger_path(tasks, story)
+    have_ledger = bool(ledger) and os.path.isfile(ledger)
+    was_red = read_red_ledger(tasks, story)
+    now_red = set()
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
             cls, method = SELECTOR.match(selector).groups()
             pattern = fmt.replace("{class}", cls).replace("{method}", method)
+            test_path = located.get(selector)
+            command_key, command = command_for(profile, test_path) if test_path else (None, None)
+            if not command and test_path:
+                # Running it with some other command proves nothing in either direction: a runner
+                # that matched no test exits 0 on one stack (looks green) and non-zero on another
+                # (looks red). Both are artefacts, so this is a configuration error, not a verdict.
+                result.fail(
+                    f"tests-{expected}",
+                    f"{selector} lives in {test_path}, which no declared test command covers. "
+                    f"Declare that source set in the stack profile (`test.<name>: <command>`); "
+                    f"a run with any other command would match no test, and that exits 0 on one "
+                    f"runner and non-zero on another — neither is evidence about {key!r}.",
+                )
+                continue
+            if not command:
+                command_key, command = "e2eTest" if profile.get("e2eTest") else "test", fallback
             invocation = f'{command} {flag} "{pattern}"'.strip()
             code, output = run(invocation, cwd)
             passed = code == 0
+            if not passed:
+                now_red.add(selector)
+            if expected == "green" and passed and not have_ledger:
+                # No test stage ran in this checkout — the run artefacts may simply not be
+                # committed. Say that the evidence is missing instead of inventing either verdict.
+                result.skip(
+                    "tests-green",
+                    f"{selector} is green, but no `{os.path.basename(ledger)}` from a test stage "
+                    f"is present here, so nothing proves it ever failed ({key!r}).",
+                )
+                continue
+            if expected == "green" and passed and selector not in was_red:
+                # Never seen red: a runner that matched nothing exits 0 exactly like a passing
+                # test, so "green" alone is no evidence that this test ran at all.
+                result.fail(
+                    "tests-green",
+                    f"{selector} passes now but was never recorded red by the test stage "
+                    f"({key!r}) — a test that never failed proves nothing, and a run that "
+                    f"matched no test passes too. Run `--stage test` before the build stage.",
+                )
+                continue
             if expected == "red" and passed:
                 result.fail(
                     "tests-red",
@@ -598,8 +701,35 @@ def check_test_state(result, profile, cwd, mapping, expected):
             else:
                 result.ok(
                     f"tests-{expected}",
-                    f"{selector} is {'green' if passed else 'red'} ({key})",
+                    f"{selector} is {'green' if passed else 'red'} ({key}, via `{command_key}:`)",
                 )
+    if expected == "red":
+        write_red_ledger(tasks, story, now_red)
+
+
+#: Which selectors the test stage saw fail. Kept as a file next to the round counter for the same
+#: reason: the build gate must not take a stage's word that a test was red once.
+def red_ledger_path(tasks, story):
+    if not tasks or not story:
+        return None
+    return os.path.join(tasks, story, ".tests-red")
+
+
+def read_red_ledger(tasks, story):
+    path = red_ledger_path(tasks, story)
+    if not path or not os.path.isfile(path):
+        return set()
+    with open(path, encoding="utf-8") as handle:
+        return {line.strip() for line in handle if line.strip()}
+
+
+def write_red_ledger(tasks, story, selectors):
+    path = red_ledger_path(tasks, story)
+    if not path:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(sorted(selectors)) + ("\n" if selectors else ""))
 
 
 def tail(output, limit=1200):
@@ -715,7 +845,7 @@ def main(argv):
             check_stage_commands(result, profile, cwd, args.stage)
         if args.stage in ("test", "build"):
             mapping = check_mapping(result, args.tasks, story_id, criteria)
-            check_exists(result, cwd, mapping)
+            located = check_exists(result, cwd, mapping)
             check_compiles(result, profile, cwd)
             check_test_state(
                 result,
@@ -723,6 +853,9 @@ def main(argv):
                 cwd,
                 mapping,
                 "red" if args.stage == "test" else "green",
+                located,
+                args.tasks,
+                story_id,
             )
             check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:

@@ -10,10 +10,22 @@ fresh context, in a subagent or in a separate process without changing the resul
 | `stage-test` | the story, `plan.md` | `tasks/<story>/tests.md` (with the `gate:tests` table) |
 | `stage-build` | the story, `plan.md`, `tests.md` | `tasks/<story>/build.md` |
 | `stage-judge` | the story and all three predecessors, the diff, and the profile's `reviews:`/`review.<perspective>:` lines | `tasks/<story>/judge.md` |
+| `stage-document` | the story, all predecessors, the project's documents and glossaries | `tasks/<story>/document.md` |
+
+`tasks/<story>/.tests-red` records which selectors the test stage actually saw fail. The build gate
+requires each green test to appear in it, because a runner that matched **no** test exits 0 exactly
+like a passing one: without the record, a criterion with a mistyped or misplaced test would be
+certified green. When the file is absent altogether — the run artefacts need not be committed — the
+green run is skipped and named rather than trusted or refused.
 
 `tasks/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
 the orchestrator remembers, because an in-session run has no other honest way to count and a
 resumed run must see the same number. At three the run stops.
+
+A mapped test is run with the profile command that **covers the file it was found in** — the
+end-user tests and the unit tests usually live in different projects or source sets, and a selector
+run against the wrong one matches nothing. When no declared command covers that path, the gate says
+so instead of guessing.
 
 `tasks/` holds run artefacts. Whether they are committed is the project's choice; the pipeline
 only requires that a stage finds its predecessor's file.

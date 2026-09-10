@@ -29,6 +29,12 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 4. **Write only what you can verify.** Every path, file, class, method and command you put in a
    document must exist — check it, do not remember it. A documented path that does not resolve is
    worse than no documentation: it survives, gets cited, and sends the next reader nowhere.
+   Write every path **as it resolves from the project root**, in your file and in the document you
+   write — `src/main/java/com/example/billing/domain/glossary.md`, not the package- or
+   namespace-relative shorthand `billing/domain/glossary.md`. A shorthand a reader has to complete
+   is not a path: it reads like one, it cannot be opened, and it is indistinguishable from a typo.
+   Add the line or the section separately (`file.md:149`, `Book.cs:28-31`) — the location is
+   allowed and is not part of the file name.
 5. Record what you did *not* document and why: a decision that belongs in an architecture decision
    record rather than a README, a term the domain contact has to define first, an open assumption
    the story never resolved.

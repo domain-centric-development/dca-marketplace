@@ -27,8 +27,11 @@ Output: the test sources, plus `tasks/<story>/tests.md`. You write **no** produc
    criterion key or number into a test name, display name, comment or documentation. The link
    between criterion and test lives in the table below and nowhere else.
 6. Add only the minimum stubs the test sources need to compile — a class, an empty method, a
-   port interface. A stub returns nothing meaningful; that is what makes the test red for the
-   right reason.
+   port interface. A stub **refuses to answer**: it throws (`UnsupportedOperationException`,
+   `NotImplementedException`, whatever the language calls it). It never returns a value, not even
+   an empty list or a default — for a criterion whose expected answer *is* the empty case, a stub
+   returning empty makes the test green before any code exists, and a green test at this stage
+   proves nothing. The gate refuses it, and rightly: the criterion would ship uncovered.
 7. Run the project's compile and test commands from the stack profile. Confirm two things: the
    test sources compile, and every new test fails **on its assertion**, not on a missing class or
    a wiring error. A test red for the wrong reason proves nothing.

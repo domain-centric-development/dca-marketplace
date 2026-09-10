@@ -1,6 +1,9 @@
 # Stack profile — the only place that knows how this project builds and tests.
 # Flat `key: value` pairs. A command that is not declared here is skipped by the
-# gate and named in its report; it never fails a stage.
+# gate and named in its report; it never fails a stage. Every value is run through a
+# shell, so a stack that needs two commands chains them (`a && b`) — except the command
+# the gate appends a single-test selector to (`e2eTest:`, or `test:` when there is no
+# `e2eTest:`), which stays one command, because the selector would reach only the last.
 #
 # compile      makes the test sources compile without running them
 # test         runs the unit tests
