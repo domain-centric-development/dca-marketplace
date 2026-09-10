@@ -26,7 +26,7 @@
     },
     {
       "name": "dca-factory",
-      "description": "Delivery pipeline for DCA projects: a markdown backlog contract (epics with intent, goal, outcome-event metric and domain contact), the stage skills plan/test/build/judge with file hand-overs, a dependency-free story gate script that checks epic completeness and one red-then-green end-user test per acceptance criterion, and one orchestrator skill. Carries no architecture method and no project knowledge \u2014 those stay in dca-core and in the project's stack profile.",
+      "description": "Delivery pipeline for DCA projects: a markdown backlog contract (epics with intent, goal, outcome-event metric and domain contact; stories with keyed acceptance criteria), the stage skills plan/test/build/tidy/judge/document with one hand-over file each, factory-backlog to write the backlog and factory-scope for the questions a run may not answer itself, and a dependency-free story gate that checks epic completeness, one red-then-green end-user test per criterion, the architecture suite and the documentation claims. Portable by rule: skill folders and one script, so Claude Code, Codex and OpenCode run the same pipeline. Carries no architecture method and no project knowledge \u2014 those stay in dca-core and in the project's stack profile.",
       "author": {
         "name": "Christoph Bloemer"
       },
