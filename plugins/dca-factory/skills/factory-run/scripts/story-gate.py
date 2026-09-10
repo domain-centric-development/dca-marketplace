@@ -24,6 +24,7 @@ Checks by stage:
            plus every extra check the profile declares for this stage (architecture suite,
            formatter, …). Without the record the green run is skipped and named, never taken as
            evidence: a runner that matched no test at all exits 0 exactly like a passing one
+    tidy   the same as build: nothing the refactor touched may have changed what the code does
     document  every path, file and identifier the document stage claims actually exists, every
            row of its glossary table names where its definition came from, and every term the plan
            proposed has landed in a glossary
@@ -563,6 +564,9 @@ def check_documented(result, tasks, story_id, cwd):
 STAGE_CHECKS = {
     "test": (),
     "build": ("architecture", "format"),
+    # The tidy stage changes no behaviour, so its whole claim is that everything still holds:
+    # the same commands as the build stage, run again after the refactor.
+    "tidy": ("architecture", "format"),
     "document": ("architecture",),
 }
 
@@ -801,7 +805,9 @@ def main(argv):
     parser = argparse.ArgumentParser(add_help=True, description="story gate")
     parser.add_argument("--story", required=True)
     parser.add_argument(
-        "--stage", required=True, choices=("plan", "test", "build", "document")
+        "--stage",
+        required=True,
+        choices=("plan", "test", "build", "tidy", "document"),
     )
     parser.add_argument("--backlog", default="backlog")
     parser.add_argument("--tasks", default="tasks")
@@ -843,7 +849,7 @@ def main(argv):
             check_documented(result, args.tasks, story_id, cwd)
             check_proposals_landed(result, args.tasks, story_id, cwd, profile)
             check_stage_commands(result, profile, cwd, args.stage)
-        if args.stage in ("test", "build"):
+        if args.stage in ("test", "build", "tidy"):
             mapping = check_mapping(result, args.tasks, story_id, criteria)
             located = check_exists(result, cwd, mapping)
             check_compiles(result, profile, cwd)

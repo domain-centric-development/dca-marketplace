@@ -14,12 +14,15 @@ what must be true before the next one starts.
 
 | Skill | Does |
 |---|---|
-| `factory-run` | runs one story: gate → plan → test → gate → build → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in |
+| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in |
 | `stage-plan` | story → `tasks/<story>/plan.md`: elements that change, criteria, test shape per criterion |
 | `stage-test` | plan → tests plus `tasks/<story>/tests.md` with the criterion-to-test table |
 | `stage-build` | red tests → production code plus `tasks/<story>/build.md` |
+| `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `tasks/<story>/tidy.md`; changes no test and no behaviour |
 | `stage-judge` | the change → `tasks/<story>/judge.md`: domain, boundaries and craft in one verdict, plus any perspective the profile adds |
 | `stage-document` | the change → `tasks/<story>/document.md`: glossary, context map and reader documentation follow the code |
+| `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them |
+| `factory-scope` | answers the question a run may not answer itself — a new bounded context, a new relationship, a surface its actor lacks — as a recorded decision plus the map, never as code |
 
 ## The gate
 

@@ -49,7 +49,8 @@ dca-marketplace/
 │   └── agents/{ddd-expert,ddd-reviewer,hexagonal-reviewer}.md
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
 │   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates + reference
-│   └── skills/{stage-plan,stage-test,stage-build,stage-judge}/
+│   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
+│   └── skills/{factory-backlog,factory-scope}/   # write the backlog; answer a scoping question
 ├── plugins/software-craftsmanship/        # project-agnostic skills + agents (any Java or .NET project)
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
 └── MULTI-HARNESS-PORTABILITY.md           # notes on running the skills outside Claude Code
@@ -66,7 +67,9 @@ dca-marketplace/
   and add only an isolated context and a tool restriction.
 - **dca-factory** — the *delivery* layer, kept apart from the method on purpose (three layers, three owners:
   methodology → `dca-core`, stack profile → the project, pipeline → here). `factory-run` runs one backlog story
-  through `stage-plan`, `stage-test`, `stage-build`, `stage-judge`; `skills/factory-run/scripts/story-gate.py`
+  through `stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stage-judge` and `stage-document`;
+  `factory-backlog` writes the backlog it reads and `factory-scope` answers what a run may not decide
+  itself — a new bounded context, a new relationship between contexts, a surface an actor lacks; `skills/factory-run/scripts/story-gate.py`
   is the deterministic check between the stages, copied into a consuming project as
   `.agents/factory/story-gate.py`. Carriers are portable by rule: `SKILL.md` folders and one script, no hooks,
   no orchestration script, no agent frontmatter, no `disable-model-invocation` — Codex discovers the same folder

@@ -1,6 +1,6 @@
 ---
 name: factory-run
-description: Runs one backlog story through the delivery pipeline — plan, test, build, judge — with a deterministic story gate between the stages. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), or to set up the pipeline's files in a project that has none. Works in any project: it reads the backlog, the stack profile and the stage hand-over files, never project knowledge baked into itself.
+description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), or to set up the pipeline's files in a project that has none. Works in any project: it reads the backlog, the stack profile and the stage hand-over files, never project knowledge baked into itself.
 ---
 
 # Run one story
@@ -103,18 +103,23 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    `stage-build`. Every repeat round increments `tasks/<story>/.rounds`; at **three** the run
    stops and escalates. The counter is a file, not something you remember — an in-session run has
    no other honest way to count, and a resumed run must see the same number.
-7. **`stage-judge`** → `tasks/<story>/judge.md`, which carries one of three verdicts:
+7. **`stage-tidy`** → `tasks/<story>/tidy.md`: the refactor half of red–green–refactor, inside
+   this story's footprint, with every test green and no test changed. A stage that changes nothing
+   and says why is finished, not skipped.
+8. **gate `tidy`** — the same checks as the build gate, run again: the stage's whole claim is that
+   nothing it touched changed what the code does.
+9. **`stage-judge`** → `tasks/<story>/judge.md`, which carries one of three verdicts:
    - `pass` — done, go to the report.
    - `changes-requested` — back to `stage-build` with the confirmed defects, then gate `build`
      again; the round counter applies.
    - `story-conflict` — the story or the plan is wrong. **Stop.** This never goes back to
      `stage-build`: a correction that changes an agreed criterion belongs in the story, and a
      human decides it. Say which criterion conflicts with what.
-8. **`stage-document`** → `tasks/<story>/document.md`: the glossary, the context map and the
+10. **`stage-document`** → `tasks/<story>/document.md`: the glossary, the context map and the
    project's reader documentation follow what the story changed.
-9. **gate `document`** — every file, path and identifier the stage claims exists, and every claim
+11. **gate `document`** — every file, path and identifier the stage claims exists, and every claim
    says how it was checked. A story whose documents still describe yesterday is not delivered.
-10. Report: the story, the criteria and their tests, what the gate checked, what it **skipped**,
+12. Report: the story, the criteria and their tests, what the gate checked, what it **skipped**,
    and every open assumption from the story. A run that skipped a check must not read as a
    complete verification.
 
@@ -129,7 +134,8 @@ correctly after an interruption, in another session or in another tool:
 | `plan.md`, no `tests.md` | `stage-test` |
 | `tests.md`, gate `test` red-and-mapped | `stage-build` |
 | `build.md`, gate `build` failing | `stage-build` again (count the round) |
-| `build.md`, gate `build` passing, no `judge.md` | `stage-judge` |
+| `build.md`, gate `build` passing, no `tidy.md` | `stage-tidy` |
+| `tidy.md`, gate `tidy` passing, no `judge.md` | `stage-judge` |
 | `judge.md` with `changes-requested` | `stage-build` (count the round) |
 | `judge.md` with `story-conflict` | stop, escalate to the human |
 | `judge.md` with `pass`, no `document.md` | gate `document` is next after `stage-document` |

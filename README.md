@@ -39,7 +39,9 @@ No DCA assumptions. Pairs naturally with `dca-core`.
 
 The delivery pipeline: one backlog story from plan to verdict.
 
-- **Skills:** `factory-run` (orchestrator), `stage-plan`, `stage-test`, `stage-build`, `stage-judge`
+- **Skills:** `factory-run` (orchestrator), `stage-plan`, `stage-test`, `stage-build`, `stage-tidy`,
+  `stage-judge`, `stage-document`; `factory-backlog` writes the backlog a run reads and `factory-scope`
+  answers what a run may not decide for itself (a new context, a new relationship, a missing surface)
 - **Gate:** `story-gate.py` — a dependency-free script, copied into the project, run between stages
 
 Carries no architecture method — that stays in `dca-core`. What a project contributes lives in one

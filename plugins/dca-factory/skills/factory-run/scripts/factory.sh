@@ -11,13 +11,13 @@
 
 set -uo pipefail
 
-STAGES=(plan test build judge document)
+STAGES=(plan test build tidy judge document)
 # Which gate runs when. `plan` is the only gate that can run *before* its stage: it reads the
 # backlog alone. Every other gate judges the file its stage writes — `tests.md`, the implementation,
 # `document.md` — so it runs after it. Gating `test` up front would refuse every story for the
 # missing file its own stage is about to write.
 PRE_GATED=(plan)
-POST_GATED=(test build document)
+POST_GATED=(test build tidy document)
 GATE=".agents/factory/story-gate.py"
 TASKS="tasks"
 
@@ -71,6 +71,20 @@ invoke() {                                  # invoke <tool> <prompt>
 
 # --- install -----------------------------------------------------------------
 
+
+# Whether a directory holds nothing but links into the given source — then it is ours to replace
+# with one link, and no project-owned skill is lost.
+only_links_into() {
+  local dir=$1 source_abs=$2 entry
+  [ -d "$dir" ] || return 1
+  for entry in "$dir"/* "$dir"/.[!.]*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    [ -L "$entry" ] || return 1
+    case "$(readlink "$entry")" in "$source_abs"/*) ;; *) return 1 ;; esac
+  done
+  return 0
+}
+
 install_skills() {
   local tool=${1:-all} from=${2:-} copy_mode=${3:-}
   if [ -z "$from" ]; then
@@ -84,23 +98,38 @@ install_skills() {
     all)      targets=(.claude/skills .codex/skills .opencode/skills) ;;
     *)        usage ;;
   esac
+  local source_abs; source_abs=$(cd "$from" && pwd)
   for target in "${targets[@]}"; do
-    mkdir -p "$target"
     # A copy of a skill folder is a second truth: an edit at the source does not reach the project,
     # and the project keeps running yesterday's process while its author believes otherwise (that
     # is how a whole set of runs can use a stale stage). So a local source is *linked* by default;
     # --copy is for a real distribution, where there is no source directory to point at.
-    for skill in "$from"/*; do
-      [ -d "$skill" ] || continue
-      local name; name=$(basename "$skill")
-      rm -rf "$target/$name"
-      if [ -n "$copy_mode" ]; then
-        cp -R "$skill" "$target/$name"
-      else
-        ln -s "$(cd "$skill" && pwd)" "$target/$name"
-      fi
-    done
-    echo "factory: skills → $target ($([ -n "$copy_mode" ] && echo copied || echo "linked to $from"))"
+    #
+    # The *whole directory* is linked where it can be, not one link per skill: per-skill links
+    # freeze the set at install time, so a skill added later never appears and the project runs an
+    # incomplete pipeline without a word. Where the project keeps skills of its own in that
+    # directory, each skill is linked individually instead and the freeze is named.
+    if [ -n "$copy_mode" ]; then
+      mkdir -p "$target"
+      cp -R "$source_abs"/* "$target"/
+      echo "factory: skills → $target (copied; re-run install after a skill is added)"
+      continue
+    fi
+    if [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; then
+      rm -rf "$target"
+      mkdir -p "$(dirname "$target")"
+      ln -s "$source_abs" "$target"
+      echo "factory: skills → $target (linked to $from — a skill added there appears at once)"
+    else
+      mkdir -p "$target"
+      for skill in "$source_abs"/*; do
+        [ -d "$skill" ] || continue
+        rm -rf "$target/$(basename "$skill")"
+        ln -s "$skill" "$target/$(basename "$skill")"
+      done
+      echo "factory: skills → $target (per skill: the directory holds skills of its own)" >&2
+      echo "factory:   re-run install after a skill is added to the source" >&2
+    fi
   done
   check_dca_setup
   mkdir -p .agents/factory .githooks

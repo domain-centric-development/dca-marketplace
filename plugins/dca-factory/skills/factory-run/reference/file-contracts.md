@@ -9,7 +9,8 @@ fresh context, in a subagent or in a separate process without changing the resul
 | `stage-plan` | the story, the project's glossary and context map if present | `tasks/<story>/plan.md` |
 | `stage-test` | the story, `plan.md` | `tasks/<story>/tests.md` (with the `gate:tests` table) |
 | `stage-build` | the story, `plan.md`, `tests.md` | `tasks/<story>/build.md` |
-| `stage-judge` | the story and all three predecessors, the diff, and the profile's `reviews:`/`review.<perspective>:` lines | `tasks/<story>/judge.md` |
+| `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `tasks/<story>/tidy.md` |
+| `stage-judge` | the story and all its predecessors, the diff, and the profile's `reviews:`/`review.<perspective>:` lines | `tasks/<story>/judge.md` |
 | `stage-document` | the story, all predecessors, the project's documents and glossaries | `tasks/<story>/document.md` |
 
 `tasks/<story>/.tests-red` records which selectors the test stage actually saw fail. The build gate
