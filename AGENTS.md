@@ -39,6 +39,7 @@ elsewhere, this repository follows.
 dca-marketplace/
 ├── .claude-plugin/marketplace.json        # manifest — owner: the domain-centric-development org
 ├── plugins/dca-core/                      # DCA-specific skills + agents (Java/Spring and .NET/C#)
+│   ├── skills/{ddd-modelling,review-domain,review-boundaries}/  # craft + review perspectives as skills
 │   ├── .claude-plugin/plugin.json
 │   ├── skills/dca-bootstrap/              # installs the published packages, generates one architecture test
 │   │   ├── reference/archunit-rule-catalog.md   # GENERATED — see below
@@ -46,19 +47,36 @@ dca-marketplace/
 │   ├── skills/dca-knowledge/catalog/      # GENERATED mirror of dca-knowledge-catalog/bundle — never hand-edit
 │   ├── skills/{dca-discipline,dca-review,dca-scaffold,context-map,ubiquitous-language}/
 │   └── agents/{ddd-expert,ddd-reviewer,hexagonal-reviewer}.md
+├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
+│   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates + reference
+│   └── skills/{stage-plan,stage-test,stage-build,stage-judge}/
 ├── plugins/software-craftsmanship/        # project-agnostic skills + agents (any Java or .NET project)
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
 └── MULTI-HARNESS-PORTABILITY.md           # notes on running the skills outside Claude Code
 ```
 
-## The two plugins
+## The three plugins
 
 - **dca-core** — `/dca-bootstrap`, `/dca-discipline`, `/ubiquitous-language`, `/context-map`, `/dca-scaffold`,
   `/dca-review`, `/dca-knowledge`; agents `ddd-expert` (builder), `ddd-reviewer`, `hexagonal-reviewer`. Every skill
   and agent speaks both languages: Java/Spring (`UseCase<I,O>`, packages, `package-info.java`) and .NET/C#
-  (`IUseCase<TIn,TOut>`, namespaces, a `[BoundedContext]` marker class).
-- **software-craftsmanship** — `/tdd`, `/clean-code`, `/adr`; agents `e2e-tester`, `clean-code-reviewer`. No DCA
-  assumptions; usable alone.
+  (`IUseCase<TIn,TOut>`, namespaces, a `[BoundedContext]` marker class). Since 0.4.0 the tactical-modelling
+  craft and the domain/boundaries review perspectives are **skills** (`ddd-modelling`, `review-domain`,
+  `review-boundaries`); `ddd-expert`, `ddd-reviewer` and `hexagonal-reviewer` are thin agents that apply them
+  and add only an isolated context and a tool restriction.
+- **dca-factory** — the *delivery* layer, kept apart from the method on purpose (three layers, three owners:
+  methodology → `dca-core`, stack profile → the project, pipeline → here). `factory-run` runs one backlog story
+  through `stage-plan`, `stage-test`, `stage-build`, `stage-judge`; `skills/factory-run/scripts/story-gate.py`
+  is the deterministic check between the stages, copied into a consuming project as
+  `.agents/factory/story-gate.py`. Carriers are portable by rule: `SKILL.md` folders and one script, no hooks,
+  no orchestration script, no agent frontmatter, no `disable-model-invocation` — Codex discovers the same folder
+  from a project's `.codex/skills/`. Project knowledge lives in two places the project owns: the stack profile
+  (`.agents/factory/factory.profile.yaml`) and the backlog, glossary and context map.
+- **software-craftsmanship** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`; agents `e2e-tester`,
+  `clean-code-reviewer`. No DCA assumptions; usable alone. `e2e-testing` holds the end-user-testing craft
+  (Page Objects, stable selectors, diagnosis-first protocol) and `review-craft` the craft review perspective;
+  `e2e-tester` and `clean-code-reviewer` are the thin agents around them — the split keeps both usable in
+  tools that have no agents.
 
 ## Generated content — never hand-edit
 
@@ -99,6 +117,9 @@ interfaces are aliased to the library ones or kept and declared through `DcaLayo
 | Use-case / result pattern in the guide or samples | `dca-review/reference/use-case-pattern.md`, `dca-scaffold/templates/use-case/` |
 | Guide text (`dca-guide/*.md`) or authored catalog nodes | regenerate the catalog; the mirror follows |
 | Context-map relationships or renderer options | `context-map/SKILL.md` |
+| Craft that a delivery stage or a review perspective needs (test writing, implementation, a review angle) | the **skill** carries it (portable — every tool reads skills); an agent stays a thin wrapper around that skill for isolated context and a restricted tool set. Knowledge in an agent alone is Claude-only |
+| Delivery process: backlog fields, stage order, gate checks, file hand-overs | `dca-factory/skills/factory-run/SKILL.md`, its `reference/{backlog-contract,file-contracts}.md`, `scripts/story-gate.py`, and the affected `stage-*/SKILL.md`. A gate check is a script change, never a hook or a stage self-assessment |
+| A stage needs project knowledge (build command, test runner, source set) | it goes into the project's stack profile, never into a skill |
 
 Sync targets in the other direction: root `AGENTS.md` § 5 (plugin contents, installation), `planning/porting-status.md`
 row "Marketplace bootstrap branch".
@@ -126,7 +147,9 @@ bootstrap from templates to packages was such a change.
 ```
 
 Try `/dca-bootstrap` on a fresh Spring Boot project and on a fresh .NET web project; both must end with a green
-architecture test that runs the whole rule catalog. Published installation:
+architecture test that runs the whole rule catalog. For `dca-factory`, run one story through `factory-run` on a
+project that is not a sample and check the gate's red→green transition; the skills must contain no sample
+vocabulary and no project path. Published installation:
 `/plugin marketplace add domain-centric-development/dca-marketplace`.
 
 ## Commit message format

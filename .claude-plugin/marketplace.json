@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "dca-marketplace",
-  "description": "Claude Code plugins for Domain-Centric Architecture (DCA) and general software craftsmanship — composable skills and reviewer agents for daily practice.",
+  "description": "Claude Code plugins for Domain-Centric Architecture (DCA) and general software craftsmanship \u2014 composable skills and reviewer agents for daily practice.",
   "owner": {
     "name": "domain-centric-development"
   },
@@ -17,12 +17,21 @@
     },
     {
       "name": "software-craftsmanship",
-      "description": "Project-agnostic craftsmanship skills and agents: Test-Driven Development workflow, Clean Code principles while writing, Architecture Decision Records, and a Clean-Code reviewer. Usable on any Java or .NET project — no DCA assumptions.",
+      "description": "Project-agnostic craftsmanship skills and agents: Test-Driven Development workflow, Clean Code principles while writing, Architecture Decision Records, and a Clean-Code reviewer. Usable on any Java or .NET project \u2014 no DCA assumptions.",
       "author": {
         "name": "Christoph Bloemer"
       },
       "category": "development",
       "source": "./plugins/software-craftsmanship"
+    },
+    {
+      "name": "dca-factory",
+      "description": "Delivery pipeline for DCA projects: a markdown backlog contract (epics with intent, goal, outcome-event metric and domain contact), the stage skills plan/test/build/judge with file hand-overs, a dependency-free story gate script that checks epic completeness and one red-then-green end-user test per acceptance criterion, and one orchestrator skill. Carries no architecture method and no project knowledge \u2014 those stay in dca-core and in the project's stack profile.",
+      "author": {
+        "name": "Christoph Bloemer"
+      },
+      "category": "development",
+      "source": "./plugins/dca-factory"
     }
   ]
 }

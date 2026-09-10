@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# The enforcement boundary. Tool hooks and deny rules do not port between agent tools —
+# but every tool commits through git, so this is where the guard belongs. A tool-specific
+# hook stays a fast feedback loop; it is never the boundary.
+#
+# Install once per clone:  git config core.hooksPath .githooks
+#
+# Runs the commands the stack profile declares. A command the profile does not declare is
+# skipped and named — a hook that fails on something nobody configured gets switched off,
+# and then there is no guard at all.
+
+set -uo pipefail
+
+PROFILE="${FACTORY_PROFILE:-.agents/factory/factory.profile.yaml}"
+# Which profile commands run before a commit. Keep it to what a developer will wait for: a hook
+# that takes minutes gets bypassed with --no-verify, and then it guards nothing. On a slow stack,
+# narrow it (FACTORY_PRECOMMIT_CHECKS="compile architecture") and let CI run the rest.
+CHECKS="${FACTORY_PRECOMMIT_CHECKS:-compile test architecture format}"
+
+if [ ! -f "$PROFILE" ]; then
+  echo "pre-commit: no stack profile at $PROFILE — nothing to check." >&2
+  exit 0
+fi
+
+read_key() {
+  sed -n "s/^$1:[[:space:]]*//p" "$PROFILE" | head -1 | sed 's/^"\(.*\)"$/\1/; s/^'"'"'\(.*\)'"'"'$/\1/'
+}
+
+failed=0
+skipped=""
+
+for key in $CHECKS; do
+  command=$(read_key "$key")
+  if [ -z "$command" ]; then
+    skipped="$skipped $key"
+    continue
+  fi
+  printf 'pre-commit: %s → %s\n' "$key" "$command" >&2
+  if ! output=$(eval "$command" 2>&1); then
+    echo "pre-commit: $key failed." >&2
+    printf '%s\n' "$output" | tail -40 >&2
+    failed=1
+  fi
+done
+
+[ -n "$skipped" ] && echo "pre-commit: skipped (not in the profile):$skipped" >&2
+
+if [ "$failed" -ne 0 ]; then
+  echo "pre-commit: commit refused. Fix the above, or commit with --no-verify and say why." >&2
+  exit 1
+fi
+
+exit 0

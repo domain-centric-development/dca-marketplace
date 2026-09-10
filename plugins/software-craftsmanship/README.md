@@ -7,20 +7,26 @@ but stands on its own.
 
 ## What's inside
 
-### Skills (3) — applied while writing
+### Skills (5) — applied while writing
 
 | Skill | Purpose | When it triggers |
 |---|---|---|
 | `/tdd` | Red-Green-Refactor workflow guidance | Adding new behavior |
 | `/clean-code` | Naming, function size, SLAP, smells, Boy-Scout-Rule | Any code edit |
 | `/adr` | Architecture Decision Records (Michael Nygard format, immutable after Accepted) | Non-trivial architectural choice |
+| `/e2e-testing` | The end-user-testing craft: Page Objects, stable selectors, one flow per test, explicit waits, diagnosis-first when a test breaks | Adding or fixing an end-user test |
+| `/review-craft` | The **craft** review perspective: naming, function size and SLAP, SOLID, smells, DRY with judgement | Reviewing a change for readability |
 
-### Agents (2) — specialist builders and reviewers
+### Agents (2) — the same craft in an isolated context
 
-| Agent | Role | Sources |
+| Agent | Applies | Adds |
 |---|---|---|
-| `e2e-tester` | **Builder** — Playwright E2E tests + Page Objects (Playwright for Java or for .NET) with stable `data-test` selectors, one-flow-per-test, no sleeps | Playwright docs + Page Object Pattern |
-| `clean-code-reviewer` | **Reviewer** — SOLID, naming, function size, smells, DRY with judgment, named refactorings | Martin, Hunt/Thomas, Fowler |
+| `e2e-tester` | `/e2e-testing` | own context, write tools — for a long test-writing session |
+| `clean-code-reviewer` | `/review-craft` | own context, read-only tools — no "fix" slips into a review |
+
+**Knowledge lives in the skill, isolation in the agent.** Each agent is a thin wrapper that applies
+its skill and adds nothing to it: an agent exists only in a tool that has agents, so craft held in
+an agent alone would be unavailable everywhere else.
 
 ## Why these are separate from dca-core
 

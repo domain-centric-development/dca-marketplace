@@ -1,0 +1,30 @@
+---
+id: {{STORY_ID}}
+epic: {{EPIC_ID}}
+status: draft
+context: {{BOUNDED_CONTEXT}}
+title: {{STORY_TITLE}}
+depends_on: []
+---
+
+# {{STORY_TITLE}}
+
+## Story
+
+As {{ROLE}} I want {{CAPABILITY}} so that {{BENEFIT}}.
+
+## Acceptance criteria
+
+One line per criterion, `- <key>: <criterion>`. The key is lowercase and hyphenated and
+names the behaviour — never a number, because a number means nothing once the list is
+reordered. Every key needs one end-user test before the build stage may run.
+
+- {{CRITERION_KEY}}: {{OBSERVABLE_BEHAVIOUR}}
+
+## Assumptions
+
+Everything the story rests on that only the domain contact can confirm. Each line is a
+question, answered or open — this is the asynchronous channel to the domain expert, not a
+place for decisions the team took itself.
+
+- open: {{QUESTION}}

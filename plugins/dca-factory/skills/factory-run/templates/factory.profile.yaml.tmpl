@@ -1,0 +1,37 @@
+# Stack profile — the only place that knows how this project builds and tests.
+# Flat `key: value` pairs. A command that is not declared here is skipped by the
+# gate and named in its report; it never fails a stage.
+#
+# compile      makes the test sources compile without running them
+# test         runs the unit tests
+# e2eTest      runs the end-user tests (falls back to `test` when absent)
+# filterFlag   the flag that selects a single test
+# filterFormat how a selector `<Class>#<method>` is written for this runner
+# architecture runs the architecture rule suite — the gate runs it in the build stage
+# format       runs the formatter check — the gate runs it in the build stage
+# carrier.<s>  the skill or agent that carries one stage's craft (`carrier.test`, `carrier.build`,
+#              `carrier.plan`). A skill works in every tool; an agent only where a tool has them
+# knowledge    the ONE skill a stage may treat as an authority, with citations. Name it only when
+#              the project vouches for it being current: a vendored catalog from an older release
+#              names rules and markers that no longer exist, and a citation makes that look verified.
+#              Unnamed means the stages work from the project's own rules, markers and documents
+# contextMap   where the project keeps its context map (found by convention when absent)
+# glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
+# reviews      perspectives the judge stage covers *in addition to* domain, boundaries and craft
+# review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
+#              tool; a review *agent* only in a tool that has agents — where it is missing, the
+#              judge runs the built-in pass itself and says so
+
+compile: {{COMPILE_COMMAND}}
+test: {{TEST_COMMAND}}
+e2eTest: {{E2E_TEST_COMMAND}}
+filterFlag: {{FILTER_FLAG}}
+filterFormat: {{FILTER_FORMAT}}
+architecture: {{ARCHITECTURE_COMMAND}}
+format: {{FORMAT_COMMAND}}
+#carrier.test: <the skill that carries this project's end-user testing craft>
+#carrier.build: <the skill that carries this project's implementation craft>
+# A perspective is found by description when a matching review skill is installed; name a carrier
+# here only to override that choice or to bind an added perspective.
+#reviews: security, performance
+#review.security: <the review skill that carries it>

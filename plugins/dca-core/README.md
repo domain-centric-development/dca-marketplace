@@ -7,7 +7,7 @@ Code, ADRs), see the companion plugin
 
 ## What's inside
 
-### Skills (7) — applied while writing
+### Skills (10) — applied while writing
 
 | Skill | Purpose | When it triggers |
 |---|---|---|
@@ -17,20 +17,28 @@ Code, ADRs), see the companion plugin
 | `/dca-bootstrap` | Adds the published packages (Java: `dca-building-blocks` + `dca-archunit`; .NET: `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit`), generates one architecture test with the project's `DcaLayout` and a `dca-archunit.properties`, and wires the project's `CLAUDE.md` to the knowledge catalog | Introducing DCA conventions into a new or existing Java or .NET codebase |
 | `/dca-scaffold` | Scaffolds bounded contexts, use cases (Command/Query + InputPort + Result + Impl), aggregate roots — Java or C# | Creating new DCA structure for a feature |
 | `/dca-review` | Semantic review of Java or .NET code against DCA conventions (aggregate design, use-case granularity, port semantics, result shape, event hygiene) — complements the rule catalog | Auditing a diff or path set for DCA compliance |
+| `/ddd-modelling` | The tactical-modelling craft: aggregates, entities, values, ids, domain and integration events, domain services, factories, specifications, repositories and stores, in both language spellings | Designing or implementing a domain concept |
+| `/review-domain` | The **domain** review perspective: real invariants vs. anemic records, entity vs. value, aggregate boundaries, ubiquitous language, event hygiene, repository vs. store | Reviewing a change from the model's point of view |
+| `/review-boundaries` | The **boundaries** review perspective: dependency direction, port granularity, adapter direction, framework leaks, input-port shape, translation at the edge | Reviewing a change from the ports-and-adapters point of view |
 | `/dca-knowledge` | Grounded Q&A + recipe-driven **build loop** over the OKF knowledge catalog — traverses marker↔rule↔ADR↔section links, cites the source `resource:`, and `save` promotes answers into permanent catalog nodes | Asking what DCA says about X, why an ADR was made, or constructing DCA code ("add a use case") from recipes + rule checklists |
 
-### Agents (3) — builder + review-time perspectives
+### Agents (3) — the same craft in an isolated context
 
-| Agent | Role | Perspective / Sources |
+| Agent | Applies | Adds |
 |---|---|---|
-| `ddd-expert` | **Builder** — designs and implements tactical DDD code (aggregates, events, repositories, value objects, services, factories, specifications) | Evans, Vernon |
-| `ddd-reviewer` | **Reviewer** — checks finished code for DDD compliance | Evans, Vernon |
-| `hexagonal-reviewer` | **Reviewer** — dependency direction, port granularity, adapter direction, framework leaks, use-case shape | Cockburn, Palermo, Hombergs |
+| `ddd-expert` | `/ddd-modelling` | own context, write tools — for a long modelling session |
+| `ddd-reviewer` | `/review-domain` | own context, read-only tools — no "fix" slips into a review |
+| `hexagonal-reviewer` | `/review-boundaries` | same, for the boundaries perspective |
 
-`ddd-expert` and `ddd-reviewer` are complementary: the expert *writes*, the
-reviewer *audits*. Invoke the expert when designing a new aggregate; invoke
-the reviewer (alongside `hexagonal-reviewer` and `clean-code-reviewer`) for
-PR-style review.
+**Knowledge lives in the skill, isolation in the agent.** Each agent is a thin wrapper that applies
+its skill and adds nothing to it. That split is deliberate: an agent only exists in a tool that has
+agents, so knowledge held in an agent alone would be unavailable everywhere else. A project on
+another agent tool loads the same skills and works to the same standard; where agents exist, the
+reviewers can also run in parallel, each in its own context.
+
+Builder and reviewer stay complementary: `/ddd-modelling` *writes*, `/review-domain` *audits*. Use
+the first when designing an aggregate, the reviewers (alongside `/review-craft` from
+`software-craftsmanship`) for PR-style review.
 
 ## Recommended companion
 

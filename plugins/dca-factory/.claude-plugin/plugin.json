@@ -1,0 +1,8 @@
+{
+  "name": "dca-factory",
+  "version": "0.1.0",
+  "description": "Delivery pipeline for Domain-Centric Architecture projects: a backlog contract, four stage skills with file hand-overs, a deterministic story gate script and one orchestrator. Carries no architecture method of its own — that stays in dca-core.",
+  "author": {
+    "name": "Christoph Bloemer"
+  }
+}

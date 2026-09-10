@@ -1,7 +1,7 @@
 {
   "name": "software-craftsmanship",
-  "description": "Project-agnostic craftsmanship skills and agents: Test-Driven Development workflow, Clean Code principles while writing, Architecture Decision Records (Michael Nygard format), and a Clean-Code reviewer. Usable on any Java or .NET project without DCA assumptions. Pairs well with dca-core for full DCA practice.",
-  "version": "0.2.0",
+  "description": "Project-agnostic craftsmanship skills and agents: Test-Driven Development workflow, Clean Code principles while writing, Architecture Decision Records (Michael Nygard format), the craft of end-user browser tests (Page Objects, stable selectors), plus Clean-Code reviewer and E2E builder agents. Usable on any Java or .NET project without DCA assumptions. Pairs well with dca-core for full DCA practice.",
+  "version": "0.3.0",
   "author": {
     "name": "Christoph Bloemer"
   },
@@ -12,6 +12,8 @@
     "adr",
     "architecture-decision-records",
     "refactoring",
-    "pragmatic-programmer"
+    "pragmatic-programmer",
+    "e2e",
+    "page-object"
   ]
 }

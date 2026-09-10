@@ -9,8 +9,9 @@ Architecture (DCA)** practice and general **software craftsmanship**.
 
 DCA-specific skills and agents:
 
-- **Skills:** `/dca-discipline`, `/ubiquitous-language`, `/context-map`, `/dca-bootstrap`, `/dca-scaffold`, `/dca-review`, `/dca-knowledge`
-- **Agents:** `ddd-expert` (builder), `ddd-reviewer`, `hexagonal-reviewer`
+- **Skills:** `/dca-discipline`, `/ubiquitous-language`, `/context-map`, `/dca-bootstrap`, `/dca-scaffold`, `/dca-review`, `/dca-knowledge`, `/ddd-modelling`, `/review-domain`, `/review-boundaries`
+- **Agents:** `ddd-expert`, `ddd-reviewer`, `hexagonal-reviewer` — thin wrappers that apply those
+  skills in an isolated context
 - **Knowledge:** a vendored OKF knowledge catalog (~350 markdown nodes: DCA guide
   text, marker contracts, architecture rules, recipes, decisions, pitfalls,
   templates) ships inside `/dca-knowledge`, so grounded Q&A and the recipe-driven
@@ -28,18 +29,32 @@ and rule checklists instead of from memory.
 
 Project-agnostic craftsmanship — usable on any Java or .NET project:
 
-- **Skills:** `/tdd`, `/clean-code`, `/adr`
-- **Agents:** `e2e-tester` (builder), `clean-code-reviewer`
+- **Skills:** `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/review-craft`
+- **Agents:** `e2e-tester`, `clean-code-reviewer` — thin wrappers that apply those skills in an
+  isolated context
 
 No DCA assumptions. Pairs naturally with `dca-core`.
 
-## Why two plugins?
+### [dca-factory](plugins/dca-factory/)
 
-Craftsmanship practices (TDD, Clean Code, ADRs) are valuable independent of
-architecture style. Splitting them out means:
+The delivery pipeline: one backlog story from plan to verdict.
+
+- **Skills:** `factory-run` (orchestrator), `stage-plan`, `stage-test`, `stage-build`, `stage-judge`
+- **Gate:** `story-gate.py` — a dependency-free script, copied into the project, run between stages
+
+Carries no architecture method — that stays in `dca-core`. What a project contributes lives in one
+stack profile it owns: build and test commands, the reviewer for a perspective, the skill that
+carries a stage's craft.
+
+## Why three plugins?
+
+Craftsmanship practices (TDD, Clean Code, ADRs, end-user testing) are valuable independent of
+architecture style, and a delivery process is a third concern again — methodology, craft and
+pipeline change at different times and belong to different owners. Splitting them means:
 
 - Teams not using DCA can still adopt `software-craftsmanship`
-- DCA-using teams install both for a complete daily-practice setup
+- DCA-using teams install `dca-core` plus `software-craftsmanship` for daily practice, and
+  `dca-factory` when they want stories delivered through gates
 - Updates and versioning evolve at their own pace per plugin
 
 ## Installation
@@ -49,6 +64,7 @@ architecture style. Splitting them out means:
 
 /plugin install dca-core@dca-marketplace
 /plugin install software-craftsmanship@dca-marketplace
+/plugin install dca-factory@dca-marketplace
 ```
 
 Acceptance: bootstrapping a fresh project ends with the DCA rule catalog running from the published
