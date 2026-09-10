@@ -145,20 +145,39 @@ correctly after an interruption, in another session or in another tool:
 
 ## Execution tier
 
-Run each stage in the most isolated way this tool offers, and say in the report which tier you
-used:
+Run each stage in the most isolated way available, take the highest tier this tool actually
+delivers, and say in the report which one you used:
 
+- **one process per stage — the runner outside the session.** Where the project has the runner
+  script (`.agents/factory/factory.sh`, or the copy in this skill's `scripts/`), the whole run can
+  be handed to it: `factory.sh run --story <id> --tool <tool>`. It calls the tool once per stage, so
+  every stage begins with an empty context by construction rather than by discipline, and it applies
+  the gates, the judge's verdict, the round counter and the file checks itself. This is the highest
+  tier, and the one to prefer when the human asked for a story to be delivered rather than for a
+  particular stage to be done. Per-tool flags (a model, an effort level, a sandbox) come from the
+  environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`, `FACTORY_OPENCODE_ARGS` — because they
+  are the tool's configuration and never the process's.
 - **subagent per stage** when the tool can start one *and it comes back*: the stage gets the story
   and its predecessor file as its whole input.
 - **in-session** otherwise: you carry out the stage assignment yourself, in order, reading only
   the story and the predecessor file for that stage — not what you remember from earlier stages.
   The file contract plus the gate is what keeps this honest.
 
+Two situations put you *below* the highest tier on purpose. A single stage the human asked for
+(`/stage-build` on a story that already has a plan) is done here, not through the runner — the
+runner delivers whole stories. And where the tool cannot start processes at all, or the script is
+absent, in-session is the correct answer, not a defect: say so in the report.
+
 Degrade rather than wait. A stage is finished when **its file exists**, not when a delegation
 reports success. If a stage you delegated has produced no file when control returns to you, do
 that stage in-session and note the fall-back in the report — a run that stalls waiting for a
 subagent mechanism delivers nothing, and the file contract makes the in-session variant just as
 correct.
+
+One thing the runner does that an in-session run cannot: it reads the judge's verdict from the
+file and acts on it — `changes-requested` goes back to the build stage and increments the round
+counter, `story-conflict` stops the run. In-session you do that yourself, from the file rather than
+from what you remember writing.
 
 Isolation is a comfort; the gate is the correctness argument. Never skip a gate because a stage
 reported success — a stage judging its own work is exactly what the gate replaces.

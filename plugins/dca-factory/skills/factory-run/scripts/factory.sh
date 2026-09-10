@@ -6,6 +6,10 @@
 #   factory.sh install [--tool claude|codex|opencode|all] [--from <skill folder>] [--copy]
 #   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--dry-run]
 #
+# Per-tool flags come from the environment, because a model and an effort level are the
+# tool's configuration and not the process': FACTORY_CLAUDE_ARGS, FACTORY_CODEX_ARGS,
+# FACTORY_OPENCODE_ARGS.
+#
 # The tool adapters below are the only tool-specific lines in the whole pipeline. Adding a tool
 # is one entry, not a change to any stage.
 
@@ -59,12 +63,19 @@ allowed_commands() {
 
 invoke() {                                  # invoke <tool> <prompt>
   local tool=$1 prompt=$2
+  # Which model, which effort, which sandbox a tool runs with is the tool's configuration and not
+  # the pipeline's — but a default that does not work stops the run, so each adapter takes extra
+  # flags from the environment: FACTORY_CLAUDE_ARGS, FACTORY_CODEX_ARGS, FACTORY_OPENCODE_ARGS.
+  # Example: FACTORY_OPENCODE_ARGS="--model <provider>/<model>" where the default provider is not
+  # authenticated. The pipeline never chooses a model; it only stops standing in the way of one.
   case "$tool" in
     claude)   claude -p "$prompt" --permission-mode acceptEdits \
-                --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" ;;
+                --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
+                ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} ;;
     codex)    codex exec -s workspace-write \
-                -c sandbox_workspace_write.network_access=true "$prompt" ;;
-    opencode) opencode run "$prompt" ;;
+                -c sandbox_workspace_write.network_access=true \
+                ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" ;;
+    opencode) opencode run ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" ;;
     *)        echo "factory: unknown tool '$tool'" >&2; return 2 ;;
   esac
 }
@@ -74,6 +85,21 @@ invoke() {                                  # invoke <tool> <prompt>
 
 # Whether a directory holds nothing but links into the given source — then it is ours to replace
 # with one link, and no project-owned skill is lost.
+
+# The craft skills a stack profile may name as a carrier, where they sit next to this pipeline in
+# the same checkout. Claude Code finds them through its plugins; a tool without that mechanism
+# finds only what the project's own skill directory holds.
+method_skill_dirs() {
+  local source_abs=$1 plugins dir found=""
+  plugins=$(cd "$source_abs/../.." 2>/dev/null && pwd) || return 0
+  for dir in "$plugins"/*/skills; do
+    [ -d "$dir" ] || continue
+    [ "$(cd "$dir" && pwd)" = "$source_abs" ] && continue
+    found="$found $(cd "$dir" && pwd)"
+  done
+  echo "$found"
+}
+
 only_links_into() {
   local dir=$1 source_abs=$2 entry
   [ -d "$dir" ] || return 1
@@ -115,7 +141,26 @@ install_skills() {
       echo "factory: skills → $target (copied; re-run install after a skill is added)"
       continue
     fi
-    if [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; then
+    local method_dirs; method_dirs=$(method_skill_dirs "$source_abs")
+    if [ -n "$method_dirs" ] && [ "$target" != ".claude/skills" ]; then
+      # A tool without a plugin mechanism finds *only* what is in this directory, so the craft the
+      # profile names as a carrier (`carrier.build:`, `review.<perspective>:`) has to be here too —
+      # otherwise the pipeline ports and the craft does not, and every stage falls back with a note.
+      # Several sources cannot be one directory link, so these are per skill: an edited skill is
+      # still live, but a *newly added* one needs another install, and that is said out loud.
+      rm -rf "$target"; mkdir -p "$target"
+      local linked=0 dir skill
+      for dir in "$source_abs" $method_dirs; do
+        for skill in "$dir"/*; do
+          [ -d "$skill" ] || continue
+          rm -rf "$target/$(basename "$skill")"
+          ln -s "$skill" "$target/$(basename "$skill")"
+          linked=$((linked + 1))
+        done
+      done
+      echo "factory: skills → $target ($linked linked: the pipeline plus the craft it names as carriers)"
+      echo "factory:   per skill, because they come from several sources — re-run install after a skill is added" >&2
+    elif [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; then
       rm -rf "$target"
       mkdir -p "$(dirname "$target")"
       ln -s "$source_abs" "$target"
