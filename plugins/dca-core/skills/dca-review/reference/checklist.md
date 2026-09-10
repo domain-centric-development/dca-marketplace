@@ -136,7 +136,7 @@ The shape of the port is as important as its existence. Run these checks on ever
   - Fix: split by responsibility — `OrderRepository` (findById, save), `OrderSearchPort` (findByCustomer, searchByDateRange), `OrderArchivePort` (archive, restore, exportToCsv).
   - Why it matters: forces every adapter impl to implement methods it doesn't need; couples unrelated use cases together.
 
-- [ ] **Anti-pattern flag — Anemic port:** generic, domain-meaningless name like `*DataAccessor`, `*PersistenceHandler`, `*Manager`, `*Gateway` (when not a real gateway pattern).
+- [ ] **Anti-pattern flag — Anemic port:** generic, domain-meaningless name like `*DataAccessor`, `*PersistenceHandler`, `*Gateway` (when not a real gateway pattern).
   - Symptom: `OrderDataAccessor` instead of `OrderRepository`; `CustomerPersistenceHandler` instead of `CustomerRepository`.
   - Fix: rename using DCA vocabulary — `*Repository` (aggregates), `*Store` (operational data), `*DataPort` (cross-context read), `*EventPublisher` (events).
   - Why it matters: anemic names erase intent — a reader can't tell if it manages an aggregate, records events, or fetches from another context.

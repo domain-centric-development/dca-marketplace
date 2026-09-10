@@ -174,7 +174,7 @@ Why: incoming adapters drive the application through input ports only — direct
 access bypasses transactions, authorization, and orchestration.
 
 ### Technical names in the domain
-Symptoms: `*Manager`/`*Helper`/`*Util`/`*Impl` classes in `domain/`, or bucket packages
+Symptoms: `*Helper`/`*Util`/`*Impl` classes in `domain/` (`Manager` is valid domain vocabulary), or bucket packages
 like `entities/`, `valueobjects/`, `helpers/`, `util/`.
 Why: technical names signal a missing domain concept; packages are named by domain concept.
 

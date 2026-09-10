@@ -14,7 +14,7 @@ disable-model-invocation: false
 
 # /dca-knowledge — Grounded Q&A over the OKF catalog
 
-The OKF bundle is the **canonical, machine-readable DCA knowledge base**: ~300 atomic
+The OKF bundle is the **canonical, machine-readable DCA knowledge base**: several hundred atomic
 markdown nodes, each with typed frontmatter and bundle-relative cross-links forming a
 graph. Two zones:
 

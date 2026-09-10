@@ -75,7 +75,7 @@ The conventions are one set; the two languages spell them differently. Review ei
 | `*Resource` | REST controller (DCA convention, ADR-020) | `adapter/incoming/api/` |
 | `*Controller` | MVC view controller | `adapter/incoming/web/` |
 | `*EventConsumer` | integration event listener | `adapter/incoming/event/` |
-| `*Response` | adapter-layer DTO (e.g. JSON shape) | `adapter/incoming/...` |
+| `*Response` | adapter-layer DTO (e.g. JSON shape, provider reply) | `adapter/incoming/...` or `adapter/outgoing/...` |
 | `*ViewModel` | MVC view model | `adapter/incoming/web/` |
 | `*Dto` | data transfer object | `adapter/...` (NEVER in domain/application) |
 | `*Converter` | mapping logic between adapter and application | `adapter/...` |
