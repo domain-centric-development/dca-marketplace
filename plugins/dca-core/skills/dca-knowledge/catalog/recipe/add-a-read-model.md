@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add a read model"
+title: Add a read model
 tags: [recipe, application, cqrs, use-case, value-object]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-003.md, /rule/usecase/dca-use-006.md, "/rule/retired.md#dca-tac-022", /rule/tactical/dca-tac-008.md, /rule/naming/dca-nam-011.md, /rule/naming/dca-nam-007.md, /marker/tactical/value.md, /marker/port-in/usecase.md]
 ---
 
 Build a view for a query without going through the full aggregate write journey. A read model is *shaping data for a reader*, not modelling behaviour — so it deliberately sidesteps commands, invariants-that-mutate, and event publishing. This recipe binds two skeletons together: the [enriched domain model](/template/enriched-domain-model.md) (a Value Object that combines aggregate state with cross-context data and owns cross-context read rules) and the [ViewModel](/template/view-model.md) (a primitive-only presentation record at the adapter edge). It tells you **which to build, when, and in what order** — the *how the read is produced* question is decided first in [Plain query use case or a dedicated read model](/decision/read-model-vs-domain-query.md).
@@ -17,12 +20,12 @@ Build a view for a query without going through the full aggregate write journey.
 
 ## Rules to satisfy (build-time checklist)
 
-- [Queries must end with `Query` and reside in the application package](/rule/usecase/use-case-queries-must-end-with-query-and-reside-in-application-package.md)
-- [Result models must end with `Result` and reside in the application package](/rule/usecase/use-case-result-models-must-end-with-result-and-reside-in-application-package.md)
-- [Enriched domain models must be Value Object records](/rule/tactical/enriched-domain-models-must-be-value-object-records.md)
-- [Value objects must not contain aggregate roots or entities](/rule/tactical/value-objects-must-not-contain-aggregate-roots-or-entities.md)
-- [View models must reside in adapter.incoming.web packages](/rule/naming/viewmodels-must-reside-in-adapter-incoming-web-packages.md)
-- [DTOs must reside in the adapter package, not in domain or application](/rule/naming/dtos-must-reside-in-the-adapter-layer-not-in-domain-or-application.md)
+- [Queries must end with `Query` and reside in the application package](/rule/usecase/dca-use-003.md)
+- [Result models must end with `Result` and reside in the application package](/rule/usecase/dca-use-006.md)
+- [Enriched domain models must be Value Object records](/rule/retired.md#dca-tac-022)
+- [Value objects must not contain aggregate roots or entities](/rule/tactical/dca-tac-008.md)
+- [View models must reside in adapter.incoming.web packages](/rule/naming/dca-nam-011.md)
+- [DTOs must reside in the adapter package, not in domain or application](/rule/naming/dca-nam-007.md)
 
 ## Anchors
 

@@ -1,22 +1,42 @@
 ---
 type: Note
-title: "Domain vs integration events in an outbox / event store"
+title: Domain vs integration events in an outbox / event store
 tags: [note, events, outbox]
+review: reviewed
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/domainevent.md, /marker/tactical/integrationevent.md, /guide/spring-modulith/event-driven-architecture-in-spring-modulith.md, /guide/readme/integration-patterns.md, /guide/spring-modulith/module-communication.md, /guide/readme/rules.md]
 ---
 
-Should an outbox store domain events or integration events? The short answer: an **external** (broker) outbox stores **integration events**; an **internal** event-publication registry stores **domain events**. They are the same transactional-outbox pattern at two scopes. This note compounds a longer Q&A — see the [decision guide](/decision/event-delivery-sync-async-and-outbox.md) for the table.
+## Classification and process scope
 
-## Three things people conflate
+Events are optional: an aggregate that never registers a fact needs no publisher dependency. `DCA-USE-009`
+exempts a save only when the repository type argument and the aggregate's complete hierarchy can be inspected
+and no registration is found; unresolved arguments, incomplete scans and undecidable external helpers retain the check.
+Contracts belong in the configured `{context}/events/` segment. Translators belong in `adapter/outgoing/event/`;
+transport and storage are separate adapters. Schema versions belong in integration-event type metadata.
+`DCA-ADV-006/007` use a name heuristic for `schemaVersion`, `eventVersion`, `contractVersion`; a business `version` is allowed.
 
-**1. Event store ≠ outbox.** An event-sourcing *event store* keys by aggregate, is append-only, never "completes" — events are the source of truth. An *outbox* keys by delivery, tracks completion/retry, and is a relay buffer over a DB that is itself the truth. The Spring Modulith `EVENT_PUBLICATION` table is an outbox (per-listener completion + redelivery), **not** an event store.
+An in-process registry may deliver domain events within a context **or integration events between contexts**.
+Process location does not determine event classification. Synchronous delivery is atomic only for local resources
+participating in the same transaction; a synchronous remote effect cannot be rolled back with the aggregate.
+For an external effect, either (A) an own-context async consumer receives a durably captured domain fact, or
+(B) an own-context synchronous translator captures an integration contract consumed asynchronously. Cross-context
+consumers always use the integration contract. No broker is required to cross a context boundary.
 
-**2. Internal registry vs external outbox.** Both persist the event in the publishing transaction and relay at-least-once. The internal registry redelivers to **in-process** listeners and stores the **domain event** (it never leaves the context). The external outbox relays to a **broker** and stores the **integration event** (versioned, serializable, channel-neutral — the foreign wire payload is built later by the delivery adapter, which is the ACL).
+Capture the publication in the aggregate transaction; establish delivery eligibility with commit, then wake the
+worker after commit. Recovery reads committed publications even when that wakeup was lost. Track completion per
+consumer/effect, retry only unfinished work with bounded attempts and exponential backoff, retain terminal failures
+for inspection and deliberate replay. Reuse the original payload and `eventId + consumer + effect` identity.
+Provider acceptance is the acknowledgement point. If the process stops after acceptance but before local acknowledgement,
+provider-supported idempotency can deduplicate a repeated key; without it, a duplicate external effect remains possible.
+For each concrete effect, decide whether rendering/template version and recipient are captured or resolved later;
+the event snapshot alone does not decide these. No universal email policy is implied.
 
-**3. Delivery mode, not event type, decides outbox need.** Sync listener → atomic, no outbox. Async + must-not-lose → durable capture. A domain event delivered async in-process still needs the registry; "domain events never need an outbox" is wrong for that case.
+`DCA-USE-012` checks transaction-boundary evidence in Java and .NET (`FrameworkTypes.TransactionalAttribute` is empty
+by default). Static call graphs cannot prove lambda containment: publishing after an empty boundary in the same
+method passes this check. Verify runtime containment and rollback separately. `.NET DCA-USE-013` remains unavailable;
+review remote-capable calls and transaction scope explicitly.
 
-## State of the reference implementation
-
-The sample implements the **internal** registry only — surfaced read-only as `EventPublicationLogStore` / `JdbcEventPublicationLogStore` in the `backoffice` context (reads Spring Modulith's `EVENT_PUBLICATION` table). The **external** broker outbox is documented as the target pattern but not yet built — no `@Externalized` / broker config. So storing **domain** events in the sample is correct: it is the internal registry, not a boundary-crossing outbox.
 
 ## Anchors
 

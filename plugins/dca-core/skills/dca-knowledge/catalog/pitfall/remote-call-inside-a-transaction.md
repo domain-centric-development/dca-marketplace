@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Remote call inside a transaction"
+title: Remote call inside a transaction
 tags: [pitfall, application, use-case, port-out, persistence, performance]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-013.md, /rule/usecase/dca-use-012.md, /marker/application/transactionboundary.md, /marker/port-out/outputport.md, /guide/readme/rules.md]
 ---
 
 A `@Transactional` use case (or the body of an explicit transaction block) that calls an output port which may leave the process — another bounded context's API, a payment provider, a mail gateway, a remote catalog. In the monolith the call is in-process and nothing hurts; in the distributed deployment the same code holds a database connection for a network round trip.
@@ -14,8 +17,8 @@ A `@Transactional` use case (or the body of an explicit transaction block) that 
 
 ## What forbids it
 
-- [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/declaratively-transactional-use-cases-must-not-call-remote-capable-output-ports.md) — only `Repository`, `Store` and the event publishers may be called inside a declaratively transactional use case.
-- [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md) — a publishing use case needs a boundary; the explicit form exists exactly so remote reads can stay outside it.
+- [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/dca-use-013.md) — only `Repository`, `Store` and the event publishers may be called inside a declaratively transactional use case.
+- [Use cases that save an aggregate or publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md) — a publishing use case needs a boundary; the explicit form exists exactly so remote reads can stay outside it.
 
 ## Do instead
 
@@ -36,6 +39,6 @@ return transactionBoundary.inTransaction(() -> {               // short transact
 
 ## Anchors
 
-- Rules: [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/declaratively-transactional-use-cases-must-not-call-remote-capable-output-ports.md) · [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md)
+- Rules: [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/dca-use-013.md) · [Use cases that save an aggregate or publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md)
 - Markers: [TransactionBoundary](/marker/application/transactionboundary.md) · [OutputPort](/marker/port-out/outputport.md)
 - Guide: [Layer rules](/guide/readme/rules.md)

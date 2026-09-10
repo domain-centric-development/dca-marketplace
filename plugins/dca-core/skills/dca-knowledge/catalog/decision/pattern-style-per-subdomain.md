@@ -2,6 +2,9 @@
 type: Decision
 title: "Pattern style per subdomain: full tactical DDD, transaction script, or buy"
 tags: [decision, strategic, subdomain]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/archunit-governance/context-specific-rule-sets.md, /guide/readme/java-package-structure.md]
 ---
 
 Not every bounded context deserves the full tactical DDD toolkit. The effort you invest should track the **subdomain type** — how much competitive value the context carries. Applying rich aggregates everywhere wastes effort on commodity logic; applying transaction scripts to the core erodes the model that justifies building in-house at all.

@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add a repository with adapter"
+title: Add a repository with adapter
 tags: [recipe, adapter, repository]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/readme/rules.md, /rule/tactical/dca-tac-016.md, /rule/tactical/dca-tac-013.md, /rule/tactical/dca-tac-014.md, /rule/tactical/dca-tac-015.md, /rule/tactical/dca-tac-017.md, /rule/naming/dca-nam-004.md, /rule/hexagonal/dca-hex-003.md]
 ---
 
 Give an aggregate root a persistence port: an interface in the application layer, an implementation in an outgoing adapter. The interface belongs to the domain-facing side (an output port); the storage technology stays behind the boundary. One repository per aggregate root.
@@ -21,14 +24,14 @@ Give an aggregate root a persistence port: an interface in the application layer
 
 ## Rules to satisfy (build-time checklist)
 
-- [Repositories must only exist for aggregate roots](/rule/tactical/repositories-must-only-exist-for-aggregate-roots.md)
-- [Repository interfaces should extend the Repository marker](/rule/tactical/repository-interfaces-should-extend-repository-marker-interface.md)
-- [Repository interfaces must reside in the application output-port package](/rule/tactical/repository-interfaces-must-reside-in-the-application-layer-s-shared-output-port-package.md)
-- [Repository implementations must reside in the adapter.outgoing package](/rule/tactical/repository-implementations-must-reside-in-adapter-outgoing-package.md)
-- [Repository methods must not return non-root Entities](/rule/tactical/repository-methods-must-not-return-non-root-entities.md)
-- [Repository interfaces must end with `Repository`](/rule/naming/repository-interfaces-must-end-with-repository.md)
-- [Controllers and resources must never access repositories directly](/rule/hexagonal/controllers-and-resources-must-never-access-repositories-directly.md)
-- [Output ports in application.shared must extend OutputPort](/rule/hexagonal/output-ports-in-application-shared-must-extend-outputport.md)
+- [Repositories must only exist for aggregate roots](/rule/tactical/dca-tac-016.md)
+- [Repository interfaces should extend the Repository marker](/rule/tactical/dca-tac-013.md)
+- [Repository interfaces must reside in the application output-port package](/rule/tactical/dca-tac-014.md)
+- [Repository implementations must reside in the adapter.outgoing package](/rule/tactical/dca-tac-015.md)
+- [Repository methods must not return non-root Entities](/rule/tactical/dca-tac-017.md)
+- [Repository interfaces must end with `Repository`](/rule/naming/dca-nam-004.md)
+- [Controllers and resources must never access repositories directly](/rule/hexagonal/dca-hex-003.md)
+- [Output ports in application.shared must extend OutputPort](/rule/hexagonal/dca-hex-009.md)
 
 ## Anchors
 

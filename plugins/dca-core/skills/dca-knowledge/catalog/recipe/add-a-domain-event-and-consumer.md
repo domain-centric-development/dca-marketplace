@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add a domain event and consumer"
+title: Add a domain event and consumer
 tags: [recipe, domain, events]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/spring-modulith/module-communication.md, /rule/advanced/dca-adv-001.md, /rule/advanced/dca-adv-008.md, /rule/advanced/dca-adv-002.md, /rule/advanced/dca-adv-004.md, /rule/advanced/dca-adv-007.md, /marker/tactical/domainevent.md, /guide/readme/rules.md]
 ---
 
 Record that something meaningful happened in the domain, and let another part of the *same* context react to it. A past-tense record implementing `DomainEvent`, registered on the aggregate, published by the use case after save, consumed in-process. If the reaction crosses a context boundary, this is the wrong recipe.
@@ -21,11 +24,11 @@ Does the consumer live in another bounded context or an external system? Then yo
 
 ## Rules to satisfy (build-time checklist)
 
-- [Domain events must implement the DomainEvent marker and be records](/rule/advanced/domain-events-must-implement-domainevent-marker-interface-and-be-records.md)
-- [Domain events must have a timestamp field](/rule/advanced/domain-events-must-have-a-timestamp-field.md)
-- [Domain events must reside in the domain package](/rule/advanced/domain-events-must-reside-in-domain-package.md)
-- [Domain events must not have Spring annotations](/rule/advanced/domain-events-must-not-carry-container-annotations.md)
-- [Domain events that are not integration events must not have a version field](/rule/advanced/domain-events-that-are-not-integration-events-must-not-have-a-version-field.md)
+- [Domain events must implement the DomainEvent marker and be records](/rule/advanced/dca-adv-001.md)
+- [Domain events must have a timestamp field](/rule/advanced/dca-adv-008.md)
+- [Domain events must reside in the domain package](/rule/advanced/dca-adv-002.md)
+- [Domain events must not have Spring annotations](/rule/advanced/dca-adv-004.md)
+- [Domain events that are not integration events must not have a version field](/rule/advanced/dca-adv-007.md)
 
 ## Anchors
 

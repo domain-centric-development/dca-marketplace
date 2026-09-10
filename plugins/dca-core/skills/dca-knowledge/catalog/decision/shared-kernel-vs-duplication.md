@@ -2,6 +2,9 @@
 type: Decision
 title: "Shared kernel or duplication: where a value object lives"
 tags: [decision, strategic, shared-kernel, value-object]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/strategic/sharedkernel.md, /rule/strategic/dca-str-002.md, /guide/spring-modulith/shared-kernel-in-spring-modulith.md]
 ---
 
 When two contexts both need a concept — a `Money`, a `UserId`, an `Address` — you can promote it into the `sharedkernel` or let each context own its own copy. The shared kernel removes duplication but creates a coupling that every sharing context must agree to maintain. Choose deliberately; the default leans toward duplication.
@@ -32,6 +35,6 @@ When two contexts both need a concept — a `Money`, a `UserId`, an `Address` �
 ## Anchors
 
 - Markers: [@SharedKernel](/marker/strategic/sharedkernel.md)
-- Rules: [Shared Kernel must not have dependencies on any bounded context](/rule/strategic/shared-kernel-must-not-have-dependencies-on-any-bounded-context.md)
+- Rules: [Shared Kernel must not have dependencies on any bounded context](/rule/strategic/dca-str-002.md)
 - Guide: [Shared kernel](/guide/spring-modulith/shared-kernel-in-spring-modulith.md)
 - Related pitfall: [Raw cross-context import](/pitfall/raw-cross-context-import.md)

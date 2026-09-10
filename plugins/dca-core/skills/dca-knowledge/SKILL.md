@@ -14,12 +14,12 @@ disable-model-invocation: false
 
 # /dca-knowledge — Grounded Q&A over the OKF catalog
 
-The OKF bundle is the **canonical, machine-readable DCA knowledge base**: ~300 atomic
+The OKF bundle is the **canonical, machine-readable DCA knowledge base**: several hundred atomic
 markdown nodes, each with typed frontmatter and bundle-relative cross-links forming a
 graph. Two zones:
 
-- **Generated** (implementation-guide docs and sections, 24 marker contracts,
-  90 ArchUnit rules, 1 process) — derived from the sources.
+- **Generated** (implementation-guide docs and sections, marker contracts,
+  architecture rules, process and API references) — derived from the sources.
 - **Extensible** (`recipe/`, `decision/`, `pitfall/`, `template/`, `note/`) — authored
   by a human or an LLM, preserved across regeneration. May be empty until populated.
 
@@ -71,9 +71,9 @@ without reading everything.
 | Node `type` | Lives in | Carries | Key outgoing edges |
 |---|---|---|---|
 | `Guide` | `guide/` | preamble + `## Sections` index | → child Sections |
-| `Section` | `guide/<g>/` | **full verbatim text** | `## Related markers` |
-| `Marker` | `marker/<cat>/` | interface signature, `extends`, methods | `## Extends`, `## Governed by` (rules), `## Discussed in` (sections) |
-| `Rule` | `rule/<cat>/` | ArchUnit/Spock body, `enforced_by`, `status` | `## Applies to markers` |
+| `Section` | `guide/<g>/` | **full verbatim text** | `## Related mentions (heuristic)` |
+| `Marker` | `marker/<cat>/` | interface signature, `extends`, methods | `## Extends`, `## Governed by` (rules), `## Related mentions in guides (heuristic)` (sections) |
+| `Rule` | `rule/<cat>/` | Java/ArchUnit or C#/ArchUnitNET evidence, `enforced_by`, `status` | `## Applies to markers` |
 | `Process` | `process/` | how-to (e.g. writing an ADR) | → any |
 | `Reference` | `reference/` | `DcaLayout` (settings, defaults, patterns, framework names) and `DcaArchitecture` (how contexts and module roots are discovered, every query the rules select through) — Java and .NET | ← every rule ("Configured by") |
 | `Recipe`/`Decision`/`Pitfall`/`Template`/`Note` | `recipe/` … `note/` (**extensible zone**) | authored playbooks, design-fork guides, anti-patterns, code skeletons, saved query answers | links into the skeleton |
@@ -148,8 +148,8 @@ When the user is **constructing** DCA code ("add a use case", "create an aggrega
 2. **Decide** — follow any `decision/` link the recipe gates on first (e.g. sync-vs-async).
 3. **Template** — emit from the linked `/template/<...>.md` skeleton.
 4. **Checklist** — satisfy the recipe's "Rules to satisfy" *while generating* — each links a
-   `rule/` node whose `constraint:` is the one-line precondition (no need to parse the Groovy).
-5. **Verify** — run the project's architecture test suite (`./gradlew test-architecture`).
+   `rule/` node whose `constraint:` is the one-line precondition (read `selects`/`checks` before the Java/ArchUnit or C# evidence).
+5. **Verify** — run the project's architecture test suite (`./gradlew test-architecture` for Java, `dotnet test -c Debug` for .NET).
 
 If no recipe covers the task, build from the relevant `marker/` (+ its `Governed by` rules)
 and offer to `save` a new `recipe/` so the next build is covered.
@@ -162,12 +162,11 @@ and offer to `save` a new `recipe/` so the next build is covered.
 - `pitfall` — an anti-pattern + the rule that forbids it
 - `recipe` — an ordered task playbook · `template` — a domain-free code skeleton
 
-Write `bundle/<type>/<slug>.md` (or the resolved catalog's extensible zone) with
-frontmatter `type:` + `title:` + `tags:`, a body that **synthesizes** (don't paste the
-chat), and bundle-relative links into the generated skeleton (markers/rules/sections)
-**and** to sibling extensible nodes. Then regenerate so it's catalogued:
-`cd dca-knowledge-catalog && PYTHONPATH=src python3 -m dca_catalog.generate`. The node
-survives future regenerations (extensible zone is preserved).
+Prepare a proposal in the consuming project's notes, or in the owning catalog repository's `authored/<type>/<slug>.md`
+source workflow when that checkout is available. Include type/title/tags, evidence and bundle-relative links.
+The resolved mirror, installed plugin cache and `bundle/` are read-only: never write a save there.
+The owner reviews the source and regenerates/tests/lints the canonical bundle before updating the mirror.
+Saving a proposal does not make it authoritative.
 
 > **When to offer it:** after any `ask`/`explain` that took real graph traversal or
 > resolved a non-obvious question, offer to `save` it. That is the Query→page loop — the
@@ -179,8 +178,8 @@ Every substantive claim ends with its provenance:
 
 ```
 <claim>.
-  — [Rule] /rule/tactical/aggregate-roots-must-not-have-fields-with-other-aggregate-root-types.md
-    enforced_by: TacticalDDDArchUnitTest (status: enforced)
+  — [Rule] /rule/tactical/dca-tac-003.md
+    enforced_by: TacticalPatternRules#DCA-TAC-003 (status: enforced)
 ```
 
 For "show me the real code", quote the node itself: a `rule` node carries its ArchUnit
@@ -192,8 +191,7 @@ matching type in *the user's own* project — never at another repository.
 - Lead with `index.md` files (small) before node bodies.
 - Filter on frontmatter (`type`/`tags`/`status`) before reading bodies.
 - Sections are atomic — read the one section, not the whole chapter.
-- One guide node (`guide/architecture-reference-guide/custom-annotations-placement.md`) is
-  large (~986 lines); read it only when directly on-topic, and quote the relevant subsection.
+- Inspect file size before reading large guide nodes; read the relevant subsection and retain its caveats.
 - For broad/fan-out questions across many nodes, delegate to an `Explore` agent over the
   bundle dir and keep only its conclusion in main context.
 
@@ -226,12 +224,19 @@ to confirm the new node is wired into the graph (no `unanchored-authored`/`orpha
 
 ## What this skill does NOT do
 
-- **Doesn't edit the generated zone.** `guide/ marker/ rule/ process/ reference/` are
-  derived from the sources (see the generator in `dca-knowledge-catalog/`) — the only
-  writes this skill performs are `save` operations into the authored **extensible zone**
-  (`recipe/ decision/ pitfall/ template/ note/`).
+- **Doesn't edit mirrors, plugin cache or bundle output.** `save` prepares an owning-source proposal;
+  generation and review publish knowledge. Read current counts from `index.md` / `log.md` when needed.
 - **Doesn't answer from memory.** No catalog node = no grounded answer. It says so rather
   than guessing.
 - **Doesn't replace `/dca-review`.** It explains rules; it doesn't audit your code against them.
 - **Doesn't fetch remote catalogs.** It reads a local bundle (in-repo or vendored); pointing
   at a remote copy is the user's setup step.
+
+## Review status and retrieval order
+
+1. Read `manifest.json` to identify the snapshot and library versions, then use `rule/index-compact.md` for exact id lookup.
+2. Read the target node's `selects`/`checks`, status, implementations and resolved framework before its evidence.
+3. For authored nodes, `review: draft` and `review: superseded` are **non-normative**. Missing review is also non-normative. Cite them only as proposals/history, never as the answer's authority. Follow `superseded_by` and inspect its own status; do not promote automatically. `reviewed` requires an owner and evidence.
+4. Prefer the requested language's evidence (`.NET reading` / C# expression for .NET). Large nodes offer `Evidence slices`; read the relevant slice together with the parent selection/check and caveats. Full nodes remain available.
+5. `Governed by` and `Applies to markers` are reviewed mappings. Every `Related mentions` link is heuristic navigation, including mentions derived from `selects`; it does not prove applicability.
+6. Do not add Spring dependencies to .NET or framework-neutral projects. Verify Java with its architecture task and .NET with `dotnet test -c Debug`.

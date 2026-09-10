@@ -52,8 +52,10 @@ architecture style. Splitting them out means:
 ```
 
 Acceptance: bootstrapping a fresh project ends with the DCA rule catalog running from the published
-packages — Java against `dev.domaincentric:dca-archunit` 0.3.0 on Maven Central, .NET against
-`DomainCentric.ArchRules.Xunit` 0.3.0 on NuGet.org (both released 2026-09-08).
+packages — Java against `dev.domaincentric:dca-archunit` 0.4.0 on Maven Central, .NET against
+`DomainCentric.ArchRules.Xunit` 0.4.0 on NuGet.org (both released 2026-09-10, together with the markers
+`dca-building-blocks` 0.2.0 and `DomainCentric.BuildingBlocks` 0.1.1). The bootstrap resolves the latest
+version itself rather than carrying these numbers.
 
 Working from a local clone instead (e.g. for plugin development):
 

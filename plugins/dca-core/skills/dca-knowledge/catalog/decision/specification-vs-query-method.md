@@ -2,6 +2,9 @@
 type: Decision
 title: "Specification or query method: how to express a selection rule"
 tags: [decision, tactical, specification, repository]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/specification.md, /marker/port-out/repository.md, /rule/advanced/dca-adv-017.md, /rule/advanced/dca-adv-018.md, /rule/tactical/dca-tac-017.md, /guide/readme/elements.md, /guide/architecture-reference-guide/framework-annotations-rules.md, /guide/spring-modulith/shared-kernel-in-spring-modulith.md]
 ---
 
 You have a business rule that decides whether something qualifies — a "large order", a "premium customer", an "overdue invoice". The fork is how to express it: as a **Specification** (a first-class domain object with `isSatisfiedBy`, composable with `and`/`or`/`not`), or as a plain **repository query method** (`findOverdue()`). A Specification pays for itself when the rule is domain-meaningful, reused, or combined; a query method is the leaner choice when you just need rows back and the rule is a one-off.
@@ -37,7 +40,7 @@ A quick tell: if the same rule appears in a use-case guard *and* in a filter *an
 ## Anchors
 
 - Markers: [Specification&lt;T&gt;](/marker/tactical/specification.md) · [Repository&lt;T, ID&gt;](/marker/port-out/repository.md)
-- Rules: [Specifications must end with 'Specification'](/rule/advanced/specifications-must-end-with-specification.md) · [Specifications must not have Spring annotations](/rule/advanced/specifications-must-not-carry-container-annotations.md) · [Repository methods must not return non-root Entities](/rule/tactical/repository-methods-must-not-return-non-root-entities.md)
+- Rules: [Specifications must end with 'Specification'](/rule/advanced/dca-adv-017.md) · [Specifications must not have Spring annotations](/rule/advanced/dca-adv-018.md) · [Repository methods must not return non-root Entities](/rule/tactical/dca-tac-017.md)
 - Guide: [Layer elements](/guide/readme/elements.md) · [Framework annotation rules](/guide/architecture-reference-guide/framework-annotations-rules.md) · [Shared kernel](/guide/spring-modulith/shared-kernel-in-spring-modulith.md)
 - Recipes: [Add a repository with adapter](/recipe/add-a-repository-with-adapter.md)
 - Template: [Specification skeleton](/template/specification.md)

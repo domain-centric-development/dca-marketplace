@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Test a use case"
+title: Test a use case
 tags: [recipe, testing, use-case]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-in/usecase.md, /marker/port-out/repository.md, /marker/port-out/domaineventpublisher.md]
 ---
 
 Test a use case as an application-layer unit test: construct the `*UseCase`, feed it a `Command` (write) or `Query` (read), assert on the returned `Result` and on observable state. Every output port (repository, event publisher, gateway) is replaced with a **hand-written fake**; real domain objects are used directly, never mocked. The reference implementation uses plain JUnit 5 with in-line fakes — no Mockito, no AssertJ.

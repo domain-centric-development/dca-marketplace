@@ -1,7 +1,10 @@
 ---
 type: Decision
-title: "Declarative or explicit transaction boundary"
+title: Declarative or explicit transaction boundary
 tags: [decision, application, use-case, persistence, events]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-012.md, /rule/usecase/dca-use-013.md, /rule/dotnet/dca-net-006.md, /marker/application/transactionboundary.md, /marker/port-out/domaineventpublisher.md, /marker/port-out/integrationeventpublisher.md, /guide/readme/rules.md]
 ---
 
 Every writing use case runs load → mutate → save → publish inside one short transaction. The question is only **who draws the boundary**: the framework around the whole method, or the use case by hand around part of it.
@@ -20,9 +23,9 @@ Does the use case call an output port that **may leave the process** — another
 
 ## What the rules enforce
 
-- [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md) — a publishing use case has a boundary of either kind.
-- [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/declaratively-transactional-use-cases-must-not-call-remote-capable-output-ports.md) — a declaratively transactional use case calls no remote-capable port; only `Repository`, `Store`, `DomainEventPublisher`, `IntegrationEventPublisher` inside.
-- [Application layer must not use persistence or transaction frameworks](/rule/dotnet/application-layer-must-not-use-persistence-or-transaction-frameworks.md) — the application layer never touches the persistence or transaction framework; the only place that knows how a transaction opens is the boundary's infrastructure implementation.
+- [Use cases that save an aggregate or publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md) — a publishing use case has a boundary of either kind.
+- [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/dca-use-013.md) — a declaratively transactional use case calls no remote-capable port; only `Repository`, `Store`, `DomainEventPublisher`, `IntegrationEventPublisher` inside.
+- [Application layer must not use persistence or transaction frameworks](/rule/dotnet/dca-net-006.md) — the application layer never touches the persistence or transaction framework; the only place that knows how a transaction opens is the boundary's infrastructure implementation.
 
 ## Contract of the explicit boundary
 
@@ -35,7 +38,7 @@ Moving the transactional part into a dedicated handler behind a decorator, so th
 ## Anchors
 
 - Markers: [TransactionBoundary](/marker/application/transactionboundary.md) · [DomainEventPublisher](/marker/port-out/domaineventpublisher.md) · [IntegrationEventPublisher](/marker/port-out/integrationeventpublisher.md)
-- Rules: [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md) · [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/declaratively-transactional-use-cases-must-not-call-remote-capable-output-ports.md) · [Application layer must not use persistence or transaction frameworks](/rule/dotnet/application-layer-must-not-use-persistence-or-transaction-frameworks.md)
+- Rules: [Use cases that save an aggregate or publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md) · [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/dca-use-013.md) · [Application layer must not use persistence or transaction frameworks](/rule/dotnet/dca-net-006.md)
 - Guide: [Layer rules](/guide/readme/rules.md)
 - Recipe: [Add a bulk operation](/recipe/add-a-bulk-operation.md)
 - Pitfalls: [Remote call inside a transaction](/pitfall/remote-call-inside-a-transaction.md) · [Publishing domain events without a transaction](/pitfall/publishing-domain-events-without-a-transaction.md)

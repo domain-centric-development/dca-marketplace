@@ -2,38 +2,41 @@
 type: Decision
 title: "Event delivery: synchronous, asynchronous, and when you need an outbox"
 tags: [decision, events, outbox]
+review: reviewed
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/domainevent.md, /marker/tactical/integrationevent.md, /guide/spring-modulith/event-driven-architecture-in-spring-modulith.md, /guide/readme/rules.md, /guide/spring-modulith/module-communication.md, /guide/readme/integration-patterns.md]
 ---
 
-Choosing how to deliver an event reliably is two independent questions, not one. Answer both, then read the row off the table — most "do I need an outbox?" confusion comes from collapsing them.
+## Choose boundary and delivery independently
 
-## The two axes
+Events are optional: an aggregate that never registers a fact needs no publisher dependency. `DCA-USE-009`
+exempts a save only when the repository type argument and the aggregate's complete hierarchy can be inspected
+and no registration is found; unresolved arguments, incomplete scans and undecidable external helpers retain the check.
+Contracts belong in the configured `{context}/events/` segment. Translators belong in `adapter/outgoing/event/`;
+transport and storage are separate adapters. Schema versions belong in integration-event type metadata.
+`DCA-ADV-006/007` use a name heuristic for `schemaVersion`, `eventVersion`, `contractVersion`; a business `version` is allowed.
 
-1. **Boundary** — does the event stay **inside** the bounded context (a `DomainEvent`) or **cross** it to an external system (an `IntegrationEvent`)?
-2. **Delivery** — is the listener **synchronous** (runs in the publishing transaction) or **asynchronous** (separate transaction/thread)?
+An in-process registry may deliver domain events within a context **or integration events between contexts**.
+Process location does not determine event classification. Synchronous delivery is atomic only for local resources
+participating in the same transaction; a synchronous remote effect cannot be rolled back with the aggregate.
+For an external effect, either (A) an own-context async consumer receives a durably captured domain fact, or
+(B) an own-context synchronous translator captures an integration contract consumed asynchronously. Cross-context
+consumers always use the integration contract. No broker is required to cross a context boundary.
 
-Outbox need is driven by **delivery**, not by event type. Event type is driven by **boundary**.
+Capture the publication in the aggregate transaction; establish delivery eligibility with commit, then wake the
+worker after commit. Recovery reads committed publications even when that wakeup was lost. Track completion per
+consumer/effect, retry only unfinished work with bounded attempts and exponential backoff, retain terminal failures
+for inspection and deliberate replay. Reuse the original payload and `eventId + consumer + effect` identity.
+Provider acceptance is the acknowledgement point. If the process stops after acceptance but before local acknowledgement,
+provider-supported idempotency can deduplicate a repeated key; without it, a duplicate external effect remains possible.
+For each concrete effect, decide whether rendering/template version and recipient are captured or resolved later;
+the event snapshot alone does not decide these. No universal email policy is implied.
 
-## Decision table
+`DCA-USE-012` checks transaction-boundary evidence in Java and .NET (`FrameworkTypes.TransactionalAttribute` is empty
+by default). Static call graphs cannot prove lambda containment: publishing after an empty boundary in the same
+method passes this check. Verify runtime containment and rollback separately. `.NET DCA-USE-013` remains unavailable;
+review remote-capable calls and transaction scope explicitly.
 
-| Listener delivery | Crosses boundary? | Stored payload | Needs durable capture (outbox)? | Mechanism |
-|---|---|---|---|---|
-| `DomainEvent`, **sync** | No | — | **No** — atomic with the transaction | plain in-tx listener |
-| `DomainEvent`, **async**, must-not-lose | No | the domain event | **Yes** | **internal** event-publication registry |
-| `DomainEvent`, **async**, best-effort (metrics/logging) | No | — | No — allowed to be lost | plain async publisher |
-| `IntegrationEvent`, **async**, to a broker | Yes | the integration event (versioned) | **Yes** | **external** transactional outbox |
-
-## Why it's the same pattern twice
-
-The internal registry and the external outbox are **both transactional outboxes**: persist the event in the publishing transaction, relay out of band, at-least-once. They differ only in:
-
-- **consumer** — in-process listener vs foreign system over a broker
-- **stored payload** — `DomainEvent` (never leaves the context) vs `IntegrationEvent` (versioned published contract)
-
-Crossing the boundary forces the translation: a cross-context consumer needs a stable, serializable, versioned contract, so an Anti-Corruption Layer translates `DomainEvent` → `IntegrationEvent` before it is captured.
-
-## Common trap
-
-"Domain events don't need an outbox" is only true for **synchronous** delivery. An **async, must-not-lose** in-process domain listener needs durable capture too — it just stores the domain event and delivers in-process. See the [pitfall](/pitfall/storing-domain-events-in-an-external-outbox.md) for the inverse mistake.
 
 ## Anchors
 

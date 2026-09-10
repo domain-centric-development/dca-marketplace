@@ -2,6 +2,11 @@
 type: Template
 title: "Aggregate root skeleton (BaseAggregateRoot + Id + domain event)"
 tags: [template, domain, aggregate]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/readme/deviations-from-the-literature.md, /marker/tactical/aggregateroot.md, /marker/tactical/baseaggregateroot.md, /marker/tactical/domainevent.md, /marker/port-out/repository.md, /guide/readme/elements.md, /guide/readme/rules.md]
+applies_to: [java]
+framework: [framework-neutral]
 ---
 
 Domain-free skeleton for an aggregate root: the consistency boundary that enforces invariants and registers domain events. Replace `{Name}` / `{context}` / `{basePackage}`. The domain layer is framework-free — no Spring/JPA annotations.

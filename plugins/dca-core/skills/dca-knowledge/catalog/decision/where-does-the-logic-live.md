@@ -2,6 +2,9 @@
 type: Decision
 title: "Where does the logic live: aggregate method, domain service, or use case"
 tags: [decision, tactical, domain, application, domain-service, use-case]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/domainservice.md, /marker/tactical/aggregateroot.md, /rule/advanced/dca-adv-010.md, /rule/advanced/dca-adv-012.md, /rule/advanced/dca-adv-011.md, /rule/tactical/dca-tac-002.md, /guide/domain-services-with-data-dependencies/default-rule-pure-domain-services-90-of-cases.md, /guide/domain-services-with-data-dependencies/comparison-when-to-use-which-approach.md]
 ---
 
 You have a piece of business logic to place. It can go in three places, and picking the wrong one is how domain models turn anemic or use cases turn into fat transaction scripts. The fork: does the behaviour belong **on an aggregate**, in a **domain service**, or in the **use case** (application service)?
@@ -37,7 +40,7 @@ A quick tell: if the "service" reads an aggregate's fields, computes, and writes
 ## Anchors
 
 - Markers: [DomainService](/marker/tactical/domainservice.md) · [AggregateRoot&lt;T, ID&gt;](/marker/tactical/aggregateroot.md)
-- Rules: [Domain Services must reside in domain package](/rule/advanced/domain-services-must-reside-in-domain-package.md) · [Domain Services should be stateless (only final fields for dependencies)](/rule/advanced/domain-services-should-be-stateless-only-final-fields-for-dependencies.md) · [Domain Services must not have Spring annotations](/rule/advanced/domain-services-must-not-carry-container-annotations.md) · [Aggregate Roots must not hold references to Repositories or other Output Ports](/rule/tactical/aggregate-roots-must-not-hold-references-to-repositories-or-other-output-ports.md)
+- Rules: [Domain Services must reside in domain package](/rule/advanced/dca-adv-010.md) · [Domain Services should be stateless (only final fields for dependencies)](/rule/advanced/dca-adv-012.md) · [Domain Services must not have Spring annotations](/rule/advanced/dca-adv-011.md) · [Aggregate Roots must not hold references to Repositories or other Output Ports](/rule/tactical/dca-tac-002.md)
 - Guide: [Default rule: pure domain services](/guide/domain-services-with-data-dependencies/default-rule-pure-domain-services-90-of-cases.md) · [When to use which approach](/guide/domain-services-with-data-dependencies/comparison-when-to-use-which-approach.md) · [Framework annotation rules](/guide/architecture-reference-guide/framework-annotations-rules.md) · [Layer elements](/guide/readme/elements.md)
 - Recipes: [Add a use case](/recipe/add-a-use-case.md) · [Add an aggregate](/recipe/add-an-aggregate.md)
 - Related decision: [Where authorization and validation live](/decision/where-authorization-and-validation-live.md) — the companion fork for *guards* (validation / authorization / invariants) rather than behaviour

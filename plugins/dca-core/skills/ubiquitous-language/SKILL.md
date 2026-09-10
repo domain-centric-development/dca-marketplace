@@ -87,8 +87,9 @@ For each source file (`*.java`, `*.cs`):
 4. For each identifier:
    - Is it in the glossary? ✓ silent pass.
    - Is it a near-miss synonym (`OrderItem` vs glossary's `OrderLine`)? → finding.
-   - Is it a generic technical name (`*Helper`, `*Util`, `*Manager`, `*Data`,
-     `*Info`)? → finding (suggests a domain name).
+   - Is it a generic technical name (`*Helper`, `*Util`, `*Data`, `*Info`)? →
+     finding (suggests a domain name). `*Manager` is domain vocabulary when the
+     glossary says so (`PortfolioManager`), not a technical suffix.
    - Is it absent from glossary entirely (and looks domain-significant)? →
      suggest adding to glossary.
 

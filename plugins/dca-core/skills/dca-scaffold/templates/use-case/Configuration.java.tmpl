@@ -1,0 +1,13 @@
+package {{basePackage}}.{{context}}.infrastructure;
+
+import {{basePackage}}.{{context}}.application.{{featureSegment}}{{usecasename}}.{{Name}}InputPort;
+import {{basePackage}}.{{context}}.application.{{featureSegment}}{{usecasename}}.{{Name}}{{useCaseImplSuffix}};
+{{outputPortImports}}
+
+/** Explicit constructor wiring for a project using the none preset. The host calls this factory. */
+public final class {{Name}}Configuration {
+    private {{Name}}Configuration() {}
+    public static {{Name}}InputPort create({{constructorParameters}}) {
+        return new {{Name}}{{useCaseImplSuffix}}({{constructorArguments}});
+    }
+}

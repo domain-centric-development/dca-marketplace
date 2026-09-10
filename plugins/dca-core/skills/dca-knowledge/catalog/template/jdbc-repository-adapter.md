@@ -2,6 +2,11 @@
 type: Template
 title: "JDBC repository adapter skeleton (JdbcClient)"
 tags: [template, adapter, persistence, repository, spring]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-out/repository.md, /marker/port-out/outputport.md, /rule/tactical/dca-tac-015.md, /rule/hexagonal/dca-hex-008.md, /rule/usecase/dca-use-009.md, /rule/tactical/dca-tac-013.md, /guide/readme/rules.md, /guide/readme/deviations-from-the-literature.md]
+applies_to: [java]
+framework: [framework-neutral]
 ---
 
 Domain-free skeleton for a **JDBC outgoing adapter** that implements the *same* `{Name}Repository` output port as the [in-memory adapter](/template/repository-with-in-memory-adapter.md) and the [JPA adapter](/template/jpa-repository-adapter.md). The port and the aggregate do not change; only the class behind the boundary does. It lives in `adapter/outgoing/persistence/`, is named `Jdbc{Name}Repository`, and speaks SQL through Spring's `JdbcClient`: `save` is an upsert, a `RowMapper` rebuilds the aggregate through its `reconstitute(...)` factory, and `findAll` orders by an explicit column. Replace `{Name}` (aggregate) / `{name}` / `{context}` / `{basePackage}`.
@@ -126,7 +131,7 @@ Run the same port contract test against this adapter, the in-memory one and any 
 ## Realizes / governed by
 
 - Marker: [Repository<T, ID>](/marker/port-out/repository.md) · [OutputPort](/marker/port-out/outputport.md)
-- Rules: [Repository Implementations must reside in adapter.outgoing package](/rule/tactical/repository-implementations-must-reside-in-adapter-outgoing-package.md) · [Classes named *Repository must reside in the outgoing adapter package](/rule/hexagonal/classes-named-repository-must-reside-in-the-outgoing-adapter-package.md) · [Use cases that save an aggregate must publish its domain events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md) · [Repository Interfaces should extend Repository Marker Interface](/rule/tactical/repository-interfaces-should-extend-repository-marker-interface.md)
+- Rules: [Repository Implementations must reside in adapter.outgoing package](/rule/tactical/dca-tac-015.md) · [Classes named *Repository must reside in the outgoing adapter package](/rule/hexagonal/dca-hex-008.md) · [Use cases that save an aggregate must publish its domain events](/rule/usecase/dca-use-009.md) · [Repository Interfaces should extend Repository Marker Interface](/rule/tactical/dca-tac-013.md)
 - Guide: [Layer rules](/guide/readme/rules.md) (repository interface rules — "A repository hands out copies") · [Deviations from the literature](/guide/readme/deviations-from-the-literature.md)
 - Pitfalls: [Reconstitution raises creation event](/pitfall/reconstitution-raises-creation-event.md) · [Business logic in adapter](/pitfall/business-logic-in-adapter.md) · [Framework leak in domain](/pitfall/framework-leak-in-domain.md)
 - Sibling templates: [Repository + in-memory adapter](/template/repository-with-in-memory-adapter.md) · [JPA repository adapter](/template/jpa-repository-adapter.md) · [Aggregate root](/template/aggregate-root.md)

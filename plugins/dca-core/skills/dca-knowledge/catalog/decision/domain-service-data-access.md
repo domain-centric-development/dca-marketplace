@@ -2,42 +2,34 @@
 type: Decision
 title: "Domain service data access: injected output port or passed-in data"
 tags: [decision, tactical, domain-service, domain, gateway]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/domainservice.md, /marker/tactical/domaingateway.md, /marker/port-out/outputport.md, /marker/port-out/repository.md, /marker/port-out/store.md, /rule/advanced/dca-adv-012.md, /rule/advanced/dca-adv-011.md, /rule/advanced/dca-adv-010.md]
 ---
 
-A domain service needs data it doesn't hold — a category's discount table, a price it must look up, some fact that lives in another aggregate or a repository. The tempting move is to inject the `Repository` (or another output port) straight into the domain service. DCA says: **don't** — a domain service is a pure domain class in the innermost ring and must not depend on the application layer or adapters. So the fork is: does the service take its data as **passed-in parameters** (the use case loads it), or through an **abstract domain interface** it owns (dependency inversion), or does it never legitimately need external data at all? This is the *data-access* companion to [where does the logic live](/decision/where-does-the-logic-live.md), which decides whether the logic belongs on the aggregate, in a domain service, or in the use case in the first place.
+An aggregate answers from its own state. If an operation combines facts held elsewhere, the use case retrieves
+those facts through output ports and supplies immutable snapshots to a domain service. The service owns the calculation;
+the aggregate owns its invariant-preserving state transition. Presentation enrichment remains a separate value model.
 
-## The discriminator
+## Default: supplied facts
 
-Ask, in order:
+Neither aggregate nor domain service receives a repository or remote port. Moving external lookup behind a resolver
+or callback parameter does not transfer semantic responsibility into the aggregate. Supply facts or a calculated
+assessment instead; save and publish in the use case's transaction after remote retrieval.
 
-1. **Can the use case load everything the service needs up front?** Then it does — the use case reads via output ports and passes plain domain objects (Value Objects, prices, quantities) as method parameters. The service stays **pure**: no injected port, no repository, trivially testable. This is the default and covers the large majority of cases.
-2. **Must the domain service itself decide dynamically what to fetch** (it can't be pre-loaded because the query depends on branching domain logic), or do several services share the same lookup? Then invert the dependency: declare an **abstract domain interface (`DomainGateway`)** *in the domain package*, inject that interface, and implement it in an outgoing adapter. The domain depends only on its own abstraction, never on a `Repository` or adapter type.
-3. **Is it a single, simple query at one call site?** A lightweight **Strategy/Callback** (a function passed in by the use case) avoids a dedicated interface.
+## Explicit exceptions and manual review
 
-A hard "no" underlies all three: **never inject a `Repository`, `Store`, or any concrete output port into a domain service.** That would drag an application-layer contract into the domain and break the dependency rule.
-
-## Options
-
-| | Pure (passed-in params) | DomainGateway | Strategy / Callback |
-|---|---|---|---|
-| Who loads the data | the use case, up front | the injected domain interface, on demand | the use case, via a passed function |
-| Dependency in the domain | none | an **abstract interface owned by the domain** | none |
-| Injected output port? | no | no — a domain abstraction, impl in adapter | no |
-| Testability | trivial (plain args) | mock the gateway | inline lambda |
-| Use when | data is pre-loadable (1–2 sources) | domain decides what it needs / shared lookup | single simple query at one service |
-| Frequency | the default (~90%) | occasional | occasional |
-
-## Consequences
-
-- A domain service is **stateless — only final fields for dependencies** (see anchors), and those dependencies are *domain abstractions*, never repositories or adapters. It carries **no Spring annotations** and must **reside in the domain package**.
-- Choosing "pure" keeps the use case as the single place that touches output ports: load → pass into the domain service → act on the result. If you find yourself wanting to inject a repository into the service, that is the signal to move the load up into the use case instead.
-- The `DomainGateway` route is dependency inversion, not a loophole: the interface lives in the domain, the implementation in `adapter.outgoing`. It does **not** license the service to import a concrete `Repository`.
-- Passing an aggregate's fields into a "service" that computes and would write them back is the [anemic domain model](/pitfall/anemic-domain-model.md) smell — that logic belonged on the aggregate.
+A domain-owned DomainGateway may represent a capability whose rationale is recorded explicitly. Local password
+hashing is a computational capability, not a reason to hide cross-context retrieval. Pure algorithmic strategy
+callbacks do not perform lookup. Review callback parameters for effects and ownership; DCA-TAC-002 checks fields
+and cannot prove semantic responsibility. No new marker can prove it either.
 
 ## Anchors
 
 - Markers: [DomainService](/marker/tactical/domainservice.md) · [DomainGateway](/marker/tactical/domaingateway.md) · [OutputPort](/marker/port-out/outputport.md) · [Repository&lt;T, ID&gt;](/marker/port-out/repository.md) · [Store](/marker/port-out/store.md)
-- Rules: [Domain Services should be stateless (only final fields for dependencies)](/rule/advanced/domain-services-should-be-stateless-only-final-fields-for-dependencies.md) · [Domain Services must not have Spring annotations](/rule/advanced/domain-services-must-not-carry-container-annotations.md) · [Domain Services must reside in domain package](/rule/advanced/domain-services-must-reside-in-domain-package.md) · [Aggregate Roots must not hold references to Repositories or other Output Ports](/rule/tactical/aggregate-roots-must-not-hold-references-to-repositories-or-other-output-ports.md)
+- Rules: [Domain Services should be stateless (only final fields for dependencies)](/rule/advanced/dca-adv-012.md) · [Domain Services must not carry framework metadata](/rule/advanced/dca-adv-011.md) · [Domain Services must reside in domain package](/rule/advanced/dca-adv-010.md) · [Aggregate Roots must not hold references to Repositories or other Output Ports](/rule/tactical/dca-tac-002.md)
 - Guide: [Problem statement](/guide/domain-services-with-data-dependencies/problem-statement.md) · [Default rule: pure domain services](/guide/domain-services-with-data-dependencies/default-rule-pure-domain-services-90-of-cases.md) · [DomainGateway Pattern](/guide/domain-services-with-data-dependencies/approach-1-domaingateway-pattern.md) · [Strategy/Callback Pattern](/guide/domain-services-with-data-dependencies/approach-2-strategy-callback-pattern.md) · [When to use which approach](/guide/domain-services-with-data-dependencies/comparison-when-to-use-which-approach.md) · [Framework annotation rules](/guide/architecture-reference-guide/framework-annotations-rules.md)
 - Related decision: [Where does the logic live](/decision/where-does-the-logic-live.md) — the companion fork for *placing* the behaviour before you decide how it gets its data
 - Related pitfall: [Anemic domain model](/pitfall/anemic-domain-model.md)
+
+- [Default construction and boundary validation](/pitfall/default-construction-bypasses-validation.md)

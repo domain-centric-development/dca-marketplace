@@ -1,7 +1,10 @@
 ---
 type: Decision
-title: "Plain query use case or a dedicated read model"
+title: Plain query use case or a dedicated read model
 tags: [decision, application, use-case, cqrs, repository, performance]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/readme/elements.md, /guide/readme/integration-patterns.md, /marker/port-in/usecase.md, /marker/port-out/repository.md, /rule/usecase/dca-use-003.md]
 ---
 
 You need to read data out of a context. The fork is whether a **plain query use case over the domain repository** suffices, or whether the read deserves a **dedicated read model** — a separate query side, possibly its own store, kept up to date by projection (CQRS). The first is the default and costs almost nothing; the second buys read performance and shape at the price of eventual consistency and more moving parts.
@@ -37,7 +40,7 @@ A separate query side with its own read model and projections. Three escalating 
 ## Anchors
 
 - Markers: [UseCase&lt;INPUT, OUTPUT&gt;](/marker/port-in/usecase.md) · [Repository&lt;T, ID&gt;](/marker/port-out/repository.md)
-- Rules: [Queries must end with `Query` and reside in the application package](/rule/usecase/use-case-queries-must-end-with-query-and-reside-in-application-package.md)
+- Rules: [Queries must end with `Query` and reside in the application package](/rule/usecase/dca-use-003.md)
 - Guide: [Layer elements](/guide/readme/elements.md)
 - Recipes: [Add a use case](/recipe/add-a-use-case.md)
 - Templates: [Enriched domain model](/template/enriched-domain-model.md) · [ViewModel](/template/view-model.md)

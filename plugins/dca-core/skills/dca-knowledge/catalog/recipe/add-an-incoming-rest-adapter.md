@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Add an incoming REST adapter"
+title: Add an incoming REST adapter
 tags: [recipe, adapter, rest]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/readme/java-package-structure.md, /rule/naming/dca-nam-006.md, /rule/naming/dca-nam-005.md, /rule/usecase/dca-use-008.md, /rule/hexagonal/dca-hex-003.md, /rule/hexagonal/dca-hex-004.md, /rule/hexagonal/dca-hex-007.md, /rule/naming/dca-nam-007.md]
 ---
 
 Expose a use case to the outside world through a primary (driving) adapter. A `*Resource` for a REST API, a `*PageController` for server-rendered web. The adapter is a thin edge: it calls an input port and maps the `Result` to a transport DTO — no business logic, no repository access.
@@ -26,14 +29,14 @@ The same recipe with a different edge. A `{Name}PageController` in `adapter/inco
 
 ## Rules to satisfy (build-time checklist)
 
-- [REST controllers must end with `Resource`](/rule/naming/rest-controllers-must-end-with-resource-rest-best-practice.md)
-- [Controller classes must end with `Controller`](/rule/naming/controller-classes-must-end-with-controller.md)
-- [HTTP response models must end with `Response` and reside in the adapter incoming package](/rule/usecase/http-response-models-must-end-with-response-and-reside-in-adapter-incoming-package.md)
-- [Controllers and resources must never access repositories directly](/rule/hexagonal/controllers-and-resources-must-never-access-repositories-directly.md)
-- [Incoming adapters must only use outbound ports, not infrastructure implementations](/rule/hexagonal/incoming-adapters-must-only-use-outbound-ports-not-infrastructure-implementations.md)
-- [Incoming adapters must only access their own bounded context](/rule/hexagonal/incoming-adapters-must-only-access-their-own-bounded-context-except-event-consumers-and-open-host-services.md)
-- [DTOs must reside in the adapter package, not in domain or application](/rule/naming/dtos-must-reside-in-the-adapter-layer-not-in-domain-or-application.md)
-- [View models must reside in adapter.incoming.web packages](/rule/naming/viewmodels-must-reside-in-adapter-incoming-web-packages.md)
+- [REST controllers must end with `Resource`](/rule/naming/dca-nam-006.md)
+- [Controller classes must end with `Controller`](/rule/naming/dca-nam-005.md)
+- [HTTP response models must end with `Response` and reside in the adapter incoming package](/rule/usecase/dca-use-008.md)
+- [Controllers and resources must never access repositories directly](/rule/hexagonal/dca-hex-003.md)
+- [Incoming adapters must only use outbound ports, not infrastructure implementations](/rule/hexagonal/dca-hex-004.md)
+- [Incoming adapters must only access their own bounded context](/rule/hexagonal/dca-hex-007.md)
+- [DTOs must reside in the adapter package, not in domain or application](/rule/naming/dca-nam-007.md)
+- [View models must reside in adapter.incoming.web packages](/rule/naming/dca-nam-011.md)
 
 ## Anchors
 

@@ -110,8 +110,7 @@ public Result execute(Command cmd) {
     var aggregate = repository.findById(cmd.id()).orElseThrow();
     aggregate.doSomething(cmd.payload());    // registers event(s) internally
     repository.save(aggregate);              // persist
-    eventPublisher.publishAll(aggregate.domainEvents());
-    aggregate.clearDomainEvents();           // <-- this line is the discipline
+    eventPublisher.publishAndClearEvents(aggregate); // dispatch succeeds before clearing
     return Result.of(aggregate);
 }
 ```
@@ -130,13 +129,29 @@ public Task<Result> ExecuteAsync(Command cmd, CancellationToken ct = default) =>
     }, ct);
 ```
 
-If the project uses Spring Modulith's `ApplicationEventPublisher` plus
-`AggregateRoot.andEvents()` or a `BaseAggregateRoot` that handles clearing
-automatically, skip the explicit clear but verify the abstraction handles it.
+Use the building-block publisher contract. Its implementation clears only after successful synchronous dispatch.
+Events are optional when no domain fact needs publication: an event-free aggregate needs no publisher dependency.
+The conservative USE-009 exemption requires a resolved, completely inspected aggregate hierarchy.
+
+An own-context outgoing adapter subscribes to the domain fact, translates to a contract in `{context}/events/`,
+and captures it inside the transaction. For Spring, the subscription can be a plain synchronous `@EventListener`:
+
+```java
+// Same context, adapter/outgoing/event; the publisher captures transactionally.
+@EventListener
+public void on(DocumentApproved fact) {
+    integrationEvents.publish(DocumentApprovedEvent.from(fact));
+}
+```
+
+In .NET the same adapter implements the local domain-event listener contract and awaits its integration publisher.
+Async consumers acknowledge per consumer/effect; bounded retry and intentional manual replay preserve the snapshot
+and stable event/consumer/effect key. Provider-supported idempotency is needed to suppress acceptance-before-ack duplicates.
+Synchronous remote effects cannot roll back with local state. Event snapshot policy does not decide template or recipient policy.
 
 **Event shape rules** (all four required):
 
-1. **Immutable**: Java `record` / C# `sealed record`, no setters, no mutable fields.
+1. **Immutable**: Java record or immutable class / C# record or immutable class/readonly struct, no mutable instance fields or setters.
 2. **Past tense name**: `OrderPlaced`, not `PlaceOrder` or `OrderPlacement`.
 3. **`occurredOn` field** of type `Instant` / `DateTimeOffset` (or matching convention).
 4. **Carries IDs and value objects only**, no aggregate references.
@@ -161,7 +176,7 @@ When writing or editing domain model classes:
   which may leave the process (another context's API, a payment provider)
   drops the class-level annotation: remote reads first, then
   `transactionBoundary.inTransaction(() -> { load; mutate; save; publish; })` — the `TransactionBoundary`
-  output port of the building blocks. Remote *effects* go after the commit,
+  application-layer execution abstraction of the building blocks, not a port. Remote *effects* go after the commit,
   as a reaction to an integration event.
 
 > **Note:** invariant strictness follows the context's declared pattern style
@@ -228,3 +243,43 @@ The point of the skill is to make the discipline visible, not to make the
 user's life harder. When the rule's cost outweighs its benefit (legacy
 integration, framework-mandated annotation), an ADR makes the exception
 explicit — and that's a successful outcome.
+
+Domain vocabulary may include `Manager`. Repository and Store ports may be local to
+one use case; reused ports belong in application/shared. Store lookup by key is valid;
+aggregate save/delete semantics require a Repository. Response types may belong to
+incoming or outgoing adapters. Review entity constructor callers for the domain
+invariant boundary, rather than demanding private constructors. Configured operation
+containers do not alter the flat/grouped consistency requirement.
+
+### Operation boundaries and ACL evidence
+
+Ordinary use cases do not invoke other use cases, whether directly, through an
+input port, or through an application helper. Shared collaborators that do not call
+operations remain valid. `DCA-USE-016` follows dependencies within the module's
+application layer and reports `Caller -> Target [via Helper]`. Explicit coordination
+uses a caller-side exception, for example
+`dca.rule.DCA-USE-016.ignore=^com\.example\.module\.application\.coordinate\.CoordinatorUseCase -> `.
+This permits the coordinator to invoke operations; it does not permit an operation
+to invoke the coordinator, and `DCA-CYC-005` still detects coordination cycles,
+including two operations inside the same feature. No coordinator marker is implied.
+When a reliable exception cannot be expressed, use WARN with a recorded reason and
+review the coordinator's transaction boundaries and partial-failure semantics manually.
+Reflection, container lookups and calls through interfaces outside the InputPort
+hierarchy also require manual review.
+
+The input port describes the complete effective public instance surface (`DCA-USE-017`).
+Declared and inherited business methods, unrelated-interface methods and public
+properties/getters/setters must be in the input-port contract. Constructors, Object
+members and compiler-generated members are exempt; a property accessor is not exempt
+merely because it has a special runtime name. Ordinary, inherited and explicit
+input-port implementations are valid. In .NET, `DCA-NET-003` separately validates
+`IUseCase<TIn,TOut>.ExecuteAsync(input, CancellationToken)` returning `Task<T>` through
+the interface map; it does not count declared public methods.
+
+For every declared ACL interaction, the matching adapter must contain a class that
+uses that upstream's channel contract and the declaring context's own domain or
+application model (`DCA-MAP-008`). Two translators for different upstreams may share
+an adapter package. Evidence for one upstream does not satisfy another interaction.
+This identifies a structural translation site, without proving translation quality.
+
+Validate invariants again at aggregate entry points when default construction, deserialization or reconstitution can bypass a value constructor. Retrieve external facts in the use case and supply immutable snapshots to domain services; do not hide lookup in aggregate callbacks. TAC-002 checks fields, so semantic callback review remains manual.

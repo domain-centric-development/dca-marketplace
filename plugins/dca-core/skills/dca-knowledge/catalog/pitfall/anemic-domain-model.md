@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Anemic domain model"
+title: Anemic domain model
 tags: [pitfall, tactical, aggregate, domain]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/tactical/dca-tac-006.md, /rule/tactical/dca-tac-011.md, /rule/tactical/dca-tac-002.md, /guide/readme/elements.md, /marker/tactical/aggregateroot.md, /marker/tactical/entity.md]
 ---
 
 Aggregates and entities reduced to bags of getters and setters, with all the business rules living in application-layer services that reach in, read fields, compute, and write them back. The domain classes hold data; the "logic" lives outside them. This is the most common way a rich domain model quietly decays into a database-row-with-accessors.
@@ -15,9 +18,9 @@ Aggregates and entities reduced to bags of getters and setters, with all the bus
 
 ## What forbids it
 
-- [Domain model classes must not have public setter methods](/rule/tactical/domain-model-classes-must-not-have-public-setter-methods.md) — mechanically blocks the setter-driven mutation this anti-pattern depends on.
-- [Value Objects must not have setter methods](/rule/tactical/value-objects-must-not-have-setter-methods.md) — value objects are immutable; you replace them, not mutate them.
-- [Aggregate Roots must not hold references to repositories or other output ports](/rule/tactical/aggregate-roots-must-not-hold-references-to-repositories-or-other-output-ports.md) — behaviour belongs on the aggregate, but it operates on its own state, not by calling out.
+- [Domain model classes must not have public setter methods](/rule/tactical/dca-tac-006.md) — mechanically blocks the setter-driven mutation this anti-pattern depends on.
+- [Value Objects must not have setter methods](/rule/tactical/dca-tac-011.md) — value objects are immutable; you replace them, not mutate them.
+- [Aggregate Roots must not hold references to repositories or other output ports](/rule/tactical/dca-tac-002.md) — behaviour belongs on the aggregate, but it operates on its own state, not by calling out.
 
 ## Do instead
 

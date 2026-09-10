@@ -2,6 +2,11 @@
 type: Template
 title: "Domain Gateway skeleton (domain-owned port to external capability)"
 tags: [template, domain, gateway]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/domaingateway.md, /guide/domain-services-with-data-dependencies/approach-1-domaingateway-pattern.md, /guide/domain-services-with-data-dependencies/archunit-governance.md]
+applies_to: [java]
+framework: [spring]
 ---
 
 Domain-free skeleton for a **Domain Gateway**: an interface declared in the *domain layer* that the domain itself (an aggregate, entity, or domain service) uses to consult an external fact or delegate a technology-bound operation — without coupling the domain to framework or infrastructure types. The **interface** lives in `{context}/domain/gateway/` and is framework-free; the **implementation** is a secondary (outgoing) adapter in `adapter/outgoing/`. It implements the `DomainGateway` marker. Distinct from an Output Port (which lives in the *application* layer and is used by use cases) and from a Repository (which persists aggregates): a Domain Gateway exposes an external *capability* (hashing, availability check, tax-rate lookup) consumed from inside the domain. Replace `{Name}` / `{context}` / `{basePackage}`.

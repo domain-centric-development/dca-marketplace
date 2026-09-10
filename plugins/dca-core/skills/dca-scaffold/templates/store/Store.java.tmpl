@@ -10,11 +10,8 @@ import java.time.Duration;
  *
  * <p>{{storeDescription}}
  *
- * <p><b>Why a Store, not a Repository?</b> The stored objects ({{StoredType}}) have no
- * own identity-based lifecycle — there is no {@code findById({{StoredType}}Id id)}.
- * The Store records and aggregates over them. If you find yourself adding {@code findById}
- * or {@code save}, the stored type is probably an Aggregate Root and you should switch
- * to a {@code Repository} instead.
+ * <p>The stored data has no aggregate lifecycle. Lookup by key is allowed;
+ * aggregate save/delete lifecycle semantics belong to a Repository.
  */
 public interface {{Name}}Store extends Store {
 

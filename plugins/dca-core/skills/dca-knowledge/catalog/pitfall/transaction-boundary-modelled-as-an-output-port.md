@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Transaction boundary modelled as an output port"
+title: Transaction boundary modelled as an output port
 tags: [pitfall, application, hexagonal, port-out, port]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-013.md, /marker/application/transactionboundary.md, /marker/port-out/outputport.md, /guide/readme/rules.md]
 ---
 
 Declaring the transaction abstraction as an output port — `interface UnitOfWork extends OutputPort` — and placing its implementation under `adapter/outgoing/`. It looks consistent ("the use case depends on it, adapters implement it"), and that is precisely the mistake: not everything a use case calls is a port.
@@ -14,7 +17,7 @@ Declaring the transaction abstraction as an output port — `interface UnitOfWor
 
 ## What forbids it
 
-- [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/declaratively-transactional-use-cases-must-not-call-remote-capable-output-ports.md) — its allowed list inside a transaction names the real transactional resources (`Repository`, `Store`, the publishers); the boundary itself is not on it because it is not a port.
+- [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/dca-use-013.md) — its allowed list inside a transaction names the real transactional resources (`Repository`, `Store`, the publishers); the boundary itself is not on it because it is not a port.
 - [TransactionBoundary](/marker/application/transactionboundary.md) — the building block documents itself as "an application-layer execution abstraction, deliberately not an output port".
 
 ## Do instead
@@ -26,5 +29,5 @@ Keep `TransactionBoundary` in the building blocks' `application` namespace (`App
 ## Anchors
 
 - Markers: [TransactionBoundary](/marker/application/transactionboundary.md) · [OutputPort](/marker/port-out/outputport.md)
-- Rules: [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/declaratively-transactional-use-cases-must-not-call-remote-capable-output-ports.md)
+- Rules: [Declaratively transactional use cases must not call remote-capable output ports](/rule/usecase/dca-use-013.md)
 - Guide: [Layer rules](/guide/readme/rules.md)

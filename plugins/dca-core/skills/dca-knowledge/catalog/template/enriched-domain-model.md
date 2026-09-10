@@ -2,6 +2,11 @@
 type: Template
 title: "Enriched domain model skeleton (read model combining aggregate + cross-context data)"
 tags: [template, domain, value-object, bounded-context]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/value.md, /guide/readme/integration-patterns.md, /guide/readme/elements.md, /guide/readme/java-package-structure.md]
+applies_to: [java]
+framework: [spring]
 ---
 
 Domain-free skeleton for an **enriched domain model**: an immutable read model that combines one aggregate's state with fresh data fetched from *other* bounded contexts, and owns the business rules that need data from more than one context. It is a **Value Object** — it implements `Value`, lives in `{context}.domain.model/` next to the aggregate it enriches, has **no identity, no lifecycle, and raises no events**. Assembly happens through a **static factory** that takes the aggregate plus the external data; the aggregate never learns about the external concepts, so bounded-context isolation stays intact. Use this when a read must show aggregate state together with, e.g., current price (Pricing) or stock (Inventory), or must compare persisted vs. current values. Replace `{Name}` (aggregate) / `{context}` / `{basePackage}` / `{External}` (the cross-context data carrier).

@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Operational module marked as a bounded context"
+title: Operational module marked as a bounded context
 tags: [pitfall, strategic, context-map, bounded-context]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/contextmap/dca-map-001.md, /marker/strategic/boundedcontext.md, /marker/strategic/openhostservice.md]
 ---
 
 A cross-cutting module — an admin shell, a "common" module, a reporting surface that only reformats other contexts' data — declared as a bounded context because that is how every other module in the code base is declared. It gets the context marker, appears on the context map, and acquires upstream declarations towards half the system.
@@ -23,7 +26,7 @@ A second tell, for the borrowed-language case: it would never be extracted into 
 
 ## What forbids it
 
-- [Upstream, ExternalUpstream and Partnership may only be declared on bounded-context packages](/rule/contextmap/upstream-externalupstream-and-partnership-may-only-be-declared-on-bounded-context-packages.md) — the map's relationship vocabulary is reserved for contexts, so a module that is not one must not carry it.
+- [Upstream, ExternalUpstream and Partnership may only be declared on bounded-context packages](/rule/contextmap/dca-map-001.md) — the map's relationship vocabulary is reserved for contexts, so a module that is not one must not carry it.
 - [New context vs. extend existing](/decision/new-context-vs-extend-existing.md) — the same question asked before a context is created at all.
 
 ## Do instead
@@ -41,4 +44,4 @@ A second tell, for the borrowed-language case: it would never be extracted into 
 ## Anchors
 
 - Markers: [BoundedContext](/marker/strategic/boundedcontext.md) · [OpenHostService](/marker/strategic/openhostservice.md)
-- Rules: [Upstream, ExternalUpstream and Partnership may only be declared on bounded-context packages](/rule/contextmap/upstream-externalupstream-and-partnership-may-only-be-declared-on-bounded-context-packages.md)
+- Rules: [Upstream, ExternalUpstream and Partnership may only be declared on bounded-context packages](/rule/contextmap/dca-map-001.md)

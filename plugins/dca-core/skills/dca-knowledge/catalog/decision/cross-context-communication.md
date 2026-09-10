@@ -2,6 +2,9 @@
 type: Decision
 title: "Cross-context communication: synchronous call or integration event"
 tags: [decision, strategic, bounded-context, integration-event, events, anti-corruption-layer, port-out]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/strategic/openhostservice.md, /marker/port-out/outputport.md, /guide/readme/integration-patterns.md, /marker/tactical/domaingateway.md, /marker/tactical/domainevent.md, /marker/tactical/integrationevent.md, /marker/port-out/domaineventpublisher.md, /rule/strategic/dca-str-006.md]
 ---
 
 Two bounded contexts need to interact. The fork is **how**: a **synchronous call** to the provider (the consumer asks and blocks for an answer) or an **asynchronous integration event** (the provider announces a fact and the consumer reacts later). Get this wrong and you either couple two contexts into one distributed lockstep, or you build eventual-consistency machinery for a query that needed an answer *now*.
@@ -47,7 +50,7 @@ The provider raises a `DomainEvent` internally; an ACL translates it to a versio
 ## Anchors
 
 - Markers: [@OpenHostService](/marker/strategic/openhostservice.md) · [OutputPort](/marker/port-out/outputport.md) · [DomainGateway](/marker/tactical/domaingateway.md) · [DomainEventPublisher](/marker/port-out/domaineventpublisher.md) · [IntegrationEvent](/marker/tactical/integrationevent.md)
-- Rules: [Outgoing adapters accessing other modules must only use their published api/ and events/ packages](/rule/strategic/outgoing-adapters-accessing-other-modules-must-only-use-their-published-api-and-events-packages.md) · [Modules must not access each other in the application layer](/rule/strategic/modules-must-not-access-each-other-in-the-application-layer.md) · [Event listeners consuming integration events should use an ACL](/rule/strategic/event-listeners-consuming-integration-events-should-use-anti-corruption-layer.md)
+- Rules: [Outgoing adapters accessing other modules must only use their published api/ and events/ packages](/rule/strategic/dca-str-006.md) · [Modules must not access each other in the application layer](/rule/strategic/dca-str-003.md) · [Event listeners consuming integration events should use an ACL](/rule/strategic/dca-str-010.md)
 - Guide: [Integration Patterns](/guide/readme/integration-patterns.md) · [Java package structure](/guide/readme/java-package-structure.md)
 - Recipes: [Publish a cross-context event](/recipe/publish-a-cross-context-event.md) · [Add an anti-corruption layer](/recipe/add-an-anti-corruption-layer.md)
 - Related decisions: [Event delivery: sync, async, and when you need an outbox](/decision/event-delivery-sync-async-and-outbox.md) · [Domain event vs integration event](/decision/domain-event-vs-integration-event.md)

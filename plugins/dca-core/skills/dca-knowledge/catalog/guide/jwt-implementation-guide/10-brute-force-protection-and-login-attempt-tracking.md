@@ -50,6 +50,6 @@ account/application/shared/
 
 ---
 
-## Related markers
+## Related mentions (heuristic)
 
 - [OutputPort](/marker/port-out/outputport.md)

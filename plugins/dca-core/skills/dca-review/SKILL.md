@@ -87,12 +87,9 @@ For each finding, capture:
 After the review, if you noticed patterns that *could* be enforced statically but aren't covered
 by the current ArchUnit suite, suggest adding rules. Format:
 
-```
-Suggested ArchUnit rule:
-  classes().that().implement(DomainEvent.class)
-           .should().haveSimpleNameEndingWith("ed")  // past-tense
-           .because("Events are things that already happened")
-```
+Past-tense event names are a language review prompt: `Sent` is valid without an `ed` suffix.
+Do not propose a suffix rule to infer tense. Propose a static rule only for a structural property with
+named positive and negative fixtures and a clear selection scope.
 
 ### Phase 5: Output
 
@@ -124,8 +121,8 @@ Produce a structured report:
 
 ### Strengths
 
-- All aggregate roots emit a Created event ✓
-- Output ports are interfaces in application.shared ✓
+- Events are emitted only when a domain fact needs publication ✓
+- Output ports are interfaces in application, shared when reused and local when owned by one operation ✓
 ```
 
 ## Anti-patterns this review catches
@@ -137,7 +134,7 @@ Symptoms: aggregate is mostly getters/setters; business logic lives in use case.
 Why: aggregates should *protect invariants* — if they don't, they're just data containers.
 
 ### God use case
-Symptoms: use case has >5 output ports, or executes >50 lines of code, or has multiple
+Review prompts, not numerical thresholds: a use case with more than five output ports, a long method, or multiple
 nested if-blocks.
 Why: a use case should be one cohesive operation. Big ones suggest missing domain service or
 mis-bounded context.
@@ -177,7 +174,7 @@ Why: incoming adapters drive the application through input ports only — direct
 access bypasses transactions, authorization, and orchestration.
 
 ### Technical names in the domain
-Symptoms: `*Manager`/`*Helper`/`*Util`/`*Impl` classes in `domain/`, or bucket packages
+Symptoms: `*Helper`/`*Util`/`*Impl` classes in `domain/` (`Manager` is valid domain vocabulary), or bucket packages
 like `entities/`, `valueobjects/`, `helpers/`, `util/`.
 Why: technical names signal a missing domain concept; packages are named by domain concept.
 
@@ -208,7 +205,7 @@ Why: only aggregate roots have repositories — non-root entities are loaded thr
 aggregate.
 
 ### Repository vs. Store mismatch
-Symptoms: a `*Store` has `findById` / `save`, OR a `*Repository`'s stored type is a Value
+Symptoms: a `*Store` exposes aggregate persistence methods (`save`, `delete`), OR a `*Repository`'s stored type is a Value
 Object / record without aggregate lifecycle.
 Why: DCA distinguishes Repository (for Aggregate Roots — collection-like, identity-based) from
 Store (for operational data — record/count/exists). Confusing them breaks the Ubiquitous
@@ -250,3 +247,17 @@ This makes the review match the project's actual conventions, not DCA defaults.
 - `reference/checklist.md` — the complete per-layer checklist (includes Output Port Granularity section)
 - `reference/use-case-pattern.md` — central reference for use-case folder structure, file roles, shared-vs-local output-port decision guide, ArchUnit rules
 - `reference/naming-conventions.md` — extracted from `dca-guide/README.md`
+
+### Wiring and metadata review
+
+Check how operations are registered: a stereotype or configuration is equally valid.
+Static references cannot prove runtime wiring; NAM-002 is informational only.
+Presets also configure member roles (`injectionSite`, `persistenceMapping` in Java;
+attribute namespace roles in .NET). Review prohibited roles on types and members,
+including composed annotations/derived attributes; unknown metadata is unclassified
+and allowed by these checks. Outgoing adapters can reuse own/global infrastructure,
+while another module’s infrastructure remains private.
+
+## Cross-sample contract checkpoint (D08)
+
+For a shared behavior change, identify the counterpart implementation and the pinned specification revision. Review the counterpart change and spec revision together, including scenario fixtures and event JSON. An intentional difference needs the accepted compatibility note; do not silently fork behavior.

@@ -2,6 +2,9 @@
 type: Pitfall
 title: "Authenticated is not authorized: a filter that enriches every request"
 tags: [pitfall, security, adapter, application, infrastructure]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-out/outputport.md]
 ---
 
 An authentication filter or middleware that resolves an identity for *every* request — minting an anonymous one for a first-time visitor so the cart survives — sitting under a blanket rule such as `anyRequest().authenticated()` or a globally applied authorize attribute. The rule reads like a gate and is treated as one: the endpoints behind it carry no check of their own.

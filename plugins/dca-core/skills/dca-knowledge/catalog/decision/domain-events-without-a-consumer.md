@@ -1,7 +1,10 @@
 ---
 type: Decision
-title: "Register domain events nobody listens to yet?"
+title: Register domain events nobody listens to yet?
 tags: [decision, domain, domain-event, events, aggregate, use-case]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/tactical/domainevent.md, /marker/port-out/domaineventpublisher.md, /marker/tactical/baseaggregateroot.md, /rule/usecase/dca-use-009.md, /guide/readme/rules.md]
 ---
 
 An aggregate's `create` and `complete` methods could register `{Name}Created` and `{Name}Completed` — but no listener exists in the context, and none is planned for this iteration. The fork is whether the aggregate **registers the events anyway** and the use case publishes into silence, or whether it **registers nothing** until a consumer appears. The publish call itself is not part of the decision: a saving use case calls `publishAndClearEvents` in both cases, because the rule demands it whenever `save` is called.
@@ -36,7 +39,7 @@ The aggregate mutates state and registers no event; the use case still saves and
 ## Anchors
 
 - Markers: [DomainEvent](/marker/tactical/domainevent.md) · [DomainEventPublisher](/marker/port-out/domaineventpublisher.md) · [BaseAggregateRoot](/marker/tactical/baseaggregateroot.md)
-- Rules: [Use cases that save an aggregate must publish its domain events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md)
+- Rules: [Use cases that save an aggregate must publish its domain events](/rule/usecase/dca-use-009.md)
 - Guide: [Layer rules](/guide/readme/rules.md)
 - Recipe: [Add a domain event and consumer](/recipe/add-a-domain-event-and-consumer.md)
 - Related decisions: [Domain event or integration event](/decision/domain-event-vs-integration-event.md) · [Pattern style per subdomain](/decision/pattern-style-per-subdomain.md)

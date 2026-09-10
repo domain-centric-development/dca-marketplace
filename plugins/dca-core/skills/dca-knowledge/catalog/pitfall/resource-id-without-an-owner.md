@@ -2,6 +2,9 @@
 type: Pitfall
 title: "Resource id without an owner: a command that says which, never whose"
 tags: [pitfall, application, security, adapter, use-case]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/marker/port-in/usecase.md, /marker/port-out/repository.md]
 ---
 
 A command or query that identifies a resource belonging to somebody — `CheckoutCartCommand(cartId)`, `GetOrderQuery(orderId)`, `DownloadInvoiceQuery(invoiceId)` — and says nothing about on whose behalf it runs. The id reaches the use case straight from the outside: a path segment, a hidden form field, a request parameter. The use case loads the aggregate by that id and acts on it.

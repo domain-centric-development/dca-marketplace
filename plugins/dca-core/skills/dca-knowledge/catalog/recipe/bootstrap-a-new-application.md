@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Bootstrap a new application"
+title: Bootstrap a new application
 tags: [recipe, strategic, bootstrap]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/archunit-governance/core-rule-categories.md, /rule/usecase/dca-use-001.md, /rule/layered/dca-lay-001.md, /rule/strategic/dca-str-002.md, /rule/layered/dca-lay-005.md, /rule/naming/dca-nam-009.md, /marker/port-in/inputport.md, /marker/port-out/outputport.md]
 ---
 
 Stand up a fresh Domain-Centric Architecture app from nothing: the building-block dependencies, the package skeleton, the rule catalog as a test, and the first bounded context. Get the guardrails in place *before* the domain code, so the rules are green from commit one.
@@ -18,11 +21,11 @@ Stand up a fresh Domain-Centric Architecture app from nothing: the building-bloc
 
 ## Rules to satisfy (build-time checklist)
 
-- [The base InputPort interface must be in the building-blocks port-in package](/rule/usecase/base-inputport-interface-must-be-in-the-building-blocks-port-in-package.md)
-- [The rules of the layered architecture should be followed](/rule/layered/diagnostic-the-rules-of-the-layered-architecture-should-be-followed.md)
-- [Shared Kernel must not have dependencies on any bounded context](/rule/strategic/shared-kernel-must-not-have-dependencies-on-any-bounded-context.md)
-- [The shared kernel's output-port markers must all be interfaces](/rule/layered/the-shared-kernel-s-output-port-markers-must-all-be-interfaces.md)
-- [No technical bucket packages — package by domain concept](/rule/naming/no-technical-bucket-packages-package-by-domain-concept.md)
+- [The base InputPort interface must be in the building-blocks port-in package](/rule/usecase/dca-use-001.md)
+- [The rules of the layered architecture should be followed](/rule/layered/dca-lay-001.md)
+- [Shared Kernel must not have dependencies on any bounded context](/rule/strategic/dca-str-002.md)
+- [The shared kernel's output-port markers must all be interfaces](/rule/layered/dca-lay-005.md)
+- [No technical bucket packages — package by domain concept](/rule/naming/dca-nam-009.md)
 
 ## Anchors
 

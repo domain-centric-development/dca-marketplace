@@ -7,10 +7,8 @@ namespace {{rootNamespace}}.{{Context}}.Application.Shared;
 /// Output port: operational data store for {{storedTypeDescription}}. {{storeDescription}}
 /// </summary>
 /// <remarks>
-/// A store, not a repository: the stored objects (<see cref="{{StoredType}}"/>) have no identity-based lifecycle —
-/// there is no <c>FindByIdAsync({{StoredType}}Id)</c>. The store records and aggregates over them. If you find
-/// yourself adding <c>FindByIdAsync</c> or <c>SaveAsync</c>, the stored type is an aggregate root and belongs
-/// behind an <see cref="IRepository{T,TId}"/> instead.
+/// The stored data has no aggregate lifecycle. Lookup by key is allowed;
+/// aggregate save/delete lifecycle semantics belong to a Repository.
 /// </remarks>
 public interface I{{Name}}Store : IStore
 {

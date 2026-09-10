@@ -86,7 +86,7 @@ Apply only the checks for each file's layer.
 - [ ] C#: ports are async (`Task<TOut> ExecuteAsync(TIn, CancellationToken)`), the domain they call is not — no `.Result`/`.Wait()` bridging
 - [ ] Constructor injection only (no `@Autowired` field injection)
 - [ ] Implements the input port
-- [ ] **Anti-pattern flag — God use case:** more than 5 output ports → consider splitting
+- [ ] **Cohesion review prompt:** more than five output ports prompts a responsibility review; it is not a numerical violation threshold
 - [ ] **Anti-pattern flag — Leaking infrastructure:** depends on JDBC/JPA/Kafka classes directly (must go through ports)
 - [ ] Uses domain methods, not raw field access (e.g. `order.cancel(reason)`, not `order.setStatus(CANCELLED)`)
 - [ ] Order inside the use case: `save`, then `publishAndClearEvents` — never publish before the save; the publisher dispatches first and clears afterwards (clear = acknowledgement)
@@ -136,7 +136,7 @@ The shape of the port is as important as its existence. Run these checks on ever
   - Fix: split by responsibility — `OrderRepository` (findById, save), `OrderSearchPort` (findByCustomer, searchByDateRange), `OrderArchivePort` (archive, restore, exportToCsv).
   - Why it matters: forces every adapter impl to implement methods it doesn't need; couples unrelated use cases together.
 
-- [ ] **Anti-pattern flag — Anemic port:** generic, domain-meaningless name like `*DataAccessor`, `*PersistenceHandler`, `*Manager`, `*Gateway` (when not a real gateway pattern).
+- [ ] **Anti-pattern flag — Anemic port:** generic, domain-meaningless name like `*DataAccessor`, `*PersistenceHandler`, `*Gateway` (when not a real gateway pattern).
   - Symptom: `OrderDataAccessor` instead of `OrderRepository`; `CustomerPersistenceHandler` instead of `CustomerRepository`.
   - Fix: rename using DCA vocabulary — `*Repository` (aggregates), `*Store` (operational data), `*DataPort` (cross-context read), `*EventPublisher` (events).
   - Why it matters: anemic names erase intent — a reader can't tell if it manages an aggregate, records events, or fetches from another context.
@@ -180,10 +180,10 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 
 - [ ] **Anti-pattern flag — Repository for non-aggregate:** a `*Repository` whose stored type is a Value Object or record. Should be a `*Store` instead.
   - Symptom: the stored type doesn't implement `AggregateRoot` and has no own identity-based lifecycle.
-  - Fix: rename to `*Store`, change marker from `Repository<T,ID>` to `Store`, replace `findById/save` with `record/count/exists`.
+  - Fix: rename to `*Store`, change marker from `Repository<T,ID>` to `Store`, choose operational methods such as `record/count/exists`; a lookup named `findById` is allowed.
 
-- [ ] **Anti-pattern flag — Store with `findById` or `save`:** a `*Store` interface using Repository semantics.
-  - Symptom: methods named `findById`, `save`, `delete`.
+- [ ] **Anti-pattern flag — Store with aggregate persistence methods (`save`/`delete`):** a `*Store` interface using Repository semantics.
+  - Symptom: methods named `save`, `delete`, `deleteById`; `findById` alone is valid for a Store.
   - Fix: if the stored type has identity → rename to `*Repository` and ensure stored type extends `AggregateRoot`. Otherwise rewrite methods to `record(...)`, `count(...)`, `exists(...)`, `reset(...)`.
 
 - [ ] **Naming clarity:** the port name should tell the reader without opening the file whether it manages an aggregate (`*Repository`) or records operational data (`*Store`).
@@ -227,7 +227,7 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 
 - [ ] In `adapter/outgoing/event/`
 - [ ] Translate domain events → integration events
-- [ ] **Anti-pattern flag:** publishing the domain event directly to other contexts → use an IntegrationEvent record (with version field)
+- [ ] **Anti-pattern flag:** publishing the domain event directly to other contexts → use an IntegrationEvent contract (schema version in IntegrationEventType metadata, business version allowed)
 
 ---
 
@@ -286,3 +286,37 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 
 - [ ] `sealed record` for commands, queries, results, events; `readonly record struct` for ids and small values
 - [ ] **Anti-pattern flag:** a `record` with `{ get; set; }` or `init` on domain state that carries an invariant — a record spelled mutable is a class with setters
+
+### Operation boundaries and ACL evidence
+
+Ordinary use cases do not invoke other use cases, whether directly, through an
+input port, or through an application helper. Shared collaborators that do not call
+operations remain valid. `DCA-USE-016` follows dependencies within the module's
+application layer and reports `Caller -> Target [via Helper]`. Explicit coordination
+uses a caller-side exception, for example
+`dca.rule.DCA-USE-016.ignore=^com\.example\.module\.application\.coordinate\.CoordinatorUseCase -> `.
+This permits the coordinator to invoke operations; it does not permit an operation
+to invoke the coordinator, and `DCA-CYC-005` still detects coordination cycles,
+including two operations inside the same feature. No coordinator marker is implied.
+When a reliable exception cannot be expressed, use WARN with a recorded reason and
+review the coordinator's transaction boundaries and partial-failure semantics manually.
+Reflection, container lookups and calls through interfaces outside the InputPort
+hierarchy also require manual review.
+
+The input port describes the complete effective public instance surface (`DCA-USE-017`).
+Declared and inherited business methods, unrelated-interface methods and public
+properties/getters/setters must be in the input-port contract. Constructors, Object
+members and compiler-generated members are exempt; a property accessor is not exempt
+merely because it has a special runtime name. Ordinary, inherited and explicit
+input-port implementations are valid. In .NET, `DCA-NET-003` separately validates
+`IUseCase<TIn,TOut>.ExecuteAsync(input, CancellationToken)` returning `Task<T>` through
+the interface map; it does not count declared public methods.
+
+For every declared ACL interaction, the matching adapter must contain a class that
+uses that upstream's channel contract and the declaring context's own domain or
+application model (`DCA-MAP-008`). Two translators for different upstreams may share
+an adapter package. Evidence for one upstream does not satisfy another interaction.
+This identifies a structural translation site, without proving translation quality.
+
+- [ ] D08: shared behavior changes include counterpart implementation and specification revision/scenarios; event JSON stays compatible.
+- [ ] Past-tense names are reviewed as language (`Sent` is valid), never enforced by an `ed` suffix.

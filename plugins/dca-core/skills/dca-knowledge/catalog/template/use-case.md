@@ -2,6 +2,11 @@
 type: Template
 title: "Use case skeleton (InputPort + UseCase + Command/Query + Result)"
 tags: [template, application, use-case]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-009.md, /marker/port-in/usecase.md, /marker/port-in/inputport.md, /guide/readme/rules.md, /guide/readme/elements.md]
+applies_to: [java]
+framework: [spring]
 ---
 
 Domain-free skeleton for one application-layer use case. A use case is a self-contained folder `application/{usecasename}/` (lowercase) with four files. Replace `{Name}` (PascalCase), `{usecasename}` (lowercase), `{context}`, `{basePackage}`. Use `Command` for writes, `Query` for reads.
@@ -151,7 +156,7 @@ read model instead ([Add a read model](/recipe/add-a-read-model.md)).
 > **Bulk command without `save`.** A command that calls a set-level method on the port — `repository.deleteAll()`,
 > `repository.archiveAllBefore(cutoff)` — loads and saves no aggregate and registers no domain event, so it needs
 > no `DomainEventPublisher`: `DCA-USE-009` ([Use cases that save an aggregate must publish its domain
-> events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md)) hangs on `save`, not on
+> events](/rule/usecase/dca-use-009.md)) hangs on `save`, not on
 > the command shape. It still writes, so keep `@Transactional`. See [Add a bulk operation](/recipe/add-a-bulk-operation.md)
 > and [Declarative or explicit transaction boundary](/decision/declarative-vs-explicit-transaction-boundary.md).
 
@@ -159,5 +164,5 @@ read model instead ([Add a read model](/recipe/add-a-read-model.md)).
 
 - Markers: [UseCase<INPUT, OUTPUT>](/marker/port-in/usecase.md) · [InputPort](/marker/port-in/inputport.md)
 - Guide: [Layer rules](/guide/readme/rules.md) · [Layer elements](/guide/readme/elements.md)
-- Rules: [Use cases that save an aggregate must publish its domain events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md)
+- Rules: [Use cases that save an aggregate must publish its domain events](/rule/usecase/dca-use-009.md)
 - Recipe: [Add a use case](/recipe/add-a-use-case.md) · [Add a bulk operation](/recipe/add-a-bulk-operation.md) · [Add a read model](/recipe/add-a-read-model.md)

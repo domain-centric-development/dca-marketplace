@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Cyclic module dependency"
+title: Cyclic module dependency
 tags: [pitfall, strategic, bounded-context, modulith]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/strategic/dca-str-003.md, /rule/cycles/dca-cyc-001.md, /rule/cycles/dca-cyc-002.md, /rule/cycles/dca-cyc-004.md, /rule/cycles/dca-cyc-003.md, /marker/tactical/integrationevent.md, /guide/spring-modulith/module-communication.md, /marker/strategic/openhostservice.md]
 ---
 
 Two bounded contexts that reference each other: Ordering depends on Shipping *and* Shipping depends on Ordering. Each direction may look reasonable in isolation — Ordering asks Shipping for a rate, Shipping reads the order to know what to ship — but together they close a loop. The modules can no longer be built, deployed, reasoned about, or tested independently, and `ApplicationModules.of(...).verify()` fails the build with a cycle between the two modules.
@@ -17,8 +20,8 @@ Where [raw cross-context import](/pitfall/raw-cross-context-import.md) is the *s
 
 ## What forbids it
 
-- [Modules must not access each other in the application layer](/rule/strategic/modules-must-not-access-each-other-in-the-application-layer.md) — the mechanical guard; a mutual dependency can't satisfy the `allowedDependencies` allow-list in both directions.
-- The package-cycle rules apply the same acyclic principle inside each layer: [Domain Packages](/rule/cycles/domain-packages-must-not-have-cyclic-dependencies.md) · [Application Layer](/rule/cycles/application-layer-must-not-have-cyclic-dependencies.md) · [Incoming Adapter Packages](/rule/cycles/incoming-adapter-packages-must-not-have-cyclic-dependencies.md) · [Outgoing Adapter Packages](/rule/cycles/outgoing-adapter-packages-must-not-have-cyclic-dependencies.md).
+- [Modules must not access each other in the application layer](/rule/strategic/dca-str-003.md) — the mechanical guard; a mutual dependency can't satisfy the `allowedDependencies` allow-list in both directions.
+- The package-cycle rules apply the same acyclic principle inside each layer: [Domain Packages](/rule/cycles/dca-cyc-001.md) · [Application Layer](/rule/cycles/dca-cyc-002.md) · [Incoming Adapter Packages](/rule/cycles/dca-cyc-004.md) · [Outgoing Adapter Packages](/rule/cycles/dca-cyc-003.md).
 
 ## Do instead
 

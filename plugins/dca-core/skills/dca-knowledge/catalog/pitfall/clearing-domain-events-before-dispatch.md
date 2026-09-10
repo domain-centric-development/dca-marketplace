@@ -1,7 +1,10 @@
 ---
 type: Pitfall
-title: "Clearing domain events before they are dispatched"
+title: Clearing domain events before they are dispatched
 tags: [pitfall, events, domain-event, application, infrastructure]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/usecase/dca-use-009.md, /marker/port-out/domaineventpublisher.md, /rule/usecase/dca-use-012.md, /guide/readme/rules.md]
 ---
 
 A `DomainEventPublisher` implementation that snapshots the aggregate's events, calls `clearDomainEvents()`, and then dispatches the snapshot — or a use case that publishes before it saves. Both look like tidy bookkeeping; both change what a failure means.
@@ -14,7 +17,7 @@ A `DomainEventPublisher` implementation that snapshots the aggregate's events, c
 
 ## What forbids it
 
-- [Use cases that save an aggregate must publish its domain events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md) — the use case saves, then publishes; the rule anchors the order.
+- [Use cases that save an aggregate must publish its domain events](/rule/usecase/dca-use-009.md) — the use case saves, then publishes; the rule anchors the order.
 - [DomainEventPublisher](/marker/port-out/domaineventpublisher.md) — the marker's contract: save → dispatch → clear; clearing is the acknowledgement that every listener saw the event.
 
 ## Do instead
@@ -26,5 +29,5 @@ Order inside the use case: `save`, then `publishAndClearEvents`, inside the same
 ## Anchors
 
 - Markers: [DomainEventPublisher](/marker/port-out/domaineventpublisher.md)
-- Rules: [Use cases that save an aggregate must publish its domain events](/rule/usecase/use-cases-that-save-an-aggregate-must-publish-its-domain-events.md) · [Use cases that publish domain events must have a transaction boundary](/rule/usecase/use-cases-that-publish-domain-events-must-have-a-transaction-boundary.md)
+- Rules: [Use cases that save an aggregate must publish its domain events](/rule/usecase/dca-use-009.md) · [Use cases that save an aggregate or publish domain events must have a transaction boundary](/rule/usecase/dca-use-012.md)
 - Guide: [Layer rules](/guide/readme/rules.md)

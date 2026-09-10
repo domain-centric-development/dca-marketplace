@@ -1,7 +1,10 @@
 ---
 type: Recipe
-title: "Expose an Open Host Service"
+title: Expose an Open Host Service
 tags: [recipe, strategic, bounded-context, port-in]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/rule/strategic/dca-str-005.md, /rule/hexagonal/dca-hex-007.md, /rule/hexagonal/dca-hex-004.md, /rule/strategic/dca-str-006.md, /rule/strategic/dca-str-003.md, /marker/strategic/openhostservice.md, /marker/port-out/outputport.md, /marker/port-in/usecase.md]
 ---
 
 Publish the public, stable capabilities of a bounded context so *other* contexts can call in — the provider side of the Open Host Service (OHS) pattern. An OHS is an **incoming adapter**: it sits at your context's edge, delegates to your own use cases, and returns DTOs in a published language. It exists so consuming contexts have one sanctioned door instead of reaching into your domain. This recipe covers building the provider; the fork of *whether* two contexts should talk synchronously (OHS) or via events is decided in [Cross-context communication](/decision/cross-context-communication.md) — build an OHS only when a consumer genuinely needs an answer to proceed.
@@ -17,11 +20,11 @@ Publish the public, stable capabilities of a bounded context so *other* contexts
 
 ## Rules to satisfy (build-time checklist)
 
-- [Open Host Services must be published: in the api package or as an incoming adapter](/rule/strategic/open-host-services-must-be-published-in-the-api-package-or-as-an-incoming-adapter.md)
-- [Incoming adapters must only access their own bounded context (event consumers and Open Host Services excepted)](/rule/hexagonal/incoming-adapters-must-only-access-their-own-bounded-context-except-event-consumers-and-open-host-services.md)
-- [Incoming adapters must only use outbound ports, not infrastructure implementations](/rule/hexagonal/incoming-adapters-must-only-use-outbound-ports-not-infrastructure-implementations.md)
-- [Outgoing adapters accessing other modules must only use their published api/ and events/ packages](/rule/strategic/outgoing-adapters-accessing-other-modules-must-only-use-their-published-api-and-events-packages.md) *(consumer side)*
-- [Modules must not access each other in the application layer](/rule/strategic/modules-must-not-access-each-other-in-the-application-layer.md)
+- [Open Host Services must be published: in the api package or as an incoming adapter](/rule/strategic/dca-str-005.md)
+- [Incoming adapters must only access their own bounded context (event consumers and Open Host Services excepted)](/rule/hexagonal/dca-hex-007.md)
+- [Incoming adapters must only use outbound ports, not infrastructure implementations](/rule/hexagonal/dca-hex-004.md)
+- [Outgoing adapters accessing other modules must only use their published api/ and events/ packages](/rule/strategic/dca-str-006.md) *(consumer side)*
+- [Modules must not access each other in the application layer](/rule/strategic/dca-str-003.md)
 
 ## Anchors
 

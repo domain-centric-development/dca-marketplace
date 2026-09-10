@@ -80,7 +80,8 @@ the sources, not the copies, when a rule text looks wrong.
   DcaArchitectureTest` with the project's `DcaLayout`, and `dca-archunit.properties` for the rule selection. No
   templates for adapters or the Modulith test remain; the four artifacts are versioned independently.
 - .NET: `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit`, a `*.ArchitectureTests` project with
-  `DcaArchitectureTests : DcaArchitectureTest` (Debug builds), from NuGet.org (0.1.0 since 2026-09-07). A
+  `DcaArchitectureTests : DcaArchitectureTest` (Debug builds), from NuGet.org (`DomainCentric.BuildingBlocks` 0.1.1,
+  `DomainCentric.ArchRules.Xunit` 0.4.0 since 2026-09-10). A
   conditional project reference to a sibling `dca-dotnet` checkout is offered only on request, for unreleased rules.
 
 It ships no marker or rule templates. The single remaining template is the Spring Modulith verification test,
@@ -131,3 +132,5 @@ architecture test that runs the whole rule catalog. Published installation:
 ## Commit message format
 
 Conventional commits, scope = plugin or skill: `feat(dca-core): …`, `docs: …`, `chore(bootstrap): …`.
+
+2026-09-09 WP-38: shared resolved-preset contract drives bootstrap/scaffold imports and wiring; publisher examples use the published API, event contracts use events/, business version remains valid. Scaffold Spring/none/.NET smoke and canonical/mirror catalog checks passed.

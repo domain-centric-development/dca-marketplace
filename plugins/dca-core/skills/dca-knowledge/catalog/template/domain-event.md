@@ -2,6 +2,11 @@
 type: Template
 title: "Domain event skeleton (record implementing DomainEvent)"
 tags: [template, domain, domain-event]
+review: draft
+owner: DCA catalog maintainers
+evidence: [/guide/readme/rules.md, /marker/tactical/domainevent.md, /marker/tactical/baseaggregateroot.md, /rule/advanced/dca-adv-001.md, /rule/advanced/dca-adv-008.md, /rule/advanced/dca-adv-004.md, /rule/advanced/dca-adv-002.md, /rule/advanced/dca-adv-007.md]
+applies_to: [java]
+framework: [framework-neutral]
 ---
 
 Domain-free skeleton for a domain event: an immutable fact about something that happened, internal to one bounded context. Model it as a Java `record` implementing `DomainEvent`, named in the **past tense**, with no `Event` suffix and no `version` field (that is reserved for integration events). The aggregate registers it; the use case publishes and clears it after persistence. Replace `{Name}` / `{context}` / `{name}` / `{basePackage}`. The domain layer is framework-free — no Spring annotations.
@@ -53,7 +58,7 @@ integration event (see the integration-event template).
 ## Realizes / governed by
 
 - Markers: [DomainEvent](/marker/tactical/domainevent.md) · [BaseAggregateRoot<T, ID>](/marker/tactical/baseaggregateroot.md)
-- Rules: [Domain Events must implement DomainEvent Marker Interface and be records](/rule/advanced/domain-events-must-implement-domainevent-marker-interface-and-be-records.md) · [Domain Events must have a timestamp field](/rule/advanced/domain-events-must-have-a-timestamp-field.md) · [Domain Events must not have Spring annotations](/rule/advanced/domain-events-must-not-carry-container-annotations.md) · [Domain Events must reside in domain package](/rule/advanced/domain-events-must-reside-in-domain-package.md) · [Domain Events that are not Integration Events must not have a version field](/rule/advanced/domain-events-that-are-not-integration-events-must-not-have-a-version-field.md)
+- Rules: [Domain Events must implement DomainEvent Marker Interface and be records](/rule/advanced/dca-adv-001.md) · [Domain Events must have a timestamp field](/rule/advanced/dca-adv-008.md) · [Domain Events must not have Spring annotations](/rule/advanced/dca-adv-004.md) · [Domain Events must reside in domain package](/rule/advanced/dca-adv-002.md) · [Domain Events that are not Integration Events must not have a version field](/rule/advanced/dca-adv-007.md)
 - Guide: [Layer rules](/guide/readme/rules.md) · [Integration patterns](/guide/readme/integration-patterns.md)
 - Decision: [Domain event vs. integration event](/decision/domain-event-vs-integration-event.md)
 - Recipe: [Add a domain event and consumer](/recipe/add-a-domain-event-and-consumer.md)
