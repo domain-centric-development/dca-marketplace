@@ -617,12 +617,11 @@ def command_for(profile, test_path):
     """
     segments = [part for part in test_path.replace("\\", "/").split("/") if part]
     joined = "/".join(segments)
-    best, catch_all = None, None
+    best = None
     for key in test_command_keys(profile):
         command = profile.get(key)
         if not command:
             continue
-        located = False
         for token in command.split():
             token = token.strip("\"'").lstrip("./")
             if not token or token.startswith("-"):
@@ -634,43 +633,56 @@ def command_for(profile, test_path):
                 token = os.path.dirname(token) or token
             if "/" not in token and "." in token and not token.startswith("test"):
                 continue                      # a version, a flag's value, a class name
-            located = located or "/" in token or token in segments
             covers = token in segments or ("/" in token and token in joined)
             if covers and (best is None or len(token) > best[2]):
                 best = (key, command, len(token))
-        if not located and catch_all is None:
-            # `dotnet test`, `./gradlew test`, `mvn test`: no path at all, so it runs the whole
-            # solution or project and therefore covers every test in it. Ranked last, because a
-            # command that names a source set is the better answer where one exists.
-            catch_all = (key, command)
     if best:
         return best[0], best[1]
-    if catch_all:
-        return catch_all
+    # No guessing beyond this point. Whether a command without a path runs the whole project
+    # (`dotnet test` on a solution) or exactly one source set (`./gradlew test`) is knowledge about
+    # that build tool, and a gate that guesses it either refuses valid projects or silently runs the
+    # wrong task and calls a criterion covered that nothing executes. So the project declares it:
+    #
+    #     covers.test: **                  this command runs every test in the project
+    #     covers.test: tests/, src/it/     it runs the tests under these paths
+    #
+    # The installer writes it where it can tell; a human corrects it where it cannot.
+    for key in test_command_keys(profile):
+        scope = profile.get(f"covers.{key}")
+        if not scope or not profile.get(key):
+            continue
+        for prefix in (part.strip() for part in scope.split(",")):
+            if prefix == "**" or (prefix and joined.startswith(prefix.rstrip("/").lstrip("./"))):
+                return key, profile[key]
     return None, None
 
 
-#: Exit codes and messages that mean the command never got as far as running a test. A shell
-#: reports 127 for "not found" and 126 for "not executable"; a build tool that cannot start says so
-#: in words. Neither is a statement about the test.
-INFRASTRUCTURE = (
-    ("command not found", "the command does not exist"),
-    ("No such file or directory", "the command or its project is missing"),
-    ("Permission denied", "the command is not executable"),
-    ("not recognized as an internal or external command", "the command does not exist"),
-)
+#: A selector no project can contain. Running the same command with it answers the only question
+#: that makes a verdict meaningful: does this command distinguish a test that exists from one that
+#: does not? If it answers both the same way, nothing it says about a real selector is evidence —
+#: and that holds whatever the exit code or the wording of the error happens to be on this machine.
+SENTINEL = ("dev.dca.factory.NoSuchTestClass", "noSuchTestMethod")
+#: Noise that differs between two runs of the same command and says nothing about the outcome.
+NOISE = re.compile(r"\b\d+(\.\d+)?\s*(ms|s|sec|seconds|minutes)\b|\b\d{2}:\d{2}:\d{2}\b")
 
 
-def infrastructure_failure(code, output):
-    """Why this run proves nothing, or an empty string when it is a real verdict."""
-    if code in (126, 127):
-        return f"exit {code}: the command could not be started"
-    for needle, reason in INFRASTRUCTURE:
-        if needle in output:
-            return reason
-    if code != 0 and not output.strip():
-        return f"exit {code} with no output at all"
-    return ""
+def normalise(output, cwd):
+    text = output.replace(cwd, ".")
+    return NOISE.sub("<time>", text).strip()
+
+
+def discriminates(command, flag, fmt, cwd, cache):
+    """(control_code, control_output) for this command, run once and remembered.
+
+    The control is a run with a selector that cannot exist. Comparing a real run against it is a
+    positive check — a list of known error messages is not: which message a missing runner produces
+    depends on the shell, and a test host that crashes produces the exit code of a failing test.
+    """
+    if command not in cache:
+        pattern = fmt.replace("{class}", SENTINEL[0]).replace("{method}", SENTINEL[1])
+        code, output = run(f'{command} {flag} "{pattern}"'.strip(), cwd)
+        cache[command] = (code, normalise(output, cwd))
+    return cache[command]
 
 def check_test_state(result, profile, cwd, mapping, expected, located=None, tasks=None, story=None):
     """expected 'red': every mapped test must fail. 'green': all must pass."""
@@ -690,6 +702,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
     have_ledger = bool(ledger) and os.path.isfile(ledger)
     was_red = read_red_ledger(tasks, story)
     now_red = set()
+    control = {}                              # one control run per command, not per selector
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
             cls, method = SELECTOR.match(selector).groups()
@@ -703,7 +716,9 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                 result.fail(
                     f"tests-{expected}",
                     f"{selector} lives in {test_path}, which no declared test command covers. "
-                    f"Declare that source set in the stack profile (`test.<name>: <command>`); "
+                    f"Declare that source set in the stack profile (`test.<name>: <command>`), or "
+                    f"state the scope of a command that already runs it (`covers.<key>: <paths>` "
+                    f"or `covers.<key>: **`); "
                     f"a run with any other command would match no test, and that exits 0 on one "
                     f"runner and non-zero on another — neither is evidence about {key!r}.",
                 )
@@ -712,15 +727,17 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                 command_key, command = "e2eTest" if profile.get("e2eTest") else "test", fallback
             invocation = f'{command} {flag} "{pattern}"'.strip()
             code, output = run(invocation, cwd)
-            broken = infrastructure_failure(code, output)
-            if broken:
-                # A command that never ran a test is not evidence in either direction. Counting its
-                # exit code as "red" lets a missing runner, a typo in the profile or an unbuildable
-                # project fill the record that the build gate later accepts as proof.
+            control_code, control_output = discriminates(command, flag, fmt, cwd, control)
+            if code == control_code and normalise(output, cwd) == control_output:
+                # The command answered a selector that cannot exist exactly as it answered this
+                # one, so it never looked at this test: a missing runner, a wrong path in the
+                # profile, a project that will not build. Recording that as "red" is how a criterion
+                # with no working test ends up certified by the build gate.
                 result.fail(
                     f"tests-{expected}",
-                    f"{selector}: `{invocation}` did not run the test ({broken}) — no evidence "
-                    f"about {key!r} in either direction:\n{tail(output)}",
+                    f"{selector}: `{invocation}` answers a selector that cannot exist the same way "
+                    f"(exit {code}), so it never ran this test — no evidence about {key!r} in "
+                    f"either direction:\n{tail(output)}",
                 )
                 continue
             passed = code == 0

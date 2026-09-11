@@ -10,6 +10,12 @@
 # e2eTest      runs the end-user tests (falls back to `test` when absent)
 # filterFlag   the flag that selects a single test
 # filterFormat how a selector `<Class>#<method>` is written for this runner
+# covers.<key> which tests a command runs, where its own text does not say: `**` for every
+#              test in the project (`dotnet test` on a solution), or a comma-separated list
+#              of path prefixes. Needed because whether a pathless command runs everything
+#              or one source set is knowledge about that build tool — the gate refuses to
+#              guess it, and running the wrong task would call a criterion covered that
+#              nothing executes
 # architecture runs the architecture rule suite — the gate runs it in the build stage
 # format       runs the formatter check — the gate runs it in the build stage
 # carrier.<s>  the skill or agent that carries one stage's craft (`carrier.test`, `carrier.build`,

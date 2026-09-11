@@ -68,6 +68,29 @@ TESTS = """# Tests — STORY-1
 
 # The fixture's runner: exit 1 while the marker for that test is absent, 0 once it is there. It
 # also refuses a selector it cannot see, so "a run that matched nothing" is reproducible too.
+#: A runner invoked the way a build tool is — `gradlew <task>`, no path anywhere in the command.
+#: The task names the source set: `test` runs src/test, `test-integration` runs src/test-integration.
+TASK_RUNNER_STUB = """#!/bin/sh
+task=$1; shift
+[ "$1" = "--select" ] && shift
+selector=$1
+simple=$(echo "$selector" | sed 's/.*\\.//; s/#.*//')
+case "$task" in
+  test) set=src/test ;;
+  *)    set="src/$task" ;;
+esac
+if [ -z "$(find "$set" -name "$simple.java" 2>/dev/null | head -1)" ]; then
+  echo "no tests found for given includes: $selector"
+  exit 1
+fi
+if [ -f "green/$(echo "$selector" | tr -d './#')" ]; then
+  echo "BUILD SUCCESSFUL: $selector"
+  exit 0
+fi
+echo "FAILED: $selector"
+exit 1
+"""
+
 RUNNER_STUB = """#!/bin/sh
 # The fixture's test runner: it stands in for a build tool, and it behaves like one in the two
 # ways that matter here — it only knows the tests in the source set it was pointed at, and a test
@@ -159,6 +182,8 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
         write("tasks/STORY-1/.tests-red", "\n".join(ledger) + "\n")
     write("runner.sh", RUNNER_STUB)
     os.chmod(os.path.join(root, "runner.sh"), 0o755)
+    write("gradlew-stub", TASK_RUNNER_STUB)
+    os.chmod(os.path.join(root, "gradlew-stub"), 0o755)
     for selector in green:
         write("green/" + re.sub(r"[./#]", "", selector), "")
     return root
@@ -337,6 +362,19 @@ def verify_runner(runner, verbose=False):
               f"{sorted(entries)[:5]}…")
         check("install: a link whose skill is gone from the source is pruned",
               "gone-from-the-source" not in entries)
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        skills = os.path.join(root, ".codex", "skills")
+        os.makedirs(skills)
+        elsewhere = os.path.join(root, "our-stage-plan")
+        os.makedirs(elsewhere)
+        with open(os.path.join(elsewhere, "SKILL.md"), "w") as handle:
+            handle.write("---\nname: stage-plan\ndescription: the project's own plan stage\n---\n")
+        os.symlink(elsewhere, os.path.join(skills, "stage-plan"))
+        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        check("install: a link the *project* made is not replaced either",
+              os.path.realpath(os.path.join(skills, "stage-plan")) == os.path.realpath(elsewhere),
+              f"stage-plan now points at {os.path.realpath(os.path.join(skills, 'stage-plan'))}")
 
     # 1f. the snapshot sees files in a directory this run added
     with tempfile.TemporaryDirectory() as root:
@@ -484,14 +522,38 @@ def main(argv=None):
         (Case("test: a mandatory epic field left blank is refused", "plan", 1, must_fail=("epic",),
               text=("missing domain_contact",)),
          dict(epic=EPIC.replace("domain_contact: the-expert", "domain_contact:"))),
-        (Case("test: a runner that never ran the test is no evidence", "test", 1,
-              must_fail=("tests-red",), text=("did not run the test",)),
+        (Case("test: a runner that cannot start is no evidence", "test", 1,
+              must_fail=("tests-red",), text=("never ran this test",)),
          dict(profile=PROFILE.replace("test: sh runner.sh src/test/java",
-                                      "test: sh no-such-runner.sh src/test/java"))),
-        (Case("test: a whole-project command covers every test in it", "test", 0,
+                                      "test: sh no-such-runner.sh src/test/java\ncovers.test: **"))),
+        (Case("test: a runner that answers everything the same way is no evidence", "test", 1,
+              must_fail=("tests-red",), text=("selector that cannot exist",)),
+         # exits 1 whatever it is asked — a crashed test host looks exactly like this, and its exit
+         # code alone is indistinguishable from a failing test
+         dict(profile=PROFILE.replace("test: sh runner.sh src/test/java",
+                                      "test: sh -c 'exit 1' --\ncovers.test: **"))),
+        (Case("test: a command whose declared scope is everything covers every test", "test", 0,
               must_pass=("tests-red",)),
-         dict(profile="compile: true\ntest: sh runner.sh .\nfilterFlag: --select\n"
-                      'filterFormat: "{class}#{method}"\narchitecture: true\n')),
+         dict(profile="compile: true\ntest: sh runner.sh .\ncovers.test: **\n"
+                      'filterFlag: --select\nfilterFormat: "{class}#{method}"\narchitecture: true\n')),
+        (Case("test: a pathless task is not assumed to run another source set", "test", 1,
+              must_fail=("tests-red",), text=("no declared test command covers",)),
+         # The build-tool shape: `<tool> test` carries no path at all. A test in another source set
+         # must not be attributed to it — that task does not run those tests, and calling the
+         # criterion covered would certify something nothing executes.
+         dict(tests=TESTS.replace("com.example.WidgetPageTest#showsTheThing",
+                                  "com.example.OtherTest#showsTheThing"),
+              extra_sources=(("src/test-integration/java/com/example/OtherTest.java",
+                              "class OtherTest { void showsTheThing() {} }\n"),),
+              profile="compile: true\ntest: ./gradlew-stub test\n"
+                      'filterFlag: --select\nfilterFormat: "{class}#{method}"\narchitecture: true\n')),
+        (Case("test: a pathless task still covers its own source set", "test", 0,
+              must_pass=("tests-red",)),
+         dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
+              tests="# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
+                    "| shows-nothing-when-empty | com.example.WidgetUnitTest#showsNothingWhenEmpty |\n",
+              profile="compile: true\ntest: ./gradlew-stub test\n"
+                      'filterFlag: --select\nfilterFormat: "{class}#{method}"\narchitecture: true\n')),
         (Case("test: a project file names the directory it covers", "test", 0,
               must_pass=("tests-red",)),
          dict(profile="compile: true\ntest: sh runner.sh src/test/java/com/example/WidgetUnitTest.java\n"

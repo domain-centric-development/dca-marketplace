@@ -187,9 +187,15 @@ install_skills() {
         for skill in "$dir"/*; do
           [ -d "$skill" ] || continue
           name=$(basename "$skill")
-          if [ -e "$target/$name" ] && [ ! -L "$target/$name" ]; then
-            echo "factory: kept the project's own $target/$name — the pipeline's copy was not installed" >&2
-            continue
+          # Ours to replace only if it is a link into a source we install from. A directory the
+          # project keeps here is obvious; a *link* the project made is just as much its own, and
+          # overwriting it silently swaps a skill under someone's feet.
+          if [ -e "$target/$name" ] || [ -L "$target/$name" ]; then
+            if ! { [ -L "$target/$name" ] && ours "$(readlink "$target/$name")" "$source_abs" "$method_dirs"; }; then
+              echo "factory: kept the project's own $target/$name — the pipeline's $name was not installed" >&2
+              kept=$((kept + 1))
+              continue
+            fi
           fi
           ln -sfn "$skill" "$target/$name"
           linked=$((linked + 1))
@@ -255,7 +261,7 @@ write_profile() {
   local from=$1 conventions
   conventions=$(conventions_file)
   cp "$from/factory-run/templates/factory.profile.yaml.tmpl" .agents/factory/factory.profile.yaml
-  local compile="" test="" architecture="" filter_flag="" filter_format=""
+  local compile="" test="" architecture="" filter_flag="" filter_format="" covers=""
   # The selector syntax belongs to the runner, not to the language: writing a Gradle selector into
   # a .NET profile makes every single-test invocation of the gate select nothing, and a test that
   # runs nothing looks exactly like a red one.
@@ -269,6 +275,10 @@ write_profile() {
     # `dotnet test` takes one project per invocation; several paths in one call is an MSBuild error.
     compile="dotnet build"; test="dotnet test"; architecture="dotnet test --filter FullyQualifiedName~Architecture"
     filter_flag="--filter"; filter_format='"FullyQualifiedName~{class}.{method}"'
+    # Without a project argument `dotnet test` runs every test project of the solution, so this
+    # command's scope is the whole project. A Gradle or Maven task is *not* that — `./gradlew test`
+    # runs one source set — which is why this is declared here rather than guessed by the gate.
+    covers="**"
   fi
   if [ -n "$conventions" ]; then
     local stated
@@ -276,9 +286,9 @@ write_profile() {
     [ -n "$stated" ] && architecture="$stated"
     echo "factory: read build facts from $conventions"
   fi
-  python3 - "$compile" "$test" "$architecture" "$filter_flag" "$filter_format" <<'PYEOF'
+  python3 - "$compile" "$test" "$architecture" "$filter_flag" "$filter_format" "$covers" <<'PYEOF'
 import sys
-compile_, test, architecture, filter_flag, filter_format = sys.argv[1:6]
+compile_, test, architecture, filter_flag, filter_format, covers = sys.argv[1:7]
 path = ".agents/factory/factory.profile.yaml"
 lines = open(path).read().splitlines()
 values = {
@@ -300,6 +310,8 @@ for line in lines:
         continue
     else:
         out.append(line)
+if covers:
+    out.append(f"covers.test: {covers}")
 open(path, "w").write("\n".join(out) + "\n")
 PYEOF
   echo "factory: wrote .agents/factory/factory.profile.yaml — check the commands, then add"
