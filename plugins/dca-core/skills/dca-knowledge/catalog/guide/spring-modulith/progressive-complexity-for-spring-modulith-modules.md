@@ -24,7 +24,7 @@ For general progressive complexity guidelines, see [Domain-Centric Architecture]
 
 **Structure:**
 ```text
-com.company.ecommerce.order/ (module)
+com.company.project.order/ (module)
 ├── package-info.java (@ApplicationModule)
 ├── api/ (published)
 │   ├── package-info.java (@NamedInterface("api"))
@@ -65,7 +65,7 @@ com.company.ecommerce.order/ (module)
 
 **Structure:**
 ```text
-com.company.ecommerce.order/
+com.company.project.order/
 ├── api/
 ├── events/
 └── internal/
