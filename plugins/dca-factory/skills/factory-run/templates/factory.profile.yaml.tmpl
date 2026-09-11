@@ -33,12 +33,18 @@
 #              the project vouches for it being current: a vendored catalog from an older release
 #              names rules and markers that no longer exist, and a citation makes that look verified.
 #              Unnamed means the stages work from the project's own rules, markers and documents
+# contract     the gate file contract this profile was written for (see below)
 # contextMap   where the project keeps its context map (found by convention when absent)
 # glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
 # reviews      perspectives the judge stage covers *in addition to* domain, boundaries and craft
 # review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
 #              tool; a review *agent* only in a tool that has agents — where it is missing, the
 #              judge runs the built-in pass itself and says so
+
+# Which gate file contract this profile is written for. The gate refuses a run when the number is
+# higher than the gate it is asked to run against — the project would be relying on keys that copy
+# of the script does not know, and a key ignored in silence is a check that has quietly gone.
+contract: 1
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}

@@ -82,7 +82,7 @@ say precisely which file to create, create it when the user agrees, then continu
 
 ## The run
 
-Call the gate as `python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build>`
+Call the gate as `python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy|document>`
 from the project root. Exit code 0 means proceed; any `gate:fail` line stops the stage that was
 about to run, and the fix belongs to the stage that produced the artefact, not to you.
 

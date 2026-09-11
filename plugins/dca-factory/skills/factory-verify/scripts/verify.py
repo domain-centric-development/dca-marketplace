@@ -12,6 +12,7 @@ fixture's "test runner" is a marker file, so red and green cost milliseconds ins
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -229,6 +230,25 @@ def checks_by_verdict(output):
 # artefact names, the verdict handling and the two shapes `install` may leave behind.
 
 
+_OBSERVE = None
+
+
+def observe_snapshot(path):
+    """Read a tree snapshot with the *observer's* own function, not a copy of its rule here.
+
+    What matters is that `observe.py` refuses to compare a snapshot the runner wrote without a hash
+    command; a second implementation of that rule in this file could agree while the observer does
+    not, which is the one outcome a check may not have.
+    """
+    global _OBSERVE
+    if _OBSERVE is None:
+        spec = importlib.util.spec_from_file_location(
+            "factory_observe", os.path.join(HERE, "observe.py"))
+        _OBSERVE = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_OBSERVE)
+    return _OBSERVE.snapshot(path)
+
+
 def read_snapshot(path):
     """The runner's tree snapshot: digest and path per line."""
     entries = {}
@@ -409,6 +429,76 @@ def verify_runner(runner, verbose=False):
         check("snapshot: a file inside a directory this run added is hashed, not skipped",
               "src/brand-new/Added.java" in snap,
               f"{len(snap)} entries: {sorted(snap)[:4]}…")
+
+    # 1g. no sha256 command on the machine: the snapshot says so instead of recording empty
+    # digests, because empty digests compare equal and would read as "this stage changed nothing".
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        code, output = run_runner(
+            runner, root, "run", "--story", "STORY-1", "--tool", "stand-in", "--from", "judge",
+            env={"FACTORY_SHA256": "none",
+                 "FACTORY_TOOL_CMD": 'mkdir -p tasks/STORY-1; printf "## Verdict\\nverdict: pass\\n" '
+                                     '> tasks/STORY-1/judge.md'})
+        tree = os.path.join(root, "tasks", "STORY-1", ".verify", "tree-before-judge.txt")
+        first = open(tree).readline().strip() if os.path.isfile(tree) else ""
+        check("snapshot: without a sha256 command the snapshot says so, and the run says it too",
+              first.startswith("# no-sha256-command") and "no sha256 command found" in output,
+              f"first line {first!r}")
+        check("snapshot: the observer reads a names-only snapshot as absent, not as unchanged",
+              observe_snapshot(tree) is None,
+              "a placeholder digest must never compare equal to a real one")
+
+    # 1h. an install step that cannot write must abort, not report success. A regular file where
+    # `.agents/factory` has to be a directory is the cheapest way to make one `mkdir` fail.
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        shutil.rmtree(os.path.join(root, ".agents"))
+        with open(os.path.join(root, ".agents"), "w") as handle:
+            handle.write("not a directory\n")
+        code, output = run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        check("install: a write that fails aborts the install instead of reporting success",
+              code != 0 and "install aborted" in output
+              and not os.path.isfile(os.path.join(root, ".agents", "factory", "story-gate.py")),
+              f"exit {code}: {output.strip().splitlines()[-1] if output.strip() else ''!r}")
+
+    # 1i. the architecture test is found where source layouts actually put it — several directories
+    # down. A `**` glob without `shopt -s globstar` matches one level and reported none.
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root, extra_sources=(
+            ("src/test-architecture/java/com/example/ArchitectureTest.java",
+             "class ArchitectureTest {}\n"),))
+        code, output = run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        check("install: an architecture test nested in a source set is found",
+              "architecture governance found" in output,
+              [l for l in output.splitlines() if "governance" in l])
+
+    # 1j. the install stamps where the gate came from, and a later run says when the project is
+    # behind the pipeline. The gate itself cannot tell: a copied script has nothing to compare to.
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        stamp = os.path.join(root, ".agents", "factory", ".installed-from")
+        stamped = open(stamp).read() if os.path.isfile(stamp) else ""
+        check("install: the gate's version and contract are stamped into the project",
+              "version: " in stamped and "contract: " in stamped and "source: " in stamped,
+              stamped.strip().replace("\n", " | "))
+        # the project's copy is made to look like an older release of the same contract
+        gate_copy = os.path.join(root, ".agents", "factory", "story-gate.py")
+        body = open(gate_copy).read()
+        open(gate_copy, "w").write(body.replace('VERSION = "', 'VERSION = "0.0.1-', 1))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
+                                  "--dry-run")
+        check("install: a run says when the project's gate is behind the pipeline",
+              "brings the project up to date" in output,
+              [l for l in output.splitlines() if "gate is" in l])
+        # and a differing *contract* is the louder message, because it is a compatibility question
+        open(gate_copy, "w").write(body.replace("CONTRACT = 1", "CONTRACT = 0", 1))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
+                                  "--dry-run")
+        check("install: a differing file contract is reported as a compatibility question",
+              "file contract" in output and "check the stack profile" in output,
+              [l for l in output.splitlines() if "contract" in l])
 
     # 2. the artefact name the runner waits for is the file contract's, not the stage's name
     with tempfile.TemporaryDirectory() as root:
@@ -682,6 +772,33 @@ def main(argv=None):
                    '\'</testsuite>\\n\' > build/test-results/run/TEST-WidgetUnitTest.xml\n'
                    'echo "2 tests ran"\nexit 1\n'),
               ))),
+        # --- the version contract -----------------------------------------
+        # Two numbers, two jobs: the *contract* says whether this gate can read the project's
+        # files at all, so a mismatch is a refusal. The script's *version* is provenance and an
+        # update hint, which only the installer can see — the runner checks that, not the gate.
+        (Case("contract: a profile written for a newer gate is refused", "plan", 1,
+              must_fail=("contract",), text=("re-run `factory.sh install`",)),
+         dict(profile="contract: 99\n" + PROFILE)),
+        (Case("contract: a profile written for an older gate is still read", "plan", 0,
+              text=("worth bringing up to date",)),
+         dict(profile="contract: 0\n" + PROFILE)),
+        (Case("contract: a profile that declares none is not treated as a failing check", "plan", 0,
+              text=("declares no `contract:`",)),
+         dict()),
+        (Case("contract: a contract that is not a number is refused", "plan", 1,
+              must_fail=("contract",)),
+         dict(profile="contract: latest\n" + PROFILE)),
+
+        # --- the shape the selector depends on ------------------------------
+        # The documented limit, as a case: a selector resolves through a source file *named after
+        # the class*. Stated in prose it is a claim; here it is the behaviour, so the day the
+        # profile learns to declare another shape, this case is what has to change with it.
+        (Case("selector: a class whose file is not named after it is not found", "test", 1,
+              must_fail=("tests-exist",), text=("no source file for",)),
+         dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
+              tests="# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
+                    "| shows-nothing-when-empty | com.example.Widgets#showsNothingWhenEmpty |\n")),
+
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),

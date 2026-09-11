@@ -142,10 +142,20 @@ def digest(path):
         return None
 
 
+#: The first line the runner writes when the machine has no sha256 command (see `snapshot` in
+#: factory.sh). Such a file carries names and no content.
+NO_HASHES = "# no-sha256-command"
+
+
 def snapshot(path):
-    """`tree-<label>.txt` written by the runner: digest and path per line."""
+    """`tree-<label>.txt` written by the runner: digest and path per line.
+
+    A snapshot without content hashes is reported as *absent*, not compared: every digest in it is
+    a placeholder, so every comparison against it would come out equal and every check would read
+    "nothing changed" — the strongest claim in the report from no evidence at all.
+    """
     text = read(path)
-    if text is None:
+    if text is None or text.startswith(NO_HASHES):
         return None
     entries = {}
     for line in text.splitlines():
@@ -153,6 +163,15 @@ def snapshot(path):
         if len(parts) == 2:
             entries[parts[1].strip()] = parts[0].strip()
     return entries
+
+
+def snapshot_reason(path):
+    """Why a snapshot could not be compared, where the file itself says so."""
+    text = read(path)
+    if text is not None and text.startswith(NO_HASHES):
+        return (" — the runner found no sha256 command on that machine and recorded file names "
+                "without content")
+    return ""
 
 
 def locate(project, selector):
@@ -258,10 +277,12 @@ def observe(project, tasks, backlog, story_id):
                              "so only the files can be cross-checked")
 
     # --- 4. did a stage change a test after the test stage? --------------
-    before = snapshot(os.path.join(journal_dir, "tree-after-test.txt"))
+    before_path = os.path.join(journal_dir, "tree-after-test.txt")
+    before = snapshot(before_path)
     if before is None:
-        report.blind("tests-untouched", "no tree snapshot from the test stage — cannot tell whether a "
-                                        "later stage edited a test")
+        report.blind("tests-untouched", "no tree snapshot from the test stage to compare — cannot tell "
+                                        "whether a later stage edited a test"
+                                        + snapshot_reason(before_path))
     else:
         touched, unhashed = [], []
         for selector in selectors:
@@ -293,7 +314,8 @@ def observe(project, tasks, backlog, story_id):
 
     # --- 5. what the build claimed it changed vs. what changed -----------
     actual = changed_files(project)
-    window = snapshot(os.path.join(journal_dir, "tree-before-build.txt"))
+    window_path = os.path.join(journal_dir, "tree-before-build.txt")
+    window = snapshot(window_path)
     if actual is not None and window is not None:
         # Only what changed *during* the run is the run's to account for. Without the journal the
         # working tree also holds whatever was there before, and blaming a stage for that is noise.
@@ -303,7 +325,8 @@ def observe(project, tasks, backlog, story_id):
     elif actual is not None:
         journalled = sorted(f[5:-4] for f in os.listdir(journal_dir)
                             if f.startswith("tree-")) if os.path.isdir(journal_dir) else []
-        report.blind("claims", "no tree snapshot from around the build stage"
+        report.blind("claims", "no tree snapshot from around the build stage to compare"
+                               + snapshot_reason(window_path)
                                + (f" (the journal has {', '.join(journalled)})" if journalled else
                                   " and no journal at all")
                                + " — without the run's own window the check would blame a stage for "

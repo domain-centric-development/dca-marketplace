@@ -51,9 +51,11 @@ dca-marketplace/
 │   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
 │   ├── skills/{factory-backlog,factory-scope}/   # write the backlog; answer a scoping question
-│   └── skills/factory-verify/                    # scripts/verify.py — 33 cases over gate and runner
+│   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
 ├── plugins/software-craftsmanship/        # project-agnostic skills + agents (any Java or .NET project)
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
+├── .github/workflows/check.yml            # syntax, manifests, skill front matter, factory-verify (Linux + macOS)
+├── scripts/check-skills.py                # every skill folder has a SKILL.md with name and description
 └── MULTI-HARNESS-PORTABILITY.md           # notes on running the skills outside Claude Code
 ```
 
@@ -122,9 +124,11 @@ interfaces are aliased to the library ones or kept and declared through `DcaLayo
 | Guide text (`dca-guide/*.md`) or authored catalog nodes | regenerate the catalog; the mirror follows |
 | Context-map relationships or renderer options | `context-map/SKILL.md` |
 | Craft that a delivery stage or a review perspective needs (test writing, implementation, a review angle) | the **skill** carries it (portable — every tool reads skills); an agent stays a thin wrapper around that skill for isolated context and a restricted tool set. Knowledge in an agent alone is Claude-only |
-| A gate check, a stage order or the runner changed | run `plugins/dca-factory/skills/factory-verify/scripts/verify.py` and extend it with a case for what changed — the gate is the correctness argument for every stage, so it may not rest on a hand check |
+| A gate check, a stage order or the runner changed | extend `plugins/dca-factory/skills/factory-verify/scripts/verify.py` with a case for what changed — the gate is the correctness argument for every stage, so it may not rest on a hand check. `.github/workflows/check.yml` runs the suite on every push and pull request, on Linux and macOS; never state a case count in prose, it drifts |
 | Delivery process: backlog fields, stage order, gate checks, file hand-overs | `dca-factory/skills/factory-run/SKILL.md`, its `reference/{backlog-contract,file-contracts}.md`, `scripts/story-gate.py`, and the affected `stage-*/SKILL.md`. A gate check is a script change, never a hook or a stage self-assessment |
 | A stage needs project knowledge (build command, test runner, source set) | it goes into the project's stack profile, never into a skill |
+| What the gate **reads or writes** changes incompatibly (profile keys, the `gate:tests` table, the red ledger, a document claim's shape) | raise `CONTRACT` in `story-gate.py` *and* in `templates/factory.profile.yaml.tmpl`, and refresh the gate copy in every consuming project — an older copy then refuses the newer profile instead of ignoring a key |
+| Anything else in `dca-factory` ships | keep `VERSION` in `story-gate.py` in step with `plugin.json`; that number is provenance, so the runner can tell a project it is behind the pipeline |
 
 Sync targets in the other direction: root `AGENTS.md` § 5 (plugin contents, installation), `planning/porting-status.md`
 row "Marketplace bootstrap branch".

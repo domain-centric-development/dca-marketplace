@@ -1,0 +1,42 @@
+name: check
+
+# The pipeline's own test suite. `factory-verify` builds a throwaway project per case and calls the
+# real gate and the real runner, so it is the only argument that the factory works other than "an
+# agent said it did". It runs on two operating systems on purpose: the gate is portable Python, but
+# the runner is a shell script, and a shell assumption holds on one platform and not on the other.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  factory:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Syntax
+        run: |
+          bash -n plugins/dca-factory/skills/factory-run/scripts/factory.sh
+          bash -n plugins/dca-factory/skills/factory-run/templates/githooks/pre-commit
+          python3 -m py_compile \
+            plugins/dca-factory/skills/factory-run/scripts/story-gate.py \
+            plugins/dca-factory/skills/factory-verify/scripts/verify.py \
+            plugins/dca-factory/skills/factory-verify/scripts/observe.py \
+            scripts/render-rule-catalog.py
+      - name: Manifests are valid JSON
+        run: |
+          python3 -c "import json,glob,sys; [json.load(open(p)) for p in \
+            ['.claude-plugin/marketplace.json'] + glob.glob('plugins/*/.claude-plugin/plugin.json')]"
+      - name: Every skill has a name and a description
+        run: python3 scripts/check-skills.py
+      - name: factory-verify
+        run: python3 plugins/dca-factory/skills/factory-verify/scripts/verify.py

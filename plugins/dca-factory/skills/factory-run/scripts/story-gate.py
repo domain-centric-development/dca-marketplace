@@ -4,7 +4,7 @@
 Reads the backlog (markdown with front matter) and the stack profile, then checks
 what a stage may not decide for itself. Exit code 0 means the stage may proceed.
 
-    story-gate.py --story <id> --stage <plan|test|build|document> [options]
+    story-gate.py --story <id> --stage <plan|test|build|tidy|document> [options]
 
 Options:
     --backlog <dir>     backlog root (default: backlog)
@@ -57,6 +57,19 @@ INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md")
 CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)\s*:\s*(\S.*)$")
 MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
 SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
+
+#: Two different questions, so two different numbers.
+#:
+#: CONTRACT is the version of the *files* the gate reads and writes: the stack profile's keys, the
+#: `gate:tests` table, the red ledger, the shape of a document claim. It goes up only when an older
+#: or newer artefact would be read wrongly — that is what makes a mismatch a refusal.
+#:
+#: VERSION is where this copy came from. The gate is *copied* into a project (`.agents/factory/`),
+#: so a project can be governed by a release older than the pipeline it was installed from without
+#: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
+#: installer can see it — it is the one place that holds both files.
+CONTRACT = 1
+VERSION = "0.4.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -186,6 +199,38 @@ def epic_of(story_path, front, backlog):
 
 
 # --- checks -----------------------------------------------------------------
+
+def check_contract(result, profile):
+    """The profile may declare which gate contract it was written for.
+
+    Undeclared is the normal case and no finding: a profile with today's keys is what the template
+    writes. A *higher* number than this gate knows is a refusal — the project has keys this script
+    would ignore, and ignoring a key silently is how a check disappears without anyone noticing.
+    """
+    declared = str(profile.get("contract", "")).strip()
+    if not declared:
+        result.note("contract", f"profile declares no `contract:` — read as {CONTRACT} "
+                                f"(gate {VERSION})")
+        return
+    if not declared.isdigit():
+        result.fail("contract", f"profile's `contract: {declared}` is not a number")
+        return
+    if int(declared) > CONTRACT:
+        result.fail(
+            "contract",
+            f"the profile is written for gate contract {declared} and this gate implements "
+            f"{CONTRACT} (gate {VERSION}) — re-run `factory.sh install` before trusting a run, "
+            f"because this script would ignore whatever the newer contract added",
+        )
+    elif int(declared) < CONTRACT:
+        result.note(
+            "contract",
+            f"the profile declares contract {declared} and this gate implements {CONTRACT} "
+            f"(gate {VERSION}) — still read, and worth bringing up to date",
+        )
+    else:
+        result.ok("contract", f"profile and gate agree on contract {CONTRACT} (gate {VERSION})")
+
 
 def check_status(result, story_path, front):
     """A story a human has not released is not a story the pipeline builds. A story
@@ -1092,6 +1137,10 @@ def resolve_profile(given, cwd):
 
 def main(argv):
     parser = argparse.ArgumentParser(add_help=True, description="story gate")
+    parser.add_argument(
+        "--version", action="version",
+        version=f"story-gate {VERSION} (file contract {CONTRACT})",
+    )
     parser.add_argument("--story", required=True)
     parser.add_argument(
         "--stage",
@@ -1126,6 +1175,7 @@ def main(argv):
                 f"{len(criteria)} criterion(s)",
             )
         profile = read_profile(resolve_profile(args.profile, cwd))
+        check_contract(result, profile)
         check_status(result, story_path, front)
         check_epic(result, story_path, front, args.backlog)
         check_rounds(result, args.tasks, story_id)

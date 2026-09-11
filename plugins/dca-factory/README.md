@@ -35,6 +35,9 @@ Check the file it wrote before the first run:
 /factory-backlog
 ```
 
+(Installed as a plugin, the skills are namespaced: `/dca-factory:factory-backlog`. The bare
+`factory.sh` and gate commands below are the same in every tool.)
+
 Say what the behaviour is. It writes `backlog/<epic>/epic.md` and one story, asks for the four
 epic fields rather than inventing them (`intent`, `goal`, `metric`, `domain_contact`), and leaves
 the story `status: draft` until you release it — the one check no script can replace.
@@ -57,7 +60,7 @@ bash .agents/factory/factory.sh run --story STORY-1 --tool claude
 
 Two modes: **observe** the run that just happened — the stages' claims against the repository, the
 gate reports and the run journal — or **check the machinery** itself against throwaway fixtures
-(47 cases over the gate, the runner and the installer). Either way it reports three things: what
+(every gate check, the runner's loop and the install shapes). Either way it reports three things: what
 did not hold, what held, and what it could not observe. The last one is not decoration: a check
 that was not observed is not a check that passed.
 
@@ -91,7 +94,7 @@ what must be true before the next one starts.
 project as `.agents/factory/story-gate.py` so every tool and every CI run execute the same check:
 
 ```
-python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build>
+python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy|document>
 ```
 
 | Stage | Checks |
@@ -99,6 +102,7 @@ python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build>
 | `plan` | the story names a context that is **on the context map**, has keyed criteria and is not left in `draft`; its epic has `intent`, `goal`, `metric`, `domain_contact`; the repeat counter is below three; a note when the instruction file exceeds what a tool loads |
 | `test` | every criterion mapped to a test; that test exists in the sources; test sources compile; every mapped test **red** |
 | `build` | every mapped test **green**; the profile's `architecture:` and `format:` commands succeed |
+| `tidy` | the build gate's checks again — the tidy stage's whole claim is that it changed no behaviour |
 | `document` | every file, path and identifier the document stage claims **exists**; every claim names how it was checked; every term the plan proposed has landed in a glossary or is named as open |
 
 A command the stack profile does not declare is skipped and named in the report — never failed.
@@ -117,6 +121,51 @@ agent tool that reads the Agent Skills format. Nothing in the pipeline depends o
 manifest, an orchestration script, agent frontmatter or hooks. Where a tool can start a
 subagent per stage, `factory-run` uses it; where it cannot, the file contracts plus the gate
 keep an in-session run honest.
+
+## What is actually supported
+
+Portable *in form* is not the same as verified *in fact*, and the difference is worth stating
+rather than leaving a reader to find it in a failing run.
+
+**Agent tools.** Claude Code, Codex and OpenCode have an adapter in `factory.sh`; any other tool
+plugs in through `FACTORY_TOOL_CMD`. Run the stage skills in-session and no adapter is needed at
+all — the file contracts and the gate are what make a run honest, not the runner.
+
+**Operating systems.** The gate is standard-library Python 3 and runs wherever Python does. The
+runner and the commit hook are bash, and the install makes symlinks, so both want a POSIX shell:
+Linux and macOS are what the pipeline's own suite runs on in CI. Windows is reachable through WSL
+or Git Bash and is **not tested** — expect the symlink step to need developer mode and `python3` to
+be spelled `python`. A project on Windows can still use the gate on its own: it is one file and one
+command line.
+
+**Test stacks.** The criterion-to-test mapping is a selector of the form `<class>#<method>`, and
+the gate needs three things to line up behind it: a filter the runner accepts (`filterFlag`,
+`filterFormat`), a source file it can find (it looks for a file **named after the class** and
+containing the method's name), and a report that names the case (JUnit XML or TRX, matched on
+class plus method or a declared display name). That holds for **JUnit on Gradle and Maven** and
+for **xUnit, NUnit and MSTest on `dotnet test`** — the two stacks the suite covers — and for
+Kotlin or any other JVM language that keeps one class per file named after it.
+
+It does **not** hold for pytest, Go, Jest or any stack whose tests are functions in a file rather
+than methods of a class named after their file. Reading their JUnit XML is the easy half; the
+selector, the source lookup and the report identity all have to agree, and today they are wired to
+the class-per-file shape. Extending the profile to declare that shape per stack is the open piece
+of work — done for a concrete second stack rather than in the abstract, so the evidence chain is
+proved and not just parameterised.
+
+## Versions, and what a version answers
+
+The gate is **copied** into a project, so two questions come apart that a single version number
+would run together. Both are stated in `story-gate.py` and readable with
+`python3 .agents/factory/story-gate.py --version`:
+
+| | What it answers | Who checks it, and how it ends |
+|---|---|---|
+| **file contract** (`CONTRACT`, and `contract:` in the stack profile) | can this gate read this project's files at all | the **gate**, on every run. A profile written for a higher contract is **refused**: this script would ignore whatever the newer contract added, and a key ignored in silence is a check that has quietly gone |
+| **script version** (`VERSION`) | which release governs this project | the **runner**, from `.agents/factory/.installed-from` written at install time. A project on an older release of the same contract is valid and says so — it is an update to run, never a reason to refuse a story |
+
+The gate cannot answer the second one alone: a copied script has nothing to compare itself
+against. Only the installer and the runner see both files at once.
 
 ## Project knowledge
 

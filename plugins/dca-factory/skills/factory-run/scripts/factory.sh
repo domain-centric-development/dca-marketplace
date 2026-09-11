@@ -39,6 +39,51 @@ stage_file() {
 
 usage() { sed -n '2,12p' "$0" >&2; exit 2; }
 
+# An install step that had to work and did not. `set -e` is deliberately *not* used: the run loop
+# expects non-zero exits in several places — a gate that refuses, a tool that stops, a verdict that
+# sends the story back — and a shell that aborts on the first one would turn a normal refusal into a
+# crash. So the steps that must not fail silently say so one by one. An install that could not write
+# the gate has installed nothing, and reporting success there is the one failure mode that leaves a
+# project believing it is governed.
+must() {                                    # must <what> <command...>
+  local what=$1; shift
+  "$@" || { echo "factory: could not $what — install aborted, the project is unchanged from here on." >&2; exit 1; }
+}
+
+# A gate script states two things about itself: VERSION (where this copy came from) and CONTRACT
+# (the version of the files it reads and writes). Read them out of the file, because the copy in a
+# project is the only thing that knows which release governs that project.
+gate_field() {                              # gate_field <file> <VERSION|CONTRACT>
+  [ -f "$1" ] || return 1
+  sed -n "s/^$2 = *//p" "$1" | head -1 | tr -d '"' | tr -d "'"
+}
+
+STAMP=".agents/factory/.installed-from"
+
+# Whether the gate in this project is still the one the pipeline ships. Only the installer and this
+# check can see both files at once — the gate itself cannot: a copied script has nothing to compare
+# against. A difference in VERSION is an update to run, never a reason to refuse a story; an
+# incompatible *contract* is refused by the gate, against the profile, which is where it shows.
+check_gate_freshness() {
+  [ -f "$STAMP" ] || return 0
+  local source installed_version source_version installed_contract source_contract
+  source=$(sed -n 's/^source:[[:space:]]*//p' "$STAMP" | head -1)
+  [ -n "$source" ] && [ -f "$source" ] || return 0
+  installed_version=$(gate_field "$GATE" VERSION) || return 0
+  source_version=$(gate_field "$source" VERSION) || return 0
+  installed_contract=$(gate_field "$GATE" CONTRACT)
+  source_contract=$(gate_field "$source" CONTRACT)
+  if [ "$installed_contract" != "$source_contract" ]; then
+    echo "factory: this project's gate implements file contract $installed_contract and the" >&2
+    echo "factory:   pipeline at $source implements $source_contract — run 'factory.sh install'" >&2
+    echo "factory:   and check the stack profile's 'contract:' line before trusting a run." >&2
+  elif [ "$installed_version" != "$source_version" ]; then
+    echo "factory: this project's gate is $installed_version, the pipeline it came from is now" >&2
+    echo "factory:   $source_version — same file contract, so the run is valid; 'factory.sh install'" >&2
+    echo "factory:   brings the project up to date." >&2
+  fi
+}
+
 # --- tool adapters -----------------------------------------------------------
 
 detect_tool() {
@@ -157,8 +202,8 @@ install_skills() {
     # incomplete pipeline without a word. Where the project keeps skills of its own in that
     # directory, each skill is linked individually instead and the freeze is named.
     if [ -n "$copy_mode" ]; then
-      mkdir -p "$target"
-      cp -R "$source_abs"/* "$target"/
+      must "create $target" mkdir -p "$target"
+      must "copy the skills into $target" cp -R "$source_abs"/* "$target"/
       echo "factory: skills → $target (copied; re-run install after a skill is added)"
       continue
     fi
@@ -206,9 +251,9 @@ install_skills() {
       echo "factory: skills → $target ($linked linked: the pipeline plus the craft it names as carriers)"
       echo "factory:   per skill, because they come from several sources — re-run install after a skill is added" >&2
     elif [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; then
-      rm -rf "$target"
-      mkdir -p "$(dirname "$target")"
-      ln -s "$source_abs" "$target"
+      must "replace $target" rm -rf "$target"
+      must "create $(dirname "$target")" mkdir -p "$(dirname "$target")"
+      must "link $target to the pipeline" ln -s "$source_abs" "$target"
       echo "factory: skills → $target (linked to $from — a skill added there appears at once)"
     else
       mkdir -p "$target"
@@ -222,11 +267,27 @@ install_skills() {
     fi
   done
   check_dca_setup
-  mkdir -p .agents/factory .githooks
-  cp "$from/factory-run/scripts/story-gate.py" "$GATE"
-  cp "$from/factory-run/templates/githooks/pre-commit" .githooks/pre-commit
-  chmod +x .githooks/pre-commit "$GATE"
-  git config core.hooksPath .githooks 2>/dev/null && echo "factory: git hooks → .githooks"
+  must "create .agents/factory and .githooks" mkdir -p .agents/factory .githooks
+  must "copy the gate to $GATE" cp "$from/factory-run/scripts/story-gate.py" "$GATE"
+  must "copy the commit hook to .githooks/pre-commit" \
+    cp "$from/factory-run/templates/githooks/pre-commit" .githooks/pre-commit
+  must "make the gate and the commit hook executable" chmod +x .githooks/pre-commit "$GATE"
+  # Where this copy came from, so a later run can tell a project on an older release from one on an
+  # incompatible contract. The gate alone cannot: a copied script has nothing to compare against.
+  {
+    echo "version: $(gate_field "$GATE" VERSION)"
+    echo "contract: $(gate_field "$GATE" CONTRACT)"
+    echo "source: $from/factory-run/scripts/story-gate.py"
+    echo "installed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$STAMP"
+  echo "factory: gate → $GATE (version $(gate_field "$GATE" VERSION), file contract $(gate_field "$GATE" CONTRACT))"
+  # Not a `must`: the project need not be a git repository for the gate to work, and a checkout
+  # without git is a legitimate place to run the pipeline. The hook is then absent, and said to be.
+  if git config core.hooksPath .githooks 2>/dev/null; then
+    echo "factory: git hooks → .githooks"
+  else
+    echo "factory: no git repository here — .githooks/pre-commit is installed but nothing runs it." >&2
+  fi
   [ -f .agents/factory/factory.profile.yaml ] || write_profile "$from"
   case "$tool" in
     claude|all) write_claude_permissions ;;
@@ -237,7 +298,12 @@ install_skills() {
 check_dca_setup() {
   # The factory delivers stories; it does not install an architecture. That is the bootstrap
   # skill's job, and it runs once. Say so instead of quietly starting without one.
-  if ls **/ArchitectureTest.* */ArchitectureTest.* 2>/dev/null | head -1 | grep -q . \
+  # `find`, not a glob: `**` without `shopt -s globstar` is one `*`, so an architecture test one
+  # directory further down — which is where every real source layout puts it — went unseen and the
+  # install told the project it had no governance.
+  if find . -name "ArchitectureTest*" -not -path "*/build/*" -not -path "*/bin/*" \
+        -not -path "*/obj/*" -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null \
+        | head -1 | grep -q . \
      || grep -rqs "dca-archunit\|DomainCentric.ArchRules" --include="*.gradle" --include="*.kts" \
         --include="pom.xml" --include="*.csproj" --include="*.props" . 2>/dev/null; then
     echo "factory: architecture governance found — the pipeline has something to gate on."
@@ -260,7 +326,8 @@ write_profile() {
   # Prefill from what the project already states, so the profile is not a second truth.
   local from=$1 conventions
   conventions=$(conventions_file)
-  cp "$from/factory-run/templates/factory.profile.yaml.tmpl" .agents/factory/factory.profile.yaml
+  must "copy the stack-profile template" \
+    cp "$from/factory-run/templates/factory.profile.yaml.tmpl" .agents/factory/factory.profile.yaml
   local compile="" test="" architecture="" filter_flag="" filter_format="" covers=""
   # The selector syntax belongs to the runner, not to the language: writing a Gradle selector into
   # a .NET profile makes every single-test invocation of the gate select nothing, and a test that
@@ -399,19 +466,53 @@ gate() {                                    # gate <stage> <story>
   return "$code"
 }
 
+# Which SHA-256 command this machine has, resolved once. `shasum` is the BSD and macOS spelling and
+# arrives with perl; `sha256sum` is the coreutils one and all a slim Linux image has; `openssl` is
+# the fallback where neither is installed. FACTORY_SHA256 overrides the choice — `none` forces the
+# names-only path, which is how that path is exercised by a test rather than by a wrong machine.
+HASHER=""
+hasher() {
+  [ -n "$HASHER" ] && { printf '%s' "$HASHER"; return; }
+  if [ -n "${FACTORY_SHA256:-}" ]; then HASHER="$FACTORY_SHA256"
+  elif command -v shasum >/dev/null 2>&1; then HASHER="shasum -a 256"
+  elif command -v sha256sum >/dev/null 2>&1; then HASHER="sha256sum"
+  elif command -v openssl >/dev/null 2>&1; then HASHER="openssl dgst -sha256 -r"
+  else HASHER="none"; fi
+  printf '%s' "$HASHER"
+}
+
+#: The first line of a snapshot written without a hash command. The observer reads it and treats
+#: the snapshot as absent — see below for why that is the only honest reading.
+NO_HASHES="# no-sha256-command: names only, no content hashes"
+
 # What the working tree looks like right now, so a later stage's claim about what it changed can be
 # checked rather than believed. Cheap: one porcelain listing plus a hash per file git reports.
 snapshot() {                                # snapshot <story> <label>
-  local journal="$TASKS/$1/.verify" file
+  local journal="$TASKS/$1/.verify" file hash
   mkdir -p "$journal"
+  hash=$(hasher)
+  if [ "$hash" = none ]; then
+    # Named, and named loudly. A snapshot of empty digests compares equal to every other one, so
+    # the observer would read "this stage changed nothing" off a missing tool — the strongest claim
+    # in its report, from the least evidence. So the snapshot says it carries no content, and the
+    # run says which command it looked for.
+    echo "factory: no sha256 command found (shasum, sha256sum, openssl) — the tree snapshots" >&2
+    echo "factory:   record file names without content, and factory-verify reports every check" >&2
+    echo "factory:   that needs a digest as not observed. Install one of the three for full evidence." >&2
+  fi
   {
+    [ "$hash" = none ] && echo "$NO_HASHES"
     # -uall: without it a newly added directory is listed as one entry and every file in it is
     # missing from the snapshot — so a test added by this run, and edited afterwards, would look
     # untouched. `--porcelain` also quotes unusual names, hence the -z form and the NUL split.
     git -c core.fileMode=false status --porcelain -z -uall 2>/dev/null \
       | tr '\0' '\n' | sed 's/^...//' | while read -r file; do
-      [ -n "$file" ] && [ -f "$file" ] \
-        && printf '%s  %s\n' "$(shasum -a 256 "$file" 2>/dev/null | cut -d" " -f1)" "$file"
+      { [ -n "$file" ] && [ -f "$file" ]; } || continue
+      if [ "$hash" = none ]; then
+        printf '%s  %s\n' "-" "$file"
+      else
+        printf '%s  %s\n' "$($hash "$file" 2>/dev/null | cut -d" " -f1)" "$file"
+      fi
     done
   } > "$journal/tree-$2.txt" 2>/dev/null || true
 }
@@ -525,6 +626,7 @@ case "$command" in
     [ -n "$story" ] || usage
     [ -n "$tool" ] || tool=$(detect_tool)
     [ -n "$tool" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
+    check_gate_freshness                    # once per invocation; run_story recurses on a verdict
     run_story "$story" "$tool" "$from" "$dry"
     ;;
   *) usage ;;
