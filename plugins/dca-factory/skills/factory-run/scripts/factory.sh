@@ -273,7 +273,10 @@ write_profile() {
     filter_flag="-Dtest"; filter_format='"{class}#{method}"'
   elif compgen -G "./*.sln" >/dev/null || compgen -G "./*.slnx" >/dev/null || compgen -G "./*.csproj" >/dev/null; then
     # `dotnet test` takes one project per invocation; several paths in one call is an MSBuild error.
-    compile="dotnet build"; test="dotnet test"; architecture="dotnet test --filter FullyQualifiedName~Architecture"
+    # `--logger trx`: the gate reads what actually ran from the runner's report, and the .NET test
+    # platform writes one only when asked. Without it every verdict would rest on an exit code.
+    compile="dotnet build"; test="dotnet test --logger trx"
+    architecture="dotnet test --filter FullyQualifiedName~Architecture"
     filter_flag="--filter"; filter_format='"FullyQualifiedName~{class}.{method}"'
     # Without a project argument `dotnet test` runs every test project of the solution, so this
     # command's scope is the whole project. A Gradle or Maven task is *not* that — `./gradlew test`

@@ -10,6 +10,15 @@
 # e2eTest      runs the end-user tests (falls back to `test` when absent)
 # filterFlag   the flag that selects a single test
 # filterFormat how a selector `<Class>#<method>` is written for this runner
+# testReport  where this runner leaves its report of what it executed, as a glob. Found by
+#              convention when absent: JUnit XML (`build/test-results/**`, `surefire-reports/*`)
+#              and TRX (`TestResults/**`). Any stack can emit one of those two — pytest with
+#              `--junitxml`, jest with jest-junit, `gotestsum --junitfile`, `cargo nextest`,
+#              PHPUnit, RSpec, the .NET platform with `--logger trx` — so naming the path is all
+#              a new stack needs
+# testEvidence `exit-code` to accept the weaker check where a runner writes no report at all. The
+#              gate then says so on every single test, because an exit code cannot distinguish a
+#              failing test from a runner that never ran one
 # covers.<key> which tests a command runs, where its own text does not say: `**` for every
 #              test in the project (`dotnet test` on a solution), or a comma-separated list
 #              of path prefixes. Needed because whether a pathless command runs everything

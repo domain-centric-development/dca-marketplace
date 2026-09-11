@@ -83,10 +83,18 @@ if [ -z "$(find "$set" -name "$simple.java" 2>/dev/null | head -1)" ]; then
   echo "no tests found for given includes: $selector"
   exit 1
 fi
+cls=$(echo "$selector" | sed 's/#.*//')
+method=$(echo "$selector" | sed 's/.*#//')
+mkdir -p "build/test-results/$task"
+report="build/test-results/$task/TEST-$simple.xml"
 if [ -f "green/$(echo "$selector" | tr -d './#')" ]; then
+  printf '<testsuite name="%s"><testcase classname="%s" name="%s"/></testsuite>\\n' \\
+    "$cls" "$cls" "$method" > "$report"
   echo "BUILD SUCCESSFUL: $selector"
   exit 0
 fi
+printf '<testsuite name="%s"><testcase classname="%s" name="%s"><failure>no</failure></testcase></testsuite>\\n' \\
+  "$cls" "$cls" "$method" > "$report"
 echo "FAILED: $selector"
 exit 1
 """
@@ -100,15 +108,23 @@ set=$1; shift
 [ "$1" = "--select" ] && shift
 selector=$1
 simple=$(echo "$selector" | sed 's/.*\\.//; s/#.*//')
+simple_method=$(echo "$selector" | sed 's/.*#//')
 if [ -z "$(find "$set" -name "$simple.java" 2>/dev/null | head -1)" ]; then
   echo "no test matched $selector under $set"
   exit "${NO_MATCH_EXIT:-0}"          # a runner that matched nothing: 0 here, non-zero elsewhere
 fi
+cls=$(echo "$selector" | sed 's/#.*//')
+mkdir -p build/test-results/run
+report="build/test-results/run/TEST-$simple.xml"
 if [ -f "green/$(echo "$selector" | tr -d './#')" ]; then
+  printf '<testsuite name="%s"><testcase classname="%s" name="%s"/></testsuite>\\n' \\
+    "$cls" "$cls" "$simple_method" > "$report"
   echo "1 test ran, 0 failed: $selector"
   exit 0
 fi
-echo "1 test ran, 1 failed: $selector"   # a runner that ran something says so
+printf '<testsuite name="%s"><testcase classname="%s" name="%s"><failure>no</failure></testcase></testsuite>\\n' \\
+  "$cls" "$cls" "$simple_method" > "$report"
+echo "1 test ran, 1 failed: $selector"
 exit 1
 """
 
@@ -523,15 +539,28 @@ def main(argv=None):
               text=("missing domain_contact",)),
          dict(epic=EPIC.replace("domain_contact: the-expert", "domain_contact:"))),
         (Case("test: a runner that cannot start is no evidence", "test", 1,
-              must_fail=("tests-red",), text=("never ran this test",)),
+              must_fail=("tests-red",), text=("no test report from this run names it",)),
          dict(profile=PROFILE.replace("test: sh runner.sh src/test/java",
                                       "test: sh no-such-runner.sh src/test/java\ncovers.test: **"))),
-        (Case("test: a runner that answers everything the same way is no evidence", "test", 1,
-              must_fail=("tests-red",), text=("selector that cannot exist",)),
-         # exits 1 whatever it is asked — a crashed test host looks exactly like this, and its exit
-         # code alone is indistinguishable from a failing test
+        (Case("test: a runner that reports no test but names the selector is no evidence", "test", 1,
+              must_fail=("tests-red",), text=("no test report from this run names it",)),
+         # The reviewer's case: it exists, it exits 1, and it prints the selector back — so its
+         # output differs per selector while it executes nothing. Only a report settles it.
+         dict(profile=PROFILE.replace(
+             "test: sh runner.sh src/test/java",
+             "test: sh -c 'echo \"no tests found for given includes: $2\"; exit 1' --"
+             "\ncovers.test: **"))),
+        (Case("test: a crashed runner that exits like a failing test is no evidence", "test", 1,
+              must_fail=("tests-red",), text=("no test report from this run names it",)),
          dict(profile=PROFILE.replace("test: sh runner.sh src/test/java",
                                       "test: sh -c 'exit 1' --\ncovers.test: **"))),
+        (Case("test: with testEvidence: exit-code the weaker check is named, not hidden", "test", 0,
+              must_skip=("tests-red",), text=("rests on the exit code",)),
+         dict(profile=PROFILE.replace(
+             "test: sh runner.sh src/test/java",
+             "test: sh runner-noreport.sh src/test/java\ncovers.test: **\ntestEvidence: exit-code"),
+              extra_sources=(("runner-noreport.sh",
+                              "#!/bin/sh\necho \"ran $3\"\nexit 1\n"),))),
         (Case("test: a command whose declared scope is everything covers every test", "test", 0,
               must_pass=("tests-red",)),
          dict(profile="compile: true\ntest: sh runner.sh .\ncovers.test: **\n"
@@ -559,6 +588,27 @@ def main(argv=None):
          dict(profile="compile: true\ntest: sh runner.sh src/test/java/com/example/WidgetUnitTest.java\n"
                       "test.pages: sh runner.sh src/test-pages/java\nfilterFlag: --select\n"
                       'filterFormat: "{class}#{method}"\narchitecture: true\n')),
+        (Case("test: any stack works when it says where its report is", "test", 0,
+              must_pass=("tests-red",)),
+         # A runner of no particular ecosystem: it writes JUnit XML — what pytest, jest, gotestsum,
+         # nextest, PHPUnit and RSpec all can emit — to a path of its own, declared in the profile.
+         dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
+              tests="# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
+                    "| shows-nothing-when-empty | com.example.WidgetUnitTest#showsNothingWhenEmpty |\n",
+              profile="compile: true\ntest: sh other-stack.sh\ncovers.test: **\n"
+                      "testReport: reports/junit-*.xml\nfilterFlag: -k\n"
+                      'filterFormat: "{class}#{method}"\narchitecture: true\n',
+              extra_sources=(("other-stack.sh",
+                              '#!/bin/sh\n'
+                              '# -k <Class>#<method>, JUnit XML wherever this stack puts it\n'
+                              'selector=$2\n'
+                              'cls=$(echo "$selector" | sed "s/#.*//")\n'
+                              'method=$(echo "$selector" | sed "s/.*#//")\n'
+                              'mkdir -p reports\n'
+                              'printf \'<testsuite><testcase classname="%s" name="%s">\''
+                              '\'<failure>not yet</failure></testcase></testsuite>\\n\' '
+                              '"$cls" "$method" > reports/junit-run.xml\n'
+                              'echo "1 failed"\nexit 1\n'),))),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),

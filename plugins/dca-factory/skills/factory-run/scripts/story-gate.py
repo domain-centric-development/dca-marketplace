@@ -36,8 +36,11 @@ import argparse
 import json
 import os
 import re
+import glob
 import subprocess
 import sys
+import time
+from xml.etree import ElementTree
 
 EPIC_FIELDS = ("intent", "goal", "metric", "domain_contact")
 MAX_ROUNDS = 3
@@ -657,12 +660,20 @@ def command_for(profile, test_path):
     return None, None
 
 
-#: A selector no project can contain. Running the same command with it answers the only question
-#: that makes a verdict meaningful: does this command distinguish a test that exists from one that
-#: does not? If it answers both the same way, nothing it says about a real selector is evidence —
-#: and that holds whatever the exit code or the wording of the error happens to be on this machine.
+#: Where test runners leave a report of what they actually executed. These are file-format
+#: conventions rather than knowledge about any one tool: JUnit XML (Gradle, Maven, most JVM
+#: runners) and TRX (the .NET test platform). A project whose reports live elsewhere says so with
+#: `testReport: <glob>`.
+REPORT_GLOBS = (
+    "**/build/test-results/**/*.xml",
+    "**/target/surefire-reports/*.xml",
+    "**/target/failsafe-reports/*.xml",
+    "**/test-results/**/*.xml",
+    "**/TestResults/**/*.trx",
+    "**/*.trx",
+)
+#: A selector no project can contain — the control run's subject (see `discriminates`).
 SENTINEL = ("dev.dca.factory.NoSuchTestClass", "noSuchTestMethod")
-#: Noise that differs between two runs of the same command and says nothing about the outcome.
 NOISE = re.compile(r"\b\d+(\.\d+)?\s*(ms|s|sec|seconds|minutes)\b|\b\d{2}:\d{2}:\d{2}\b")
 
 
@@ -671,12 +682,93 @@ def normalise(output, cwd):
     return NOISE.sub("<time>", text).strip()
 
 
+def report_files(cwd, profile, since):
+    """Report files written or rewritten since `since` — the run's own, not an older one's."""
+    patterns = [profile["testReport"]] if profile.get("testReport") else list(REPORT_GLOBS)
+    found = []
+    for pattern in patterns:
+        for path in glob.glob(os.path.join(cwd, pattern), recursive=True):
+            try:
+                if os.path.getmtime(path) >= since - 1:
+                    found.append(path)
+            except OSError:
+                continue
+    return found
+
+
+def executed_tests(paths):
+    """{(class, method): outcome} for every test a report says ran. Outcome is 'passed' or 'failed'.
+
+    Two formats, because two are enough to cover the runners this is used with. A report is the
+    only artefact that states what was *executed*: an exit code says how a process ended, and a
+    message says what a process printed — neither says a test ran.
+    """
+    ran = {}
+    for path in paths:
+        try:
+            root = ElementTree.parse(path).getroot()
+        except (ElementTree.ParseError, OSError):
+            continue
+        for case in root.iter():
+            tag = case.tag.rsplit("}", 1)[-1]
+            if tag == "testcase":                                   # JUnit XML
+                cls = (case.get("classname") or "").strip()
+                method = (case.get("name") or "").strip()
+                outcome = "passed"
+                for child in case:
+                    if child.tag.rsplit("}", 1)[-1] in ("failure", "error"):
+                        outcome = "failed"
+                    elif child.tag.rsplit("}", 1)[-1] == "skipped":
+                        outcome = "skipped"
+                if method:
+                    ran[(cls, method.split("(")[0])] = outcome
+            elif tag == "UnitTestResult":                           # TRX
+                name = (case.get("testName") or "").strip()
+                outcome = (case.get("outcome") or "").strip().lower()
+                if name:
+                    cls, _, method = name.rpartition(".")
+                    ran[(cls, method.split("(")[0])] = (
+                        "passed" if outcome == "passed" else
+                        "skipped" if outcome in ("notexecuted", "skipped") else "failed")
+    return ran
+
+
+def outcome_for(ran, cls, method):
+    """What a report says about this selector: (outcome, how it was matched) or (None, "").
+
+    The method name is the better key, but it is not always in the report — a JUnit XML writer puts
+    the *display* name in `name`, so a test with a readable title loses its method name there. The
+    class always survives, and the run was filtered to one selector, so a case reported for that
+    class is this test. Where several appear, the filter was not honoured and the verdict covers
+    them all, which the report says out loud rather than pretending precision.
+    """
+    simple = cls.rsplit(".", 1)[-1]
+
+    def same_class(report_class):
+        return (not report_class or report_class == cls
+                or report_class.rsplit(".", 1)[-1] == simple
+                or report_class.endswith("." + simple)
+                or simple in report_class.split("."))
+
+    for (report_class, report_method), outcome in ran.items():
+        if report_method == method and same_class(report_class):
+            return outcome, "by name"
+    in_class = [outcome for (report_class, _m), outcome in ran.items() if same_class(report_class)]
+    if not in_class:
+        return None, ""
+    aggregate = ("failed" if "failed" in in_class else
+                 "skipped" if all(o == "skipped" for o in in_class) else "passed")
+    if len(in_class) == 1:
+        return aggregate, "by class (the report carries a display name, not the method)"
+    return aggregate, f"by class over {len(in_class)} cases (the runner did not honour the filter)"
+
+
 def discriminates(command, flag, fmt, cwd, cache):
     """(control_code, control_output) for this command, run once and remembered.
 
-    The control is a run with a selector that cannot exist. Comparing a real run against it is a
-    positive check — a list of known error messages is not: which message a missing runner produces
-    depends on the shell, and a test host that crashes produces the exit code of a failing test.
+    Only used where a project has opted out of report evidence: comparing a real run against a run
+    with a selector that cannot exist is weaker — a runner that prints the selector back in its
+    "no tests found" line answers differently without having run anything.
     """
     if command not in cache:
         pattern = fmt.replace("{class}", SENTINEL[0]).replace("{method}", SENTINEL[1])
@@ -726,20 +818,57 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
             if not command:
                 command_key, command = "e2eTest" if profile.get("e2eTest") else "test", fallback
             invocation = f'{command} {flag} "{pattern}"'.strip()
+            evidence = ""
+            started = time.time()
             code, output = run(invocation, cwd)
-            control_code, control_output = discriminates(command, flag, fmt, cwd, control)
-            if code == control_code and normalise(output, cwd) == control_output:
-                # The command answered a selector that cannot exist exactly as it answered this
-                # one, so it never looked at this test: a missing runner, a wrong path in the
-                # profile, a project that will not build. Recording that as "red" is how a criterion
-                # with no working test ends up certified by the build gate.
-                result.fail(
+
+            # What the test *did* comes from the runner's report, because that is the only artefact
+            # that states which tests were executed. An exit code says how a process ended; a
+            # message says what it printed. Neither says a test ran — a runner that answers "no
+            # tests found for <selector>" produces a different exit code and a different line for
+            # every selector while executing nothing at all.
+            if profile.get("testEvidence", "").strip() == "exit-code":
+                control_code, control_output = discriminates(command, flag, fmt, cwd, control)
+                if code == control_code and normalise(output, cwd) == control_output:
+                    result.fail(
+                        f"tests-{expected}",
+                        f"{selector}: `{invocation}` answers a selector that cannot exist the same "
+                        f"way (exit {code}), so it never ran this test — no evidence about {key!r}:"
+                        f"\n{tail(output)}",
+                    )
+                    continue
+                result.skip(
                     f"tests-{expected}",
-                    f"{selector}: `{invocation}` answers a selector that cannot exist the same way "
-                    f"(exit {code}), so it never ran this test — no evidence about {key!r} in "
-                    f"either direction:\n{tail(output)}",
+                    f"{selector}: `testEvidence: exit-code` — the verdict rests on the exit code, "
+                    f"not on a report of what ran. A runner that exits like a failing test without "
+                    f"running one is indistinguishable here.",
                 )
-                continue
+            else:
+                reports = report_files(cwd, profile, started)
+                outcome, how = outcome_for(executed_tests(reports), cls, method)
+                if outcome is None:
+                    result.fail(
+                        f"tests-{expected}",
+                        f"{selector}: no test report from this run names it, so nothing shows it "
+                        f"ran ({len(reports)} report file(s) written). Let the runner write one "
+                        f"(JUnit XML is the default on the JVM; .NET needs `--logger trx`), point "
+                        f"`testReport:` at it, or accept the weaker check with "
+                        f"`testEvidence: exit-code`:\n{tail(output)}",
+                    )
+                    continue
+                if outcome == "skipped":
+                    result.fail(
+                        f"tests-{expected}",
+                        f"{selector} was skipped rather than run, so it says nothing about "
+                        f"{key!r}.",
+                    )
+                    continue
+                # The report decides, not the exit code: a build can fail for reasons beside this
+                # test, and a runner can exit 0 with a failure recorded.
+                code = 0 if outcome == "passed" else 1
+                evidence = f"report {how}"
+                if "did not honour" in how:
+                    result.note(f"tests-{expected}", f"{selector}: matched {how}")
             passed = code == 0
             if not passed:
                 now_red.add(selector)
@@ -776,7 +905,8 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
             else:
                 result.ok(
                     f"tests-{expected}",
-                    f"{selector} is {'green' if passed else 'red'} ({key}, via `{command_key}:`)",
+                    f"{selector} is {'green' if passed else 'red'} ({key}, via `{command_key}:`"
+                    f"{', ' + evidence if evidence else ''})",
                 )
     if expected == "red":
         write_red_ledger(tasks, story, now_red)
@@ -826,6 +956,10 @@ class Result:
 
     def skip(self, check, message):
         self.entries.append(("skip", check, message))
+
+    def note(self, check, message):
+        """A fact worth reading that fails nothing and covers nothing — it is not a skipped check."""
+        self.entries.append(("note", check, message))
 
     @property
     def failed(self):

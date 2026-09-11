@@ -141,6 +141,15 @@ See `skills/factory-run/reference/backlog-contract.md` and `.../file-contracts.m
 
 ## Troubleshooting
 
+**"no test report from this run names it."** The gate reads what a runner *executed* from its
+report, because an exit code says how a process ended and a message says what it printed — neither
+says a test ran. A runner that answers "no tests found for <selector>" produces a different exit
+code and a different line for every selector while executing nothing. Let the runner write a report
+(JUnit XML is the default on the JVM and an option in every other ecosystem — pytest, jest,
+gotestsum, nextest, PHPUnit, RSpec; the .NET platform needs `--logger trx`), point `testReport:` at
+it if it lands somewhere unusual, or accept the weaker check with `testEvidence: exit-code` and
+read that line in every report it produces.
+
 **"no declared test command covers this test."** A mapped test lives in a source set the profile
 does not mention. Add it as `test.<name>: <command>`. The gate refuses rather than guessing,
 because a run that matched no test exits successfully on one runner and unsuccessfully on another —
