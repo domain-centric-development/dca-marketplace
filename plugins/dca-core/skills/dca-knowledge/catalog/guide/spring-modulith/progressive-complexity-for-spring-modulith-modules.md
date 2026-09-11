@@ -23,7 +23,7 @@ For general progressive complexity guidelines, see [Domain-Centric Architecture]
 **Timeline:** Weeks 1-2
 
 **Structure:**
-```
+```text
 com.company.ecommerce.order/ (module)
 ├── package-info.java (@ApplicationModule)
 ├── api/ (published)
@@ -64,7 +64,7 @@ com.company.ecommerce.order/ (module)
 - **>2 adapter types** suggests `internal/adapter/incoming/` and `/outgoing/` packages
 
 **Structure:**
-```
+```text
 com.company.ecommerce.order/
 ├── api/
 ├── events/

@@ -6,7 +6,7 @@ source: guide
 tags: [guide, section]
 ---
 
-```
+```text
 Layer          | Framework annotations | Example
 ---------------+-----------------------+------------------------------------
 Domain         | never                 | pure Java / C# only

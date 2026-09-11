@@ -6,7 +6,7 @@ source: guide
 tags: [guide, section]
 ---
 
-```
+```text
 com.company.project
 │
 ├── order (bounded context)

@@ -6,7 +6,7 @@ source: guide
 tags: [guide, section]
 ---
 
-```
+```text
 Port type | Interface declared in | Implemented in    | Called by
 ----------+-----------------------+-------------------+------------------
 Input     | application           | application       | adapter/incoming

@@ -50,7 +50,7 @@ public interface DomainGateway {}
 
 **Where it sits among the building blocks:**
 
-```
+```text
 dev.domaincentric.dca.buildingblocks.ddd.tactical     (the library; .NET: DomainCentric.BuildingBlocks.Ddd.Tactical → IDomainGateway)
 ├── DomainService
 ├── DomainGateway               ← this one
@@ -203,7 +203,7 @@ public class CalculateBundleDiscountUseCase implements CalculateBundleDiscountIn
 
 ### Data Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ Adapter Layer                                                               │
 │                                                                             │

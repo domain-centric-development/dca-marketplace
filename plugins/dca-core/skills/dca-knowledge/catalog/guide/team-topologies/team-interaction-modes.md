@@ -18,7 +18,7 @@ tags: [guide, section]
 - Use when integration points are unclear
 
 **Example:**
-```
+```text
 Order Team ↔ Inventory Team (Collaboration)
 ├── Goal: Define integration for stock reservation
 ├── Duration: 4 weeks
@@ -40,7 +40,7 @@ Order Team ↔ Inventory Team (Collaboration)
 - Self-service where possible
 
 **Example:**
-```
+```text
 Order Team → Platform Team (X-as-a-Service)
 ├── Order Team consumes: Database provisioning API
 ├── SLA: Database available in <10 minutes
@@ -65,7 +65,7 @@ Order Team → Platform Team (X-as-a-Service)
 - Goal: increase capability, not create dependency
 
 **Example:**
-```
+```text
 Enabling Team → Customer Team (Facilitating)
 ├── Request: Help implementing CQRS pattern
 ├── Engagement: 2 weeks embedded pairing

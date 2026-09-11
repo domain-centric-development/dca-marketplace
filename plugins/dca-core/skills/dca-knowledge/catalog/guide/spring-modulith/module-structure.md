@@ -8,7 +8,7 @@ tags: [guide, section]
 
 ### Recommended Structure: Module per Bounded Context
 
-```
+```text
 com.company.ecommerce
 ├── order (module = bounded context)
 │   ├── api (published - public interface)

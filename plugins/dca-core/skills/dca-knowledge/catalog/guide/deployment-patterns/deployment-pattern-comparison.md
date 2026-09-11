@@ -9,7 +9,7 @@ tags: [guide, section]
 ### Pattern 1: Modular Monolith (Single Deployment Unit)
 
 **Structure:**
-```
+```text
 Single Deployment Unit
 ┌──────────────────────────────────────┐
 │  Spring Boot Application             │
@@ -43,7 +43,7 @@ Single Deployment Unit
 ### Pattern 2: Self-Contained Systems (Multiple SCS)
 
 **Structure:**
-```
+```text
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │  Order SCS   │     │ Customer SCS │     │Inventory SCS │
 │              │     │              │     │              │
@@ -79,7 +79,7 @@ Single Deployment Unit
 ### Pattern 3: Multi-Service Bounded Context (Advanced)
 
 **Structure:**
-```
+```text
 Order Bounded Context
 ┌─────────────────────────────────────────────────────────┐
 │                                                         │

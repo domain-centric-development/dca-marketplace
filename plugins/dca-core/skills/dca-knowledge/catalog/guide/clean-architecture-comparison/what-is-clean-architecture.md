@@ -15,7 +15,7 @@ tags: [guide, section]
 
 ### Clean Architecture Layers
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │  Frameworks & Drivers (outermost)           │
 │  - Web, UI, Database, External Interfaces   │

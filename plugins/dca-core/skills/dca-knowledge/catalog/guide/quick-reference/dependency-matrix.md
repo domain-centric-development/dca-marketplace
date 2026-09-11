@@ -6,7 +6,7 @@ source: guide
 tags: [guide, section]
 ---
 
-```
+```text
 Layer          | May depend on
 ---------------+-----------------------------------------------------------
 Domain         | nothing, or shared-kernel domain concepts
