@@ -478,26 +478,35 @@ def verify_runner(runner, verbose=False):
     with tempfile.TemporaryDirectory() as root:
         build_project(root)
         run_runner(runner, root, "install", "--tool", "codex", "--from", source)
-        stamp = os.path.join(root, ".agents", "factory", ".installed-from")
+        stamp = os.path.join(root, ".agents", "factory", "gate.installed")
         stamped = open(stamp).read() if os.path.isfile(stamp) else ""
-        check("install: the gate's version and contract are stamped into the project",
-              "version: " in stamped and "contract: " in stamped and "source: " in stamped,
+        check("install: the pipeline's identity and contract are recorded in the project",
+              "plugin: dca-factory" in stamped and "version: " in stamped and "contract: " in stamped,
               stamped.strip().replace("\n", " | "))
-        # the project's copy is made to look like an older release of the same contract
-        gate_copy = os.path.join(root, ".agents", "factory", "story-gate.py")
-        body = open(gate_copy).read()
-        open(gate_copy, "w").write(body.replace('VERSION = "', 'VERSION = "0.0.1-', 1))
+        check("install: the record carries nothing machine-local, so it can be committed",
+              root not in stamped and "source:" not in stamped and "installed:" not in stamped
+              and os.sep + "Users" not in stamped,
+              "a path or a timestamp would be wrong in every other checkout")
+        # a newer pipeline beside the project: the record says 0.4.0, the plugin copy says otherwise
+        plugin = os.path.join(root, "newer-plugin", "factory-run", "scripts")
+        os.makedirs(plugin)
+        body = open(os.path.join(os.path.dirname(runner), "story-gate.py")).read()
+        with open(os.path.join(plugin, "story-gate.py"), "w") as handle:
+            handle.write(body.replace('VERSION = "', 'VERSION = "9.9.9-', 1))
+        env = {"FACTORY_PLUGIN_DIR": os.path.join(root, "newer-plugin")}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
-                                  "--dry-run")
-        check("install: a run says when the project's gate is behind the pipeline",
+                                  "--dry-run", env=env)
+        check("install: a run says when the project is behind the pipeline beside it",
               "brings the project up to date" in output,
-              [l for l in output.splitlines() if "gate is" in l])
+              [l for l in output.splitlines() if "installed from pipeline" in l])
         # and a differing *contract* is the louder message, because it is a compatibility question
-        open(gate_copy, "w").write(body.replace("CONTRACT = 1", "CONTRACT = 0", 1))
+        with open(os.path.join(plugin, "story-gate.py"), "w") as handle:
+            handle.write(body.replace("CONTRACT = 1", "CONTRACT = 7", 1))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
-                                  "--dry-run")
+                                  "--dry-run", env=env)
         check("install: a differing file contract is reported as a compatibility question",
-              "file contract" in output and "check the stack profile" in output,
+              "installed against file contract 1" in output and "implements 7" in output
+              and "stack profile" in output,      # the message wraps, so match per line, not across
               [l for l in output.splitlines() if "contract" in l])
 
     # 2. the artefact name the runner waits for is the file contract's, not the stage's name

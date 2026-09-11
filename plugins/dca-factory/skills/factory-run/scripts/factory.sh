@@ -58,27 +58,54 @@ gate_field() {                              # gate_field <file> <VERSION|CONTRAC
   sed -n "s/^$2 = *//p" "$1" | head -1 | tr -d '"' | tr -d "'"
 }
 
-STAMP=".agents/factory/.installed-from"
+#: What the project records about the pipeline it installed. Three facts, no paths and no
+#: timestamps, so the file belongs in the repository: a reviewer and a CI run can see which version
+#: of the pipeline governs this project, and every checkout reads the same thing. Where the plugin
+#: sits is a property of a machine, not of the project, so it is resolved when it is needed instead
+#: of being frozen here — an absolute path written on one machine is wrong on every other one.
+STAMP=".agents/factory/gate.installed"
 
-# Whether the gate in this project is still the one the pipeline ships. Only the installer and this
-# check can see both files at once — the gate itself cannot: a copied script has nothing to compare
-# against. A difference in VERSION is an update to run, never a reason to refuse a story; an
-# incompatible *contract* is refused by the gate, against the profile, which is where it shows.
+# The pipeline's own copy of the gate, for comparison against the project's copy. In order: an
+# explicit override, the checkout this script is running from (the usual case — the runner is
+# started out of the plugin), and the skill links an install may have left. When none of them
+# resolves there is simply nothing to compare, which is a silence, not a finding.
+plugin_gate() {
+  local candidate dir
+  for candidate in \
+      "${FACTORY_PLUGIN_DIR:-}/factory-run/scripts/story-gate.py" \
+      "$(dirname "${BASH_SOURCE[0]}")/story-gate.py" \
+      .claude/skills/factory-run/scripts/story-gate.py \
+      .codex/skills/factory-run/scripts/story-gate.py \
+      .opencode/skills/factory-run/scripts/story-gate.py; do
+    case "$candidate" in /factory-run/*) continue ;; esac        # no override given
+    [ -f "$candidate" ] || continue
+    dir=$(cd "$(dirname "$candidate")" && pwd)
+    # never compare the project's own copy with itself
+    [ "$dir/story-gate.py" = "$(cd "$(dirname "$GATE")" 2>/dev/null && pwd)/story-gate.py" ] && continue
+    echo "$dir/story-gate.py"
+    return 0
+  done
+  return 1
+}
+
+# Whether the gate in this project is still the one the pipeline ships. The gate itself cannot tell:
+# a copied script has nothing to compare against. A difference in VERSION is an update to run, never
+# a reason to refuse a story; an incompatible *contract* is refused by the gate, against the
+# profile, which is where it shows.
 check_gate_freshness() {
   [ -f "$STAMP" ] || return 0
   local source installed_version source_version installed_contract source_contract
-  source=$(sed -n 's/^source:[[:space:]]*//p' "$STAMP" | head -1)
-  [ -n "$source" ] && [ -f "$source" ] || return 0
-  installed_version=$(gate_field "$GATE" VERSION) || return 0
+  source=$(plugin_gate) || return 0
+  installed_version=$(sed -n 's/^version:[[:space:]]*//p' "$STAMP" | head -1)
+  installed_contract=$(sed -n 's/^contract:[[:space:]]*//p' "$STAMP" | head -1)
   source_version=$(gate_field "$source" VERSION) || return 0
-  installed_contract=$(gate_field "$GATE" CONTRACT)
   source_contract=$(gate_field "$source" CONTRACT)
   if [ "$installed_contract" != "$source_contract" ]; then
-    echo "factory: this project's gate implements file contract $installed_contract and the" >&2
-    echo "factory:   pipeline at $source implements $source_contract — run 'factory.sh install'" >&2
-    echo "factory:   and check the stack profile's 'contract:' line before trusting a run." >&2
+    echo "factory: this project was installed against file contract $installed_contract and the" >&2
+    echo "factory:   pipeline here implements $source_contract — run 'factory.sh install' and check" >&2
+    echo "factory:   the stack profile's 'contract:' line before trusting a run." >&2
   elif [ "$installed_version" != "$source_version" ]; then
-    echo "factory: this project's gate is $installed_version, the pipeline it came from is now" >&2
+    echo "factory: this project was installed from pipeline $installed_version, the one here is" >&2
     echo "factory:   $source_version — same file contract, so the run is valid; 'factory.sh install'" >&2
     echo "factory:   brings the project up to date." >&2
   fi
@@ -272,13 +299,13 @@ install_skills() {
   must "copy the commit hook to .githooks/pre-commit" \
     cp "$from/factory-run/templates/githooks/pre-commit" .githooks/pre-commit
   must "make the gate and the commit hook executable" chmod +x .githooks/pre-commit "$GATE"
-  # Where this copy came from, so a later run can tell a project on an older release from one on an
-  # incompatible contract. The gate alone cannot: a copied script has nothing to compare against.
+  # Which pipeline this project is governed by — committed with the project, so it is the same
+  # answer for everyone who checks it out. Deliberately no path and no timestamp: both describe the
+  # machine that happened to run the install, and neither survives a second developer.
   {
+    echo "plugin: dca-factory"
     echo "version: $(gate_field "$GATE" VERSION)"
     echo "contract: $(gate_field "$GATE" CONTRACT)"
-    echo "source: $from/factory-run/scripts/story-gate.py"
-    echo "installed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } > "$STAMP"
   echo "factory: gate → $GATE (version $(gate_field "$GATE" VERSION), file contract $(gate_field "$GATE" CONTRACT))"
   # Not a `must`: the project need not be a git repository for the gate to work, and a checkout

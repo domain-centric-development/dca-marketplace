@@ -162,10 +162,15 @@ would run together. Both are stated in `story-gate.py` and readable with
 | | What it answers | Who checks it, and how it ends |
 |---|---|---|
 | **file contract** (`CONTRACT`, and `contract:` in the stack profile) | can this gate read this project's files at all | the **gate**, on every run. A profile written for a higher contract is **refused**: this script would ignore whatever the newer contract added, and a key ignored in silence is a check that has quietly gone |
-| **script version** (`VERSION`) | which release governs this project | the **runner**, from `.agents/factory/.installed-from` written at install time. A project on an older release of the same contract is valid and says so — it is an update to run, never a reason to refuse a story |
+| **script version** (`VERSION`) | which release governs this project | the **runner**, comparing `.agents/factory/gate.installed` — three machine-neutral lines written at install time and **committed with the project** — against the pipeline it finds beside it. A project on an older release of the same contract is valid and says so: an update to run, never a reason to refuse a story |
 
 The gate cannot answer the second one alone: a copied script has nothing to compare itself
-against. Only the installer and the runner see both files at once.
+against. The record holds the *identity* of the pipeline — plugin, version, contract — and never a
+path or a timestamp, because those describe the machine that happened to run the install and would
+be wrong in every other checkout. Where the plugin lives is resolved when the comparison is made:
+`FACTORY_PLUGIN_DIR`, the checkout the runner is started from, or the skill links an install left.
+When none of them resolves there is nothing to compare, and the runner says nothing rather than
+guessing.
 
 ## Project knowledge
 
