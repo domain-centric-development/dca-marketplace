@@ -829,18 +829,18 @@ def outcome_for(ran, cls, method, display=None):
         for (report_class, report_method), outcome in ran.items():
             if report_method == display and same_class(report_class):
                 return outcome, f"by the display name declared in the code ({display!r})"
-    in_class = [(m, o) for (report_class, m), o in ran.items() if same_class(report_class)]
+    # Nothing below the name. Membership of the same class is not a mapping: a runner that ignores
+    # the filter, or a filter that matches a sibling, produces exactly one case for the class that
+    # is *not* this test — and counting it would let one test's outcome decide another's criterion.
+    # A report without this test's name, or without the display name its declaration sets, is no
+    # evidence, and the names it did carry are worth printing.
+    in_class = sorted(m for (report_class, m), _o in ran.items() if same_class(report_class))
     if not in_class:
         return None, ""
-    if len(in_class) == 1:
-        # The run was filtered to this one selector and the report holds exactly one case for its
-        # class: that case is this test, whatever name the runner chose to print.
-        return in_class[0][1], "by class — the filtered run reported exactly one case for it"
-    # Several cases: attributing any one of them to this selector would let another method's result
-    # decide this criterion. No mapping, no verdict.
-    return None, (f"the report holds {len(in_class)} cases for that class "
-                  f"({', '.join(sorted(name for name, _ in in_class)[:4])}) and none is named "
-                  f"{method!r}")
+    return None, (f"the report holds {len(in_class)} case(s) for that class "
+                  f"({', '.join(in_class[:4])}) and none is named {method!r}"
+                  + (f" or {display!r}" if display else "")
+                  + (", and no display name is declared on it" if not display else ""))
 
 
 def discriminates(command, flag, fmt, cwd, cache):

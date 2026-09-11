@@ -627,7 +627,7 @@ def main(argv=None):
                    "</testcase></testsuite>\n"),
               ))),
         (Case("test: another method's result does not settle this one", "test", 1,
-              must_fail=("tests-red",), text=("cases for that class",)),
+              must_fail=("tests-red",), text=("case(s) for that class",)),
          # The report holds two cases for the class and neither is named like the mapped method —
          # attributing one of them would let a sibling decide this criterion.
          dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
@@ -643,6 +643,21 @@ def main(argv=None):
                               '\'<testcase classname="com.example.WidgetUnitTest" name="another title"/>\''
                               '\'</testsuite>\\n\' > build/test-results/run/TEST-WidgetUnitTest.xml\n'
                               'echo "2 tests ran"\nexit 1\n'),))),
+        (Case("test: a single case in the class is not the mapped test either", "test", 1,
+              must_fail=("tests-red",), text=("1 case(s) for that class", "otherMethod")),
+         # The reviewer's case: the report holds exactly one case, and it is a *sibling*. A filtered
+         # run is not a promise that the filter was honoured, so one case proves nothing by itself.
+         dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
+              tests="# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
+                    "| shows-nothing-when-empty | com.example.WidgetUnitTest#showsNothingWhenEmpty |\n",
+              profile="compile: true\ntest: sh one-sibling-runner.sh\ncovers.test: **\n"
+                      'filterFlag: --select\nfilterFormat: "{class}#{method}"\narchitecture: true\n',
+              extra_sources=(("one-sibling-runner.sh",
+                              '#!/bin/sh\nmkdir -p build/test-results/run\n'
+                              'printf \'<testsuite><testcase classname="com.example.WidgetUnitTest" \''
+                              '\'name="otherMethod"><failure>no</failure></testcase></testsuite>\\n\' '
+                              '> build/test-results/run/TEST-WidgetUnitTest.xml\n'
+                              'echo "1 test ran"\nexit 1\n'),))),
         (Case("test: a display name declared in the code settles it", "test", 0,
               must_pass=("tests-red",), text=("display name declared in the code",)),
          dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
