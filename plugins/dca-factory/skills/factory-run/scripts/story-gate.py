@@ -336,7 +336,10 @@ def check_proposals_landed(result, tasks, story_id, cwd, profile):
 def check_epic(result, story_path, front, backlog):
     epic_path, epic_name = epic_of(story_path, front, backlog)
     epic_front, _ = read_front_matter(epic_path)
-    missing = [f for f in EPIC_FIELDS if not str(epic_front.get(f, "")).strip()]
+    # A key with no value parses as an empty list, and `str([])` is "[]" — non-empty, so the field
+    # would count as filled. A mandatory field is a sentence, so only a non-empty string counts.
+    missing = [f for f in EPIC_FIELDS
+               if not (isinstance(epic_front.get(f), str) and epic_front[f].strip())]
     if missing:
         result.fail(
             "epic",
@@ -613,21 +616,61 @@ def command_for(profile, test_path):
     (source set `src/test-e2e/java`). Both forms are matched against the file's path segments.
     """
     segments = [part for part in test_path.replace("\\", "/").split("/") if part]
-    best = None
+    joined = "/".join(segments)
+    best, catch_all = None, None
     for key in test_command_keys(profile):
         command = profile.get(key)
         if not command:
             continue
+        located = False
         for token in command.split():
             token = token.strip("\"'").lstrip("./")
             if not token or token.startswith("-"):
                 continue
-            covers = token in segments or ("/" in token and token in "/".join(segments))
+            # A project or solution file names a directory, not a file to match: `dotnet test
+            # tests/Foo/Foo.csproj` runs every test under tests/Foo.
+            if os.path.splitext(token)[1] in (".csproj", ".fsproj", ".vbproj", ".sln", ".slnx",
+                                              ".slnf", "pom.xml"):
+                token = os.path.dirname(token) or token
+            if "/" not in token and "." in token and not token.startswith("test"):
+                continue                      # a version, a flag's value, a class name
+            located = located or "/" in token or token in segments
+            covers = token in segments or ("/" in token and token in joined)
             if covers and (best is None or len(token) > best[2]):
                 best = (key, command, len(token))
+        if not located and catch_all is None:
+            # `dotnet test`, `./gradlew test`, `mvn test`: no path at all, so it runs the whole
+            # solution or project and therefore covers every test in it. Ranked last, because a
+            # command that names a source set is the better answer where one exists.
+            catch_all = (key, command)
     if best:
         return best[0], best[1]
+    if catch_all:
+        return catch_all
     return None, None
+
+
+#: Exit codes and messages that mean the command never got as far as running a test. A shell
+#: reports 127 for "not found" and 126 for "not executable"; a build tool that cannot start says so
+#: in words. Neither is a statement about the test.
+INFRASTRUCTURE = (
+    ("command not found", "the command does not exist"),
+    ("No such file or directory", "the command or its project is missing"),
+    ("Permission denied", "the command is not executable"),
+    ("not recognized as an internal or external command", "the command does not exist"),
+)
+
+
+def infrastructure_failure(code, output):
+    """Why this run proves nothing, or an empty string when it is a real verdict."""
+    if code in (126, 127):
+        return f"exit {code}: the command could not be started"
+    for needle, reason in INFRASTRUCTURE:
+        if needle in output:
+            return reason
+    if code != 0 and not output.strip():
+        return f"exit {code} with no output at all"
+    return ""
 
 def check_test_state(result, profile, cwd, mapping, expected, located=None, tasks=None, story=None):
     """expected 'red': every mapped test must fail. 'green': all must pass."""
@@ -669,6 +712,17 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                 command_key, command = "e2eTest" if profile.get("e2eTest") else "test", fallback
             invocation = f'{command} {flag} "{pattern}"'.strip()
             code, output = run(invocation, cwd)
+            broken = infrastructure_failure(code, output)
+            if broken:
+                # A command that never ran a test is not evidence in either direction. Counting its
+                # exit code as "red" lets a missing runner, a typo in the profile or an unbuildable
+                # project fill the record that the build gate later accepts as proof.
+                result.fail(
+                    f"tests-{expected}",
+                    f"{selector}: `{invocation}` did not run the test ({broken}) — no evidence "
+                    f"about {key!r} in either direction:\n{tail(output)}",
+                )
+                continue
             passed = code == 0
             if not passed:
                 now_red.add(selector)

@@ -77,11 +77,15 @@ set=$1; shift
 [ "$1" = "--select" ] && shift
 selector=$1
 simple=$(echo "$selector" | sed 's/.*\\.//; s/#.*//')
-if ! ls "$set"/*/*/"$simple".java >/dev/null 2>&1 && ! ls "$set"/*/*/*/"$simple".java >/dev/null 2>&1; then
+if [ -z "$(find "$set" -name "$simple.java" 2>/dev/null | head -1)" ]; then
   echo "no test matched $selector under $set"
   exit "${NO_MATCH_EXIT:-0}"          # a runner that matched nothing: 0 here, non-zero elsewhere
 fi
-[ -f "green/$(echo "$selector" | tr -d './#')" ] && exit 0
+if [ -f "green/$(echo "$selector" | tr -d './#')" ]; then
+  echo "1 test ran, 0 failed: $selector"
+  exit 0
+fi
+echo "1 test ran, 1 failed: $selector"   # a runner that ran something says so
 exit 1
 """
 
@@ -183,6 +187,20 @@ def checks_by_verdict(output):
 # The runner is bash, so these cases call it rather than importing anything: the stage order, the
 # artefact names, the verdict handling and the two shapes `install` may leave behind.
 
+
+def read_snapshot(path):
+    """The runner's tree snapshot: digest and path per line."""
+    entries = {}
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                parts = line.split("  ", 1)
+                if len(parts) == 2:
+                    entries[parts[1].strip()] = parts[0].strip()
+    except OSError:
+        pass
+    return entries
+
 def run_runner(runner, root, *args, env=None):
     environment = dict(os.environ)
     environment.update(env or {})
@@ -195,6 +213,8 @@ def run_runner(runner, root, *args, env=None):
 def verify_runner(runner, verbose=False):
     """Order, names, verdicts, links — everything about the runner that holds without a model."""
     results = []
+    both_green = ["com.example.WidgetPageTest#showsTheThing",
+                  "com.example.WidgetUnitTest#showsNothingWhenEmpty"]
 
     def check(name, ok, detail=""):
         results.append((name, ok, detail))
@@ -216,6 +236,125 @@ def verify_runner(runner, verbose=False):
         check("runner: the plan gate runs before its stage, every other gate after it",
               order == expected, f"got {order}")
         check("runner: a dry run changes nothing", code == 0 and not os.path.isdir(os.path.join(root, "tasks", "STORY-1", "plan.md")))
+
+    # 1b. a whole run without a model: the loop, the journal and the final report
+    # FACTORY_TOOL_CMD stands in for the tool and writes each stage's artefact, so a defect in the
+    # loop — a stage silently skipped, a report naming stages that never ran — fails here rather
+    # than after an hour of real work.
+    stand_in = (
+        'case "$FACTORY_STAGE" in '
+        'test) f=tests.md ;; *) f="$FACTORY_STAGE.md" ;; esac; '
+        'mkdir -p tasks/STORY-1; '
+        'case "$FACTORY_STAGE" in '
+        '  plan) printf "## Context\\n## Changes\\n## Acceptance criteria\\n" ;; '
+        '  test) cat "$FIXTURE_TESTS" ;; '
+        '  build) printf "## Changed\\n## Criteria\\n## Checks\\n" ;; '
+        '  tidy) printf "## Moves\\n## Checks\\n" ;; '
+        '  judge) printf "## Verdict\\nverdict: pass\\n" ;; '
+        '  document) printf "## Glossary\\n" ;; '
+        'esac > "tasks/STORY-1/$f"; '
+        # red until the build stage, as a real run is: the test gate must see them fail
+        'case "$FACTORY_STAGE" in build|tidy|judge|document) '
+        '  for s in $(cat "$FIXTURE_GREEN" 2>/dev/null); do mkdir -p green; : > "green/$s"; done ;; '
+        'esac'
+    )
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        # the stand-in turns the mapped tests green from the build stage onwards
+        with open(os.path.join(root, "greens.txt"), "w") as handle:
+            handle.write("")
+        tests_path = os.path.join(root, "fixture-tests.md")
+        with open(tests_path, "w") as handle:
+            handle.write(TESTS)
+        os.remove(os.path.join(root, "tasks", "STORY-1", "tests.md"))
+        greens = " ".join(re.sub(r"[./#]", "", s) for s in both_green)
+        with open(os.path.join(root, "greens.txt"), "w") as handle:
+            handle.write(greens + "\n")
+        env = {"FACTORY_TOOL_CMD": stand_in, "FIXTURE_TESTS": tests_path,
+               "FIXTURE_GREEN": os.path.join(root, "greens.txt")}
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env=env)
+        stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
+        check("runner: every stage runs, in order, in a real run",
+              stages == ["plan", "test", "build", "tidy", "judge", "document"],
+              f"stages that ran: {stages}")
+        check("runner: the final line names the stages that ran",
+              "ran through plan,test,build,tidy,judge,document." in output,
+              [l for l in output.splitlines() if "ran through" in l])
+        check("runner: the journal records a start and an end per stage",
+              os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv"))
+              and open(os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv")).read().count("stage-end") == 6)
+        check("runner: a tree snapshot is kept around every stage",
+              len([f for f in os.listdir(os.path.join(root, "tasks", "STORY-1", ".verify"))
+                   if f.startswith("tree-")]) == 12)
+        check("runner: every gate run is kept, not only a refusal",
+              len([f for f in os.listdir(os.path.join(root, "tasks", "STORY-1", ".verify"))
+                   if f.startswith("gate-")]) >= 4)
+
+    # 1c. a stage that writes no file stops the run, and says which file was missing
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": "true"})
+        check("runner: a stage that produced no file stops the run",
+              code != 0 and "produced no tasks/STORY-1/plan.md" in output,
+              output.strip().splitlines()[-1] if output.strip() else "no output")
+
+    # 1d. a stage that escalates stops the run
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        escalating = ('mkdir -p tasks/STORY-1; printf "## Context\\n## Changes\\n'
+                      '## Acceptance criteria\\n## needs-human\\nSomeone must decide.\\n" '
+                      '> tasks/STORY-1/plan.md')
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": escalating})
+        stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
+        check("runner: a stage that ends with needs-human stops the run",
+              code != 0 and stages == ["plan"] and "needs-human" in output,
+              f"stages that ran: {stages}, exit {code}")
+
+    # 1e. install keeps what the project owns
+    source = os.path.normpath(os.path.join(os.path.dirname(runner), "..", ".."))
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        own = os.path.join(root, ".codex", "skills", "our-own-skill")
+        os.makedirs(own)
+        with open(os.path.join(own, "SKILL.md"), "w") as handle:
+            handle.write("---\nname: our-own-skill\ndescription: the project's own\n---\n")
+        stale = os.path.join(root, ".codex", "skills", "gone-from-the-source")
+        os.symlink(os.path.join(source, "no-longer-here"), stale)
+        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        entries = os.listdir(os.path.join(root, ".codex", "skills"))
+        check("install: a skill the project owns survives the install",
+              "our-own-skill" in entries and
+              os.path.isfile(os.path.join(own, "SKILL.md")),
+              f"{sorted(entries)[:5]}…")
+        check("install: a link whose skill is gone from the source is pruned",
+              "gone-from-the-source" not in entries)
+
+    # 1f. the snapshot sees files in a directory this run added
+    with tempfile.TemporaryDirectory() as root:
+        build_project(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"],
+                       cwd=root, capture_output=True)
+        os.makedirs(os.path.join(root, "src", "brand-new"))
+        with open(os.path.join(root, "src", "brand-new", "Added.java"), "w") as handle:
+            handle.write("class Added {}\n")
+        run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in", "--from", "judge",
+                   env={"FACTORY_TOOL_CMD": 'mkdir -p tasks/STORY-1; printf "## Verdict\\nverdict: pass\\n" '
+                                            '> tasks/STORY-1/judge.md'})
+        snap = read_snapshot(os.path.join(root, "tasks", "STORY-1", ".verify", "tree-before-judge.txt"))
+        check("snapshot: a file inside a directory this run added is hashed, not skipped",
+              "src/brand-new/Added.java" in snap,
+              f"{len(snap)} entries: {sorted(snap)[:4]}…")
 
     # 2. the artefact name the runner waits for is the file contract's, not the stage's name
     with tempfile.TemporaryDirectory() as root:
@@ -342,6 +481,22 @@ def main(argv=None):
                                   "com.example.OtherTest#showsTheThing"),
               extra_sources=(("src/other/java/com/example/OtherTest.java",
                               "class OtherTest { void showsTheThing() {} }\n"),))),
+        (Case("test: a mandatory epic field left blank is refused", "plan", 1, must_fail=("epic",),
+              text=("missing domain_contact",)),
+         dict(epic=EPIC.replace("domain_contact: the-expert", "domain_contact:"))),
+        (Case("test: a runner that never ran the test is no evidence", "test", 1,
+              must_fail=("tests-red",), text=("did not run the test",)),
+         dict(profile=PROFILE.replace("test: sh runner.sh src/test/java",
+                                      "test: sh no-such-runner.sh src/test/java"))),
+        (Case("test: a whole-project command covers every test in it", "test", 0,
+              must_pass=("tests-red",)),
+         dict(profile="compile: true\ntest: sh runner.sh .\nfilterFlag: --select\n"
+                      'filterFormat: "{class}#{method}"\narchitecture: true\n')),
+        (Case("test: a project file names the directory it covers", "test", 0,
+              must_pass=("tests-red",)),
+         dict(profile="compile: true\ntest: sh runner.sh src/test/java/com/example/WidgetUnitTest.java\n"
+                      "test.pages: sh runner.sh src/test-pages/java\nfilterFlag: --select\n"
+                      'filterFormat: "{class}#{method}"\narchitecture: true\n')),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),

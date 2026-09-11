@@ -6,6 +6,9 @@
 #   factory.sh install [--tool claude|codex|opencode|all] [--from <skill folder>] [--copy]
 #   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--dry-run]
 #
+# FACTORY_TOOL_CMD replaces the tool invocation entirely ($FACTORY_STAGE and $FACTORY_PROMPT are
+# exported to it) — for a tool none of the adapters covers, and so the loop itself is testable.
+#
 # Per-tool flags come from the environment, because a model and an effort level are the
 # tool's configuration and not the process': FACTORY_CLAUDE_ARGS, FACTORY_CODEX_ARGS,
 # FACTORY_OPENCODE_ARGS.
@@ -68,6 +71,13 @@ invoke() {                                  # invoke <tool> <prompt>
   # flags from the environment: FACTORY_CLAUDE_ARGS, FACTORY_CODEX_ARGS, FACTORY_OPENCODE_ARGS.
   # Example: FACTORY_OPENCODE_ARGS="--model <provider>/<model>" where the default provider is not
   # authenticated. The pipeline never chooses a model; it only stops standing in the way of one.
+  # One seam, for two honest purposes: a project whose tool is none of the three can plug it in,
+  # and the runner's own loop can be exercised without a model — which is the only way a defect in
+  # the loop is found by a test rather than by a wasted run.
+  if [ -n "${FACTORY_TOOL_CMD:-}" ]; then
+    FACTORY_STAGE="${stage_in_flight:-}" FACTORY_PROMPT="$prompt" sh -c "$FACTORY_TOOL_CMD"
+    return $?
+  fi
   case "$tool" in
     claude)   claude -p "$prompt" --permission-mode acceptEdits \
                 --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
@@ -89,6 +99,17 @@ invoke() {                                  # invoke <tool> <prompt>
 # The craft skills a stack profile may name as a carrier, where they sit next to this pipeline in
 # the same checkout. Claude Code finds them through its plugins; a tool without that mechanism
 # finds only what the project's own skill directory holds.
+
+# Whether a link points into one of the directories we install from — the only links this install
+# may replace or prune. Anything else in that directory is the project's and is left alone.
+ours() {                                    # ours <target> <source> <method dirs>
+  local target=$1 dir
+  for dir in $2 $3; do
+    case "$target" in "$dir"/*) return 0 ;; esac
+  done
+  return 1
+}
+
 method_skill_dirs() {
   local source_abs=$1 plugins dir found=""
   plugins=$(cd "$source_abs/../.." 2>/dev/null && pwd) || return 0
@@ -148,16 +169,34 @@ install_skills() {
       # otherwise the pipeline ports and the craft does not, and every stage falls back with a note.
       # Several sources cannot be one directory link, so these are per skill: an edited skill is
       # still live, but a *newly added* one needs another install, and that is said out loud.
-      rm -rf "$target"; mkdir -p "$target"
-      local linked=0 dir skill
+      mkdir -p "$target"
+      # Never wipe the directory: a project may keep skills of its own in it, and an install that
+      # deletes them while reporting success is the worst kind of helpfulness. Only links that
+      # point into a source we install from are ours to replace, and a stale one — its skill gone
+      # from the source — is pruned and named.
+      local linked=0 kept=0 pruned=0 dir skill entry name
+      for entry in "$target"/*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        if [ -L "$entry" ] && ours "$(readlink "$entry")" "$source_abs" "$method_dirs"; then
+          [ -e "$entry" ] || { rm -f "$entry"; pruned=$((pruned + 1)); }   # its skill is gone
+          continue
+        fi
+        kept=$((kept + 1))
+      done
       for dir in "$source_abs" $method_dirs; do
         for skill in "$dir"/*; do
           [ -d "$skill" ] || continue
-          rm -rf "$target/$(basename "$skill")"
-          ln -s "$skill" "$target/$(basename "$skill")"
+          name=$(basename "$skill")
+          if [ -e "$target/$name" ] && [ ! -L "$target/$name" ]; then
+            echo "factory: kept the project's own $target/$name — the pipeline's copy was not installed" >&2
+            continue
+          fi
+          ln -sfn "$skill" "$target/$name"
           linked=$((linked + 1))
         done
       done
+      [ "$kept" -gt 0 ] && echo "factory: left $kept entry/entries in $target that are the project's own" >&2
+      [ "$pruned" -gt 0 ] && echo "factory: pruned $pruned link(s) whose skill is gone from the source" >&2
       echo "factory: skills → $target ($linked linked: the pipeline plus the craft it names as carriers)"
       echo "factory:   per skill, because they come from several sources — re-run install after a skill is added" >&2
     elif [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; then
@@ -332,17 +371,39 @@ $TASKS/$story/. Do the stage yourself in this session; do not delegate it. Do no
 
 gate() {                                    # gate <stage> <story>
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh install'" >&2; return 2; }
-  local report="$TASKS/$2/.gate-$1.txt"
-  mkdir -p "$TASKS/$2"
+  local report="$TASKS/$2/.gate-$1.txt" journal="$TASKS/$2/.verify"
+  mkdir -p "$TASKS/$2" "$journal"
   python3 "$GATE" --story "$2" --stage "$1" 2>&1 | tee "$report"
   local code=${PIPESTATUS[0]}
-  [ "$code" = 0 ] && rm -f "$report"      # only a refusal is worth handing on
+  # Every gate run is kept for the observer, with its verdict; only a *refusal* is kept where the
+  # next stage reads it. A run that has to be reconstructed afterwards from what a stage claimed is
+  # exactly the evidence the gate exists to replace.
+  cp "$report" "$journal/gate-$1.$(date -u +%H%M%S).txt"
+  printf '%s\tgate\t%s\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$code" >> "$journal/journal.tsv"
+  [ "$code" = 0 ] && rm -f "$report"
   return "$code"
+}
+
+# What the working tree looks like right now, so a later stage's claim about what it changed can be
+# checked rather than believed. Cheap: one porcelain listing plus a hash per file git reports.
+snapshot() {                                # snapshot <story> <label>
+  local journal="$TASKS/$1/.verify" file
+  mkdir -p "$journal"
+  {
+    # -uall: without it a newly added directory is listed as one entry and every file in it is
+    # missing from the snapshot — so a test added by this run, and edited afterwards, would look
+    # untouched. `--porcelain` also quotes unusual names, hence the -z form and the NUL split.
+    git -c core.fileMode=false status --porcelain -z -uall 2>/dev/null \
+      | tr '\0' '\n' | sed 's/^...//' | while read -r file; do
+      [ -n "$file" ] && [ -f "$file" ] \
+        && printf '%s  %s\n' "$(shasum -a 256 "$file" 2>/dev/null | cut -d" " -f1)" "$file"
+    done
+  } > "$journal/tree-$2.txt" 2>/dev/null || true
 }
 
 run_story() {
   local story=$1 tool=$2 from=${3:-plan} dry=${4:-}
-  local started=0
+  local started=0 ran=""
   for stage in "${STAGES[@]}"; do
     [ "$stage" = "$from" ] && started=1
     [ "$started" = 1 ] || continue
@@ -356,12 +417,30 @@ run_story() {
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
     else
-      invoke "$tool" "$(prompt_for "$stage" "$story")" || {
+      # Never `started` — that name is the loop's "have we reached --from yet" flag, and
+      # overwriting it skips every later stage while the run still reports success.
+      local stage_started; stage_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      snapshot "$story" "before-$stage"
+      printf '%s\tstage-start\t%s\ttool=%s\n' "$stage_started" "$stage" "$tool" >> "$TASKS/$story/.verify/journal.tsv"
+      stage_in_flight="$stage" invoke "$tool" "$(prompt_for "$stage" "$story")" || {
+        printf '%s\tstage-end\t%s\texit=nonzero\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
+          >> "$TASKS/$story/.verify/journal.tsv"
         echo "factory: the tool exited non-zero during stage '$stage'." >&2; return 1; }
+      printf '%s\tstage-end\t%s\texit=0\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
+        >> "$TASKS/$story/.verify/journal.tsv"
+      snapshot "$story" "after-$stage"
       local artefact="$TASKS/$story/$(stage_file "$stage")"
       [ -f "$artefact" ] || {
         echo "factory: stage '$stage' produced no $artefact — a stage is finished when its file exists." >&2
         return 1; }
+      # A stage that ends with a needs-human section has stopped, whatever its file otherwise says.
+      # Reading only "does the file exist" turns an escalation into a hand-over, and the next stage
+      # then builds on a decision nobody took.
+      if grep -q '^## needs-human' "$artefact"; then
+        echo "factory: stage '$stage' ends with a needs-human section — the run stops here." >&2
+        echo "factory:   read $artefact and decide; the stages after it were not run." >&2
+        return 1
+      fi
     fi
 
     if [[ " ${POST_GATED[*]} " == *" $stage "* ]]; then
@@ -370,6 +449,8 @@ run_story() {
         echo "factory: gate '$stage' failed after the stage. Re-run this stage with the gate output." >&2
         return 1; }
     fi
+
+    ran="${ran:+$ran,}$stage"
 
     if [ "$stage" = "judge" ] && [ -z "$dry" ]; then
       local verdict rounds
@@ -401,7 +482,9 @@ run_story() {
       esac
     fi
   done
-  echo "factory: story $story ran through $(IFS=,; echo "${STAGES[*]}")."
+  # What ran, not what the script knows how to run: a message that names six stages after one of
+  # them is exactly the self-report the gates exist to replace.
+  echo "factory: story $story ran through ${ran:-nothing}."
 }
 
 # --- main --------------------------------------------------------------------
