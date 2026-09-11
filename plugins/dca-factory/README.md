@@ -228,3 +228,7 @@ are linked individually — a *new* one needs another `install`; an edited one i
 **The gate says a command was "skipped and named".** The profile does not declare it. Deliberate: a
 gate that fails on something nobody configured gets switched off, and then nothing is checked at
 all.
+
+## Author
+
+**Christoph Bloemer** — [@chbloemer](https://github.com/chbloemer)

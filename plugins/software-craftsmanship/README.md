@@ -97,4 +97,4 @@ Falls back to `<project-root>/CLAUDE.md`, then to sensible defaults.
 
 ## Author
 
-Christoph Bloemer · neuland Büro für Informatik
+**Christoph Bloemer** — [@chbloemer](https://github.com/chbloemer)

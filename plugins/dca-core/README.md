@@ -126,4 +126,4 @@ over the vendored snapshot.
 
 ## Author
 
-Christoph Bloemer
+**Christoph Bloemer** — [@chbloemer](https://github.com/chbloemer)
