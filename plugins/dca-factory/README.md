@@ -150,6 +150,12 @@ gotestsum, nextest, PHPUnit, RSpec; the .NET platform needs `--logger trx`), poi
 it if it lands somewhere unusual, or accept the weaker check with `testEvidence: exit-code` and
 read that line in every report it produces.
 
+**"the report holds N cases for that class and none is named …"** The runner reported display names
+rather than method names, and more than one test of that class ran — so no case can be attributed
+to the mapped test without guessing. Give the test a name the report carries, or declare the
+display name where the test is declared (`@DisplayName`, `[Fact(DisplayName = …)]`,
+`[Test(Description = …)]`): the gate reads it from there and matches on it.
+
 **"no declared test command covers this test."** A mapped test lives in a source set the profile
 does not mention. Add it as `test.<name>: <command>`. The gate refuses rather than guessing,
 because a run that matched no test exits successfully on one runner and unsuccessfully on another —

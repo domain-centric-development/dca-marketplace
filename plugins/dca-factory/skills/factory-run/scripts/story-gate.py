@@ -37,6 +37,7 @@ import json
 import os
 import re
 import glob
+import hashlib
 import subprocess
 import sys
 import time
@@ -682,18 +683,56 @@ def normalise(output, cwd):
     return NOISE.sub("<time>", text).strip()
 
 
-def report_files(cwd, profile, since):
-    """Report files written or rewritten since `since` — the run's own, not an older one's."""
+def report_state(cwd, profile):
+    """{path: (digest, mtime)} of every candidate report file right now."""
     patterns = [profile["testReport"]] if profile.get("testReport") else list(REPORT_GLOBS)
-    found = []
+    state = {}
     for pattern in patterns:
         for path in glob.glob(os.path.join(cwd, pattern), recursive=True):
+            if not os.path.isfile(path):
+                continue
             try:
-                if os.path.getmtime(path) >= since - 1:
-                    found.append(path)
+                with open(path, "rb") as handle:
+                    state[path] = (hashlib.sha256(handle.read()).hexdigest(),
+                                   os.path.getmtime(path))
             except OSError:
                 continue
-    return found
+    return state
+
+
+def clock_marker(cwd):
+    """A file written now, to read the *filesystem's* clock rather than this process's.
+
+    Comparing report timestamps against `time.time()` imports clock skew and the filesystem's
+    granularity into the check; comparing them against a file written at the same moment does not.
+    """
+    path = os.path.join(cwd, ".factory-gate-marker")
+    try:
+        with open(path, "w") as handle:
+            handle.write("")
+        stamp = os.path.getmtime(path)
+        os.remove(path)
+        return stamp
+    except OSError:
+        return None
+
+
+def reports_from_this_run(before, after, marker):
+    """The report files this invocation created or rewrote.
+
+    Two signals, because neither alone is enough. Content: a report whose bytes changed is new
+    evidence — but a deterministic runner can write the same bytes twice. Time against the marker:
+    a report touched after the invocation began is this run's — while a report left by an earlier
+    run keeps its older timestamp and stays out, which is the case this check exists for.
+    """
+    fresh = []
+    for path, (digest, mtime) in after.items():
+        was = before.get(path)
+        if was is None or was[0] != digest:
+            fresh.append(path)
+        elif marker is not None and mtime >= marker:
+            fresh.append(path)
+    return fresh
 
 
 def executed_tests(paths):
@@ -733,7 +772,40 @@ def executed_tests(paths):
     return ran
 
 
-def outcome_for(ran, cls, method):
+#: How a test's *reported* name is declared in code where it differs from the method name. Two
+#: forms cover the runners whose reports drop the method name; every other stack reports the method
+#: and never reaches this.
+DISPLAY_NAME = (
+    re.compile(r'@DisplayName\s*\(\s*"((?:[^"\\]|\\.)*)"'),           # JUnit 5
+    re.compile(r'DisplayName\s*=\s*"((?:[^"\\]|\\.)*)"'),              # xUnit [Fact(DisplayName=…)]
+    re.compile(r'Description\s*=\s*"((?:[^"\\]|\\.)*)"'),              # NUnit [Test(Description=…)]
+)
+
+
+def display_name_of(test_path, method):
+    """The name this method is reported under, read from the code that declares it.
+
+    A report that carries a display name instead of a method name needs a mapping, and the only
+    honest place to get one is the declaration: the annotation sits on the method. Guessing from
+    class membership instead would let a sibling's result stand in for this test.
+    """
+    text = read_text(test_path) if test_path and os.path.isfile(test_path) else ""
+    if not text:
+        return None
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if re.search(rf"\b{re.escape(method)}\s*\(", line):
+            for candidate in reversed(lines[max(0, index - 6):index + 1]):
+                for pattern in DISPLAY_NAME:
+                    match = pattern.search(candidate)
+                    if match:
+                        return match.group(1)
+                if candidate.strip().endswith("}") and candidate is not lines[index]:
+                    break                     # left this method's declaration
+    return None
+
+
+def outcome_for(ran, cls, method, display=None):
     """What a report says about this selector: (outcome, how it was matched) or (None, "").
 
     The method name is the better key, but it is not always in the report — a JUnit XML writer puts
@@ -753,14 +825,22 @@ def outcome_for(ran, cls, method):
     for (report_class, report_method), outcome in ran.items():
         if report_method == method and same_class(report_class):
             return outcome, "by name"
-    in_class = [outcome for (report_class, _m), outcome in ran.items() if same_class(report_class)]
+    if display:
+        for (report_class, report_method), outcome in ran.items():
+            if report_method == display and same_class(report_class):
+                return outcome, f"by the display name declared in the code ({display!r})"
+    in_class = [(m, o) for (report_class, m), o in ran.items() if same_class(report_class)]
     if not in_class:
         return None, ""
-    aggregate = ("failed" if "failed" in in_class else
-                 "skipped" if all(o == "skipped" for o in in_class) else "passed")
     if len(in_class) == 1:
-        return aggregate, "by class (the report carries a display name, not the method)"
-    return aggregate, f"by class over {len(in_class)} cases (the runner did not honour the filter)"
+        # The run was filtered to this one selector and the report holds exactly one case for its
+        # class: that case is this test, whatever name the runner chose to print.
+        return in_class[0][1], "by class — the filtered run reported exactly one case for it"
+    # Several cases: attributing any one of them to this selector would let another method's result
+    # decide this criterion. No mapping, no verdict.
+    return None, (f"the report holds {len(in_class)} cases for that class "
+                  f"({', '.join(sorted(name for name, _ in in_class)[:4])}) and none is named "
+                  f"{method!r}")
 
 
 def discriminates(command, flag, fmt, cwd, cache):
@@ -819,7 +899,9 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                 command_key, command = "e2eTest" if profile.get("e2eTest") else "test", fallback
             invocation = f'{command} {flag} "{pattern}"'.strip()
             evidence = ""
-            started = time.time()
+            reporting = profile.get("testEvidence", "").strip() != "exit-code"
+            before_reports = report_state(cwd, profile) if reporting else {}
+            marker = clock_marker(cwd) if reporting else None
             code, output = run(invocation, cwd)
 
             # What the test *did* comes from the runner's report, because that is the only artefact
@@ -844,15 +926,18 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                     f"running one is indistinguishable here.",
                 )
             else:
-                reports = report_files(cwd, profile, started)
-                outcome, how = outcome_for(executed_tests(reports), cls, method)
+                reports = reports_from_this_run(before_reports, report_state(cwd, profile), marker)
+                display = display_name_of(located.get(selector), method)
+                outcome, how = outcome_for(executed_tests(reports), cls, method, display)
                 if outcome is None:
+                    detail = (f" — {how}" if how else
+                              f" ({len(reports)} report file(s) written by this run)")
                     result.fail(
                         f"tests-{expected}",
-                        f"{selector}: no test report from this run names it, so nothing shows it "
-                        f"ran ({len(reports)} report file(s) written). Let the runner write one "
-                        f"(JUnit XML is the default on the JVM; .NET needs `--logger trx`), point "
-                        f"`testReport:` at it, or accept the weaker check with "
+                        f"{selector}: no test report from this run shows it ran{detail}. Let the "
+                        f"runner write one (JUnit XML is the default on the JVM; .NET needs "
+                        f"`--logger trx`), point `testReport:` at it, give the test a name the "
+                        f"report carries, or accept the weaker check with "
                         f"`testEvidence: exit-code`:\n{tail(output)}",
                     )
                     continue
@@ -867,8 +952,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                 # test, and a runner can exit 0 with a failure recorded.
                 code = 0 if outcome == "passed" else 1
                 evidence = f"report {how}"
-                if "did not honour" in how:
-                    result.note(f"tests-{expected}", f"{selector}: matched {how}")
+
             passed = code == 0
             if not passed:
                 now_red.add(selector)

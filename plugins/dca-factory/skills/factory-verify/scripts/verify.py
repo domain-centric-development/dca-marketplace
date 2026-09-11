@@ -539,11 +539,11 @@ def main(argv=None):
               text=("missing domain_contact",)),
          dict(epic=EPIC.replace("domain_contact: the-expert", "domain_contact:"))),
         (Case("test: a runner that cannot start is no evidence", "test", 1,
-              must_fail=("tests-red",), text=("no test report from this run names it",)),
+              must_fail=("tests-red",), text=("no test report from this run shows it ran",)),
          dict(profile=PROFILE.replace("test: sh runner.sh src/test/java",
                                       "test: sh no-such-runner.sh src/test/java\ncovers.test: **"))),
         (Case("test: a runner that reports no test but names the selector is no evidence", "test", 1,
-              must_fail=("tests-red",), text=("no test report from this run names it",)),
+              must_fail=("tests-red",), text=("no test report from this run shows it ran",)),
          # The reviewer's case: it exists, it exits 1, and it prints the selector back — so its
          # output differs per selector while it executes nothing. Only a report settles it.
          dict(profile=PROFILE.replace(
@@ -551,7 +551,7 @@ def main(argv=None):
              "test: sh -c 'echo \"no tests found for given includes: $2\"; exit 1' --"
              "\ncovers.test: **"))),
         (Case("test: a crashed runner that exits like a failing test is no evidence", "test", 1,
-              must_fail=("tests-red",), text=("no test report from this run names it",)),
+              must_fail=("tests-red",), text=("no test report from this run shows it ran",)),
          dict(profile=PROFILE.replace("test: sh runner.sh src/test/java",
                                       "test: sh -c 'exit 1' --\ncovers.test: **"))),
         (Case("test: with testEvidence: exit-code the weaker check is named, not hidden", "test", 0,
@@ -609,6 +609,64 @@ def main(argv=None):
                               '\'<failure>not yet</failure></testcase></testsuite>\\n\' '
                               '"$cls" "$method" > reports/junit-run.xml\n'
                               'echo "1 failed"\nexit 1\n'),))),
+        (Case("test: a report from before the run is not this run's evidence", "test", 1,
+              must_fail=("tests-red",), text=("no test report from this run shows it ran",)),
+         # A failure report left by an earlier run, and a runner that finds nothing now: the old
+         # file must not stand in for a test that was never executed.
+         dict(profile=PROFILE.replace(
+                  "test: sh runner.sh src/test/java",
+                  "test: sh -c 'echo \"No tests found\"; exit 1' --\ncovers.test: **"),
+              extra_sources=(
+                  ("build/test-results/stale/TEST-WidgetUnitTest.xml",
+                   '<testsuite><testcase classname="com.example.WidgetUnitTest" '
+                   'name="showsNothingWhenEmpty"><failure>from yesterday</failure>'
+                   "</testcase></testsuite>\n"),
+                  ("build/test-results/stale/TEST-WidgetPageTest.xml",
+                   '<testsuite><testcase classname="com.example.WidgetPageTest" '
+                   'name="showsTheThing"><failure>from yesterday</failure>'
+                   "</testcase></testsuite>\n"),
+              ))),
+        (Case("test: another method's result does not settle this one", "test", 1,
+              must_fail=("tests-red",), text=("cases for that class",)),
+         # The report holds two cases for the class and neither is named like the mapped method —
+         # attributing one of them would let a sibling decide this criterion.
+         dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
+              tests="# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
+                    "| shows-nothing-when-empty | com.example.WidgetUnitTest#showsNothingWhenEmpty |\n",
+              profile="compile: true\ntest: sh sibling-runner.sh\ncovers.test: **\n"
+                      'filterFlag: --select\nfilterFormat: "{class}#{method}"\narchitecture: true\n',
+              extra_sources=(("sibling-runner.sh",
+                              '#!/bin/sh\nmkdir -p build/test-results/run\n'
+                              'printf \'<testsuite>\''
+                              '\'<testcase classname="com.example.WidgetUnitTest" name="a nice title">\''
+                              '\'<failure>no</failure></testcase>\''
+                              '\'<testcase classname="com.example.WidgetUnitTest" name="another title"/>\''
+                              '\'</testsuite>\\n\' > build/test-results/run/TEST-WidgetUnitTest.xml\n'
+                              'echo "2 tests ran"\nexit 1\n'),))),
+        (Case("test: a display name declared in the code settles it", "test", 0,
+              must_pass=("tests-red",), text=("display name declared in the code",)),
+         dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
+              tests="# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
+                    "| shows-nothing-when-empty | com.example.WidgetUnitTest#showsNothingWhenEmpty |\n",
+              profile="compile: true\ntest: sh titled-runner.sh\ncovers.test: **\n"
+                      'filterFlag: --select\nfilterFormat: "{class}#{method}"\narchitecture: true\n',
+              extra_sources=(
+                  ("src/test/java/com/example/WidgetUnitTest.java",
+                   "class WidgetUnitTest {\n"
+                   '  @DisplayName("shows an invitation when nothing is recorded")\n'
+                   "  void showsNothingWhenEmpty() {}\n"
+                   '  @DisplayName("another title")\n'
+                   "  void somethingElse() {}\n}\n"),
+                  ("titled-runner.sh",
+                   '#!/bin/sh\nmkdir -p build/test-results/run\n'
+                   'printf \'<testsuite>\''
+                   '\'<testcase classname="com.example.WidgetUnitTest" \''
+                   '\'name="shows an invitation when nothing is recorded">\''
+                   '\'<failure>not yet</failure></testcase>\''
+                   '\'<testcase classname="com.example.WidgetUnitTest" name="another title"/>\''
+                   '\'</testsuite>\\n\' > build/test-results/run/TEST-WidgetUnitTest.xml\n'
+                   'echo "2 tests ran"\nexit 1\n'),
+              ))),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
