@@ -47,4 +47,4 @@ Domain Object"
 
 ## Related mentions in guides (heuristic)
 
-- [INTEGRATION PATTERNS](/guide/readme/integration-patterns.md)
+- [Factory for Cross-Context Assembly](/guide/integration-patterns/factory-for-cross-context-assembly.md)

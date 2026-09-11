@@ -220,7 +220,7 @@ Read `<project-root>/.claude/dca/conventions.md` for:
   domain")
 
 If no conventions file: use DCA defaults from
-`dca-guide/README.md`.
+`dca-guide/architecture/rules.md`.
 
 ## What this skill does NOT do
 

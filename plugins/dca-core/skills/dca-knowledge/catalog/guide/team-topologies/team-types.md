@@ -18,7 +18,7 @@ tags: [guide, section]
 - Long-lived, stable team
 
 **Responsibilities:**
-- Own domain, application, and adapters (see [Domain-Centric Architecture](/guide/readme/dependency-structure.md))
+- Own domain, application, and adapters (see [Domain-Centric Architecture](/guide/dependency-structure/layer-dependency-flow.md))
 - Build, deploy, run, maintain
 - Respond to user needs
 - Continuous delivery

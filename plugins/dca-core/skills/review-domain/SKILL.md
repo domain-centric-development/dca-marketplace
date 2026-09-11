@@ -97,7 +97,7 @@ Before reviewing, gather context:
 3. If `docs/context-map.md` exists, read it. Use it to judge whether
    cross-context imports are documented (and thus expected) or smuggled in.
 4. Optionally consult the vendored knowledge catalog
-   (`skills/dca-knowledge/catalog/`: `guide/readme/elements.md`, `guide/readme/rules.md`,
+   (`skills/dca-knowledge/catalog/`: `guide/elements.md`, `guide/rules.md`,
    the `pitfall/` and `decision/` nodes) for the doctrine behind a finding.
 
 ## Output format

@@ -63,7 +63,7 @@ public class Order implements AggregateRoot<OrderId> {
 }
 ```
 
-> **See:** [Domain-Centric Architecture - Domain Layer Rules](/guide/readme/rules.md) for full DDD patterns
+> **See:** [Domain-Centric Architecture - Domain Layer Rules](/guide/rules/domain-layer-rules.md) for full DDD patterns
 
 ### 2. Strategic Design
 
@@ -82,7 +82,7 @@ public class Order implements AggregateRoot<OrderId> {
 - Includes both **tactical** (layers) and **strategic** (bounded contexts) design
 - Explicit guidance on how to partition large systems
 
-> **See:** [Domain-Centric Architecture - Strategic Design Rules](/guide/readme/rules.md)
+> **See:** [Domain-Centric Architecture - Strategic Design Rules](/guide/rules/strategic-design-rules.md)
 
 ### 3. Domain Events
 
@@ -122,7 +122,7 @@ public class CreateOrderUseCase {
 }
 ```
 
-> **See:** [Domain-Centric Architecture - Domain Event Rules](/guide/readme/rules.md)
+> **See:** [Domain-Centric Architecture - Domain Event Rules](/guide/rules/domain-layer-rules.md)
 
 ### 4. Terminology
 
@@ -177,7 +177,7 @@ com.company.project
 
 **Key Difference:** Domain-Centric Architecture organizes by **bounded context first**, then by layer.
 
-> **See:** [Domain-Centric Architecture - Package Structure](/guide/readme/java-package-structure.md)
+> **See:** [Domain-Centric Architecture - Package Structure](/guide/package-structure.md)
 
 ### 6. Presenter Pattern
 
@@ -254,7 +254,7 @@ public interface OrderRepository {
 
 **Repository interface placement:** Classic DDD literature (Evans, Vernon, Millett/Tune) places repository interfaces in the domain layer. DCA deliberately places them in the application layer as output ports — consistent with Hexagonal and Clean Architecture, where the use case owns the contracts it depends on. The domain then holds no opinion about persistence at all: it neither declares the interface nor knows that one exists.
 
-> **See:** [Domain-Centric Architecture - Aggregate Rules](/guide/readme/rules.md)
+> **See:** [Domain-Centric Architecture - Aggregate Rules](/guide/rules/domain-layer-rules.md)
 
 ### 8. Cross-Context Integration
 
@@ -268,7 +268,7 @@ public interface OrderRepository {
 - Integration Events vs Domain Events
 - Context Map
 
-> **See:** [Domain-Centric Architecture - Integration Patterns](/guide/readme/integration-patterns.md)
+> **See:** [Domain-Centric Architecture - Integration Patterns](/guide/integration-patterns.md)
 
 ## Related mentions (heuristic)
 

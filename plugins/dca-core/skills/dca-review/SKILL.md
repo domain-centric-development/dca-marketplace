@@ -246,7 +246,7 @@ This makes the review match the project's actual conventions, not DCA defaults.
 
 - `reference/checklist.md` — the complete per-layer checklist (includes Output Port Granularity section)
 - `reference/use-case-pattern.md` — central reference for use-case folder structure, file roles, shared-vs-local output-port decision guide, ArchUnit rules
-- `reference/naming-conventions.md` — extracted from `dca-guide/README.md`
+- `reference/naming-conventions.md` — extracted from `dca-guide/architecture/package-structure.md`
 
 ### Wiring and metadata review
 

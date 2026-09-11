@@ -54,7 +54,7 @@ com.company.ecommerce
 │           └── OrderModuleConfiguration.java
 ```
 
-> **Note:** The `internal/` structure follows [Domain-Centric Architecture layers](/guide/readme/java-package-structure.md). See main document for layer rules and responsibilities.
+> **Note:** The `internal/` structure follows [Domain-Centric Architecture layers](/guide/package-structure.md). See main document for layer rules and responsibilities.
 
 ### Module Configuration
 

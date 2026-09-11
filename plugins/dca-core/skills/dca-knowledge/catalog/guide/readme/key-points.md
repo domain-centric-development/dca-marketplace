@@ -1,12 +1,10 @@
 ---
 type: Section
-title: Key Points
+title: Key points
 chapter: Domain-Centric Architecture
 source: guide
 tags: [guide, section]
 ---
-
-**Domain-Centric Architecture** is an architectural approach that puts **domain logic at the center** and protects it from infrastructure concerns. It synthesizes proven patterns from Domain-Driven Design, Hexagonal Architecture, and Clean Architecture.
 
 ### Core Principles
 
@@ -66,4 +64,4 @@ Domain         ─→  Entities, Value Objects, Aggregates, Events
 5. **Implement adapters** - Web controllers, persistence, messaging as adapters
 6. **Add complexity progressively** - Subdivide packages only when you feel pain
 
-For detailed patterns and rules, continue reading below. For specific topics, see [Related Documentation](#related-documentation).
+Where each of these is settled in full is listed below.
