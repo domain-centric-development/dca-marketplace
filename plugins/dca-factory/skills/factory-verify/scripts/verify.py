@@ -531,7 +531,8 @@ def verify_runner(runner, verbose=False):
             # the dry run does not reach the judge, so read the parser directly
             parsed = subprocess.run(
                 ["bash", "-c",
-                 f'TASKS=tasks; source <(sed -n "/^verdict_of/,/^}}/p" "{runner}"); verdict_of STORY-1'],
+                 f'TASKS=tasks; sed -n "/^verdict_of/,/^}}/p" "{runner}" > fn.sh; '
+                 f'. ./fn.sh; verdict_of STORY-1'],
                 cwd=root, capture_output=True, text=True).stdout.strip()
             check(f"runner: reads the verdict '{verdict}' from the file", parsed == expect,
                   f"parsed {parsed!r}")
@@ -541,7 +542,8 @@ def verify_runner(runner, verbose=False):
         os.makedirs(os.path.join(root, "tasks", "STORY-1"))
         counted = subprocess.run(
             ["bash", "-c",
-             f'TASKS=tasks; source <(sed -n "/^bump_rounds/,/^}}/p" "{runner}"); bump_rounds STORY-1; bump_rounds STORY-1'],
+             f'TASKS=tasks; sed -n "/^bump_rounds/,/^}}/p" "{runner}" > fn.sh; '
+             f'. ./fn.sh; bump_rounds STORY-1; bump_rounds STORY-1'],
             cwd=root, capture_output=True, text=True).stdout.split()
         check("runner: the round counter is a file and counts up", counted == ["1", "2"],
               f"got {counted}")
