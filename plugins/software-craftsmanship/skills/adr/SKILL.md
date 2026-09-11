@@ -37,7 +37,7 @@ Alternative paths can be set in `<project-root>/.claude/dca/conventions.md`.
 ```markdown
 # NNNN. Kurztitel
 
-- **Status:** Proposed | Accepted | Deprecated | Superseded by [NNNN](NNNN-...md)
+- **Status:** Proposed | Accepted | Deprecated | Superseded by NNNN (`NNNN-...md`)
 - **Date:** YYYY-MM-DD
 - **Deciders:** Names or roles
 - **Tags:** bounded-context, framework, integration, persistence, security, ...
@@ -66,7 +66,7 @@ Optional. Kurz die ernsthaft erwogenen Alternativen und warum verworfen.
 - Code: `path/file.java:42`
 - Commit: `abc1234`
 - Ticket: JIRA-123
-- Related ADRs: [0005](0005-...md)
+- Related ADRs: 0005 (`0005-...md`)
 ```
 
 ## Operations
@@ -102,9 +102,9 @@ Warn the user: "Once accepted, edit only by writing a new ADR. Are you sure?"
 2. Create a new ADR (NNNN+k, following `new` logic) with:
    - Title from the user
    - Pre-filled `References` linking back to NNNN
-   - A `Supersedes [NNNN](NNNN-...md)` note in `Context`
+   - A `Supersedes NNNN (`NNNN-...md`)` note in `Context`
 3. On the **old** NNNN: change Status from `Accepted` to
-   `Superseded by [NNNN+k](NNNN+k-...md)`. This is the *only* change
+   `Superseded by NNNN+k (`NNNN+k-...md`)`. This is the *only* change
    permitted on an accepted ADR.
 4. Update the index.
 
@@ -123,9 +123,9 @@ sorted by number:
 
 | # | Title | Status | Date | Tags |
 |---|---|---|---|---|
-| [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted | 2026-05-17 | meta |
-| [0002](0002-use-spring-modulith.md) | Use Spring Modulith | Accepted | 2026-05-20 | framework, modules |
-| [0003](0003-jpa-for-persistence.md) | JPA for persistence | Superseded by [0007](0007-...md) | 2026-06-01 | persistence |
+| 0001 (`0001-record-architecture-decisions.md`) | Record architecture decisions | Accepted | 2026-05-17 | meta |
+| 0002 (`0002-use-spring-modulith.md`) | Use Spring Modulith | Accepted | 2026-05-20 | framework, modules |
+| 0003 (`0003-jpa-for-persistence.md`) | JPA for persistence | Superseded by 0007 (`0007-...md`) | 2026-06-01 | persistence |
 | ... | ... | ... | ... | ... |
 ```
 

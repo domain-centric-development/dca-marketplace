@@ -5,6 +5,12 @@ Java or .NET project — **no DCA assumptions**. Pairs naturally with
 [dca-core](../dca-core/) for the full Domain-Centric Architecture practice,
 but stands on its own.
 
+## Start here
+
+Pick the skill for what you are about to do — `/tdd` before writing new behaviour, `/clean-code`
+while editing, `/adr` when a decision needs to outlive the conversation, `/e2e-testing` when a
+user-visible flow needs a test. Nothing has to be set up first, and none of it assumes DCA.
+
 ## What's inside
 
 ### Skills (5) — applied while writing

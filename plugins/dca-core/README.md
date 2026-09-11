@@ -5,6 +5,23 @@ core of the toolset. For project-agnostic craftsmanship bricks (TDD, Clean
 Code, ADRs), see the companion plugin
 [software-craftsmanship](../software-craftsmanship/).
 
+## Start here
+
+In a project that does not use DCA yet:
+
+```
+/dca-bootstrap
+```
+
+It adds the published packages and generates **one** architecture test that runs the whole rule
+catalog against your layout — nothing else to wire. After that, three skills carry the daily work:
+`/dca-discipline` applies the invariants while you edit, `/dca-review` reviews what a static rule
+cannot (aggregate design, use-case granularity, port semantics, naming drift), and
+`/dca-knowledge` answers a question about DCA from the vendored catalog and cites the node it read.
+
+In a project that already follows the conventions, skip the bootstrap and start with
+`/dca-knowledge` or `/dca-review`.
+
 ## What's inside
 
 ### Skills (10) — applied while writing

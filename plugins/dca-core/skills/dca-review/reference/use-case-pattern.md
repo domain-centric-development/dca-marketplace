@@ -280,7 +280,7 @@ zu einem `OrderRepository` in `application/shared/`.
 - Use-Case-Impl hängt **nur gegen Interfaces** (Input + Output Ports), niemals gegen
   konkrete Adapter-Klassen.
 
-Siehe auch [DTO Mapping Strategy](../../../dca-scaffold/SKILL.md#dto-mapping-at-the-adapter-boundary)
+Siehe auch [DTO Mapping Strategy](../../dca-scaffold/SKILL.md#dto-mapping-at-the-adapter-boundary)
 für Details, wie Request/Response am Adapter-Rand gemappt werden.
 
 ---

@@ -3,6 +3,66 @@
 The **delivery pipeline** for a Domain-Centric Architecture project: a backlog contract, four
 stage skills with file hand-overs, a deterministic story gate and one orchestrator.
 
+## Install
+
+```
+/plugin marketplace add domain-centric-development/dca-marketplace
+/plugin install dca-factory@dca-marketplace
+/plugin install dca-core@dca-marketplace          # the method the stages call
+```
+
+Then, once per project — this writes the gate, the stack profile and the commit hook into the
+repository, because that is where a process has to live to survive a change of tool:
+
+```
+bash <plugin>/skills/factory-run/scripts/factory.sh install --tool claude
+```
+
+`--tool codex`, `--tool opencode` or `--tool all` instead, for a project used with those. The
+installer reads what the project already states — build tool, verification command — and leaves
+a command it could not detect *out* rather than writing a placeholder the gate would try to run.
+Check the file it wrote before the first run:
+
+```
+.agents/factory/factory.profile.yaml     your build and test commands, one per test source set
+.agents/factory/story-gate.py            the gate, callable from a terminal and from CI
+.githooks/pre-commit                     the same commands on every commit (core.hooksPath)
+```
+
+## Your first story
+
+```
+/factory-backlog
+```
+
+Say what the behaviour is. It writes `backlog/<epic>/epic.md` and one story, asks for the four
+epic fields rather than inventing them (`intent`, `goal`, `metric`, `domain_contact`), and leaves
+the story `status: draft` until you release it — the one check no script can replace.
+
+```
+/factory-run
+```
+
+Six stages, a gate between them, one hand-over file each under `tasks/<story>/`. It stops and says
+so when a stage escalates, when the judge finds the *story* wrong, or when three rounds did not
+converge. Where the project has the runner script, the highest isolation is one process per stage:
+
+```
+bash .agents/factory/factory.sh run --story STORY-1 --tool claude
+```
+
+```
+/factory-verify
+```
+
+Two modes: **observe** the run that just happened — the stages' claims against the repository, the
+gate reports and the run journal — or **check the machinery** itself against throwaway fixtures
+(47 cases over the gate, the runner and the installer). Either way it reports three things: what
+did not hold, what held, and what it could not observe. The last one is not decoration: a check
+that was not observed is not a check that passed.
+
+## What it carries, and what it does not
+
 It carries no architecture method of its own. Markers, rules, the knowledge catalog, glossary
 and context map belong to `dca-core`; build commands and templates belong to the project's stack
 profile. The dependency runs one way: the factory calls `dca-core`'s skills — the bootstrap that
@@ -78,3 +138,24 @@ tool has agents, and a carrier this tool cannot offer falls back to the stage's 
 with that fact in the report.
 
 See `skills/factory-run/reference/backlog-contract.md` and `.../file-contracts.md`.
+
+## Troubleshooting
+
+**"no declared test command covers this test."** A mapped test lives in a source set the profile
+does not mention. Add it as `test.<name>: <command>`. The gate refuses rather than guessing,
+because a run that matched no test exits successfully on one runner and unsuccessfully on another —
+neither is evidence.
+
+**"<command> did not run the test."** The command could not start (a missing runner, a typo, an
+unbuildable project). That is not a red test, and the gate will not record it as one.
+
+**"never recorded red by the test stage."** A green test is only evidence if the same test failed
+before the code existed. Run `--stage test` first, or say why this criterion's test cannot fail.
+
+**A skill I added to the source does not show up.** For Claude Code the pipeline's folder is linked
+as a whole, so it appears at once. For Codex and OpenCode the skills come from several sources and
+are linked individually — a *new* one needs another `install`; an edited one is live either way.
+
+**The gate says a command was "skipped and named".** The profile does not declare it. Deliberate: a
+gate that fails on something nobody configured gets switched off, and then nothing is checked at
+all.

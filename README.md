@@ -1,86 +1,147 @@
 # dca-marketplace
 
-A Claude Code marketplace hosting two complementary plugins for **Domain-Centric
-Architecture (DCA)** practice and general **software craftsmanship**.
+Three Claude Code plugins for **Domain-Centric Architecture (DCA)**: the architecture method, the
+craftsmanship practices around it, and a delivery pipeline that puts one story through gates
+instead of through good intentions.
 
-## Plugins
+They also work outside Claude Code — Codex and OpenCode read the same skill folders (see
+[Other tools](#other-tools)).
 
-### [dca-core](plugins/dca-core/)
+## Install
 
-DCA-specific skills and agents:
-
-- **Skills:** `/dca-discipline`, `/ubiquitous-language`, `/context-map`, `/dca-bootstrap`, `/dca-scaffold`, `/dca-review`, `/dca-knowledge`, `/ddd-modelling`, `/review-domain`, `/review-boundaries`
-- **Agents:** `ddd-expert`, `ddd-reviewer`, `hexagonal-reviewer` — thin wrappers that apply those
-  skills in an isolated context
-- **Knowledge:** a vendored OKF knowledge catalog (~350 markdown nodes: DCA guide
-  text, marker contracts, architecture rules, recipes, decisions, pitfalls,
-  templates) ships inside `/dca-knowledge`, so grounded Q&A and the recipe-driven
-  build loop work in any project with zero setup
-
-For projects that follow Domain-Driven Design + Hexagonal Architecture
-conventions, in Java/Spring or .NET/C#. `/dca-bootstrap` adds the published
-packages — `dev.domaincentric:dca-building-blocks` + `dca-spring` and `dca-archunit`
-(+ `dca-archunit-spring-modulith`), or `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit` — generates one
-architecture test that runs the whole rule catalog against the project's layout,
-and wires its `CLAUDE.md` to the catalog, so a coding agent builds from recipes
-and rule checklists instead of from memory.
-
-### [software-craftsmanship](plugins/software-craftsmanship/)
-
-Project-agnostic craftsmanship — usable on any Java or .NET project:
-
-- **Skills:** `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/review-craft`
-- **Agents:** `e2e-tester`, `clean-code-reviewer` — thin wrappers that apply those skills in an
-  isolated context
-
-No DCA assumptions. Pairs naturally with `dca-core`.
-
-### [dca-factory](plugins/dca-factory/)
-
-The delivery pipeline: one backlog story from plan to verdict.
-
-- **Skills:** `factory-run` (orchestrator), `stage-plan`, `stage-test`, `stage-build`, `stage-tidy`,
-  `stage-judge`, `stage-document`; `factory-backlog` writes the backlog a run reads and `factory-scope`
-  answers what a run may not decide for itself (a new context, a new relationship, a missing surface); `factory-verify`
-  checks the pipeline itself against throwaway fixtures rather than on an agent's word
-- **Gate:** `story-gate.py` — a dependency-free script, copied into the project, run between stages
-
-Carries no architecture method — that stays in `dca-core`. What a project contributes lives in one
-stack profile it owns: build and test commands, the reviewer for a perspective, the skill that
-carries a stage's craft.
-
-## Why three plugins?
-
-Craftsmanship practices (TDD, Clean Code, ADRs, end-user testing) are valuable independent of
-architecture style, and a delivery process is a third concern again — methodology, craft and
-pipeline change at different times and belong to different owners. Splitting them means:
-
-- Teams not using DCA can still adopt `software-craftsmanship`
-- DCA-using teams install `dca-core` plus `software-craftsmanship` for daily practice, and
-  `dca-factory` when they want stories delivered through gates
-- Updates and versioning evolve at their own pace per plugin
-
-## Installation
+Add the marketplace once, then install what you need. No clone, no build step:
 
 ```
 /plugin marketplace add domain-centric-development/dca-marketplace
 
-/plugin install dca-core@dca-marketplace
-/plugin install software-craftsmanship@dca-marketplace
-/plugin install dca-factory@dca-marketplace
+/plugin install dca-core@dca-marketplace                 # the architecture method
+/plugin install software-craftsmanship@dca-marketplace   # TDD, Clean Code, ADRs, end-user tests
+/plugin install dca-factory@dca-marketplace              # the delivery pipeline
 ```
 
-Acceptance: bootstrapping a fresh project ends with the DCA rule catalog running from the published
-packages — Java against `dev.domaincentric:dca-archunit` 0.4.0 on Maven Central, .NET against
-`DomainCentric.ArchRules.Xunit` 0.4.0 on NuGet.org (both released 2026-09-10, together with the markers
-`dca-building-blocks` 0.2.0 and `DomainCentric.BuildingBlocks` 0.1.1). The bootstrap resolves the latest
-version itself rather than carrying these numbers.
+Check it worked: `/plugin` lists each one as *installed*, and its skills appear under the plugin's
+name — `dca-core:dca-bootstrap`, `dca-factory:factory-run`, and so on. A plugin that stays absent
+after `/plugin marketplace add` was added to the marketplace but never installed; install it by
+name as above.
 
-Working from a local clone instead (e.g. for plugin development):
+To pick up new versions later:
+
+```
+/plugin marketplace update dca-marketplace
+```
+
+Only for working *on* these plugins — a clone, so edits take effect without a release:
 
 ```
 /plugin marketplace add <path-to-your-clone>
 ```
+
+## Which plugin do I need?
+
+| You want to | Install |
+|---|---|
+| write DDD/hexagonal code with the conventions enforced, ask what DCA says about something | `dca-core` |
+| add DCA to an existing project: packages, one architecture test, conventions | `dca-core` (`/dca-bootstrap`) |
+| TDD, Clean Code, ADRs and end-user tests — with or without DCA | `software-craftsmanship` |
+| deliver stories through plan → test → build → tidy → judge → document with a gate between | `dca-factory` (+ `dca-core` for the method) |
+
+`dca-core` and `software-craftsmanship` are what a developer invokes directly. `dca-factory` owns
+the *process* and calls them; it carries no architecture knowledge of its own, so there is never a
+second truth about how the code should look.
+
+## Using it
+
+### Adopt DCA in a project
+
+```
+/dca-bootstrap
+```
+
+It adds the published packages — Java `dev.domaincentric:dca-building-blocks` + `dca-archunit`
+(Maven Central), .NET `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit`
+(NuGet.org) — and generates **one** architecture test that runs the whole rule catalog against
+your project's layout. From then on `/dca-discipline` applies the invariants while you edit,
+`/dca-review` reviews what static rules cannot, and `/dca-knowledge` answers "what does DCA say
+about X" from a catalog it cites rather than from memory.
+
+Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
+
+### Deliver a story through the pipeline
+
+```
+/factory-backlog          # write the epic and the story, in the contract the gate reads
+/factory-run              # plan → test → build → tidy → judge → document, gated
+/factory-verify           # check what that run actually did, and the pipeline itself
+```
+
+The pipeline needs two things from your project: a **stack profile**
+(`.agents/factory/factory.profile.yaml` — your build and test commands) and the gate script next to
+it. `factory-run` sets both up on first use, or run the installer directly:
+
+```
+bash <plugin>/skills/factory-run/scripts/factory.sh install --tool claude
+```
+
+Details, including the backlog contract and every gate check:
+**[dca-factory/README.md](plugins/dca-factory/README.md)**.
+
+### Craftsmanship on its own
+
+```
+/tdd            # red, green, refactor — with the failing test first
+/clean-code     # names, function size, smells, while you edit
+/adr            # record a decision so the next reader finds the reasoning
+/e2e-testing    # Page Objects, stable selectors, one flow per test
+```
+
+No DCA assumptions; usable on any Java or .NET project.
+Details: **[software-craftsmanship/README.md](plugins/software-craftsmanship/README.md)**.
+
+## How the three fit together
+
+Three layers with three owners, which is why they are three plugins:
+
+| Layer | Owner | Where it lives |
+|---|---|---|
+| **method** — markers, rules, conventions, review perspectives, the knowledge catalog | the architecture | `dca-core` |
+| **craft** — how a test, a name, a decision record is written | the profession | `software-craftsmanship` |
+| **pipeline** — stages, gates, backlog contract, hand-over files | the delivery process | `dca-factory` |
+| **project knowledge** — build commands, test source sets, glossary, context map, backlog | *your project* | files in your repository |
+
+They change at different times and for different reasons. A new rule is a method change; a new
+build command is a project change; a new stage is a process change. Nothing in the pipeline knows
+your domain, and nothing in the method knows your build.
+
+## Other tools
+
+The pipeline's carriers are deliberately portable: `SKILL.md` folders and one dependency-free
+script — no plugin manifest, no hooks, no agent frontmatter. Codex and OpenCode discover skills
+from a project-local directory, so the installer writes them there:
+
+```
+bash <plugin>/skills/factory-run/scripts/factory.sh install --tool codex      # or opencode, or all
+```
+
+For those tools it links the craft skills as well, because they have no plugin mechanism to find
+them by. Verified: Codex 0.153.0 and OpenCode 1.18.15 list the same skills and run the same
+stages against the same gate.
+
+## Troubleshooting
+
+**A plugin does not appear after adding the marketplace.** Adding a marketplace makes its plugins
+*available*; each still has to be installed by name (`/plugin install <name>@dca-marketplace`).
+
+**A skill I edited in a clone does not change anything.** Installed plugins are copies taken from a
+git commit, not from your working tree. Commit, then `/plugin marketplace update` — or, while
+developing, add the clone as the marketplace and let the project link the skill folder directly.
+
+**The pipeline says a command is "skipped and named".** Your stack profile does not declare it. That
+is deliberate: a gate that fails on something nobody configured gets switched off, so it reports the
+gap instead. Add the command to `.agents/factory/factory.profile.yaml`.
+
+**A gate refuses a story I consider fine.** Read the check name in its output — each one states what
+it refused and why. `factory-verify` shows the same checks against fixtures if you suspect the gate
+rather than the story.
 
 ## Background
 
