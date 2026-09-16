@@ -145,12 +145,12 @@ Symptoms: an output port name reveals the implementation (`*JdbcRepository`, `*R
 Why: ports are technology-agnostic by definition. Implementation details belong in the adapter.
 
 ### Port without an application-side caller
-Symptoms: an `OutputPort` subtype that no use case depends on — only adapters or infrastructure
-call it (cookie or token handling, session logout, a filter asking its own context whether an
-account exists); or a use case asks a port who the current caller is.
-Why: an output port is a capability a use case needs from outside the process. Adapter mechanics
-stay in the adapter without a marker; the caller is a Command/Query field the incoming adapter
-fills; a question into the own context is a query use case or the published API.
+Symptoms: an `OutputPort` subtype that no use case depends on and that is not the identity port —
+cookie or token handling, session logout (adapter mechanics); or a filter asking its own context
+whether an account exists through an output port (an inbound question).
+Why: an output port is a capability needed from outside the process. Adapter mechanics stay in
+the adapter without a marker; a question into the own context is a query use case or the
+published API. The identity port is legitimate: the caller's identity comes from an identity system.
 
 ### Domain event without timestamp
 Why: events are causal records; without time you can't reason about ordering across contexts.

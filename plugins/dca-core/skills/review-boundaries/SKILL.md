@@ -31,21 +31,22 @@ adapter.
 
 A port is an interface owned by the application or domain that an adapter
 implements (output port) or a primary adapter calls (input port). An output
-port stands for a capability a use case needs from outside the process:
-persistence, another context, an external system, messaging. A use case is
-the caller of every output port.
+port stands for a capability needed from outside the process: persistence,
+another context, an external system, messaging, the caller's identity when
+it comes from an identity system. Use cases call output ports; an incoming
+adapter legitimately uses one — the identity port — to translate request
+context into the project's language.
 
 Smells:
 
 - **Port without an application-side caller**: an `OutputPort` subtype that
-  no use case depends on — only adapters or infrastructure call it. Cookie or
-  token handling, session logout, "does this account exist" asked by a
-  filter into its own context. These are adapter mechanics or an inbound
-  query, not a port. Fix: drop the marker and move the type next to its
-  caller; an inbound question becomes a query use case or the published API.
-- **Request context as a port**: a use case asks a port who the current
-  caller is. The caller is a field of the Command/Query, filled by the
-  incoming adapter from the authenticated request.
+  no use case depends on and that is not the identity port — cookie or
+  token handling, session logout, response headers. That is adapter
+  mechanics wearing a marker. Fix: drop the marker and move the type into
+  the adapter package next to its caller.
+- **Inbound question dressed as an output port**: a filter or adapter asks
+  its own context "does this account exist?" through an `OutputPort`. The
+  call points inward. Fix: a query use case or the published API.
 - **Execution semantics as a port**: a transaction boundary or unit of work
   declared as an `OutputPort`. It stands for nothing outside the process;
   `TransactionBoundary` is deliberately not a port.

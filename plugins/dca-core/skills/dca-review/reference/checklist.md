@@ -122,7 +122,7 @@ Apply only the checks for each file's layer.
 - [ ] Interfaces only (no implementations)
 - [ ] Extends `Repository<T, ID>`, `Store`, `DomainEventPublisher`/`IntegrationEventPublisher`, or plain `OutputPort` for a project-specific port (`IdentityProvider`, `Clock`) — these are ports, not markers
 - [ ] Lives in the application layer — never in `domain/`
-- [ ] **Anti-pattern flag — Port without an application-side caller:** at least one use case depends on it. An `OutputPort` only adapters or infrastructure call (cookies, tokens, session logout, a filter asking its own context) is adapter mechanics or an inbound query, not a port — drop the marker and move it next to its caller
+- [ ] **Anti-pattern flag — Port without an application-side caller:** a use case depends on it, or it is the identity port an incoming adapter uses. An `OutputPort` that only serves adapter mechanics (cookies, tokens, session logout) or an inbound question (a filter asking its own context) is not a port — drop the marker; mechanics move into the adapter, the question becomes a query use case
 - [ ] **Anti-pattern flag — Leaky port (technology in name):** name reveals technology (`OrderJpaRepository`, `KafkaOrderEventPublisher` as the *port* — not the impl). The port should be technology-agnostic; the *implementation* in `adapter/outgoing/` carries the tech prefix.
 - [ ] **Anti-pattern flag — Per-use-case repository:** if every use case has its own bespoke `*Repository` instead of reusing one per aggregate, consolidate into a shared `*Repository` in `application/shared/`.
 
