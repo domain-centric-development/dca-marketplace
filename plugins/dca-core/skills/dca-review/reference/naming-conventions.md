@@ -61,12 +61,20 @@ The conventions are one set; the two languages spell them differently. Review ei
 | Past-tense | domain event, e.g. `OrderPlaced`, `CartCleared` |
 | Past-tense + `Event` | integration event (optional convention), e.g. `OrderPlacedEvent` |
 | `*Service` (in `domain/service/`) | domain service |
+| named by the question (in `domain/gateway/`) | domain gateway, e.g. `CategoryPriceLookup`, `PasswordHasher` — read-only, implemented in `adapter/outgoing/` |
+| `*Snapshot`, `*View` (in `domain/readmodel/`) | read model / snapshot `Value` an aggregate hands out |
 | `*Factory` | factory for complex aggregate creation |
-| `*Specification` | business rule object |
+| `*Specification` | business rule object (`DCA-ADV-017`) |
 
-**Avoid:** `*Helper`, `*Util`, `*Handler` in the domain — these are vague names.
+**Event members:** every `DomainEvent` and `IntegrationEvent` carries `eventId` and `occurredOn` (C#: `EventId`,
+`OccurredOn`) — the marker's contract. An integration event's type name and schema version live in
+`@IntegrationEventType(name, version)`, not in a field.
 
-**Packages:** package by domain concept (`domain/model/`, `domain/event/`) — never technical buckets like `entities/`, `valueobjects/`, `helpers/`, `util/`.
+**Avoid:** `*Helper`, `*Util`, `*Impl`, `*Implementation` in the domain (`DCA-NAM-010`) — these are vague names.
+`*Handler` is a review prompt: usually an application concern, not a domain one.
+
+**Packages:** package by domain concept (`domain/model/`, `domain/event/`, `domain/service/`, `domain/gateway/`,
+`domain/readmodel/`) — never technical buckets like `entities/`, `valueobjects/`, `helpers/`, `util/` (`DCA-NAM-009`).
 
 ## Adapter layer
 
@@ -101,11 +109,16 @@ The conventions are one set; the two languages spell them differently. Review ei
 | `DomainEvent` | domain event marker |
 | `IntegrationEvent` | cross-context event marker — separate hierarchy, does *not* extend `DomainEvent`; version via `@IntegrationEventType` |
 | `DomainService` | domain service marker |
+| `DomainGateway` | domain-owned, read-only gateway interface — the explicit exception to "services over supplied facts" |
 | `Factory` | factory marker |
 | `Specification` | specification marker |
+| `DomainEventPublisher` / `IntegrationEventPublisher` | publisher output ports (extend `OutputPort`) |
+| `@IntegrationEventType(name, version)` | the integration event's logical name and schema version |
+| `TransactionBoundary` | execution abstraction of the application layer — not a port, not a marker |
 | `@BoundedContext("name")` | strategic marker on `package-info.java` |
 | `@SharedKernel` | strategic marker on sharedkernel `package-info.java` |
 | `@OpenHostService` | strategic marker for cross-context-callable service |
+| `@Upstream`, `@Partnership`, `@ExternalUpstream` | context-map relations on `package-info.java` (`DCA-MAP-*`) |
 
 ## Layer folders
 
@@ -116,8 +129,8 @@ The conventions are one set; the two languages spell them differently. Review ei
 | `application/{usecasename}/` — or `application/{feature}/{usecasename}/` once grouped | `application/service/` (flat) + `application/port/in/` + `application/port/out/` |
 | `sharedkernel/` | `shared/`, `common/`, `core/` |
 
-A domain term such as `PortfolioManager` is valid; the remaining technical suffix
-restrictions still apply. Operation implementations are discovered by InputPort
+Only `Helper`, `Util`, `Impl` and `Implementation` are forbidden domain suffixes (`DCA-NAM-010`); a term of the
+ubiquitous language such as `PortfolioManager` passes. Operation implementations are discovered by InputPort
 assignability or the configured use-case suffix. Optional organisational segments
 are configured with `withOperationContainers(...)` / `WithOperationContainers(...)`
 and removed before measuring flat/grouped operation depth. Supporting subfolders do

@@ -49,14 +49,25 @@ Apply only the checks for each file's layer.
 
 ## Domain — Events (`domain/event/`)
 
-- [ ] Past-tense name (`OrderPlaced`, not `PlaceOrder`)
-- [ ] Is a `record`
+- [ ] Past-tense name (`OrderPlaced`, not `PlaceOrder`) — reviewed as language, `Sent` is valid
+- [ ] Is a `record` (C#: `sealed record`)
 - [ ] Implements `DomainEvent`
-- [ ] Has a timestamp field (`Instant occurredAt` or similar)
-- [ ] Has the aggregate ID (`OrderId aggregateId` or similar)
-- [ ] If it's an `IntegrationEvent`, also has a `version` field
-- [ ] No Spring annotations (`@Component`, `@EventListener`)
+- [ ] Carries the two members the marker requires: `UUID eventId` and `Instant occurredOn` (C#: `Guid EventId`,
+      `DateTimeOffset OccurredOn`) — no other spelling (`occurredAt`, `timestamp`)
+- [ ] Names the aggregate it happened to (`OrderId orderId`)
+- [ ] Carries domain types (`ProductId`, `Money`), not the aggregate itself
+- [ ] No framework annotation (`@Component`, `@EventListener`) — data, not a bean
 - [ ] In `domain/event/` (or its sub-package)
+
+## Published — Integration Events (`{context}/events/`)
+
+- [ ] Implements `IntegrationEvent` — a separate hierarchy, it does **not** extend `DomainEvent`
+- [ ] Same required members: `eventId`, `occurredOn`
+- [ ] Type name and schema version come from `@IntegrationEventType(name = "...", version = n)` (C#:
+      `[IntegrationEventType]`) — **no `version` field on the instance**; a business version (`orderVersion`) is allowed
+- [ ] Carries primitives and published-language types only — no domain types of the owning context
+- [ ] A breaking schema change is a new class with the same logical `name` and a bumped `version`
+- [ ] Lives in the context's published `events/` package, next to `api/` — never in `domain/` or `adapter/`
 
 ---
 
@@ -65,8 +76,35 @@ Apply only the checks for each file's layer.
 - [ ] Implements `DomainService`
 - [ ] Stateless (only `final` fields)
 - [ ] Operates on multiple aggregates that no single aggregate owns
+- [ ] Works on **supplied facts**: the use case fetches through output ports and passes immutable snapshots; the
+      service holds no repository, no output port, no remote port. A callback or resolver parameter hiding a lookup
+      is the same smell — review manually
+- [ ] The one allowed dependency is a `DomainGateway` (see below), and then with a recorded rationale
 - [ ] No Spring annotations
 - [ ] **Anti-pattern flag:** if domain service does CRUD orchestration → likely belongs in application layer instead
+
+## Domain — Gateways (`domain/gateway/`)
+
+The explicit exception to "domain services over supplied facts". Legitimate, not a finding by itself.
+
+- [ ] Interface implements `DomainGateway` (C#: `IDomainGateway`); the implementation lives in `adapter/outgoing/`
+- [ ] Narrow and **read-only** — it answers one question in the ubiquitous language (`CategoryPriceLookup`,
+      `PasswordHasher`, `ShippingAvailability`); no `save`, no publish, no side effect
+- [ ] Signature uses domain types only — no framework, transport or persistence type
+- [ ] Called by a domain service (or, rarely, an aggregate method that receives it as a parameter) — never held as an
+      aggregate field (`DCA-TAC-002`)
+- [ ] Has a recorded effect-and-dependency rationale (ADR, glossary or catalog note) for why supplying the facts up
+      front was not enough
+- [ ] **Anti-pattern flag — Output port in disguise:** the gateway is only ever called from a use case → it is an
+      `OutputPort` in `application/shared/`, not a domain gateway
+- [ ] **Anti-pattern flag — Strategy mistaken for gateway:** a pure algorithm passed in (tax formula, rounding
+      policy) needs no gateway marker and no rationale
+
+## Domain — Read models (`domain/readmodel/`)
+
+- [ ] `Value` records that project an aggregate (`CartSnapshot.from(cart)`) or an enriched view for a query
+- [ ] Immutable, no behaviour beyond parameterless queries over its own data (`lineTotal()`)
+- [ ] Contains no `AggregateRoot`/`Entity`, also not transitively (`DCA-USE-015` when it becomes a result field)
 
 ---
 
@@ -80,7 +118,7 @@ Apply only the checks for each file's layer.
 
 ### Implementation class
 
-- [ ] `@Service` (and `@Transactional` for write use cases); C#: plain class registered behind its input port in `Add{Context}Context()`, no framework attribute
+- [ ] Wired per the resolved framework preset: with Spring `@Service` (and `@Transactional` for write use cases), otherwise registered behind its input port in a configuration — stereotype and registration are equally valid, `DCA-NAM-002` is informational; C#: plain class registered in `Add{Context}Context()`, no framework attribute
 - [ ] `@Transactional` only in the application layer — never on domain classes or incoming adapters (outgoing persistence adapters are the allowed exception); C#: the boundary is `ITransactionBoundary.InTransactionAsync` or a decorator — EF Core, `System.Data`, `System.Transactions` stay out of `Application/` (`DCA-NET-006`)
 - [ ] No remote-capable output port (another context's API, payment provider, mail gateway) called inside a `@Transactional` use case — such use cases fetch remote data first and wrap save + publish in `TransactionBoundary.inTransaction(...)` (`DCA-USE-013`); C#: remote reads before `InTransactionAsync`, never inside
 - [ ] C#: ports are async (`Task<TOut> ExecuteAsync(TIn, CancellationToken)`), the domain they call is not — no `.Result`/`.Wait()` bridging
@@ -173,7 +211,7 @@ The shape of the port is as important as its existence. Run these checks on ever
 - [ ] A use case with no caller (event consumer, scheduled job) is unscoped **and says so** in a comment.
 - [ ] Refusals are rendered in the adapter (`403` vs `404` is a protocol decision); the use case returns "nothing here for you".
 
-See [use-case-pattern.md §3](use-case-pattern.md#3-decision-guide-lokaler-vs-shared-output-port) for the full decision guide.
+See [use-case-pattern.md §3](use-case-pattern.md#3-decision-guide-local-versus-shared-output-port) for the full decision guide.
 
 ### Repository vs. Store correctness
 
@@ -238,8 +276,12 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 
 - [ ] No file in `contextA/...` imports `contextB/domain/...`
 - [ ] No file in `contextA/application/...` imports `contextB/application/...`
-- [ ] Cross-context calls go via `contextB/api/` (Open Host Service) or events
-- [ ] **Anti-pattern flag:** finding a `contextB.domain.*` import in `contextA/...`
+- [ ] Cross-context calls go through the published packages only: `contextB/api/` (synchronous, Open Host Service)
+      or `contextB/events/` (integration events)
+- [ ] The consuming use case depends on its own output port (`*DataPort` in `application/shared/`); the outgoing
+      adapter in `adapter/outgoing/{partner}/` calls the `api/` contract and translates
+- [ ] Incoming event consumers depend on the upstream's `events/` only (`DCA-HEX-007`)
+- [ ] **Anti-pattern flag:** finding a `contextB.domain.*` or `contextB.application.*` import in `contextA/...`
 
 ### Spring placement
 
@@ -319,5 +361,6 @@ application model (`DCA-MAP-008`). Two translators for different upstreams may s
 an adapter package. Evidence for one upstream does not satisfy another interaction.
 This identifies a structural translation site, without proving translation quality.
 
-- [ ] D08: shared behavior changes include counterpart implementation and specification revision/scenarios; event JSON stays compatible.
+- [ ] Twin implementation (if the project has one): the counterpart change is reviewed alongside — same use case,
+      same `events/` contracts and wire JSON; an intentional difference carries a recorded compatibility note.
 - [ ] Past-tense names are reviewed as language (`Sent` is valid), never enforced by an `ed` suffix.

@@ -304,11 +304,11 @@ class OrderEntity { /* JPA-Felder, getter/setter, @Id, @Column ... */ }
 - **Aggregat direkt als REST-Response** — leakt Domain-Form an Clients (`Order` als JSON-Antwort). Immer auf `*Response`-Record im Adapter mappen.
 - **`*Command`/`*Query`/`*Result` als JPA-`@Entity`** — bricht Framework-freies Domain/Application und vermischt zwei Lebenszyklen (Use-Case-Input vs Persistence-Row).
 - **Mapper-Logik in der Use Case** — wenn `PlaceOrderUseCase` ein `PlaceOrderRequest` konstruiert oder ein `*Response` baut, ist die Boundary verschoben. Mapper gehören in `adapter/`.
-- **Geteilter `*Dto` für Request *und* Persistence** — derselbe Record erfüllt zwei Rollen; jede Änderung an einer Seite zwingt die andere. Lieber zwei separate Records mit explizitem Mapping.
+- **One `*Dto` shared by request *and* persistence** — the same record serves two roles; every change on one side forces the other. Prefer two separate records with explicit mapping.
 - **Mapper in `application/` oder `domain/`** — Mapper sind Adapter-Concern. ArchUnit-Regel `dtosShouldLiveInAdapterLayer` fängt das.
 - **Domain-Event direkt als Kafka-Payload** — DCA-Konvention: Domain-Events bleiben kontextintern. Cross-Context geht über `*IntegrationEvent` (Schema-Version in `IntegrationEventType`, fachliches `version` bleibt erlaubt), gemappt im `adapter/outgoing/event/`-Publisher.
 
-Siehe [use-case-pattern.md §4](../dca-review/reference/use-case-pattern.md#4-adapter-wiring-wer-ruft-was) für das vollständige Wiring-Bild und [naming-conventions.md](../dca-review/reference/naming-conventions.md#adapter-layer) für die Adapter-Namens-Tabelle.
+See [use-case-pattern.md §4](../dca-review/reference/use-case-pattern.md#4-adapter-wiring-who-calls-what) for the complete wiring picture and [naming-conventions.md](../dca-review/reference/naming-conventions.md#adapter-layer) for the adapter naming table.
 
 ---
 

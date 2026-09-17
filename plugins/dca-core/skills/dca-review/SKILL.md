@@ -30,6 +30,9 @@ reviewed against the same checklist — `reference/naming-conventions.md` carrie
 | Cross-context refs forbidden | Whether the cross-context API is well-designed |
 | Records/finals on value objects | Whether value objects model the domain or just hold getters |
 
+The rule suite has grown into semantic territory (`DCA-USE-015/016/017`, `DCA-HEX-012`, `DCA-TAC-021`, `DCA-MAP-008`).
+Where the checklist cites a rule id, the review confirms what that rule cannot see — it does not repeat the rule.
+
 ## Workflow
 
 ### Phase 1: Scope
@@ -53,20 +56,27 @@ If neither: ask the user which paths to review.
 For each file, determine its DCA layer from path:
 
 ```
-**/domain/model/**       → domain.model
-**/domain/event/**       → domain.event
-**/domain/service/**     → domain.service
+**/domain/model/**         → domain.model
+**/domain/event/**         → domain.event          (domain events, internal to the context)
+**/domain/service/**       → domain.service
+**/domain/gateway/**       → domain.gateway        (DomainGateway interfaces owned by the domain)
+**/domain/readmodel/**     → domain.readmodel      (Value snapshots and read models)
+**/domain/specification/** → domain.specification
 **/application/{usecasename}/**  → application.usecase
 **/application/{feature}/{usecasename}/**  → application.usecase (feature-grouped context)
-**/application/shared/** → application.outputports
+**/application/shared/**   → application.outputports
 **/adapter/{in,incoming}/**  → adapter.incoming
 **/adapter/{out,outgoing}/** → adapter.outgoing
+**/{context}/api/**        → published.api         (synchronous published contract, Open Host Service)
+**/{context}/events/**     → published.events      (integration events, asynchronous published contract)
+**/infrastructure/**       → infrastructure        (per-context or global wiring)
 ```
 
+The `api`/`events` segment names follow the project's `DcaLayout` (`withApiSubpackage`/`withEventsSubpackage`).
 C# uses the same segments in PascalCase (`Domain/Model`, `Application/{UseCase}`, `Application/Shared`,
-`Adapter/Incoming`, `Adapter/Outgoing`); match case-insensitively.
+`Adapter/Incoming`, `Adapter/Outgoing`, `Api`, `Events`); match case-insensitively.
 
-Files outside these patterns: report as "uncategorized" — could be infra or shared kernel.
+Files outside these patterns: report as "uncategorized" — could be the shared kernel or a layout deviation.
 
 ### Phase 3: Apply review checks per layer
 
@@ -112,8 +122,8 @@ Produce a structured report:
   Why: God-use-case smell. Consider splitting or introducing a domain service.
 
 #### nits
-- `path/CartCleared.java` — Event name is past tense ✓ but missing `occurredAt` field
-  Suggested fix: add `Instant occurredAt`.
+- `path/CartCleared.java` — Event name is past tense ✓ but carries no `occurredOn`
+  Suggested fix: add `UUID eventId, Instant occurredOn` — the two members the `DomainEvent` contract requires.
 
 ### Suggested ArchUnit rules
 
@@ -153,8 +163,11 @@ Why: an output port is a capability the application needs but does not own, fulf
 the adapter without a marker; a question into the own context is a query use case or the
 published API. The identity port is legitimate: the caller's identity comes from an identity system.
 
-### Domain event without timestamp
-Why: events are causal records; without time you can't reason about ordering across contexts.
+### Domain event without identity or timestamp
+Symptoms: a `DomainEvent` record without `eventId()` / `occurredOn()` (C#: `EventId` / `OccurredOn`).
+Why: events are causal records; without an id they cannot be deduplicated, without time you can't
+reason about ordering. Both members are the marker's contract, not a project convention — do not
+suggest other spellings (`occurredAt`, `timestamp`).
 
 ### Domain event with mutable field
 Why: events are facts about the past — facts don't change.
@@ -168,9 +181,19 @@ Why: state changes go through intention-revealing methods from the ubiquitous la
 (`adjustStockTo`, not `setAvailableQuantity`). A setter name hides the business operation.
 
 ### Injected dependency in aggregate
-Symptoms: an aggregate holds a `*Repository`, output port, or service as a field.
+Symptoms: an aggregate holds a `*Repository`, output port, or service as a field (`DCA-TAC-002`).
 Why: aggregates are persistence-ignorant — dependencies are loaded by the use case and
-passed as method parameters.
+passed as method parameters. Moving the lookup behind a callback or resolver parameter does not change
+who owns the calculation; review such parameters manually.
+
+### Domain gateway without a rationale
+Symptoms: a `DomainGateway` interface in `domain/gateway/` — or a domain service holding one — where the
+facts could have been supplied by the use case as an immutable snapshot; or a gateway that writes.
+Why: the default is *domain services over supplied facts*: the use case fetches through output ports and hands
+snapshots in. A `DomainGateway` is the explicit exception — a narrow, read-only interface in the ubiquitous
+language, owned by the domain, implemented in an outgoing adapter — and needs a recorded effect-and-dependency
+rationale. It is legitimate; it is not a finding by itself. A pure algorithmic strategy passed in is not a gateway.
+The aggregate never holds a gateway; the domain service or the use case passes it in.
 
 ### Transaction outside the application layer
 Symptoms: `@Transactional` on a domain class or incoming adapter.
@@ -183,8 +206,9 @@ Why: incoming adapters drive the application through input ports only — direct
 access bypasses transactions, authorization, and orchestration.
 
 ### Technical names in the domain
-Symptoms: `*Helper`/`*Util`/`*Impl` classes in `domain/` (`Manager` is valid domain vocabulary), or bucket packages
-like `entities/`, `valueobjects/`, `helpers/`, `util/`.
+Symptoms: `*Helper`/`*Util`/`*Impl`/`*Implementation` classes in `domain/` (`DCA-NAM-010`), or bucket packages
+like `entities/`, `valueobjects/`, `helpers/`, `util/` (`DCA-NAM-009`). A term the ubiquitous language uses
+(`PortfolioManager`, `PriceCalculator`) is not a technical name, whatever its suffix looks like.
 Why: technical names signal a missing domain concept; packages are named by domain concept.
 
 ### Spring annotation on domain class
@@ -192,9 +216,11 @@ Why: domain stays framework-free (DCA invariant). The C# twin: an ASP.NET, EF Co
 or `System.Text.Json` attribute on a class in `Domain/`, or an `async` member on an aggregate — the .NET
 catalog keeps the domain synchronous and framework-free (`DCA-NET-00x`).
 
-### Cross-context import not via api/
-Symptoms: file in `contextA/...` imports from `contextB/domain/...` directly.
-Why: contexts communicate via Open Host Service or events, never raw domain.
+### Cross-context import not via the published packages
+Symptoms: file in `contextA/...` imports from `contextB/domain/...` or `contextB/application/...` directly.
+Why: contexts communicate through the other context's published packages only — `api/` (the synchronous
+contract, Open Host Service) and `events/` (its integration events) — never raw domain or application types.
+The consuming use case sees its own output port (`*DataPort`); the outgoing adapter calls the `api/` contract.
 
 ### Use-case naming mismatch
 Symptoms: class name doesn't match the action it performs (`OrderHandler` instead of
@@ -267,6 +293,9 @@ including composed annotations/derived attributes; unknown metadata is unclassif
 and allowed by these checks. Outgoing adapters can reuse own/global infrastructure,
 while another module’s infrastructure remains private.
 
-## Cross-sample contract checkpoint (D08)
+## Twin implementation checkpoint
 
-For a shared behavior change, identify the counterpart implementation and the pinned specification revision. Review the counterpart change and spec revision together, including scenario fixtures and event JSON. An intentional difference needs the accepted compatibility note; do not silently fork behavior.
+When the project has a twin — the same system in a second language or stack — a behaviour change is reviewed
+together with its counterpart: the same use case, the same event contracts (`events/` schemas, wire JSON), the
+same ubiquitous language. An intentional difference needs a recorded compatibility note in the project; the review
+does not let the two silently fork. Without a twin this section does not apply.
