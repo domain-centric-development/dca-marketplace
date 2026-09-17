@@ -31,11 +31,13 @@ adapter.
 
 A port is an interface owned by the application or domain that an adapter
 implements (output port) or a primary adapter calls (input port). An output
-port stands for a capability needed from outside the process: persistence,
-another context, an external system, messaging, the caller's identity when
-it comes from an identity system. Use cases call output ports; an incoming
-adapter legitimately uses one — the identity port — to translate request
-context into the project's language.
+port is a capability the application needs but does not own: persistence,
+another context, an external system, messaging, the caller's identity. The
+application declares it in its own language, an adapter fulfils it — remote
+or in-memory, the same port. Responsibility and dependency direction make
+the port, not distance. Use cases call output ports; an incoming adapter
+legitimately uses one — the identity port — to translate request context
+into the project's language.
 
 Smells:
 
@@ -48,8 +50,8 @@ Smells:
   its own context "does this account exist?" through an `OutputPort`. The
   call points inward. Fix: a query use case or the published API.
 - **Execution semantics as a port**: a transaction boundary or unit of work
-  declared as an `OutputPort`. It stands for nothing outside the process;
-  `TransactionBoundary` is deliberately not a port.
+  declared as an `OutputPort`. It is how the application runs, not a
+  capability it lacks; `TransactionBoundary` is deliberately not a port.
 
 - **God port**: an output port with 15 methods. One adapter has to implement
   all of them even when it only needs three. Probably should be split.

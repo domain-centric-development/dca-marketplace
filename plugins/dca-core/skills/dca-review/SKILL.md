@@ -148,7 +148,8 @@ Why: ports are technology-agnostic by definition. Implementation details belong 
 Symptoms: an `OutputPort` subtype that no use case depends on and that is not the identity port —
 cookie or token handling, session logout (adapter mechanics); or a filter asking its own context
 whether an account exists through an output port (an inbound question).
-Why: an output port is a capability needed from outside the process. Adapter mechanics stay in
+Why: an output port is a capability the application needs but does not own, fulfilled by an adapter
+(in-memory or remote). Adapter mechanics stay in
 the adapter without a marker; a question into the own context is a query use case or the
 published API. The identity port is legitimate: the caller's identity comes from an identity system.
 
