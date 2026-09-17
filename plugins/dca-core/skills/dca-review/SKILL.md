@@ -163,6 +163,14 @@ Why: an output port is a capability the application needs but does not own, fulf
 the adapter without a marker; a question into the own context is a query use case or the
 published API. The identity port is legitimate: the caller's identity comes from an identity system.
 
+### Cookies of one exchange with different policies
+Symptoms: the identity cookie is configured (`SameSite`, `Secure`) while the CSRF/antiforgery cookie keeps the
+framework default; a cookie contract or test that names only the hand-written cookies.
+Why: a request that needs both arrives incomplete wherever the policies diverge — an iframe, a cross-site redirect,
+another scheme — and is refused as a *missing* token rather than a refused one, which points the reader at form
+handling instead of at a cookie attribute. Framing belongs on its own switch: it is an origin question, the cookie
+policy a site question.
+
 ### Domain event without identity or timestamp
 Symptoms: a `DomainEvent` record without `eventId()` / `occurredOn()` (C#: `EventId` / `OccurredOn`).
 Why: events are causal records; without an id they cannot be deduplicated, without time you can't

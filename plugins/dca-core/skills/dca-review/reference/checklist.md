@@ -243,6 +243,15 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 - [ ] Per-use-case methods, not "kitchen sink" controllers
 - [ ] No state-changing use case behind `@GetMapping` — writes use `POST`/`PUT`/`DELETE`; links never create sessions, carts or orders
 - [ ] Every state-changing browser form carries the CSRF token; an API exempt from CSRF authenticates by `Authorization: Bearer` only and never reads or sets cookies
+- [ ] **Cookies of one exchange carry one policy:** the CSRF/antiforgery cookie takes its `SameSite` and `Secure` from
+      the same configuration as the identity cookie it protects, rather than the framework's default (Spring writes no
+      `SameSite`, ASP.NET Core writes `Strict`). A request needing both arrives incomplete when only one cookie may
+      travel, and fails as a *missing* token rather than a refused one — read the `Set-Cookie` headers of a real
+      response, not the configuration
+- [ ] **Framing is decided on its own switch,** not derived from the cookie policy: framing is an *origin* question
+      (the port counts), cookies are a *site* question (it does not). A page on another port of the same host needs
+      framing allowed and no cookie relaxed. Where two stacks must behave alike, the frame header is set in one place
+      of the project — ASP.NET Core emits its own only for responses that render a token, Spring on every response
 
 ### Event consumers
 
