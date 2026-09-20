@@ -69,3 +69,4 @@ package com.company.project.order;
 - [OutputPort](/marker/port-out/outputport.md)
 - [AggregateRoot<T, ID>](/marker/tactical/aggregateroot.md)
 - [DomainEvent](/marker/tactical/domainevent.md)
+- [DomainException](/marker/tactical/domainexception.md)
