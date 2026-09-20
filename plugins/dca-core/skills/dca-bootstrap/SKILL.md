@@ -75,9 +75,12 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
    `src/main/java`) or root namespace (.NET: `RootNamespace` or the first namespace segments of the
    production projects); multi-module (`settings.gradle` `include`, Maven modules, several
    `*.csproj`). In multi-module Java builds the module hosting `src/test-architecture` must depend
-   on every production module, or `DcaArchitecture.load(layout)` imports only part of the base
-   package; in .NET, list every production project in the test project and every assembly in
-   `Assemblies`.
+   on every production module — `DcaArchitecture.load(layout)` imports jars as well, so a sibling
+   module reaches it as its jar, but only if it is on the test class path at all; in .NET, list every
+   production project in the test project and every assembly in `Assemblies`. Both loaders refuse a
+   run that imported nothing below the base package or root namespace, and `DCA-STR-011` fails when no
+   package or namespace declares a bounded context — say so in the report instead of treating the
+   green suite as an adoption result.
 
 4. **Existing architecture tests.**
 

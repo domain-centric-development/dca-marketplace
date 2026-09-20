@@ -10,9 +10,9 @@ Every rule of the two rule libraries `/dca-bootstrap` wires into a project, grou
 | Java | `dev.domaincentric:dca-archunit` implements the rule |
 | .NET | `DomainCentric.ArchRules` implements the rule; *n/a* names why it has no .NET reading |
 
-Java: 113 rules in 10 sets. .NET: 116 rules (110 ported + 6 .NET-only), 3 Java rules n/a.
+Java: 114 rules in 10 sets. .NET: 117 rules (111 ported + 6 .NET-only), 3 Java rules n/a.
 
-Java: 108 enforced, 5 informational. .NET: 112 enforced, 4 informational. 3 retired identities.
+Java: 109 enforced, 5 informational. .NET: 113 enforced, 4 informational. 3 retired identities.
 
 ## `layered` — Layered Architecture
 
@@ -89,6 +89,7 @@ Java: 108 enforced, 5 informational. .NET: 112 enforced, 4 informational. 3 reti
 | `DCA-STR-008` | Integration Events should have immutable shape | Integration Events must be immutable to ensure event integrity across contexts (Event Sourcing best practice) | Non-interface classes assignable to IntegrationEvent - directly or through a sub-interface - anywhere on the classpath under scan. | The class is final or a record with final inherited instance fields and no instance setter methods - a name heuristic: set followed by an upper-case letter, with parameters, returning void (settle(x) is not a setter). Referenced objects and collection contents are not inspected. Interfaces are excluded. | ✓ | ✓ |
 | `DCA-STR-009` | Anti-Corruption Layer components must be in acl packages | Anti-Corruption Layer components must be in 'acl' packages for clear architectural intent (DDD Strategic Pattern) | Classes anywhere on the classpath under scan whose simple name ends with EventTranslator, ACL or AntiCorruptionLayer - selected by name alone, no marker or annotation is read. | Each resides in a package whose path contains an acl segment (..acl..), at any depth. A translation class named otherwise is neither selected nor checked. | ✓ | ✓ |
 | `DCA-STR-010` | Event Listeners consuming integration events should use Anti-Corruption Layer (informational) | Consumed integration events are translated into the consuming context's own language before they reach its domain — verified by code review, not statically | Informational - selects nothing and never fails; it carries doctrine only. | Nothing is asserted. Whether a consumed integration event is translated into the consuming context's own language before it reaches the domain is a code-review check. | ✓ | ✓ |
+| `DCA-STR-011` | At least one bounded context is declared | Without a declared context the context-map and isolation rules select nothing and report success over an empty model | The declared bounded contexts of the imported classes — every package whose package-info carries @BoundedContext, at any depth below the base package. No individual class is reported. | At least one such package exists. The rule says nothing about how many contexts there should be, about their boundaries, or about modules that own a layer without declaring a context — those are governed structurally and are not a substitute for the declaration. | ✓ | ✓ |
 
 ## `contextmap` — Context map
 
