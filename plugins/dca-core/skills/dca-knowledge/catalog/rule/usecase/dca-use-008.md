@@ -1,9 +1,9 @@
 ---
 type: Rule
 id: DCA-USE-008
-title: HTTP Response Models must end with 'Response' and reside in adapter package
+title: "Types named *Response reside in an adapter"
 rule: HTTP response models should be in adapter layer.
-constraint: HTTP Response Models must end with 'Response' and reside in adapter package.
+constraint: "Types named *Response reside in an adapter."
 selects: Classes under the base package whose simple name ends with Response.
 checks: "Each resides in an adapter package of some module root (<module>.adapter..), the shared kernel's included."
 enforced_by: "UseCaseRules#DCA-USE-008"
@@ -13,7 +13,7 @@ implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 
-# HTTP Response Models must end with 'Response' and reside in adapter package
+# Types named *Response reside in an adapter
 
 ## Selection
 
@@ -34,7 +34,7 @@ Each resides in an adapter package of some module root (<module>.adapter..), the
 ```java
 DcaRule.of(
         "DCA-USE-008",
-        "HTTP Response Models must end with 'Response' and reside in adapter package",
+        "Types named *Response reside in an adapter",
         "HTTP response models should be in adapter layer",
         arch ->
             classes()
@@ -58,7 +58,7 @@ DcaRule.of(
 ```csharp
 DcaRule.Of(
         "DCA-USE-008",
-        "HTTP Response Models must end with 'Response' and reside in adapter namespace",
+        "Types named *Response reside in an adapter",
         "HTTP response models should be in adapter layer",
         arch =>
             Types()

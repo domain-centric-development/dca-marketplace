@@ -39,15 +39,16 @@ DcaRule.check(
             + " it a lifecycle it must not have",
         arch -> {
           List<String> violations = new ArrayList<>();
-          for (JavaClass valueObject : concreteClassesAssignableTo(arch, Value.class)) {
+          for (JavaClass valueObject :
+              concreteClassesAssignableTo(arch, arch.layout().markers().value())) {
             for (JavaField field : TypeInspection.instanceFields(valueObject)) {
               for (JavaClass involved : TypeInspection.involvedTypes(field, valueObject)) {
-                if (isConcreteAggregateRoot(involved)) {
+                if (isConcreteAggregateRoot(involved, arch.layout().markers())) {
                   violations.add(
                       fieldDescription(valueObject, field, involved)
                           + " which is an aggregate root");
                 }
-                if (isConcreteNonRootEntity(involved)) {
+                if (isConcreteNonRootEntity(involved, arch.layout().markers())) {
                   violations.add(
                       fieldDescription(valueObject, field, involved) + " which is an entity");
                 }
@@ -70,8 +71,7 @@ DcaRule.check(
 ### `concreteClassesAssignableTo`
 
 ```java
-private static List<JavaClass> concreteClassesAssignableTo(
-    DcaArchitecture arch, Class<?> marker) {
+private static List<JavaClass> concreteClassesAssignableTo(DcaArchitecture arch, String marker) {
   return classesMatching(arch, c -> c.isAssignableTo(marker) && !c.isInterface());
 }
 ```
@@ -79,8 +79,8 @@ private static List<JavaClass> concreteClassesAssignableTo(
 ### `isConcreteAggregateRoot`
 
 ```java
-private static boolean isConcreteAggregateRoot(JavaClass type) {
-  return type.isAssignableTo(AggregateRoot.class);
+private static boolean isConcreteAggregateRoot(JavaClass type, DcaMarkers markers) {
+  return type.isAssignableTo(markers.aggregateRoot());
 }
 ```
 
@@ -100,8 +100,8 @@ private static boolean isConcreteAggregateRoot(JavaClass type) {
 ### `isConcreteNonRootEntity`
 
 ```java
-private static boolean isConcreteNonRootEntity(JavaClass type) {
-  return type.isAssignableTo(Entity.class) && !type.isAssignableTo(AggregateRoot.class);
+private static boolean isConcreteNonRootEntity(JavaClass type, DcaMarkers markers) {
+  return type.isAssignableTo(markers.entity()) && !type.isAssignableTo(markers.aggregateRoot());
 }
 ```
 
@@ -247,7 +247,7 @@ private static void collect(
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `classes()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `classes()`, `layout()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
@@ -258,9 +258,9 @@ DcaRule.Check(
     arch =>
     {
         var violations = new List<string>();
-        foreach (var valueObject in ConcreteTypesAssignableTo(arch, typeof(IValue)))
+        foreach (var valueObject in ConcreteTypesAssignableTo(arch, arch.Layout.Markers.Value))
         {
-            foreach (var member in DataMembers(arch, valueObject))
+            foreach (var member in InstanceDataMembers(arch, valueObject))
             {
                 if (IsConcreteAggregateRoot(arch, member.Type))
                 {
@@ -299,7 +299,6 @@ DcaRule.Check(
 ## Related mentions (heuristic)
 
 - [AggregateRoot<T, ID>](/marker/tactical/aggregateroot.md)
-- [Entity<T, ID>](/marker/tactical/entity.md)
 
 ## Applies to markers
 

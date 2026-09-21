@@ -1,9 +1,9 @@
 ---
 type: Rule
 id: DCA-USE-006
-title: Use Case Result Models must end with 'Result' and reside in application package
+title: "Types named *Result reside in the application layer"
 rule: Use case result models should be in application layer. Domain Value Objects with 'Result' in name are allowed in domain layer.
-constraint: Use Case Result Models must end with 'Result' and reside in application package.
+constraint: "Types named *Result reside in the application layer."
 selects: Classes under the base package whose simple name ends with Result and that do not implement Value.
 checks: "Each resides in an application package of some module root (<module>.application..). A domain value object named *Result is exempt because it implements Value."
 enforced_by: "UseCaseRules#DCA-USE-006"
@@ -13,7 +13,7 @@ implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 
-# Use Case Result Models must end with 'Result' and reside in application package
+# Types named *Result reside in the application layer
 
 ## Selection
 
@@ -34,7 +34,7 @@ Each resides in an application package of some module root (<module>.application
 ```java
 DcaRule.of(
         "DCA-USE-006",
-        "Use Case Result Models must end with 'Result' and reside in application package",
+        "Types named *Result reside in the application layer",
         "Use case result models should be in application layer. Domain Value Objects with 'Result'"
             + " in name are allowed in domain layer.",
         arch ->
@@ -44,7 +44,7 @@ DcaRule.of(
                 .and()
                 .resideInAnyPackage(layout.basePackage() + "..")
                 .and()
-                .doNotImplement(Value.class)
+                .areNotAssignableTo(arch.layout().markers().value())
                 .should()
                 .resideInAnyPackage(arch.allApplicationPatterns())
                 .allowEmptyShould(true))
@@ -56,13 +56,13 @@ DcaRule.of(
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `allApplicationPatterns()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `allApplicationPatterns()`, `layout()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
 DcaRule.Of(
         "DCA-USE-006",
-        "Use Case Result Models must end with 'Result' and reside in application namespace",
+        "Types named *Result reside in the application layer",
         "Use case result models should be in application layer. Domain Value Objects with 'Result' in name are allowed in domain layer.",
         arch =>
             Types()
@@ -71,7 +71,7 @@ DcaRule.Of(
                 .And()
                 .ResideInNamespaceMatching(DcaLayout.Below(layout.RootNamespace))
                 .And()
-                .DoNotImplementInterface(typeof(IValue))
+                .FollowCustomPredicate(t => !t.IsAssignableTo(arch.Layout.Markers.Value), "are not value objects")
                 .Should()
                 .ResideInNamespaceMatching(DcaLayout.AnyOf(arch.AllApplicationPatterns())))
     .Selecting(

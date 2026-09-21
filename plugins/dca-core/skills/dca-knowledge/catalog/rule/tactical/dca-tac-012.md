@@ -39,7 +39,8 @@ DcaRule.check(
             + " override equals and hashCode itself to compare by its attributes",
         arch -> {
           List<String> violations = new ArrayList<>();
-          for (JavaClass valueObject : concreteClassesAssignableTo(arch, Value.class)) {
+          for (JavaClass valueObject :
+              concreteClassesAssignableTo(arch, arch.layout().markers().value())) {
             if (valueObject.isRecord() || valueObject.isEnum()) {
               continue;
             }
@@ -69,8 +70,7 @@ DcaRule.check(
 ### `concreteClassesAssignableTo`
 
 ```java
-private static List<JavaClass> concreteClassesAssignableTo(
-    DcaArchitecture arch, Class<?> marker) {
+private static List<JavaClass> concreteClassesAssignableTo(DcaArchitecture arch, String marker) {
   return classesMatching(arch, c -> c.isAssignableTo(marker) && !c.isInterface());
 }
 ```
@@ -135,7 +135,7 @@ private static boolean isOverride(
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `classes()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `classes()`, `layout()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
@@ -147,7 +147,7 @@ DcaRule.Check(
         arch =>
         {
             var violations = new List<string>();
-            foreach (var valueObject in ConcreteTypesAssignableTo(arch, typeof(IValue)))
+            foreach (var valueObject in ConcreteTypesAssignableTo(arch, arch.Layout.Markers.Value))
             {
                 if (IsRecord(valueObject) || valueObject is Enum)
                 {

@@ -1,9 +1,9 @@
 ---
 type: Rule
 id: DCA-USE-003
-title: Use Case Queries must end with 'Query' and reside in application package
+title: "Types named *Query reside in the application layer"
 rule: "Use case queries should be in application layer (CQRS pattern)."
-constraint: Use Case Queries must end with 'Query' and reside in application package.
+constraint: "Types named *Query reside in the application layer."
 selects: Classes under the base package whose simple name ends with Query.
 checks: "Each resides in an application package of some module root (<module>.application..)."
 enforced_by: "UseCaseRules#DCA-USE-003"
@@ -13,7 +13,7 @@ implementations: [java, dotnet]
 tags: [usecase, archunit]
 ---
 
-# Use Case Queries must end with 'Query' and reside in application package
+# Types named *Query reside in the application layer
 
 ## Selection
 
@@ -34,7 +34,7 @@ Each resides in an application package of some module root (<module>.application
 ```java
 DcaRule.of(
         "DCA-USE-003",
-        "Use Case Queries must end with 'Query' and reside in application package",
+        "Types named *Query reside in the application layer",
         "Use case queries should be in application layer (CQRS pattern)",
         arch ->
             classes()
@@ -58,7 +58,7 @@ DcaRule.of(
 ```csharp
 DcaRule.Of(
         "DCA-USE-003",
-        "Use Case Queries must end with 'Query' and reside in application namespace",
+        "Types named *Query reside in the application layer",
         "Use case queries should be in application layer (CQRS pattern)",
         arch =>
             Types()

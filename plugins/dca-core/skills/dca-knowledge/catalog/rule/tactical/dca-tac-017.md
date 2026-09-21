@@ -42,8 +42,8 @@ DcaRule.check(
           for (JavaClass repository : repositoryInterfaces(arch)) {
             for (JavaMethod method : repository.getMethods()) {
               for (JavaClass type : TypeInspection.involvedTypes(method.getReturnType())) {
-                if (type.isAssignableTo(Entity.class)
-                    && !type.isAssignableTo(AggregateRoot.class)) {
+                if (type.isAssignableTo(arch.layout().markers().entity())
+                    && !type.isAssignableTo(arch.layout().markers().aggregateRoot())) {
                   violations.add(
                       repository.getName()
                           + "."
@@ -80,9 +80,9 @@ private static List<JavaClass> repositoryInterfaces(DcaArchitecture arch) {
   return classesMatching(
       arch,
       c ->
-          c.isAssignableTo(Repository.class)
+          c.isAssignableTo(arch.layout().markers().repository())
               && c.isInterface()
-              && !c.getSimpleName().equals(REPOSITORY_SUFFIX));
+              && !c.getSimpleName().equals(arch.layout().repositorySuffix()));
 }
 ```
 
@@ -213,7 +213,7 @@ private static void collect(
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `classes()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `classes()`, `layout()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
@@ -231,7 +231,7 @@ DcaRule.Check(
             {
                 foreach (var type in TypesInvolvedIn(method.ReturnTypeInstance))
                 {
-                    if (IsConcreteNonRootEntity(arch, type) || (IsAssignableTo(arch, type, typeof(IEntity)) && !IsAssignableTo(arch, type, typeof(IAggregateRoot))))
+                    if (IsConcreteNonRootEntity(arch, type) || (IsAssignableTo(arch, type, arch.Layout.Markers.Entity) && !IsAssignableTo(arch, type, arch.Layout.Markers.AggregateRoot)))
                     {
                         violations.Add($"{repository.FullName}.{SimpleName(method)} exposes {type.FullName}, an Entity that is not an Aggregate Root");
                     }
@@ -257,7 +257,6 @@ DcaRule.Check(
 ## Related mentions (heuristic)
 
 - [AggregateRoot<T, ID>](/marker/tactical/aggregateroot.md)
-- [Entity<T, ID>](/marker/tactical/entity.md)
 - [Repository<T, ID>](/marker/port-out/repository.md)
 
 ## Configured by
