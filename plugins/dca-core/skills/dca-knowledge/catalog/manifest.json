@@ -30,7 +30,7 @@
   },
   "sources": {
     "dca-dotnet": {
-      "revision": "c6c0a8ff9a3349cd3a1fccee22f8902c10adbf90",
+      "revision": "4b5b0bf221a0d28f92258f4aec939d85650c3bb1",
       "source_sha256": "9f3d6047b32788ebf25a68f891c452eeca9f2c6212345e528da9487869291da3"
     },
     "dca-guide": {
@@ -38,7 +38,7 @@
       "source_sha256": "84993ed5f90cbdabb802255e3ab83c01760e746b6060c3a3b525525411bf7a50"
     },
     "dca-java": {
-      "revision": "1f9878110f269cf815d75c8f0cb556c3eaa27fb3",
+      "revision": "1182b225ae4c075d9db287f391032f103a97bb7f",
       "source_sha256": "d922924a84f95f8733294bb77980b75aa2df2d3e0ffb6aa1eedf1c48d8924c9b"
     },
     "dca-knowledge-catalog": {
