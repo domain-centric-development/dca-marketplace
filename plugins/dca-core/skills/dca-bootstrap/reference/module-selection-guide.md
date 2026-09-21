@@ -7,20 +7,22 @@ becomes `dca.rules.off` with a `dca.rule.<id>.reason`; one the team is working t
 `dca.rules.warn`. Both stay in the report with their reason — prefer that over leaving a set out.
 
 Sets: `cycles`, `layered`, `onion`, `hexagonal`, `naming`, `tactical`, `strategic`, `contextmap`,
-`advanced`, `usecase`; on .NET additionally `dotnet` (always on — async ports, synchronous domain,
-framework-free application layer).
+`advanced`, `usecase`, `errors`; on .NET additionally `dotnet` (always on — async ports, synchronous
+domain, framework-free application layer). The authoritative list is the generated `RULES.md` of the
+library version the project pins.
 
 ## By project profile
 
 | Profile | `dca.rules.sets` |
 |---|---|
 | **Greenfield DCA project** (designing for full DCA from day 1) | *(omit — whole catalog)* |
-| **Brownfield retrofit** (introducing DCA into legacy code) | `cycles,hexagonal,naming,usecase` — add `tactical` once classes implement the markers; freeze (`dca.rules.freeze`, Java) or warn on the rest meanwhile |
-| **CRUD app, layered but not DDD** | `cycles,layered,onion,hexagonal,naming` |
+| **Brownfield retrofit** (introducing DCA into legacy code) | `cycles,hexagonal,naming,usecase` — add `tactical` and `errors` once classes implement the markers; freeze (`dca.rules.freeze`, Java) or warn on the rest meanwhile |
+| **CRUD app, layered but not DDD** | `cycles,layered,onion,hexagonal,naming` — add `errors` as soon as the app has failure types of its own |
 | **Spring Modulith project** | whole catalog + `dca-archunit-spring-modulith` (`ModulithTest extends DcaSpringModulithTest`) |
-| **Microservice (single bounded context)** | `cycles,layered,onion,hexagonal,naming,usecase,tactical,advanced` — `strategic` and `contextmap` are no-ops with one context |
+| **Microservice (single bounded context)** | `cycles,layered,onion,hexagonal,naming,usecase,tactical,advanced,errors` — `strategic` and `contextmap` are no-ops with one context |
 | **Modulith with several contexts** | whole catalog; `contextmap` keeps the `@Upstream` / `@Partnership` declarations honest |
 | **Layer enforcement only, no DDD vocabulary** | `cycles,layered,onion,hexagonal,naming` |
+| **Named failures instead of framework exceptions** | add `errors` — it selects nothing until the project has `DomainException` / `UseCaseException` subtypes |
 
 ## By subdomain type
 
@@ -29,7 +31,7 @@ Pattern choice per subdomain — record it in a pattern-selection ADR:
 | Subdomain type | `dca.rules.sets` |
 |---|---|
 | **Core** (competitive differentiator — full tactical DDD) | *(omit — whole catalog)* |
-| **Supporting** (transaction script / active record is fine) | `cycles,layered,onion,hexagonal,naming,usecase` — structural baseline, no `tactical` / `advanced` |
+| **Supporting** (transaction script / active record is fine) | `cycles,layered,onion,hexagonal,naming,usecase,errors` — structural baseline, no `tactical` / `advanced` |
 | **Generic** (adopted off the shelf, thin integration) | `cycles,hexagonal,naming` — boundary protection only |
 
 One selection applies to the whole test class. A project with contexts of different types either
@@ -48,6 +50,7 @@ package pattern), or runs one architecture test per group of contexts with its o
 | bounded contexts don't leak into each other | `strategic`, `hexagonal` |
 | declared context relationships match the code | `contextmap` |
 | events follow conventions (records, timestamps, versioning) | `advanced` |
+| failures are named domain types, and only the adapter answers with a status | `errors` |
 
 ## Order of strictness
 
@@ -61,8 +64,9 @@ structural problems. Raise the bar in this order:
 5. `usecase`
 6. `onion`
 7. `tactical`
-8. `strategic`, `contextmap`
-9. `advanced`
+8. `errors`
+9. `strategic`, `contextmap`
+10. `advanced`
 
 ## Common reasons to leave a set out
 
