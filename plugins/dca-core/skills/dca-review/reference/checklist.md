@@ -47,6 +47,22 @@ Apply only the checks for each file's layer.
 
 ---
 
+## Domain — Failures (`domain/model/`)
+
+- [ ] A broken business rule raises a subtype of `DomainException`, not `IllegalStateException` /
+      `InvalidOperationException` (`DCA-ERR-001`)
+- [ ] The name is the rule in the ubiquitous language (`InsufficientStockException`), with no `Error`/`Fault`/
+      `Failure` suffix and no `Http`/`Status`/`Response` in it (`DCA-ERR-005`)
+- [ ] It carries the facts the rule compared (requested vs. available), so a caller can say what happened
+      without parsing a message
+- [ ] It lives beside the model that raises it — no `domain/exception/` package (`DCA-ERR-002`)
+- [ ] No framework metadata on the type, `@ResponseStatus` included (`DCA-ERR-004`)
+- [ ] **Argument guards stay the platform's own exception.** A null check, a range check, "must not be blank" in
+      a value object is a caller contract, not a business rule — this is the judgement no rule can make, so make
+      it here: would a domain expert have a word for this failure?
+
+---
+
 ## Domain — Events (`domain/event/`)
 
 - [ ] Past-tense name (`OrderPlaced`, not `PlaceOrder`) — reviewed as language, `Sent` is valid
@@ -229,6 +245,20 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 
 ---
 
+## Application — Failures (`application/{usecasename}/` or `application/shared/`)
+
+- [ ] A request the use case cannot serve raises a subtype of `UseCaseException` — not found, not the caller's,
+      a precondition on another aggregate, a uniqueness rule only the store can see (`DCA-ERR-003`)
+- [ ] The kind matches who can state the failure: a rule the aggregate knows is a `DomainException` and belongs
+      to the domain layer, even when the use case is the one that noticed
+- [ ] A failure the store detects is declared beside the port whose contract it is and documented on the port's
+      method, so every implementation reports it with the same type
+- [ ] Lives with its use case, or in `application/shared` when several raise it or a port declares it
+- [ ] A `catch` that converts a rule into a result variant names the rule's own type — a generic catch there
+      swallows a defect and shows it to the user as a business answer
+
+---
+
 ## Adapter — Incoming (`adapter/incoming/` or `adapter/in/`)
 
 ### REST resources / controllers
@@ -252,6 +282,21 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
       (the port counts), cookies are a *site* question (it does not). A page on another port of the same host needs
       framing allowed and no cookie relaxed. Where two stacks must behave alike, the frame header is set in one place
       of the project — ASP.NET Core emits its own only for responses that render a token, Spring on every response
+
+### Failure translation
+
+- [ ] Exactly one translation site per context, in its own `adapter/incoming/` package: a
+      `@RestControllerAdvice` scoped by `basePackages`, or an `IExceptionHandler` scoped to the context's routes
+- [ ] The answer is a problem document (`ProblemDetail` / `ProblemDetails`, RFC 9457), not a home-grown error DTO
+- [ ] **The status follows the failure, not the base type** — a position missing from a cart is a rule of the
+      model and still answers `404`. Mapping every `DomainException` to one status is the common mistake
+- [ ] No `catch (Exception)` / `catch (RuntimeException)` around a use-case call; a blanket catch answers a
+      defect of this application like a refusal the customer caused (`DCA-ERR-006` lists the candidates but
+      cannot decide this — a `catch` is not in the import model)
+- [ ] No stack trace and no internal detail in the answer
+- [ ] Page controllers of the same context map the same types into form errors rather than catching broadly
+- [ ] An incoming adapter that deliberately translates nothing says why — an event consumer whose failed
+      reaction belongs to the delivery machinery's retry is a good answer, an omission is not
 
 ### Event consumers
 

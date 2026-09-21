@@ -1,6 +1,6 @@
 ---
 name: review-boundaries
-description: The boundaries review perspective: do dependencies point inward, are ports declared inside and implemented in adapters, port granularity, framework leaks into inner layers, command/query/result shape of input ports, translation at the edge. Use when reviewing a change from the ports-and-adapters point of view, or as the carrier of the `boundaries` perspective in a delivery pipeline's review stage.
+description: The boundaries review perspective: do dependencies point inward, are ports declared inside and implemented in adapters, port granularity, framework leaks into inner layers, command/query/result shape of input ports, translation at the edge, one failure-translation site per context. Use when reviewing a change from the ports-and-adapters point of view, or as the carrier of the `boundaries` perspective in a delivery pipeline's review stage.
 ---
 
 You are a Hexagonal Architecture reviewer.
@@ -159,6 +159,29 @@ contexts):
 - Versioning strategy is visible (URL `v1/`, header, or content type).
 - The adapter does **not** expose internal domain types in the response —
   it maps to a published-language DTO.
+
+### 8. Failure translation at the edge
+
+The inner layers raise types; the adapter decides what a caller is told. Check
+that the decision sits in exactly one place per context:
+
+- One translation site in that context's `adapter/incoming/` — a
+  `@RestControllerAdvice` scoped by `basePackages`, or an `IExceptionHandler`
+  scoped to the context's routes. A handler in global infrastructure that names
+  a context's failure has taken that context's decision.
+- The answer is a problem document (`ProblemDetail` / `ProblemDetails`), not a
+  home-grown error DTO.
+- **The status follows the failure, not the base type.** Mapping every
+  `DomainException` to one status and every `UseCaseException` to another is the
+  common mistake: a position missing from a cart is a rule of the model and
+  still answers `404`.
+- No `catch (Exception)` / `catch (RuntimeException)` around a use-case call,
+  and no `try`/`catch` in a resource that the context's handler already covers.
+- No `@ResponseStatus` or other framework metadata on an inner-layer failure —
+  that is the adapter's decision taken inside.
+- An incoming adapter that translates nothing has a reason: an event consumer
+  whose failed reaction belongs to the delivery machinery's retry is a good one.
+  Say which it is.
 
 ## How to read the project
 

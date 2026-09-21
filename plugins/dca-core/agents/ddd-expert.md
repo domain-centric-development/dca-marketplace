@@ -3,7 +3,8 @@ name: ddd-expert
 description: |
   Domain-Driven Design specialist for *building* tactical DDD code in an
   isolated context: aggregates, entities, value objects, ids, domain and
-  integration events, domain services, factories, specifications, repositories.
+  integration events, domain services, factories, specifications, repositories,
+  named failures.
   Use when asked to design or implement a new domain concept — not to review
   one. The craft it applies is the `ddd-modelling` skill.
 tools: Read, Write, Edit, Glob, Grep, Bash

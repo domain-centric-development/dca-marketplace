@@ -3,8 +3,8 @@ name: dca-review
 description: |
   Reviews Java/Spring or .NET/C# code against Domain-Centric Architecture (DCA) conventions. Complements
   ArchUnit by checking semantic aspects that static rules can't: aggregate-design quality,
-  use-case granularity, port semantics, domain-event hygiene, cross-context boundaries, naming
-  consistency. Use when the user asks to "review my DCA code", "is this DCA-compliant", "audit
+  use-case granularity, port semantics, domain-event hygiene, failure types and their translation,
+  cross-context boundaries, naming consistency. Use when the user asks to "review my DCA code", "is this DCA-compliant", "audit
   the changes for DCA", or "/dca-review". Default scope is the git diff against main; the user
   can pass explicit paths instead.
 ---
@@ -29,6 +29,7 @@ reviewed against the same checklist — `reference/naming-conventions.md` carrie
 | Domain events implement marker | Whether events are emitted at the right state-transition points |
 | Cross-context refs forbidden | Whether the cross-context API is well-designed |
 | Records/finals on value objects | Whether value objects model the domain or just hold getters |
+| Failures extend the base type of their layer | Whether a refusal should have been a named failure at all, and whether an adapter catches too widely — a `throw` and a `catch` are not in the import model |
 
 The rule suite has grown into semantic territory (`DCA-USE-015/016/017`, `DCA-HEX-012`, `DCA-TAC-021`, `DCA-MAP-008`).
 Where the checklist cites a rule id, the review confirms what that rule cannot see — it does not repeat the rule.
@@ -193,6 +194,32 @@ Symptoms: an aggregate holds a `*Repository`, output port, or service as a field
 Why: aggregates are persistence-ignorant — dependencies are loaded by the use case and
 passed as method parameters. Moving the lookup behind a callback or resolver parameter does not change
 who owns the calculation; review such parameters manually.
+
+### Business rule as an argument exception
+Symptoms: a state transition or a cross-field invariant refuses with `IllegalStateException` /
+`InvalidOperationException` or `IllegalArgumentException` / `ArgumentException`.
+Why: the adapter cannot tell the case apart from a defect of this application, and answers both the same way.
+`DCA-ERR-001` sees only the types that *are* declared, so this one is the review's: would a domain expert have
+a word for the failure? If yes, it is a `DomainException` subtype with that word in it. A null or range check
+is not — that stays an argument guard.
+
+### Blanket catch around a use-case call
+Symptoms: `catch (Exception)` / `catch (RuntimeException)` in an incoming adapter, or in a use case that
+converts a rule into a result variant.
+Why: a defect of this application is reported as the caller's mistake and disappears from anything watching
+for server faults. Name the types the call can produce. `DCA-ERR-006` lists the packages worth looking at and
+cannot decide this.
+
+### Failure translated in more than one place
+Symptoms: a `try`/`catch` in a resource for a failure the context's exception handler already maps, or a
+handler in global infrastructure naming one context's failure.
+Why: two sites decide the same answer and drift apart. One translation site per context, and infrastructure
+keeps only the last-resort handler for an exception nobody named.
+
+### Status derived from the base type
+Symptoms: every `DomainException` mapped to one status, every `UseCaseException` to another.
+Why: the base type says which layer owns the failure, not what the caller should do next. A position missing
+from a cart is a rule of the model and still answers `404`.
 
 ### Domain gateway without a rationale
 Symptoms: a `DomainGateway` interface in `domain/gateway/` — or a domain service holding one — where the

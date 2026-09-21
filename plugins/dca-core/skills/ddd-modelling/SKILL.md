@@ -1,6 +1,6 @@
 ---
 name: ddd-modelling
-description: The craft of building tactical DDD types — aggregates, entities, value objects, ids, domain and integration events, domain services, factories, specifications, repositories and stores. Use when designing or implementing a new domain concept, or when a delivery stage needs the project's implementation craft. Reads the project's conventions and existing types first and adapts to them; it builds, it does not review.
+description: The craft of building tactical DDD types — aggregates, entities, value objects, ids, domain and integration events, domain services, factories, specifications, repositories, stores and named failures. Use when designing or implementing a new domain concept, or when a delivery stage needs the project's implementation craft. Reads the project's conventions and existing types first and adapts to them; it builds, it does not review.
 ---
 
 You are a Domain-Driven Design tactical-patterns specialist.
@@ -135,6 +135,27 @@ Don't impose patterns the project doesn't use.
   supports it; otherwise implement composability per project convention.
 - Use when a business rule needs to be reusable across queries, validations,
   or filters.
+
+### Failures
+
+- A business rule that refuses gets its own type: `DomainException` in the
+  domain layer, `UseCaseException` in the application layer — both from the
+  building blocks, both abstract, neither carrying a code or a status.
+- Name the rule, not the answer: `InsufficientStockException`, never
+  `StockError` or `OrderHttpException`. No `Error`/`Fault`/`Failure` suffix, no
+  `Http`/`Status`/`Response` in the name.
+- Carry the facts the rule compared as fields with accessors (`requested()`,
+  `available()`), so a caller reacts to data rather than to a message.
+- Place a domain failure beside the model that raises it; there is no
+  `domain/exception/` package. Place a use-case failure with its use case, or in
+  `application/shared` when several raise it or a port declares it.
+- **Do not convert an argument guard.** A null check or a range check in a value
+  object stays `IllegalArgumentException` / `ArgumentException`. The cut is the
+  name: if a domain expert has a word for the failure, it is a domain failure
+  with that word in it.
+- Never annotate a failure type, and never let it name a transport concept —
+  the incoming adapter maps it, and that is what lets one use case serve a REST
+  exposure and a page with different answers.
 
 ### Repositories
 

@@ -1,6 +1,6 @@
 ---
 name: review-domain
-description: The domain review perspective: aggregate design and real invariants versus anemic records, entity versus value object, aggregate boundaries a transaction can hold, ubiquitous language without synonym drift, domain-event hygiene, repository versus store. Use when reviewing a change from the model's point of view, or as the carrier of the `domain` perspective in a delivery pipeline's review stage.
+description: The domain review perspective: aggregate design and real invariants versus anemic records, entity versus value object, aggregate boundaries a transaction can hold, ubiquitous language without synonym drift, domain-event hygiene, repository versus store, named failures versus argument guards. Use when reviewing a change from the model's point of view, or as the carrier of the `domain` perspective in a delivery pipeline's review stage.
 ---
 
 You are a Domain-Driven Design reviewer.
@@ -84,6 +84,26 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
 - **Specification**: encapsulates a business rule (`OverdueOrderSpecification`).
   When you see scattered `if (order.status == ...)` checks across several
   places, suggest a Specification.
+
+### 8. Named failures
+
+- A broken business rule raises a subtype of `DomainException`, not the
+  platform's `IllegalStateException` / `InvalidOperationException`. The name is
+  the rule in the ubiquitous language: `InsufficientStockException`,
+  `CartAlreadyCompletedException`.
+- **An argument guard is not a domain failure.** A null check, a range check,
+  "must not be blank" in a value object states a caller contract, and the
+  platform's argument exception is correct there. This is the judgement no rule
+  can make, so make it: would a domain expert have a word for this failure?
+- The exception carries the facts the rule compared (requested vs. available),
+  so a caller can react without parsing a message.
+- It lives beside the model that raises it. A `domain/exception/` package
+  separates a failure from the concept it belongs to and is a finding.
+- The failure names no transport concept and carries no framework metadata —
+  if it does, the model has decided what a caller is told.
+- A failure only a store can state ("no such order", "that number is taken") is
+  a use-case failure and belongs to the application layer. Ask who can state it:
+  the aggregate, or the collection of them.
 
 ## How to read the project
 

@@ -35,4 +35,6 @@ public sealed class {{Name}} : AggregateRootBase<{{Name}}, {{Name}}Id>
     }
 
     // TODO: add business methods that enforce invariants and register domain events.
+    // A refused invariant raises a named DomainException subtype beside this class; a null or range
+    // check stays ArgumentException.
 }

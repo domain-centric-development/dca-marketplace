@@ -350,6 +350,11 @@ The skill scaffolds the structure — the user writes the actual invariants and 
 
 Generate intention-revealing methods, never public setters.
 
+When the user then writes an invariant that refuses, the refusal gets its own type next to the aggregate: a
+subtype of `DomainException` named after the rule (`InsufficientStockException`). An argument guard — null,
+range, "must not be blank" — stays the platform's argument exception. The skill scaffolds no exception types,
+because the name has to come from the rule, not from a template.
+
 ---
 
 ---

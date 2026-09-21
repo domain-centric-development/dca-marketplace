@@ -4,8 +4,8 @@ description: |
   Applies Domain-Centric Architecture invariants while writing or editing
   Java/Spring or .NET/C# code: framework-free domain, dependency inversion (interfaces in
   app/domain, impls in adapters), bounded-context isolation (no raw cross-context
-  imports), domain-event hygiene (publish + clear). Use during edits to
-  domain/, application/, or adapter/ folders.
+  imports), domain-event hygiene (publish + clear), named failure types with one
+  translation site. Use during edits to domain/, application/, or adapter/ folders.
 disable-model-invocation: false
 ---
 
@@ -15,7 +15,7 @@ This skill is a **set of write-time guards**, not a review. Before every edit
 inside a DCA-shaped project, Claude checks the file's layer and applies the
 rules that apply to that layer.
 
-## The five invariants
+## The six invariants
 
 ### 1. No framework in domain
 
@@ -178,6 +178,38 @@ When writing or editing domain model classes:
   `transactionBoundary.inTransaction(() -> { load; mutate; save; publish; })` — the `TransactionBoundary`
   application-layer execution abstraction of the building blocks, not a port. Remote *effects* go after the commit,
   as a reaction to an integration event.
+
+### 6. A failure has a type, and only the adapter answers it
+
+When writing or editing code that refuses:
+
+- **A business rule raises a named failure.** In the domain layer it extends
+  `DomainException` (`ddd.tactical` / `Ddd.Tactical`), in the application layer
+  `UseCaseException` (`application` / `Application`) — both from the building
+  blocks. The name is the rule in the ubiquitous language:
+  `InsufficientStockException`, not `OrderError`.
+- **An argument guard stays the platform's own exception.** A null check or a
+  range check in a value object is a caller contract, not a business rule:
+  `IllegalArgumentException` / `ArgumentException`,
+  `ArgumentNullException`, `ArgumentOutOfRangeException`. The cut is the name —
+  if a domain expert has a word for the failure, it is a domain exception with
+  that word in it.
+- **Domain exception or use-case exception: ask who can state the failure.**
+  "Already confirmed" is something the aggregate knows; "no such order" is
+  something only the repository can answer. A failure the store detects is
+  declared in the application layer beside the port whose contract it is, and
+  raised by the adapter implementing it.
+- **Never put a transport decision in the type.** No `@ResponseStatus` or other
+  framework metadata on the exception, and no `Error`/`Fault`/`Failure` suffix,
+  no `Http`/`Status`/`Response` in the name (`DCA-ERR-004`, `DCA-ERR-005`).
+- **One translation site per context**, in `adapter/incoming/`: a
+  `@RestControllerAdvice` scoped to that context's package, or an
+  `IExceptionHandler` scoped to its routes, producing a problem document
+  (`ProblemDetail` / `ProblemDetails`). The status follows the failure, not the
+  base type — a missing position is a rule of the model and still answers 404.
+- **Never catch `Exception` or `RuntimeException` around a use-case call.** Name
+  the types the call can produce. The same holds inside a use case that converts
+  a rule into a result variant: catch the rule's own type, not a generic one.
 
 > **Note:** invariant strictness follows the context's declared pattern style
 > (see the project's pattern-selection ADR, if any). Contexts implemented as

@@ -52,4 +52,6 @@ public final class {{Name}} {{aggregateRootExtendsClause}} {
     }
 
     // TODO: add business methods that enforce invariants and emit domain events.
+    // A refused invariant raises a named DomainException subtype beside this class; a null or range
+    // check stays IllegalArgumentException.
 }
