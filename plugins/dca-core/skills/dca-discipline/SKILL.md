@@ -241,7 +241,7 @@ The same table applies to the C# folders in PascalCase (`Domain/`, `Application/
 
 ## Conventions overlay
 
-Read `<project-root>/.claude/dca/conventions.md` for:
+Read the project's conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — for:
 
 - The actual base package / root namespace; markers come from the library
   (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`)

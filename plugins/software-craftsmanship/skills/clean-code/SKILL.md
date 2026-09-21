@@ -145,7 +145,7 @@ Leave touched code a little cleaner than you found it. Bounds:
 
 This skill does **not** auto-reformat. It works alongside whatever formatter
 the project has configured. Read
-`<project-root>/.claude/dca/conventions.md` for the project's formatter
+the conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — for the project's formatter
 command (e.g. `./gradlew spotlessApply`, `dotnet format`); offer to run it at the end of a
 larger edit, but don't reformat invisibly mid-edit.
 

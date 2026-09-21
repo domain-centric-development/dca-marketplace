@@ -78,7 +78,8 @@ and `*Resource` vs `*Controller`) and the rule selection in
 overlay
 
 ```
-<project-root>/.claude/dca/conventions.md
+<project-root>/.agents/dca/conventions.md      # written by /dca-bootstrap
+<project-root>/.claude/dca/conventions.md      # read as a fallback, for projects bootstrapped earlier
 ```
 
 adds what the test cannot express:

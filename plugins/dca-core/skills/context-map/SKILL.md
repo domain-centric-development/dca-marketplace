@@ -37,7 +37,7 @@ metadata, then the event/ACL heuristics.
 
 Default: `docs/context-map.md` at repo root.
 
-Alternative path can be set in `<project-root>/.claude/dca/conventions.md`.
+Alternative path can be set in the conventions overlay, `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`).
 
 ## Map structure
 
@@ -303,7 +303,7 @@ we change the upstream's event schema".
 
 ## Conventions overlay
 
-`<project-root>/.claude/dca/conventions.md` may set:
+The conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — may set:
 
 - Alternative map path
 - Module-discovery overrides (if the project uses neither the DCA

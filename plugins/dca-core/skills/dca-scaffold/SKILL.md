@@ -7,7 +7,7 @@ description: |
   (with Id, Repository, and Created event). Use when the user asks to "create a new bounded
   context", "scaffold a use case", "add an aggregate root", "generate DCA structure for
   feature X", or "/dca-scaffold". Adapts to existing project conventions: reads the project's
-  DcaLayout (architecture test) and `.claude/dca/conventions.md`, plus existing code style.
+  DcaLayout (architecture test) and the conventions overlay, plus existing code style.
   Never overwrites files.
 ---
 
@@ -27,7 +27,7 @@ Before generating anything, **inspect the project** to find:
 1. The language: `build.gradle(.kts)`/`pom.xml` → Java branch; `*.sln`/`*.csproj` → C# branch.
 2. The project's `DcaLayout` — the architecture test that `dca-bootstrap` generated encodes the conventions
    (`class … extends DcaArchitectureTest` / `class … : DcaArchitectureTest`).
-3. `.claude/dca/conventions.md`, if present.
+3. The conventions overlay, if present: `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`).
 4. Otherwise: existing markers, layer naming, use-case-class suffix, lombok-or-records preference.
 
 Generate code that matches what's already there. Don't impose DCA defaults if the project
@@ -65,7 +65,7 @@ is a deviation from the DCA default:
 - `withRestControllerSuffix(...)` / `WithRestControllerSuffix(...)` → REST adapter suffix
 - `withDomainSubpackage`, `withApplicationSubpackage`, `withAdapterSubpackage` (rare) → layer names
 The marker types are the library's (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`);
-`.claude/dca/conventions.md` may override any of it. Also read `dca-archunit.properties` (test class path /
+The conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — may override any of it. Also read `dca-archunit.properties` (test class path /
 next to the test assembly) — a rule set switched off there tells you which patterns the project deliberately
 does not use (e.g. no `tactical` → do not scaffold a rich aggregate without asking).
 

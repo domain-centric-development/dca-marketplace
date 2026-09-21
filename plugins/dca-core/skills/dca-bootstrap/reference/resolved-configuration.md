@@ -1,7 +1,9 @@
 # Resolved configuration shared by bootstrap and scaffold
 
-Bootstrap writes a `## Resolved configuration` section in `.claude/dca/conventions.md` for every project,
-including projects using the vendored catalog. Scaffold reads this section and the current architecture test
+Bootstrap writes a `## Resolved configuration` section in the conventions overlay for every project,
+including projects using the vendored catalog. The overlay is `.agents/dca/conventions.md` — harness-neutral,
+which is why every skill resolves it first — unless the project already has `.claude/dca/conventions.md`, in
+which case that file is kept and written to. Scaffold reads this section and the current architecture test
 and properties before rendering. Preserve unrelated conventions. If dependencies or overrides changed, refresh
 this section from the actual resolved preset report; never infer Spring from Java alone.
 

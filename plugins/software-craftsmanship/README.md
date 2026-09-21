@@ -66,7 +66,8 @@ become available when dca-core is also installed.
 Skills and agents read this optional file if present:
 
 ```
-<project-root>/.claude/dca/conventions.md
+<project-root>/.agents/dca/conventions.md      # written by /dca-bootstrap
+<project-root>/.claude/dca/conventions.md      # read as a fallback, for projects bootstrapped earlier
 ```
 
 (The `dca/` subpath is historical from this marketplace's origin — the

@@ -30,7 +30,7 @@ Files: `NNNN-kebab-case-title.md` (zero-padded to 4 digits), e.g.
 
 Index: `docs/adr/README.md` — auto-regenerated table of all ADRs.
 
-Alternative paths can be set in `<project-root>/.claude/dca/conventions.md`.
+Alternative paths can be set in the conventions overlay, `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`).
 
 ## ADR template
 
@@ -208,7 +208,7 @@ offer to generate this meta-ADR first.
 
 ## Conventions overlay
 
-`<project-root>/.claude/dca/conventions.md` may set:
+The conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — may set:
 
 - Alternative ADR path (`docs/decisions/`, etc.)
 - Required tags (e.g. enforce a `Tags:` value from a fixed vocabulary)

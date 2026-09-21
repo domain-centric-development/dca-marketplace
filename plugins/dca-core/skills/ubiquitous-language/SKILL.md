@@ -27,7 +27,7 @@ code:
 src/{RootNamespace}.{Context}/Domain/glossary.md    # .NET (one project per context)
 ```
 
-Alternative path can be set in `<project-root>/.claude/dca/conventions.md`.
+Alternative path can be set in the conventions overlay, `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`).
 
 ## Glossary entry format
 
@@ -154,7 +154,7 @@ Cross-context audit:
 
 ## Conventions overlay
 
-Read `<project-root>/.claude/dca/conventions.md` for:
+Read the project's conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — for:
 
 - Custom glossary location (e.g. `docs/glossary/{context}.md` instead of
   inline)

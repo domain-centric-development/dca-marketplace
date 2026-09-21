@@ -37,12 +37,12 @@ text themselves, so a citation needs no path outside the catalog. It is the read
 
 Resolve the catalog path in this order; stop at the first that exists:
 
-1. `catalog_path` in `<project-root>/.claude/dca/conventions.md` (explicit override wins)
+1. `catalog_path` in the conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — (explicit override wins)
 2. `dca-knowledge-catalog/bundle/` relative to repo root (working in this repo)
 3. `${CLAUDE_PLUGIN_ROOT}/skills/dca-knowledge/catalog/` — the **vendored copy that
    ships with the plugin**; always present once the plugin is installed, so
    `/dca-knowledge` works in any project with no extra setup
-4. `.claude/dca/catalog/` (a manually vendored copy inside the consuming project)
+4. `.agents/dca/catalog/`, then `.claude/dca/catalog/` (a manually vendored copy inside the consuming project)
 5. Any directory containing both `index.md` and `log.md` with OKF frontmatter
 
 Prefer the in-repo bundle (#2) over the vendored copy (#3) when both exist — the in-repo
@@ -56,7 +56,8 @@ one is freshly regenerable; the vendored one is a snapshot from the plugin's rel
 > a decision the catalog does not carry, say so rather than reconstructing it.
 
 If none found, tell the user the catalog is not present. It ships with this plugin; a project that
-keeps its own copy vendors a `bundle/` into `.claude/dca/catalog/` and sets `catalog_path`.
+keeps its own copy vendors a `bundle/` into `.agents/dca/catalog/` (or `.claude/dca/catalog/`) and sets
+`catalog_path`.
 
 ## Node types & typed edges
 

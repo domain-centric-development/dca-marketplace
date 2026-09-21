@@ -69,8 +69,8 @@ Cycle length: minutes, not hours. If a cycle takes >15 min, the step is too big.
 
 ## Conventions
 
-Read `<project-root>/.claude/dca/conventions.md` (or fall back to
-`<project-root>/CLAUDE.md`) for:
+Read the project's conventions, searched in this order: an explicit path given to you,
+`.agents/dca/conventions.md`, `.claude/dca/conventions.md`, `AGENTS.md`, `CLAUDE.md`. Take from it:
 
 - Test source set paths (`src/test/`, `src/test-integration/`, etc.)
 - Test framework choice (JUnit 5 vs. Spock; xUnit in .NET)

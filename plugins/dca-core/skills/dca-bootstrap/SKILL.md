@@ -186,8 +186,8 @@ F. **Context map** — install `ContextMapDocumentationTest`, which renders `doc
 G. **Catalog wiring (`CLAUDE.md`)** — wire the project's coding agent to the DCA knowledge catalog?
    - `Yes, vendored catalog` (default) — append the DCA section to `CLAUDE.md`; `/dca-knowledge`
      resolves the catalog vendored with this plugin.
-   - `Yes, live catalog` — additionally write `.claude/dca/conventions.md` with a `catalog_path:`
-     pointing at a locally regenerable `dca-knowledge-catalog/bundle` (verify it holds `index.md` and `log.md`).
+   - `Yes, live catalog` — additionally set `catalog_path:` in the conventions overlay, pointing at a
+     locally regenerable `dca-knowledge-catalog/bundle` (verify it holds `index.md` and `log.md`).
    - `No`.
 
 ### Phase 3 — Generation
@@ -227,7 +227,9 @@ Before each write: if the target exists, ask *overwrite / skip / abort* (default
 8. Decision G: `templates/claude/CLAUDE-dca-section.md.tmpl` **appended** to `CLAUDE.md`
    (`{{verifyCommand}}` = `./gradlew test-architecture` or `mvn test`); idempotent — skip when a line
    starting with `## Architecture: Domain-Centric Architecture` exists. `conventions.md.tmpl` →
-   `.claude/dca/conventions.md` for every project, with the resolved-configuration section; `catalog_path` is optional.
+   `.agents/dca/conventions.md` for every project, with the resolved-configuration section; `catalog_path` is
+   optional. Write to `.claude/dca/conventions.md` instead only when that file already exists — a project
+   bootstrapped before this path changed keeps the file it has, and every skill reads both.
 
 **.NET**
 
@@ -298,8 +300,9 @@ Next steps:
 ## For the other skills
 
 `/dca-scaffold`, `/dca-review` and `/dca-discipline` read the project's conventions from the
-generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, suffixes) and from
-`.claude/dca/conventions.md` when present. There is no constants class to consult.
+generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, suffixes) and from the
+conventions overlay when present — `.agents/dca/conventions.md`, falling back to
+`.claude/dca/conventions.md`. There is no constants class to consult.
 
 ## Reference materials
 

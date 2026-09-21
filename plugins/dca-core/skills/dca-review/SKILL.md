@@ -16,7 +16,7 @@ ArchUnit rules can't detect because they are semantic, not structural.
 
 This is the third skill in the DCA suite. It assumes `dca-bootstrap` may or may not have run.
 If it ran, the review reads the project's `DcaLayout` from the architecture test (and
-`.claude/dca/conventions.md`) for naming conventions; otherwise it falls back to defaults. Java and C# are
+the conventions overlay, `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`)) for naming conventions; otherwise it falls back to defaults. Java and C# are
 reviewed against the same checklist — `reference/naming-conventions.md` carries the language mapping.
 
 ## Where ArchUnit ends and dca-review begins
