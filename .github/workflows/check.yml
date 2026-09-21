@@ -4,6 +4,12 @@ name: check
 # real gate and the real runner, so it is the only argument that the factory works other than "an
 # agent said it did". It runs on two operating systems on purpose: the gate is portable Python, but
 # the runner is a shell script, and a shell assumption holds on one platform and not on the other.
+#
+# The `derived` job guards the two generated artifacts this repository ships. Root AGENTS.md rule 7
+# says never hand-edit a generated artifact, and until now nothing checked that the source had not
+# moved on without them: the rendered rule catalog went four rule changes without being re-rendered,
+# and the vendored knowledge catalog carried a self-consistent manifest describing an older bundle.
+# Both gates need the sibling checkouts the generators read, so the job recreates that layout.
 
 on:
   push:
@@ -40,3 +46,40 @@ jobs:
         run: python3 scripts/check-skills.py
       - name: factory-verify
         run: python3 plugins/dca-factory/skills/factory-verify/scripts/verify.py
+
+  derived:
+    name: generated artifacts are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: dca-marketplace
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: domain-centric-development/dca-java
+          path: dca-java
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: domain-centric-development/dca-dotnet
+          path: dca-dotnet
+      - uses: actions/checkout@v4
+        with:
+          repository: domain-centric-development/dca-knowledge-catalog
+          path: dca-knowledge-catalog
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: The rendered rule catalog matches both rules.json
+        working-directory: dca-marketplace
+        run: |
+          python3 scripts/render-rule-catalog.py
+          if ! git diff --quiet -- plugins/dca-core/skills/dca-bootstrap/reference/archunit-rule-catalog.md; then
+            echo "::error::archunit-rule-catalog.md is stale - run scripts/render-rule-catalog.py and commit it"
+            git --no-pager diff -- plugins/dca-core/skills/dca-bootstrap/reference/archunit-rule-catalog.md
+            exit 1
+          fi
+      - name: The vendored knowledge catalog equals the canonical bundle
+        working-directory: dca-knowledge-catalog
+        run: python3 scripts/check-mirror.py
