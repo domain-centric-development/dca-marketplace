@@ -1,3 +1,14 @@
+> **Superseded — historical record, kept on purpose.** Written 3 September 2026, in German, when the
+> plan was to build harness-specific adapters from one source (`adapters/codex/`, `adapters/opencode/`,
+> `scripts/build-distributions.sh`, `dist/`). None of that was built. Portability was reached a different
+> way in WP-43: plain skill folders that every harness reads, and one dependency-free script,
+> `plugins/dca-factory/skills/factory-run/scripts/factory.sh`, which carries a small adapter per tool
+> instead of generating distributions. Of the six "couplings" listed below, the Claude-only tool names
+> were removed on 21 September 2026 and `${CLAUDE_PLUGIN_ROOT}` earlier; the conventions-path split it
+> describes was closed the same day. Read this for why the decisions were taken, not for what to do.
+> The current statement of what is portable and what is only portable *in form* is in
+> `plugins/dca-factory/README.md`.
+
 # DCA Marketplace für Claude Code, Codex, Antigravity und OpenCode
 
 Stand: 3. September 2026

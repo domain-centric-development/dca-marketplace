@@ -56,7 +56,7 @@ dca-marketplace/
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
 ├── .github/workflows/check.yml            # syntax, manifests, skill front matter, factory-verify (Linux + macOS)
 ├── scripts/check-skills.py                # every skill folder has a SKILL.md with name and description
-└── MULTI-HARNESS-PORTABILITY.md           # notes on running the skills outside Claude Code
+└── MULTI-HARNESS-PORTABILITY-2026-09-03.md  # superseded plan, kept as history — see its header
 ```
 
 ## The three plugins
