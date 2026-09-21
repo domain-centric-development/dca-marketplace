@@ -55,13 +55,8 @@ one is freshly regenerable; the vendored one is a snapshot from the plugin's rel
 > Answer from the `guide/` sections and the skeleton — and if the question is really about
 > a decision the catalog does not carry, say so rather than reconstructing it.
 
-If none found, tell the user the catalog isn't present and how to get it:
-
-```bash
-cd dca-knowledge-catalog && PYTHONPATH=src python3 -m dca_catalog.generate
-```
-
-or vendor the `bundle/` into `.claude/dca/catalog/` and set `catalog_path`.
+If none found, tell the user the catalog is not present. It ships with this plugin; a project that
+keeps its own copy vendors a `bundle/` into `.claude/dca/catalog/` and sets `catalog_path`.
 
 ## Node types & typed edges
 
@@ -192,25 +187,22 @@ matching type in *the user's own* project — never at another repository.
 - Filter on frontmatter (`type`/`tags`/`status`) before reading bodies.
 - Sections are atomic — read the one section, not the whole chapter.
 - Inspect file size before reading large guide nodes; read the relevant subsection and retain its caveats.
-- For broad/fan-out questions across many nodes, delegate to an `Explore` agent over the
-  bundle dir and keep only its conclusion in main context.
+- For broad/fan-out questions across many nodes, delegate to a read-only research subagent over the
+  bundle dir where the harness has one, and keep only its conclusion in main context.
 
-## Keeping the catalog fresh
+## When the catalog looks stale
 
-The bundle is a **generated, derived artifact** — never hand-edit it, and treat a stale
-bundle as a correctness risk. If an answer looks out of date versus the reference
-implementation, the source changed but the bundle wasn't regenerated:
+The bundle shipped with this plugin is a **generated, derived artifact** and is read-only here:
+the sources it was generated from are not installed with it. Never hand-edit a node — an edit
+survives until the next plugin update and nothing else.
 
-```bash
-cd dca-knowledge-catalog && PYTHONPATH=src python3 -m dca_catalog.generate && PYTHONPATH=src python3 -m pytest tests/
-```
+When citing, the node body is the source of truth. If an answer looks out of date against the
+libraries the project actually uses, say so in the answer and report it to the catalog's
+maintainers, together with the node path and `manifest.json`'s `bundle_sha256` — that digest, not
+the plugin version, identifies which catalog you read. Do not try to regenerate.
 
-(See `dca-knowledge-catalog/CLAUDE.md`.) When citing, the node body is the source of
-truth; if it looks stale against the generator's sources, recommend a regenerate.
-
-Health: `python3 -m dca_catalog.lint` mechanically flags broken links, stale source
-pointers, and unanchored/orphan authored nodes. Run it after saving a `note/`/`recipe/`/etc
-to confirm the new node is wired into the graph (no `unanchored-authored`/`orphan`/`broken-link`).
+Regenerating, linting and saving new authored nodes are the catalog repository's own workflow and
+are documented in its `AGENTS.md`.
 
 ## Relationship to other skills
 

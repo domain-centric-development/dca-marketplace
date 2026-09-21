@@ -124,7 +124,8 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
 
 ### Phase 2 — Decisions (ask the user)
 
-Use `AskUserQuestion`; bundle related questions.
+Ask the user, bundling related questions into one exchange — through a structured question tool
+where the harness has one, in prose otherwise.
 
 A. **Marker policy** — per existing marker-like type:
    - `Migrate` — replace it with the package marker (`extends BaseAggregateRoot<T, ID>`,

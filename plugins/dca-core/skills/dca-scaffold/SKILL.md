@@ -44,7 +44,8 @@ The user's wording determines which mode:
 - **"aggregate X"** / "aggregate root X" / "create domain entity X" → [Mode C: Aggregate Root](#mode-c-aggregate-root)
 - **"store for X"** / "operational store" / "scaffold a Store" → [Mode D: Store](#mode-d-store)
 
-If unclear, ask via `AskUserQuestion`.
+If unclear, ask the user — through a structured question tool where the harness has one, in prose
+otherwise.
 
 ---
 
