@@ -229,7 +229,15 @@ are documented in its `AGENTS.md`.
 
 1. Read `manifest.json` to identify the snapshot and library versions, then use `rule/index-compact.md` for exact id lookup.
 2. Read the target node's `selects`/`checks`, status, implementations and resolved framework before its evidence.
-3. For authored nodes, `review: draft` and `review: superseded` are **non-normative**. Missing review is also non-normative. Cite them only as proposals/history, never as the answer's authority. Follow `superseded_by` and inspect its own status; do not promote automatically. `reviewed` requires an owner and evidence.
+3. For authored nodes, `review:` says how far the node has been checked, not whether it is usable.
+   - `reviewed` — an owner and evidence have been verified. Cite it as the answer.
+   - `draft` (the majority today) — written and wired into the graph, not yet through a review
+     pass. Use it, and say once that the construction guidance is a draft. Never let it override a
+     generated node: the rules, markers and guide text are derived from the code and win on every
+     contradiction. If it disagrees with a rule's `selects`/`checks`, the rule is right.
+   - `superseded` — history. Cite it only to explain what changed, follow `superseded_by`, and
+     inspect that node's own status; nothing is promoted automatically.
+   - missing — treat as `draft`.
 4. Prefer the requested language's evidence (`.NET reading` / C# expression for .NET). Large nodes offer `Evidence slices`; read the relevant slice together with the parent selection/check and caveats. Full nodes remain available.
 5. `Governed by` and `Applies to markers` are reviewed mappings. Every `Related mentions` link is heuristic navigation, including mentions derived from `selects`; it does not prove applicability.
 6. Do not add Spring dependencies to .NET or framework-neutral projects. Verify Java with its architecture task and .NET with `dotnet test -c Debug`.
