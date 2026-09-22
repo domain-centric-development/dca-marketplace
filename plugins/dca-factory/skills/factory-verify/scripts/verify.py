@@ -787,7 +787,8 @@ def verify_runner(runner, verbose=False):
         run_runner(runner, root, "install", "--tool", "codex", "--from", source)
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
         pipeline = {"factory-run", "stage-plan", "stage-test", "stage-build", "stage-tidy",
-                    "stage-judge", "stage-document", "factory-backlog", "factory-scope"}
+                    "stage-judge", "stage-document", "factory-backlog", "factory-scope",
+                    "factory-decisions"}
         check("install: a tool without plugins also gets the craft the profile may name",
               pipeline.issubset(set(entries)) and len(entries) > len(pipeline),
               f"{len(entries)} skills: {sorted(entries)[:6]}…")
@@ -1169,6 +1170,46 @@ def main(argv=None):
                 print(f"  ok    {case.name}")
 
     print(f"\nverify: {len(cases) - len(failures)}/{len(cases)} gate cases behaved as specified")
+
+    # --- the inbox: one listing a second session can act on --------------------
+    # Not a stage gate, so not a Case: the listing reads the store alone and orders it so that
+    # what waits on a human comes first. Read from files only — a record's state is never stored.
+    print()
+    inbox_failures = []
+    with tmpdir() as root:
+        build_project(root, **with_decisions(
+            ("STORY-1-01", DECISION),
+            ("STORY-1-02", DECISION.replace("STORY-1-01", "STORY-1-02") + "\n## Answer\nanswer: a\n"),
+            ("STORY-1-03", DECISION.replace("STORY-1-01", "STORY-1-03") + ANSWER),
+            ("STORY-1-04", DECISION.replace("STORY-1-01", "STORY-1-04") + ANSWER
+             + "\n## Applied\nat: 2026-09-22T21:30:00Z\nstage: plan\n"),
+            ("STORY-9-01", DECISION.replace("STORY-1", "STORY-9"))))
+        listing = subprocess.run([sys.executable, args.gate, "--list-decisions"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace")
+        lines = [l for l in listing.stdout.splitlines() if l and not l.startswith("decisions:")]
+        states = [l.split()[1] for l in lines]
+        expectations = [
+            ("inbox: every record is listed, open first, then draft, answered, applied",
+             states == ["open", "open", "draft", "answered", "applied"], f"states in order: {states}"),
+            ("inbox: an answered record shows its answer and who gave it",
+             any("STORY-1-03" in l and "→ b by the-expert" in l for l in lines),
+             [l for l in lines if "STORY-1-03" in l]),
+            ("inbox: the summary counts what waits on a human",
+             "5 record(s), 3 waiting for an answer" in listing.stdout,
+             listing.stdout.strip().splitlines()[-1:] if listing.stdout.strip() else "no output"),
+        ]
+        one_story = subprocess.run([sys.executable, args.gate, "--list-decisions", "--story", "STORY-9"],
+                                   cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        expectations.append(("inbox: --story narrows the listing to one story",
+                             "STORY-9-01" in one_story.stdout and "STORY-1-01" not in one_story.stdout
+                             and "1 record(s), 1 waiting" in one_story.stdout,
+                             one_story.stdout.strip().splitlines()[-1:]))
+        for name, ok, detail in expectations:
+            print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+            if not ok:
+                print(f"          {detail}")
+                inbox_failures.append(name)
+    failures += [(name, [], "") for name in inbox_failures]
 
     runner_failures = []
     if os.path.isfile(args.runner):

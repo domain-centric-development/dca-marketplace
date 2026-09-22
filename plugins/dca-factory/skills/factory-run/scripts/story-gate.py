@@ -5,6 +5,7 @@ Reads the backlog (markdown with front matter) and the stack profile, then check
 what a stage may not decide for itself. Exit code 0 means the stage may proceed.
 
     story-gate.py --story <id> --stage <plan|test|build|tidy|document> [options]
+    story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
 
 Options:
     --backlog <dir>     backlog root (default: backlog)
@@ -80,7 +81,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 2
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1289,6 +1290,43 @@ def stamp_applied(path, stage):
                      f"stage: {stage}\n")
 
 
+def list_decisions(cwd, story_id=None):
+    """The inbox: one line per record, open ones first, then drafts, answered, applied.
+
+    `<id>  <state>  <story>/<stage>  asked <time>  <question>` — what a second session needs to
+    pick one up without any transcript. Read from the files alone; nothing is inferred."""
+    store = os.path.join(cwd, DECISIONS_DIR)
+    rows = []
+    if os.path.isdir(store):
+        for name in sorted(os.listdir(store)):
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(store, name)
+            try:
+                front, body = read_front_matter(path)
+            except GateError as error:
+                rows.append((-1, name[:-3], "unreadable", "?", "?", "?", str(error)))
+                continue
+            story = str(front.get("story", "")).strip()
+            if story_id and story != story_id:
+                continue
+            state, answer = decision_state(body)
+            question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
+            rank = {"open": 0, "draft": 1, "answered": 2, "applied": 3}[state]
+            rows.append((rank, str(front.get("id", name[:-3])).strip(), state, story,
+                         str(front.get("stage", "?")).strip(), str(front.get("asked", "?")).strip(),
+                         question + (f"  → {answer.get('answer')} by {answer.get('by')}"
+                                     if state in ("answered", "applied") else "")))
+    rows.sort()
+    for _rank, rid, state, story, stage, asked, text in rows:
+        print(f"{rid}  {state:<9} {story}/{stage}  asked {asked}  {text}")
+    open_count = sum(1 for r in rows if r[2] in ("open", "draft"))
+    print(f"decisions: {len(rows)} record(s), {open_count} waiting for an answer"
+          + (f" (story {story_id})" if story_id else "")
+          + f" — store {DECISIONS_DIR}/")
+    return 0
+
+
 def check_decisions(result, tasks, story_id, cwd):
     """Every question this story raised is recorded, and every answer it got has been applied.
 
@@ -1442,12 +1480,13 @@ def main(argv):
         "--version", action="version",
         version=f"story-gate {VERSION} (file contract {CONTRACT})",
     )
-    parser.add_argument("--story", required=True)
+    parser.add_argument("--story")
     parser.add_argument(
         "--stage",
-        required=True,
         choices=("plan", "test", "build", "tidy", "document"),
     )
+    parser.add_argument("--list-decisions", action="store_true",
+                        help="print the decision inbox (all stories, or --story's) and exit")
     parser.add_argument("--backlog", default="backlog")
     parser.add_argument("--tasks", default="tasks")
     parser.add_argument("--profile")
@@ -1457,6 +1496,10 @@ def main(argv):
 
     cwd = os.path.abspath(args.project)
     os.chdir(cwd)
+    if args.list_decisions:
+        return list_decisions(cwd, args.story)
+    if not args.story or not args.stage:
+        parser.error("--story and --stage are required (or --list-decisions)")
     result = Result()
     try:
         story_path = find_story(args.backlog, args.story)

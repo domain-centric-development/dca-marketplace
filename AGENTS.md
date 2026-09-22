@@ -50,7 +50,7 @@ dca-marketplace/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
 │   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
-│   ├── skills/{factory-backlog,factory-scope}/   # write the backlog; answer a scoping question
+│   ├── skills/{factory-backlog,factory-scope,factory-decisions}/   # write the backlog; answer a scoping question; the decision inbox
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
 ├── plugins/software-craftsmanship/        # project-agnostic skills + agents (any Java or .NET project)
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files

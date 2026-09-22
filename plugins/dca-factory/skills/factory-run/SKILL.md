@@ -212,7 +212,9 @@ options, its recommendation, never an answer — and names it in its `## needs-h
 it, in this session or another (see `reference/file-contracts.md`, *Decision records*). When you
 resume a story whose record is answered, run the stage that asked (`stage:` in the record) with
 the answer in front of it; the gate checks that its new file cites the id, and stamps the record
-applied.
+applied. The human answers through `factory-decisions` — in this session or another — which lists
+the records (`story-gate.py --list-decisions`), explains one and writes `## Answer` only on their
+confirmation.
 
 ## Scope
 

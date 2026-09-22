@@ -116,6 +116,8 @@ rationale: <optional>
   not that the story is delivered.
 - The gate checks the store on **every** stage: an open record blocks the story wherever it
   stands, and the runner does not start a stage while one is open.
+- `python3 .agents/factory/story-gate.py --list-decisions [--story <id>]` prints the inbox — one
+  line per record, open first — which is what the `factory-decisions` skill shows and works from.
 
 What this does not do, on purpose: no leases, no revision numbers, no stale-answer detection when
 the story changes underneath, no authorisation beyond `by:`. Files writable by the same user give
