@@ -554,17 +554,45 @@ def module_files(by_path, cls, method):
     return []
 
 
+def posix_shell():
+    """On Windows, the bash that runs profile commands; None elsewhere (the system shell does).
+
+    Not `shutil.which("bash")`: on a stock Windows that is `System32\\bash.exe`, the WSL launcher,
+    which starts a Linux distribution or fails without one — either way not a shell over this
+    tree. Order: `FACTORY_BASH`; the bash of the Git installation that `git` on PATH belongs to
+    (Git Bash, the supported route); any other `bash.exe` on PATH outside System32.
+    """
+    if os.name != "nt":
+        return None
+    named = os.environ.get("FACTORY_BASH", "").strip()
+    if named:
+        return named
+    git = shutil.which("git")
+    if git:
+        install = os.path.dirname(os.path.dirname(os.path.realpath(git)))     # <Git>/cmd/git.exe
+        for relative in ("bin/bash.exe", "usr/bin/bash.exe", "../bin/bash.exe"):
+            candidate = os.path.normpath(os.path.join(install, relative))
+            if os.path.isfile(candidate):
+                return candidate
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = os.path.join(entry, "bash.exe")
+        if os.path.isfile(candidate) and "system32" not in candidate.lower():
+            return candidate
+    return None
+
+
 def run(command, cwd):
     """Run one profile command through a shell.
 
     The profile is written for a POSIX shell — `a && b`, `sh runner.sh`, quoting — and the runner
-    and the commit hook are bash, so on Windows the same commands go through the bash that Git
-    installs when it is on PATH (Git Bash, WSL's launcher, MSYS2). Without one, `cmd.exe` gets
-    them, and a profile that leans on POSIX syntax fails there loudly rather than subtly.
+    and the commit hook are bash, so on Windows the same commands go through Git's bash (see
+    `posix_shell`). Without one, `cmd.exe` gets them, and a profile that leans on POSIX syntax
+    fails there loudly rather than subtly.
     """
-    if os.name == "nt" and shutil.which("bash"):
+    bash = posix_shell()
+    if bash:
         completed = subprocess.run(
-            ["bash", "-c", command], cwd=cwd, capture_output=True, text=True
+            [bash, "-c", command], cwd=cwd, capture_output=True, text=True
         )
         return completed.returncode, completed.stdout + completed.stderr
     completed = subprocess.run(

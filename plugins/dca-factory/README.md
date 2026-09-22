@@ -136,8 +136,9 @@ runner and the commit hook are bash, so both want a POSIX shell. Linux, macOS an
 Git Bash** are what the pipeline's own suite runs on in CI. On Windows the install copies the skills
 instead of linking them (a symlink needs developer mode, and `ln -s` without it makes a silent copy
 anyway), the runner picks `python3` or `python`, whichever the machine has (`FACTORY_PYTHON`
-overrides), and the gate runs the profile's commands through the bash on `PATH`, so a profile is
-written for a POSIX shell on every platform. WSL is the same route with a Linux userland and needs
+overrides), and the gate runs the profile's commands through Git's bash — found beside `git`, never the
+WSL launcher in `System32`; `FACTORY_BASH` names another — so a profile is written for a POSIX
+shell on every platform. WSL is the same route with a Linux userland and needs
 none of that. A project on Windows can still use the gate on its own: it is one file and one
 command line.
 

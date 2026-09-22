@@ -48,6 +48,40 @@ def tmpdir():
 def shell_path(path):
     """A path as bash reads it on every platform — forward slashes, `C:/…` on Windows."""
     return path.replace("\\", "/")
+
+
+def posix_shell():
+    """On Windows, the bash that runs profile commands; None elsewhere (the system shell does).
+
+    Not `shutil.which("bash")`: on a stock Windows that is `System32\\bash.exe`, the WSL launcher,
+    which starts a Linux distribution or fails without one — either way not a shell over this
+    tree. Order: `FACTORY_BASH`; the bash of the Git installation that `git` on PATH belongs to
+    (Git Bash, the supported route); any other `bash.exe` on PATH outside System32.
+    """
+    if os.name != "nt":
+        return None
+    named = os.environ.get("FACTORY_BASH", "").strip()
+    if named:
+        return named
+    git = shutil.which("git")
+    if git:
+        install = os.path.dirname(os.path.dirname(os.path.realpath(git)))     # <Git>/cmd/git.exe
+        for relative in ("bin/bash.exe", "usr/bin/bash.exe", "../bin/bash.exe"):
+            candidate = os.path.normpath(os.path.join(install, relative))
+            if os.path.isfile(candidate):
+                return candidate
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = os.path.join(entry, "bash.exe")
+        if os.path.isfile(candidate) and "system32" not in candidate.lower():
+            return candidate
+    return None
+
+
+#: The bash the runner cases call. The same resolution the gate uses, because the same wrong
+#: answer — the WSL launcher — would make every runner case fail with an empty transcript.
+BASH = posix_shell() or "bash"
+if os.name == "nt":
+    print(f"verify: bash → {BASH}")
 DEFAULT_GATE = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "story-gate.py"))
 DEFAULT_RUNNER = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "factory.sh"))
 
@@ -342,7 +376,7 @@ def run_runner(runner, root, *args, env=None):
     environment = dict(os.environ)
     environment.update(env or {})
     result = subprocess.run(
-        ["bash", runner, *args], cwd=root, capture_output=True, text=True, env=environment,
+        [BASH, runner, *args], cwd=root, capture_output=True, text=True, env=environment,
     )
     return result.returncode, result.stdout + result.stderr
 
@@ -420,15 +454,15 @@ def verify_runner(runner, verbose=False):
         check("runner: the final line names the stages that ran",
               "ran through plan,test,build,tidy,judge,document." in output,
               [l for l in output.splitlines() if "ran through" in l])
+        journal = os.path.join(root, "tasks", "STORY-1", ".verify")
+        kept = os.listdir(journal) if os.path.isdir(journal) else []     # absent when nothing ran
         check("runner: the journal records a start and an end per stage",
-              os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv"))
-              and open(os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv")).read().count("stage-end") == 6)
+              os.path.isfile(os.path.join(journal, "journal.tsv"))
+              and open(os.path.join(journal, "journal.tsv")).read().count("stage-end") == 6)
         check("runner: a tree snapshot is kept around every stage",
-              len([f for f in os.listdir(os.path.join(root, "tasks", "STORY-1", ".verify"))
-                   if f.startswith("tree-")]) == 12)
+              len([f for f in kept if f.startswith("tree-")]) == 12)
         check("runner: every gate run is kept, not only a refusal",
-              len([f for f in os.listdir(os.path.join(root, "tasks", "STORY-1", ".verify"))
-                   if f.startswith("gate-")]) >= 4)
+              len([f for f in kept if f.startswith("gate-")]) >= 4)
 
     # 1c. a stage that writes no file stops the run, and says which file was missing
     with tmpdir() as root:
@@ -611,8 +645,8 @@ def verify_runner(runner, verbose=False):
                 env={"FACTORY_VERIFY_VERDICT": "1"})
             # the dry run does not reach the judge, so read the parser directly
             parsed = subprocess.run(
-                ["bash", "-c",
-                 f'TASKS=tasks; sed -n "/^verdict_of/,/^}}/p" "{runner}" > fn.sh; '
+                [BASH, "-c",
+                 f'TASKS=tasks; sed -n "/^verdict_of/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
                  f'. ./fn.sh; verdict_of STORY-1'],
                 cwd=root, capture_output=True, text=True).stdout.strip()
             check(f"runner: reads the verdict '{verdict}' from the file", parsed == expect,
@@ -622,8 +656,8 @@ def verify_runner(runner, verbose=False):
     with tmpdir() as root:
         os.makedirs(os.path.join(root, "tasks", "STORY-1"))
         counted = subprocess.run(
-            ["bash", "-c",
-             f'TASKS=tasks; sed -n "/^bump_rounds/,/^}}/p" "{runner}" > fn.sh; '
+            [BASH, "-c",
+             f'TASKS=tasks; sed -n "/^bump_rounds/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
              f'. ./fn.sh; bump_rounds STORY-1; bump_rounds STORY-1'],
             cwd=root, capture_output=True, text=True).stdout.split()
         check("runner: the round counter is a file and counts up", counted == ["1", "2"],
