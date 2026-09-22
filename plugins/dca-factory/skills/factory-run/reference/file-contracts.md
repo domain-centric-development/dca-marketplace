@@ -58,9 +58,65 @@ the file:
 
 ## Escalation
 
-A stage that cannot finish writes its file anyway, with a `## needs-human` section naming the
-open decision. The orchestrator stops the run at that point. Two situations always escalate
-rather than being solved:
+A stage that cannot finish writes its file anyway, with a `## needs-human` section, and the
+orchestrator stops the run at that point. Two situations always escalate rather than being solved:
 
 - the plan would need a new bounded context or a new relationship between contexts;
 - three build/judge rounds in a row did not converge.
+
+The section names the question as a **decision record** (below): `decision: <id>` on its own
+line. A `## needs-human` without one has asked nobody, and the next gate refuses it.
+
+## Decision records — `.agents/factory/decisions/<story>-<nn>.md`
+
+The question a stage may not answer, kept as a file of its own so the answer has a place to land
+and a second session — or the same one tomorrow, or another tool — finds it without any
+transcript. Committed with the project. Markdown with front matter, from
+`templates/decision.md.tmpl`:
+
+```markdown
+---
+id: US-3-01
+story: US-3
+stage: plan
+asked: 2026-09-22T20:40:00Z
+---
+
+# Does an archived entry count?
+
+## Question
+<what is asked, why this stage may not decide it, the evidence read>
+
+## Options
+- a: <one way>
+- b: <another>
+
+## Recommendation
+<the stage's view — never an answer>
+
+## Answer
+answer: b
+by: the-expert
+at: 2026-09-22T21:00:00Z
+rationale: <optional>
+```
+
+- `id` is `<story>-<nn>`, `nn` the next two-digit number among the story's records, and it is
+  the file name — the gate finds a record by its name and refuses one whose `id:` disagrees.
+- `stage` is the stage that asked. It is the stage that re-runs once the answer is there.
+- The state is **read off the file, never stored in it**: no `## Answer` is *open*; an
+  `## Answer` with `answer:`, `by:` and `at:` is *answered*; a gate-written `## Applied` is
+  *applied*. An `## Answer` missing the name or the time is a draft, and a draft unblocks nothing.
+- Only a human writes `## Answer`, or a skill writing the human's exact words on their explicit
+  confirmation. A recommendation, a timeout, a preselected option or an unconfirmed draft is not
+  an answer.
+- The stage that asked **applies** the answer when it runs again: its new file no longer ends in
+  `## needs-human` and cites the id where the answer landed (`Decision US-3-01 answered b: …`).
+  The gate then stamps `## Applied` into the record. Applied means the plan carries the answer,
+  not that the story is delivered.
+- The gate checks the store on **every** stage: an open record blocks the story wherever it
+  stands, and the runner does not start a stage while one is open.
+
+What this does not do, on purpose: no leases, no revision numbers, no stale-answer detection when
+the story changes underneath, no authorisation beyond `by:`. Files writable by the same user give
+process guarantees, not security ones.

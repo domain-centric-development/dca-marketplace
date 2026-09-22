@@ -100,7 +100,17 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 - <assumption from the story that the plan rests on>
 
 ## needs-human                    (only when the run must stop)
+decision: <story>-<nn>
+<one line saying what is asked>
 ```
+
+A `## needs-human` names a **decision record**: write `.agents/factory/decisions/<story>-<nn>.md`
+from the factory's `templates/decision.md.tmpl` (`nn` — the next two-digit number among this
+story's records) with the question, the options you see, the evidence you read and your
+recommendation; never an answer. The gate refuses a `## needs-human` that names no record. When
+you run again on a story whose record is answered, read the answer, plan with it, and cite the id
+in the plan where it landed (`Decision <id> answered <option>: …`) — that is what lets the gate
+stamp the record applied.
 
 ## Do not
 

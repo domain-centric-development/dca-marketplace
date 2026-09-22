@@ -254,6 +254,66 @@ def pytest_project(criterion, selector, **more):
     return fixture
 
 
+#: A decision record — the question a stage may not answer, kept where an answer can land.
+DECISION = """---
+id: STORY-1-01
+story: STORY-1
+stage: plan
+asked: 2026-09-22T20:40:00Z
+---
+
+# Does an archived thing count?
+
+## Question
+The criteria say "the thing"; the glossary knows archived things. Which the reader sees decides
+the read model.
+
+## Options
+- a: archived things are shown, marked
+- b: archived things are hidden
+
+## Recommendation
+b — the story's intent is what the reader needs now.
+"""
+
+ANSWER = """
+## Answer
+answer: b
+by: the-expert
+at: 2026-09-22T21:00:00Z
+rationale: archived is history, not inventory.
+"""
+
+PLAN_ASKING = """# Plan — STORY-1
+
+## Context
+## Changes
+## Acceptance criteria
+
+## needs-human
+decision: STORY-1-01
+Does an archived thing count? See the record.
+"""
+
+PLAN_APPLIED = """# Plan — STORY-1
+
+## Context
+Decision STORY-1-01 answered b: archived things are hidden — the read model filters them.
+## Changes
+## Acceptance criteria
+"""
+
+
+def with_decisions(*records, plan=None, **more):
+    """A fixture with decision records under .agents/factory/decisions/ and, optionally, a plan."""
+    sources = [(f".agents/factory/decisions/{name}.md", text) for name, text in records]
+    if plan is not None:
+        sources.append(("tasks/STORY-1/plan.md", plan))
+    fixture = dict(extra_sources=tuple(sources))
+    fixture.update(more)
+    return fixture
+
+
 DOCUMENT = """# Document — STORY-1
 
 ## Glossary
@@ -499,6 +559,34 @@ def verify_runner(runner, verbose=False):
               code != 0 and stages == ["plan"] and "needs-human" in output,
               f"stages that ran: {stages}, exit {code}")
 
+    # 1d2. a stage that asks writes the record; the run names it and how to resume
+    with tmpdir() as root:
+        build_project(root)
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        asking = ('mkdir -p tasks/STORY-1 .agents/factory/decisions; '
+                  'cat "$FIXTURE_DECISION" > .agents/factory/decisions/STORY-1-01.md; '
+                  'cat "$FIXTURE_PLAN" > tasks/STORY-1/plan.md')
+        with open(os.path.join(root, "decision.md"), "w", encoding="utf-8") as handle:
+            handle.write(DECISION)
+        with open(os.path.join(root, "plan.md"), "w", encoding="utf-8") as handle:
+            handle.write(PLAN_ASKING)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": asking,
+                                       "FIXTURE_DECISION": shell_path(os.path.join(root, "decision.md")),
+                                       "FIXTURE_PLAN": shell_path(os.path.join(root, "plan.md"))})
+        check("runner: a stage that asks a question names the record and the command that resumes",
+              code != 0 and ".agents/factory/decisions/STORY-1-01.md" in output
+              and "--from plan" in output,
+              [l for l in output.splitlines() if "decision" in l][:3])
+        # and with the question still open, the next run does not start a stage
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  "--from", "test", env={"FACTORY_TOOL_CMD": "true"})
+        stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
+        check("runner: while a question is open no stage runs, whatever --from says",
+              code != 0 and stages == [] and "waits for a decision" in output,
+              f"stages that ran: {stages}")
+
     # 1e. install keeps what the project owns
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
     with tmpdir() as root:
@@ -611,7 +699,7 @@ def verify_runner(runner, verbose=False):
               root not in stamped and "source:" not in stamped and "installed:" not in stamped
               and os.sep + "Users" not in stamped,
               "a path or a timestamp would be wrong in every other checkout")
-        # a newer pipeline beside the project: the record says 0.4.0, the plugin copy says otherwise
+        # a newer pipeline beside the project: the record says this version, the plugin copy says otherwise
         plugin = os.path.join(root, "newer-plugin", "factory-run", "scripts")
         os.makedirs(plugin)
         body = open(os.path.join(os.path.dirname(runner), "story-gate.py"), encoding="utf-8").read()
@@ -625,11 +713,12 @@ def verify_runner(runner, verbose=False):
               [l for l in output.splitlines() if "installed from pipeline" in l])
         # and a differing *contract* is the louder message, because it is a compatibility question
         with open(os.path.join(plugin, "story-gate.py"), "w", encoding="utf-8") as handle:
-            handle.write(body.replace("CONTRACT = 1", "CONTRACT = 7", 1))
+            handle.write(re.sub(r"^CONTRACT = \d+", "CONTRACT = 7", body, count=1, flags=re.M))
+        contract = re.search(r"^CONTRACT = (\d+)", body, re.M).group(1)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
                                   "--dry-run", env=env)
         check("install: a differing file contract is reported as a compatibility question",
-              "installed against file contract 1" in output and "implements 7" in output
+              f"installed against file contract {contract}" in output and "implements 7" in output
               and "stack profile" in output,      # the message wraps, so match per line, not across
               [l for l in output.splitlines() if "contract" in l])
 
@@ -942,6 +1031,42 @@ def main(argv=None):
               tests="# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
                     "| shows-nothing-when-empty | com.example.Widgets#showsNothingWhenEmpty |\n")),
 
+        # --- decision records ----------------------------------------------
+        # The question a stage may not answer is a file of its own, so an answer has a place to
+        # land and a second session finds it. The gate reads the state off the file: open blocks,
+        # a draft is still open, an answer is applied by the stage that asked and stamped here.
+        (Case("decisions: a needs-human section without a record has asked nobody", "test", 1,
+              must_fail=("decisions",), text=("names no `decision: <id>`",)),
+         with_decisions(plan=PLAN_ASKING.replace("decision: STORY-1-01\n", ""))),
+        (Case("decisions: a needs-human section naming a record that does not exist is refused", "test", 1,
+              must_fail=("decisions",), text=("does not exist or names another story",)),
+         with_decisions(plan=PLAN_ASKING)),
+        (Case("decisions: an open record blocks the story and says where to answer", "test", 1,
+              must_fail=("decisions",),
+              text=("STORY-1-01 is open", ".agents/factory/decisions/STORY-1-01.md", "`by:` and `at:`")),
+         with_decisions(("STORY-1-01", DECISION), plan=PLAN_ASKING)),
+        (Case("decisions: an answer without a name and a time is a draft, and a draft unblocks nothing",
+              "test", 1, must_fail=("decisions",), text=("not confirmed", "`by:`")),
+         with_decisions(("STORY-1-01", DECISION + "\n## Answer\nanswer: b\n"), plan=PLAN_ASKING)),
+        (Case("decisions: an answered record whose stage still asks says which stage to re-run", "test", 1,
+              must_fail=("decisions",), text=("re-run that stage", "--from plan")),
+         with_decisions(("STORY-1-01", DECISION + ANSWER), plan=PLAN_ASKING)),
+        (Case("decisions: a stage that ran again without citing the answer is refused", "test", 1,
+              must_fail=("decisions",), text=("does not cite STORY-1-01",)),
+         with_decisions(("STORY-1-01", DECISION + ANSWER),
+                        plan=PLAN_APPLIED.replace("STORY-1-01", "the decision"))),
+        (Case("decisions: an applied answer passes and is stamped in the record", "test", 0,
+              must_pass=("decisions",), text=("applied by stage plan", "'b' by the-expert")),
+         with_decisions(("STORY-1-01", DECISION + ANSWER), plan=PLAN_APPLIED)),
+        (Case("decisions: a record whose id is not its file name is refused", "test", 1,
+              must_fail=("decisions",), text=("the two must agree",)),
+         with_decisions(("STORY-1-02", DECISION), plan=PLAN_APPLIED)),
+        (Case("decisions: a record for another story is not this story's", "test", 0,
+              text=("no decision record for this story",)),
+         with_decisions(("STORY-9-01", DECISION.replace("STORY-1", "STORY-9")))),
+        (Case("decisions: the check runs on every stage, not only the plan gate", "build", 1,
+              must_fail=("decisions",), text=("STORY-1-01 is open",)),
+         with_decisions(("STORY-1-01", DECISION), green=both_green, ledger=both_green)),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),

@@ -48,6 +48,11 @@ A scoping question is exactly one of these, and nothing else belongs here:
    the project can name that place from now on. The record carries the question, the options
    weighed, the answer and the consequence — including what becomes possible and what becomes
    harder. A scoping answer with no file is not finished work.
+   Where the question came from a run — a `## needs-human` naming `decision: <id>` — the answer
+   also lands in that record, `.agents/factory/decisions/<id>.md`, under `## Answer` with
+   `answer:`, `by:` (the human who decided) and `at:`, pointing at the decision record you wrote.
+   Only on the human's explicit confirmation of the exact wording: a recommendation, however good,
+   is not an answer, and the gate treats an `## Answer` without a name and a time as a draft.
 7. **Update the context map in the same step — once the decision is actually taken.** A decision
    that is not on the map is a decision the next plan cannot read: the plan gate checks the story's
    context against the map, so an unrecorded answer blocks the very story this question came from.

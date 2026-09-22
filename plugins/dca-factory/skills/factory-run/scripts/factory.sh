@@ -27,6 +27,7 @@ PRE_GATED=(plan)
 POST_GATED=(test build tidy document)
 GATE=".agents/factory/story-gate.py"
 TASKS="tasks"
+DECISIONS=".agents/factory/decisions"
 
 # Which Python runs the gate. `python3` is the POSIX spelling; on Windows the interpreter is
 # `python` and `python3` is often a Store stub that opens a shop window. FACTORY_PYTHON overrides,
@@ -581,9 +582,29 @@ snapshot() {                                # snapshot <story> <label>
   } > "$journal/tree-$2.txt" 2>/dev/null || true
 }
 
+# A record under $DECISIONS that names this story and carries no '## Answer' yet. The gate does the
+# fine reading (a draft without a name is still open); this is the cheap check that keeps a run from
+# starting a stage while the story waits for a human.
+open_decisions() {                          # open_decisions <story>
+  local file
+  [ -d "$DECISIONS" ] || return 0
+  for file in "$DECISIONS"/*.md; do
+    [ -f "$file" ] || continue
+    grep -q "^story:[[:space:]]*$1[[:space:]]*$" "$file" || continue
+    grep -q '^## Answer' "$file" || echo "$file"
+  done
+}
+
 run_story() {
   local story=$1 tool=$2 from=${3:-plan} dry=${4:-}
-  local started=0 ran=""
+  local started=0 ran="" waiting
+  waiting=$(open_decisions "$story")
+  if [ -n "$waiting" ]; then
+    echo "factory: story $story waits for a decision — no stage runs until it is answered:" >&2
+    printf 'factory:   %s\n' $waiting >&2
+    echo "factory:   answer under '## Answer' with answer:, by: and at:, then run the stage that asked (--from <stage>)." >&2
+    return 1
+  fi
   for stage in "${STAGES[@]}"; do
     [ "$stage" = "$from" ] && started=1
     [ "$started" = 1 ] || continue
@@ -618,6 +639,22 @@ run_story() {
       # then builds on a decision nobody took.
       if grep -q '^## needs-human' "$artefact"; then
         echo "factory: stage '$stage' ends with a needs-human section — the run stops here." >&2
+        # The question is a record of its own, so the answer has a place to land and a second
+        # session finds it without this transcript. Name the file, and the command that resumes.
+        local ids id
+        ids=$(sed -n '/^## needs-human/,/^## /p' "$artefact" | sed -n 's/^[[:space:]-]*decision:[[:space:]]*//p')
+        if [ -z "$ids" ]; then
+          echo "factory:   the section names no 'decision: <id>' — the stage has to write the question as" >&2
+          echo "factory:   $DECISIONS/<story>-<nn>.md; the next gate refuses a question nobody was asked." >&2
+        fi
+        for id in $ids; do
+          if [ -f "$DECISIONS/$id.md" ]; then
+            echo "factory:   decision $id → $DECISIONS/$id.md — answer it there under '## Answer'" >&2
+            echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story --from $stage" >&2
+          else
+            echo "factory:   decision $id is named but $DECISIONS/$id.md does not exist." >&2
+          fi
+        done
         echo "factory:   read $artefact and decide; the stages after it were not run." >&2
         return 1
       fi

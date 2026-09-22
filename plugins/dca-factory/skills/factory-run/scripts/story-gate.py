@@ -28,6 +28,9 @@ Checks by stage:
     document  every path, file and identifier the document stage claims actually exists, every
            row of its glossary table names where its definition came from, and every term the plan
            proposed has landed in a glossary
+    every stage  the story's decision records under .agents/factory/decisions/: a `## needs-human`
+           section names one, an open one stops the story, an answered one is applied by the
+           stage that asked and then stamped `## Applied` here
 
 A command the profile does not declare is skipped and named, never failed.
 """
@@ -76,8 +79,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 1
-VERSION = "0.5.0"
+CONTRACT = 2
+VERSION = "0.6.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1196,6 +1199,181 @@ def tail(output, limit=1200):
 
 # --- result -----------------------------------------------------------------
 
+# --- decisions: the question a stage may not answer, kept where the answer can land ------------
+#
+# A stage that cannot decide writes `## needs-human` and the run stops. The question itself lives
+# in a record of its own, `<store>/<story>-<nn>.md` — markdown with front matter, committed with
+# the project — because the stage file has no place for an answer and no second session would find
+# one there. State is read from the record, never stored in it: no `## Answer` is open; an
+# `## Answer` with `answer:`, `by:` and `at:` is answered; a gate-written `## Applied` is applied.
+# A draft that lacks the actor or the time is not an answer — an unconfirmed draft unblocks nothing.
+DECISIONS_DIR = os.path.join(".agents", "factory", "decisions")
+STAGE_FILES = {"plan": "plan.md", "test": "tests.md", "build": "build.md", "tidy": "tidy.md",
+               "judge": "judge.md", "document": "document.md"}
+ANSWER_FIELDS = ("answer", "by", "at")
+
+
+def section_of(text, heading):
+    """The lines under `## <heading>` up to the next `## `, or None when the section is absent."""
+    lines, inside, body = text.splitlines(), False, []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            if inside:
+                break
+            inside = stripped[3:].split("(")[0].strip().lower() == heading
+            continue
+        if inside:
+            body.append(line)
+    return body if inside or body else None
+
+
+def fields_of(lines):
+    """`key: value` pairs in a section, first occurrence wins."""
+    data = {}
+    for line in lines or []:
+        stripped = line.strip().lstrip("-").strip()
+        if ":" in stripped:
+            key, value = stripped.split(":", 1)
+            data.setdefault(key.strip().lower(), value.strip())
+    return data
+
+
+def decision_state(text):
+    """('open' | 'draft' | 'answered' | 'applied', answer fields)."""
+    answer = fields_of(section_of(text, "answer"))
+    if section_of(text, "applied") is not None:
+        return "applied", answer
+    if section_of(text, "answer") is None:
+        return "open", answer
+    if all(answer.get(field) for field in ANSWER_FIELDS):
+        return "answered", answer
+    return "draft", answer
+
+
+def read_decisions(store, story_id):
+    """[(path, front, body, state, answer)] for every record that names this story, in id order.
+
+    A record the gate cannot read is a refusal, not a skip: a broken record hides a question."""
+    if not os.path.isdir(store):
+        return []
+    records = []
+    for name in sorted(os.listdir(store)):
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(store, name)
+        front, body = read_front_matter(path)
+        if str(front.get("story", "")).strip() != story_id:
+            continue
+        if str(front.get("id", "")).strip() != name[:-3]:
+            raise GateError(
+                f"{path}: `id:` is {front.get('id')!r}, the file is named {name[:-3]!r} — a "
+                f"record is found by its file name, so the two must agree")
+        state, answer = decision_state(body)
+        records.append((path, front, body, state, answer))
+    return records
+
+
+def needs_human_ids(text):
+    """The decision ids a `## needs-human` section names (`decision: <id>`), or [] without one;
+    None when the file has no such section at all."""
+    section = section_of(text, "needs-human")
+    if section is None:
+        return None
+    return [value for key, value in fields_of(section).items() if key == "decision" and value]
+
+
+def stamp_applied(path, stage):
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(f"\n## Applied\nat: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n"
+                     f"stage: {stage}\n")
+
+
+def check_decisions(result, tasks, story_id, cwd):
+    """Every question this story raised is recorded, and every answer it got has been applied.
+
+    Runs on every stage: an open question blocks the story wherever it stands, and a stage file
+    that escalates without a record has asked nobody."""
+    store = os.path.join(cwd, DECISIONS_DIR)
+    try:
+        records = read_decisions(store, story_id)
+    except GateError as error:
+        result.fail("decisions", str(error))
+        return
+    known = {str(front["id"]).strip(): (path, body, state) for path, front, body, state, _ in records}
+
+    # 1. a stage that stopped must have written a record for its question
+    stage_texts = {}
+    for stage, name in STAGE_FILES.items():
+        path = os.path.join(tasks, story_id, name)
+        if not os.path.isfile(path):
+            continue
+        stage_texts[stage] = read_text(path)
+        ids = needs_human_ids(stage_texts[stage])
+        if ids is None:
+            continue
+        if not ids:
+            result.fail(
+                "decisions",
+                f"{path}: `## needs-human` names no `decision: <id>` — the question has to be a "
+                f"record under {DECISIONS_DIR}/ so an answer has a place to land; without one, "
+                f"nobody was asked.",
+            )
+        for wanted in ids:
+            if wanted not in known:
+                result.fail(
+                    "decisions",
+                    f"{path}: `## needs-human` names decision {wanted!r}, but "
+                    f"{DECISIONS_DIR}/{wanted}.md does not exist or names another story.",
+                )
+
+    # 2. every record: open blocks, a draft is still open, answered must be applied by its stage
+    for path, front, body, state, answer in records:
+        rid = str(front["id"]).strip()
+        stage = str(front.get("stage", "")).strip()
+        question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
+        rel = os.path.relpath(path, cwd)
+        if state == "open":
+            result.fail(
+                "decisions",
+                f"{rid} is open — {question!r} (asked by stage {stage or '?'}). Answer it in {rel} "
+                f"under `## Answer` with `answer:`, `by:` and `at:`; the story waits until then.",
+            )
+        elif state == "draft":
+            missing = ", ".join(f"`{f}:`" for f in ANSWER_FIELDS if not answer.get(f))
+            result.fail(
+                "decisions",
+                f"{rid} has an `## Answer` that is not confirmed — {missing} missing in {rel}. "
+                f"A draft unblocks nothing; the person deciding signs it with a name and a time.",
+            )
+        elif state == "answered":
+            text = stage_texts.get(stage)
+            still_asking = text is not None and rid in (needs_human_ids(text) or [])
+            if text is None or still_asking:
+                result.fail(
+                    "decisions",
+                    f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}), but stage "
+                    f"{stage or '?'} has not run with it yet — re-run that stage "
+                    f"(`--from {stage}`); it applies the answer and cites `decision: {rid}`.",
+                )
+            elif rid not in text:
+                result.fail(
+                    "decisions",
+                    f"{rid} is answered and stage {stage} ran again, but "
+                    f"{os.path.join(tasks, story_id, STAGE_FILES.get(stage, '?'))} does not cite "
+                    f"{rid} — say where the answer landed, so the record can be stamped applied.",
+                )
+            else:
+                stamp_applied(path, stage)
+                result.ok("decisions", f"{rid} applied by stage {stage} ({answer.get('answer')!r} "
+                                       f"by {answer.get('by')}) — stamped in {rel}")
+        else:
+            result.ok("decisions", f"{rid} applied ({answer.get('answer')!r} by {answer.get('by')})")
+    if not records and not any(state == "fail" and check == "decisions"
+                               for state, check, _ in result.entries):
+        result.note("decisions", "no decision record for this story")
+
+
 class Result:
     def __init__(self):
         self.entries = []
@@ -1302,6 +1480,7 @@ def main(argv):
         check_status(result, story_path, front)
         check_epic(result, story_path, front, args.backlog)
         check_rounds(result, args.tasks, story_id)
+        check_decisions(result, args.tasks, story_id, cwd)
         if args.stage == "plan":
             check_context_map(
                 result, cwd, profile, str(front.get("context", "")).strip()

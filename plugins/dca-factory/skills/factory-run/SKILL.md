@@ -148,7 +148,9 @@ correctly after an interruption, in another session or in another tool:
 | `judge.md` with `pass`, no `document.md` | gate `document` is next after `stage-document` |
 | `document.md`, gate `document` passing | report and stop |
 | `.rounds` at 3 | stop, escalate to the human |
-| any stage file with a `## needs-human` section | stop, escalate to the human |
+| any stage file with a `## needs-human` section | stop; the section names a decision record under `.agents/factory/decisions/` — say which file and what to write into it |
+| a decision record for the story is open (no `## Answer`, or one without `by:` and `at:`) | stop — no stage runs while the story waits |
+| a decision record is answered and its `stage:` still ends in `## needs-human` | run that stage again; it applies the answer and cites the id |
 
 ## Execution tier
 
@@ -202,6 +204,15 @@ Stop the run and hand back to the human when:
 - a stage would have to add a test framework, a dependency or a build-file change to do its work.
 
 Name the decision, the file it belongs in, and who is asked. Do not decide it yourself.
+
+A question is a **file**, not a sentence in a report: the stage writes
+`.agents/factory/decisions/<story>-<nn>.md` from `templates/decision.md.tmpl` — the question, the
+options, its recommendation, never an answer — and names it in its `## needs-human` as
+`decision: <id>`. That is what makes the question survive the session and reach whoever answers
+it, in this session or another (see `reference/file-contracts.md`, *Decision records*). When you
+resume a story whose record is answered, run the stage that asked (`stage:` in the record) with
+the answer in front of it; the gate checks that its new file cites the id, and stamps the record
+applied.
 
 ## Scope
 
