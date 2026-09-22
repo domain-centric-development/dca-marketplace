@@ -32,17 +32,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def can_symlink():
-    """Whether this account may create symlinks — on Windows only with developer mode or as an
-    administrator. Where it cannot, `install` copies, and the link cases here have no subject."""
+    """Whether `ln -s` in the runner's shell makes a symlink — asked the way the installer asks it,
+    not through `os.symlink`: on Windows an administrator's Python can link while MSYS's `ln -s`
+    still copies, and the two answers would send the install and these cases different ways.
+    Where the shell cannot link, `install` copies, and the link cases here have no subject."""
     with tempfile.TemporaryDirectory() as probe:
-        try:
-            os.symlink(os.path.join(probe, "a"), os.path.join(probe, "b"))
-            return True
-        except (OSError, NotImplementedError):
-            return False
-
-
-SYMLINKS = can_symlink()
+        with open(os.path.join(probe, "a"), "w") as handle:
+            handle.write("")
+        subprocess.run([BASH, "-c", f'ln -s "{shell_path(probe)}/a" "{shell_path(probe)}/b"'],
+                       capture_output=True)
+        return os.path.islink(os.path.join(probe, "b"))
 
 
 def tmpdir():
@@ -87,8 +86,9 @@ def posix_shell():
 #: The bash the runner cases call. The same resolution the gate uses, because the same wrong
 #: answer — the WSL launcher — would make every runner case fail with an empty transcript.
 BASH = posix_shell() or "bash"
+SYMLINKS = can_symlink()
 if os.name == "nt":
-    print(f"verify: bash → {BASH}")
+    print(f"verify: bash → {BASH}; symlinks {'available' if SYMLINKS else 'unavailable, install copies'}")
 DEFAULT_GATE = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "story-gate.py"))
 DEFAULT_RUNNER = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "factory.sh"))
 
@@ -458,7 +458,8 @@ def verify_runner(runner, verbose=False):
         stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
         check("runner: every stage runs, in order, in a real run",
               stages == ["plan", "test", "build", "tidy", "judge", "document"],
-              f"stages that ran: {stages}")
+              f"stages that ran: {stages}; the run's last lines:\n"
+              + "\n".join("            " + l for l in output.strip().splitlines()[-14:]))
         check("runner: the final line names the stages that ran",
               "ran through plan,test,build,tidy,judge,document." in output,
               [l for l in output.splitlines() if "ran through" in l])

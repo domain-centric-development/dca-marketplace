@@ -39,10 +39,19 @@ if [ -z "$PY" ]; then
   else PY=python3; fi                          # named in the error the first call then produces
 fi
 
-# On Windows (Git Bash, MSYS2, Cygwin) a symlink needs developer mode or an administrator, and
-# `ln -s` without either silently makes a *copy* — a copy that then looks like a link to the rest
-# of this script. So the install copies openly there, and says so, unless the caller insists.
-on_windows() { case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; *) return 1 ;; esac; }
+# Whether `ln -s` in this shell makes a symlink. On Windows (Git Bash, MSYS2) it needs developer
+# mode or an administrator *and* `MSYS=winsymlinks:nativestrict`; without those it silently makes
+# a *copy* — a copy that then looks like a link to the rest of this script and is stale from the
+# first edit. Probed, not inferred from the platform, so a Windows that can link gets links; where
+# it cannot, the install copies openly and says so.
+can_symlink() {
+  local probe; probe=$(mktemp -d 2>/dev/null) || return 1
+  : > "$probe/a"
+  ln -s "$probe/a" "$probe/b" 2>/dev/null && [ -L "$probe/b" ]
+  local result=$?
+  rm -rf "$probe"
+  return $result
+}
 
 # A stage is finished when its hand-over file exists. The names are the file contract's, not the
 # stage names — the test stage writes `tests.md`, because the table in it maps several tests.
@@ -235,8 +244,8 @@ install_skills() {
   esac
   local source_abs; source_abs=$(cd "$from" && pwd)
   local copy_reason=""
-  if [ -z "$copy_mode" ] && on_windows; then
-    copy_mode=1; copy_reason=" — Windows: a symlink needs developer mode, so the install copies"
+  if [ -z "$copy_mode" ] && ! can_symlink; then
+    copy_mode=1; copy_reason=" — this shell cannot make symlinks (Windows without developer mode or MSYS=winsymlinks:nativestrict), so the install copies"
   fi
   for target in "${targets[@]}"; do
     # A copy of a skill folder is a second truth: an edit at the source does not reach the project,
