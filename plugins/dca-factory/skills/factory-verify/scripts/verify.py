@@ -37,7 +37,7 @@ def can_symlink():
     still copies, and the two answers would send the install and these cases different ways.
     Where the shell cannot link, `install` copies, and the link cases here have no subject."""
     with tempfile.TemporaryDirectory() as probe:
-        with open(os.path.join(probe, "a"), "w") as handle:
+        with open(os.path.join(probe, "a"), "w", encoding="utf-8") as handle:
             handle.write("")
         subprocess.run([BASH, "-c", f'ln -s "{shell_path(probe)}/a" "{shell_path(probe)}/b"'],
                        capture_output=True)
@@ -442,14 +442,14 @@ def verify_runner(runner, verbose=False):
         shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
                     os.path.join(root, ".agents", "factory", "story-gate.py"))
         # the stand-in turns the mapped tests green from the build stage onwards
-        with open(os.path.join(root, "greens.txt"), "w") as handle:
+        with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
             handle.write("")
         tests_path = os.path.join(root, "fixture-tests.md")
-        with open(tests_path, "w") as handle:
+        with open(tests_path, "w", encoding="utf-8") as handle:
             handle.write(TESTS)
         os.remove(os.path.join(root, "tasks", "STORY-1", "tests.md"))
         greens = " ".join(re.sub(r"[./#]", "", s) for s in both_green)
-        with open(os.path.join(root, "greens.txt"), "w") as handle:
+        with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
             handle.write(greens + "\n")
         env = {"FACTORY_TOOL_CMD": stand_in, "FIXTURE_TESTS": shell_path(tests_path),
                "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
@@ -467,7 +467,7 @@ def verify_runner(runner, verbose=False):
         kept = os.listdir(journal) if os.path.isdir(journal) else []     # absent when nothing ran
         check("runner: the journal records a start and an end per stage",
               os.path.isfile(os.path.join(journal, "journal.tsv"))
-              and open(os.path.join(journal, "journal.tsv")).read().count("stage-end") == 6)
+              and open(os.path.join(journal, "journal.tsv"), encoding="utf-8").read().count("stage-end") == 6)
         check("runner: a tree snapshot is kept around every stage",
               len([f for f in kept if f.startswith("tree-")]) == 12)
         check("runner: every gate run is kept, not only a refusal",
@@ -505,7 +505,7 @@ def verify_runner(runner, verbose=False):
         build_project(root)
         own = os.path.join(root, ".codex", "skills", "our-own-skill")
         os.makedirs(own)
-        with open(os.path.join(own, "SKILL.md"), "w") as handle:
+        with open(os.path.join(own, "SKILL.md"), "w", encoding="utf-8") as handle:
             handle.write("---\nname: our-own-skill\ndescription: the project's own\n---\n")
         stale = os.path.join(root, ".codex", "skills", "gone-from-the-source")
         if SYMLINKS:
@@ -526,7 +526,7 @@ def verify_runner(runner, verbose=False):
             os.makedirs(skills)
             elsewhere = os.path.join(root, "our-stage-plan")
             os.makedirs(elsewhere)
-            with open(os.path.join(elsewhere, "SKILL.md"), "w") as handle:
+            with open(os.path.join(elsewhere, "SKILL.md"), "w", encoding="utf-8") as handle:
                 handle.write("---\nname: stage-plan\ndescription: the project's own plan stage\n---\n")
             os.symlink(elsewhere, os.path.join(skills, "stage-plan"))
             run_runner(runner, root, "install", "--tool", "codex", "--from", source)
@@ -544,7 +544,7 @@ def verify_runner(runner, verbose=False):
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"],
                        cwd=root, capture_output=True)
         os.makedirs(os.path.join(root, "src", "brand-new"))
-        with open(os.path.join(root, "src", "brand-new", "Added.java"), "w") as handle:
+        with open(os.path.join(root, "src", "brand-new", "Added.java"), "w", encoding="utf-8") as handle:
             handle.write("class Added {}\n")
         run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in", "--from", "judge",
                    env={"FACTORY_TOOL_CMD": 'mkdir -p tasks/STORY-1; printf "## Verdict\\nverdict: pass\\n" '
@@ -565,7 +565,7 @@ def verify_runner(runner, verbose=False):
                  "FACTORY_TOOL_CMD": 'mkdir -p tasks/STORY-1; printf "## Verdict\\nverdict: pass\\n" '
                                      '> tasks/STORY-1/judge.md'})
         tree = os.path.join(root, "tasks", "STORY-1", ".verify", "tree-before-judge.txt")
-        first = open(tree).readline().strip() if os.path.isfile(tree) else ""
+        first = open(tree, encoding="utf-8").readline().strip() if os.path.isfile(tree) else ""
         check("snapshot: without a sha256 command the snapshot says so, and the run says it too",
               first.startswith("# no-sha256-command") and "no sha256 command found" in output,
               f"first line {first!r}")
@@ -578,7 +578,7 @@ def verify_runner(runner, verbose=False):
     with tmpdir() as root:
         build_project(root)
         shutil.rmtree(os.path.join(root, ".agents"))
-        with open(os.path.join(root, ".agents"), "w") as handle:
+        with open(os.path.join(root, ".agents"), "w", encoding="utf-8") as handle:
             handle.write("not a directory\n")
         code, output = run_runner(runner, root, "install", "--tool", "codex", "--from", source)
         check("install: a write that fails aborts the install instead of reporting success",
@@ -603,7 +603,7 @@ def verify_runner(runner, verbose=False):
         build_project(root)
         run_runner(runner, root, "install", "--tool", "codex", "--from", source)
         stamp = os.path.join(root, ".agents", "factory", "gate.installed")
-        stamped = open(stamp).read() if os.path.isfile(stamp) else ""
+        stamped = open(stamp, encoding="utf-8").read() if os.path.isfile(stamp) else ""
         check("install: the pipeline's identity and contract are recorded in the project",
               "plugin: dca-factory" in stamped and "version: " in stamped and "contract: " in stamped,
               stamped.strip().replace("\n", " | "))
@@ -615,7 +615,7 @@ def verify_runner(runner, verbose=False):
         plugin = os.path.join(root, "newer-plugin", "factory-run", "scripts")
         os.makedirs(plugin)
         body = open(os.path.join(os.path.dirname(runner), "story-gate.py")).read()
-        with open(os.path.join(plugin, "story-gate.py"), "w") as handle:
+        with open(os.path.join(plugin, "story-gate.py"), "w", encoding="utf-8") as handle:
             handle.write(body.replace('VERSION = "', 'VERSION = "9.9.9-', 1))
         env = {"FACTORY_PLUGIN_DIR": shell_path(os.path.join(root, "newer-plugin"))}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
@@ -624,7 +624,7 @@ def verify_runner(runner, verbose=False):
               "brings the project up to date" in output,
               [l for l in output.splitlines() if "installed from pipeline" in l])
         # and a differing *contract* is the louder message, because it is a compatibility question
-        with open(os.path.join(plugin, "story-gate.py"), "w") as handle:
+        with open(os.path.join(plugin, "story-gate.py"), "w", encoding="utf-8") as handle:
             handle.write(body.replace("CONTRACT = 1", "CONTRACT = 7", 1))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
                                   "--dry-run", env=env)
@@ -647,7 +647,7 @@ def verify_runner(runner, verbose=False):
                             ("story-conflict", "story-conflict")):
         with tmpdir() as root:
             os.makedirs(os.path.join(root, "tasks", "STORY-1"))
-            with open(os.path.join(root, "tasks", "STORY-1", "judge.md"), "w") as handle:
+            with open(os.path.join(root, "tasks", "STORY-1", "judge.md"), "w", encoding="utf-8") as handle:
                 handle.write(f"# Judge\n\n## Verdict\nverdict: {verdict}\n")
             code, output = run_runner(
                 runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
