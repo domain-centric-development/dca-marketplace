@@ -28,6 +28,22 @@ POST_GATED=(test build tidy document)
 GATE=".agents/factory/story-gate.py"
 TASKS="tasks"
 
+# Which Python runs the gate. `python3` is the POSIX spelling; on Windows the interpreter is
+# `python` and `python3` is often a Store stub that opens a shop window. FACTORY_PYTHON overrides,
+# for a project that pins one. Resolved once, and the *name* is what reaches the profile and the
+# permission list, so both stay portable between machines.
+PY="${FACTORY_PYTHON:-}"
+if [ -z "$PY" ]; then
+  if command -v python3 >/dev/null 2>&1; then PY=python3
+  elif command -v python >/dev/null 2>&1; then PY=python
+  else PY=python3; fi                          # named in the error the first call then produces
+fi
+
+# On Windows (Git Bash, MSYS2, Cygwin) a symlink needs developer mode or an administrator, and
+# `ln -s` without either silently makes a *copy* — a copy that then looks like a link to the rest
+# of this script. So the install copies openly there, and says so, unless the caller insists.
+on_windows() { case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; *) return 1 ;; esac; }
+
 # A stage is finished when its hand-over file exists. The names are the file contract's, not the
 # stage names — the test stage writes `tests.md`, because the table in it maps several tests.
 stage_file() {
@@ -125,7 +141,7 @@ detect_tool() {
 # is ignored while the workspace is untrusted — so the allowlist is passed on the command line.
 allowed_commands() {
   local profile="${FACTORY_PROFILE:-.agents/factory/factory.profile.yaml}"
-  local list="Bash(python3 $GATE:*)"
+  local list="Bash($PY $GATE:*)"
   if [ -f "$profile" ]; then
     local head
     for key in compile test e2eTest architecture format; do
@@ -218,6 +234,10 @@ install_skills() {
     *)        usage ;;
   esac
   local source_abs; source_abs=$(cd "$from" && pwd)
+  local copy_reason=""
+  if [ -z "$copy_mode" ] && on_windows; then
+    copy_mode=1; copy_reason=" — Windows: a symlink needs developer mode, so the install copies"
+  fi
   for target in "${targets[@]}"; do
     # A copy of a skill folder is a second truth: an edit at the source does not reach the project,
     # and the project keeps running yesterday's process while its author believes otherwise (that
@@ -231,7 +251,7 @@ install_skills() {
     if [ -n "$copy_mode" ]; then
       must "create $target" mkdir -p "$target"
       must "copy the skills into $target" cp -R "$source_abs"/* "$target"/
-      echo "factory: skills → $target (copied; re-run install after a skill is added)"
+      echo "factory: skills → $target (copied${copy_reason}; re-run install after a skill is added)"
       continue
     fi
     local method_dirs; method_dirs=$(method_skill_dirs "$source_abs")
@@ -376,6 +396,13 @@ write_profile() {
     # command's scope is the whole project. A Gradle or Maven task is *not* that — `./gradlew test`
     # runs one source set — which is why this is declared here rather than guessed by the gate.
     covers="**"
+  elif [ -f pytest.ini ] || [ -f conftest.py ] || grep -qs "^\[tool\.pytest" pyproject.toml || grep -qs "^\[pytest\]" setup.cfg tox.ini; then
+    # pytest selects by path — `tests/test_x.py::test_y` — so the filter names the file the gate
+    # located, not a dotted class. `--junitxml` puts the report where the gate looks by convention.
+    # No `compile:`: Python has none worth the name, and a skipped check is named, not faked.
+    test="$PY -m pytest -q --junitxml=test-results/pytest.xml"
+    filter_format='"{file}::{method}"'
+    covers="**"
   fi
   if [ -n "$conventions" ]; then
     local stated
@@ -383,7 +410,7 @@ write_profile() {
     [ -n "$stated" ] && architecture="$stated"
     echo "factory: read build facts from $conventions"
   fi
-  python3 - "$compile" "$test" "$architecture" "$filter_flag" "$filter_format" "$covers" <<'PYEOF'
+  "$PY" - "$compile" "$test" "$architecture" "$filter_flag" "$filter_format" "$covers" <<'PYEOF'
 import sys
 compile_, test, architecture, filter_flag, filter_format, covers = sys.argv[1:7]
 path = ".agents/factory/factory.profile.yaml"
@@ -420,8 +447,9 @@ write_claude_permissions() {
   # so the gate cannot run and no stage can be verified — the tool then stops, correctly. These
   # two entries are the smallest allowlist that lets the pipeline verify itself; every other
   # command still asks.
-  python3 - <<'PYEOF'
-import json, os
+  "$PY" - "$PY" <<'PYEOF'
+import json, os, sys
+python = sys.argv[1]
 path = ".claude/settings.json"
 os.makedirs(".claude", exist_ok=True)
 settings = {}
@@ -429,7 +457,7 @@ if os.path.isfile(path):
     with open(path) as handle:
         settings = json.load(handle)
 allow = settings.setdefault("permissions", {}).setdefault("allow", [])
-wanted = ["Bash(python3 .agents/factory/story-gate.py:*)"]
+wanted = [f"Bash({python} .agents/factory/story-gate.py:*)"]
 profile = ".agents/factory/factory.profile.yaml"
 if os.path.isfile(profile):
     for line in open(profile):
@@ -482,7 +510,7 @@ gate() {                                    # gate <stage> <story>
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh install'" >&2; return 2; }
   local report="$TASKS/$2/.gate-$1.txt" journal="$TASKS/$2/.verify"
   mkdir -p "$TASKS/$2" "$journal"
-  python3 "$GATE" --story "$2" --stage "$1" 2>&1 | tee "$report"
+  "$PY" "$GATE" --story "$2" --stage "$1" 2>&1 | tee "$report"
   local code=${PIPESTATUS[0]}
   # Every gate run is kept for the observer, with its verdict; only a *refusal* is kept where the
   # next stage reads it. A run that has to be reconstructed afterwards from what a stage claimed is

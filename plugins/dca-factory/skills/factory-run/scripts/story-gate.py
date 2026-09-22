@@ -38,6 +38,7 @@ import os
 import re
 import glob
 import hashlib
+import shutil
 import subprocess
 import sys
 import time
@@ -69,7 +70,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 1
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -460,10 +461,25 @@ def check_mapping(result, tasks, story_id, criteria):
 
 def check_exists(result, cwd, mapping):
     """A selector must point at a test that is actually there. Without this check a
-    missing test looks exactly like a red one, and the run would certify nothing."""
+    missing test looks exactly like a red one, and the run would certify nothing.
+
+    Two shapes resolve a selector's class part to a file, and both are strict about it:
+
+    * **a file named after the class** — `com.example.WidgetTest#shows` lives in `WidgetTest.java`
+      wherever that file is. JUnit, xUnit, NUnit, MSTest, Kotlin: one class per file.
+    * **a file named by the module path** — `tests.test_widgets#test_shows` lives in
+      `tests/test_widgets.py`, and `tests.test_widgets.TestWidgets#test_shows` in the same file.
+      The class part is read as a dotted path; the longest prefix that *is* a file (by path, not by
+      basename) is the module, and every remaining segment must be declared in it. pytest, and any
+      stack whose tests are functions in a module.
+
+    A basename that happens to match elsewhere never counts for the second shape: `com.example`
+    would have to exist as `com/example.<ext>`, which is what keeps a Java class in a file not
+    named after it *not found*, exactly as before.
+    """
     if not mapping:
         return
-    sources = {}
+    sources, by_path = {}, {}
     for root, dirs, files in os.walk(cwd):
         dirs[:] = [
             d
@@ -471,9 +487,10 @@ def check_exists(result, cwd, mapping):
             if d not in ("build", "out", "bin", "obj", "target", "node_modules", ".git")
         ]
         for name in files:
-            sources.setdefault(os.path.splitext(name)[0], []).append(
-                os.path.join(root, name)
-            )
+            full = os.path.join(root, name)
+            sources.setdefault(os.path.splitext(name)[0], []).append(full)
+            stem = os.path.splitext(os.path.relpath(full, cwd))[0].replace(os.sep, "/")
+            by_path.setdefault(stem, []).append(full)
     located = {}
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
@@ -481,11 +498,15 @@ def check_exists(result, cwd, mapping):
             simple = cls.rsplit(".", 1)[-1]
             candidates = sources.get(simple, [])
             found = [path for path in candidates if contains(path, method)]
+            shape = "a file named after the class"
+            if not found and not candidates:
+                found = module_files(by_path, cls, method)
+                shape = "the module path"
             if found:
                 located[selector] = os.path.relpath(found[0], cwd)
                 result.ok(
                     "tests-exist",
-                    f"{selector} found in {located[selector]} ({key})",
+                    f"{selector} found in {located[selector]} ({key}, by {shape})",
                 )
             elif candidates:
                 result.fail(
@@ -512,7 +533,40 @@ def contains(path, needle):
         return False
 
 
+def module_files(by_path, cls, method):
+    """The files a dotted class part names as a module path, longest prefix first.
+
+    `a.b.C` is tried as the file `a/b/C.*`, then `a/b.*` holding `C`, then `a.*` holding `b` and
+    `C` — each as a path suffix of some source file, never as a bare basename. The remaining
+    segments and the method must all appear in the file, so a module that has the function but not
+    the class it is claimed to sit in is not a match either.
+    """
+    segments = cls.split(".")
+    for cut in range(len(segments), 0, -1):
+        prefix, rest = "/".join(segments[:cut]), segments[cut:]
+        hits = [path for stem, paths in by_path.items()
+                if stem == prefix or stem.endswith("/" + prefix)
+                for path in paths]
+        found = [path for path in hits
+                 if all(contains(path, name) for name in rest) and contains(path, method)]
+        if found:
+            return found
+    return []
+
+
 def run(command, cwd):
+    """Run one profile command through a shell.
+
+    The profile is written for a POSIX shell — `a && b`, `sh runner.sh`, quoting — and the runner
+    and the commit hook are bash, so on Windows the same commands go through the bash that Git
+    installs when it is on PATH (Git Bash, WSL's launcher, MSYS2). Without one, `cmd.exe` gets
+    them, and a profile that leans on POSIX syntax fails there loudly rather than subtly.
+    """
+    if os.name == "nt" and shutil.which("bash"):
+        completed = subprocess.run(
+            ["bash", "-c", command], cwd=cwd, capture_output=True, text=True
+        )
+        return completed.returncode, completed.stdout + completed.stderr
     completed = subprocess.run(
         command, cwd=cwd, shell=True, capture_output=True, text=True
     )
@@ -718,8 +772,22 @@ REPORT_GLOBS = (
     "**/TestResults/**/*.trx",
     "**/*.trx",
 )
-#: A selector no project can contain — the control run's subject (see `discriminates`).
-SENTINEL = ("dev.dca.factory.NoSuchTestClass", "noSuchTestMethod")
+#: A selector no project can contain — the control run's subject (see `discriminates`): the class,
+#: the method, and the file a `{file}` placeholder would name for it.
+SENTINEL = ("dev.dca.factory.NoSuchTestClass", "noSuchTestMethod", "dev/dca/factory/NoSuchTest.py")
+
+
+def fill(fmt, cls, method, test_path=None):
+    """The runner's filter argument for one selector.
+
+    `{class}` and `{method}` are the selector's two halves. `{file}` is the source file the selector
+    was located in, relative to the project root and with forward slashes — the handle runners
+    that select by path want (`pytest tests/test_x.py::test_y`), which no dotted name gives them.
+    """
+    text = fmt.replace("{class}", cls).replace("{method}", method)
+    if test_path is not None:
+        text = text.replace("{file}", test_path.replace(os.sep, "/"))
+    return text
 NOISE = re.compile(r"\b\d+(\.\d+)?\s*(ms|s|sec|seconds|minutes)\b|\b\d{2}:\d{2}:\d{2}\b")
 
 
@@ -780,6 +848,12 @@ def reports_from_this_run(before, after, marker):
     return fresh
 
 
+#: One test, several report cases: a parametrised test reports `test_x[a]`, `test_x[b]`, …, and a
+#: JUnit writer may append the signature, `test_x(int)`. All of them are the mapped test, and one
+#: failing case fails it — so the outcomes merge, and failed wins.
+OUTCOME_RANK = {"failed": 2, "passed": 1, "skipped": 0}
+
+
 def executed_tests(paths):
     """{(class, method): outcome} for every test a report says ran. Outcome is 'passed' or 'failed'.
 
@@ -788,6 +862,11 @@ def executed_tests(paths):
     message says what a process printed — neither says a test ran.
     """
     ran = {}
+
+    def record(cls, method, outcome):
+        key = (cls, re.split(r"[(\[]", method, maxsplit=1)[0])
+        if OUTCOME_RANK[outcome] >= OUTCOME_RANK.get(ran.get(key), -1):
+            ran[key] = outcome
     for path in paths:
         try:
             root = ElementTree.parse(path).getroot()
@@ -805,15 +884,15 @@ def executed_tests(paths):
                     elif child.tag.rsplit("}", 1)[-1] == "skipped":
                         outcome = "skipped"
                 if method:
-                    ran[(cls, method.split("(")[0])] = outcome
+                    record(cls, method, outcome)
             elif tag == "UnitTestResult":                           # TRX
                 name = (case.get("testName") or "").strip()
                 outcome = (case.get("outcome") or "").strip().lower()
                 if name:
                     cls, _, method = name.rpartition(".")
-                    ran[(cls, method.split("(")[0])] = (
-                        "passed" if outcome == "passed" else
-                        "skipped" if outcome in ("notexecuted", "skipped") else "failed")
+                    record(cls, method,
+                           "passed" if outcome == "passed" else
+                           "skipped" if outcome in ("notexecuted", "skipped") else "failed")
     return ran
 
 
@@ -896,7 +975,7 @@ def discriminates(command, flag, fmt, cwd, cache):
     "no tests found" line answers differently without having run anything.
     """
     if command not in cache:
-        pattern = fmt.replace("{class}", SENTINEL[0]).replace("{method}", SENTINEL[1])
+        pattern = fill(fmt, SENTINEL[0], SENTINEL[1], SENTINEL[2])
         code, output = run(f'{command} {flag} "{pattern}"'.strip(), cwd)
         cache[command] = (code, normalise(output, cwd))
     return cache[command]
@@ -923,8 +1002,17 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
             cls, method = SELECTOR.match(selector).groups()
-            pattern = fmt.replace("{class}", cls).replace("{method}", method)
             test_path = located.get(selector)
+            if "{file}" in fmt and not test_path:
+                # The filter names the file, and no file was found for this selector — running the
+                # placeholder literally would select nothing, and that exits 0 on some runners.
+                result.fail(
+                    f"tests-{expected}",
+                    f"{selector}: `filterFormat` selects by `{{file}}`, but no source file was "
+                    f"located for it — nothing to run for {key!r}.",
+                )
+                continue
+            pattern = fill(fmt, cls, method, test_path)
             command_key, command = command_for(profile, test_path) if test_path else (None, None)
             if not command and test_path:
                 # Running it with some other command proves nothing in either direction: a runner

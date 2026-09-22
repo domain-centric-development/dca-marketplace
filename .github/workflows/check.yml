@@ -2,8 +2,12 @@ name: check
 
 # The pipeline's own test suite. `factory-verify` builds a throwaway project per case and calls the
 # real gate and the real runner, so it is the only argument that the factory works other than "an
-# agent said it did". It runs on two operating systems on purpose: the gate is portable Python, but
+# agent said it did". It runs on three operating systems on purpose: the gate is portable Python, but
 # the runner is a shell script, and a shell assumption holds on one platform and not on the other.
+# Windows runs it under Git Bash — the supported route there — where symlinks are unavailable and
+# `python3` is not a given, which is exactly what the install and the runner have to cope with.
+# pytest is installed because the suite drives it as a real second test stack; without it those
+# cases are skipped and named, which would prove nothing about that stack.
 #
 # The `derived` job guards the two generated artifacts this repository ships. Root AGENTS.md rule 7
 # says never hand-edit a generated artifact, and until now nothing checked that the source had not
@@ -22,30 +26,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+      - name: pytest, the second test stack the suite drives
+        run: python -m pip install --quiet pytest
       - name: Syntax
         run: |
           bash -n plugins/dca-factory/skills/factory-run/scripts/factory.sh
           bash -n plugins/dca-factory/skills/factory-run/templates/githooks/pre-commit
-          python3 -m py_compile \
+          python -m py_compile \
             plugins/dca-factory/skills/factory-run/scripts/story-gate.py \
             plugins/dca-factory/skills/factory-verify/scripts/verify.py \
             plugins/dca-factory/skills/factory-verify/scripts/observe.py \
             scripts/render-rule-catalog.py
       - name: Manifests are valid JSON
         run: |
-          python3 -c "import json,glob,sys; [json.load(open(p)) for p in \
+          python -c "import json,glob,sys; [json.load(open(p)) for p in \
             ['.claude-plugin/marketplace.json'] + glob.glob('plugins/*/.claude-plugin/plugin.json')]"
       - name: Every skill has a name and a description
-        run: python3 scripts/check-skills.py
+        run: python scripts/check-skills.py
       - name: factory-verify
-        run: python3 plugins/dca-factory/skills/factory-verify/scripts/verify.py
+        run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py
 
   derived:
     name: generated artifacts are current

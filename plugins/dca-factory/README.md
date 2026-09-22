@@ -132,26 +132,38 @@ plugs in through `FACTORY_TOOL_CMD`. Run the stage skills in-session and no adap
 all — the file contracts and the gate are what make a run honest, not the runner.
 
 **Operating systems.** The gate is standard-library Python 3 and runs wherever Python does. The
-runner and the commit hook are bash, and the install makes symlinks, so both want a POSIX shell:
-Linux and macOS are what the pipeline's own suite runs on in CI. Windows is reachable through WSL
-or Git Bash and is **not tested** — expect the symlink step to need developer mode and `python3` to
-be spelled `python`. A project on Windows can still use the gate on its own: it is one file and one
+runner and the commit hook are bash, so both want a POSIX shell. Linux, macOS and **Windows under
+Git Bash** are what the pipeline's own suite runs on in CI. On Windows the install copies the skills
+instead of linking them (a symlink needs developer mode, and `ln -s` without it makes a silent copy
+anyway), the runner picks `python3` or `python`, whichever the machine has (`FACTORY_PYTHON`
+overrides), and the gate runs the profile's commands through the bash on `PATH`, so a profile is
+written for a POSIX shell on every platform. WSL is the same route with a Linux userland and needs
+none of that. A project on Windows can still use the gate on its own: it is one file and one
 command line.
 
 **Test stacks.** The criterion-to-test mapping is a selector of the form `<class>#<method>`, and
 the gate needs three things to line up behind it: a filter the runner accepts (`filterFlag`,
-`filterFormat`), a source file it can find (it looks for a file **named after the class** and
-containing the method's name), and a report that names the case (JUnit XML or TRX, matched on
-class plus method or a declared display name). That holds for **JUnit on Gradle and Maven** and
-for **xUnit, NUnit and MSTest on `dotnet test`** — the two stacks the suite covers — and for
-Kotlin or any other JVM language that keeps one class per file named after it.
+`filterFormat`), a source file it can find, and a report that names the case (JUnit XML or TRX,
+matched on class plus method or a declared display name). Two shapes resolve the class part to a
+file:
 
-It does **not** hold for pytest, Go, Jest or any stack whose tests are functions in a file rather
-than methods of a class named after their file. Reading their JUnit XML is the easy half; the
-selector, the source lookup and the report identity all have to agree, and today they are wired to
-the class-per-file shape. Extending the profile to declare that shape per stack is the open piece
-of work — done for a concrete second stack rather than in the abstract, so the evidence chain is
-proved and not just parameterised.
+- **a file named after the class** — `com.example.WidgetTest` in `WidgetTest.java`, wherever it
+  is. **JUnit on Gradle and Maven**, **xUnit, NUnit and MSTest on `dotnet test`**, Kotlin and any
+  JVM language that keeps one class per file.
+- **a file named by the module path** — `tests.test_widgets` in `tests/test_widgets.py`, and
+  `tests.test_widgets.TestWidgets` in the same file. The class part is read as a dotted path and
+  the longest prefix that is a file (by path, never by a stray basename) is the module; the
+  remaining segments must be declared in it. **pytest** is the stack the suite drives, with real
+  pytest: located, selected by `filterFormat: "{file}::{method}"` — `{file}` is the located
+  source, the handle a runner that selects by path needs — and read back from the JUnit XML that
+  `--junitxml` writes. A parametrised test is one test in that reading, and one failing case
+  fails it.
+
+What still does not hold: selecting a pytest method that sits in a class (it is *found*, but
+`{file}::{method}` names the function level, so pytest runs nothing and the gate says so), and
+stacks whose tests carry no dotted identity at all — Jest's `describe`/`it` strings, Go's
+package-level functions. Each of those is one more shape, to be added for a concrete stack when
+one asks for it, never in the abstract.
 
 ## Versions, and what a version answers
 

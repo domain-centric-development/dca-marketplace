@@ -45,8 +45,11 @@ the file:
 ```
 
 - `criterion` is the key from the story's acceptance criteria.
-- `test` is `<fully qualified class>#<method>`. The stack profile decides how that becomes a
-  filter argument for the runner (`filterFormat`).
+- `test` is `<fully qualified class>#<method>`. The class part is a dotted name: a class in a
+  file named after it (`com.example.WidgetTest`), or a module path with an optional class in it
+  (`tests.test_widgets`, `tests.test_widgets.TestWidgets`). The stack profile decides how that
+  becomes a filter argument for the runner (`filterFormat`, with `{class}`, `{method}` and the
+  located `{file}`).
 - Every criterion needs at least one row, and the gate looks the test up in the sources: a row
   without a test would look exactly like a red test at the runner, so the run would certify
   nothing. A criterion with no test at all is a criterion the build gate can never fail on.

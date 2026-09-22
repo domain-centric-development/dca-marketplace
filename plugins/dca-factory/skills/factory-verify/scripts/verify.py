@@ -22,6 +22,32 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def can_symlink():
+    """Whether this account may create symlinks — on Windows only with developer mode or as an
+    administrator. Where it cannot, `install` copies, and the link cases here have no subject."""
+    with tempfile.TemporaryDirectory() as probe:
+        try:
+            os.symlink(os.path.join(probe, "a"), os.path.join(probe, "b"))
+            return True
+        except (OSError, NotImplementedError):
+            return False
+
+
+SYMLINKS = can_symlink()
+
+
+def tmpdir():
+    """A throwaway project directory. `ignore_cleanup_errors`: a fixture that ran `git init` leaves
+    read-only objects behind, and on Windows removing those raises — which is nothing about the
+    case that ran in it."""
+    return tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+
+
+def shell_path(path):
+    """A path as bash reads it on every platform — forward slashes, `C:/…` on Windows."""
+    return path.replace("\\", "/")
 DEFAULT_GATE = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "story-gate.py"))
 DEFAULT_RUNNER = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "factory.sh"))
 
@@ -136,6 +162,56 @@ filterFlag: --select
 filterFormat: "{class}#{method}"
 architecture: true
 """
+
+#: The second shape the selector resolves through, with a real runner rather than a stub: tests
+#: are functions in a module, the module is named by its path, and pytest writes the JUnit XML the
+#: gate reads. The markers under green/ are the same convention the stub runners use.
+PYTEST_MODULE = """import os
+
+import pytest
+
+
+def test_shows_the_thing():
+    assert os.path.exists("green/teststest_widgetstest_shows_the_thing")
+
+
+class TestWidgets:
+    def test_shows_nothing_when_empty(self):
+        assert os.path.exists("green/teststest_widgetsTestWidgetstest_shows_nothing_when_empty")
+
+
+@pytest.mark.parametrize("case", ["a", "b"])
+def test_in_every_case(case):
+    assert os.path.exists(f"green/teststest_widgetstest_in_every_case-{case}")
+"""
+
+PYTEST_PROFILE = """test: {python} -m pytest -q --junitxml=test-results/pytest.xml
+covers.test: **
+filterFormat: "{{file}}::{{method}}"
+architecture: true
+"""
+
+
+def pytest_available():
+    probe = subprocess.run([sys.executable, "-m", "pytest", "--version"],
+                           capture_output=True, text=True)
+    return probe.returncode == 0
+
+
+def pytest_project(criterion, selector, **more):
+    """A fixture whose runner is pytest itself, mapping one criterion to one selector."""
+    fixture = dict(
+        story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", "")
+                   .replace("shows-nothing-when-empty", criterion),
+        tests=f"# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
+              f"| {criterion} | {selector} |\n",
+        profile=PYTEST_PROFILE.format(python=sys.executable.replace("\\", "/")),
+        extra_sources=(("tests/test_widgets.py", PYTEST_MODULE),
+                       ("pytest.ini", "[pytest]\ntestpaths = tests\n")),
+    )
+    fixture.update(more)
+    return fixture
+
 
 DOCUMENT = """# Document — STORY-1
 
@@ -284,7 +360,7 @@ def verify_runner(runner, verbose=False):
             print(f"          {detail}")
 
     # 1. the stage order, and which gate runs before its stage and which after
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
                     os.path.join(root, ".agents", "factory", "story-gate.py"))
@@ -319,7 +395,7 @@ def verify_runner(runner, verbose=False):
         '  for s in $(cat "$FIXTURE_GREEN" 2>/dev/null); do mkdir -p green; : > "green/$s"; done ;; '
         'esac'
     )
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
                     os.path.join(root, ".agents", "factory", "story-gate.py"))
@@ -333,8 +409,8 @@ def verify_runner(runner, verbose=False):
         greens = " ".join(re.sub(r"[./#]", "", s) for s in both_green)
         with open(os.path.join(root, "greens.txt"), "w") as handle:
             handle.write(greens + "\n")
-        env = {"FACTORY_TOOL_CMD": stand_in, "FIXTURE_TESTS": tests_path,
-               "FIXTURE_GREEN": os.path.join(root, "greens.txt")}
+        env = {"FACTORY_TOOL_CMD": stand_in, "FIXTURE_TESTS": shell_path(tests_path),
+               "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
                                   env=env)
         stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
@@ -355,7 +431,7 @@ def verify_runner(runner, verbose=False):
                    if f.startswith("gate-")]) >= 4)
 
     # 1c. a stage that writes no file stops the run, and says which file was missing
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
                     os.path.join(root, ".agents", "factory", "story-gate.py"))
@@ -366,7 +442,7 @@ def verify_runner(runner, verbose=False):
               output.strip().splitlines()[-1] if output.strip() else "no output")
 
     # 1d. a stage that escalates stops the run
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
                     os.path.join(root, ".agents", "factory", "story-gate.py"))
@@ -381,39 +457,44 @@ def verify_runner(runner, verbose=False):
               f"stages that ran: {stages}, exit {code}")
 
     # 1e. install keeps what the project owns
-    source = os.path.normpath(os.path.join(os.path.dirname(runner), "..", ".."))
-    with tempfile.TemporaryDirectory() as root:
+    source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
+    with tmpdir() as root:
         build_project(root)
         own = os.path.join(root, ".codex", "skills", "our-own-skill")
         os.makedirs(own)
         with open(os.path.join(own, "SKILL.md"), "w") as handle:
             handle.write("---\nname: our-own-skill\ndescription: the project's own\n---\n")
         stale = os.path.join(root, ".codex", "skills", "gone-from-the-source")
-        os.symlink(os.path.join(source, "no-longer-here"), stale)
+        if SYMLINKS:
+            os.symlink(os.path.join(source, "no-longer-here"), stale)
         run_runner(runner, root, "install", "--tool", "codex", "--from", source)
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
         check("install: a skill the project owns survives the install",
               "our-own-skill" in entries and
               os.path.isfile(os.path.join(own, "SKILL.md")),
               f"{sorted(entries)[:5]}…")
-        check("install: a link whose skill is gone from the source is pruned",
-              "gone-from-the-source" not in entries)
-    with tempfile.TemporaryDirectory() as root:
-        build_project(root)
-        skills = os.path.join(root, ".codex", "skills")
-        os.makedirs(skills)
-        elsewhere = os.path.join(root, "our-stage-plan")
-        os.makedirs(elsewhere)
-        with open(os.path.join(elsewhere, "SKILL.md"), "w") as handle:
-            handle.write("---\nname: stage-plan\ndescription: the project's own plan stage\n---\n")
-        os.symlink(elsewhere, os.path.join(skills, "stage-plan"))
-        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
-        check("install: a link the *project* made is not replaced either",
-              os.path.realpath(os.path.join(skills, "stage-plan")) == os.path.realpath(elsewhere),
-              f"stage-plan now points at {os.path.realpath(os.path.join(skills, 'stage-plan'))}")
+        if SYMLINKS:
+            check("install: a link whose skill is gone from the source is pruned",
+                  "gone-from-the-source" not in entries)
+    if SYMLINKS:
+        with tmpdir() as root:
+            build_project(root)
+            skills = os.path.join(root, ".codex", "skills")
+            os.makedirs(skills)
+            elsewhere = os.path.join(root, "our-stage-plan")
+            os.makedirs(elsewhere)
+            with open(os.path.join(elsewhere, "SKILL.md"), "w") as handle:
+                handle.write("---\nname: stage-plan\ndescription: the project's own plan stage\n---\n")
+            os.symlink(elsewhere, os.path.join(skills, "stage-plan"))
+            run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+            check("install: a link the *project* made is not replaced either",
+                  os.path.realpath(os.path.join(skills, "stage-plan")) == os.path.realpath(elsewhere),
+                  f"stage-plan now points at {os.path.realpath(os.path.join(skills, 'stage-plan'))}")
+    else:
+        print("  skip  install: the two link cases — this account cannot create symlinks, so install copies")
 
     # 1f. the snapshot sees files in a directory this run added
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
@@ -432,7 +513,7 @@ def verify_runner(runner, verbose=False):
 
     # 1g. no sha256 command on the machine: the snapshot says so instead of recording empty
     # digests, because empty digests compare equal and would read as "this stage changed nothing".
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         code, output = run_runner(
@@ -451,7 +532,7 @@ def verify_runner(runner, verbose=False):
 
     # 1h. an install step that cannot write must abort, not report success. A regular file where
     # `.agents/factory` has to be a directory is the cheapest way to make one `mkdir` fail.
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         shutil.rmtree(os.path.join(root, ".agents"))
         with open(os.path.join(root, ".agents"), "w") as handle:
@@ -464,7 +545,7 @@ def verify_runner(runner, verbose=False):
 
     # 1i. the architecture test is found where source layouts actually put it — several directories
     # down. A `**` glob without `shopt -s globstar` matches one level and reported none.
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root, extra_sources=(
             ("src/test-architecture/java/com/example/ArchitectureTest.java",
              "class ArchitectureTest {}\n"),))
@@ -475,7 +556,7 @@ def verify_runner(runner, verbose=False):
 
     # 1j. the install stamps where the gate came from, and a later run says when the project is
     # behind the pipeline. The gate itself cannot tell: a copied script has nothing to compare to.
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         run_runner(runner, root, "install", "--tool", "codex", "--from", source)
         stamp = os.path.join(root, ".agents", "factory", "gate.installed")
@@ -493,7 +574,7 @@ def verify_runner(runner, verbose=False):
         body = open(os.path.join(os.path.dirname(runner), "story-gate.py")).read()
         with open(os.path.join(plugin, "story-gate.py"), "w") as handle:
             handle.write(body.replace('VERSION = "', 'VERSION = "9.9.9-', 1))
-        env = {"FACTORY_PLUGIN_DIR": os.path.join(root, "newer-plugin")}
+        env = {"FACTORY_PLUGIN_DIR": shell_path(os.path.join(root, "newer-plugin"))}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
                                   "--dry-run", env=env)
         check("install: a run says when the project is behind the pipeline beside it",
@@ -510,7 +591,7 @@ def verify_runner(runner, verbose=False):
               [l for l in output.splitlines() if "contract" in l])
 
     # 2. the artefact name the runner waits for is the file contract's, not the stage's name
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
                                   "--from", "test", "--dry-run")
@@ -521,7 +602,7 @@ def verify_runner(runner, verbose=False):
     # 3. the judge's verdict decides what comes next
     for verdict, expect in (("pass", "pass"), ("changes-requested", "changes-requested"),
                             ("story-conflict", "story-conflict")):
-        with tempfile.TemporaryDirectory() as root:
+        with tmpdir() as root:
             os.makedirs(os.path.join(root, "tasks", "STORY-1"))
             with open(os.path.join(root, "tasks", "STORY-1", "judge.md"), "w") as handle:
                 handle.write(f"# Judge\n\n## Verdict\nverdict: {verdict}\n")
@@ -538,7 +619,7 @@ def verify_runner(runner, verbose=False):
                   f"parsed {parsed!r}")
 
     # 4. the round counter is a file, and it counts up
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         os.makedirs(os.path.join(root, "tasks", "STORY-1"))
         counted = subprocess.run(
             ["bash", "-c",
@@ -549,19 +630,27 @@ def verify_runner(runner, verbose=False):
               f"got {counted}")
 
     # 5. install leaves a live link, not a copy — and the whole set where it can
-    source = os.path.normpath(os.path.join(os.path.dirname(runner), "..", ".."))
-    with tempfile.TemporaryDirectory() as root:
+    source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
+    with tmpdir() as root:
         build_project(root)
         code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", source)
         target = os.path.join(root, ".claude", "skills")
-        check("install: the pipeline's skills are one live link for Claude Code",
-              os.path.islink(target) and os.path.realpath(target) == os.path.realpath(source),
-              f"{target} → {os.path.realpath(target) if os.path.exists(target) else 'missing'}")
+        if SYMLINKS:
+            check("install: the pipeline's skills are one live link for Claude Code",
+                  os.path.islink(target) and os.path.realpath(target) == os.path.realpath(source),
+                  f"{target} → {os.path.realpath(target) if os.path.exists(target) else 'missing'}")
+        else:
+            # No symlinks for this account: the install copies and says so, rather than failing
+            # on a `ln -s` that this shell cannot honour.
+            check("install: without symlinks the skills are copied, and the install says why",
+                  os.path.isdir(os.path.join(target, "factory-run")) and not os.path.islink(target)
+                  and "copied" in output,
+                  [l for l in output.splitlines() if "skills" in l][:2])
         check("install: the gate is copied into the project, where every tool and CI can call it",
               os.path.isfile(os.path.join(root, ".agents", "factory", "story-gate.py")))
         check("install: a stack profile is written when the project has none",
               os.path.isfile(os.path.join(root, ".agents", "factory", "factory.profile.yaml")))
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         run_runner(runner, root, "install", "--tool", "codex", "--from", source)
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
@@ -570,7 +659,7 @@ def verify_runner(runner, verbose=False):
         check("install: a tool without plugins also gets the craft the profile may name",
               pipeline.issubset(set(entries)) and len(entries) > len(pipeline),
               f"{len(entries)} skills: {sorted(entries)[:6]}…")
-    with tempfile.TemporaryDirectory() as root:
+    with tmpdir() as root:
         build_project(root)
         run_runner(runner, root, "install", "--tool", "claude", "--from", source, "--copy")
         target = os.path.join(root, ".claude", "skills", "factory-run")
@@ -844,9 +933,43 @@ def main(argv=None):
               document=DOCUMENT + "\n## needs-human\n\nSomeone has to decide.\n")),
     ]
 
+    # --- the second shape, on a real runner ----------------------------------
+    # The cases above drive stubs, so they prove the gate's logic and nothing about a runner. These
+    # drive pytest: a module-path selector is found, filtered by `{file}`, and read back from the
+    # JUnit XML pytest writes — the whole chain for a stack whose tests are functions, not classes.
+    if pytest_available():
+        function = "tests.test_widgets#test_shows_the_thing"
+        in_class = "tests.test_widgets.TestWidgets#test_shows_nothing_when_empty"
+        parametrised = "tests.test_widgets#test_in_every_case"
+        cases += [
+            # a module-level function: the module *is* the file named after the class part, so
+            # the first shape finds it; the filter and the report are what is new here
+            (Case("pytest: a function in a module is found, selected by file and read back", "test", 0,
+                  must_pass=("tests-exist", "tests-red"),
+                  text=("via `test:`", "report by name")),
+             pytest_project("shows-the-thing", function)),
+            (Case("pytest: the same function turns green, and the report says so", "build", 0,
+                  must_pass=("tests-green",), text=("report by name",)),
+             pytest_project("shows-the-thing", function, green=[function], ledger=[function])),
+            (Case("pytest: a method in a class inside the module is found — and not yet selectable",
+                  "test", 1, must_pass=("tests-exist",), must_fail=("tests-red",),
+                  text=("by the module path", "no test report from this run shows it ran")),
+             pytest_project("shows-nothing-when-empty", in_class)),
+            (Case("pytest: a function the module does not declare is not found", "test", 1,
+                  must_fail=("tests-exist",), text=("has no test_nobody_wrote",)),
+             pytest_project("shows-the-thing", "tests.test_widgets#test_nobody_wrote")),
+            (Case("pytest: a parametrised test is one test, and one failing case fails it", "build", 1,
+                  must_fail=("tests-green",)),
+             pytest_project("shows-the-thing", parametrised,
+                            green=[parametrised + "-a"], ledger=[parametrised])),
+        ]
+    else:
+        print(f"verify: pytest is not importable by {sys.executable} — the pytest cases were "
+              f"skipped, which proves nothing about that stack (pip install pytest)")
+
     failures = []
     for case, fixture in cases:
-        with tempfile.TemporaryDirectory() as root:
+        with tmpdir() as root:
             build_project(root, **fixture)
             code, output = run_gate(args.gate, root, case.stage)
             found = checks_by_verdict(output)

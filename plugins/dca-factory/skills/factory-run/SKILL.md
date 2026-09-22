@@ -71,6 +71,13 @@ say precisely which file to create, create it when the user agrees, then continu
    filterFormat: "FullyQualifiedName~{class}.{method}"
    ```
 
+   ```yaml
+   # Python, pytest — tests are functions in a module, selected by file
+   test: python3 -m pytest -q --junitxml=test-results/pytest.xml
+   covers.test: "**"
+   filterFormat: "{file}::{method}"
+   ```
+
    Leave a command out when the project has none. The gate then skips that check and names it —
    which is honest, whereas gating on a command that does not exist turns governance off after
    the second red run.

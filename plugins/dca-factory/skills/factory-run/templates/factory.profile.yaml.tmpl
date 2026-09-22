@@ -9,7 +9,9 @@
 # test         runs the unit tests
 # e2eTest      runs the end-user tests (falls back to `test` when absent)
 # filterFlag   the flag that selects a single test
-# filterFormat how a selector `<Class>#<method>` is written for this runner
+# filterFormat how a selector `<Class>#<method>` is written for this runner. `{class}` and
+#              `{method}` are the selector's halves; `{file}` is the source file the gate located
+#              the test in, for a runner that selects by path — pytest: `"{file}::{method}"`
 # testReport  where this runner leaves its report of what it executed, as a glob. Found by
 #              convention when absent: JUnit XML (`build/test-results/**`, `surefire-reports/*`)
 #              and TRX (`TestResults/**`). Any stack can emit one of those two — pytest with
