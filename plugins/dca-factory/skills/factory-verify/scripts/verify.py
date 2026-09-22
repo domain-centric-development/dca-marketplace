@@ -1291,6 +1291,14 @@ def main(argv=None):
         (Case("decisions: an open plan question still stops the plan gate", "plan", 1,
               must_fail=("decisions",), text=("STORY-1-01 is open",)),
          with_decisions(("STORY-1-01", DECISION), plan=PLAN_ASKING)),
+        (Case("document: a row saying nothing was updated names no file, and says how that was checked",
+              "document", 0, must_pass=("documented",)),
+         dict(document=DOCUMENT.replace("| `README.md` | one sentence about the thing | read `README.md:1` |",
+                                        "| — | none | `docs/context-map.md:3` still describes the context |"))),
+        (Case("document: a nothing-row without `Verified by` is still a claim", "document", 1,
+              must_fail=("documented",), text=("the row saying nothing was updated",)),
+         dict(document=DOCUMENT.replace("| `README.md` | one sentence about the thing | read `README.md:1` |",
+                                        "| — | none | |"))),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
@@ -1462,6 +1470,22 @@ def main(argv=None):
         code, output = run_change(args.gate, root)
         expectations.append(("change: a required suite that ran and passed passes",
                              code == 0 and "ran 1 case(s), none failed" in output, output.strip().splitlines()[-3:]))
+        # an end-user suite that needs a running system runs nothing here; it is not required
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("e2eTest: sh runner.sh src/test-pages/java\n")
+        code, output = run_change(args.gate, root)
+        expectations.append(("change: a test command that is not required and ran nothing is named, not failed",
+                             code == 0 and "(e2eTest) exited 0, but no report" in output
+                             and "e2eTest" not in output.split("gate:pass policy")[1].split("\n")[0],
+                             output.strip().splitlines()[-4:]))
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("required: compile test e2eTest\n")
+        code, output = run_change(args.gate, root)
+        expectations.append(("change: `required:` binds each test command by its own key",
+                             code == 1 and "(e2eTest) exited 0, but no report" in output
+                             and "ran 1 case(s)" in output, output.strip().splitlines()[-4:]))
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("required: compile test\n")
         code, output = run_change(args.gate, root, "--checks", "compile")
         expectations.append(("change: a narrowed scope names a required check it left out, never passes it",
                              code == 0 and "test" in checks_by_verdict(output)["skip"]

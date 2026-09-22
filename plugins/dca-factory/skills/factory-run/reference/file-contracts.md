@@ -127,9 +127,12 @@ process guarantees, not security ones.
 
 `story-gate.py --change` checks a change outside a story; `--staged` checks the Git index and refuses
 when the working tree differs from it. The profile's `required:` line lists the checks that must
-hold — any of `compile test architecture format`. A required check fails when its command is not
-declared, when it is left out of the scope (`--checks`, reported as not run here), or — for `test` —
-when no report written by the run shows an executed case. Without `required:` the check is
+hold: `compile`, `architecture`, `format`, and each test command by its own profile key (`test`,
+`test.<name>`, `e2eTest`), so an end-user suite that needs a running system can be declared without
+every commit waiting for one. A required check fails when its command is not declared, when it is
+left out of the scope (`--checks`, reported as not run here), or — for a test command — when no
+report written by the run shows an executed case. A test command that is not required and ran
+nothing is named, not failed. Without `required:` the check is
 report-only. An older gate would ignore the key and pass what the project declared mandatory,
 which is why it raised the file contract to 3.
 

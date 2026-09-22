@@ -130,8 +130,10 @@ python3 .agents/factory/story-gate.py --change --staged   # what the commit cont
 
 It runs the profile's `compile`, test, `architecture` and `format` commands. A test command passes
 only when its reports show executed cases — a runner that matched nothing exits 0 too. The profile's
-`required:` line (`required: compile test architecture`) makes checks mandatory: a required check
-that is not declared, not run in this scope or ran nothing fails. Without it the check is
+`required:` line (`required: compile test architecture`) makes checks mandatory — each test command
+by its own key (`test`, `test.integration`, `e2eTest`), so an end-user suite that needs a running
+system stays optional: a required check that is not declared, not run in this scope or ran nothing
+fails. Without it the check is
 report-only. `--staged` checks the Git index, including the temporary one `git commit -a` uses, and
 **refuses** when the working tree differs from it — modified-not-staged or untracked files — because
 tests passing against an unstaged fix say nothing about the commit.

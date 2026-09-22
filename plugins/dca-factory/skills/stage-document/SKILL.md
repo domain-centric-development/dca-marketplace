@@ -80,6 +80,10 @@ here fails for the absence of a knowledge skill.
 `Verified by` names how you checked a statement — the file you read, the command you ran. A row
 without it is a claim, and the gate treats it as one.
 
+When a table has nothing to list — no term added, no document changed — write one row with `—` in
+the first column and, under `Verified by`, what you read to know that nothing had to change. The
+gate reads `—` as "no file", never as a path.
+
 ## Do not
 
 - Do not write production code or tests; the story is already green and judged.

@@ -653,6 +653,11 @@ def row_cells(line):
     return [cell.strip() for cell in line.strip("|").split("|")]
 
 
+#: What a table row writes when there is nothing to list: a document stage that changed nothing says
+#: so in one row and why, and that row names no file.
+NOTHING = {"", "—", "–", "-", "none", "n/a", "nothing"}
+
+
 def check_documented(result, tasks, story_id, cwd):
     """The document stage may only write statements that can be checked. Two of them can be
     checked here: a file it says it updated exists, and every glossary row names where its
@@ -680,6 +685,10 @@ def check_documented(result, tasks, story_id, cwd):
         if len(cells) < 3 or cells[0].lower() in ("term", "file") or set(cells[0]) <= {"-", " "}:
             continue
         name, source = cells[0].strip("`"), cells[-1]
+        if section == "documents updated" and name.strip().lower() in NOTHING:
+            if not source:
+                unsourced.append("the row saying nothing was updated (no `Verified by`)")
+            continue
         if section == "documents updated":
             files += 1
             target = bare_path(name)
@@ -1501,13 +1510,17 @@ def run_test_command(result, cwd, profile, key, command, required):
 
 
 def change_check(result, cwd, profile, staged, only):
+    # `required:` names profile keys: compile, architecture, format, and each test command by its own
+    # key (`test`, `e2eTest`, `test.<name>`) — an end-user suite that needs a running system can be
+    # declared without making every commit wait for one.
     required = set(split_list(profile.get("required")))
-    unknown = sorted(required - set(CHANGE_CHECKS))
+    unknown = sorted(r for r in required
+                     if r not in CHANGE_CHECKS and r != "e2eTest" and not r.startswith("test."))
     if unknown:
-        result.fail("policy", f"`required:` names {', '.join(unknown)} — the checks are "
-                              f"{', '.join(CHANGE_CHECKS)}")
+        result.fail("policy", f"`required:` names {', '.join(unknown)} — it takes compile, architecture, "
+                              f"format and test-command keys (test, e2eTest, test.<name>)")
     if required:
-        result.ok("policy", f"required: {' '.join(c for c in CHANGE_CHECKS if c in required)}")
+        result.ok("policy", "required: " + " ".join(sorted(required)))
     else:
         result.note("policy", "the profile declares no `required:` — report-only: what is declared "
                               "runs, what is not is named, nothing is mandatory")
@@ -1524,22 +1537,32 @@ def change_check(result, cwd, profile, staged, only):
         code, head = git(cwd, "rev-parse", "--short", "HEAD", env=env)
         result.note("snapshot", "the working tree as it is" + (f", on top of {head}" if code == 0 else ""))
     scope = split_list(only) or list(CHANGE_CHECKS)
+    test_keys = [k for k in test_command_keys(profile)] + sorted(
+        r for r in required if (r == "e2eTest" or r.startswith("test.")) and r not in test_command_keys(profile))
     for check in CHANGE_CHECKS:
+        if check == "test":
+            required_tests = [k for k in test_keys if k in required]
+            if check not in scope:
+                result.skip(check, "not run in this scope" + (
+                    f" — {', '.join(required_tests)} required, so a later scope (CI) has to run it"
+                    if required_tests else ""))
+                continue
+            commands = {}
+            for key in test_keys:
+                if profile.get(key):
+                    commands.setdefault(profile[key], []).append(key)
+                elif key in required:
+                    result.fail("test", f"no `{key}:` command in the stack profile — and `{key}` is required")
+            if not commands and not required_tests:
+                result.skip("test", "no test command in the stack profile")
+            for command, keys in commands.items():
+                run_test_command(result, cwd, profile, "/".join(keys), command,
+                                 any(k in required for k in keys))
+            continue
         must = check in required
         if check not in scope:
             result.skip(check, "not run in this scope" + (" — it is required, so a later "
                                "scope (CI) has to run it" if must else ""))
-            continue
-        if check == "test":
-            commands = {}
-            for key in test_command_keys(profile):
-                if profile.get(key):
-                    commands.setdefault(profile[key], key)
-            if not commands:
-                (result.fail if must else result.skip)(
-                    "test", "no test command in the stack profile" + (" — and `test` is required" if must else ""))
-            for command, key in commands.items():
-                run_test_command(result, cwd, profile, key, command, must)
             continue
         key = check
         command = profile.get(key)
