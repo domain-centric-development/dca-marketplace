@@ -6,6 +6,7 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
 
     story-gate.py --story <id> --stage <plan|test|build|tidy|document> [options]
     story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
+    story-gate.py --schedule                           every story's state and the next one to run
 
 Options:
     --backlog <dir>     backlog root (default: backlog)
@@ -81,7 +82,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 2
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1327,11 +1328,13 @@ def list_decisions(cwd, story_id=None):
     return 0
 
 
-def check_decisions(result, tasks, story_id, cwd):
+def check_decisions(result, tasks, story_id, cwd, gating=None):
     """Every question this story raised is recorded, and every answer it got has been applied.
 
     Runs on every stage: an open question blocks the story wherever it stands, and a stage file
-    that escalates without a record has asked nobody."""
+    that escalates without a record has asked nobody. `gating` is the stage this gate call is for:
+    the plan gate runs *before* its stage, so there an answered plan question is the stage's input,
+    not yet something it failed to apply."""
     store = os.path.join(cwd, DECISIONS_DIR)
     try:
         records = read_decisions(store, story_id)
@@ -1387,7 +1390,13 @@ def check_decisions(result, tasks, story_id, cwd):
         elif state == "answered":
             text = stage_texts.get(stage)
             still_asking = text is not None and rid in (needs_human_ids(text) or [])
-            if text is None or still_asking:
+            if gating == "plan" and stage == "plan" and (text is None or still_asking):
+                result.note(
+                    "decisions",
+                    f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}) — the plan "
+                    f"stage runs next and applies it; the gate after it checks that it did.",
+                )
+            elif text is None or still_asking:
                 result.fail(
                     "decisions",
                     f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}), but stage "
@@ -1410,6 +1419,163 @@ def check_decisions(result, tasks, story_id, cwd):
     if not records and not any(state == "fail" and check == "decisions"
                                for state, check, _ in result.entries):
         result.note("decisions", "no decision record for this story")
+
+
+# --- schedule -----------------------------------------------------------------
+
+# Several stories are a loop over one story run, and the loop needs to know what comes next without
+# anyone remembering it. So the state is read off the same files a single run leaves — stage files,
+# refusal reports, the round counter, the verdict, the decision records — and never stored.
+STAGE_ORDER = ("plan", "test", "build", "tidy", "judge", "document")
+RUNNABLE = ("ready", "in-progress", "resumable")
+
+
+def depends_on(front):
+    """`depends_on: []`, `depends_on: [A, B]` or a `- A` list, as a list of ids."""
+    value = front.get("depends_on") or []
+    if isinstance(value, str):
+        value = [part for part in value.strip().strip("[]").split(",")]
+    return [str(part).strip().strip("'\"") for part in value if str(part).strip().strip("'\"")]
+
+
+def verdict_in(text):
+    for line in text.splitlines():
+        if line.strip().lower().startswith("verdict:"):
+            return line.split(":", 1)[1].strip().strip("`\"' ").lower()
+    return ""
+
+
+def story_state(cwd, tasks, story_id, front):
+    """(state, stage to run from or None, detail) for one story, from its files alone."""
+    status = str(front.get("status", "")).strip().lower()
+    if status == "superseded":
+        return "superseded", None, "replaced by another story"
+    if status and status != "approved":
+        return "unreleased", None, f"status {status} — a human releases it first"
+    folder = os.path.join(tasks, story_id)
+    texts = {stage: read_text(os.path.join(folder, name)) for stage, name in STAGE_FILES.items()
+             if os.path.isfile(os.path.join(folder, name))}
+    try:
+        records = read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
+    except GateError as error:
+        return "stopped", None, str(error)
+    waiting = [str(front_["id"]).strip() for _p, front_, _b, state, _a in records
+               if state in ("open", "draft")]
+    if waiting:
+        return "waiting", None, "decision " + ", ".join(waiting)
+    answered = {}
+    for _path, front_, _body, state, _answer in records:
+        rid, asked_by = str(front_["id"]).strip(), str(front_.get("stage", "")).strip()
+        text = texts.get(asked_by)
+        if state == "answered" and (text is None or rid in (needs_human_ids(text) or [])):
+            answered.setdefault(asked_by, rid)
+    if answered:
+        stage = min(answered, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 0)
+        return "resumable", stage, f"decision {answered[stage]} answered — its stage applies it"
+    rounds_file = os.path.join(folder, ".rounds")
+    if os.path.isfile(rounds_file) and (read_text(rounds_file).strip() or "0").isdigit() \
+            and int(read_text(rounds_file).strip() or "0") >= MAX_ROUNDS:
+        return "stopped", None, f"{MAX_ROUNDS} rounds did not converge"
+    if os.path.isfile(os.path.join(folder, ".gate-plan.txt")):
+        return "stopped", None, "the plan gate refused the story — the backlog needs a fix"
+    for stage, text in texts.items():
+        if needs_human_ids(text) is not None:
+            return "stopped", None, f"{STAGE_FILES[stage]} ends in `## needs-human` without an open record"
+    if verdict_in(texts.get("judge", "")) == "story-conflict":
+        return "stopped", None, "the judge found a story conflict"
+    refused = [stage for stage in STAGE_ORDER
+               if os.path.isfile(os.path.join(folder, f".gate-{stage}.txt"))]
+    if refused:
+        return "in-progress", refused[0], f"the {refused[0]} gate refused — the stage runs again"
+    if "document" in texts:
+        return "delivered", None, ""
+    if not texts:
+        return "ready", "plan", ""
+    if verdict_in(texts.get("judge", "")) == "changes-requested":
+        return "in-progress", "build", "the judge requested changes"
+    missing = next(stage for stage in STAGE_ORDER if stage not in texts)
+    return "in-progress", missing, f"{STAGE_FILES[missing]} not written yet"
+
+
+def schedule(cwd, backlog, tasks):
+    """Print every story's state and the next one to run; return 0.
+
+    One story with unfinished code at a time: a story past its plan stage that is not delivered
+    holds the checkout, because its tests and code are in the working tree and a second story
+    would build on them. Such a story is next if it can run, and nothing else starts while it
+    cannot. A story that stopped at its plan stage wrote no code, so independent work runs past it."""
+    stories, order = {}, []
+    for root, _dirs, files in os.walk(backlog):
+        for name in sorted(files):
+            if not name.endswith(".md") or name == "epic.md":
+                continue
+            path = os.path.join(root, name)
+            try:
+                front, _body = read_front_matter(path)
+            except GateError as error:
+                stories[name[:-3]] = dict(state="stopped", start=None, detail=str(error), deps=[])
+                continue
+            story_id = str(front.get("id") or name[:-3]).strip()
+            state, start, detail = story_state(cwd, tasks, story_id, front)
+            stories[story_id] = dict(state=state, start=start, detail=detail, deps=depends_on(front),
+                                     holds=state != "delivered" and os.path.isfile(
+                                         os.path.join(tasks, story_id, STAGE_FILES["test"])))
+
+    # dependency order, ties by id; whatever is left after that sits on a cycle
+    placed, remaining = set(), sorted(stories)
+    while remaining:
+        free = [s for s in remaining if all(d in placed or d not in stories for d in stories[s]["deps"])]
+        if not free:
+            break
+        order.append(free[0])
+        placed.add(free[0])
+        remaining.remove(free[0])
+    for story_id in remaining:
+        order.append(story_id)
+    for story_id in order:
+        story = stories[story_id]
+        if story["state"] not in RUNNABLE:
+            continue
+        unknown = [d for d in story["deps"] if d not in stories]
+        if story_id in remaining:
+            story.update(state="blocked", start=None, detail="on a dependency cycle: "
+                         + ", ".join(sorted(s for s in remaining)))
+        elif unknown:
+            story.update(state="blocked", start=None, detail="depends on unknown " + ", ".join(unknown))
+        else:
+            pending = [d for d in story["deps"] if stories[d]["state"] != "delivered"]
+            if pending:
+                story.update(state="blocked", start=None, detail="depends on " + ", ".join(
+                    f"{d} ({stories[d]['state']})" for d in pending))
+
+    holders = [s for s in order if stories[s].get("holds")]
+    nxt, reason, wait = None, "", False
+    if holders:
+        holder = stories[holders[0]]
+        if holder["state"] in RUNNABLE:
+            nxt = holders[0]
+        else:
+            reason = (f"{holders[0]} holds unfinished code in the checkout ({holder['state']}) — "
+                      f"no other story starts until it is delivered")
+            wait = holder["state"] == "waiting"
+    else:
+        nxt = next((s for s in order if stories[s]["state"] in RUNNABLE), None)
+        wait = any(stories[s]["state"] == "waiting" for s in order)
+        if nxt is None:
+            reason = "nothing can run"
+
+    for story_id in order:
+        story = stories[story_id]
+        start = f"from {story['start']}" if story["start"] else ""
+        print(f"{story_id}  {story['state']:<11} {start:<13} {story['detail']}".rstrip())
+    counts = {}
+    for story in stories.values():
+        counts[story["state"]] = counts.get(story["state"], 0) + 1
+    print("schedule: " + (", ".join(f"{n} {state}" for state, n in sorted(counts.items()))
+                          or "no story under " + backlog + "/"))
+    print(f"wait: {'yes' if wait else 'no'}")
+    print(f"next: {nxt} {stories[nxt]['start']}" if nxt else f"next: none — {reason}")
+    return 0
 
 
 class Result:
@@ -1487,6 +1653,8 @@ def main(argv):
     )
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
+    parser.add_argument("--schedule", action="store_true",
+                        help="print every story's state and the next one to run, and exit")
     parser.add_argument("--backlog", default="backlog")
     parser.add_argument("--tasks", default="tasks")
     parser.add_argument("--profile")
@@ -1498,8 +1666,10 @@ def main(argv):
     os.chdir(cwd)
     if args.list_decisions:
         return list_decisions(cwd, args.story)
+    if args.schedule:
+        return schedule(cwd, args.backlog, args.tasks)
     if not args.story or not args.stage:
-        parser.error("--story and --stage are required (or --list-decisions)")
+        parser.error("--story and --stage are required (or --list-decisions, --schedule)")
     result = Result()
     try:
         story_path = find_story(args.backlog, args.story)
@@ -1523,7 +1693,7 @@ def main(argv):
         check_status(result, story_path, front)
         check_epic(result, story_path, front, args.backlog)
         check_rounds(result, args.tasks, story_id)
-        check_decisions(result, args.tasks, story_id, cwd)
+        check_decisions(result, args.tasks, story_id, cwd, args.stage)
         if args.stage == "plan":
             check_context_map(
                 result, cwd, profile, str(front.get("context", "")).strip()

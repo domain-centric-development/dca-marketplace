@@ -38,7 +38,7 @@ Front matter:
 | `context` | the bounded context the story changes. It must exist in the project's context map — a story that would need a new context or a new context relationship is not a story, it is a scoping question |
 | `title` | short name |
 | `status` | `draft` while it is still being written, `approved` once a human released it for building, `superseded` when another story replaced it. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
-| `depends_on` | story ids that must be delivered first; empty list when none |
+| `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by id; an unknown id or a cycle blocks the story and is named |
 
 Body sections:
 

@@ -1,6 +1,6 @@
 ---
 name: factory-run
-description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), or to set up the pipeline's files in a project that has none. Works in any project: it reads the backlog, the stack profile and the stage hand-over files, never project knowledge baked into itself.
+description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready"), or to set up the pipeline's files in a project that has none. Works in any project: it reads the backlog, the stack profile and the stage hand-over files, never project knowledge baked into itself.
 ---
 
 # Run one story
@@ -150,7 +150,7 @@ correctly after an interruption, in another session or in another tool:
 | `.rounds` at 3 | stop, escalate to the human |
 | any stage file with a `## needs-human` section | stop; the section names a decision record under `.agents/factory/decisions/` — say which file and what to write into it |
 | a decision record for the story is open (no `## Answer`, or one without `by:` and `at:`) | stop — no stage runs while the story waits |
-| a decision record is answered and its `stage:` still ends in `## needs-human` | run that stage again; it applies the answer and cites the id |
+| a decision record is answered and its `stage:` still ends in `## needs-human` | run that stage again; it applies the answer and cites the id (at the plan stage, the plan gate lets exactly this through) |
 
 ## Execution tier
 
@@ -216,7 +216,34 @@ applied. The human answers through `factory-decisions` — in this session or an
 the records (`story-gate.py --list-decisions`), explains one and writes `## Answer` only on their
 confirmation.
 
-## Scope
+## Several stories
 
-One story per run. Several stories are a loop over this skill in dependency order
-(`depends_on`), not a team of agents working in parallel on one code base.
+One story per run; several stories are a loop over it, never agents working in parallel on one
+code base. What comes next is read off the files, like everything else:
+
+```
+python3 .agents/factory/story-gate.py --schedule
+```
+
+prints each story with its state — `delivered`, `waiting` (an open decision record), `resumable`
+(answered, with the stage that asked), `in-progress` (with the stage it continues from: a refused
+gate's stage, else the first missing file), `ready`, `stopped` (three rounds, a story conflict, a
+refused plan gate, a `## needs-human` without a record), `blocked` (a dependency not delivered,
+unknown or on a cycle), `unreleased`/`superseded` — and ends with `next: <story> <stage>` or
+`next: none — <why>`. Order: `depends_on`, ties by id.
+
+**One story with unfinished code at a time.** A story that got past its plan stage (it has
+`tests.md`) and is not delivered holds the checkout: it is next if it can run, and while it waits
+or is stopped no other story starts — the next one would build on its tests and code. A story that
+stopped with a question at its plan stage wrote no code, so independent stories run past it.
+
+The runner does the loop: `factory.sh backlog [--tool <t>]` runs the next story from the stage the
+schedule names, asks again, and ends when nothing can run. A story that stops for a decision does
+not end it (`run` exits 3 there); any other stop does, because retrying a failure spends a run on
+the same refusal. `--watch` keeps it waiting while a story waits on a human: it re-reads the
+schedule every `--interval` seconds (default 60, 1–3600), invokes no agent while nothing changed,
+and resumes the answered story at the stage that asked. `--max-stages <n>` caps the agent
+invocations of the run (exit 4, the work so far stays); `.agents/factory/stop` ends it before the
+next story. The watch lives as long as its process: a closed session or terminal ends it, and a
+file wakes nobody. In-session, do the same loop yourself — ask the schedule, run the story it
+names, ask again — and stop instead of waiting.

@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 # The reports use `—` and `→`. A Windows console decodes stdout as cp1252 and a Python that
 # inherits that raises on the first arrow; the files this writes are UTF-8 in every other respect,
@@ -314,6 +315,39 @@ def with_decisions(*records, plan=None, **more):
     return fixture
 
 
+def story(story_id, depends_on=(), status="approved"):
+    """Another story like STORY-1, with its own id, dependencies and status."""
+    return (STORY.replace("STORY-1", story_id)
+            .replace("depends_on: []", f"depends_on: [{', '.join(depends_on)}]")
+            .replace("status: approved", f"status: {status}"))
+
+
+def backlog_project(root, *stories, **more):
+    """A fixture backlog: STORY-1 plus `(id, depends_on)` stories, no stage file, a profile whose
+    only command is `compile: true` — the gates then check files and records, not test runs, so a
+    stand-in tool can take several stories through every stage."""
+    sources = [(f"backlog/sample/{sid}.md", story(sid, deps)) for sid, deps in stories]
+    build_project(root, tests=None, profile="compile: true\n",
+                  extra_sources=tuple(sources) + tuple(more.pop("extra_sources", ())), **more)
+    return root
+
+
+def schedule_of(gate, root):
+    """{story: (state, from)} and the `next:` / `wait:` lines of `story-gate.py --schedule`."""
+    listing = subprocess.run([sys.executable, gate, "--schedule"], cwd=root, capture_output=True,
+                             text=True, encoding="utf-8", errors="replace")
+    rows, nxt, wait = {}, "", ""
+    for line in listing.stdout.splitlines():
+        if line.startswith("next: "):
+            nxt = line[6:]
+        elif line.startswith("wait: "):
+            wait = line[6:]
+        elif line and not line.startswith("schedule:"):
+            parts = line.split()
+            rows[parts[0]] = (parts[1], parts[3] if len(parts) > 3 and parts[2] == "from" else None)
+    return rows, nxt, wait, listing.stdout + listing.stderr
+
+
 DOCUMENT = """# Document — STORY-1
 
 ## Glossary
@@ -576,7 +610,7 @@ def verify_runner(runner, verbose=False):
                                        "FIXTURE_DECISION": shell_path(os.path.join(root, "decision.md")),
                                        "FIXTURE_PLAN": shell_path(os.path.join(root, "plan.md"))})
         check("runner: a stage that asks a question names the record and the command that resumes",
-              code != 0 and ".agents/factory/decisions/STORY-1-01.md" in output
+              code == 3 and ".agents/factory/decisions/STORY-1-01.md" in output
               and "--from plan" in output,
               [l for l in output.splitlines() if "decision" in l][:3])
         # and with the question still open, the next run does not start a stage
@@ -584,7 +618,7 @@ def verify_runner(runner, verbose=False):
                                   "--from", "test", env={"FACTORY_TOOL_CMD": "true"})
         stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
         check("runner: while a question is open no stage runs, whatever --from says",
-              code != 0 and stages == [] and "waits for a decision" in output,
+              code == 3 and stages == [] and "waits for a decision" in output,
               f"stages that ran: {stages}")
 
     # 1e. install keeps what the project owns
@@ -623,6 +657,118 @@ def verify_runner(runner, verbose=False):
                   f"stage-plan now points at {os.path.realpath(os.path.join(skills, 'stage-plan'))}")
     else:
         print("  skip  install: the two link cases — this account cannot create symlinks, so install copies")
+
+    # 1g. a backlog run: story after story, past a question, and back to it once it is answered.
+    # The stand-in writes each stage's file; STORY-1's plan stage asks until its record is answered.
+    stand_in_backlog = """#!/bin/sh
+echo "$FACTORY_STORY $FACTORY_STAGE" >> invocations.log
+d="tasks/$FACTORY_STORY"; rec=.agents/factory/decisions/STORY-1-01.md
+mkdir -p "$d" .agents/factory/decisions
+case "$FACTORY_STAGE" in
+  plan)
+    if [ "$FACTORY_STORY" = STORY-1 ] && ! grep -q '^## Answer' "$rec" 2>/dev/null; then
+      cat fixture/decision.md > "$rec"; cat fixture/plan-asking.md > "$d/plan.md"
+    elif [ "$FACTORY_STORY" = STORY-1 ]; then cat fixture/plan-applied.md > "$d/plan.md"
+    else printf '## Context\\n## Changes\\n## Acceptance criteria\\n' > "$d/plan.md"; fi ;;
+  test) cat fixture/tests.md > "$d/tests.md" ;;
+  build) printf '## Changed\\n' > "$d/build.md" ;;
+  tidy) printf '## Moves\\n' > "$d/tidy.md" ;;
+  judge) printf '## Verdict\\nverdict: pass\\n' > "$d/judge.md" ;;
+  document) printf '## Glossary\\n' > "$d/document.md" ;;
+esac
+"""
+
+    def backlog_fixture(root):
+        backlog_project(root, ("STORY-2", []), ("STORY-3", ["STORY-1"]),
+                        extra_sources=(("fixture/decision.md", DECISION),
+                                       ("fixture/plan-asking.md", PLAN_ASKING),
+                                       ("fixture/plan-applied.md", PLAN_APPLIED),
+                                       ("fixture/tests.md", TESTS)))
+        # LF on every platform: a shell script with CRLF endings is not the script it looks like
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(stand_in_backlog)
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        return {"FACTORY_TOOL_CMD": "sh stand-in.sh"}
+
+    def invocations(root):
+        path = os.path.join(root, "invocations.log")
+        return open(path, encoding="utf-8").read().split("\n")[:-1] if os.path.isfile(path) else []
+
+    def answer(root):
+        with open(os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md"), "a",
+                  encoding="utf-8") as handle:
+            handle.write(ANSWER)
+
+    six = ["plan", "test", "build", "tidy", "judge", "document"]
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        code, output = run_runner(runner, root, "backlog", env=env)
+        ran = invocations(root)
+        check("backlog: a story that asks at its plan stage does not stop the stories that do not need it",
+              code == 0 and ran == ["STORY-1 plan"] + [f"STORY-2 {s}" for s in six],
+              f"exit {code}, invocations {ran}, last lines: {output.strip().splitlines()[-3:]}")
+        check("backlog: the story that depends on the waiting one stays blocked",
+              "STORY-3  blocked" in output, [l for l in output.splitlines() if "STORY-3" in l])
+        answer(root)
+        code, output = run_runner(runner, root, "backlog", env=env)
+        ran = invocations(root)[7:]
+        check("backlog: after the answer the story resumes at the stage that asked, then its dependant runs",
+              code == 0 and ran == [f"STORY-1 {s}" for s in six] + [f"STORY-3 {s}" for s in six],
+              f"exit {code}, invocations {ran}, last lines: {output.strip().splitlines()[-4:]}")
+        record = open(os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md"),
+                      encoding="utf-8").read()
+        check("backlog: the resumed stage's answer is stamped applied", "## Applied" in record)
+        code, output = run_runner(runner, root, "backlog", env=env)
+        check("backlog: with everything delivered a run invokes nothing",
+              code == 0 and len(invocations(root)) == 19 and "nothing more can run" in output,
+              f"exit {code}, {len(invocations(root))} invocations")
+
+    # 1h. --watch: waits on the answer without invoking anything, then picks the story up itself
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        environment = dict(os.environ)
+        environment.update(env)
+        log_path = os.path.join(root, "watch.log")
+        with open(log_path, "w", encoding="utf-8") as log:
+            process = subprocess.Popen([BASH, runner, "backlog", "--watch", "--interval", "1"],
+                                       cwd=root, stdout=log, stderr=subprocess.STDOUT, env=environment)
+            deadline = time.time() + 60
+            while time.time() < deadline and "waiting for an answer" not in open(
+                    log_path, encoding="utf-8", errors="replace").read():
+                time.sleep(0.2)
+            idle_before = len(invocations(root))
+            time.sleep(3)                             # three polls at least
+            idle_after = len(invocations(root))
+            answer(root)
+            try:
+                code = process.wait(timeout=90)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                code = "timeout"
+        output = open(log_path, encoding="utf-8", errors="replace").read()
+        check("watch: waiting for an answer invokes no agent",
+              idle_before == 7 and idle_after == idle_before,
+              f"{idle_before} invocations when the wait began, {idle_after} three seconds later")
+        check("watch: a confirmed answer is picked up without anyone restarting the story",
+              code == 0 and len(invocations(root)) == 19 and "nothing waits on an answer" in output,
+              f"exit {code}, {len(invocations(root))} invocations, last lines: {output.strip().splitlines()[-3:]}")
+
+    # 1i. the limits: --max-stages stops dispatch and keeps the work, the stop file ends a run
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        code, output = run_runner(runner, root, "backlog", "--max-stages", "2", env=env)
+        check("backlog: --max-stages stops before the next invocation and keeps what ran",
+              code == 4 and invocations(root) == ["STORY-1 plan", "STORY-2 plan"]
+              and os.path.isfile(os.path.join(root, "tasks", "STORY-2", "plan.md")),
+              f"exit {code}, invocations {invocations(root)}")
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        open(os.path.join(root, ".agents", "factory", "stop"), "w").close()
+        code, output = run_runner(runner, root, "backlog", env=env)
+        check("backlog: the stop file ends the run before any story starts",
+              code == 0 and invocations(root) == [] and "stops here" in output,
+              f"exit {code}, invocations {invocations(root)}")
 
     # 1f. the snapshot sees files in a directory this run added
     with tmpdir() as root:
@@ -1068,6 +1214,12 @@ def main(argv=None):
         (Case("decisions: the check runs on every stage, not only the plan gate", "build", 1,
               must_fail=("decisions",), text=("STORY-1-01 is open",)),
          with_decisions(("STORY-1-01", DECISION), green=both_green, ledger=both_green)),
+        (Case("decisions: the plan gate lets an answered plan question through — its stage runs next",
+              "plan", 0, text=("the plan stage runs next and applies it",)),
+         with_decisions(("STORY-1-01", DECISION + ANSWER), plan=PLAN_ASKING)),
+        (Case("decisions: an open plan question still stops the plan gate", "plan", 1,
+              must_fail=("decisions",), text=("STORY-1-01 is open",)),
+         with_decisions(("STORY-1-01", DECISION), plan=PLAN_ASKING)),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
@@ -1210,6 +1362,79 @@ def main(argv=None):
                 print(f"          {detail}")
                 inbox_failures.append(name)
     failures += [(name, [], "") for name in inbox_failures]
+
+    # --- the schedule: every story's state and the next one, from the files alone -------------
+    print()
+    schedule_failures = []
+    expectations = []
+    with tmpdir() as root:
+        backlog_project(root, ("STORY-2", ["STORY-1"]), ("STORY-3", []), ("STORY-4", ["STORY-5"]),
+                        ("STORY-5", ["STORY-4"]), ("STORY-6", ["STORY-9"]), ("STORY-7", []),
+                        extra_sources=(("tasks/STORY-1/document.md", DOCUMENT),
+                                       ("tasks/STORY-1/plan.md", PLAN_APPLIED),
+                                       ("tasks/STORY-3/plan.md", PLAN_ASKING.replace("STORY-1", "STORY-3")),
+                                       (".agents/factory/decisions/STORY-3-01.md",
+                                        DECISION.replace("STORY-1", "STORY-3"))))
+        with open(os.path.join(root, "backlog", "sample", "STORY-7.md"), "w", encoding="utf-8") as handle:
+            handle.write(story("STORY-7", status="draft"))
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations += [
+            ("schedule: a story with its document written is delivered",
+             rows.get("STORY-1") == ("delivered", None), rows.get("STORY-1")),
+            ("schedule: a story whose dependency is delivered is ready, from plan",
+             rows.get("STORY-2") == ("ready", "plan"), rows.get("STORY-2")),
+            ("schedule: an open decision record makes its story wait",
+             rows.get("STORY-3", ("",))[0] == "waiting", rows.get("STORY-3")),
+            ("schedule: a dependency cycle is reported, not followed",
+             rows.get("STORY-4", ("",))[0] == "blocked" and rows.get("STORY-5", ("",))[0] == "blocked"
+             and "cycle" in output, [l for l in output.splitlines() if "STORY-4" in l]),
+            ("schedule: a dependency on an unknown story blocks it",
+             rows.get("STORY-6", ("",))[0] == "blocked" and "unknown STORY-9" in output, rows.get("STORY-6")),
+            ("schedule: a draft story is not scheduled",
+             rows.get("STORY-7", ("",))[0] == "unreleased", rows.get("STORY-7")),
+            ("schedule: the next story runs past one that waits at its plan stage",
+             nxt == "STORY-2 plan" and wait == "yes", f"next: {nxt}, wait: {wait}"),
+        ]
+    with tmpdir() as root:
+        # STORY-1 got past its plan stage and waits on a question from its test stage: its tests are
+        # in the working tree, so an independent story may not start on top of them.
+        backlog_project(root, ("STORY-2", []),
+                        extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),
+                                       ("tasks/STORY-1/tests.md", TESTS + "\n## needs-human\ndecision: STORY-1-01\n"),
+                                       (".agents/factory/decisions/STORY-1-01.md",
+                                        DECISION.replace("stage: plan", "stage: test"))))
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a waiting story with code in the tree holds the checkout",
+                             nxt.startswith("none") and "STORY-1 holds unfinished code" in nxt
+                             and rows.get("STORY-2") == ("ready", "plan") and wait == "yes",
+                             f"next: {nxt}"))
+        with open(os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md"), "a",
+                  encoding="utf-8") as handle:
+            handle.write(ANSWER)
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: once answered, the holder resumes at the stage that asked",
+                             rows.get("STORY-1") == ("resumable", "test") and nxt == "STORY-1 test",
+                             f"{rows.get('STORY-1')}, next: {nxt}"))
+    with tmpdir() as root:
+        backlog_project(root, extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),
+                                             ("tasks/STORY-1/tests.md", TESTS),
+                                             ("tasks/STORY-1/build.md", "## Changed\n"),
+                                             ("tasks/STORY-1/.gate-build.txt", "gate:fail tests-green\n")))
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a refused gate sends its story back to that stage",
+                             rows.get("STORY-1") == ("in-progress", "build"), rows.get("STORY-1")))
+        with open(os.path.join(root, "tasks", "STORY-1", ".rounds"), "w", encoding="utf-8") as handle:
+            handle.write("3\n")
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: three rounds stop the story, and nothing waits for them",
+                             rows.get("STORY-1", ("",))[0] == "stopped" and nxt.startswith("none")
+                             and wait == "no", f"{rows.get('STORY-1')}, next: {nxt}, wait: {wait}"))
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            schedule_failures.append(name)
+    failures += [(name, [], "") for name in schedule_failures]
 
     runner_failures = []
     if os.path.isfile(args.runner):

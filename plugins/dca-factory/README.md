@@ -54,6 +54,14 @@ converge. Where the project has the runner script, the highest isolation is one 
 bash .agents/factory/factory.sh run --story STORY-1 --tool claude
 ```
 
+Several stories are one command. It runs them in dependency order, runs past a story that waits
+for a decision, and with `--watch` picks that story up again at the stage that asked, once the
+answer is written (`--max-stages` caps the agent invocations, `.agents/factory/stop` ends it):
+
+```
+bash .agents/factory/factory.sh backlog --tool claude --watch
+```
+
 ```
 /factory-verify
 ```
@@ -77,7 +85,7 @@ what must be true before the next one starts.
 
 | Skill | Does |
 |---|---|
-| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in |
+| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `story-gate.py --schedule` reads every story's state off the files, and `factory.sh backlog` runs them in that order |
 | `stage-plan` | story → `tasks/<story>/plan.md`: elements that change, criteria, test shape per criterion |
 | `stage-test` | plan → tests plus `tasks/<story>/tests.md` with the criterion-to-test table |
 | `stage-build` | red tests → production code plus `tasks/<story>/build.md` |

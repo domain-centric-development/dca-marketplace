@@ -5,6 +5,11 @@
 #
 #   factory.sh install [--tool claude|codex|opencode|all] [--from <skill folder>] [--copy]
 #   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--dry-run]
+#   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>] [--dry-run]
+#
+# `run` exits 0 when the story ran through, 3 when it stopped for a decision, 4 at --max-stages,
+# anything else on a failure. `backlog` runs story after story in the order `story-gate.py
+# --schedule` names, past stories that wait for a decision; --watch keeps it waiting for answers.
 #
 # FACTORY_TOOL_CMD replaces the tool invocation entirely ($FACTORY_STAGE and $FACTORY_PROMPT are
 # exported to it) — for a tool none of the adapters covers, and so the loop itself is testable.
@@ -28,6 +33,9 @@ POST_GATED=(test build tidy document)
 GATE=".agents/factory/story-gate.py"
 TASKS="tasks"
 DECISIONS=".agents/factory/decisions"
+STOP_FILE=".agents/factory/stop"             # exists → a backlog run stops before its next story
+INVOCATIONS=0                                # agent invocations in this process
+MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 
 # Which Python runs the gate. `python3` is the POSIX spelling; on Windows the interpreter is
 # `python` and `python3` is often a Store stub that opens a shop window. FACTORY_PYTHON overrides,
@@ -63,7 +71,7 @@ stage_file() {
   esac
 }
 
-usage() { sed -n '2,12p' "$0" >&2; exit 2; }
+usage() { sed -n '2,17p' "$0" >&2; exit 2; }
 
 # An install step that had to work and did not. `set -e` is deliberately *not* used: the run loop
 # expects non-zero exits in several places — a gate that refuses, a tool that stops, a verdict that
@@ -172,8 +180,10 @@ invoke() {                                  # invoke <tool> <prompt>
   # One seam, for two honest purposes: a project whose tool is none of the three can plug it in,
   # and the runner's own loop can be exercised without a model — which is the only way a defect in
   # the loop is found by a test rather than by a wasted run.
+  INVOCATIONS=$((INVOCATIONS + 1))
   if [ -n "${FACTORY_TOOL_CMD:-}" ]; then
-    FACTORY_STAGE="${stage_in_flight:-}" FACTORY_PROMPT="$prompt" sh -c "$FACTORY_TOOL_CMD"
+    FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}" FACTORY_PROMPT="$prompt" \
+      sh -c "$FACTORY_TOOL_CMD"
     return $?
   fi
   case "$tool" in
@@ -603,7 +613,7 @@ run_story() {
     echo "factory: story $story waits for a decision — no stage runs until it is answered:" >&2
     printf 'factory:   %s\n' $waiting >&2
     echo "factory:   answer under '## Answer' with answer:, by: and at:, then run the stage that asked (--from <stage>)." >&2
-    return 1
+    return 3
   fi
   for stage in "${STAGES[@]}"; do
     [ "$stage" = "$from" ] && started=1
@@ -617,13 +627,19 @@ run_story() {
     echo "── stage $stage  (tool: $tool, fresh context)"
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
+    elif [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
+      # Checked before the invocation, never after: the cap is what may still be spent. Nothing is
+      # undone — the stages so far keep their files, and the schedule resumes the story from them.
+      echo "factory: --max-stages $MAX_STAGES reached before stage '$stage' of $story — nothing more is" >&2
+      echo "factory:   dispatched; the work so far stays as it is and the next run continues from it." >&2
+      return 4
     else
       # Never `started` — that name is the loop's "have we reached --from yet" flag, and
       # overwriting it skips every later stage while the run still reports success.
       local stage_started; stage_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
       snapshot "$story" "before-$stage"
       printf '%s\tstage-start\t%s\ttool=%s\n' "$stage_started" "$stage" "$tool" >> "$TASKS/$story/.verify/journal.tsv"
-      stage_in_flight="$stage" invoke "$tool" "$(prompt_for "$stage" "$story")" || {
+      stage_in_flight="$stage" story_in_flight="$story" invoke "$tool" "$(prompt_for "$stage" "$story")" || {
         printf '%s\tstage-end\t%s\texit=nonzero\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
           >> "$TASKS/$story/.verify/journal.tsv"
         echo "factory: the tool exited non-zero during stage '$stage'." >&2; return 1; }
@@ -656,6 +672,9 @@ run_story() {
           fi
         done
         echo "factory:   read $artefact and decide; the stages after it were not run." >&2
+        # 3 only when the question is a record: that is what a backlog run can wait on. A section
+        # without one is a stop a human has to look at, like any other failure.
+        [ -n "$ids" ] && return 3
         return 1
       fi
     fi
@@ -704,11 +723,68 @@ run_story() {
   echo "factory: story $story ran through ${ran:-nothing}."
 }
 
+# Story after story, in the order the schedule names. The schedule is read off the files every
+# time, so nothing here remembers what ran: a story that stopped for a decision is simply not named
+# again until its record is answered, and then it is named with the stage that asked. A failure
+# ends the loop — retrying a broken stage spends a run on the same refusal.
+run_backlog() {                             # run_backlog <tool> <watch> <interval> <dry>
+  local tool=$1 watch=$2 interval=$3 dry=$4
+  local out previous="" next story from last="" code
+  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh install'" >&2; return 2; }
+  while :; do
+    if [ -f "$STOP_FILE" ]; then
+      echo "factory: $STOP_FILE exists — the backlog run stops here. Remove it to run again."
+      return 0
+    fi
+    out=$("$PY" "$GATE" --schedule 2>&1) || {
+      printf '%s\n' "$out" >&2; echo "factory: the schedule could not be read." >&2; return 1; }
+    next=$(printf '%s\n' "$out" | sed -n 's/^next: //p')
+    case "$next" in
+      none*|"") ;;
+      *)
+        story=${next%% *}; from=${next#* }
+        if [ "$next" = "$last" ]; then
+          printf '%s\n' "$out"
+          echo "factory: $story ran from $from and the schedule names it there again — no progress, stopping." >&2
+          return 1
+        fi
+        echo "══ story $story from $from"
+        if [ -n "$dry" ]; then
+          printf '%s\n' "$out"
+          echo "   would run: factory.sh run --story $story --from $from"
+          return 0
+        fi
+        run_story "$story" "$tool" "$from" ""
+        code=$?
+        case "$code" in
+          0) last=$next; continue ;;
+          3) last=""; continue ;;              # waits for a decision; the schedule skips it now
+          *) echo "factory: story $story stopped (exit $code) — the backlog run ends here." >&2
+             return "$code" ;;
+        esac
+        ;;
+    esac
+    if [ -z "$watch" ] || ! printf '%s\n' "$out" | grep -q '^wait: yes'; then
+      printf '%s\n' "$out"
+      echo "factory: nothing more can run$([ -n "$watch" ] && echo ", and nothing waits on an answer that would change that")."
+      return 0
+    fi
+    # Waiting is reading files, never asking an agent: an unchanged schedule costs one gate call.
+    if [ "$out" != "$previous" ]; then
+      printf '%s\n' "$out"
+      echo "factory: waiting for an answer — the schedule is read again every ${interval}s; $STOP_FILE ends the watch."
+      previous=$out
+    fi
+    last=""
+    sleep "$interval"
+  done
+}
+
 # --- main --------------------------------------------------------------------
 
 [ $# -ge 1 ] || usage
 command=$1; shift
-story=""; tool=""; from="plan"; dry=""; source_dir=""; copy_mode=""
+story=""; tool=""; from="plan"; dry=""; source_dir=""; copy_mode=""; watch=""; interval=60
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -717,6 +793,9 @@ while [ $# -gt 0 ]; do
     --from) if [ "$command" = "install" ]; then source_dir=$2; else from=$2; fi; shift 2 ;;
     --copy) copy_mode=1; shift ;;
     --dry-run) dry=1; shift ;;
+    --watch) watch=1; shift ;;
+    --interval) interval=$2; shift 2 ;;
+    --max-stages) MAX_STAGES=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -729,6 +808,18 @@ case "$command" in
     [ -n "$tool" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
     check_gate_freshness                    # once per invocation; run_story recurses on a verdict
     run_story "$story" "$tool" "$from" "$dry"
+    ;;
+  backlog)
+    [ -n "$tool" ] || tool=$(detect_tool)
+    [ -n "$tool" ] || [ -n "${FACTORY_TOOL_CMD:-}" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
+    case "$interval" in ''|*[!0-9]*) echo "factory: --interval takes whole seconds" >&2; exit 2 ;; esac
+    case "$MAX_STAGES" in *[!0-9]*) echo "factory: --max-stages takes a number" >&2; exit 2 ;; esac
+    # Bounded both ways: below a second the watch is a busy loop, above an hour an answer waits
+    # longer than anyone expects to.
+    [ "$interval" -lt 1 ] && interval=1
+    [ "$interval" -gt 3600 ] && interval=3600
+    check_gate_freshness
+    run_backlog "${tool:-stand-in}" "$watch" "$interval" "$dry"
     ;;
   *) usage ;;
 esac

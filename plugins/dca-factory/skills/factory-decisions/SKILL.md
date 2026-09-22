@@ -49,7 +49,7 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    completed with the missing lines once the human confirms it is theirs.
 8. **Say what happens next, and do not do it.** After writing: name the stage that asked and the
    command that resumes the story (`factory.sh run --story <id> --from <stage>`, or that stage's
-   skill in a session). Answering a question is not taking over the story; the worker that asked
+   skill in a session; a `factory.sh backlog --watch` that is running picks it up by itself). Answering a question is not taking over the story; the worker that asked
    applies the answer, and the gate stamps the record applied when it has. If the human wants to
    go on interactively in *this* session, they say so — then it is a hand-over, named as one.
 
