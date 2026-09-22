@@ -134,8 +134,8 @@ all — the file contracts and the gate are what make a run honest, not the runn
 **Operating systems.** The gate is standard-library Python 3 and runs wherever Python does. The
 runner and the commit hook are bash, so both want a POSIX shell. Linux, macOS and **Windows under
 Git Bash** are what the pipeline's own suite runs on in CI. On Windows the install copies the skills
-instead of linking them (a symlink needs developer mode, and `ln -s` without it makes a silent copy
-anyway), the runner picks `python3` or `python`, whichever the machine has (`FACTORY_PYTHON`
+where `ln -s` cannot link (a symlink needs developer mode and `MSYS=winsymlinks:nativestrict`;
+without them `ln -s` makes a silent copy anyway, so the installer probes and says which it did), the runner picks `python3` or `python`, whichever the machine has (`FACTORY_PYTHON`
 overrides), and the gate runs the profile's commands through Git's bash — found beside `git`, never the
 WSL launcher in `System32`; `FACTORY_BASH` names another — so a profile is written for a POSIX
 shell on every platform. WSL is the same route with a Linux userland and needs

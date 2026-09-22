@@ -614,7 +614,7 @@ def verify_runner(runner, verbose=False):
         # a newer pipeline beside the project: the record says 0.4.0, the plugin copy says otherwise
         plugin = os.path.join(root, "newer-plugin", "factory-run", "scripts")
         os.makedirs(plugin)
-        body = open(os.path.join(os.path.dirname(runner), "story-gate.py")).read()
+        body = open(os.path.join(os.path.dirname(runner), "story-gate.py"), encoding="utf-8").read()
         with open(os.path.join(plugin, "story-gate.py"), "w", encoding="utf-8") as handle:
             handle.write(body.replace('VERSION = "', 'VERSION = "9.9.9-', 1))
         env = {"FACTORY_PLUGIN_DIR": shell_path(os.path.join(root, "newer-plugin"))}
