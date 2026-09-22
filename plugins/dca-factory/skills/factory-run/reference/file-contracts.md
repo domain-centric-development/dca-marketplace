@@ -122,3 +122,38 @@ rationale: <optional>
 What this does not do, on purpose: no leases, no revision numbers, no stale-answer detection when
 the story changes underneath, no authorisation beyond `by:`. Files writable by the same user give
 process guarantees, not security ones.
+
+## The change policy — `required:` in the stack profile
+
+`story-gate.py --change` checks a change outside a story; `--staged` checks the Git index and refuses
+when the working tree differs from it. The profile's `required:` line lists the checks that must
+hold — any of `compile test architecture format`. A required check fails when its command is not
+declared, when it is left out of the scope (`--checks`, reported as not run here), or — for `test` —
+when no report written by the run shows an executed case. Without `required:` the check is
+report-only. An older gate would ignore the key and pass what the project declared mandatory,
+which is why it raised the file contract to 3.
+
+## Scenario contract — for `--parity`
+
+Markdown, one scenario per `## <id>` heading, with two lines under it:
+
+```markdown
+## scenario.thing.shown
+Title: The reader sees the thing
+Runs: always
+```
+
+`Title:` is the binding: a test report names the scenario by carrying the title verbatim as the
+test's name (JUnit XML `testcase/@name`, TRX `UnitTestResult/@testName` — a display name in both).
+`Runs: always` is mandatory in every implementation; any other value names the configuration the
+scenario is bound to, and a run that skips it is reported as *not proven here*, not as passed. The
+parity config is flat `key: value`, paths relative to the config file:
+
+```
+scenarios: spec/scenarios.md
+implementation.first: first/build/test-results/e2e/*.xml
+implementation.second: second/tests/E2e/TestResults/*.trx
+```
+
+The check reads whatever reports match: delete stale ones, or point the glob at one run's output,
+before trusting the verdict.

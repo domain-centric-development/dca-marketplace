@@ -26,7 +26,7 @@ Check the file it wrote before the first run:
 ```
 .agents/factory/factory.profile.yaml     your build and test commands, one per test source set
 .agents/factory/story-gate.py            the gate, callable from a terminal and from CI
-.githooks/pre-commit                     the same commands on every commit (core.hooksPath)
+.githooks/pre-commit                     the change check on what every commit contains (core.hooksPath)
 ```
 
 ## Your first story
@@ -120,10 +120,39 @@ A command the stack profile does not declare is skipped and named in the report 
 The gate is a build-level check, not a hook and not a stage's self-assessment: a stage cannot
 declare its own work done.
 
-The same profile drives `templates/githooks/pre-commit`: `git config core.hooksPath .githooks` and
-every commit runs the project's compile, test, architecture and format commands, whichever it
-declares. That is the enforcement boundary — a tool's own hooks are a fast feedback loop, but only
-git is common to every tool.
+**Outside a story** the same script checks any change — a direct edit, a commit, a CI run — with
+one command and one verdict for one tree:
+
+```
+python3 .agents/factory/story-gate.py --change            # the working tree, e.g. in CI
+python3 .agents/factory/story-gate.py --change --staged   # what the commit contains
+```
+
+It runs the profile's `compile`, test, `architecture` and `format` commands. A test command passes
+only when its reports show executed cases — a runner that matched nothing exits 0 too. The profile's
+`required:` line (`required: compile test architecture`) makes checks mandatory: a required check
+that is not declared, not run in this scope or ran nothing fails. Without it the check is
+report-only. `--staged` checks the Git index, including the temporary one `git commit -a` uses, and
+**refuses** when the working tree differs from it — modified-not-staged or untracked files — because
+tests passing against an unstaged fix say nothing about the commit.
+
+`templates/githooks/pre-commit` is exactly that command (`git config core.hooksPath .githooks`);
+`FACTORY_PRECOMMIT_CHECKS="compile architecture"` narrows it on a slow stack, and a required check
+left out is reported as not run here, never as passed. That is the enforcement boundary — a tool's
+own hooks are a fast feedback loop, but only git is common to every tool, and a hook can be skipped
+with `--no-verify`, so CI runs `--change` as well.
+
+**Several implementations of one behaviour** — a port, a second language, a rewrite — prove the
+same scenarios from their own reports:
+
+```
+python3 .agents/factory/story-gate.py --parity parity.conf
+```
+
+`parity.conf` names the scenario contract (`scenarios: <file>`) and one `implementation.<name>:
+<report glob>` per implementation. Every `Runs: always` scenario must appear in each
+implementation's reports, by its title as the test's name, and pass; missing, failed or skipped
+fails. Each implementation is held to the contract, not to the other one.
 
 ## Portability
 

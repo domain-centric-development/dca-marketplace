@@ -36,6 +36,10 @@
 #              names rules and markers that no longer exist, and a citation makes that look verified.
 #              Unnamed means the stages work from the project's own rules, markers and documents
 # contract     the gate file contract this profile was written for (see below)
+# required     the checks that must hold for any change — `compile test architecture format`, or
+#              a part of it. `story-gate.py --change` (the commit hook, CI, a direct edit) then fails
+#              a required check that is not declared, not run in its scope, or ran no test at all.
+#              Absent: report-only — declared checks run, the rest is named, nothing is mandatory
 # contextMap   where the project keeps its context map (found by convention when absent)
 # glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
 # reviews      perspectives the judge stage covers *in addition to* domain, boundaries and craft
@@ -46,7 +50,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 2
+contract: 3
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}
@@ -55,6 +59,7 @@ filterFlag: {{FILTER_FLAG}}
 filterFormat: {{FILTER_FORMAT}}
 architecture: {{ARCHITECTURE_COMMAND}}
 format: {{FORMAT_COMMAND}}
+#required: compile test architecture
 #carrier.test: <the skill that carries this project's end-user testing craft>
 #carrier.build: <the skill that carries this project's implementation craft>
 # A perspective is found by description when a matching review skill is installed; name a carrier

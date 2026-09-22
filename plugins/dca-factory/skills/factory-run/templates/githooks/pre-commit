@@ -1,53 +1,44 @@
 #!/usr/bin/env bash
 # The enforcement boundary. Tool hooks and deny rules do not port between agent tools —
 # but every tool commits through git, so this is where the guard belongs. A tool-specific
-# hook stays a fast feedback loop; it is never the boundary.
+# hook stays a fast feedback loop; it is never the boundary. A hook can be bypassed
+# (--no-verify), so CI runs the same command on its checkout: `story-gate.py --change`.
 #
 # Install once per clone:  git config core.hooksPath .githooks
 #
-# Runs the commands the stack profile declares. A command the profile does not declare is
-# skipped and named — a hook that fails on something nobody configured gets switched off,
-# and then there is no guard at all.
+# One command, the gate's change check, against what the commit contains: the Git index, and
+# refused when the working tree differs from it — tests that pass against an unstaged fix
+# certify nothing about the commit. The stack profile declares the commands and, in its
+# `required:` line, which of them must hold; without that line the check is report-only.
 
 set -uo pipefail
 
-PROFILE="${FACTORY_PROFILE:-.agents/factory/factory.profile.yaml}"
-# Which profile commands run before a commit. Keep it to what a developer will wait for: a hook
-# that takes minutes gets bypassed with --no-verify, and then it guards nothing. On a slow stack,
-# narrow it (FACTORY_PRECOMMIT_CHECKS="compile architecture") and let CI run the rest.
-CHECKS="${FACTORY_PRECOMMIT_CHECKS:-compile test architecture format}"
+GATE=".agents/factory/story-gate.py"
+# Which checks run before a commit. Keep it to what a developer will wait for: a hook that takes
+# minutes gets bypassed with --no-verify, and then it guards nothing. On a slow stack, narrow it
+# (FACTORY_PRECOMMIT_CHECKS="compile architecture"); a required check left out is reported as not
+# run in this scope, never as passed, and CI has to run it.
+CHECKS="${FACTORY_PRECOMMIT_CHECKS:-}"
 
-if [ ! -f "$PROFILE" ]; then
-  echo "pre-commit: no stack profile at $PROFILE — nothing to check." >&2
+if [ ! -f "$GATE" ]; then
+  echo "pre-commit: no gate at $GATE — nothing to check (run 'factory.sh install')." >&2
   exit 0
 fi
 
-read_key() {
-  sed -n "s/^$1:[[:space:]]*//p" "$PROFILE" | head -1 | sed 's/^"\(.*\)"$/\1/; s/^'"'"'\(.*\)'"'"'$/\1/'
-}
-
-failed=0
-skipped=""
-
-for key in $CHECKS; do
-  command=$(read_key "$key")
-  if [ -z "$command" ]; then
-    skipped="$skipped $key"
-    continue
-  fi
-  printf 'pre-commit: %s → %s\n' "$key" "$command" >&2
-  if ! output=$(eval "$command" 2>&1); then
-    echo "pre-commit: $key failed." >&2
-    printf '%s\n' "$output" | tail -40 >&2
-    failed=1
-  fi
-done
-
-[ -n "$skipped" ] && echo "pre-commit: skipped (not in the profile):$skipped" >&2
-
-if [ "$failed" -ne 0 ]; then
-  echo "pre-commit: commit refused. Fix the above, or commit with --no-verify and say why." >&2
-  exit 1
+PY="${FACTORY_PYTHON:-}"
+if [ -z "$PY" ]; then
+  if command -v python3 >/dev/null 2>&1; then PY=python3
+  elif command -v python >/dev/null 2>&1; then PY=python
+  else PY=python3; fi
 fi
 
-exit 0
+args=(--change --staged)
+[ -n "$CHECKS" ] && args+=(--checks "$CHECKS")
+[ -n "${FACTORY_PROFILE:-}" ] && args+=(--profile "$FACTORY_PROFILE")
+
+"$PY" "$GATE" "${args[@]}" >&2
+code=$?
+if [ "$code" -ne 0 ]; then
+  echo "pre-commit: commit refused. Fix the above, or commit with --no-verify and say why." >&2
+fi
+exit "$code"

@@ -7,6 +7,10 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
     story-gate.py --story <id> --stage <plan|test|build|tidy|document> [options]
     story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
     story-gate.py --schedule                           every story's state and the next one to run
+    story-gate.py --change [--staged] [--checks <c>]   the profile's checks outside a story; --staged
+                                                       checks what the commit contains (the hook, CI)
+    story-gate.py --parity <config>                    every implementation's reports prove every
+                                                       mandatory scenario of a scenario contract
 
 Options:
     --backlog <dir>     backlog root (default: backlog)
@@ -30,6 +34,10 @@ Checks by stage:
     document  every path, file and identifier the document stage claims actually exists, every
            row of its glossary table names where its definition came from, and every term the plan
            proposed has landed in a glossary
+    change the profile's compile, test, architecture and format commands against the working tree
+           (or, with --staged, the Git index — refused when the working tree differs from it). A test
+           command passes only when its reports show executed cases. The profile's `required:` line
+           makes checks mandatory: a required check that is not declared, not run or ran nothing fails
     every stage  the story's decision records under .agents/factory/decisions/: a `## needs-human`
            section names one, an open one stops the story, an answered one is applied by the
            stage that asked and then stamped `## Applied` here
@@ -81,8 +89,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 2
-VERSION = "0.8.0"
+CONTRACT = 3
+VERSION = "0.9.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1421,6 +1429,236 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
         result.note("decisions", "no decision record for this story")
 
 
+# --- change check -------------------------------------------------------------
+
+# The same checks outside a story: a direct edit, a commit and CI get one verdict for one tree. The
+# profile declares the commands; its `required:` line declares which of them must hold. Without
+# that line the check reports what it ran and what it skipped, and fails only on a red command.
+CHANGE_CHECKS = ("compile", "test", "architecture", "format")
+
+
+def git(cwd, *args, env=None):
+    try:
+        completed = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, env=env)
+    except OSError as error:
+        return 1, str(error)
+    return completed.returncode, (completed.stdout + completed.stderr).strip()
+
+
+def split_list(value):
+    return [part for part in re.split(r"[\s,]+", str(value or "").strip()) if part]
+
+
+def staged_snapshot(result, cwd, env):
+    """The index tree, or None when the working tree differs from it.
+
+    Refuse on drift rather than materialise the index: a check that runs the tests against an
+    unstaged fix certifies a commit that does not contain it."""
+    code, top = git(cwd, "rev-parse", "--show-toplevel", env=env)
+    if code:
+        result.fail("snapshot", "--staged needs a git repository")
+        return None
+    code, tree = git(cwd, "write-tree", env=env)
+    if code:
+        result.fail("snapshot", f"the index cannot be written as a tree: {tail(tree, 300)}")
+        return None
+    _, unstaged = git(cwd, "diff", "--name-only", env=env)
+    _, untracked = git(cwd, "ls-files", "--others", "--exclude-standard", env=env)
+    drift = [f"modified, not staged: {p}" for p in unstaged.splitlines() if p] \
+        + [f"untracked: {p}" for p in untracked.splitlines() if p]
+    if drift:
+        shown = "\n".join("  " + line for line in drift[:10])
+        more = f"\n  … and {len(drift) - 10} more" if len(drift) > 10 else ""
+        result.fail(
+            "snapshot",
+            f"the working tree is not what the commit contains — the checks would run against "
+            f"these, and the commit would not:\n{shown}{more}\nStage them, or set them aside "
+            f"(`git stash push --keep-index --include-untracked`), then commit again.",
+        )
+        return None
+    result.ok("snapshot", f"index tree {tree[:12]} — the working tree matches it")
+    return tree
+
+
+def run_test_command(result, cwd, profile, key, command, required):
+    """A test command passes only when its reports show it executed tests and none failed."""
+    before, marker = report_state(cwd, profile), clock_marker(cwd)
+    code, output = run(command, cwd)
+    ran = executed_tests(reports_from_this_run(before, report_state(cwd, profile), marker))
+    executed = sum(1 for outcome in ran.values() if outcome != "skipped")
+    failed = sum(1 for outcome in ran.values() if outcome == "failed")
+    if code != 0 or failed:
+        result.fail("test", f"`{command}` ({key}) failed — {failed} failing case(s):\n{tail(output)}")
+    elif executed:
+        result.ok("test", f"`{command}` ({key}) ran {executed} case(s), none failed")
+    elif profile.get("testEvidence") == "exit-code":
+        result.skip("test", f"`{command}` ({key}) exited 0 and writes no report "
+                            f"(`testEvidence: exit-code`) — nothing shows a test ran")
+    else:
+        message = (f"`{command}` ({key}) exited 0, but no report written by this run shows an "
+                   f"executed test — a runner that matched nothing exits 0 too")
+        (result.fail if required else result.skip)("test", message)
+
+
+def change_check(result, cwd, profile, staged, only):
+    required = set(split_list(profile.get("required")))
+    unknown = sorted(required - set(CHANGE_CHECKS))
+    if unknown:
+        result.fail("policy", f"`required:` names {', '.join(unknown)} — the checks are "
+                              f"{', '.join(CHANGE_CHECKS)}")
+    if required:
+        result.ok("policy", f"required: {' '.join(c for c in CHANGE_CHECKS if c in required)}")
+    else:
+        result.note("policy", "the profile declares no `required:` — report-only: what is declared "
+                              "runs, what is not is named, nothing is mandatory")
+    env = dict(os.environ)
+    tree = None
+    if staged:
+        tree = staged_snapshot(result, cwd, env)
+        if tree is None:
+            return
+        # The profile's commands must not inherit a temporary index (`git commit -a`): a test that
+        # runs git in a repository of its own would read this commit's index as its own.
+        os.environ.pop("GIT_INDEX_FILE", None)
+    else:
+        code, head = git(cwd, "rev-parse", "--short", "HEAD", env=env)
+        result.note("snapshot", "the working tree as it is" + (f", on top of {head}" if code == 0 else ""))
+    scope = split_list(only) or list(CHANGE_CHECKS)
+    for check in CHANGE_CHECKS:
+        must = check in required
+        if check not in scope:
+            result.skip(check, "not run in this scope" + (" — it is required, so a later "
+                               "scope (CI) has to run it" if must else ""))
+            continue
+        if check == "test":
+            commands = {}
+            for key in test_command_keys(profile):
+                if profile.get(key):
+                    commands.setdefault(profile[key], key)
+            if not commands:
+                (result.fail if must else result.skip)(
+                    "test", "no test command in the stack profile" + (" — and `test` is required" if must else ""))
+            for command, key in commands.items():
+                run_test_command(result, cwd, profile, key, command, must)
+            continue
+        key = check
+        command = profile.get(key)
+        if not command:
+            (result.fail if must else result.skip)(
+                check, f"no `{key}:` command in the stack profile" + (f" — and `{check}` is required" if must else ""))
+            continue
+        code, output = run(command, cwd)
+        if code == 0:
+            result.ok(check, f"`{command}` succeeded")
+        else:
+            result.fail(check, f"`{command}` failed:\n{tail(output)}")
+    if staged:
+        _, after = git(cwd, "write-tree", env=env)
+        if after != tree:
+            result.fail("snapshot", f"the index changed while the checks ran ({tree[:12]} → "
+                                    f"{after[:12]}) — what was checked is not what would be committed")
+
+
+# --- parity -------------------------------------------------------------------
+
+# Several implementations of one behaviour, each proving the same scenarios. The scenario contract is
+# markdown: `## <id>`, then `Title:` and `Runs:` lines. A report names a scenario by carrying its
+# title as the test's name. Each implementation is checked against the contract — never against the
+# other one, because two implementations agreeing on a wrong result is not parity.
+SCENARIO_HEADING = re.compile(r"^##\s+(\S+)\s*$")
+
+
+def read_scenarios(path):
+    scenarios, current = [], None
+    for line in read_text(path).splitlines():
+        match = SCENARIO_HEADING.match(line)
+        if match:
+            current = {"id": match.group(1), "title": "", "runs": "always"}
+            scenarios.append(current)
+        elif current is not None and ":" in line and line.split(":", 1)[0].strip().lower() in ("title", "runs"):
+            key, value = line.split(":", 1)
+            current[key.strip().lower()] = value.strip()
+    return [s for s in scenarios if s["title"]]
+
+
+def reported_names(paths):
+    """{test name: outcome} as the report states the name — whole, because a title may hold dots."""
+    names = {}
+    for path in paths:
+        try:
+            root = ElementTree.parse(path).getroot()
+        except (ElementTree.ParseError, OSError):
+            continue
+        for case in root.iter():
+            tag = case.tag.rsplit("}", 1)[-1]
+            if tag == "testcase":
+                name, outcome = (case.get("name") or "").strip(), "passed"
+                for child in case:
+                    child_tag = child.tag.rsplit("}", 1)[-1]
+                    if child_tag in ("failure", "error"):
+                        outcome = "failed"
+                    elif child_tag == "skipped" and outcome != "failed":
+                        outcome = "skipped"
+            elif tag == "UnitTestResult":
+                name = (case.get("testName") or "").strip()
+                raw = (case.get("outcome") or "").strip().lower()
+                outcome = "passed" if raw == "passed" else \
+                    "skipped" if raw in ("notexecuted", "skipped", "inconclusive") else "failed"
+            else:
+                continue
+            if name and OUTCOME_RANK[outcome] >= OUTCOME_RANK.get(names.get(name), -1):
+                names[name] = outcome
+    return names
+
+
+def parity(result, config_path):
+    config = read_profile(config_path)
+    if not config:
+        raise GateError(f"{config_path}: no parity config (`scenarios:` and `implementation.<name>:` lines)")
+    base = os.path.dirname(os.path.abspath(config_path))
+    contract = os.path.join(base, config.get("scenarios", ""))
+    if not config.get("scenarios") or not os.path.isfile(contract):
+        raise GateError(f"{config_path}: `scenarios:` names no readable contract ({contract})")
+    scenarios = read_scenarios(contract)
+    with open(contract, "rb") as handle:
+        digest = hashlib.sha256(handle.read()).hexdigest()[:12]
+    result.ok("contract", f"{len(scenarios)} scenario(s) in {config['scenarios']} (sha256 {digest})")
+    implementations = sorted(k for k in config if k.startswith("implementation."))
+    if not implementations:
+        result.fail("implementations", f"{config_path} declares no `implementation.<name>: <report glob>`")
+    for key in implementations:
+        name = key.split(".", 1)[1]
+        paths = sorted(p for p in glob.glob(os.path.join(base, config[key]), recursive=True) if os.path.isfile(p))
+        if not paths:
+            result.fail(name, f"no report matches {config[key]} — run its suite first")
+            continue
+        names = reported_names(paths)
+        newest = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(max(os.path.getmtime(p) for p in paths)))
+        bound = [s for s in scenarios if s["title"] in names]
+        if not bound:
+            result.fail(name, f"{len(paths)} report(s) name no scenario of the contract — the binding "
+                              f"(the title as the test's name) is gone")
+            continue
+        problems, unproven = [], []
+        for scenario in scenarios:
+            outcome = names.get(scenario["title"])
+            mandatory = scenario["runs"].strip().lower() == "always"
+            if outcome == "passed":
+                continue
+            if not mandatory and outcome in (None, "skipped"):
+                unproven.append(scenario["id"])
+                continue
+            problems.append(f"{scenario['id']} {outcome or 'missing'} — {scenario['title']!r}")
+        if problems:
+            result.fail(name, f"{len(problems)} scenario(s) not proven by {len(paths)} report(s):\n"
+                        + "\n".join("  " + p for p in problems))
+        else:
+            result.ok(name, f"{len(scenarios) - len(unproven)} scenario(s) passed in {len(paths)} "
+                            f"report(s), newest {newest}")
+        if unproven:
+            result.note(name, f"not proven here (bound to another configuration): {', '.join(unproven)}")
+
+
 # --- schedule -----------------------------------------------------------------
 
 # Several stories are a loop over one story run, and the loop needs to know what comes next without
@@ -1609,7 +1847,7 @@ class Result:
                 f"a green run here does not cover them"
             )
         verdict = "fail" if self.failed else "pass"
-        print(f"gate:{verdict} story {story_id} stage {stage}")
+        print(f"gate:{verdict} {stage}" if story_id == stage else f"gate:{verdict} story {story_id} stage {stage}")
         if as_json:
             print(
                 json.dumps(
@@ -1653,6 +1891,13 @@ def main(argv):
     )
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
+    parser.add_argument("--change", action="store_true",
+                        help="run the profile's checks outside a story and exit")
+    parser.add_argument("--staged", action="store_true",
+                        help="with --change: check the Git index, refuse when the working tree differs")
+    parser.add_argument("--checks", help="with --change: only these checks (compile test architecture format)")
+    parser.add_argument("--parity", metavar="CONFIG",
+                        help="check every implementation's reports against a scenario contract and exit")
     parser.add_argument("--schedule", action="store_true",
                         help="print every story's state and the next one to run, and exit")
     parser.add_argument("--backlog", default="backlog")
@@ -1668,8 +1913,20 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.change or args.parity:
+        result, label = Result(), "change" if args.change else "parity"
+        try:
+            if args.change:
+                profile = read_profile(resolve_profile(args.profile, cwd))
+                check_contract(result, profile)
+                change_check(result, cwd, profile, args.staged, args.checks)
+            else:
+                parity(result, args.parity)
+        except GateError as error:
+            result.fail("gate", str(error))
+        return result.report(label, label, args.json)
     if not args.story or not args.stage:
-        parser.error("--story and --stage are required (or --list-decisions, --schedule)")
+        parser.error("--story and --stage are required (or --list-decisions, --schedule, --change, --parity)")
     result = Result()
     try:
         story_path = find_story(args.backlog, args.story)

@@ -315,6 +315,77 @@ def with_decisions(*records, plan=None, **more):
     return fixture
 
 
+#: A whole suite, as `./gradlew test` or `dotnet test` runs one: it writes a JUnit report of what it
+#: executed. It fails while `src/state` says `broken`, and writes no report at all — a runner that
+#: matched nothing — while `src/state` says `empty`.
+SUITE_STUB = """#!/bin/sh
+state=$(cat src/state 2>/dev/null)
+[ "$state" = empty ] && { echo "no tests matched"; exit 0; }
+mkdir -p build/test-results/suite
+if [ "$state" = broken ]; then
+  printf '<testsuite name="Suite"><testcase classname="Suite" name="holds"><failure>no</failure></testcase></testsuite>\\n' > build/test-results/suite/TEST-Suite.xml
+  echo "1 test, 1 failed"; exit 1
+fi
+printf '<testsuite name="Suite"><testcase classname="Suite" name="holds"/></testsuite>\\n' > build/test-results/suite/TEST-Suite.xml
+echo "1 test, 0 failed"
+"""
+
+
+def change_project(root, profile, state="fixed", repository=False):
+    """A project for the change check: the suite stub, its state file, optionally committed."""
+    build_project(root, tests=None, profile=profile,
+                  extra_sources=(("suite.sh", SUITE_STUB), ("src/state", state + "\n"),
+                                 (".gitignore", "build/\n")))
+    if repository:
+        for command in (["init", "-q"], ["add", "-A"],
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+    return root
+
+
+def run_change(gate, root, *args):
+    completed = subprocess.run([sys.executable, gate, "--change", *args], cwd=root, capture_output=True,
+                               text=True, encoding="utf-8", errors="replace")
+    return completed.returncode, completed.stdout + completed.stderr
+
+
+def write_file(root, path, content):
+    with open(os.path.join(root, path), "w", encoding="utf-8") as handle:
+        handle.write(content)
+
+
+#: A scenario contract: two mandatory scenarios, one bound to a configuration. A title may hold a dot.
+SCENARIOS = """# Scenarios
+
+## scenario.thing.shown
+Title: The reader sees the thing
+Runs: always
+
+## scenario.thing.empty
+Title: An empty list shows v1.0 of nothing
+Runs: always
+
+## scenario.thing.embedded
+Title: The thing shows inside a frame
+Runs: embedded
+"""
+
+
+def junit(*cases):
+    """A JUnit report with `(name, outcome)` cases."""
+    body = "".join(
+        f'<testcase classname="X" name="{name}"/>' if outcome == "passed" else
+        f'<testcase classname="X" name="{name}"><{"skipped" if outcome == "skipped" else "failure"}/></testcase>'
+        for name, outcome in cases)
+    return f'<testsuite name="X">{body}</testsuite>\n'
+
+
+def trx(*cases):
+    body = "".join(f'<UnitTestResult testName="{name}" outcome="{outcome}"/>' for name, outcome in cases)
+    return ('<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><Results>'
+            f'{body}</Results></TestRun>\n')
+
+
 def story(story_id, depends_on=(), status="approved"):
     """Another story like STORY-1, with its own id, dependencies and status."""
     return (STORY.replace("STORY-1", story_id)
@@ -1362,6 +1433,158 @@ def main(argv=None):
                 print(f"          {detail}")
                 inbox_failures.append(name)
     failures += [(name, [], "") for name in inbox_failures]
+
+    # --- the change check: the same checks outside a story, and the commit checks what it commits
+    print()
+    change_failures = []
+    expectations = []
+    with tmpdir() as root:
+        change_project(root, "compile: true\n")
+        code, output = run_change(args.gate, root)
+        verdicts = checks_by_verdict(output)
+        expectations.append(("change: without `required:` the check is report-only and names what it skipped",
+                             code == 0 and "test" in verdicts["skip"] and "report-only" in output,
+                             output.strip().splitlines()[-3:]))
+    with tmpdir() as root:
+        change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test architecture\n")
+        code, output = run_change(args.gate, root)
+        expectations.append(("change: a required check the profile does not declare fails",
+                             code == 1 and "architecture" in checks_by_verdict(output)["fail"]
+                             and "`architecture` is required" in output, output.strip().splitlines()[-3:]))
+    with tmpdir() as root:
+        change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", state="empty")
+        code, output = run_change(args.gate, root)
+        expectations.append(("change: a required test command that ran no test fails, though it exited 0",
+                             code == 1 and "no report written by this run shows an executed test" in output,
+                             output.strip().splitlines()[-3:]))
+    with tmpdir() as root:
+        change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n")
+        code, output = run_change(args.gate, root)
+        expectations.append(("change: a required suite that ran and passed passes",
+                             code == 0 and "ran 1 case(s), none failed" in output, output.strip().splitlines()[-3:]))
+        code, output = run_change(args.gate, root, "--checks", "compile")
+        expectations.append(("change: a narrowed scope names a required check it left out, never passes it",
+                             code == 0 and "test" in checks_by_verdict(output)["skip"]
+                             and "a later scope (CI) has to run it" in output, output.strip().splitlines()[-3:]))
+    with tmpdir() as root:
+        change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", repository=True)
+        # staged: broken; working tree: the fix, not staged
+        write_file(root, "src/state", "broken\n")
+        subprocess.run(["git", "add", "src/state"], cwd=root, capture_output=True)
+        write_file(root, "src/state", "fixed\n")
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: a failing staged version with an unstaged fix beside it is refused",
+                             code == 1 and "modified, not staged: src/state" in output
+                             and "ran 1 case" not in output, output.strip().splitlines()[-4:]))
+        code, output = run_change(args.gate, root)
+        expectations.append(("change: the same tree checked as a working tree passes — the index is what differs",
+                             code == 0, output.strip().splitlines()[-2:]))
+        write_file(root, "src/state", "broken\n")
+        write_file(root, "src/extra.txt", "not staged\n")
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: an untracked file is drift too — the commit would not contain it",
+                             code == 1 and "untracked: src/extra.txt" in output, output.strip().splitlines()[-4:]))
+        os.remove(os.path.join(root, "src", "extra.txt"))
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: a staged version that fails is refused, with the working tree matching it",
+                             code == 1 and "index tree" in output and "failed" in output,
+                             output.strip().splitlines()[-3:]))
+        state_before = open(os.path.join(root, "src", "state"), encoding="utf-8").read()
+        expectations.append(("change: checking leaves the user's files as they were",
+                             state_before == "broken\n", state_before))
+    with tmpdir() as root:
+        # the hook is the same command; `git commit -a` hands it a temporary index
+        change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", repository=True)
+        os.makedirs(os.path.join(root, ".githooks"), exist_ok=True)
+        shutil.copy(os.path.join(os.path.dirname(args.gate), "..", "templates", "githooks", "pre-commit"),
+                    os.path.join(root, ".githooks", "pre-commit"))
+        os.chmod(os.path.join(root, ".githooks", "pre-commit"), 0o755)
+        shutil.copy(args.gate, os.path.join(root, ".agents", "factory", "story-gate.py"))
+        subprocess.run(["git", "config", "core.hooksPath", ".githooks"], cwd=root, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)      # a project commits both
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "gate",
+                        "--no-verify"], cwd=root, capture_output=True)
+        environment = dict(os.environ, FACTORY_PYTHON=shell_path(sys.executable))
+        commit = ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam"]
+        write_file(root, "src/state", "broken\n")
+        refused = subprocess.run(commit + ["broken"], cwd=root, capture_output=True, text=True, env=environment)
+        write_file(root, "src/state", "fixed, and changed\n")
+        accepted = subprocess.run(commit + ["fixed"], cwd=root, capture_output=True, text=True, env=environment)
+        log = subprocess.run(["git", "log", "--format=%s"], cwd=root, capture_output=True, text=True).stdout.split()
+        expectations.append(("change: the commit hook refuses `git commit -a` of a failing version",
+                             refused.returncode != 0 and "commit refused" in refused.stderr
+                             and "1 failing case(s)" in refused.stderr and "not staged" not in refused.stderr,
+                             (refused.stdout + refused.stderr).strip().splitlines()[-3:]))
+        expectations.append(("change: the commit hook lets `git commit -a` of a passing version through",
+                             accepted.returncode == 0 and log[:1] == ["fixed"] and "broken" not in log
+                             and "ran 1 case(s)" in accepted.stderr,
+                             f"log {log}; {(accepted.stdout + accepted.stderr).strip().splitlines()[-3:]}"))
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            change_failures.append(name)
+    failures += [(name, [], "") for name in change_failures]
+
+    # --- parity: every implementation proves every mandatory scenario, from its own reports -------
+    print()
+    parity_failures = []
+    with tmpdir() as root:
+        reports = {
+            "complete": ("one/TEST-x.xml", junit(("The reader sees the thing", "passed"),
+                                                 ("An empty list shows v1.0 of nothing", "passed"),
+                                                 ("The thing shows inside a frame", "skipped"))),
+            "trx": ("two/results.trx", trx(("The reader sees the thing", "Passed"),
+                                           ("An empty list shows v1.0 of nothing", "Passed"))),
+            "skipping": ("three/TEST-x.xml", junit(("The reader sees the thing", "passed"),
+                                                   ("An empty list shows v1.0 of nothing", "skipped"))),
+            "missing": ("four/TEST-x.xml", junit(("The reader sees the thing", "passed"))),
+            "failing": ("five/TEST-x.xml", junit(("The reader sees the thing", "failed"),
+                                                 ("An empty list shows v1.0 of nothing", "passed"))),
+            "unbound": ("six/TEST-x.xml", junit(("showsTheThing", "passed"))),
+        }
+        config = "scenarios: contract/scenarios.md\n"
+        os.makedirs(os.path.join(root, "contract"))
+        write_file(root, "contract/scenarios.md", SCENARIOS)
+        for name, (path, body) in reports.items():
+            os.makedirs(os.path.join(root, os.path.dirname(path)), exist_ok=True)
+            write_file(root, path, body)
+            config += f"implementation.{name}: {os.path.dirname(path)}/**/*.{path.rsplit('.', 1)[1]}\n"
+        config += "implementation.absent: seven/**/*.xml\n"
+        write_file(root, "parity.conf", config)
+        completed = subprocess.run([sys.executable, args.gate, "--parity", "parity.conf"], cwd=root,
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
+        output = completed.stdout + completed.stderr
+        verdicts = checks_by_verdict(output)
+        expectations = [
+            ("parity: an implementation that proves every mandatory scenario passes; a bound one may skip",
+             "complete" in verdicts["pass"] and "not proven here" in output and "scenario.thing.embedded" in output,
+             [l for l in output.splitlines() if "complete" in l]),
+            ("parity: a TRX report binds by its test name, dots and all",
+             "trx" in verdicts["pass"], [l for l in output.splitlines() if "trx" in l]),
+            ("parity: a skipped mandatory scenario fails, though the suite passed",
+             "skipping" in verdicts["fail"] and "scenario.thing.empty skipped" in output,
+             [l for l in output.splitlines() if "skipping" in l]),
+            ("parity: a mandatory scenario missing from the reports fails",
+             "missing" in verdicts["fail"] and "scenario.thing.empty missing" in output,
+             [l for l in output.splitlines() if "missing" in l]),
+            ("parity: a failing scenario fails its implementation, not the other ones",
+             "failing" in verdicts["fail"] and "scenario.thing.shown failed" in output,
+             [l for l in output.splitlines() if "failing" in l]),
+            ("parity: reports that name no scenario at all mean the binding is gone",
+             "unbound" in verdicts["fail"] and "binding" in output, [l for l in output.splitlines() if "unbound" in l]),
+            ("parity: an implementation without reports fails and says to run its suite",
+             "absent" in verdicts["fail"] and "run its suite first" in output,
+             [l for l in output.splitlines() if "absent" in l]),
+            ("parity: the verdict names the contract's digest, and one failure fails the whole check",
+             completed.returncode == 1 and "sha256" in output, output.strip().splitlines()[-1:]),
+        ]
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            parity_failures.append(name)
+    failures += [(name, [], "") for name in parity_failures]
 
     # --- the schedule: every story's state and the next one, from the files alone -------------
     print()

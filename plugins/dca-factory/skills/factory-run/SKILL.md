@@ -216,6 +216,16 @@ applied. The human answers through `factory-decisions` — in this session or an
 the records (`story-gate.py --list-decisions`), explains one and writes `## Answer` only on their
 confirmation.
 
+## Outside a story
+
+A direct edit gets the same checks without a story: `python3 .agents/factory/story-gate.py
+--change` runs the profile's compile, test, architecture and format commands and fails a required
+one (the profile's `required:` line) that is missing, left out or ran no test. `--staged` checks
+what a commit contains and refuses when the working tree differs from the index; the commit hook
+is that command, and CI runs `--change` on its checkout. Recommend it when someone asks whether a
+change is ready to commit — do not invent a story for it. `--parity <config>` checks that several
+implementations each prove a scenario contract from their reports (`reference/file-contracts.md`).
+
 ## Several stories
 
 One story per run; several stories are a loop over it, never agents working in parallel on one
