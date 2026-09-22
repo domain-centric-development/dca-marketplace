@@ -24,8 +24,11 @@ two modes:
   `[ExternalUpstream]`, `[Partnership]` on the `XContext` marker class (C#).
   The `contextmap` rule set (`DCA-MAP-*`) fails the build when a declaration
   and the real dependencies disagree, and `ContextMapRenderer` renders
-  `docs/context-map.md` from an opt-in test. The skill **edits the
+  `docs/architecture/context-map.md` from an opt-in test. The skill **edits the
   declarations and runs that test**; it never hand-edits the rendered file.
+  What the declarations cannot carry — the pattern name a relationship goes by
+  and the subdomain type of each context — belongs in the hand-maintained map at
+  `docs/context-map.md`, which the skill does own.
 - **Manual mode** (no packages): the skill maintains `docs/context-map.md`
   itself from the heuristics below.
 
@@ -35,9 +38,19 @@ metadata, then the event/ACL heuristics.
 
 ## Map location
 
-Default: `docs/context-map.md` at repo root.
+Two files, two owners — never one file with two meanings:
 
-Alternative path can be set in the conventions overlay, `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`).
+| File | Owner | Content |
+|---|---|---|
+| `docs/architecture/context-map.md` | the renderer, from an opt-in test | which contexts exist and which dependencies they declare. Generated; a test rewrites it and fails when it was stale |
+| `docs/context-map.md` | this skill, by hand | the strategic reading: relationship pattern names, subdomain types, and the reason a relationship has the shape it has |
+
+In manual mode only the second file exists. In declared mode the hand-maintained
+map states which of the two is authoritative about a dependency — the generated
+one — and links to it, so a reader who finds a difference knows which side to
+trust.
+
+Alternative paths can be set in the conventions overlay, `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`).
 
 ## Map structure
 
@@ -180,13 +193,13 @@ test the project owns:
 ```java
 @Test
 void renderContextMap() {
-  ContextMapRenderer.of(architecture()).writeTo(Path.of("docs/context-map.md"));
+  ContextMapRenderer.of(architecture()).writeTo(Path.of("docs/architecture/context-map.md"));
 }
 ```
 
 ```csharp
 var markdown = ContextMapRenderer.Of(arch).WithTitle("Shop Context Map").Render();
-File.WriteAllText(Path.Combine(repoRoot, "docs", "context-map.md"), markdown);
+File.WriteAllText(Path.Combine(repoRoot, "docs", "architecture", "context-map.md"), markdown);
 ```
 
 In this mode `init` writes the declarations for the relationships it finds and asks the user to add the

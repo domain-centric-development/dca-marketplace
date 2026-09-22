@@ -114,8 +114,10 @@ Before reviewing, gather context:
    adapter folder names.
 2. If glossaries exist (`*/domain/glossary.md`), read the one for each
    context that the diff touches. Cite specific entries when flagging.
-3. If `docs/context-map.md` exists, read it. Use it to judge whether
-   cross-context imports are documented (and thus expected) or smuggled in.
+3. If a context map exists, read it: `docs/architecture/context-map.md` for the
+   declared dependencies (generated) and `docs/context-map.md` for the strategic
+   reading (hand-maintained). Use them to judge whether cross-context imports are
+   documented (and thus expected) or smuggled in.
 4. Optionally consult the vendored knowledge catalog
    (`skills/dca-knowledge/catalog/`: `guide/elements.md`, `guide/rules.md`,
    the `pitfall/` and `decision/` nodes) for the doctrine behind a finding.

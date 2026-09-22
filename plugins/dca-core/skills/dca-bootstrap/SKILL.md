@@ -179,7 +179,7 @@ E. **Spring Modulith** (Java, only when detected) — add `dev.domaincentric:dca
    Modulith's own analyzer (not an ArchUnit rule) and excludes the architecture tests in the base
    package from Modulith's root module. Requires `spring-modulith-starter-test` on the class path.
 
-F. **Context map** — install `ContextMapDocumentationTest`, which renders `docs/context-map.md`
+F. **Context map** — install `ContextMapDocumentationTest`, which renders `docs/architecture/context-map.md`
    from the `@BoundedContext` / `@Upstream` / `@Partnership` declarations and fails when the committed
    file is stale? Recommend yes for more than one context.
 
@@ -221,7 +221,7 @@ Before each write: if the target exists, ask *overwrite / skip / abort* (default
    markers it re-exports become invisible). Skip where a `package-info.java` exists.
 6. Decision A: apply the migrate/alias edits to the existing marker types.
 7. Decision F: `templates/java/ContextMapDocumentationTest.java.tmpl` (`{{contextMapPath}}`, default
-   `docs/context-map.md`). Decision E: no template — write the four-line subclass of
+   `docs/architecture/context-map.md`). Decision E: no template — write the four-line subclass of
    `dev.domaincentric.dca.archunit.springmodulith.DcaSpringModulithTest` next to `ArchitectureTest`, overriding
    `layout()` the same way; the dependency comes from the `test-architecture.gradle` / `pom` snippet.
 8. Decision G: `templates/claude/CLAUDE-dca-section.md.tmpl` **appended** to `CLAUDE.md`
@@ -275,7 +275,7 @@ staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that comp
 | `{{springModulithEnabled}}` | detected | `true` / `false` |
 | `{{contextName}}`, `{{description}}`, `{{packageName}}` / `{{contextNamespace}}`, `{{contextClassName}}` | detected contexts | `Shopping Cart`, `com.acme.shop.cart`, `CartContext` |
 | `{{productionProjects}}`, `{{assemblyAnchors}}` | detected (.NET) | `../../src/Acme.Shop.Cart/Acme.Shop.Cart.csproj`, `Cart.CartContext` |
-| `{{contextMapPath}}` | decision F | `docs/context-map.md` |
+| `{{contextMapPath}}` | decision F | `docs/architecture/context-map.md` |
 | `{{verifyCommand}}` | build system | `./gradlew test-architecture` |
 | `{{catalogPath}}` | decision G (`live catalog`) | `~/…/dca-knowledge-catalog/bundle` |
 
