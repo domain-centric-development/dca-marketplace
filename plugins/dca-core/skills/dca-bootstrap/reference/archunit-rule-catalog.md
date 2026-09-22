@@ -10,9 +10,9 @@ Every rule of the two rule libraries `/dca-bootstrap` wires into a project, grou
 | Java | `dev.domaincentric:dca-archunit` implements the rule |
 | .NET | `DomainCentric.ArchRules` implements the rule; *n/a* names why it has no .NET reading |
 
-Java: 119 rules in 11 sets. .NET: 124 rules (118 ported + 6 .NET-only), 1 Java rules n/a.
+Java: 121 rules in 11 sets. .NET: 126 rules (120 ported + 6 .NET-only), 1 Java rules n/a.
 
-Java: 113 enforced, 6 informational. .NET: 119 enforced, 5 informational. 5 retired identities.
+Java: 115 enforced, 6 informational. .NET: 121 enforced, 5 informational. 5 retired identities.
 
 ## `layered` — Layered Architecture
 
@@ -128,6 +128,8 @@ Java: 113 enforced, 6 informational. .NET: 119 enforced, 5 informational. 5 reti
 | `DCA-ADV-016` | Factories should be stateless (only final fields for dependencies) | Factories should be stateless (only final fields for dependencies) | Non-interface classes in <module>.domain.. of every module root that are assignable to Factory. | Every field - declared or inherited from a superclass, static fields included - is final. Field types are not inspected. An empty selection passes. | ✓ | ✓ |
 | `DCA-ADV-017` | Specifications reside in the domain layer | A specification is a rule of the model expressed as a predicate; it belongs where the model is, not in the layer that happens to ask the question | Non-interface classes anywhere on the classpath under scan that are assignable to the configured specification role or whose simple name ends with Specification, the role's own type and a class named exactly Specification excluded. The marker and the name both select, so a specification named after the predicate it expresses is governed too. | Each resides in a domain package of some module root (<module>.domain..). An empty selection passes. | ✓ | ✓ |
 | `DCA-ADV-018` | Specifications must not carry prohibited framework metadata | Domain objects carry no metadata for container management, persistence or transaction coordination | Non-interface types in domain packages that are assignable to the configured specification role or whose simple name ends with Specification. Metadata ownership is exclusive: events, services, factories, specifications, then domain.model types. | Direct or meta-annotations: types prohibit injectable, persistenceEntity and transactional roles; fields prohibit injectionSite and persistenceMapping; methods prohibit transactional and eventListener, plus injectionSite except on events; constructors prohibit injectionSite. Unclassified annotations are allowed by this check. Empty configured roles select no metadata; wiring is not established. | ✓ | ✓ |
+| `DCA-ADV-019` | Aggregates, entities and value objects must not use domain services | A domain service exists for logic that spans several aggregates, so the application calls it; a model type that reaches for one would drive another aggregate from inside its own | Classes anywhere on the classpath under scan that carry the aggregate-root, entity or value role. | None of them calls a method of, reads a field of, or instantiates a type carrying the domain-service role. Holding one as a parameter or a field type is not an access and is not reported. A domain service calling another domain service is outside this selection. An empty selection passes. | ✓ | ✓ |
+| `DCA-ADV-020` | Domain service operations take an aggregate or an entity | A domain service works on the model itself; an operation that only takes extracted values moves the decision out of the domain and into its caller | Public methods declared on non-interface classes carrying the domain-service role, except the methods every object has (equals, hashCode, toString) and compiler generated ones. | At least one parameter of the method carries the aggregate-root or the entity role. Value objects and foreign facts may be passed alongside but do not satisfy the check on their own: a calculation that needs no aggregate is behaviour of the value object or the aggregate, not a domain service. An empty selection passes. | ✓ | ✓ |
 
 ## `usecase` — Use case patterns
 
