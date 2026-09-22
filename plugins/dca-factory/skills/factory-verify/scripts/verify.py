@@ -21,6 +21,13 @@ import subprocess
 import sys
 import tempfile
 
+# The reports use `—` and `→`. A Windows console decodes stdout as cp1252 and a Python that
+# inherits that raises on the first arrow; the files this writes are UTF-8 in every other respect,
+# so the streams are too.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -319,7 +326,7 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
 def run_gate(gate, root, stage):
     result = subprocess.run(
         [sys.executable, gate, "--story", "STORY-1", "--stage", stage],
-        cwd=root, capture_output=True, text=True,
+        cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     return result.returncode, result.stdout + result.stderr
 
@@ -377,6 +384,7 @@ def run_runner(runner, root, *args, env=None):
     environment.update(env or {})
     result = subprocess.run(
         [BASH, runner, *args], cwd=root, capture_output=True, text=True, env=environment,
+        encoding="utf-8", errors="replace",
     )
     return result.returncode, result.stdout + result.stderr
 

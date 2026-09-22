@@ -44,6 +44,13 @@ import sys
 import time
 from xml.etree import ElementTree
 
+# The reports use `—` and `→`. A Windows console decodes stdout as cp1252 and a Python that
+# inherits that raises on the first arrow; the files this writes are UTF-8 in every other respect,
+# so the streams are too.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 EPIC_FIELDS = ("intent", "goal", "metric", "domain_contact")
 MAX_ROUNDS = 3
 #: Codex stops loading project documents at 32 KiB by default and truncates silently; other tools
