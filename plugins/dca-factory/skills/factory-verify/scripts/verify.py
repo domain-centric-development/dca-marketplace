@@ -1479,10 +1479,17 @@ def main(argv=None):
                              and "e2eTest" not in output.split("gate:pass policy")[1].split("\n")[0],
                              output.strip().splitlines()[-4:]))
         with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as handle:
-            handle.write("required: compile test e2eTest\n")
+            handle.write("format: false\n")
+        code, output = run_change(args.gate, root)
+        expectations.append(("change: with a policy, a red optional check is reported and does not decide",
+                             code == 0 and "optional (not in `required:`), so it does not decide" in output,
+                             output.strip().splitlines()[-4:]))
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("required: compile test e2eTest format\n")
         code, output = run_change(args.gate, root)
         expectations.append(("change: `required:` binds each test command by its own key",
                              code == 1 and "(e2eTest) exited 0, but no report" in output
+                             and "format" in checks_by_verdict(output)["fail"]
                              and "ran 1 case(s)" in output, output.strip().splitlines()[-4:]))
         with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as handle:
             handle.write("required: compile test\n")

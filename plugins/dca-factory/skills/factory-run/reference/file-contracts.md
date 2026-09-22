@@ -131,8 +131,9 @@ hold: `compile`, `architecture`, `format`, and each test command by its own prof
 `test.<name>`, `e2eTest`), so an end-user suite that needs a running system can be declared without
 every commit waiting for one. A required check fails when its command is not declared, when it is
 left out of the scope (`--checks`, reported as not run here), or — for a test command — when no
-report written by the run shows an executed case. A test command that is not required and ran
-nothing is named, not failed. Without `required:` the check is
+report written by the run shows an executed case. Once `required:` is declared, the policy
+decides: a check outside it that ran red or ran nothing is reported, and does not fail the verdict.
+Without `required:` every declared command that runs red fails, as it always did. Without `required:` the check is
 report-only. An older gate would ignore the key and pass what the project declared mandatory,
 which is why it raised the file contract to 3.
 

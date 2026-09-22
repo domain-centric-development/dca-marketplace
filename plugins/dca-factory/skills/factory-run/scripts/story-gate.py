@@ -1489,7 +1489,16 @@ def staged_snapshot(result, cwd, env):
     return tree
 
 
-def run_test_command(result, cwd, profile, key, command, required):
+def red(result, check, message, must, strict):
+    """A red check fails the verdict — unless a policy is declared and this check is not in it.
+    Then the policy decides: the red run is reported, and it is not what the commit is judged by."""
+    if strict and not must:
+        result.note(check, message + " — optional (not in `required:`), so it does not decide")
+    else:
+        result.fail(check, message)
+
+
+def run_test_command(result, cwd, profile, key, command, required, strict=False):
     """A test command passes only when its reports show it executed tests and none failed."""
     before, marker = report_state(cwd, profile), clock_marker(cwd)
     code, output = run(command, cwd)
@@ -1497,7 +1506,8 @@ def run_test_command(result, cwd, profile, key, command, required):
     executed = sum(1 for outcome in ran.values() if outcome != "skipped")
     failed = sum(1 for outcome in ran.values() if outcome == "failed")
     if code != 0 or failed:
-        result.fail("test", f"`{command}` ({key}) failed — {failed} failing case(s):\n{tail(output)}")
+        red(result, "test", f"`{command}` ({key}) failed — {failed} failing case(s):\n{tail(output)}",
+            required, strict)
     elif executed:
         result.ok("test", f"`{command}` ({key}) ran {executed} case(s), none failed")
     elif profile.get("testEvidence") == "exit-code":
@@ -1557,7 +1567,7 @@ def change_check(result, cwd, profile, staged, only):
                 result.skip("test", "no test command in the stack profile")
             for command, keys in commands.items():
                 run_test_command(result, cwd, profile, "/".join(keys), command,
-                                 any(k in required for k in keys))
+                                 any(k in required for k in keys), bool(required))
             continue
         must = check in required
         if check not in scope:
@@ -1574,7 +1584,7 @@ def change_check(result, cwd, profile, staged, only):
         if code == 0:
             result.ok(check, f"`{command}` succeeded")
         else:
-            result.fail(check, f"`{command}` failed:\n{tail(output)}")
+            red(result, check, f"`{command}` failed:\n{tail(output)}", must, bool(required))
     if staged:
         _, after = git(cwd, "write-tree", env=env)
         if after != tree:
