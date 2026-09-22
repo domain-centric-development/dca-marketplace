@@ -1332,7 +1332,7 @@ def check_decisions(result, tasks, story_id, cwd):
         rid = str(front["id"]).strip()
         stage = str(front.get("stage", "")).strip()
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-        rel = os.path.relpath(path, cwd)
+        rel = os.path.relpath(path, cwd).replace(os.sep, "/")     # one spelling on every platform
         if state == "open":
             result.fail(
                 "decisions",
