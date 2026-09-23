@@ -45,6 +45,10 @@ overwrite an existing file** — if a target path is occupied, stop and ask.
 
 Use `Glob`, `Read`, `Grep` and `Bash` to determine:
 
+0. **Repository.** `git rev-parse --is-inside-work-tree`: whether the directory is a Git repository
+   already. A project without one gets it in Phase 3 — the architecture test runs without Git, but a
+   commit hook, CI and a delivery pipeline on top of it all need one.
+
 1. **Language and build system.** `build.gradle(.kts)` / `pom.xml` → Java branch; `*.sln` /
    `*.csproj` → .NET branch. Read the Java version (`toolchain`, `sourceCompatibility`,
    `<java.version>`), Spring Boot version, whether Spring Modulith is present; or the
@@ -195,6 +199,11 @@ G. **Catalog wiring (`CLAUDE.md`)** — wire the project's coding agent to the D
 Only after Phase 2. Placeholders use `{{name}}`; `{{#if}}` / `{{#each}}` blocks are resolved by you.
 Before each write: if the target exists, ask *overwrite / skip / abort* (default skip).
 
+**Git, where Phase 1 found none:** `git init`, and a `.gitignore` for the build's outputs — Java/Gradle
+`.gradle/` and `build/`, Maven `target/`, .NET `bin/`, `obj/` and `TestResults/`, plus `.idea/`,
+`.vs/`, `*.iml`. An existing `.gitignore` is never replaced: add only the lines it lacks. Commit
+nothing — the first commit is the user's, after Phase 4.
+
 **Java**
 
 1. `templates/gradle/build-snippet.gradle.tmpl` → add `dca-building-blocks` and (Spring) `dca-spring` to
@@ -257,7 +266,8 @@ mvn test -Dtest='ArchitectureTest'   # Java, Maven
 dotnet test tests/<Solution>.ArchitectureTests   # .NET — Debug; the rules refuse Release builds
 ```
 
-Report which rules passed and which failed. In a retrofit, failures are findings about the existing
+Report which rules passed and which failed. Where Phase 3 initialised the repository, say that
+nothing is committed yet and that the project is ready for its first commit. In a retrofit, failures are findings about the existing
 code, not bootstrap bugs: point the user to `dca.rules.warn` / `dca.rules.freeze` (Java) for a
 staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that complies from the start.
 
