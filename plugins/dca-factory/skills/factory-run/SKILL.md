@@ -161,23 +161,27 @@ correctly after an interruption, in another session or in another tool:
 
 ## Execution tier
 
-Run each stage in the most isolated way available, take the highest tier this tool actually
-delivers, and say in the report which one you used:
+Who runs the stages is the human's choice, not yours, and it decides what the run costs and where:
 
-- **one process per stage — the runner outside the session.** Where the project has the runner
-  script (`.agents/factory/factory.sh`, or the copy in this skill's `scripts/`), the whole run can
-  be handed to it: `factory.sh run --story <id> --tool <tool>`. It calls the tool once per stage, so
-  every stage begins with an empty context by construction rather than by discipline, and it applies
-  the gates, the judge's verdict, the round counter and the file checks itself. This is the highest
-  tier, and the one to prefer when the human asked for a story to be delivered rather than for a
-  particular stage to be done. Per-tool flags (a model, an effort level, a sandbox) come from the
-  environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`, `FACTORY_OPENCODE_ARGS` — because they
-  are the tool's configuration and never the process's.
-- **subagent per stage** when the tool can start one *and it comes back*: the stage gets the story
-  and its predecessor file as its whole input.
-- **in-session** otherwise: you carry out the stage assignment yourself, in order, reading only
-  the story and the predecessor file for that stage — not what you remember from earlier stages.
-  The file contract plus the gate is what keeps this honest.
+| Asked for | Stages run | Tool processes |
+|---|---|---|
+| `/factory-run [story]`, "deliver STORY-1", `/loop /factory-run` | **in this session** — a subagent per stage where the tool can start one and it comes back, otherwise in-session | none beyond this session |
+| `/factory-run --watch`, "in the background", "unattended" | **the runner**, one process per stage (`factory.sh backlog --watch`, see *Without a story*) | one per stage |
+| "one process per stage" for a single story, or the human runs `factory.sh run` | **the runner**: `bash .agents/factory/factory.sh run --story <id> --tool <tool>` | one per stage |
+
+Never switch to the runner on your own: it starts a tool process per stage on top of this session —
+usage the human did not ask for. Say in the report which tier ran.
+
+- **subagent per stage**: the stage gets the story and its predecessor file as its whole input and a
+  fresh context of its own — the isolation the runner gives, without a process per stage.
+- **in-session** where the tool has no subagents: you carry out the stage assignment yourself, in
+  order, reading only the story and the predecessor file for that stage — not what you remember
+  from earlier stages. The file contract plus the gate is what keeps this honest.
+- **the runner**: it calls the tool once per stage, so every stage begins with an empty context by
+  construction; it applies the gates, the judge's verdict, the round counter and the file checks
+  itself, and records each stage's cost with its price. Per-tool flags (a model, an effort level, a
+  sandbox) come from the environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`,
+  `FACTORY_OPENCODE_ARGS` — because they are the tool's configuration and never the process's.
 
 In the subagent and in-session tiers, mark every stage so its cost is known: run
 `python3 .agents/factory/story-gate.py --stage-start <stage> --story <id>` right before it and
@@ -188,10 +192,8 @@ stages the way they see the runner's. A mark without a log it can read records t
 unknown. Do not work on anything else between the two marks: the window counts everything the
 session did in it.
 
-Two situations put you *below* the highest tier on purpose. A single stage the human asked for
-(`/stage-build` on a story that already has a plan) is done here, not through the runner — the
-runner delivers whole stories. And where the tool cannot start processes at all, or the script is
-absent, in-session is the correct answer, not a defect: say so in the report.
+A single stage the human asked for (`/stage-build` on a story that already has a plan) is always
+done here — the runner delivers whole stories.
 
 Degrade rather than wait. A stage is finished when **its file exists**, not when a delegation
 reports success. If a stage you delegated has produced no file when control returns to you, do

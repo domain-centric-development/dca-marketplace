@@ -48,7 +48,8 @@ the story `status: draft` until you release it — the one check no script can r
 
 Six stages, a gate between them, one hand-over file each under `tasks/<story>/`. It stops and says
 so when a stage escalates, when the judge finds the *story* wrong, or when three rounds did not
-converge. Where the project has the runner script, the highest isolation is one process per stage:
+converge. The stages run in your session — a subagent each, where the tool has them. One process per
+stage, outside the session, is the runner, and it runs only when you start it:
 
 ```
 bash .agents/factory/factory.sh run --story STORY-1 --tool claude
