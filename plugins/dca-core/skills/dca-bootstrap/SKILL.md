@@ -217,20 +217,30 @@ nothing — the first commit is the user's, after Phase 4.
    `org.springframework.boot:spring-boot-transaction`, a small `PlatformTransactionManager` bean **in the
    project** (a visible placeholder until a database arrives — `dca-spring` publishes none on purpose) and,
    with Modulith, `spring-modulith-events-api` for `@ApplicationModuleListener`. Say so in the summary.
+   The bean comes from `templates/java/InMemoryTransactionManagerConfiguration.java.tmpl` →
+   `src/main/java/{{basePackagePath}}/infrastructure/InMemoryTransactionManagerConfiguration.java`. The package
+   is not a style choice: `DCA-LAY-004` allows transaction-manager wiring only in the global infrastructure
+   package (`<base>.infrastructure..`) and in `<base>.sharedkernel.infrastructure..` — a `config/` package or a
+   context's own package fails the rule.
 2. `templates/gradle/test-architecture.gradle.tmpl` → `gradle/plugins/test-architecture.gradle`, plus
    `apply from: "gradle/plugins/test-architecture.gradle"` in `build.gradle`. Creates the
    `testArchitecture` source set and the `test-architecture` task, wired into `check`.
 3. `templates/java/ArchitectureTest.java.tmpl` → `src/test-architecture/java/{{basePackagePath}}/ArchitectureTest.java`
    with the `DcaLayout` calls from decisions B and D (`{{layoutCalls}}` — none for a default layout).
 4. `templates/java/dca-archunit.properties.tmpl` → `src/test-architecture/resources/dca-archunit.properties`
-   with `dca.rules.sets` from decision C (omit the key when every set was chosen).
+   with `dca.rules.sets` from decision C (omit the key when every set was chosen). Set
+   `{{noLayeredModuleYet}}` when no package below the base package has a `domain`, `application` or `adapter`
+   subpackage yet — always on a greenfield bootstrap, which ends before any domain code. `DCA-STR-012` would
+   otherwise fail the first run by construction; on `warn` it stays in the report until `/dca-scaffold`
+   creates the first layered module and removes the entry.
 5. `templates/java/package-info.java.tmpl` → one per bounded-context root package
    (`@BoundedContext(name, description)`) and one for the shared kernel (`@SharedKernel`; with
    Modulith also `@ApplicationModule(type = OPEN)`, otherwise Modulith closes the kernel and the
    markers it re-exports become invisible). Skip where a `package-info.java` exists.
 6. Decision A: apply the migrate/alias edits to the existing marker types.
 7. Decision F: `templates/java/ContextMapDocumentationTest.java.tmpl` (`{{contextMapPath}}`, default
-   `docs/architecture/context-map.md`). Decision E: no template — write the four-line subclass of
+   `docs/architecture/context-map.md`). The first run creates the file and reports the test as skipped;
+   the map belongs in the user's first commit, after which the test fails whenever the map is stale. Decision E: no template — write the four-line subclass of
    `dev.domaincentric.dca.archunit.springmodulith.DcaSpringModulithTest` next to `ArchitectureTest`, overriding
    `layout()` the same way; the dependency comes from the `test-architecture.gradle` / `pom` snippet.
 8. Decision G: `templates/claude/CLAUDE-dca-section.md.tmpl` **appended** to `CLAUDE.md`
@@ -251,7 +261,7 @@ nothing — the first commit is the user's, after Phase 4.
 3. `templates/dotnet/ArchitectureTest.cs.tmpl` — `Layout` with the calls from decisions B and D,
    `Assemblies` with one `typeof(<ContextMarkerClass>).Assembly` per production assembly.
 4. `templates/dotnet/dca-archunit.properties.tmpl` next to the csproj (the csproj copies it to the
-   output directory).
+   output directory); `{{noLayeredModuleYet}}` as in Java step 4.
 5. `templates/dotnet/Context.cs.tmpl` → `{{ContextClassName}}.cs` in each context's root namespace,
    `templates/dotnet/SharedKernelContext.cs.tmpl` for the shared kernel. Skip where a class with
    `[BoundedContext]` / `[SharedKernel]` exists.
@@ -266,7 +276,9 @@ mvn test -Dtest='ArchitectureTest'   # Java, Maven
 dotnet test tests/<Solution>.ArchitectureTests   # .NET — Debug; the rules refuse Release builds
 ```
 
-Report which rules passed and which failed. Where Phase 3 initialised the repository, say that
+Report which rules passed and which failed. On a greenfield bootstrap two entries are expected and not
+failures: `DCA-STR-012` on `warn` (no layered module yet) and, with decision F, a skipped
+`ContextMapDocumentationTest` that has just generated `{{contextMapPath}}` — both named in the report. Where Phase 3 initialised the repository, say that
 nothing is committed yet and that the project is ready for its first commit. In a retrofit, failures are findings about the existing
 code, not bootstrap bugs: point the user to `dca.rules.warn` / `dca.rules.freeze` (Java) for a
 staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that complies from the start.
@@ -282,6 +294,7 @@ staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that comp
 | `{{springBootVersion}}`, `{{javaVersion}}` | looked up / detected (greenfield Java build only) | `4.0.2`, `25` |
 | `{{layoutCalls}}` | decisions B, D | `withIncomingSubpackage("in")`, `withUseCaseSuffix("ApplicationService")` |
 | `{{ruleSets}}` | decision C | `cycles,layered,hexagonal,naming` |
+| `{{noLayeredModuleYet}}` | detected: no `domain`/`application`/`adapter` package below the base package (greenfield) | `true` / `false` |
 | `{{springModulithEnabled}}` | detected | `true` / `false` |
 | `{{contextName}}`, `{{description}}`, `{{packageName}}` / `{{contextNamespace}}`, `{{contextClassName}}` | detected contexts | `Shopping Cart`, `com.acme.shop.cart`, `CartContext` |
 | `{{productionProjects}}`, `{{assemblyAnchors}}` | detected (.NET) | `../../src/Acme.Shop.Cart/Acme.Shop.Cart.csproj`, `Cart.CartContext` |

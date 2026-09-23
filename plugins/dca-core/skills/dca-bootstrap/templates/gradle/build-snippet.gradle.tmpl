@@ -14,7 +14,9 @@ dependencies {
 
 // In-memory start without a data starter? Then also (see SKILL.md, Java step 1):
 //   implementation 'org.springframework.boot:spring-boot-transaction'
-//   + one PlatformTransactionManager @Bean in the project, replaced when persistence arrives
+//   + one PlatformTransactionManager @Bean in the project, replaced when persistence arrives:
+//     templates/java/InMemoryTransactionManagerConfiguration.java.tmpl, in {{basePackage}}.infrastructure
+//     (DCA-LAY-004 allows manager wiring only there and in {{basePackage}}.sharedkernel.infrastructure)
 
 // Multi-module builds: the module that hosts src/test-architecture must see every production
 // module on its class path, or DcaArchitecture.load(...) imports only part of the base package.

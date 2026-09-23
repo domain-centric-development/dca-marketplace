@@ -1,6 +1,7 @@
 package {{basePackage}};
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import dev.domaincentric.dca.archunit.DcaArchitecture;
 import dev.domaincentric.dca.archunit.DcaLayout;
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.Test;
  * {@code @ExternalUpstream} and {@code @Partnership} package annotations — the context map as a
  * fully derived view. The test regenerates the file on every run and fails if it was stale, so CI
  * catches a map that drifted from the declarations; the fix is to commit the regenerated file.
+ * A missing file is created and the test reported as skipped (not failed): the first run has no
+ * committed map to be stale against, but the skip stays visible until the file is committed.
  */
 class ContextMapDocumentationTest {
 
@@ -30,6 +33,7 @@ class ContextMapDocumentationTest {
     Files.createDirectories(CONTEXT_MAP.getParent());
     Files.writeString(CONTEXT_MAP, generated);
 
+    assumeTrue(existing != null, CONTEXT_MAP + " did not exist and has been generated — commit it");
     assertEquals(
         generated,
         existing,

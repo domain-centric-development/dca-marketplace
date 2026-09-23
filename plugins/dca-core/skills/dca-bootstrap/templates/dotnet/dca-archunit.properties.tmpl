@@ -14,7 +14,14 @@ dca.rules.sets = {{ruleSets}}
 #dca.rule.DCA-NAM-005.reason = no MVC controllers here
 
 # Reported but not failing the build — for rules the team is working towards.
+{{#if noLayeredModuleYet}}
+# DCA-STR-012: no context has a domain/application/adapter layer yet, so every layer-selecting
+# rule passes without looking at anything. Remove this entry once the first aggregate or use case
+# exists (/dca-scaffold does that for you).
+dca.rules.warn              = DCA-STR-012
+{{else}}
 #dca.rules.warn              = DCA-TAC-009
+{{/if}}
 #dca.rules.warn.sets         = naming
 
 # A documented exception: violations matching the pattern are ignored for that rule.

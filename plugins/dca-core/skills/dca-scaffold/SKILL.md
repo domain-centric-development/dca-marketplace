@@ -437,6 +437,11 @@ Run the architecture tests if they exist:
 dotnet test tests/*.ArchitectureTests   # .NET (Debug build — ArchUnitNET needs it)
 ```
 
+When this run created the project's first `domain`, `application` or `adapter` package and
+`dca-archunit.properties` carries the bootstrap's `dca.rules.warn = DCA-STR-012` entry, remove that entry
+and its comment block before running the tests, so the rule is enforced from now on. Leave any other
+`warn` entries untouched.
+
 Any failures should be findings, not skill bugs. Print:
 ```
 ✓ Scaffolded {N} files for {operation}
