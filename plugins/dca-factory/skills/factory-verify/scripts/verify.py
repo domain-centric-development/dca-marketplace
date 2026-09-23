@@ -1091,6 +1091,23 @@ exit 0
               and "OURS" in open(os.path.join(skills_dir, "stage-plan", "SKILL.md"), encoding="utf-8").read(),
               [l for l in output.splitlines() if "removed" in l or "kept" in l][:3])
 
+    # 1r. inside an agent session the runner does not start a real tool
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        nested = dict(os.environ)
+        nested.pop("FACTORY_TOOL_CMD", None)
+        nested.update({"CLAUDE_CODE_SESSION_ID": "some-session", "PATH": os.environ.get("PATH", "")})
+        result = subprocess.run([BASH, runner, "run", "--story", "STORY-2", "--tool", "claude"], cwd=root,
+                                capture_output=True, text=True, env=nested, encoding="utf-8", errors="replace")
+        check("runner: inside an agent session it refuses a real tool, before any stage",
+              result.returncode == 6 and "belongs to an agent session" in result.stderr
+              and not os.path.exists(os.path.join(root, "tasks", "STORY-2", "plan.md")),
+              f"exit {result.returncode}; {result.stderr.strip().splitlines()[-1:] if result.stderr else ''}")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in",
+                                  env=dict(env, CLAUDE_CODE_SESSION_ID="some-session"))
+        check("runner: a stand-in starts no tool and is not refused inside a session",
+              code == 0 and len(invocations(root)) == 6, f"exit {code}")
+
     # 1p. a runner does not start while another worker holds the checkout
     with tmpdir() as root:
         env = backlog_fixture(root)

@@ -16,7 +16,8 @@
 #   factory.sh parity <config>            every implementation proves the scenario contract
 #
 # `run` exits 0 when the story ran through, 3 when it stopped for a decision, 4 at --max-stages,
-# 5 when another worker holds the checkout, anything else on a failure. `backlog` runs story after story in the order `story-gate.py
+# 5 when another worker holds the checkout, 6 when started inside an agent session with a real
+# tool (FACTORY_ALLOW_NESTED=1 overrides), anything else on a failure. `backlog` runs story after story in the order `story-gate.py
 # --schedule` names, past stories that wait for a decision; --watch keeps it waiting for answers.
 #
 # FACTORY_TOOL_CMD replaces the tool invocation entirely ($FACTORY_STAGE and $FACTORY_PROMPT are
@@ -46,6 +47,21 @@ INVOCATIONS=0                                # agent invocations in this process
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
 WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
+
+# Inside an agent session the stages run in that session (`/factory-run`); a runner started from
+# there would start a tool process per stage on top of it. So `run` and `backlog` refuse to start a
+# real tool when this shell belongs to a Claude Code or Codex session. FACTORY_ALLOW_NESTED=1 is the
+# deliberate way past it; a stand-in (FACTORY_TOOL_CMD) and a dry run start no tool and pass.
+refuse_nested() {
+  [ -n "${FACTORY_TOOL_CMD:-}" ] && return 0
+  [ "${FACTORY_ALLOW_NESTED:-}" = 1 ] && return 0
+  if [ -n "${CLAUDECODE:-}${CLAUDE_CODE_SESSION_ID:-}${CODEX_SESSION_ID:-}${CODEX_THREAD_ID:-}" ]; then
+    echo "factory: this shell belongs to an agent session — the runner would start a tool process per" >&2
+    echo "factory:   stage on top of it. In the session, run the stages with /factory-run; start the" >&2
+    echo "factory:   runner from a terminal of its own. FACTORY_ALLOW_NESTED=1 starts it here anyway." >&2
+    return 6
+  fi
+}
 
 # One worker per checkout: the gate's claim, taken before the first stage, renewed before each one,
 # given back when the runner ends — however it ends.
@@ -1085,6 +1101,7 @@ case "$command" in
     [ -n "$tool" ] || tool=$(detect_tool)
     [ -n "$tool" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
     check_gate_freshness                    # once per invocation; run_story recurses on a verdict
+    [ -n "$dry" ] || refuse_nested || exit $?
     [ -n "$dry" ] || take_checkout || exit $?
     run_story "$story" "$tool" "$from" "$dry"
     ;;
@@ -1099,6 +1116,7 @@ case "$command" in
     [ "$interval" -lt 1 ] && interval=1
     [ "$interval" -gt 3600 ] && interval=3600
     check_gate_freshness
+    [ -n "$dry" ] || refuse_nested || exit $?
     [ -n "$dry" ] || take_checkout || exit $?
     run_backlog "${tool:-stand-in}" "$watch" "$interval" "$dry"
     ;;
