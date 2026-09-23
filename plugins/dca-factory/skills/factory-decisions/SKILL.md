@@ -47,11 +47,16 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    it, and stop. A change of mind is a new question — say that the stage would have to ask again,
    and why the old answer stays as history. A draft (an `## Answer` without `by:` or `at:`) may be
    completed with the missing lines once the human confirms it is theirs.
-8. **Say what happens next, and do not do it.** After writing: name the stage that asked and the
-   command that resumes the story (`factory.sh run --story <id> --from <stage>`, or that stage's
-   skill in a session; a `factory.sh backlog --watch` that is running picks it up by itself). Answering a question is not taking over the story; the worker that asked
+8. **Say what happens next, and do not do it.** After writing: name the stage that asked and how the
+   story continues — a worker that is running (`/factory-run --watch`, `/loop /factory-run`) picks it
+   up by itself; otherwise `/factory-run <story>` resumes it at that stage. Answering a question is not taking over the story; the worker that asked
    applies the answer, and the gate stamps the record applied when it has. If the human wants to
    go on interactively in *this* session, they say so — then it is a hand-over, named as one.
+
+**Speak in skills.** You run the commands; the person gets the result and, for a next step, the
+skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
+`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
+person asks how to do it without a session.
 
 ## Do not
 
@@ -90,6 +95,6 @@ at: 2026-09-22T21:04:00Z
 rationale: archived is history, not inventory.
 ```
 
-"Written to `.agents/factory/decisions/US-3-01.md`. The plan stage asked; resume with
-`factory.sh run --story US-3 --from plan` — it re-plans with the answer, and the gate stamps the
-record applied."
+"Written to `.agents/factory/decisions/US-3-01.md`. The plan stage asked; a running worker picks it
+up by itself, otherwise `/factory-run US-3` resumes it at the plan stage — it re-plans with the
+answer, and the gate stamps the record applied."

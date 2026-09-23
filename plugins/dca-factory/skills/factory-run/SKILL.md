@@ -209,6 +209,11 @@ from what you remember writing.
 Isolation is a comfort; the gate is the correctness argument. Never skip a gate because a stage
 reported success — a stage judging its own work is exactly what the gate replaces.
 
+**Speak in skills.** You run the commands; the person gets the result and, for a next step, the
+skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
+`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
+person asks how to do it without a session.
+
 ## Escalation
 
 Stop the run and hand back to the human when:

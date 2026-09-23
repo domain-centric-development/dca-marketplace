@@ -74,6 +74,11 @@ from you; a story without a context gets one only if the map already has it; a c
 key gets a key that names its behaviour. Do not rewrite the parts the gate did not complain about
 — a story's wording is the domain contact's, not yours.
 
+**Speak in skills.** You run the commands; the person gets the result and, for a next step, the
+skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
+`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
+person asks how to do it without a session.
+
 ## Do not
 
 - Do not write a plan, a test shape, an implementation hint or a file path into a story. What

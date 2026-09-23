@@ -28,9 +28,14 @@ start nothing and answer nothing on anyone's behalf.
 4. **Explain a state from its files when asked.** "Why is STORY-3 blocked?" — the dependency it names;
    "why does STORY-1 run from document?" — its document gate has not passed yet. Read the file the
    state comes from before you repeat the reason.
-5. **Give cost on request, in detail.** The status shows totals. For a story's stages run
-   `bash .agents/factory/factory.sh usage --story <id>`. Unmeasured invocations are unknown,
-   not free; a session log has no price, so its cost reads `—`.
+5. **Give cost on request, in detail.** The status shows totals. Asked what a story or a stage
+   cost, run `bash .agents/factory/factory.sh usage --story <id>` yourself and show its table.
+   Unmeasured invocations are unknown, not free; a session log has no price, so its cost reads `—`.
+
+**Speak in skills.** You run the commands; the person gets the result and, for a next step, the
+skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
+`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
+person asks how to do it without a session.
 
 ## Do not
 

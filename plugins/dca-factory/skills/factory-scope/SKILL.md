@@ -70,6 +70,11 @@ A scoping question may be answered by declining it: the behaviour waits, the sto
 a smaller piece of it fits the map as it stands. That is a real answer and it gets recorded like
 any other — an undocumented "we decided against it" comes back as the same question in a month.
 
+**Speak in skills.** You run the commands; the person gets the result and, for a next step, the
+skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
+`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
+person asks how to do it without a session.
+
 ## Do not
 
 - Do not add a context to the map without the decision record that explains it. A map is the

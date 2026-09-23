@@ -29,6 +29,11 @@ a report of what changed. You commit nothing; the human reviews and commits.
 4. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, and the
    skill copies where the project keeps copies.
 
+**Speak in skills.** You run the commands; the person gets the result and, for a next step, the
+skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
+`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
+person asks how to do it without a session.
+
 ## Do not
 
 - Do not commit, push or change the stack profile.
