@@ -1714,6 +1714,8 @@ def main(argv=None):
                                         DECISION.replace("STORY-1", "STORY-3"))))
         with open(os.path.join(root, "backlog", "sample", "STORY-7.md"), "w", encoding="utf-8") as handle:
             handle.write(story("STORY-7", status="draft"))
+        with open(os.path.join(root, "backlog", "README.md"), "w", encoding="utf-8") as handle:
+            handle.write("# Backlog\n\nOne folder per epic.\n")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations += [
             ("schedule: a story with its document written is delivered",
@@ -1727,6 +1729,8 @@ def main(argv=None):
              and "cycle" in output, [l for l in output.splitlines() if "STORY-4" in l]),
             ("schedule: a dependency on an unknown story blocks it",
              rows.get("STORY-6", ("",))[0] == "blocked" and "unknown STORY-9" in output, rows.get("STORY-6")),
+            ("schedule: a file beside the epic folders is not a story",
+             "README" not in rows, sorted(rows)),
             ("schedule: a draft story is not scheduled",
              rows.get("STORY-7", ("",))[0] == "unreleased", rows.get("STORY-7")),
             ("schedule: the next story runs past one that waits at its plan stage",

@@ -91,7 +91,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 3
-VERSION = "0.10.0"
+VERSION = "0.10.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1829,6 +1829,9 @@ def schedule(cwd, backlog, tasks):
     cannot. A story that stopped at its plan stage wrote no code, so independent work runs past it."""
     stories, order = {}, []
     for root, _dirs, files in os.walk(backlog):
+        # A story is `backlog/<epic>/<story>.md`; a file beside the epics — a README — is not one.
+        if os.path.normpath(root) == os.path.normpath(backlog):
+            continue
         for name in sorted(files):
             if not name.endswith(".md") or name == "epic.md":
                 continue
