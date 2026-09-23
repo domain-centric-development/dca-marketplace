@@ -776,6 +776,8 @@ case "$FACTORY_STAGE" in
   judge) printf '## Verdict\\nverdict: pass\\n' > "$d/judge.md" ;;
   document) printf '## Glossary\\n' > "$d/document.md" ;;
 esac
+[ -n "${FIXTURE_USAGE:-}" ] && printf '%s' "$FIXTURE_USAGE"
+exit 0
 """
 
     def backlog_fixture(root):
@@ -932,6 +934,45 @@ esac
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         check("runner: a judge's story conflict with a record waits for the answer at the stage that applies it",
               code == 3 and "--from test" in output, f"exit {code}; {[l for l in output.splitlines() if 'decision' in l][:3]}")
+
+    # 1n. what a stage cost: recorded per invocation, summed per story and stage, bounded per story
+    claude_like = ('{"result":"done","total_cost_usd":0.01,"modelUsage":{"some-model":{"inputTokens":100,'
+                   '"outputTokens":900,"cacheReadInputTokens":0,"cacheCreationInputTokens":0}}}')
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        env.update({"FIXTURE_USAGE": claude_like, "FACTORY_USAGE_FORMAT": "claude-json"})
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
+        journal = open(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv"), encoding="utf-8").read()
+        report = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
+                                 "--usage", "--story", "STORY-2"], cwd=root, capture_output=True, text=True).stdout
+        check("usage: each invocation's tokens land in the story's journal",
+              code == 0 and journal.count("\tusage\t") == 6 and "output=900" in journal,
+              f"exit {code}; usage lines {journal.count(chr(9) + 'usage' + chr(9))}")
+        check("usage: the report sums tokens and cost per stage and per story",
+              "STORY-2/plan" in report and "STORY-2 total" in report and "5400" in report and "0.06" in report,
+              report.strip().splitlines()[-3:])
+        check("usage: the stage's final message still reaches the log", "done" in output, output[-200:])
+        _, _, _, sched = schedule_of(os.path.join(root, ".agents", "factory", "story-gate.py"), root)
+        check("usage: the schedule shows a story's tokens", "6,000 tokens" in sched,
+              [l for l in sched.splitlines() if "STORY-2" in l])
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        env.update({"FIXTURE_USAGE": claude_like, "FACTORY_USAGE_FORMAT": "claude-json"})
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in",
+                                  "--story-budget", "2500", env=env)
+        first = len(invocations(root))
+        code2, output2 = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in",
+                                    "--from", "build", "--story-budget", "2500", env=env)
+        check("usage: --story-budget stops dispatch once the story has used it, and a restart keeps the count",
+              code == 4 and first == 3 and code2 == 4 and len(invocations(root)) == 3
+              and "has used 3000 tokens" in output2, f"exit {code}/{code2}, invocations {first}/{len(invocations(root))}")
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
+        report = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
+                                 "--usage", "--story", "STORY-2"], cwd=root, capture_output=True, text=True).stdout
+        check("usage: a tool that reports nothing is counted as unknown, never as zero",
+              "6 invocation(s) without a usage report" in report, report.strip().splitlines()[-2:])
 
     # 1l. a resumed document stage whose file already holds is not invoked again
     with tmpdir() as root:
@@ -1789,6 +1830,36 @@ def main(argv=None):
             print(f"          {detail}")
             proof_failures.append(name)
     failures += [(name, [], "") for name in proof_failures]
+
+    # --- the two usage formats the runner reads, in the shape the tools really write ------------------
+    with tmpdir() as root:
+        claude_out = os.path.join(root, "claude.json")
+        with open(claude_out, "w", encoding="utf-8") as handle:
+            handle.write('{"type":"result","result":"ok","total_cost_usd":0.023707,"usage":{"input_tokens":10},'
+                         '"modelUsage":{"claude-haiku-4-5":{"inputTokens":10,"outputTokens":79,'
+                         '"cacheReadInputTokens":14220,"cacheCreationInputTokens":10940,"costUSD":0.023707}}}')
+        codex_out = os.path.join(root, "codex.jsonl")
+        with open(codex_out, "w", encoding="utf-8") as handle:
+            handle.write('{"type":"thread.started","thread_id":"t"}\n{"type":"turn.started"}\n'
+                         '{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n'
+                         '{"type":"turn.completed","usage":{"input_tokens":12850,"cached_input_tokens":9984,'
+                         '"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}\n')
+        read = lambda *a: subprocess.run([sys.executable, args.gate, "--usage-from", *a], capture_output=True,
+                                         text=True, encoding="utf-8").stdout
+        c, x, n = read("claude-json", claude_out), read("codex-jsonl", codex_out, "--usage-model", "gpt-x"), \
+            read("none", codex_out)
+        expectations = [
+            ("usage: Claude's JSON result is read per model, with its cost",
+             c.startswith("model=claude-haiku-4-5\tinput=10\tcache_read=14220\tcache_write=10940\toutput=79\tcost=0.0237"), c),
+            ("usage: Codex's JSONL is read from its turn events, cached input apart",
+             x.startswith("model=gpt-x\tinput=2866\tcache_read=9984\tcache_write=0\toutput=5") and "ok" in x, x),
+            ("usage: an unknown format reads as unknown", n.startswith("unknown"), n[:40]),
+        ]
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            failures.append((name, [], ""))
 
     # --- existing tests keep their expectations: the plan gate's baseline, the later gates' check -----
     print()

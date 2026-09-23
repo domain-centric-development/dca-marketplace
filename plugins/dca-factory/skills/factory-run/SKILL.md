@@ -257,6 +257,16 @@ the same refusal. `--watch` keeps it waiting while a story waits on a human: it 
 schedule every `--interval` seconds (default 60, 1–3600), invokes no agent while nothing changed,
 and resumes the answered story at the stage that asked. `--max-stages <n>` caps the agent
 invocations of the run (exit 4, the work so far stays); `.agents/factory/stop` ends it before the
-next story. The watch lives as long as its process: a closed session or terminal ends it, and a
+next story.
+
+**What a story cost.** The runner asks Claude Code and Codex for their machine-readable output and
+records each invocation's tokens — input, cache read, cache write, output, and Claude's cost — as a
+`usage` line in the story's journal. `python3 .agents/factory/story-gate.py --usage [--story <id>]`
+sums them per story and stage, repeat rounds included; the schedule shows each story's total.
+`--story-budget <tokens>` (on `run` and `backlog`) stops dispatch once a story has used that many,
+counted from the journal, so a restart or a second session continues the same count; the stage
+that crosses the line still finishes, because usage is known only after it ran. A tool that reports
+nothing — OpenCode today, a custom `FACTORY_TOOL_CMD` without `FACTORY_USAGE_FORMAT` — is shown as
+invocations without a report, never as zero. An in-session run writes no journal and has no numbers. The watch lives as long as its process: a closed session or terminal ends it, and a
 file wakes nobody. In-session, do the same loop yourself — ask the schedule, run the story it
 names, ask again — and stop instead of waiting.

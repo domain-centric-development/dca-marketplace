@@ -4,8 +4,9 @@
 # files as running the skills inside a session — this only changes who holds the context.
 #
 #   factory.sh install [--tool claude|codex|opencode|all] [--from <skill folder>] [--copy]
-#   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--dry-run]
-#   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>] [--dry-run]
+#   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--story-budget <tokens>] [--dry-run]
+#   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>]
+#                      [--story-budget <tokens>] [--dry-run]
 #
 # `run` exits 0 when the story ran through, 3 when it stopped for a decision, 4 at --max-stages,
 # anything else on a failure. `backlog` runs story after story in the order `story-gate.py
@@ -36,6 +37,7 @@ DECISIONS=".agents/factory/decisions"
 STOP_FILE=".agents/factory/stop"             # exists → a backlog run stops before its next story
 INVOCATIONS=0                                # agent invocations in this process
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
+STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
 
 # Which Python runs the gate. `python3` is the POSIX spelling; on Windows the interpreter is
 # `python` and `python3` is often a Store stub that opens a shop window. FACTORY_PYTHON overrides,
@@ -71,7 +73,7 @@ stage_file() {
   esac
 }
 
-usage() { sed -n '2,17p' "$0" >&2; exit 2; }
+usage() { sed -n '2,18p' "$0" >&2; exit 2; }
 
 # An install step that had to work and did not. `set -e` is deliberately *not* used: the run loop
 # expects non-zero exits in several places — a gate that refuses, a tool that stops, a verdict that
@@ -181,21 +183,57 @@ invoke() {                                  # invoke <tool> <prompt>
   # and the runner's own loop can be exercised without a model — which is the only way a defect in
   # the loop is found by a test rather than by a wasted run.
   INVOCATIONS=$((INVOCATIONS + 1))
+  # The tool's own output is kept per invocation (`$raw`), because it is also where the tool says
+  # what the stage cost. Claude and Codex are asked for their machine-readable form; the runner
+  # prints the stage's final message from it, so the log still reads as text.
+  local raw="${invocation_raw:-/dev/null}"
   if [ -n "${FACTORY_TOOL_CMD:-}" ]; then
     FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}" FACTORY_PROMPT="$prompt" \
-      sh -c "$FACTORY_TOOL_CMD"
-    return $?
+      sh -c "$FACTORY_TOOL_CMD" > "$raw"
+    local code=$?
+    [ "$raw" = /dev/null ] || { [ -n "${FACTORY_USAGE_FORMAT:-}" ] || cat "$raw"; }
+    return $code
   fi
   case "$tool" in
-    claude)   claude -p "$prompt" --permission-mode acceptEdits \
+    claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format json \
                 --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
-                ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} ;;
-    codex)    codex exec -s workspace-write \
+                ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
+    # stdin closed: `codex exec` also reads a prompt from stdin, and an unattended run has none.
+    codex)    codex exec --json -s workspace-write \
                 -c sandbox_workspace_write.network_access=true \
-                ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" ;;
-    opencode) opencode run ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" ;;
+                ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" < /dev/null > "$raw" ;;
+    opencode) opencode run ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" | tee "$raw" ;;
     *)        echo "factory: unknown tool '$tool'" >&2; return 2 ;;
   esac
+}
+
+# Which format a tool's raw output is in, for the usage reading. OpenCode's JSON events were not
+# verified against a real run, so its usage is recorded as unknown rather than guessed.
+usage_format() {                            # usage_format <tool>
+  if [ -n "${FACTORY_TOOL_CMD:-}" ]; then echo "${FACTORY_USAGE_FORMAT:-none}"; return; fi
+  case "$1" in
+    claude) echo claude-json ;;
+    codex)  echo codex-jsonl ;;
+    *)      echo none ;;
+  esac
+}
+
+# The model a tool ran with, where its output does not say: the -m/--model in its extra flags.
+model_flag() {                              # model_flag <tool>
+  local args=""
+  case "$1" in codex) args="${FACTORY_CODEX_ARGS:-}" ;; opencode) args="${FACTORY_OPENCODE_ARGS:-}" ;; esac
+  printf '%s\n' "$args" | sed -n 's/.*\(-m\|--model\)[ =]\([^ ]*\).*/\2/p' | head -1
+}
+
+# One `usage` line in the story's journal per invocation, and the stage's final message on screen.
+record_usage() {                            # record_usage <story> <stage> <tool> <raw>
+  local out fields
+  out=$("$PY" "$GATE" --usage-from "$(usage_format "$3")" "$4" --usage-model "$(model_flag "$3")" 2>/dev/null) \
+    || out="unknown"
+  fields=$(printf '%s\n' "$out" | head -1)
+  [ "$(usage_format "$3")" = none ] || printf '%s\n' "$out" | sed '1d'
+  printf '%s\tusage\t%s\ttool=%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "$3" "$fields" \
+    >> "$TASKS/$1/.verify/journal.tsv"
 }
 
 # --- install -----------------------------------------------------------------
@@ -648,6 +686,12 @@ run_story() {
     echo "── stage $stage  (tool: $tool, fresh context)"
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
+    elif [ -n "$STORY_BUDGET" ] && [ "$("$PY" "$GATE" --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
+      # Checked before the invocation, from the journal: a restart, a second session or a new run
+      # continues the same count. The last stage may overshoot — usage is known only after it ran.
+      echo "factory: story $story has used $("$PY" "$GATE" --usage --story "$story" --total) tokens of its" >&2
+      echo "factory:   --story-budget $STORY_BUDGET — stage '$stage' is not dispatched; the work so far stays." >&2
+      return 4
     elif [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
       # Checked before the invocation, never after: the cap is what may still be spent. Nothing is
       # undone — the stages so far keep their files, and the schedule resumes the story from them.
@@ -663,7 +707,12 @@ run_story() {
       [ "$stage" = judge ] && [ -f "$TASKS/$story/judge.md" ] && mv "$TASKS/$story/judge.md" "$TASKS/$story/.judge-previous.md"
       snapshot "$story" "before-$stage"
       printf '%s\tstage-start\t%s\ttool=%s\n' "$stage_started" "$stage" "$tool" >> "$TASKS/$story/.verify/journal.tsv"
-      stage_in_flight="$stage" story_in_flight="$story" invoke "$tool" "$(prompt_for "$stage" "$story")" || {
+      local raw_out; raw_out="$TASKS/$story/.verify/$stage.$(date -u +%H%M%S).out"
+      local invoked=0
+      invocation_raw="$raw_out" stage_in_flight="$stage" story_in_flight="$story" \
+        invoke "$tool" "$(prompt_for "$stage" "$story")" || invoked=$?
+      record_usage "$story" "$stage" "$tool" "$raw_out"
+      [ "$invoked" = 0 ] || {
         printf '%s\tstage-end\t%s\texit=nonzero\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
           >> "$TASKS/$story/.verify/journal.tsv"
         echo "factory: the tool exited non-zero during stage '$stage'." >&2; return 1; }
@@ -832,6 +881,7 @@ while [ $# -gt 0 ]; do
     --watch) watch=1; shift ;;
     --interval) interval=$2; shift 2 ;;
     --max-stages) MAX_STAGES=$2; shift 2 ;;
+    --story-budget) STORY_BUDGET=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -850,6 +900,7 @@ case "$command" in
     [ -n "$tool" ] || [ -n "${FACTORY_TOOL_CMD:-}" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
     case "$interval" in ''|*[!0-9]*) echo "factory: --interval takes whole seconds" >&2; exit 2 ;; esac
     case "$MAX_STAGES" in *[!0-9]*) echo "factory: --max-stages takes a number" >&2; exit 2 ;; esac
+    case "$STORY_BUDGET" in *[!0-9]*) echo "factory: --story-budget takes a number of tokens" >&2; exit 2 ;; esac
     # Bounded both ways: below a second the watch is a busy loop, above an hour an answer waits
     # longer than anyone expects to.
     [ "$interval" -lt 1 ] && interval=1

@@ -7,6 +7,7 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
     story-gate.py --story <id> --stage <plan|test|build|tidy|document> [options]
     story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
     story-gate.py --schedule                           every story's state and the next one to run
+    story-gate.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
     story-gate.py --change [--staged] [--checks <c>]   the profile's checks outside a story; --staged
                                                        checks what the commit contains (the hook, CI)
     story-gate.py --parity <config>                    every implementation's reports prove every
@@ -93,7 +94,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 4
-VERSION = "0.14.0"
+VERSION = "0.15.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1912,6 +1913,135 @@ def parity(result, config_path):
             result.note(name, f"not proven here (bound to another configuration): {', '.join(unproven)}")
 
 
+# --- usage ------------------------------------------------------------------------
+
+# What a stage cost, as the tool itself reports it. The runner saves each invocation's raw output and
+# asks this script to read it; the numbers land in the story's journal next to the stage's start and
+# end, so they survive restarts, second sessions and new runs like everything else there. A tool that
+# reports nothing is `unknown` — never zero, because a zero would look like a cheap stage.
+USAGE_FIELDS = ("input", "cache_read", "cache_write", "output")
+
+
+def parse_usage(fmt, path):
+    """({model, input, cache_read, cache_write, output, cost} or None, the final message text)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            raw = handle.read()
+    except OSError:
+        return None, ""
+    if fmt == "claude-json":
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return None, raw
+        models = data.get("modelUsage") or {}
+        if not models:
+            return None, str(data.get("result", ""))
+        usage = {"model": ",".join(sorted(models)),
+                 "input": sum(int(m.get("inputTokens", 0)) for m in models.values()),
+                 "cache_read": sum(int(m.get("cacheReadInputTokens", 0)) for m in models.values()),
+                 "cache_write": sum(int(m.get("cacheCreationInputTokens", 0)) for m in models.values()),
+                 "output": sum(int(m.get("outputTokens", 0)) for m in models.values())}
+        if data.get("total_cost_usd") is not None:
+            usage["cost"] = f"{float(data['total_cost_usd']):.4f}"
+        return usage, str(data.get("result", ""))
+    if fmt == "codex-jsonl":
+        usage, seen, text = {k: 0 for k in USAGE_FIELDS}, False, ""
+        for line in raw.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") == "turn.completed" and isinstance(event.get("usage"), dict):
+                seen = True
+                u = event["usage"]
+                cached = int(u.get("cached_input_tokens", 0))
+                usage["input"] += int(u.get("input_tokens", 0)) - cached       # input counts the cached part
+                usage["cache_read"] += cached
+                usage["cache_write"] += int(u.get("cache_write_input_tokens", 0))
+                usage["output"] += int(u.get("output_tokens", 0))
+            item = event.get("item") or {}
+            if event.get("type") == "item.completed" and item.get("type") in ("agent_message", "assistant_message"):
+                text = str(item.get("text", text))
+        return (usage if seen else None), text
+    return None, raw
+
+
+def usage_from(fmt, path, model=None):
+    usage, text = parse_usage(fmt, path)
+    if usage is None:
+        print("unknown")
+    else:
+        if model and not usage.get("model"):
+            usage["model"] = model
+        usage.setdefault("model", "unknown")
+        print("\t".join(f"{k}={usage[k]}" for k in ("model",) + USAGE_FIELDS + (("cost",) if "cost" in usage else ())))
+    if text.strip():
+        print(text.strip())
+    return 0
+
+
+def journal_usage(tasks, story_id):
+    """{stage: {invocations, measured, input, cache_read, cache_write, output, cost}} from the journal."""
+    journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
+    stages = {}
+    if not os.path.isfile(journal):
+        return stages
+    for line in read_text(journal).splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        entry = stages.setdefault(parts[2], {"invocations": 0, "measured": 0, "cost": 0.0,
+                                             **{k: 0 for k in USAGE_FIELDS}})
+        if parts[1] == "stage-start":
+            entry["invocations"] += 1
+        elif parts[1] == "usage" and "unknown" not in parts[3:]:
+            fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
+            entry["measured"] += 1
+            for k in USAGE_FIELDS:
+                entry[k] += int(fields.get(k, 0) or 0)
+            entry["cost"] += float(fields.get("cost", 0) or 0)
+    return {s: e for s, e in stages.items() if e["invocations"] or e["measured"]}
+
+
+def tokens_of(entry):
+    return sum(entry[k] for k in USAGE_FIELDS)
+
+
+def usage_report(tasks, story_filter=None, total_only=False):
+    stories = sorted(d for d in os.listdir(tasks) if os.path.isdir(os.path.join(tasks, d))) \
+        if os.path.isdir(tasks) else []
+    if story_filter:
+        stories = [s for s in stories if s == story_filter]
+    if total_only:
+        print(sum(tokens_of(e) for s in stories for e in journal_usage(tasks, s).values()))
+        return 0
+    print(f"{'story/stage':<24} {'runs':>4} {'measured':>8} {'input':>9} {'cache read':>11} "
+          f"{'cache write':>11} {'output':>8} {'cost $':>8}")
+    grand = None
+    for story in stories:
+        stages = journal_usage(tasks, story)
+        if not stages:
+            continue
+        order = sorted(stages, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 99)
+        total = {"invocations": 0, "measured": 0, "cost": 0.0, **{k: 0 for k in USAGE_FIELDS}}
+        for stage in order:
+            e = stages[stage]
+            for k in total:
+                total[k] += e[k]
+            print(f"{story + '/' + stage:<24} {e['invocations']:>4} {e['measured']:>8} {e['input']:>9} "
+                  f"{e['cache_read']:>11} {e['cache_write']:>11} {e['output']:>8} {e['cost']:>8.2f}")
+        print(f"{story + ' total':<24} {total['invocations']:>4} {total['measured']:>8} {total['input']:>9} "
+              f"{total['cache_read']:>11} {total['cache_write']:>11} {total['output']:>8} {total['cost']:>8.2f}")
+        unknown = total["invocations"] - total["measured"]
+        if unknown > 0:
+            print(f"{'':<24} {unknown} invocation(s) without a usage report — not counted, not zero")
+        grand = total if grand is None else {k: grand[k] + total[k] for k in grand}
+    if grand is None:
+        print("usage: no stage invocation recorded — an in-session run writes no journal")
+    return 0
+
+
 # --- schedule -----------------------------------------------------------------
 
 # Several stories are a loop over one story run, and the loop needs to know what comes next without
@@ -2106,8 +2236,10 @@ def schedule(cwd, backlog, tasks):
         journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
         spent = ""
         if os.path.isfile(journal):
-            count = sum(1 for line in read_text(journal).splitlines() if "\tstage-start\t" in line)
-            spent = f" · {count} stage invocation(s)" if count else ""
+            used = journal_usage(tasks, story_id)
+            count = sum(e["invocations"] for e in used.values())
+            tokens = sum(tokens_of(e) for e in used.values())
+            spent = (f" · {count} stage invocation(s)" + (f", {tokens:,} tokens" if tokens else "")) if count else ""
         print(f"{story_id}  {story['state']:<11} {start:<13} {story['detail']}{spent}".rstrip())
     counts = {}
     for story in stories.values():
@@ -2201,6 +2333,12 @@ def main(argv):
     parser.add_argument("--checks", help="with --change: only these checks (compile test architecture format)")
     parser.add_argument("--parity", metavar="CONFIG",
                         help="check every implementation's reports against a scenario contract and exit")
+    parser.add_argument("--usage", action="store_true",
+                        help="print the tokens each story and stage used, from the runner's journals")
+    parser.add_argument("--total", action="store_true", help="with --usage: print only the token total")
+    parser.add_argument("--usage-from", nargs=2, metavar=("FORMAT", "FILE"),
+                        help="read one invocation's usage from a tool's raw output (claude-json, codex-jsonl)")
+    parser.add_argument("--usage-model", help="with --usage-from: the model, where the output does not name it")
     parser.add_argument("--schedule", action="store_true",
                         help="print every story's state and the next one to run, and exit")
     parser.add_argument("--backlog", default="backlog")
@@ -2216,6 +2354,10 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.usage_from:
+        return usage_from(args.usage_from[0], args.usage_from[1], args.usage_model)
+    if args.usage:
+        return usage_report(args.tasks, args.story, args.total)
     if args.change or args.parity:
         result, label = Result(), "change" if args.change else "parity"
         try:
