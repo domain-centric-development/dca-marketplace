@@ -39,6 +39,10 @@ item in a project. The templates are `factory-run/templates/backlog/{epic,story}
    A criterion is behaviour the system **does not show yet**: its test must be red before the build
    stage, and the gate refuses one that is already green. What has to keep working is the job of
    the tests that already exist — "posting still works" is not a criterion.
+   An assumption that fixes an observable result — a format, an order, a wording the user sees —
+   is a criterion waiting for its answer, not a footnote: the plan stage builds the next best shape
+   around an open assumption, and that shape then reaches delivery unconfirmed. Ask for it before
+   the story is released, or write the answer in as a criterion.
 6. **Use the project's own words.** Read the context's glossary first and write the story in those
    terms. A term the story needs that no glossary carries goes into `## Assumptions` as a question
    for the domain contact, not into the story as if it were established.

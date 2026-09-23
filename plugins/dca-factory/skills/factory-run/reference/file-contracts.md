@@ -103,7 +103,10 @@ rationale: <optional>
 
 - `id` is `<story>-<nn>`, `nn` the next two-digit number among the story's records, and it is
   the file name — the gate finds a record by its name and refuses one whose `id:` disagrees.
-- `stage` is the stage that asked. It is the stage that re-runs once the answer is there.
+- `stage` is the stage that re-runs once the answer is there and applies it — the stage that asked,
+  except for a judge's story conflict, where it is the stage the answer lands in (`plan` or `test`).
+  A test whose expectation changes on such a decision may be green at the test gate when it was
+  recorded red before; without the decision, green before the build is refused.
 - The state is **read off the file, never stored in it**: no `## Answer` is *open*; an
   `## Answer` with `answer:`, `by:` and `at:` is *answered*; a gate-written `## Applied` is
   *applied*. An `## Answer` missing the name or the time is a draft, and a draft unblocks nothing.

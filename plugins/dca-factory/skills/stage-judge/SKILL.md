@@ -94,6 +94,12 @@ Which value you choose decides where the run goes back to, and that is the point
 
 Only `blocker` and `major` findings prevent `pass`. A review that finds something everywhere is
 ignored and therefore worthless: rank, and let `minor` findings be recorded without blocking.
+A `story-conflict` is a question to a human, so it is a **decision record** like any other: write
+`## needs-human` in the judge file naming it (`decision: <story>-<nn>`), and the record at
+`.agents/factory/decisions/<story>-<nn>.md` with the front matter `id:`, `story:`, `asked:` (UTC) and
+`stage:` — the stage that will **apply** the answer, not yourself: `plan` when the story or the plan
+has to change, `test` when an agreed expectation has to change. Say in `## Question` that the judge
+asked. The run waits for the answer and resumes at that stage; everything after it runs again.
 Never resolve a `story-conflict` by quietly reinterpreting the criterion — a correction that
 changes an agreed decision belongs in the document, or after five rounds the story describes
 something the code no longer does and nobody notices.

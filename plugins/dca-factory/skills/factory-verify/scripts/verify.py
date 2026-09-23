@@ -305,6 +305,21 @@ Decision STORY-1-01 answered b: archived things are hidden — the read model fi
 """
 
 
+#: A judge's story conflict whose answer lands in the test stage.
+CONFLICT = DECISION.replace("stage: plan", "stage: test").replace(
+    "# Does an archived thing count?", "# May the agreed test of shows-the-thing change?")
+JUDGE_CONFLICT = """# Judge — STORY-1
+
+## Verdict
+verdict: story-conflict
+
+## needs-human
+decision: STORY-1-01
+The judge asks whether an agreed expectation may change; the test stage applies the answer.
+"""
+TESTS_ON_DECISION = TESTS + "\nDecision STORY-1-01 answered b: the expectation of shows-the-thing changed.\n"
+
+
 def with_decisions(*records, plan=None, **more):
     """A fixture with decision records under .agents/factory/decisions/ and, optionally, a plan."""
     sources = [(f".agents/factory/decisions/{name}.md", text) for name, text in records]
@@ -901,6 +916,23 @@ esac
               and ".judge-previous.md" not in prompts.split("Apply the stage-judge")[1],
               f"exit {code}; prompts: {prompts[-300:]}")
 
+    # 1m. a judge's story conflict is a question: the run waits, and names the stage that applies it
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        with open(os.path.join(root, "fixture", "judge-conflict.md"), "w", encoding="utf-8") as handle:
+            handle.write(JUDGE_CONFLICT.replace("STORY-1", "STORY-2"))
+        with open(os.path.join(root, "fixture", "conflict.md"), "w", encoding="utf-8") as handle:
+            handle.write(CONFLICT.replace("STORY-1", "STORY-2"))
+        stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            "  judge) printf '## Verdict\\nverdict: pass\\n' > \"$d/judge.md\" ;;",
+            "  judge) cat fixture/conflict.md > .agents/factory/decisions/STORY-2-01.md; "
+            "cat fixture/judge-conflict.md > \"$d/judge.md\" ;;")
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(stand_in)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
+        check("runner: a judge's story conflict with a record waits for the answer at the stage that applies it",
+              code == 3 and "--from test" in output, f"exit {code}; {[l for l in output.splitlines() if 'decision' in l][:3]}")
+
     # 1l. a resumed document stage whose file already holds is not invoked again
     with tmpdir() as root:
         env = backlog_fixture(root)
@@ -1381,6 +1413,13 @@ def main(argv=None):
         (Case("document: an empty `## needs-human` left from the template stops nothing", "document", 0,
               must_pass=("documented",)),
          dict(document=DOCUMENT + "\n## needs-human\n(none)\n")),
+        (Case("test: a test recorded red before may be green when its expectation changed on a decision",
+              "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
+         dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,
+              **with_decisions(("STORY-1-01", CONFLICT + ANSWER), plan=PLAN_APPLIED))),
+        (Case("test: without that decision, green before the build is still refused", "test", 1,
+              must_fail=("tests-red",), text=("passes before the build stage",)),
+         dict(green=both_green, ledger=both_green)),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
@@ -1799,6 +1838,30 @@ def main(argv=None):
                              unchanged == ("in-progress", "test") and rows.get("STORY-1") == ("in-progress", "plan")
                              and "the story changed after it was planned" in output,
                              f"before the edit {unchanged}, after {rows.get('STORY-1')}"))
+    with tmpdir() as root:
+        # a judge's story conflict: waits, resumes where the answer lands, then runs the rest again
+        backlog_project(root, extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_APPLIED), ("tasks/STORY-1/tests.md", TESTS),
+            ("tasks/STORY-1/build.md", "## Changed\n"), ("tasks/STORY-1/tidy.md", "## Moves\n"),
+            ("tasks/STORY-1/judge.md", JUDGE_CONFLICT),
+            (".agents/factory/decisions/STORY-1-01.md", CONFLICT)))
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        waiting = rows.get("STORY-1")
+        record = os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md")
+        with open(record, "a", encoding="utf-8") as handle:
+            handle.write(ANSWER)
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        resumable = rows.get("STORY-1")
+        with open(os.path.join(root, "tasks", "STORY-1", "tests.md"), "w", encoding="utf-8") as handle:
+            handle.write(TESTS_ON_DECISION)
+        with open(record, "a", encoding="utf-8") as handle:
+            handle.write("\n## Applied\nat: 2026-09-23T08:00:00Z\nstage: test\n")
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a judge's story conflict waits, resumes where its answer lands, then "
+                             "runs the stages after it again",
+                             waiting[0] == "waiting" and resumable == ("resumable", "test")
+                             and rows.get("STORY-1") == ("in-progress", "build"),
+                             f"open {waiting}, answered {resumable}, applied {rows.get('STORY-1')}"))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         if not ok:

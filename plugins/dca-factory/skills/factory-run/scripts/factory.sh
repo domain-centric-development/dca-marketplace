@@ -689,8 +689,11 @@ run_story() {
         fi
         for id in $ids; do
           if [ -f "$DECISIONS/$id.md" ]; then
+            # The record names the stage that applies the answer — for a judge's story conflict that is
+            # not the judge. That is where the story resumes.
+            local applies; applies=$(sed -n 's/^stage:[[:space:]]*//p' "$DECISIONS/$id.md" | head -1)
             echo "factory:   decision $id → $DECISIONS/$id.md — answer it there under '## Answer'" >&2
-            echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story --from $stage" >&2
+            echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story --from ${applies:-$stage}" >&2
           else
             echo "factory:   decision $id is named but $DECISIONS/$id.md does not exist." >&2
           fi

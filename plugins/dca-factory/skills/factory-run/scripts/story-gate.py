@@ -91,7 +91,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 3
-VERSION = "0.10.1"
+VERSION = "0.11.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1056,6 +1056,10 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
     have_ledger = bool(ledger) and os.path.isfile(ledger)
     was_red = read_red_ledger(tasks, story)
     now_red = set()
+    # An expectation that changes on a human's decision: the test was recorded red before the code
+    # existed, the decision changed what it expects, and the code now meets it. Only that combination
+    # lets a green test through the red check — without the decision it is the refusal below.
+    changed_on = answered_decisions(cwd, story, "test") if expected == "red" else []
     control = {}                              # one control run per command, not per selector
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
@@ -1165,6 +1169,11 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                     f"({key!r}) — a test that never failed proves nothing, and a run that "
                     f"matched no test passes too. Run `--stage test` before the build stage.",
                 )
+                continue
+            if expected == "red" and passed and selector in was_red and changed_on:
+                now_red.add(selector)
+                result.ok("tests-red", f"{selector} is green now and was recorded red before; its "
+                                       f"expectation changed on decision {', '.join(changed_on)} ({key})")
                 continue
             if expected == "red" and passed:
                 result.fail(
@@ -1295,6 +1304,16 @@ def read_decisions(store, story_id):
         state, answer = decision_state(body)
         records.append((path, front, body, state, answer))
     return records
+
+
+def answered_decisions(cwd, story_id, stage):
+    """Ids of this story's answered or applied records whose `stage:` is the given stage."""
+    try:
+        records = read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
+    except GateError:
+        return []
+    return [str(front["id"]).strip() for _p, front, _b, state, _a in records
+            if state in ("answered", "applied") and str(front.get("stage", "")).strip() == stage]
 
 
 def needs_human_ids(text):
@@ -1779,11 +1798,15 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
                if state in ("open", "draft")]
     if waiting:
         return "waiting", None, "decision " + ", ".join(waiting)
-    answered = {}
+    answered, resolved = {}, {}
     for _path, front_, _body, state, _answer in records:
         rid, asked_by = str(front_["id"]).strip(), str(front_.get("stage", "")).strip()
         text = texts.get(asked_by)
-        if state == "answered" and (text is None or rid in (needs_human_ids(text) or [])):
+        if state in ("answered", "applied"):
+            resolved[rid] = asked_by
+        # The record's `stage:` applies the answer — usually the stage that asked, for a judge's
+        # story conflict the stage the answer lands in. Until that stage's file cites the id, it is next.
+        if state == "answered" and (text is None or rid in (needs_human_ids(text) or []) or rid not in text):
             answered.setdefault(asked_by, rid)
     if answered:
         stage = min(answered, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 0)
@@ -1794,8 +1817,19 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
         return "stopped", None, f"{MAX_ROUNDS} rounds did not converge"
     if os.path.isfile(os.path.join(folder, ".gate-plan.txt")):
         return "stopped", None, "the plan gate refused the story — the backlog needs a fix"
+    conflict = needs_human_ids(texts.get("judge", "")) or []
+    if verdict_in(texts.get("judge", "")) == "story-conflict" and conflict and all(i in resolved for i in conflict):
+        applied_at = max((resolved[i] for i in conflict),
+                         key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 0)
+        after = STAGE_ORDER[min(STAGE_ORDER.index(applied_at) + 1, len(STAGE_ORDER) - 1)] \
+            if applied_at in STAGE_ORDER else "build"
+        return "in-progress", after, (f"the story conflict was answered and applied at {applied_at} — "
+                                      f"the stages after it run again")
     for stage, text in texts.items():
-        if needs_human_ids(text) is not None:
+        ids = needs_human_ids(text)
+        if ids and all(i in resolved for i in ids):
+            continue
+        if ids is not None:
             return "stopped", None, f"{STAGE_FILES[stage]} ends in `## needs-human` without an open record"
     if verdict_in(texts.get("judge", "")) == "story-conflict":
         return "stopped", None, "the judge found a story conflict"
