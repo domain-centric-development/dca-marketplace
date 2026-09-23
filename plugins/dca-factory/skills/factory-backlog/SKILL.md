@@ -76,9 +76,11 @@ key gets a key that names its behaviour. Do not rewrite the parts the gate did n
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
-`/factory-backlog`) — never a shell command to type. Two exceptions: the pipeline's install and
-update, which the person runs in a shell with `factory.sh` (no skill runs it), and a person who asks
-how to do something without a session.
+`/factory-backlog`) — never a shell command to type, unless the person asks how to do something
+without a session. You may run `factory.sh` for everything that starts no tool — `install`,
+`update`, `status`, `usage`, `decisions`, `schedule`, `change`, `parity` — but never `run` or
+`backlog`: they start a tool process per stage (`claude -p` and the like) on top of this session,
+and the runner refuses them inside one anyway.
 
 ## Do not
 

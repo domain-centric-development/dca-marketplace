@@ -132,10 +132,11 @@ Skills are held one of two ways, and the update keeps whichever the project chos
 `install` writes a section into `AGENTS.md` (between `<!-- dca-factory: start -->` and `end`; only
 that block is replaced on an update) telling any tool to begin a session with the gate's
 `--status --brief` and to ask what to do. For Claude Code it also adds a `SessionStart` hook to
-`.claude/settings.json` that puts those lines into the session's context. Both call the gate, which
-only reads: `factory.sh` is the person's, in a shell — no skill and no hook runs it, so no session
-starts a tool process of its own. The first message — even "hi" — then gets the state and the
-choices.
+`.claude/settings.json` that puts those lines into the session's context, and allows the reading
+commands (`status`, `usage`, `decisions`, `schedule`) without a prompt. Skills use `factory.sh` for
+everything that starts no tool; `run` and `backlog` start a tool process per stage, so no skill
+runs them and the runner refuses them inside an agent session (`FACTORY_ALLOW_NESTED=1` to force).
+The first message — even "hi" — then gets the state and the choices.
 
 ## How to see where it stands
 

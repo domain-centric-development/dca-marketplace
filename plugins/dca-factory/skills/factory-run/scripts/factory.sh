@@ -653,8 +653,9 @@ This project delivers stories through the dca-factory pipeline. At the start of 
 person names a task right away, run `python3 .agents/factory/story-gate.py --status --brief`, show
 its lines, and ask what they want to do: write or release a story (`/factory-backlog`), answer a
 waiting question (`/factory-decisions`), work the backlog (`/factory-run`, or `/loop /factory-run` to
-keep listening), or look closer (`/factory-status`). `factory.sh` is the person's, in a shell — no
-session runs it. One worker per checkout: a managing session writes backlog and decision files only.
+keep listening), or look closer (`/factory-status`). A session never runs `factory.sh run` or
+`backlog` — they start a tool process per stage. One worker per checkout: a managing session writes
+backlog and decision files only.
 """ + end
 text = open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
 if start in text and end in text:
@@ -696,6 +697,10 @@ if os.path.isfile(profile):
             head = command.split()[0] if command else ""
             if head and not head.startswith("{{"):
                 wanted.append(f"Bash({head}:*)")
+# the reading commands, so a session looks without being asked; `run` and `backlog` are not in it —
+# they start a tool process per stage, and the runner refuses them inside a session anyway
+for verb in ("status", "usage", "decisions", "schedule"):
+    wanted.append(f"Bash(bash .agents/factory/factory.sh {verb}:*)")
 added = [entry for entry in dict.fromkeys(wanted) if entry not in allow]
 allow.extend(added)
 # The session starts knowing where the pipeline stands: the hook's output lands in its context. It

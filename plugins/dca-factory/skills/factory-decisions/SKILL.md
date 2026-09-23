@@ -17,8 +17,8 @@ once per project. The state of a record is read off the file: no `## Answer` is 
 
 ## Do
 
-1. **List what is waiting.** Run `python3 .agents/factory/story-gate.py --list-decisions` (add
-   `--story <id>` for one story). It prints one line per record — id, state, story and
+1. **List what is waiting.** Run `bash .agents/factory/factory.sh decisions` (add `--story <id>` for
+   one story; `python3 .agents/factory/story-gate.py --list-decisions` where there is no runner copy). It prints one line per record — id, state, story and
    stage, when it was asked, the question — open ones first. Show that, in that order. Where the
    gate is not installed, read the directory yourself and say that you did.
 2. **Explain one from its files, not from memory.** Read the record: the question, the options,
@@ -55,9 +55,11 @@ once per project. The state of a record is read off the file: no `## Answer` is 
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
-`/factory-backlog`) — never a shell command to type. Two exceptions: the pipeline's install and
-update, which the person runs in a shell with `factory.sh` (no skill runs it), and a person who asks
-how to do something without a session.
+`/factory-backlog`) — never a shell command to type, unless the person asks how to do something
+without a session. You may run `factory.sh` for everything that starts no tool — `install`,
+`update`, `status`, `usage`, `decisions`, `schedule`, `change`, `parity` — but never `run` or
+`backlog`: they start a tool process per stage (`claude -p` and the like) on top of this session,
+and the runner refuses them inside one anyway.
 
 ## Do not
 

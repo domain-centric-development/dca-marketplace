@@ -35,10 +35,9 @@ say precisely which file to create, create it when the user agrees, then continu
    The factory delivers stories, it does not install an architecture: one is a once-per-project
    step that belongs to the method, the other repeats per story. The installer says so and installs
    the pipeline anyway, so a project can adopt the two in either order.
-1. **The person installs the pipeline, in a shell — never you.** `factory.sh` is theirs: no skill
-   runs it. Give them the one command with this skill's folder filled in, for the tool you are:
-   `bash <this skill's folder>/scripts/factory.sh install --tool <claude|codex|opencode>`, and
-   continue when they say it ran. It puts the gate and the runner under `.agents/factory/`, the
+1. Run the pipeline's installer from this skill's folder, for the tool you are:
+   `bash <this skill's folder>/scripts/factory.sh install --tool <claude|codex|opencode>`, and report
+   what it printed. It starts no tool. It puts the gate and the runner under `.agents/factory/`, the
    commit hook under `.githooks/`, `.gitattributes`, the pipeline's section in `AGENTS.md` and, for
    Claude Code, the gate's permission and a SessionStart hook; it writes the stack profile from
    what it detects. The hook runs the same checks the gate does: tool hooks and deny rules do not
@@ -168,8 +167,8 @@ Who runs the stages is the human's choice, not yours, and it decides what the ru
 | `/factory-run [story]`, "deliver STORY-1", `/loop /factory-run` | **in this session** — a subagent per stage where the tool can start one and it comes back, otherwise in-session | none beyond this session |
 | the person runs `factory.sh run` or `backlog` in a shell | **the runner**, one process per stage | one per stage |
 
-The runner is the person's, never yours: no skill starts `factory.sh`, because it starts a tool
-process per stage on top of this session. Asked for "one process per stage", "unattended" or "in the
+The runner — `factory.sh run` and `backlog` — is the person's, never yours: it starts a tool process
+per stage on top of this session, and refuses to inside one. Asked for "one process per stage", "unattended" or "in the
 background", say that this is the runner and that they start it in a shell. Say in the report which
 tier ran.
 
@@ -212,9 +211,11 @@ reported success — a stage judging its own work is exactly what the gate repla
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
-`/factory-backlog`) — never a shell command to type. Two exceptions: the pipeline's install and
-update, which the person runs in a shell with `factory.sh` (no skill runs it), and a person who asks
-how to do something without a session.
+`/factory-backlog`) — never a shell command to type, unless the person asks how to do something
+without a session. You may run `factory.sh` for everything that starts no tool — `install`,
+`update`, `status`, `usage`, `decisions`, `schedule`, `change`, `parity` — but never `run` or
+`backlog`: they start a tool process per stage (`claude -p` and the like) on top of this session,
+and the runner refuses them inside one anyway.
 
 ## Escalation
 
