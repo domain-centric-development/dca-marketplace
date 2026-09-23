@@ -95,7 +95,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 5
-VERSION = "0.18.0"
+VERSION = "0.19.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2115,6 +2115,9 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
     kind, session_id = current_session()
+    owner = session_owner()
+    if owner and claim(cwd, owner) == 3:
+        return 3                               # another worker holds the checkout: this stage does not start
     if session_log:
         kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
     allowed = session_usage_allowed(cwd)
@@ -2293,6 +2296,85 @@ def usage_report(tasks, story_filter=None, total_only=False):
     return 0
 
 
+# --- one worker per checkout ------------------------------------------------------------
+
+# Two workers on one checkout build on each other's unfinished code. The claim is a file created
+# exclusively — of two workers asking at the same moment, one gets it — in the git directory, so it is
+# per checkout (a worktree has its own), never committed and never an untracked file the commit check
+# would call drift. A holder renews it before every stage; one that stops renewing is stale after
+# FACTORY_STALE_AFTER seconds (default two hours) and may be taken over, which is said out loud.
+def stale_after():
+    try:
+        return max(0, int(os.environ.get("FACTORY_STALE_AFTER", "7200")))
+    except ValueError:
+        return 7200
+
+
+def claim_path(cwd):
+    code, git_dir = git(cwd, "rev-parse", "--git-dir")
+    if code == 0 and git_dir:
+        return os.path.join(cwd, git_dir, "dca-factory-worker.lock")
+    return os.path.join(cwd, ".agents", "factory", "worker.lock")
+
+
+def session_owner():
+    kind, session_id = current_session()
+    return f"{kind}:{session_id}" if session_id else ""
+
+
+def read_claim(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
+def write_claim(path, owner, since):
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    temporary = f"{path}.{os.getpid()}"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump({"owner": owner, "since": since or stamp, "beat": stamp}, handle)
+    os.replace(temporary, path)
+
+
+def claim(cwd, owner):
+    """0 when `owner` holds the checkout now (claimed, renewed or taken over), 3 when another does."""
+    path = claim_path(cwd)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(descriptor)
+        write_claim(path, owner, None)
+        print(f"claim: {owner} holds the checkout")
+        return 0
+    except FileExistsError:
+        pass
+    held = read_claim(path) or {}
+    if held.get("owner") == owner:
+        write_claim(path, owner, held.get("since"))
+        return 0
+    beat = parse_time(held.get("beat"))
+    age = (datetime.now(timezone.utc) - beat).total_seconds() if beat else None
+    if age is None or age > stale_after():
+        write_claim(path, owner, None)
+        print(f"claim: took over from {held.get('owner', 'an unreadable claim')} — no sign of life for "
+              f"{int(age // 60) if age is not None else '?'} min, so it was stopped or crashed")
+        return 0
+    print(f"claim: the checkout is held by {held.get('owner')} since {held.get('since')} (last sign of life "
+          f"{int(age // 60)} min ago) — one worker per checkout; this one does not start")
+    return 3
+
+
+def release(cwd, owner):
+    path = claim_path(cwd)
+    held = read_claim(path)
+    if held and held.get("owner") == owner:
+        os.remove(path)
+        print(f"claim: {owner} released the checkout")
+    return 0
+
+
 # --- status: one look at the whole pipeline -----------------------------------------
 
 def running_stages(tasks):
@@ -2333,6 +2415,15 @@ def status(cwd, backlog, tasks):
         print(f"{story}  stage {stage}  since {started}" + (f"  ({minutes} min)" if minutes is not None else ""))
     if not running:
         print("nothing — no stage has a start without an end in any journal")
+    held = read_claim(claim_path(cwd))
+    if held:
+        beat = parse_time(held.get("beat"))
+        age = int((now - beat).total_seconds() // 60) if beat else None
+        print(f"worker: {held.get('owner')} since {held.get('since')}, last sign of life "
+              + (f"{age} min ago" if age is not None else "unknown")
+              + (" — stale, the next worker takes over" if age is not None and age * 60 > stale_after() else ""))
+    else:
+        print("worker: none holds the checkout")
     print("\n== waiting for a human")
     store = os.path.join(cwd, DECISIONS_DIR)
     waiting = 0
@@ -2543,6 +2634,18 @@ def schedule(cwd, backlog, tasks):
                 story.update(state="blocked", start=None, detail="depends on " + ", ".join(
                     f"{d} ({stories[d]['state']})" for d in pending))
 
+    # A stage that started and has not ended is running — unless it has shown no sign of life for longer
+    # than a stage may take, then it was interrupted and the story may be picked up again.
+    now = datetime.now(timezone.utc)
+    for story_id, stage, started in running_stages(tasks):
+        if story_id not in stories:
+            continue
+        since = parse_time(started)
+        if since and (now - since).total_seconds() <= stale_after():
+            stories[story_id].update(state="running", start=None, detail=f"stage {stage} since {started}")
+        else:
+            stories[story_id]["detail"] = (stories[story_id]["detail"] + " · " if stories[story_id]["detail"] else "") \
+                + f"stage {stage} started {started} and never ended — possibly interrupted"
     holders = [s for s in order if stories[s].get("holds")]
     nxt, reason, wait = None, "", False
     if holders:
@@ -2552,11 +2655,14 @@ def schedule(cwd, backlog, tasks):
         else:
             reason = (f"{holders[0]} holds unfinished code in the checkout ({holder['state']}) — "
                       f"no other story starts until it is delivered")
-            wait = holder["state"] == "waiting"
+            wait = holder["state"] in ("waiting", "running")
     else:
-        nxt = next((s for s in order if stories[s]["state"] in RUNNABLE), None)
-        wait = any(stories[s]["state"] == "waiting" for s in order)
-        if nxt is None:
+        busy = [s for s in order if stories[s]["state"] == "running"]
+        nxt = None if busy else next((s for s in order if stories[s]["state"] in RUNNABLE), None)
+        wait = any(stories[s]["state"] in ("waiting", "running") for s in order)
+        if busy:
+            reason = f"{busy[0]} is running ({stories[busy[0]]['detail']}) — one story at a time per checkout"
+        elif nxt is None:
             reason = "nothing can run"
 
     for story_id in order:
@@ -2664,6 +2770,9 @@ def main(argv):
     parser.add_argument("--checks", help="with --change: only these checks (compile test architecture format)")
     parser.add_argument("--parity", metavar="CONFIG",
                         help="check every implementation's reports against a scenario contract and exit")
+    parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
+    parser.add_argument("--release", nargs="?", const="", metavar="OWNER",
+                        help="give the checkout back (default: this session's claim)")
     parser.add_argument("--status", action="store_true",
                         help="print what runs, what waits for a human, every story's state and the cost")
     parser.add_argument("--usage", action="store_true",
@@ -2691,6 +2800,10 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.claim:
+        return claim(cwd, args.claim)
+    if args.release is not None:
+        return release(cwd, args.release or session_owner())
     if args.status:
         return status(cwd, args.backlog, args.tasks)
     if args.stage_start or args.stage_end:

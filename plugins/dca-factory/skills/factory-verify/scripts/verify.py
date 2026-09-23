@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 
 # The reports use `—` and `→`. A Windows console decodes stdout as cp1252 and a Python that
 # inherits that raises on the first arrow; the files this writes are UTF-8 in every other respect,
@@ -1090,6 +1091,22 @@ exit 0
               and "OURS" in open(os.path.join(skills_dir, "stage-plan", "SKILL.md"), encoding="utf-8").read(),
               [l for l in output.splitlines() if "removed" in l or "kept" in l][:3])
 
+    # 1p. a runner does not start while another worker holds the checkout
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--claim",
+                        "claude-session:other"], cwd=root, capture_output=True)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
+        check("runner: another worker's claim stops it before any stage, and it says who holds the checkout",
+              code == 5 and invocations(root) == [] and "held by claude-session:other" in output,
+              f"exit {code}; {output.strip().splitlines()[-2:]}")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in",
+                                  env=dict(env, FACTORY_STALE_AFTER="0"))
+        released = not os.path.exists(os.path.join(root, ".git", "dca-factory-worker.lock"))
+        check("runner: it takes over a stale claim, runs, and gives the checkout back at the end",
+              code == 0 and len(invocations(root)) == 6 and released, f"exit {code}, released {released}")
+
     # 1f. the snapshot sees files in a directory this run added
     with tmpdir() as root:
         build_project(root)
@@ -2149,6 +2166,57 @@ def main(argv=None):
         expectations.append(("status after a union merge: a stage is running only if its start is the latest "
                              "event by time, not by line", "S-1  stage plan" not in status_out,
                              status_out.split("== waiting")[0]))
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            failures.append((name, [], ""))
+
+    # --- one worker per checkout: the claim, and what the schedule does with a running stage -----------
+    with tmpdir() as root:
+        build_project(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        claim = lambda owner, *more: subprocess.run([sys.executable, args.gate, "--claim", owner], cwd=root,
+                                                    env=dict(os.environ, **dict(more)), capture_output=True,
+                                                    text=True, encoding="utf-8")
+        first, second, again = claim("worker-a"), claim("worker-b"), claim("worker-a")
+        taken = claim("worker-b", ("FACTORY_STALE_AFTER", "0"))
+        lock_in_git = os.path.isfile(os.path.join(root, ".git", "dca-factory-worker.lock"))
+        subprocess.run([sys.executable, args.gate, "--release", "worker-b"], cwd=root, capture_output=True)
+        expectations = [
+            ("claim: the first worker takes the checkout, the second is refused and told who holds it",
+             first.returncode == 0 and second.returncode == 3 and "held by worker-a" in second.stdout, second.stdout),
+            ("claim: the holder renews its own claim", again.returncode == 0, again.stdout),
+            ("claim: a holder with no sign of life is taken over, and that is said",
+             taken.returncode == 0 and "took over from worker-a" in taken.stdout, taken.stdout),
+            ("claim: it lives in the git directory, so it is never committed and never drift",
+             lock_in_git, os.listdir(os.path.join(root, ".git"))[:6]),
+            ("claim: the holder gives it back", not os.path.exists(os.path.join(root, ".git", "dca-factory-worker.lock")), ""),
+        ]
+    with tmpdir() as root:
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        backlog_project(root, ("STORY-2", []), extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_APPLIED),
+            ("tasks/STORY-1/.verify/journal.tsv", f"{now}\tstage-start\ttest\ttool=x\n"),))
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a stage that started and has not ended is running, and nothing else starts",
+                             rows.get("STORY-1", ("",))[0] == "running" and nxt.startswith("none")
+                             and "STORY-1 is running" in nxt, f"{rows.get('STORY-1')}, next: {nxt}"))
+        completed = subprocess.run([sys.executable, args.gate, "--schedule"], cwd=root, capture_output=True,
+                                   text=True, encoding="utf-8", env=dict(os.environ, FACTORY_STALE_AFTER="0"))
+        expectations.append(("schedule: a start with no sign of life is taken as interrupted, and the story is "
+                             "named again", "possibly interrupted" in completed.stdout
+                             and "next: STORY-1" in completed.stdout, completed.stdout.strip().splitlines()[-1:]))
+    with tmpdir() as root:
+        build_project(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        subprocess.run([sys.executable, args.gate, "--claim", "someone-else"], cwd=root, capture_output=True)
+        out = subprocess.run([sys.executable, args.gate, "--stage-start", "plan", "--story", "STORY-1"], cwd=root,
+                             env=dict(os.environ, CLAUDE_CODE_SESSION_ID="this-session"), capture_output=True,
+                             text=True, encoding="utf-8")
+        expectations.append(("claim: a session's stage mark is refused while another worker holds the checkout",
+                             out.returncode == 3 and not os.path.exists(
+                                 os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv")), out.stdout))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         if not ok:

@@ -16,7 +16,7 @@
 #   factory.sh parity <config>            every implementation proves the scenario contract
 #
 # `run` exits 0 when the story ran through, 3 when it stopped for a decision, 4 at --max-stages,
-# anything else on a failure. `backlog` runs story after story in the order `story-gate.py
+# 5 when another worker holds the checkout, anything else on a failure. `backlog` runs story after story in the order `story-gate.py
 # --schedule` names, past stories that wait for a decision; --watch keeps it waiting for answers.
 #
 # FACTORY_TOOL_CMD replaces the tool invocation entirely ($FACTORY_STAGE and $FACTORY_PROMPT are
@@ -45,6 +45,17 @@ STOP_FILE=".agents/factory/stop"             # exists → a backlog run stops be
 INVOCATIONS=0                                # agent invocations in this process
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
+WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
+
+# One worker per checkout: the gate's claim, taken before the first stage, renewed before each one,
+# given back when the runner ends — however it ends.
+take_checkout() {
+  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — the checkout is not claimed; install the pipeline" >&2; return 0; }
+  "$PY" "$GATE" --claim "$WORKER" || {
+    echo "factory: another worker holds this checkout — see 'factory.sh status'. Nothing was started." >&2
+    return 5; }
+  trap '"$PY" "$GATE" --release "$WORKER" >/dev/null 2>&1' EXIT
+}
 
 # Which Python runs the gate. `python3` is the POSIX spelling; on Windows the interpreter is
 # `python` and `python3` is often a Store stub that opens a shop window. FACTORY_PYTHON overrides,
@@ -798,6 +809,9 @@ run_story() {
     echo "── stage $stage  (tool: $tool, fresh context)"
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
+    elif [ -f "$GATE" ] && ! "$PY" "$GATE" --claim "$WORKER" >/dev/null; then
+      echo "factory: the checkout was taken over by another worker before stage '$stage' — stopping." >&2
+      return 5
     elif [ -n "$STORY_BUDGET" ] && [ "$("$PY" "$GATE" --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
       # Checked before the invocation, from the journal: a restart, a second session or a new run
       # continues the same count. The last stage may overshoot — usage is known only after it ran.
@@ -929,6 +943,10 @@ run_backlog() {                             # run_backlog <tool> <watch> <interv
   local out previous="" next story from last="" code
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh install'" >&2; return 2; }
   while :; do
+    # waiting is working too: the claim is renewed on every look, so a watch that waits for an answer
+    # for hours is not mistaken for a crashed one
+    [ -n "$dry" ] || "$PY" "$GATE" --claim "$WORKER" >/dev/null || {
+      echo "factory: another worker took over this checkout — the backlog run ends here." >&2; return 5; }
     if [ -f "$STOP_FILE" ]; then
       echo "factory: $STOP_FILE exists — the backlog run stops here. Remove it to run again."
       return 0
@@ -1020,6 +1038,7 @@ case "$command" in
     [ -n "$tool" ] || tool=$(detect_tool)
     [ -n "$tool" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
     check_gate_freshness                    # once per invocation; run_story recurses on a verdict
+    [ -n "$dry" ] || take_checkout || exit $?
     run_story "$story" "$tool" "$from" "$dry"
     ;;
   backlog)
@@ -1033,6 +1052,7 @@ case "$command" in
     [ "$interval" -lt 1 ] && interval=1
     [ "$interval" -gt 3600 ] && interval=3600
     check_gate_freshness
+    [ -n "$dry" ] || take_checkout || exit $?
     run_backlog "${tool:-stand-in}" "$watch" "$interval" "$dry"
     ;;
   *) usage ;;

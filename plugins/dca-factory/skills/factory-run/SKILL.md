@@ -249,12 +249,27 @@ implementations each prove a scenario contract from their reports (`reference/fi
    back to 1. Never pick a story yourself; the schedule orders by dependencies and keeps one story
    with unfinished code at a time.
 3. For `next: none`: say why in one or two lines — which decision waits (and that it is answered
-   through `/factory-decisions`), which story is stopped, or that the backlog is done — and end the
+   through `/factory-decisions`), which story is stopped or running elsewhere, or that the backlog is
+   done — give the checkout back (`python3 .agents/factory/story-gate.py --release`) and end the
    turn. Do not wait inside the turn and do not poll: files do not change while you wait.
 
+**One worker per checkout.** `--stage-start` takes the checkout for this session and exits 3 when
+another worker holds it — a second session, or a runner. Then stop, say who holds it (the gate prints
+it; `factory.sh status` too), and end the turn; never work around it. A holder that shows no sign of
+life for two hours (`FACTORY_STALE_AFTER`) is taken as stopped, and the next worker takes over.
+
+**`/factory-run --watch` — the runner in the background.** Asked to watch the backlog, start the
+runner as a background command where the tool can run one (Claude Code can):
+`bash .agents/factory/factory.sh backlog --tool <this tool> --watch`, with `--story-budget` if the
+human named one. Say that it runs, where its output goes, and that `touch .agents/factory/stop` ends
+it before the next story; then the session is free — for `/factory-status`, `/factory-decisions`,
+`/factory-backlog`. Every stage runs in a process of its own, with its cost priced. The watch lives as
+long as the session that started it; for longer, run the same command in a terminal. Where the tool
+cannot run a background command, give the human that command instead.
+
 **Listening on the backlog.** A session that should pick up new stories and answered decisions
-by itself runs this under a scheduler: in Claude Code `/loop /factory-run` (it wakes, works what is
-ready, and sleeps again). A second session — or a person — manages meanwhile: writes stories with
+by itself in its own context runs this under a scheduler: in Claude Code `/loop /factory-run` (it
+wakes, works what is ready, and sleeps again). A second session — or a person — manages meanwhile: writes stories with
 `/factory-backlog`, answers questions with `/factory-decisions`, watches with `/factory-status`. It
 changes backlog and decision files only, never code; the working session is the one writer. Where
 the tool has no scheduler, `bash .agents/factory/factory.sh backlog --watch` is the same loop outside
