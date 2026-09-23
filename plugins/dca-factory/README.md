@@ -130,7 +130,10 @@ starts fresh and reads the skill, the story and its predecessor's file again.
 
 **History.** Every number lives in the project: `tasks/<story>/.verify/journal.tsv`, next to the gate
 reports and each invocation's raw output (`*.out`). Commit `tasks/` and the history travels with the
-repository — `--usage` without `--story` shows every story ever run. An in-session stage first
+repository — `--usage` without `--story` shows every story ever run. The journal is append-only, so
+the install marks it `merge=union` in `.gitattributes`: two branches that ran the same story merge
+without a conflict, a window read on one side and pending on the other counts once, and "running" is
+judged by time, not by line order. An in-session stage first
 records its window and the session log it read from; once that log has caught up, the next mark or
 `--usage` writes the numbers into the journal and drops the machine-local path, so the history
 survives a clone and the tool's cleanup of old session logs.

@@ -1966,6 +1966,27 @@ def main(argv=None):
              "STORY-1  waiting" in section("stories") and "2 stage invocation(s), 1 measured, 100 tokens, $0.01"
              in section("cost"), section("cost")),
         ]
+    with tmpdir() as root:
+        # a union merge: one branch read the window, the other still points at the log; lines interleave
+        journal = os.path.join(root, "tasks", "S-1", ".verify", "journal.tsv")
+        os.makedirs(os.path.dirname(journal))
+        window = "window=2026-09-23T10:00:00.000Z/2026-09-23T10:05:00.000Z"
+        with open(journal, "w", encoding="utf-8") as handle:
+            handle.write("2026-09-23T10:05:00.000Z\tstage-end\tplan\texit=0\n"
+                         f"2026-09-23T10:05:00.000Z\tusage\tplan\ttool=claude-session\tmodel=m\tinput=1\t"
+                         f"cache_read=0\tcache_write=0\toutput=9\t{window}\n"
+                         f"2026-09-23T10:05:00.000Z\tusage\tplan\ttool=claude-session\t{window}\tlog=/gone.jsonl\n"
+                         "2026-09-23T10:00:00.000Z\tstage-start\tplan\ttool=claude-session\n")
+        report = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
+                                capture_output=True, text=True).stdout
+        status_out = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
+                                    text=True).stdout
+        row = next((l for l in report.splitlines() if l.startswith("S-1/plan")), "")
+        expectations.append(("usage after a union merge: one window read on one branch and pending on the other "
+                             "counts once", row.split()[1:3] == ["1", "1"] and row.split()[6] == "9", row))
+        expectations.append(("status after a union merge: a stage is running only if its start is the latest "
+                             "event by time, not by line", "S-1  stage plan" not in status_out,
+                             status_out.split("== waiting")[0]))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         if not ok:

@@ -2197,10 +2197,19 @@ def journal_usage(tasks, story_id):
     stages = {}
     if not os.path.isfile(journal):
         return stages
-    for line in read_text(journal).splitlines():
+    # A journal merged with `merge=union` can hold one session window twice — read on one branch,
+    # still pending on the other. A window is one stage run, so it is counted once, the read one first.
+    counted_windows = set()
+    lines = sorted(read_text(journal).splitlines(), key=lambda l: ("log=" in l, l))
+    for line in lines:
         parts = line.split("\t")
         if len(parts) < 3:
             continue
+        window = next((p for p in parts if p.startswith("window=")), None)
+        if parts[1] == "usage" and window:
+            if (parts[2], window) in counted_windows:
+                continue
+            counted_windows.add((parts[2], window))
         entry = stages.setdefault(parts[2], {"invocations": 0, "measured": 0, "cost": 0.0, "priced": 0,
                                              **{k: 0 for k in USAGE_FIELDS}})
         if parts[1] == "stage-start":
@@ -2283,7 +2292,9 @@ def running_stages(tasks):
         if not os.path.isfile(journal):
             continue
         open_stage = None
-        for line in read_text(journal).splitlines():
+        # By time, not by position: a union merge interleaves two branches' lines.
+        for line in sorted(read_text(journal).splitlines(), key=lambda l: parse_time(l.split("\t")[0])
+                           or datetime.min.replace(tzinfo=timezone.utc)):
             parts = line.split("\t")
             if len(parts) < 3:
                 continue

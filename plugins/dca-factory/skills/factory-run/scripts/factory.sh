@@ -397,6 +397,12 @@ install_skills() {
   case "$tool" in
     claude|all) write_claude_permissions ;;
   esac
+  # The journal is append-only, one line per event: two branches that ran the same story both add
+  # lines at its end, which git reports as a conflict although keeping both is always right.
+  if ! grep -qs "journal.tsv merge=union" .gitattributes; then
+    printf '%s\n' "tasks/**/.verify/journal.tsv merge=union" >> .gitattributes
+    echo "factory: .gitattributes merges the story journals by keeping both sides (merge=union)"
+  fi
   echo "factory: the copies under .claude/.codex/.opencode belong in .gitignore"
 }
 
