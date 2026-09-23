@@ -91,7 +91,8 @@ in a project goes through one script:
 |---|---|
 | `bash .agents/factory/factory.sh run --story <id>` | one story through the six stages |
 | `bash .agents/factory/factory.sh backlog [--watch]` | every story in dependency order, waiting for answers with `--watch` |
-| `bash .agents/factory/factory.sh status` | what runs, what waits for a human, every story, the cost |
+| `bash .agents/factory/factory.sh status` | what runs, what waits for a human, every story, the cost per story and in total |
+| `bash .agents/factory/factory.sh status <story>` | the same, with that story's cost per stage |
 | `bash .agents/factory/factory.sh usage [--story <id>]` | tokens per story and stage |
 | `bash .agents/factory/factory.sh decisions [--story <id>]` | the decision inbox |
 | `bash .agents/factory/factory.sh schedule` | every story's state and the next one |
@@ -242,7 +243,7 @@ what must be true before the next one starts.
 | `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them |
 | — `decisions/` | the questions a run may not answer, one file each under `.agents/factory/decisions/<story>-<nn>.md`, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
 | `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies. Reports the versions and the profile's contract line; commits nothing |
-| `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent (`story-gate.py --status`). Reads files; changes and starts nothing |
+| `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`story-gate.py --status [--story <id>]`). Reads files; changes and starts nothing |
 | `factory-decisions` | the inbox for those records: lists what waits on a human (`story-gate.py --list-decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer |
 | `factory-scope` | answers the question a run may not answer itself — a new bounded context, a new relationship, a surface its actor lacks — as a recorded decision plus the map, never as code |
 | `factory-verify` | checks the pipeline itself: every gate check against throwaway fixtures, the runner's stage order, verdict handling and install shapes, and — when asked — one tiny story delivered end to end. Reports; it repairs nothing |

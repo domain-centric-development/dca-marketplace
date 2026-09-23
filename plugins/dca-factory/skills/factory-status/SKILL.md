@@ -19,8 +19,11 @@ start nothing and answer nothing on anyone's behalf.
 
    (`python3 .agents/factory/story-gate.py --status` where the project has no runner copy.)
 
-   It prints four sections — *running*, *waiting for a human*, *stories*, *cost*. Show it as it is;
-   where the gate is not installed, say so and stop rather than reconstructing it by hand.
+   It prints four sections — *running*, *waiting for a human*, *stories*, *cost*; the cost is a
+   table with one row per story and the total. Asked about one story, run
+   `bash .agents/factory/factory.sh status <story>` instead: the same look, with that story's cost
+   per stage. Show it as it is; where the gate is not installed, say so and stop rather than
+   reconstructing it by hand.
 2. **Lead with what needs someone.** An open decision blocks its story and everything that depends
    on it: name it first, with the story it blocks, and point to `/factory-decisions` to answer it.
 3. **Say whether a session listens.** `listening:` names the session that last looked at the backlog
@@ -32,9 +35,10 @@ start nothing and answer nothing on anyone's behalf.
 5. **Explain a state from its files when asked.** "Why is STORY-3 blocked?" — the dependency it names;
    "why does STORY-1 run from document?" — its document gate has not passed yet. Read the file the
    state comes from before you repeat the reason.
-6. **Give cost on request, in detail.** The status shows totals. Asked what a story or a stage
-   cost, run `bash .agents/factory/factory.sh usage --story <id>` yourself and show its table.
-   Unmeasured invocations are unknown, not free; a session log has no price, so its cost reads `—`.
+6. **Give cost as the table says it.** The status shows each story and the total; `status <story>`
+   shows the stages of one, with input, cache and output tokens. Unmeasured invocations are unknown,
+   not free; a session log has no price, so its cost reads `—`, and `+` after a price means some of
+   the invocations it sums named none.
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,

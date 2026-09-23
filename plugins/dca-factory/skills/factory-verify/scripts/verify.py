@@ -2140,9 +2140,21 @@ def main(argv=None):
              "STORY-2  stage test  since 2026-09-23T10:02:00Z" in section("running"), section("running")),
             ("status: an open decision is listed with the story it blocks",
              "STORY-1-01  open  STORY-1/plan" in section("waiting for a human"), section("waiting for a human")),
-            ("status: every story's state is there, and the cost in total",
-             "STORY-1  waiting" in section("stories") and "2 stage invocation(s), 1 measured, 100 tokens, $0.01"
-             in section("cost"), section("cost")),
+            ("status: every story's state is there, and the cost per story and in total",
+             "STORY-1  waiting" in section("stories")
+             and re.search(r"^STORY-2\s+2\s+1\s+100\s+0\.01$", section("cost"), re.M)
+             and re.search(r"^total\s+2\s+1\s+100\s+0\.01$", section("cost"), re.M)
+             and "1 invocation(s) without a usage report" in section("cost"), section("cost")),
+        ]
+        out = subprocess.run([sys.executable, args.gate, "--status", "--story", "STORY-2"], cwd=root,
+                             capture_output=True, text=True, encoding="utf-8").stdout
+        expectations += [
+            ("status of one story: its cost per stage, each stage its own row, and the story's total",
+             re.search(r"^plan\s+1\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01$", section("cost of STORY-2, per stage"), re.M)
+             and re.search(r"^test\s+1\s+0\s+0\s+0\s+0\s+0\s+0\s+—$", section("cost of STORY-2, per stage"), re.M)
+             and re.search(r"^total\s+2\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01$",
+                           section("cost of STORY-2, per stage"), re.M)
+             and "== stories" in out, out.split("== cost")[-1]),
         ]
     with tmpdir() as root:
         # switched off: the gate records the stage and reads no session log

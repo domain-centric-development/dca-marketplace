@@ -8,7 +8,8 @@
 #   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--story-budget <tokens>] [--dry-run]
 #   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>]
 #                      [--story-budget <tokens>] [--dry-run]
-#   factory.sh status [--brief]           what runs, what waits for a human, every story, the cost
+#   factory.sh status [--brief]           what runs, what waits for a human, every story, its cost
+#   factory.sh status <story>             the same, with that story's cost per stage
 #   factory.sh usage [--story <id>]       tokens per story and stage
 #   factory.sh decisions [--story <id>]   the decision inbox
 #   factory.sh schedule                   every story's state and the next one
@@ -1074,7 +1075,9 @@ case "$command" in
   status)    case "${1:-}" in
                --brief) shift; [ -f "$GATE" ] || exit 0; read_command --status --brief "$@" ;;
                "") check_gate_freshness; read_command --status ;;
-               *) usage ;;
+               --story) [ $# -eq 2 ] || usage; check_gate_freshness; read_command --status --story "$2" ;;
+               -*) usage ;;
+               *) [ $# -eq 1 ] || usage; check_gate_freshness; read_command --status --story "$1" ;;
              esac ;;
   schedule)  [ $# -eq 0 ] || usage; read_command --schedule ;;
   usage)     read_command --usage "$@" ;;

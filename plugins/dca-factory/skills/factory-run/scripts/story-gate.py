@@ -8,7 +8,8 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
     story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
     story-gate.py --schedule                           every story's state and the next one to run
     story-gate.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
-    story-gate.py --status                             what runs, what waits, every story, the cost
+    story-gate.py --status [--story <id>]              what runs, what waits, every story, the cost —
+                                                       per story, or per stage of --story
     story-gate.py --change [--staged] [--checks <c>]   the profile's checks outside a story; --staged
                                                        checks what the commit contains (the hook, CI)
     story-gate.py --parity <config>                    every implementation's reports prove every
@@ -95,7 +96,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 5
-VERSION = "0.23.0"
+VERSION = "0.24.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2494,7 +2495,7 @@ def status_brief(cwd, backlog, tasks, session_start=False):
     return 0
 
 
-def status(cwd, backlog, tasks):
+def status(cwd, backlog, tasks, story_filter=None):
     now = datetime.now(timezone.utc)
     print("== running")
     running = running_stages(tasks)
@@ -2538,20 +2539,53 @@ def status(cwd, backlog, tasks):
         print("nothing — no open decision record")
     print("\n== stories")
     schedule(cwd, backlog, tasks)
-    print("\n== cost")
+    print("\n== cost" + (f" of {story_filter}, per stage" if story_filter else ""))
+    if story_filter:
+        return cost_by_stage(tasks, story_filter)
+    return cost_by_story(tasks)
+
+
+def cost_by_story(tasks):
+    """One row per story and the total — what the backlog cost so far."""
     stories = sorted(d for d in os.listdir(tasks) if os.path.isdir(os.path.join(tasks, d))) if os.path.isdir(tasks) else []
-    tokens = runs = measured = priced = 0
-    cost = 0.0
+    rows, total = [], {"invocations": 0, "measured": 0, "cost": 0.0, "priced": 0, **{k: 0 for k in USAGE_FIELDS}}
     for story in stories:
-        for entry in journal_usage(tasks, story).values():
-            tokens += tokens_of(entry)
-            runs += entry["invocations"]
-            measured += entry["measured"]
-            priced += entry["priced"]
-            cost += entry["cost"]
-    print(f"{runs} stage invocation(s), {measured} measured, {tokens:,} tokens"
-          + (f", ${cost:.2f} where the tool named a price" if priced else "")
-          + " — per stage: --usage")
+        stages = journal_usage(tasks, story).values()
+        if not stages:
+            continue
+        entry = {k: sum(e[k] for e in stages) for k in total}
+        rows.append((story, entry))
+        for k in total:
+            total[k] += entry[k]
+    if not rows:
+        print("nothing — no stage invocation recorded in any journal")
+        return 0
+    print(f"{'story':<24} {'runs':>4} {'measured':>8} {'tokens':>12} {'cost $':>8}")
+    for name, e in rows + [("total", total)]:
+        print(f"{name:<24} {e['invocations']:>4} {e['measured']:>8} {tokens_of(e):>12,} {money(e):>8}")
+    unknown = total["invocations"] - total["measured"]
+    if unknown > 0:
+        print(f"{unknown} invocation(s) without a usage report — not counted, not zero")
+    print("per stage: status <story>")
+    return 0
+
+
+def cost_by_stage(tasks, story):
+    """One row per stage of one story and its total."""
+    stages = journal_usage(tasks, story)
+    if not stages:
+        print(f"nothing — no stage invocation recorded for {story}")
+        return 0
+    order = sorted(stages, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 99)
+    total = {k: sum(stages[s][k] for s in order) for k in stages[order[0]]}
+    print(f"{'stage':<24} {'runs':>4} {'measured':>8} {'input':>9} {'cache read':>11} "
+          f"{'cache write':>11} {'output':>8} {'tokens':>12} {'cost $':>8}")
+    for name, e in [(s, stages[s]) for s in order] + [("total", total)]:
+        print(f"{name:<24} {e['invocations']:>4} {e['measured']:>8} {e['input']:>9} {e['cache_read']:>11} "
+              f"{e['cache_write']:>11} {e['output']:>8} {tokens_of(e):>12,} {money(e):>8}")
+    unknown = total["invocations"] - total["measured"]
+    if unknown > 0:
+        print(f"{unknown} invocation(s) without a usage report — not counted, not zero")
     return 0
 
 
@@ -2909,7 +2943,7 @@ def main(argv):
             print(f"factory: status unavailable ({error.__class__.__name__})")
             return 0
     if args.status:
-        return status(cwd, args.backlog, args.tasks)
+        return status(cwd, args.backlog, args.tasks, args.story)
     if args.stage_start or args.stage_end:
         if not args.story:
             parser.error("--stage-start/--stage-end need --story")
