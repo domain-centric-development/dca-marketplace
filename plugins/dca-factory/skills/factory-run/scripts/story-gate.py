@@ -93,7 +93,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 3
-VERSION = "0.12.0"
+VERSION = "0.13.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1583,7 +1583,23 @@ def record_tests_baseline(cwd, tasks, story_id):
     write_mark(tasks, story_id, TESTS_BASELINE, "\n".join(blobs))
 
 
-def check_existing_tests(result, cwd, tasks, story_id):
+def changed_tests_in_plan(tasks, story_id):
+    """{test file: backed-by cell} from the plan's `## Changed tests` table."""
+    path = os.path.join(tasks, story_id, "plan.md")
+    rows = {}
+    if not os.path.isfile(path):
+        return rows
+    for line in section_of(read_text(path), "changed tests") or []:
+        cells = row_cells(line.strip())
+        if len(cells) < 2 or cells[0].lower() in ("test file", "file") or set(cells[0]) <= {"-", " "}:
+            continue
+        name = cells[0].strip("`").strip()
+        if name.lower() not in NOTHING:
+            rows[bare_path(name).replace(os.sep, "/")] = cells[-1]
+    return rows
+
+
+def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
     path = os.path.join(tasks, story_id, TESTS_BASELINE)
     if not os.path.isfile(path):
         result.skip("tests-kept", "no baseline of the tests that existed before this story "
@@ -1613,12 +1629,44 @@ def check_existing_tests(result, cwd, tasks, story_id):
     decided = answered_decisions(cwd, story_id, "test")
     if decided:
         result.ok("tests-kept", f"{', '.join(changed)} changed on decision {', '.join(decided)}")
-    else:
+        return
+    # The story may say itself that behaviour changes (`## Changed expectations`); the plan names the
+    # tests that change with it (`## Changed tests`), each backed by that section or by a decision a
+    # human answered. Nobody has to know which story wrote a test — or whether a story did at all.
+    story_says = [l for l in (section_of(story_body, "changed expectations") or [])
+                  if l.strip().lstrip("-").strip() and l.strip().lstrip("-").strip().lower() not in NOTHING]
+    try:
+        answered = {str(front["id"]).strip() for _p, front, _b, state, _a in
+                    read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id) if state in ("answered", "applied")}
+    except GateError:
+        answered = set()
+    listed = changed_tests_in_plan(tasks, story_id)
+    backed, unbacked, unlisted = [], [], []
+    for entry in changed:
+        rel = entry.replace(" (removed)", "")
+        if rel not in listed:
+            unlisted.append(entry)
+        elif story_says or any(rid in listed[rel] for rid in answered):
+            backed.append(entry)
+        else:
+            unbacked.append(entry)
+    if backed and not unbacked and not unlisted:
+        result.ok("tests-kept", f"{', '.join(backed)} changed as the plan lists, backed by "
+                                + ("the story's `## Changed expectations`" if story_says else "an answered decision"))
+        return
+    if unlisted:
         result.fail(
             "tests-kept",
-            f"{', '.join(changed)} existed before this story and no longer expects what it did — an "
-            f"agreed expectation changes only on a human's decision. Keep the old lines and add, or ask "
-            f"(a decision record with `stage: test`).",
+            f"{', '.join(unlisted)} existed before this story and no longer expects what it did, and the "
+            f"plan's `## Changed tests` does not list it. Keep the old lines and add a case — or, where the "
+            f"story changes that behaviour, the plan lists the test with what backs the change.",
+        )
+    if unbacked:
+        result.fail(
+            "tests-kept",
+            f"{', '.join(unbacked)} is listed under the plan's `## Changed tests`, but nothing a human "
+            f"wrote backs it: the story has no `## Changed expectations`, and the row cites no answered "
+            f"decision. The plan stage asks (one record listing the tests), and the row cites its id.",
         )
 
 
@@ -2176,7 +2224,7 @@ def main(argv):
             )
             if args.stage in ("build", "tidy"):
                 check_required_suites(result, profile, cwd)
-            check_existing_tests(result, cwd, args.tasks, story_id)
+            check_existing_tests(result, cwd, args.tasks, story_id, body)
             check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:
         result.fail("gate", str(error))

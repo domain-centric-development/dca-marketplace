@@ -21,6 +21,15 @@ reordered. Every key needs one end-user test before the build stage may run.
 
 - {{CRITERION_KEY}}: {{OBSERVABLE_BEHAVIOUR}}
 
+## Changed expectations
+
+Only when the story changes behaviour the system already has: one line per expectation that no
+longer holds, in the project's language — what the user or caller sees now, and what they see
+after. No story ids and no file names; the plan stage finds the tests. Leave the section out when
+the story only adds behaviour.
+
+- {{WHAT_CHANGES}}
+
 ## Assumptions
 
 Everything the story rests on that only the domain contact can confirm. Each line is a

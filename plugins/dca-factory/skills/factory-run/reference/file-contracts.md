@@ -132,8 +132,15 @@ The plan gate runs before any stage of a story touches a test. In a git reposito
 test file — found by name: `test_*.py`, `*Test.java`, `*Tests.cs`, `*IT.java`, `*.spec.ts`,
 `*_spec.rb` and the like — as a git blob, once per story. The test, build and tidy gates compare
 against it: a file that still holds every line it had, in order, has only gained cases and passes;
-a changed or removed line fails `tests-kept` unless the story has an answered decision of stage
-`test`. Outside git the check is skipped and named. What it does not see: a test this story itself
+a changed or removed line fails `tests-kept` unless it is **authorised**:
+
+- the plan lists the file under `## Changed tests` and the story says `## Changed expectations` —
+  the human released a story that changes that behaviour, and the plan found the tests (A); or
+- the plan lists the file and its row cites an answered decision of this story — the plan stage found
+  contradicting tests the story did not mention and asked once, with the list (B); or
+- the story has an answered decision of stage `test` — a judge's conflict landed there.
+
+A listed file without either backing fails, and so does a changed file the plan does not list. Outside git the check is skipped and named. What it does not see: a test this story itself
 wrote and later rewrote, and a test file named against the conventions.
 
 ## The change policy — `required:` in the stack profile

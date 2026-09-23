@@ -39,6 +39,9 @@ item in a project. The templates are `factory-run/templates/backlog/{epic,story}
    A criterion is behaviour the system **does not show yet**: its test must be red before the build
    stage, and the gate refuses one that is already green. What has to keep working is the job of
    the tests that already exist — "posting still works" is not a criterion.
+   A story that changes behaviour the system **already has** says so under `## Changed
+   expectations`: what is seen now, what is seen after, in the project's words. The human writing
+   it needs to know the behaviour, not the stories or the tests behind it.
    An assumption that fixes an observable result — a format, an order, a wording the user sees —
    is a criterion waiting for its answer, not a footnote: the plan stage builds the next best shape
    around an open assumption, and that shape then reaches delivery unconfirmed. Ask for it before

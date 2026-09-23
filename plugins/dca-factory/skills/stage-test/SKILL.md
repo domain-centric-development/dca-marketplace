@@ -96,10 +96,10 @@ test covers.
 
 - Do not implement production behaviour to make a test pass.
 - Do not weaken an assertion to get a test to run.
-- Do not change what a test that existed before this story expects. Add a case — a new test, a new
-  method in an existing file — and leave the old lines as they are; the gate compares every test
-  file against the state the plan gate recorded and refuses a changed or removed line. An agreed
-  expectation that has to change is a question (a decision record with `stage: test`), and with an
-  answer the change passes.
+- Do not change what a test that existed before this story expects — unless the plan lists it
+  under `## Changed tests`. Change those to the story's new expectation; everywhere else add a
+  case and leave the old lines as they are. The gate compares every test file against the state
+  the plan gate recorded and refuses a changed or removed line the plan does not list and back.
+  A contradicting test the plan missed is a question (a decision record with `stage: test`).
 - Do not add architecture or rule tests unless the plan introduces a new structural rule.
 - Do not touch a build file, a dependency list or a test-runner configuration.

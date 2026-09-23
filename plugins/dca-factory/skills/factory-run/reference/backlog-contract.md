@@ -51,6 +51,11 @@ Body sections:
   The **key** is lowercase, hyphenated and names the behaviour (`shows-empty-state`), because it
   is committed: the test stage records it next to the test that proves it. A running number
   would point at nothing once the list is reordered.
+- `## Changed expectations` — optional: when the story changes behaviour the system already has,
+  one line per expectation that no longer holds, in the project's language (what is seen now, what
+  is seen after). No story ids, no file names — nobody has to know which story or which hand wrote
+  a test. Released with the story, it is the human's authority for the plan to change the tests
+  that follow from it; without it, a plan that finds such tests asks.
 - `## Assumptions` — the asynchronous channel to the domain contact: one line per assumption,
   `open:` or `answered:`. An assumption is a question, never a decision the team took itself.
 

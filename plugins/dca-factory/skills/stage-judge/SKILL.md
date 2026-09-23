@@ -129,6 +129,10 @@ verdict: <pass | changes-requested | story-conflict>
   was not a defect after all> | still open — listed above
 ```
 
+Where the plan lists `## Changed tests`, check each changed test against the line that backs it:
+the new assertion follows from that line, and nothing else in the test changed. A changed test
+that expects more or other than its backing line says is a `major` defect.
+
 In a repeat round, account for **every** defect the previous verdict confirmed before you judge
 anew. A defect does not disappear because this round's reading missed it: it is fixed, with the
 line that shows it, or withdrawn, with the reason — and a withdrawal that contradicts the source

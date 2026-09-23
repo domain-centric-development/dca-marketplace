@@ -1751,6 +1751,39 @@ def main(argv=None):
 
     unit = os.path.join("src", "test", "java", "com", "example", "WidgetUnitTest.java")
     old_test = "class WidgetUnitTest {\n  void showsNothingWhenEmpty() { assert list.isEmpty(); }\n}\n"
+    changed_line = lambda t: t.replace("isEmpty()", "size() == 0 || true")
+    listing = ("## Changed tests\n| Test file | Backed by |\n| --- | --- |\n"
+               "| `src/test/java/com/example/WidgetUnitTest.java` | {backing} |\n")
+    says = "\n## Changed expectations\n\n- An empty list now reads as zero things, not as an error.\n"
+    for label, story_extra, plan_extra, record, expected in (
+            ("A: the story says what changes and the plan lists the test — the change passes",
+             says, listing.format(backing="the story's changed expectation"), None, "pass"),
+            ("a listed test without a story line or an answered decision is refused",
+             "", listing.format(backing="the plan thinks so"), None, "fail"),
+            ("the story says what changes, but a test the plan does not list is still refused",
+             says, "", None, "fail"),
+            ("B: the plan asked once, the row cites the answered decision — the change passes",
+             "", listing.format(backing="decision STORY-1-01"), DECISION + ANSWER, "pass")):
+        with tmpdir() as root:
+            build_project(root, story=STORY.replace("\n## Assumptions", story_extra + "\n## Assumptions"),
+                          extra_sources=((unit, old_test),))
+            for command in (["init", "-q"], ["add", "-A"],
+                            ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+                subprocess.run(["git", *command], cwd=root, capture_output=True)
+            subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                           capture_output=True, text=True)
+            with open(os.path.join(root, "tasks", "STORY-1", "plan.md"), "w", encoding="utf-8") as handle:
+                handle.write(PLAN_APPLIED + "\n" + plan_extra)
+            if record:
+                os.makedirs(os.path.join(root, ".agents", "factory", "decisions"), exist_ok=True)
+                with open(os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md"), "w",
+                          encoding="utf-8") as handle:
+                    handle.write(record)
+            with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
+                handle.write(changed_line(old_test))
+            verdict, output = kept_verdict(root)
+            expectations.append((f"tests-kept: {label}", verdict == expected,
+                                 f"verdict {verdict}; " + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
     for label, change, decided, expected in (
             ("change: a case added to an existing test file keeps what it expected",
              lambda t: t.replace("}\n}", "}\n  void showsOne() { assert list.size() == 1; }\n}"), False, "pass"),

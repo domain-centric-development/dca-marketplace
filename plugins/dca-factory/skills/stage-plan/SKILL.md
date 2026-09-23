@@ -47,9 +47,18 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
    `## Open assumptions` and plan the next best shape. A test shape is never a reason to build a
    surface: if the criterion could only be driven end to end through a page or an endpoint the
    project does not have, that is the `needs-human` of step 3, not a new adapter.
-8. Name business terms in the criteria that are not in the glossary yet, as proposals with a
+8. **Find the existing tests the story contradicts** — every test in the project, whoever wrote it:
+   the ones that assert the behaviour the criteria change. Read the test sources, not the backlog;
+   a test need not belong to any story. List each under `## Changed tests` with what backs the
+   change: the line of the story's `## Changed expectations` it follows. Where the story has no
+   such section and you still find contradicting tests, the story changes agreed behaviour without
+   saying so — write **one** decision record (`stage: plan`) listing every one of them, with the
+   expectation each holds today and what the story would need instead, and stop. Once answered,
+   plan again and cite the id in each row. A test the story does not contradict is not listed; the
+   gate lets the later stages change only what is listed and backed.
+9. Name business terms in the criteria that are not in the glossary yet, as proposals with a
    one-line definition. Do not silently invent domain language.
-9. Back every statement about the code with evidence: the file, and the line or symbol you read
+10. Back every statement about the code with evidence: the file, and the line or symbol you read
    it from. A statement without evidence is a guess and is marked as one.
 
 ## Ask, do not recall — but only a source the project named
@@ -92,6 +101,11 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 
 ## Acceptance criteria
 - <key>: <criterion>  →  test shape: <the shape, and the runner in this project that runs it>
+
+## Changed tests                  (omit the section when the story contradicts no existing test)
+| Test file | Backed by |
+| --- | --- |
+| <path from the project root> | <the story's changed-expectation line, or the decision id> |
 
 ## Glossary proposals
 - <term>: <definition>            (omit the section when there are none)
