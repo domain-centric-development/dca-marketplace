@@ -95,7 +95,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 5
-VERSION = "0.22.2"
+VERSION = "0.23.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2366,6 +2366,45 @@ def claim(cwd, owner):
     return 3
 
 
+# A session that listens on the backlog (`/loop /factory-run`) holds no claim while nothing is ready,
+# so from outside a waiting listener and an ended one look the same. Each look leaves a mark next to
+# the claim — who looked, and when — which `--status` shows. It only informs; it locks nothing.
+def listener_path(cwd):
+    return claim_path(cwd).replace("dca-factory-worker.lock", "dca-factory-listener.json") \
+        if claim_path(cwd).endswith("dca-factory-worker.lock") else \
+        os.path.join(cwd, ".agents", "factory", "listener.json")
+
+
+def listen_stale_after():
+    try:
+        return max(60, int(os.environ.get("FACTORY_LISTEN_STALE", "3600")))
+    except ValueError:
+        return 3600
+
+
+def mark_listening(cwd):
+    owner = session_owner() or "a session without an id"
+    path = listener_path(cwd)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    write_claim(path, owner, None)
+    print(f"listening: {owner} looked at the backlog")
+    return 0
+
+
+def listener_line(cwd):
+    """`listening: …` for the status, or None when no session has looked."""
+    held = read_claim(listener_path(cwd))
+    if not held:
+        return None
+    beat = parse_time(held.get("beat"))
+    if not beat:
+        return None
+    minutes = int((datetime.now(timezone.utc) - beat).total_seconds() // 60)
+    ended = minutes * 60 > listen_stale_after()
+    return (f"listening: {held.get('owner')}, last look {minutes} min ago"
+            + (" — no look for longer than a loop waits, probably ended" if ended else ""))
+
+
 def release(cwd, owner):
     path = claim_path(cwd)
     held = read_claim(path)
@@ -2442,6 +2481,9 @@ def status_brief(cwd, backlog, tasks, session_start=False):
     print("factory: " + (f"{len(open_ids)} question(s) wait for you: {', '.join(open_ids)} · " if open_ids else "")
           + (f"worker {held.get('owner')} holds the checkout · " if held else "no worker running · ")
           + f"next: {nxt}")
+    listening = listener_line(cwd)
+    if listening:
+        print(f"factory: {listening}")
     if session_start:
         print("dca-factory: this project delivers stories through the factory. At the person's first message, "
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
@@ -2471,6 +2513,8 @@ def status(cwd, backlog, tasks):
               + (" — stale, the next worker takes over" if age is not None and age * 60 > stale_after() else ""))
     else:
         print("worker: none holds the checkout")
+    listening = listener_line(cwd)
+    print(listening or "listening: no session has looked at the backlog")
     print("\n== waiting for a human")
     store = os.path.join(cwd, DECISIONS_DIR)
     waiting = 0
@@ -2820,6 +2864,8 @@ def main(argv):
     parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
     parser.add_argument("--release", nargs="?", const="", metavar="OWNER",
                         help="give the checkout back (default: this session's claim)")
+    parser.add_argument("--listening", action="store_true",
+                        help="record that this session looked at the backlog (a listening loop's sign of life)")
     parser.add_argument("--status", action="store_true",
                         help="print what runs, what waits for a human, every story's state and the cost")
     parser.add_argument("--brief", action="store_true", help="with --status: two lines, for a session's start")
@@ -2850,6 +2896,8 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.listening:
+        return mark_listening(cwd)
     if args.claim:
         return claim(cwd, args.claim)
     if args.release is not None:

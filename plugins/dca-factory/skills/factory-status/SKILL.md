@@ -23,13 +23,16 @@ start nothing and answer nothing on anyone's behalf.
    where the gate is not installed, say so and stop rather than reconstructing it by hand.
 2. **Lead with what needs someone.** An open decision blocks its story and everything that depends
    on it: name it first, with the story it blocks, and point to `/factory-decisions` to answer it.
-3. **Read "running" for what it is.** It means a stage started and its end is not in the journal. The
+3. **Say whether a session listens.** `listening:` names the session that last looked at the backlog
+   and when. A look within the hour means a `/loop /factory-run` is waiting for work; a long silence
+   means it has probably ended — then the backlog is worked by nobody until someone starts one.
+4. **Read "running" for what it is.** It means a stage started and its end is not in the journal. The
    journal cannot tell a running stage from one whose runner was stopped: say how long ago it
    started, and, when that is far longer than a stage takes, that it may have been interrupted.
-4. **Explain a state from its files when asked.** "Why is STORY-3 blocked?" — the dependency it names;
+5. **Explain a state from its files when asked.** "Why is STORY-3 blocked?" — the dependency it names;
    "why does STORY-1 run from document?" — its document gate has not passed yet. Read the file the
    state comes from before you repeat the reason.
-5. **Give cost on request, in detail.** The status shows totals. Asked what a story or a stage
+6. **Give cost on request, in detail.** The status shows totals. Asked what a story or a stage
    cost, run `bash .agents/factory/factory.sh usage --story <id>` yourself and show its table.
    Unmeasured invocations are unknown, not free; a session log has no price, so its cost reads `—`.
 

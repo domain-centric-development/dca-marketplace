@@ -2240,6 +2240,36 @@ def main(argv=None):
             ("claim: the holder gives it back", not os.path.exists(os.path.join(root, ".git", "dca-factory-worker.lock")), ""),
         ]
     with tmpdir() as root:
+        build_project(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        environment = dict(os.environ, CLAUDE_CODE_SESSION_ID="listening-session")
+        before = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+                                encoding="utf-8").stdout
+        subprocess.run([sys.executable, args.gate, "--listening"], cwd=root, env=environment, capture_output=True)
+        after = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+                               encoding="utf-8").stdout
+        ended = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+                               encoding="utf-8", env=dict(os.environ, FACTORY_LISTEN_STALE="60")).stdout
+        brief = subprocess.run([sys.executable, args.gate, "--status", "--brief"], cwd=root, capture_output=True,
+                               text=True, encoding="utf-8").stdout
+        expectations += [
+            ("listening: before any look the status says no session has looked",
+             "no session has looked at the backlog" in before, before.split("== waiting")[0]),
+            ("listening: a look is shown with the session and how long ago",
+             "listening: claude-session:listening-session, last look 0 min ago" in after
+             and "listening:" in brief, after.split("== waiting")[0]),
+            ("listening: it lives in the git directory, never committed",
+             os.path.isfile(os.path.join(root, ".git", "dca-factory-listener.json")), ""),
+        ]
+        write_old = os.path.join(root, ".git", "dca-factory-listener.json")
+        data = json.load(open(write_old, encoding="utf-8"))
+        data["beat"] = "2026-01-01T00:00:00Z"
+        json.dump(data, open(write_old, "w", encoding="utf-8"))
+        old = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+                             encoding="utf-8").stdout
+        expectations.append(("listening: a long silence reads as a loop that has probably ended",
+                             "probably ended" in old, old.split("== waiting")[0]))
+    with tmpdir() as root:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         backlog_project(root, ("STORY-2", []), extra_sources=(
             ("tasks/STORY-1/plan.md", PLAN_APPLIED),

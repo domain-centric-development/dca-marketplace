@@ -256,8 +256,9 @@ implementations each prove a scenario contract from their reports (`reference/fi
 
 `/factory-run` with no story named works the backlog instead of one story:
 
-1. Run `python3 .agents/factory/story-gate.py --schedule`. Its last line is `next: <story> <stage>`
-   or `next: none — <why>`.
+1. Run `python3 .agents/factory/story-gate.py --listening` — the sign of life a second session sees
+   in `/factory-status` while this one waits — then `python3 .agents/factory/story-gate.py
+   --schedule`. Its last line is `next: <story> <stage>` or `next: none — <why>`.
 2. For `next: <story> <stage>`: deliver that story from that stage, exactly as a named story —
    the gates, the stage marks, the escalations. When it is delivered or stops for a decision, go
    back to 1. Never pick a story yourself; the schedule orders by dependencies and keeps one story
