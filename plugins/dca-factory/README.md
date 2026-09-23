@@ -63,7 +63,9 @@ bash .agents/factory/factory.sh backlog --tool claude --watch
 ```
 
 What each story and stage cost — tokens per invocation from the tool's own report, summed across
-rounds and restarts; `--story-budget <tokens>` on `run` or `backlog` stops dispatch at a limit:
+rounds and restarts, for runner stages and for in-session stages alike (those through
+`--stage-start`/`--stage-end` marks, read from the session's own log); `--story-budget <tokens>` on
+`run` or `backlog` stops dispatch at a limit:
 
 ```
 python3 .agents/factory/story-gate.py --usage

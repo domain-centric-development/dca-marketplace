@@ -1861,6 +1861,86 @@ def main(argv=None):
             print(f"          {detail}")
             failures.append((name, [], ""))
 
+    # --- usage inside a session: the tool's own log, read for the window between two marks ------------
+    with tmpdir() as root:
+        home = os.path.join(root, "claude-home")
+        session = "0000-session"
+        log_dir = os.path.join(home, "projects", "-some-project")
+        os.makedirs(os.path.join(log_dir, session, "subagents"))
+        def response(stamp, mid, out, model="claude-x"):
+            return json.dumps({"type": "assistant", "timestamp": stamp, "message": {
+                "id": mid, "model": model, "usage": {"input_tokens": 1, "cache_read_input_tokens": 100,
+                                                     "cache_creation_input_tokens": 10, "output_tokens": out}}})
+        with open(os.path.join(log_dir, f"{session}.jsonl"), "w", encoding="utf-8") as handle:
+            handle.write("\n".join([
+                response("2026-09-23T10:00:00.000Z", "m0", 999),                    # before the stage
+                response("2026-09-23T10:01:00.000Z", "m1", 50),                     # in it, three blocks
+                response("2026-09-23T10:01:00.100Z", "m1", 50),
+                response("2026-09-23T10:01:00.200Z", "m1", 50),
+                response("2026-09-23T10:01:30.000Z", "s1", 0, "<synthetic>"),       # no model call
+                response("2026-09-23T10:09:00.000Z", "m9", 999)]) + "\n")          # after it
+        with open(os.path.join(log_dir, session, "subagents", "agent-a.jsonl"), "w", encoding="utf-8") as handle:
+            handle.write(response("2026-09-23T10:02:00.000Z", "a1", 7) + "\n")
+        journal = os.path.join(root, "tasks", "S-1", ".verify", "journal.tsv")
+        os.makedirs(os.path.dirname(journal))
+        with open(journal, "w", encoding="utf-8") as handle:
+            handle.write("2026-09-23T10:00:30.000Z\tstage-start\tplan\ttool=claude-session\n")
+        environment = dict(os.environ, CLAUDE_CODE_SESSION_ID=session, CLAUDE_CONFIG_DIR=home)
+        # the mark runs "now"; the log is from the past, so the window is closed by hand as the mark would
+        subprocess.run([sys.executable, args.gate, "--stage-end", "plan", "--story", "S-1"], cwd=root,
+                       env=environment, capture_output=True, text=True)
+        lines = open(journal, encoding="utf-8").read().splitlines()
+        recorded = [l for l in lines if "\tusage\t" in l]
+        if recorded:
+            fixed = recorded[0].split("\t")
+            fixed = [("window=2026-09-23T10:00:30.000Z/2026-09-23T10:05:00.000Z" if f.startswith("window=") else f)
+                     for f in fixed]
+            with open(journal, "w", encoding="utf-8") as handle:
+                handle.write("\n".join(l for l in lines if "\tusage\t" not in l) + "\n" + "\t".join(fixed) + "\n")
+        report = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
+                                env=environment, capture_output=True, text=True).stdout
+        row = next((l for l in report.splitlines() if l.startswith("S-1/plan")), "")
+        codex_home = os.path.join(root, "codex-home")
+        rollout = os.path.join(codex_home, "sessions", "2026", "09", "23", "rollout-x.jsonl")
+        os.makedirs(os.path.dirname(rollout))
+        def totals(stamp, inp, cached, out):
+            return json.dumps({"timestamp": stamp, "type": "event_msg", "payload": {"type": "token_count", "info": {
+                "total_token_usage": {"input_tokens": inp, "cached_input_tokens": cached,
+                                      "cache_write_input_tokens": 0, "output_tokens": out}}}})
+        with open(rollout, "w", encoding="utf-8") as handle:
+            handle.write("\n".join([
+                json.dumps({"type": "session_meta", "payload": {"cwd": root}}),
+                json.dumps({"type": "turn_context", "payload": {"model": "codex-model"}}),
+                totals("2026-09-23T10:00:00.000Z", 1000, 800, 10),                 # before the stage
+                totals("2026-09-23T10:02:00.000Z", 3000, 2000, 40),
+                totals("2026-09-23T10:02:00.000Z", 3000, 2000, 40)]) + "\n")      # repeated: totals, not sums
+        whole = subprocess.run([sys.executable, args.gate, "--usage-from", "codex-session", rollout],
+                               capture_output=True, text=True).stdout
+        with open(journal, "a", encoding="utf-8") as handle:
+            handle.write("2026-09-23T10:01:00.000Z\tstage-start\ttest\ttool=codex-session\n"
+                         f"2026-09-23T10:03:00.000Z\tusage\ttest\ttool=codex-session\t"
+                         f"window=2026-09-23T10:01:00.000Z/2026-09-23T10:03:00.000Z\tlog={rollout}\n")
+        report2 = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
+                                 capture_output=True, text=True).stdout
+        test_row = next((l for l in report2.splitlines() if l.startswith("S-1/test")), "")
+        expectations = [
+            ("usage in a session: the mark records the window and the log, not a number the log lags behind",
+             bool(recorded) and "window=" in recorded[0] and "log=" in recorded[0], recorded[:1]),
+            ("usage in a session: Claude's log is read for the window, each response once, subagents included, "
+             "synthetic entries left out", row.split()[1:7] == ["1", "1", "2", "200", "20", "57"], row),
+            ("usage in a session: a session log has no cost, and the report says so rather than 0.00",
+             row.split()[-1:] == ["—"], row),
+            ("usage in a session: Codex's running totals are differenced over the window",
+             test_row.split()[3:7] == ["800", "1200", "0", "30"], test_row),
+            ("usage from a whole old log: a Codex session is read to its last total",
+             whole.startswith("model=codex-model\tinput=1000\tcache_read=2000\tcache_write=0\toutput=40"), whole),
+        ]
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            failures.append((name, [], ""))
+
     # --- existing tests keep their expectations: the plan gate's baseline, the later gates' check -----
     print()
     kept_failures, expectations = [], []

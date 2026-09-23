@@ -175,6 +175,15 @@ delivers, and say in the report which one you used:
   the story and the predecessor file for that stage — not what you remember from earlier stages.
   The file contract plus the gate is what keeps this honest.
 
+In the subagent and in-session tiers, mark every stage so its cost is known: run
+`python3 .agents/factory/story-gate.py --stage-start <stage> --story <id>` right before it and
+`--stage-end <stage> --story <id>` right after its file is written. The gate records the window in
+the story's journal and reads the tool's own session log for it later — Claude Code's log of this
+session, subagents included, or Codex's — so `--usage`, the schedule and a budget see in-session
+stages the way they see the runner's. A mark without a log it can read records the stage as
+unknown. Do not work on anything else between the two marks: the window counts everything the
+session did in it.
+
 Two situations put you *below* the highest tier on purpose. A single stage the human asked for
 (`/stage-build` on a story that already has a plan) is done here, not through the runner — the
 runner delivers whole stories. And where the tool cannot start processes at all, or the script is
@@ -267,6 +276,8 @@ sums them per story and stage, repeat rounds included; the schedule shows each s
 counted from the journal, so a restart or a second session continues the same count; the stage
 that crosses the line still finishes, because usage is known only after it ran. A tool that reports
 nothing — OpenCode today, a custom `FACTORY_TOOL_CMD` without `FACTORY_USAGE_FORMAT` — is shown as
-invocations without a report, never as zero. An in-session run writes no journal and has no numbers. The watch lives as long as its process: a closed session or terminal ends it, and a
+invocations without a report, never as zero. An in-session run is measured through the stage marks
+(below, *Execution tier*); a session log carries tokens but no price, so its cost reads `—`, not 0.
+An old session log can be read whole: `story-gate.py --usage-from claude-session|codex-session <log>`. The watch lives as long as its process: a closed session or terminal ends it, and a
 file wakes nobody. In-session, do the same loop yourself — ask the schedule, run the story it
 names, ask again — and stop instead of waiting.
