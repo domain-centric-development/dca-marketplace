@@ -21,8 +21,10 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 2. Update the context map when the story changed how contexts relate — a new upstream, a new
    translation site, a relationship that changed kind. A story that *needs* a new context or
    relationship should never have reached this stage; if you find one, write `## needs-human`
-   naming a decision record (`decision: <story>-<nn>`, from the factory's
-   `templates/decision.md.tmpl` into `.agents/factory/decisions/`).
+   naming a decision record (`decision: <story>-<nn>`), written to
+   `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
+   `story:`, `stage: document`, `asked:` (UTC) and the sections `## Question`, `## Options`,
+   `## Recommendation` (full shape: `factory-run/templates/decision.md.tmpl`).
 3. Update the documents the project keeps for readers, and only where the story made them wrong:
    the package or namespace layout when it changed, a described flow that now works differently, a
    list of contexts or capabilities that is now incomplete. Where the project declares its
@@ -74,7 +76,7 @@ here fails for the absence of a knowledge skill.
 ## Not documented
 - <thing>: <why, and what it waits for>
 
-## needs-human                     (only when the run must stop)
+## needs-human                     (only when the run must stop — otherwise leave the heading out)
 ```
 
 `Verified by` names how you checked a statement — the file you read, the command you ran. A row

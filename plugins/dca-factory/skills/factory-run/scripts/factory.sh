@@ -507,6 +507,13 @@ verdict_of() {                              # verdict_of <story>
   sed -n 's/^verdict:[[:space:]]*//p' "$file" | head -1 | tr -d '`" '"'"''
 }
 
+# Whether a stage file stops the run: a `## needs-human` section with something in it. A bare
+# heading — empty, or `(none)` copied from the file template — asks nobody anything.
+asks_human() {                              # asks_human <file>
+  sed -n '/^## needs-human/,/^## /p' "$1" | sed '1d; /^## /d' \
+    | grep -v -i -E '^[[:space:]]*(\(?(none|n/a|nothing)\)?|—|–|-)?[[:space:]]*$' | grep -q .
+}
+
 bump_rounds() {                             # bump_rounds <story> -> current count
   local file="$TASKS/$1/.rounds" count=0
   [ -f "$file" ] && count=$(tr -dc '0-9' < "$file")
@@ -653,7 +660,7 @@ run_story() {
       # A stage that ends with a needs-human section has stopped, whatever its file otherwise says.
       # Reading only "does the file exist" turns an escalation into a hand-over, and the next stage
       # then builds on a decision nobody took.
-      if grep -q '^## needs-human' "$artefact"; then
+      if asks_human "$artefact"; then
         echo "factory: stage '$stage' ends with a needs-human section — the run stops here." >&2
         # The question is a record of its own, so the answer has a place to land and a second
         # session finds it without this transcript. Name the file, and the command that resumes.

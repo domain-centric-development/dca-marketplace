@@ -664,6 +664,20 @@ def verify_runner(runner, verbose=False):
               code != 0 and stages == ["plan"] and "needs-human" in output,
               f"stages that ran: {stages}, exit {code}")
 
+    # 1d1. a bare needs-human heading from the template is not an escalation
+    with tmpdir() as root:
+        build_project(root)
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        bare = ('mkdir -p tasks/STORY-1; printf "## Context\\n## Changes\\n'
+                '## Acceptance criteria\\n## needs-human\\n(none)\\n" > tasks/STORY-1/plan.md')
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": bare})
+        stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
+        check("runner: an empty needs-human heading does not stop the run",
+              stages[:2] == ["plan", "test"] and "ends with a needs-human section" not in output,
+              f"stages that ran: {stages}")
+
     # 1d2. a stage that asks writes the record; the run names it and how to resume
     with tmpdir() as root:
         build_project(root)
@@ -1305,6 +1319,9 @@ def main(argv=None):
         (Case("build: without a policy the build gate runs only the story's tests, as before", "build", 0,
               must_pass=("tests-green",)),
          dict(green=both_green, ledger=both_green)),
+        (Case("document: an empty `## needs-human` left from the template stops nothing", "document", 0,
+              must_pass=("documented",)),
+         dict(document=DOCUMENT + "\n## needs-human\n(none)\n")),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),

@@ -669,7 +669,7 @@ def check_documented(result, tasks, story_id, cwd):
     except GateError as error:
         result.fail("documented", str(error))
         return
-    if "## needs-human" in text:
+    if needs_human_ids(text) is not None:
         result.fail(
             "documented",
             f"{path}: the stage stopped with a needs-human section — read it and decide",
@@ -1299,9 +1299,11 @@ def read_decisions(store, story_id):
 
 def needs_human_ids(text):
     """The decision ids a `## needs-human` section names (`decision: <id>`), or [] without one;
-    None when the file has no such section at all."""
+    None when the file has no such section at all — or only the heading, left empty or filled with
+    `(none)` from the file template: that asks nobody anything, and reading it as a stop halts a
+    finished stage."""
     section = section_of(text, "needs-human")
-    if section is None:
+    if section is None or all(line.strip().strip("()").strip().lower() in NOTHING for line in section):
         return None
     return [value for key, value in fields_of(section).items() if key == "decision" and value]
 

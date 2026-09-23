@@ -17,9 +17,10 @@ Output: the test sources, plus `tasks/<story>/tests.md`. You write **no** produc
    runner is a stack decision, not part of a story. If the planned shape is impossible with what
    is installed, write the tests file with a `## needs-human` section naming the missing runner
    and stop — do not install it, and do not silently drop to a unit test that asserts less. The
-   section names a decision record (`decision: <story>-<nn>`, written from the factory's
-   `templates/decision.md.tmpl` into `.agents/factory/decisions/`): the question, the options,
-   your recommendation, never an answer.
+   section names a decision record (`decision: <story>-<nn>`), written to
+   `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
+   `story:`, `stage: test`, `asked:` (UTC) and the sections `## Question`, `## Options`,
+   `## Recommendation` — never an answer (full shape: `factory-run/templates/decision.md.tmpl`).
 3. Add unit tests for the invariants the plan names: the rules an aggregate or value object must
    never break. These belong to the domain's own vocabulary and are the part of the suite that
    survives a rewrite of the adapters.
