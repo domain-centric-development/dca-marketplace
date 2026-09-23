@@ -126,6 +126,15 @@ Skills are held one of two ways, and the update keeps whichever the project chos
 
 `factory.sh status` says when the project is behind the pipeline it found.
 
+## A session that starts knowing where things stand
+
+`install` writes a section into `AGENTS.md` (between `<!-- dca-factory: start -->` and `end`; only
+that block is replaced on an update) telling any tool to begin a session with
+`factory.sh status --brief` and to ask what to do. For Claude Code it also adds a `SessionStart`
+hook to `.claude/settings.json` that puts those lines into the session's context, and allows the
+reading commands (`status`, `usage`, `decisions`, `schedule`) without a prompt; `run` and
+`backlog` still ask. The first message — even "hi" — then gets the state and the choices.
+
 ## How to see where it stands
 
 From any session in the project — beside a running `backlog --watch` too, since it only reads:

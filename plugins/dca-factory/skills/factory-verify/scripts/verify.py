@@ -1107,6 +1107,35 @@ exit 0
         check("runner: it takes over a stale claim, runs, and gives the checkout back at the end",
               code == 0 and len(invocations(root)) == 6 and released, f"exit {code}, released {released}")
 
+    # 1q. a session starts knowing where the pipeline stands: AGENTS.md for every tool, a hook for Claude
+    with tmpdir() as root:
+        build_project(root)
+        with open(os.path.join(root, "AGENTS.md"), "a", encoding="utf-8") as handle:
+            handle.write("\nThe project's own line.\n")
+        os.makedirs(os.path.join(root, ".claude"), exist_ok=True)
+        with open(os.path.join(root, ".claude", "settings.json"), "w", encoding="utf-8") as handle:
+            json.dump({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}}, handle)
+        run_runner(runner, root, "install", "--tool", "claude", "--from", source)
+        run_runner(runner, root, "install", "--tool", "claude", "--from", source)
+        agents = open(os.path.join(root, "AGENTS.md"), encoding="utf-8").read()
+        settings = json.load(open(os.path.join(root, ".claude", "settings.json"), encoding="utf-8"))
+        commands = [h["command"] for e in settings["hooks"]["SessionStart"] for h in e["hooks"]]
+        check("priming: AGENTS.md carries the pipeline's section once, and keeps the project's own lines",
+              agents.count("<!-- dca-factory: start -->") == 1 and "The project's own line." in agents
+              and "factory.sh status --brief" in agents, agents[-300:])
+        check("priming: Claude's SessionStart hook is added once, beside the project's own hooks",
+              commands.count("bash .agents/factory/factory.sh status --brief --session-start") == 1
+              and "echo mine" in commands, commands)
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief")
+        check("priming: `factory.sh status --brief` prints two lines, ending in what comes next",
+              code == 0 and len([l for l in output.splitlines() if l.startswith("factory: ")]) == 2
+              and "next:" in output, output.strip().splitlines()[-2:])
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief",
+                                  "--session-start")
+        check("priming: with --session-start it adds what the session should do with them",
+              code == 0 and "At the person's first message" in output and "/factory-backlog" in output,
+              output.strip().splitlines()[-1:])
+
     # 1f. the snapshot sees files in a directory this run added
     with tmpdir() as root:
         build_project(root)

@@ -8,7 +8,7 @@
 #   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--story-budget <tokens>] [--dry-run]
 #   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>]
 #                      [--story-budget <tokens>] [--dry-run]
-#   factory.sh status                     what runs, what waits for a human, every story, the cost
+#   factory.sh status [--brief]           what runs, what waits for a human, every story, the cost
 #   factory.sh usage [--story <id>]       tokens per story and stage
 #   factory.sh decisions [--story <id>]   the decision inbox
 #   factory.sh schedule                   every story's state and the next one
@@ -514,6 +514,7 @@ install_skills() {
     printf '%s\n' "tasks/**/.verify/journal.tsv merge=union" >> .gitattributes
     echo "factory: .gitattributes merges the story journals by keeping both sides (merge=union)"
   fi
+  write_agents_block
   if [ -n "$copy_mode" ]; then
     echo "factory: the skills are copies — commit .claude/.codex/.opencode skills with the project, and"
     echo "factory:   every clone delivers stories with this pipeline, without the marketplace."
@@ -623,6 +624,38 @@ PYEOF
   echo "factory:   knowledge:, carrier.<stage>: and review.<perspective>: where the project has them"
 }
 
+# The instruction every tool reads: a block in AGENTS.md between two markers. Only the block is the
+# pipeline's — it is replaced on every install and update; the rest of the file is the project's.
+write_agents_block() {
+  "$PY" - <<'AGENTSEOF'
+import os
+path, start, end = "AGENTS.md", "<!-- dca-factory: start -->", "<!-- dca-factory: end -->"
+block = start + """
+## Delivery pipeline
+
+This project delivers stories through the dca-factory pipeline. At the start of a session, unless the
+person names a task right away, run `bash .agents/factory/factory.sh status --brief`, show its lines,
+and ask what they want to do: write or release a story (`/factory-backlog`), answer a waiting
+question (`/factory-decisions`), start working the backlog (`/factory-run --watch`, or
+`/loop /factory-run`), or look closer (`/factory-status`). One worker per checkout: a managing
+session writes backlog and decision files only.
+""" + end
+text = open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
+if start in text and end in text:
+    head, rest = text.split(start, 1)
+    text = head + block + rest.split(end, 1)[1]
+else:
+    text = (text.rstrip() + "\n\n" if text.strip() else "") + block + "\n"
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+print("factory: AGENTS.md carries the pipeline's section (between its dca-factory markers)")
+AGENTSEOF
+  if [ -f CLAUDE.md ] && ! grep -q "AGENTS.md" CLAUDE.md; then
+    echo "factory: CLAUDE.md does not import AGENTS.md — Claude Code gets the section through the" >&2
+    echo "factory:   SessionStart hook; add '@AGENTS.md' to CLAUDE.md if it should read the rest too." >&2
+  fi
+}
+
 write_claude_permissions() {
   # Claude Code asks before running a command. In a non-interactive run there is nobody to ask,
   # so the gate cannot run and no stage can be verified — the tool then stops, correctly. These
@@ -647,8 +680,17 @@ if os.path.isfile(profile):
             head = command.split()[0] if command else ""
             if head and not head.startswith("{{"):
                 wanted.append(f"Bash({head}:*)")
+# the reading commands, so a managing session looks without being asked; `run` and `backlog` still ask
+for verb in ("status", "usage", "decisions", "schedule"):
+    wanted.append(f"Bash(bash .agents/factory/factory.sh {verb}:*)")
 added = [entry for entry in dict.fromkeys(wanted) if entry not in allow]
 allow.extend(added)
+# The session starts knowing where the pipeline stands: the hook's output lands in its context.
+hook_command = "bash .agents/factory/factory.sh status --brief --session-start"
+starts = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
+if not any(h.get("command") == hook_command for entry in starts for h in entry.get("hooks", [])):
+    starts.append({"hooks": [{"type": "command", "command": hook_command}]})
+    added.append("a SessionStart hook with the pipeline's status")
 with open(path, "w") as handle:
     json.dump(settings, handle, indent=2)
     handle.write("\n")
@@ -1007,7 +1049,11 @@ read_command() {                            # read_command <gate flags…>
   exec "$PY" "$GATE" "$@"
 }
 case "$command" in
-  status)    [ $# -eq 0 ] || usage; check_gate_freshness; read_command --status ;;
+  status)    case "${1:-}" in
+               --brief) shift; [ -f "$GATE" ] || exit 0; read_command --status --brief "$@" ;;
+               "") check_gate_freshness; read_command --status ;;
+               *) usage ;;
+             esac ;;
   schedule)  [ $# -eq 0 ] || usage; read_command --schedule ;;
   usage)     read_command --usage "$@" ;;
   decisions) read_command --list-decisions "$@" ;;

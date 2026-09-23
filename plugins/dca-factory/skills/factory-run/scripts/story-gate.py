@@ -95,7 +95,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 5
-VERSION = "0.19.0"
+VERSION = "0.20.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2405,6 +2405,53 @@ def running_stages(tasks):
     return found
 
 
+def status_brief(cwd, backlog, tasks, session_start=False):
+    """Two lines: what is ready, what waits, who works, what it cost — for a session's start."""
+    import contextlib
+    import io
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        schedule(cwd, backlog, tasks)
+    rows = [l for l in buffer.getvalue().splitlines() if l and not l.startswith(("schedule:", "wait:"))]
+    nxt = next((l[6:] for l in rows if l.startswith("next: ")), "none")
+    states = {}
+    for line in rows:
+        if line.startswith("next: "):
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            states.setdefault(parts[1], []).append(parts[0])
+    store = os.path.join(cwd, DECISIONS_DIR)
+    open_ids = []
+    if os.path.isdir(store):
+        for name in sorted(os.listdir(store)):
+            if not name.endswith(".md"):
+                continue
+            try:
+                _front, body = read_front_matter(os.path.join(store, name))
+            except GateError:
+                continue
+            if decision_state(body)[0] in ("open", "draft"):
+                open_ids.append(name[:-3])
+    held = read_claim(claim_path(cwd))
+    stories = sorted(d for d in os.listdir(tasks) if os.path.isdir(os.path.join(tasks, d))) \
+        if os.path.isdir(tasks) else []
+    tokens = sum(tokens_of(e) for s in stories for e in journal_usage(tasks, s).values())
+    summary = " · ".join(f"{len(v)} {k}" for k, v in sorted(states.items())) or "no stories yet"
+    print(f"factory: {summary}" + (f" · {tokens:,} tokens so far" if tokens else ""))
+    print("factory: " + (f"{len(open_ids)} question(s) wait for you: {', '.join(open_ids)} · " if open_ids else "")
+          + (f"worker {held.get('owner')} holds the checkout · " if held else "no worker running · ")
+          + f"next: {nxt}")
+    if session_start:
+        print("dca-factory: this project delivers stories through the factory. At the person's first message, "
+              "unless they already name a task, show the two lines above and ask what they want to do: write or "
+              "release a story (/factory-backlog), answer a waiting question (/factory-decisions), start working "
+              "the backlog (/factory-run --watch, or /loop /factory-run), or look closer (/factory-status). A "
+              "managing session writes backlog and decision files only; the worker is the one writer in the "
+              "checkout.")
+    return 0
+
+
 def status(cwd, backlog, tasks):
     now = datetime.now(timezone.utc)
     print("== running")
@@ -2775,6 +2822,9 @@ def main(argv):
                         help="give the checkout back (default: this session's claim)")
     parser.add_argument("--status", action="store_true",
                         help="print what runs, what waits for a human, every story's state and the cost")
+    parser.add_argument("--brief", action="store_true", help="with --status: two lines, for a session's start")
+    parser.add_argument("--session-start", action="store_true",
+                        help="with --status --brief: add what a session should do with them (the SessionStart hook)")
     parser.add_argument("--usage", action="store_true",
                         help="print the tokens each story and stage used, from the runner's journals")
     parser.add_argument("--total", action="store_true", help="with --usage: print only the token total")
@@ -2804,6 +2854,12 @@ def main(argv):
         return claim(cwd, args.claim)
     if args.release is not None:
         return release(cwd, args.release or session_owner())
+    if args.status and args.brief:
+        try:
+            return status_brief(cwd, args.backlog, args.tasks, args.session_start)
+        except Exception as error:                      # a hook must never break a session's start
+            print(f"factory: status unavailable ({error.__class__.__name__})")
+            return 0
     if args.status:
         return status(cwd, args.backlog, args.tasks)
     if args.stage_start or args.stage_end:
