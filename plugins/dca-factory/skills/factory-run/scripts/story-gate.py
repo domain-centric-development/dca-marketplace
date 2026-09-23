@@ -39,6 +39,8 @@ Checks by stage:
            (or, with --staged, the Git index — refused when the working tree differs from it). A test
            command passes only when its reports show executed cases. The profile's `required:` line
            makes checks mandatory: a required check that is not declared, not run or ran nothing fails
+    test, build, tidy  a test file that existed before the story (recorded by the plan gate) still
+           holds every line it had; a changed or removed one needs an answered decision of stage test
     every stage  the story's decision records under .agents/factory/decisions/: a `## needs-human`
            section names one, an open one stops the story, an answered one is applied by the
            stage that asked and then stamped `## Applied` here
@@ -91,7 +93,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 3
-VERSION = "0.11.0"
+VERSION = "0.12.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1544,6 +1546,82 @@ def run_test_command(result, cwd, profile, key, command, required, strict=False)
         (result.fail if required else result.note if strict else result.skip)("test", message)
 
 
+# --- existing tests keep their expectations -------------------------------------
+
+# A story may add tests and add cases to a test file; it may not change what a test that existed
+# before it expects, unless a human decided that. The plan gate runs before any stage of the story
+# touches a test, so it records the test files as git blobs; later gates compare against them.
+TESTS_BASELINE = ".tests-baseline"
+TEST_FILE = re.compile(
+    r"(^test_.*\.py$|_test\.(py|go|rb|exs?)$|Tests?\.(java|kt|cs|scala|groovy)$|IT\.(java|kt)$"
+    r"|Spec\.(scala|groovy|kt)$|\.(test|spec)\.(js|jsx|ts|tsx|mjs)$|_spec\.rb$)")
+SKIP_DIRS = {".git", "build", "target", "bin", "obj", "node_modules", "dist", ".gradle", "tasks",
+             ".agents", ".claude", ".codex", ".opencode", "__pycache__", ".venv", "venv"}
+
+
+def test_files(cwd):
+    found = []
+    for root, dirs, files in os.walk(cwd):
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
+        for name in sorted(files):
+            if TEST_FILE.search(name):
+                found.append(os.path.relpath(os.path.join(root, name), cwd).replace(os.sep, "/"))
+    return found
+
+
+def record_tests_baseline(cwd, tasks, story_id):
+    """Write the baseline once per story; a later plan gate must not launder a change into it."""
+    path = os.path.join(tasks, story_id, TESTS_BASELINE)
+    if os.path.isfile(path) or git(cwd, "rev-parse", "--git-dir")[0]:
+        return
+    files = test_files(cwd)
+    blobs = []
+    for rel in files:
+        code, blob = git(cwd, "hash-object", "-w", "--", rel)
+        if code == 0:
+            blobs.append(f"{blob}  {rel}")
+    write_mark(tasks, story_id, TESTS_BASELINE, "\n".join(blobs))
+
+
+def check_existing_tests(result, cwd, tasks, story_id):
+    path = os.path.join(tasks, story_id, TESTS_BASELINE)
+    if not os.path.isfile(path):
+        result.skip("tests-kept", "no baseline of the tests that existed before this story "
+                                  "(the plan gate records one in a git repository)")
+        return
+    changed = []
+    for line in read_text(path).splitlines():
+        if "  " not in line:
+            continue
+        blob, rel = line.split("  ", 1)
+        full = os.path.join(cwd, rel)
+        if not os.path.isfile(full):
+            changed.append(f"{rel} (removed)")
+            continue
+        code, before = git(cwd, "cat-file", "blob", blob)
+        if code:
+            continue
+        with open(full, encoding="utf-8", errors="replace") as handle:
+            now = handle.read().splitlines()
+        # Additions only: every line the test had is still there, in the same order.
+        remaining = iter(now)
+        if not all(any(old == new for new in remaining) for old in before.splitlines()):
+            changed.append(rel)
+    if not changed:
+        result.ok("tests-kept", "no test that existed before this story changed what it expects")
+        return
+    decided = answered_decisions(cwd, story_id, "test")
+    if decided:
+        result.ok("tests-kept", f"{', '.join(changed)} changed on decision {', '.join(decided)}")
+    else:
+        result.fail(
+            "tests-kept",
+            f"{', '.join(changed)} existed before this story and no longer expects what it did — an "
+            f"agreed expectation changes only on a human's decision. Keep the old lines and add, or ask "
+            f"(a decision record with `stage: test`).",
+        )
+
+
 def check_required_suites(result, profile, cwd):
     """At build and tidy: the test commands the policy requires, run whole.
 
@@ -2098,12 +2176,14 @@ def main(argv):
             )
             if args.stage in ("build", "tidy"):
                 check_required_suites(result, profile, cwd)
+            check_existing_tests(result, cwd, args.tasks, story_id)
             check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:
         result.fail("gate", str(error))
         return result.report(args.story, args.stage, args.json)
     if not result.failed and args.stage == "plan":
         write_mark(args.tasks, story_id, STORY_DIGEST, file_digest(story_path))
+        record_tests_baseline(cwd, args.tasks, story_id)
     if not result.failed and args.stage == "document":
         write_mark(args.tasks, story_id, DELIVERED, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     return result.report(story_id, args.stage, args.json)

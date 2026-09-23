@@ -1738,6 +1738,63 @@ def main(argv=None):
             parity_failures.append(name)
     failures += [(name, [], "") for name in parity_failures]
 
+    # --- existing tests keep their expectations: the plan gate's baseline, the later gates' check -----
+    print()
+    kept_failures, expectations = [], []
+
+    def kept_verdict(root):
+        output = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "test"], cwd=root,
+                                capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        verdicts = checks_by_verdict(output)
+        return ("pass" if "tests-kept" in verdicts["pass"] else "fail" if "tests-kept" in verdicts["fail"]
+                else "skip" if "tests-kept" in verdicts["skip"] else "absent"), output
+
+    unit = os.path.join("src", "test", "java", "com", "example", "WidgetUnitTest.java")
+    old_test = "class WidgetUnitTest {\n  void showsNothingWhenEmpty() { assert list.isEmpty(); }\n}\n"
+    for label, change, decided, expected in (
+            ("change: a case added to an existing test file keeps what it expected",
+             lambda t: t.replace("}\n}", "}\n  void showsOne() { assert list.size() == 1; }\n}"), False, "pass"),
+            ("an existing test whose assertion changed is refused without a decision",
+             lambda t: t.replace("isEmpty()", "size() == 0 || true"), False, "fail"),
+            ("an existing test that was removed is refused without a decision", None, False, "fail"),
+            ("the same changed assertion passes on an answered decision of the test stage",
+             lambda t: t.replace("isEmpty()", "size() == 0 || true"), True, "pass")):
+        with tmpdir() as root:
+            build_project(root, extra_sources=((unit, old_test),))
+            for command in (["init", "-q"], ["add", "-A"],
+                            ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+                subprocess.run(["git", *command], cwd=root, capture_output=True)
+            subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                           capture_output=True, text=True)
+            baseline = os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".tests-baseline"))
+            if change is None:
+                os.remove(os.path.join(root, unit))
+            else:
+                with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
+                    handle.write(change(old_test))
+            if decided:
+                os.makedirs(os.path.join(root, ".agents", "factory", "decisions"), exist_ok=True)
+                with open(os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md"), "w",
+                          encoding="utf-8") as handle:
+                    handle.write(CONFLICT + ANSWER)
+                with open(os.path.join(root, "tasks", "STORY-1", "tests.md"), "w", encoding="utf-8") as handle:
+                    handle.write(TESTS_ON_DECISION)
+            verdict, output = kept_verdict(root)
+            expectations.append((f"tests-kept: {label.replace('change: ', '')}", baseline and verdict == expected,
+                                 f"baseline {baseline}, verdict {verdict}; "
+                                 + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    with tmpdir() as root:
+        build_project(root)
+        verdict, output = kept_verdict(root)
+        expectations.append(("tests-kept: outside a git repository the check is skipped and named",
+                             verdict == "skip", verdict))
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            kept_failures.append(name)
+    failures += [(name, [], "") for name in kept_failures]
+
     # --- the schedule: every story's state and the next one, from the files alone -------------
     print()
     schedule_failures = []

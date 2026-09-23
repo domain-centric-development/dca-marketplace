@@ -126,6 +126,16 @@ What this does not do, on purpose: no leases, no revision numbers, no stale-answ
 the story changes underneath, no authorisation beyond `by:`. Files writable by the same user give
 process guarantees, not security ones.
 
+## Tests that existed before the story — `tasks/<story>/.tests-baseline`
+
+The plan gate runs before any stage of a story touches a test. In a git repository it records every
+test file — found by name: `test_*.py`, `*Test.java`, `*Tests.cs`, `*IT.java`, `*.spec.ts`,
+`*_spec.rb` and the like — as a git blob, once per story. The test, build and tidy gates compare
+against it: a file that still holds every line it had, in order, has only gained cases and passes;
+a changed or removed line fails `tests-kept` unless the story has an answered decision of stage
+`test`. Outside git the check is skipped and named. What it does not see: a test this story itself
+wrote and later rewrote, and a test file named against the conventions.
+
 ## The change policy — `required:` in the stack profile
 
 `story-gate.py --change` checks a change outside a story; `--staged` checks the Git index and refuses

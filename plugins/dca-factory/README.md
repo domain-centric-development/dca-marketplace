@@ -114,6 +114,7 @@ python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy
 | `build` | every mapped test **green**; the profile's `architecture:` and `format:` commands succeed |
 | `tidy` | the build gate's checks again — the tidy stage's whole claim is that it changed no behaviour |
 | `document` | every file, path and identifier the document stage claims **exists**; every claim names how it was checked; every term the plan proposed has landed in a glossary or is named as open |
+| test, build, tidy | a test that existed before the story still expects what it did — only added cases pass, a changed or removed line needs a decision (`tests-kept`, from the plan gate's git baseline) |
 | every stage | the story's **decision records** (`.agents/factory/decisions/`): a `## needs-human` names one; an open one blocks the story and says where to answer; an answered one is applied by the stage that asked and stamped `## Applied` |
 
 A command the stack profile does not declare is skipped and named in the report — never failed.
