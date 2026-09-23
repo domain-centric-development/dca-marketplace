@@ -4,6 +4,7 @@
 # files as running the skills inside a session — this only changes who holds the context.
 #
 #   factory.sh install [--tool claude|codex|opencode|all] [--from <skill folder>] [--copy]
+#   factory.sh update [--from <skill folder>]   the newest pipeline found, same tools, links or copies
 #   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--story-budget <tokens>] [--dry-run]
 #   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>]
 #                      [--story-budget <tokens>] [--dry-run]
@@ -79,7 +80,7 @@ stage_file() {
   esac
 }
 
-usage() { sed -n '2,24p' "$0" >&2; exit 2; }
+usage() { sed -n '2,25p' "$0" >&2; exit 2; }
 
 # An install step that had to work and did not. `set -e` is deliberately *not* used: the run loop
 # expects non-zero exits in several places — a gate that refuses, a tool that stops, a verdict that
@@ -112,22 +113,76 @@ STAMP=".agents/factory/gate.installed"
 # started out of the plugin), and the skill links an install may have left. When none of them
 # resolves there is simply nothing to compare, which is a silence, not a finding.
 plugin_gate() {
-  local candidate dir
+  local skills; skills=$(plugin_skills) || return 1
+  echo "$skills/factory-run/scripts/story-gate.py"
+}
+
+# The pipeline's skill folder this project can update from, the newest one found: an explicit
+# FACTORY_PLUGIN_DIR, the checkout this script runs from, the skill folders the install linked or
+# copied, and Claude Code's plugin cache. A copy of the skills in the project is a candidate too, so
+# "newest" decides, not the order — the project's own copy is never the answer when a newer one exists.
+plugin_skills() {
+  local candidate dir best="" best_version="" version own
+  own=$(cd "$(dirname "$GATE")" 2>/dev/null && pwd)
   for candidate in \
-      "${FACTORY_PLUGIN_DIR:-}/factory-run/scripts/story-gate.py" \
-      "$(dirname "${BASH_SOURCE[0]}")/story-gate.py" \
-      .claude/skills/factory-run/scripts/story-gate.py \
-      .codex/skills/factory-run/scripts/story-gate.py \
-      .opencode/skills/factory-run/scripts/story-gate.py; do
-    case "$candidate" in /factory-run/*) continue ;; esac        # no override given
-    [ -f "$candidate" ] || continue
-    dir=$(cd "$(dirname "$candidate")" && pwd)
-    # never compare the project's own copy with itself
-    [ "$dir/story-gate.py" = "$(cd "$(dirname "$GATE")" 2>/dev/null && pwd)/story-gate.py" ] && continue
-    echo "$dir/story-gate.py"
-    return 0
+      "${FACTORY_PLUGIN_DIR:-}" \
+      "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)" \
+      .claude/skills .codex/skills .opencode/skills \
+      "$HOME"/.claude/plugins/cache/*/dca-factory/*/skills; do
+    [ -n "$candidate" ] && [ -f "$candidate/factory-run/scripts/story-gate.py" ] || continue
+    dir=$(cd "$candidate" && pwd -P)
+    [ "$dir/factory-run/scripts" = "$own" ] && continue                # the project's own copy of the gate
+    version=$(gate_field "$dir/factory-run/scripts/story-gate.py" VERSION)
+    if [ -z "$best" ] || [ "$(printf '%s\n%s\n' "$best_version" "$version" | sort -V | tail -1)" != "$best_version" ]; then
+      best=$dir; best_version=$version
+    fi
   done
-  return 1
+  [ -n "$best" ] && echo "$best"
+}
+
+# How the project holds the skills for one tool: `link` (into a checkout or cache — live), `copy`
+# (its own folders — pinned, committed with the project), or nothing for a tool it does not use.
+skills_mode() {                             # skills_mode <target dir>
+  local target=$1
+  [ -L "$target" ] && { echo link; return; }
+  [ -d "$target/factory-run" ] || { echo ""; return; }
+  [ -L "$target/factory-run" ] && echo link || echo copy
+}
+
+# Bring the project up to the newest pipeline found, for exactly the tools it already has, keeping
+# links as links and copies as copies. The profile is the project's and is never rewritten; a file
+# contract that moved is said out loud, with the profile line to raise.
+update_project() {                          # update_project <explicit skill folder or "">
+  local src=${1:-} before before_contract after after_contract tool target mode declared updated=0
+  [ -n "$src" ] || src=$(plugin_skills) || {
+    echo "factory: no pipeline found to update from — pass --from <the plugin's skills folder>" >&2; return 2; }
+  [ -f "$src/factory-run/scripts/story-gate.py" ] || {
+    echo "factory: $src is not the pipeline's skills folder (no factory-run/scripts/story-gate.py)" >&2; return 2; }
+  before=$(sed -n 's/^version:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
+  before_contract=$(sed -n 's/^contract:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
+  # The install is the *new* pipeline's, not this copy's: a release that adds a file the project
+  # needs must be able to put it there, even when the project's runner predates it.
+  local installer="$src/factory-run/scripts/factory.sh"
+  for tool in claude codex opencode; do
+    target=".$tool/skills"
+    mode=$(skills_mode "$target")
+    [ -n "$mode" ] || continue
+    if [ "$mode" = copy ]; then
+      bash "$installer" install --tool "$tool" --from "$src" --copy || return $?
+    else
+      bash "$installer" install --tool "$tool" --from "$src" || return $?
+    fi
+    updated=1
+  done
+  [ "$updated" = 1 ] || bash "$installer" install --tool none --from "$src" || return $?
+  after=$(gate_field "$GATE" VERSION); after_contract=$(gate_field "$GATE" CONTRACT)
+  echo "factory: updated ${before:-an unstamped install} → $after (file contract ${before_contract:-?} → $after_contract) from $src"
+  declared=$(sed -n 's/^contract:[[:space:]]*//p' .agents/factory/factory.profile.yaml 2>/dev/null | head -1)
+  if [ -n "$declared" ] && [ "$declared" != "$after_contract" ]; then
+    echo "factory: the stack profile declares contract $declared — raise it to 'contract: $after_contract' once" >&2
+    echo "factory:   the profile uses what that contract describes; the gate reads it as older until then." >&2
+  fi
+  echo "factory: review and commit the changed files — the update commits nothing."
 }
 
 # Whether the gate in this project is still the one the pipeline ships. The gate itself cannot tell:
@@ -295,6 +350,7 @@ install_skills() {
     codex)    targets=(.codex/skills) ;;
     opencode) targets=(.opencode/skills) ;;
     all)      targets=(.claude/skills .codex/skills .opencode/skills) ;;
+    none)     targets=() ;;                  # only the project's files: gate, runner, hook, stamp
     *)        usage ;;
   esac
   local source_abs; source_abs=$(cd "$from" && pwd)
@@ -313,9 +369,39 @@ install_skills() {
     # incomplete pipeline without a word. Where the project keeps skills of its own in that
     # directory, each skill is linked individually instead and the freeze is named.
     if [ -n "$copy_mode" ]; then
+      # A copy looks like a skill of the project's own, so the install keeps a list of what it copied
+      # (`.dca-factory-skills`): only those are its to replace, and one the pipeline no longer has is
+      # removed. A folder of the project's own with a pipeline skill's name is left alone and named.
       must "create $target" mkdir -p "$target"
-      must "copy the skills into $target" cp -R "$source_abs"/* "$target"/
-      echo "factory: skills → $target (copied${copy_reason}; re-run install after a skill is added)"
+      local manifest="$target/.dca-factory-skills" previous="" skill name copied=0 kept=0 removed=0
+      if [ -f "$manifest" ]; then
+        previous=$(cat "$manifest")
+      elif [ -d "$target/factory-run" ] && [ ! -L "$target/factory-run" ]; then
+        # a copy from before the list: the folders named like the pipeline's skills are the pipeline's
+        previous=$(for skill in "$source_abs"/*; do [ -d "$skill" ] && basename "$skill"; done)
+      fi
+      : > "$manifest.new"
+      for skill in "$source_abs"/*; do
+        [ -d "$skill" ] || continue
+        name=$(basename "$skill")
+        if { [ -e "$target/$name" ] || [ -L "$target/$name" ]; } && ! printf '%s\n' "$previous" | grep -qx "$name"; then
+          echo "factory: kept the project's own $target/$name — the pipeline's $name was not copied" >&2
+          kept=$((kept + 1))
+          continue
+        fi
+        rm -rf "${target:?}/$name"
+        must "copy $name into $target" cp -R "$skill" "$target/$name"
+        echo "$name" >> "$manifest.new"
+        copied=$((copied + 1))
+      done
+      for name in $previous; do
+        [ -d "$source_abs/$name" ] && continue
+        rm -rf "${target:?}/$name"
+        removed=$((removed + 1))
+        echo "factory: removed $target/$name — the pipeline no longer has it" >&2
+      done
+      mv -f "$manifest.new" "$manifest"
+      echo "factory: skills → $target ($copied copied${copy_reason}; $kept of the project's own kept, $removed removed)"
       continue
     fi
     local method_dirs; method_dirs=$(method_skill_dirs "$source_abs")
@@ -383,8 +469,11 @@ install_skills() {
   # The runner goes beside the gate, so the project has one entry point for everything it does with
   # the pipeline: `bash .agents/factory/factory.sh run|backlog|status|usage|…`. Installing again is
   # done from the plugin's copy, which knows where the skills are.
-  must "copy the runner to .agents/factory/factory.sh" cp "$from/factory-run/scripts/factory.sh" .agents/factory/factory.sh
-  must "make the runner executable" chmod +x .agents/factory/factory.sh
+  # Replaced, never written over: `update` runs from this very file, and bash reads a script as it
+  # goes — a copy onto the same inode would change the lines it has not read yet.
+  must "copy the runner to .agents/factory/factory.sh" cp "$from/factory-run/scripts/factory.sh" .agents/factory/.factory.sh.new
+  must "make the runner executable" chmod +x .agents/factory/.factory.sh.new
+  must "put the runner in place" mv -f .agents/factory/.factory.sh.new .agents/factory/factory.sh
   must "copy the commit hook to .githooks/pre-commit" \
     cp "$from/factory-run/templates/githooks/pre-commit" .githooks/pre-commit
   must "make the gate and the commit hook executable" chmod +x .githooks/pre-commit "$GATE"
@@ -414,7 +503,13 @@ install_skills() {
     printf '%s\n' "tasks/**/.verify/journal.tsv merge=union" >> .gitattributes
     echo "factory: .gitattributes merges the story journals by keeping both sides (merge=union)"
   fi
-  echo "factory: the copies under .claude/.codex/.opencode belong in .gitignore"
+  if [ -n "$copy_mode" ]; then
+    echo "factory: the skills are copies — commit .claude/.codex/.opencode skills with the project, and"
+    echo "factory:   every clone delivers stories with this pipeline, without the marketplace."
+  elif [ "${#targets[@]}" -gt 0 ]; then
+    echo "factory: the skill links point into $source_abs — they belong in .gitignore; a clone"
+    echo "factory:   installs them again, or use --copy to commit the skills with the project."
+  fi
 }
 
 check_dca_setup() {
@@ -894,7 +989,7 @@ read_command() {                            # read_command <gate flags…>
   exec "$PY" "$GATE" "$@"
 }
 case "$command" in
-  status)    [ $# -eq 0 ] || usage; read_command --status ;;
+  status)    [ $# -eq 0 ] || usage; check_gate_freshness; read_command --status ;;
   schedule)  [ $# -eq 0 ] || usage; read_command --schedule ;;
   usage)     read_command --usage "$@" ;;
   decisions) read_command --list-decisions "$@" ;;
@@ -906,7 +1001,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --story) story=$2; shift 2 ;;
     --tool) tool=$2; shift 2 ;;
-    --from) if [ "$command" = "install" ]; then source_dir=$2; else from=$2; fi; shift 2 ;;
+    --from) case "$command" in install|update) source_dir=$2 ;; *) from=$2 ;; esac; shift 2 ;;
     --copy) copy_mode=1; shift ;;
     --dry-run) dry=1; shift ;;
     --watch) watch=1; shift ;;
@@ -919,6 +1014,7 @@ done
 
 case "$command" in
   install) install_skills "${tool:-all}" "$source_dir" "$copy_mode" ;;
+  update)  update_project "$source_dir" ;;
   run)
     [ -n "$story" ] || usage
     [ -n "$tool" ] || tool=$(detect_tool)

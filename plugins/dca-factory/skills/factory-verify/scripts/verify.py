@@ -987,6 +987,105 @@ exit 0
               and os.path.isfile(os.path.join(root, "tasks", "STORY-2", ".delivered")),
               f"exit {code}, {len(invocations(root)) - before} new invocation(s)")
 
+    # 1o. update: the newest pipeline, the same tools, links stay links and copies stay copies
+    with tmpdir() as root:
+        build_project(root)
+        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        stamp = os.path.join(root, ".agents", "factory", "gate.installed")
+        text = open(stamp, encoding="utf-8").read()
+        with open(stamp, "w", encoding="utf-8") as handle:
+            handle.write(re.sub(r"version: .*", "version: 0.0.1", text))
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("contract: 1\n")
+        project_runner = os.path.join(root, ".agents", "factory", "factory.sh")
+        code, output = run_runner(project_runner, root, "update", "--from", source)
+        entries = os.listdir(os.path.join(root, ".codex", "skills"))
+        check("update: run from the project's own runner, it brings the stamp to the pipeline it names",
+              code == 0 and "updated 0.0.1 →" in output and "version: 0.0.1" not in open(stamp, encoding="utf-8").read(),
+              output.strip().splitlines()[-3:])
+        check("update: a tool that had links keeps links, and no tool is added",
+              os.path.islink(os.path.join(root, ".codex", "skills", "factory-run")) and "factory-run" in entries
+              and not os.path.exists(os.path.join(root, ".opencode")), sorted(entries)[:4])
+        check("update: an older contract line in the profile is named, and the profile is left alone",
+              "raise it to 'contract:" in output
+              and "contract: 1" in open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), encoding="utf-8").read(),
+              [l for l in output.splitlines() if "contract" in l][:2])
+    with tmpdir() as root:
+        build_project(root)
+        run_runner(runner, root, "install", "--tool", "claude", "--from", source, "--copy")
+        copied = os.path.join(root, ".claude", "skills", "factory-run", "SKILL.md")
+        with open(copied, "a", encoding="utf-8") as handle:
+            handle.write("\nSTALE COPY\n")
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "update",
+                                  "--from", source)
+        check("update: copies stay copies, refreshed from the pipeline, and are to be committed",
+              code == 0 and os.path.isdir(os.path.join(root, ".claude", "skills", "factory-run"))
+              and not os.path.islink(os.path.join(root, ".claude", "skills", "factory-run"))
+              and "STALE COPY" not in open(copied, encoding="utf-8").read() and "commit" in output,
+              output.strip().splitlines()[-4:])
+    with tmpdir() as root:
+        build_project(root)
+        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        stamp = os.path.join(root, ".agents", "factory", "gate.installed")
+        text = open(stamp, encoding="utf-8").read()
+        with open(stamp, "w", encoding="utf-8") as handle:
+            handle.write(re.sub(r"version: .*", "version: 0.0.1", text))
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status",
+                                  env={"FACTORY_PLUGIN_DIR": source})
+        check("status: a project behind the pipeline is told so, with the update to run",
+              code == 0 and "installed from pipeline 0.0.1" in output, [l for l in output.splitlines() if "pipeline" in l][:2])
+
+    with tmpdir() as root:
+        # a newer pipeline with a skill the project's runner never heard of, and its own install step
+        newer = os.path.join(root, "newer-plugin")
+        shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), newer, symlinks=True)
+        os.makedirs(os.path.join(newer, "factory-brand-new"))
+        with open(os.path.join(newer, "factory-brand-new", "SKILL.md"), "w", encoding="utf-8") as handle:
+            handle.write("---\nname: factory-brand-new\ndescription: a skill added in a later release\n---\n")
+        newer_runner = os.path.join(newer, "factory-run", "scripts", "factory.sh")
+        body = open(newer_runner, encoding="utf-8").read().replace(
+            '  check_dca_setup\n', '  check_dca_setup\n  : > .agents/factory/added-by-the-newer-install\n', 1)
+        with open(newer_runner, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(body)
+        project = os.path.join(root, "project")
+        os.makedirs(project)
+        build_project(project)
+        run_runner(runner, project, "install", "--tool", "claude", "--from", source, "--copy")
+        code, output = run_runner(os.path.join(project, ".agents", "factory", "factory.sh"), project, "update",
+                                  "--from", shell_path(newer))
+        check("update: a newer pipeline's new skill arrives, and its own install step runs, not the old copy's",
+              code == 0 and os.path.isfile(os.path.join(project, ".claude", "skills", "factory-brand-new", "SKILL.md"))
+              and os.path.isfile(os.path.join(project, ".agents", "factory", "added-by-the-newer-install")),
+              output.strip().splitlines()[-3:])
+
+    with tmpdir() as root:
+        # copies: the project's own skills, including one with a pipeline skill's name, survive; a skill
+        # the pipeline dropped leaves the copy
+        build_project(root)
+        skills_dir = os.path.join(root, ".claude", "skills")
+        for own in ("our-own-skill", "stage-plan"):
+            os.makedirs(os.path.join(skills_dir, own))
+            with open(os.path.join(skills_dir, own, "SKILL.md"), "w", encoding="utf-8") as handle:
+                handle.write(f"---\nname: {own}\ndescription: the project's own\n---\nOURS\n")
+        code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", source, "--copy")
+        manifest = open(os.path.join(skills_dir, ".dca-factory-skills"), encoding="utf-8").read().split()
+        check("copies: the project's own skills stay, a same-named one is not overwritten, and the list names only "
+              "what the pipeline copied",
+              "OURS" in open(os.path.join(skills_dir, "stage-plan", "SKILL.md"), encoding="utf-8").read()
+              and os.path.isdir(os.path.join(skills_dir, "our-own-skill")) and "factory-run" in manifest
+              and "stage-plan" not in manifest and "our-own-skill" not in manifest
+              and "kept the project's own .claude/skills/stage-plan" in output, output.strip().splitlines()[-3:])
+        dropped = os.path.join(root, "trimmed-plugin")
+        shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), dropped, symlinks=True)
+        shutil.rmtree(os.path.join(dropped, "factory-scope"))
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "update",
+                                  "--from", shell_path(dropped))
+        check("copies: a skill the pipeline dropped is removed on update; the project's own stay",
+              code == 0 and not os.path.exists(os.path.join(skills_dir, "factory-scope"))
+              and os.path.isdir(os.path.join(skills_dir, "our-own-skill"))
+              and "OURS" in open(os.path.join(skills_dir, "stage-plan", "SKILL.md"), encoding="utf-8").read(),
+              [l for l in output.splitlines() if "removed" in l or "kept" in l][:3])
+
     # 1f. the snapshot sees files in a directory this run added
     with tmpdir() as root:
         build_project(root)
@@ -1161,7 +1260,7 @@ exit 0
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
         pipeline = {"factory-run", "stage-plan", "stage-test", "stage-build", "stage-tidy",
                     "stage-judge", "stage-document", "factory-backlog", "factory-scope",
-                    "factory-decisions", "factory-status"}
+                    "factory-decisions", "factory-status", "factory-update"}
         check("install: a tool without plugins also gets the craft the profile may name",
               pipeline.issubset(set(entries)) and len(entries) > len(pipeline),
               f"{len(entries)} skills: {sorted(entries)[:6]}…")

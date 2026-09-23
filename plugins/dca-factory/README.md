@@ -98,7 +98,33 @@ in a project goes through one script:
 | `bash .agents/factory/factory.sh parity <config>` | several implementations against one scenario contract |
 
 The gate stays a Python script underneath: the commit hook, CI and the stage skills call it
-directly. Install again from the plugin's copy of `factory.sh`, which knows where the skills are.
+directly.
+
+## How to update a project
+
+The plugin holds the skills; the project holds copies of the gate, the runner and the hook, pinned
+in git, so the commit hook and CI run without the plugin and a reviewer sees which pipeline governs
+the project. A newer plugin reaches a project when it is updated:
+
+```
+/factory-update
+bash .agents/factory/factory.sh update [--from <plugin>/skills]     # the same, without a skill
+```
+
+It finds the newest pipeline on the machine (`--from`, `FACTORY_PLUGIN_DIR`, the project's skill links,
+Claude Code's plugin cache), runs *that* pipeline's install — so a release that adds a file the
+project needs puts it there — for the tools the project already uses, and reports the versions and
+whether the profile's `contract:` line has to be raised. It commits nothing and leaves the profile.
+
+Skills are held one of two ways, and the update keeps whichever the project chose:
+
+- **Links** (the default) point into the plugin or a checkout: always current, not committed.
+- **Copies** (`install --copy`) are the project's own, committed with it: every clone delivers
+  stories without the marketplace, with exactly this pipeline. `.dca-factory-skills` in each skill
+  folder lists what the pipeline copied; a skill of the project's own — even with a pipeline skill's
+  name — is never overwritten, and one the pipeline dropped is removed.
+
+`factory.sh status` says when the project is behind the pipeline it found.
 
 ## How to see where it stands
 
@@ -184,6 +210,7 @@ what must be true before the next one starts.
 | `stage-document` | the change → `tasks/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them |
 | — `decisions/` | the questions a run may not answer, one file each under `.agents/factory/decisions/<story>-<nn>.md`, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
+| `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies. Reports the versions and the profile's contract line; commits nothing |
 | `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent (`story-gate.py --status`). Reads files; changes and starts nothing |
 | `factory-decisions` | the inbox for those records: lists what waits on a human (`story-gate.py --list-decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer |
 | `factory-scope` | answers the question a run may not answer itself — a new bounded context, a new relationship, a surface its actor lacks — as a recorded decision plus the map, never as code |
