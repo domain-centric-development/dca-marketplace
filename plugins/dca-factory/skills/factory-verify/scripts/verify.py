@@ -855,6 +855,65 @@ esac
               code == 0 and invocations(root) == [] and "stops here" in output,
               f"exit {code}, invocations {invocations(root)}")
 
+    # 1j. a refused gate after its stage: the stage runs again with the report, one round counted
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        # the test stage forgets the mapping the first time, and writes it the second
+        stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            '  test) cat fixture/tests.md > "$d/tests.md" ;;',
+            '  test) if [ -f "$d/.forgot" ]; then cat fixture/tests.md > "$d/tests.md"; '
+            'else : > "$d/.forgot"; echo "# Tests" > "$d/tests.md"; fi ;;')
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(stand_in)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
+        ran = invocations(root)
+        check("runner: a refused gate sends the story back to that stage, one round counted",
+              code == 0 and ran.count("STORY-2 test") == 2 and "round 1 runs stage 'test' again" in output
+              and open(os.path.join(root, "tasks", "STORY-2", ".rounds"), encoding="utf-8").read().strip() == "1",
+              f"exit {code}, invocations {ran}")
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            '  test) cat fixture/tests.md > "$d/tests.md" ;;', '  test) echo "# Tests" > "$d/tests.md" ;;')
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(stand_in)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
+        check("runner: a gate that refuses three rounds stops the story",
+              code == 1 and invocations(root).count("STORY-2 test") == 3 and "three rounds did not converge" in output,
+              f"exit {code}, invocations {invocations(root)}")
+
+    # 1k. a repeat judge round sees the previous verdict
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            "  judge) printf '## Verdict\\nverdict: pass\\n' > \"$d/judge.md\" ;;",
+            "  judge) echo \"$FACTORY_PROMPT\" >> judge-prompts.log; "
+            "if [ -f \"$d/.judge-previous.md\" ]; then printf '## Verdict\\nverdict: pass\\n' > \"$d/judge.md\"; "
+            "else printf '## Verdict\\nverdict: changes-requested\\n' > \"$d/judge.md\"; fi ;;")
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(stand_in)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
+        prompts = open(os.path.join(root, "judge-prompts.log"), encoding="utf-8").read() \
+            if os.path.isfile(os.path.join(root, "judge-prompts.log")) else ""
+        check("runner: the judge's repeat round is handed the previous verdict",
+              code == 0 and prompts.count("Apply the stage-judge") == 2
+              and ".judge-previous.md" in prompts.split("Apply the stage-judge")[2]
+              and ".judge-previous.md" not in prompts.split("Apply the stage-judge")[1],
+              f"exit {code}; prompts: {prompts[-300:]}")
+
+    # 1l. a resumed document stage whose file already holds is not invoked again
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
+        os.remove(os.path.join(root, "tasks", "STORY-2", ".delivered"))
+        before = len(invocations(root))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in",
+                                  "--from", "document", env=env)
+        check("runner: a document file that already holds costs no invocation on resume",
+              code == 0 and len(invocations(root)) == before and "already holds" in output
+              and os.path.isfile(os.path.join(root, "tasks", "STORY-2", ".delivered")),
+              f"exit {code}, {len(invocations(root)) - before} new invocation(s)")
+
     # 1f. the snapshot sees files in a directory this run added
     with tmpdir() as root:
         build_project(root)
@@ -1648,6 +1707,7 @@ def main(argv=None):
         backlog_project(root, ("STORY-2", ["STORY-1"]), ("STORY-3", []), ("STORY-4", ["STORY-5"]),
                         ("STORY-5", ["STORY-4"]), ("STORY-6", ["STORY-9"]), ("STORY-7", []),
                         extra_sources=(("tasks/STORY-1/document.md", DOCUMENT),
+                                       ("tasks/STORY-1/.delivered", "2026-09-23T00:00:00Z\n"),
                                        ("tasks/STORY-1/plan.md", PLAN_APPLIED),
                                        ("tasks/STORY-3/plan.md", PLAN_ASKING.replace("STORY-1", "STORY-3")),
                                        (".agents/factory/decisions/STORY-3-01.md",
@@ -1706,6 +1766,35 @@ def main(argv=None):
         expectations.append(("schedule: three rounds stop the story, and nothing waits for them",
                              rows.get("STORY-1", ("",))[0] == "stopped" and nxt.startswith("none")
                              and wait == "no", f"{rows.get('STORY-1')}, next: {nxt}, wait: {wait}"))
+    with tmpdir() as root:
+        # the marks the gates leave: the plan gate records the story it let through, the document gate
+        # that it passed — and the schedule reads both
+        backlog_project(root, extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),
+                                             ("tasks/STORY-1/tests.md", TESTS),
+                                             ("tasks/STORY-1/document.md", DOCUMENT)))
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a document file without its gate's mark is not delivered",
+                             rows.get("STORY-1") == ("in-progress", "document"), rows.get("STORY-1")))
+        subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "document"], cwd=root,
+                       capture_output=True, text=True)
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: the document gate's pass is what makes a story delivered",
+                             rows.get("STORY-1") == ("delivered", None)
+                             and os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".delivered")),
+                             rows.get("STORY-1")))
+    with tmpdir() as root:
+        backlog_project(root, extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),))
+        subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                       capture_output=True, text=True)
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        unchanged = rows.get("STORY-1")
+        with open(os.path.join(root, "backlog", "sample", "STORY-1.md"), "a", encoding="utf-8") as handle:
+            handle.write("- answered: archived things are hidden (the-expert, 2026-09-23).\n")
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a story edited after its plan runs from plan again",
+                             unchanged == ("in-progress", "test") and rows.get("STORY-1") == ("in-progress", "plan")
+                             and "the story changed after it was planned" in output,
+                             f"before the edit {unchanged}, after {rows.get('STORY-1')}"))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         if not ok:

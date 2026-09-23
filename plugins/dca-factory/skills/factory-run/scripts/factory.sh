@@ -528,6 +528,9 @@ prompt_for() {                              # prompt_for <stage> <story>
   # work only on what the gate confirmed. So the refusal is named as an input, not remembered.
   [ -f "$TASKS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before; its \
 report is $TASKS/$story/.gate-$stage.txt — read it and fix exactly what it names, nothing else."
+  [ "$stage" = judge ] && [ -f "$TASKS/$story/.judge-previous.md" ] && repeat=" This is a repeat round: \
+the previous verdict is $TASKS/$story/.judge-previous.md. Account for each defect it confirmed under \
+'## Previous round' — fixed (with the evidence) or withdrawn (with the reason) — before judging anew."
   printf '%s' "Apply the stage-$stage skill for backlog story $story. \
 Read only the story and the files the skill names as its input, and write its output file under \
 $TASKS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages.$repeat"
@@ -631,6 +634,17 @@ run_story() {
       gate "$stage" "$story" || { echo "factory: gate '$stage' refused the story. Fix it before the stage runs." >&2; return 1; }
     fi
 
+    # A resumed story whose document file exists and was never refused: its gate decides first, and a
+    # file that already holds costs no invocation.
+    if [ "$stage" = document ] && [ -z "$dry" ] && [ -f "$TASKS/$story/document.md" ] \
+       && [ ! -f "$TASKS/$story/.gate-document.txt" ] && [ ! -f "$TASKS/$story/.delivered" ]; then
+      echo "── gate document  (the file exists — checked before the stage is invoked)"
+      if gate document "$story" >/dev/null 2>&1; then
+        echo "factory: $TASKS/$story/document.md already holds — the document stage is not invoked again."
+        ran="${ran:+$ran,}document"
+        break
+      fi
+    fi
     echo "── stage $stage  (tool: $tool, fresh context)"
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
@@ -644,6 +658,9 @@ run_story() {
       # Never `started` — that name is the loop's "have we reached --from yet" flag, and
       # overwriting it skips every later stage while the run still reports success.
       local stage_started; stage_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      # The previous verdict is an input to the next one, not something to overwrite: a defect a judge
+      # confirmed may not vanish in the next round without a word.
+      [ "$stage" = judge ] && [ -f "$TASKS/$story/judge.md" ] && mv "$TASKS/$story/judge.md" "$TASKS/$story/.judge-previous.md"
       snapshot "$story" "before-$stage"
       printf '%s\tstage-start\t%s\ttool=%s\n' "$stage_started" "$stage" "$tool" >> "$TASKS/$story/.verify/journal.tsv"
       stage_in_flight="$stage" story_in_flight="$story" invoke "$tool" "$(prompt_for "$stage" "$story")" || {
@@ -688,9 +705,18 @@ run_story() {
 
     if [[ " ${POST_GATED[*]} " == *" $stage "* ]]; then
       echo "── gate $stage"
-      [ -n "$dry" ] || gate "$stage" "$story" || {
-        echo "factory: gate '$stage' failed after the stage. Re-run this stage with the gate output." >&2
-        return 1; }
+      if [ -z "$dry" ] && ! gate "$stage" "$story"; then
+        # The same way back a judge's `changes-requested` takes: the stage runs again with the gate's
+        # report as its input, one round counted, and three rounds stop the story.
+        local refused_rounds; refused_rounds=$(bump_rounds "$story")
+        if [ "$refused_rounds" -ge 3 ]; then
+          echo "factory: gate '$stage' refused in round $refused_rounds — three rounds did not converge. needs-human." >&2
+          return 1
+        fi
+        echo "factory: gate '$stage' refused — round $refused_rounds runs stage '$stage' again with the gate's report." >&2
+        run_story "$story" "$tool" "$stage" "$dry"
+        return $?
+      fi
     fi
 
     ran="${ran:+$ran,}$stage"

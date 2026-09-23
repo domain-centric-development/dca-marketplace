@@ -107,7 +107,8 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
 5. **`stage-build`** → `tasks/<story>/build.md`
 6. **gate `build`** — every mapped test green, and the profile's `architecture:` and `format:`
    commands succeed. Both run in the gate, not on a stage's word. On failure, hand the gate output back to
-   `stage-build`. Every repeat round increments `tasks/<story>/.rounds`; at **three** the run
+   `stage-build`. Every repeat round — this one, a refused gate after any stage, a judge's
+   `changes-requested` — increments `tasks/<story>/.rounds`; at **three** the run
    stops and escalates. The counter is a file, not something you remember — an in-session run has
    no other honest way to count, and a resumed run must see the same number.
 7. **`stage-tidy`** → `tasks/<story>/tidy.md`: the refactor half of red–green–refactor, inside
@@ -140,7 +141,9 @@ correctly after an interruption, in another session or in another tool:
 | no `plan.md` | gate `plan`, then `stage-plan` |
 | `plan.md`, no `tests.md` | `stage-test` |
 | `tests.md`, gate `test` red-and-mapped | `stage-build` |
-| `build.md`, gate `build` failing | `stage-build` again (count the round) |
+| `build.md`, gate `build` failing | `stage-build` again (count the round) — the runner does this for every refused gate after its stage |
+| `document.md` without `.delivered` | gate `document`; it writes `.delivered` when it passes, and only then is the story delivered |
+| `.story-digest` differs from the story file | the story changed after it was planned: `stage-plan` again, and every stage after it |
 | `build.md`, gate `build` passing, no `tidy.md` | `stage-tidy` |
 | `tidy.md`, gate `tidy` passing, no `judge.md` | `stage-judge` |
 | `judge.md` with `changes-requested` | `stage-build` (count the round) |
@@ -235,7 +238,7 @@ code base. What comes next is read off the files, like everything else:
 python3 .agents/factory/story-gate.py --schedule
 ```
 
-prints each story with its state — `delivered`, `waiting` (an open decision record), `resumable`
+prints each story with its state — `delivered` (its document gate passed), `waiting` (an open decision record), `resumable`
 (answered, with the stage that asked), `in-progress` (with the stage it continues from: a refused
 gate's stage, else the first missing file), `ready`, `stopped` (three rounds, a story conflict, a
 refused plan gate, a `## needs-human` without a record), `blocked` (a dependency not delivered,

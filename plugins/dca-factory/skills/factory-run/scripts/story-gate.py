@@ -91,7 +91,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 3
-VERSION = "0.9.1"
+VERSION = "0.10.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1743,7 +1743,25 @@ def verdict_in(text):
     return ""
 
 
-def story_state(cwd, tasks, story_id, front):
+#: What a gate leaves for the schedule. The plan gate records the story it let through, so a story
+#: edited afterwards is planned again rather than built on a plan that describes something else; the
+#: document gate records that it passed, so "delivered" is a gate's verdict and not a file's existence.
+STORY_DIGEST, DELIVERED = ".story-digest", ".delivered"
+
+
+def file_digest(path):
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def write_mark(tasks, story_id, name, content):
+    folder = os.path.join(tasks, story_id)
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
+        handle.write(content + "\n")
+
+
+def story_state(cwd, tasks, story_id, front, story_path=None):
     """(state, stage to run from or None, detail) for one story, from its files alone."""
     status = str(front.get("status", "")).strip().lower()
     if status == "superseded":
@@ -1781,12 +1799,19 @@ def story_state(cwd, tasks, story_id, front):
             return "stopped", None, f"{STAGE_FILES[stage]} ends in `## needs-human` without an open record"
     if verdict_in(texts.get("judge", "")) == "story-conflict":
         return "stopped", None, "the judge found a story conflict"
+    planned = os.path.join(folder, STORY_DIGEST)
+    if story_path and texts and os.path.isfile(planned) and os.path.isfile(os.path.join(folder, "plan.md")) \
+            and not os.path.isfile(os.path.join(folder, DELIVERED)) \
+            and read_text(planned).strip() != file_digest(story_path):
+        return "in-progress", "plan", "the story changed after it was planned — every stage runs again"
     refused = [stage for stage in STAGE_ORDER
                if os.path.isfile(os.path.join(folder, f".gate-{stage}.txt"))]
     if refused:
         return "in-progress", refused[0], f"the {refused[0]} gate refused — the stage runs again"
     if "document" in texts:
-        return "delivered", None, ""
+        if os.path.isfile(os.path.join(folder, DELIVERED)):
+            return "delivered", None, ""
+        return "in-progress", "document", "document.md is written, its gate has not passed yet"
     if not texts:
         return "ready", "plan", ""
     if verdict_in(texts.get("judge", "")) == "changes-requested":
@@ -1814,7 +1839,7 @@ def schedule(cwd, backlog, tasks):
                 stories[name[:-3]] = dict(state="stopped", start=None, detail=str(error), deps=[])
                 continue
             story_id = str(front.get("id") or name[:-3]).strip()
-            state, start, detail = story_state(cwd, tasks, story_id, front)
+            state, start, detail = story_state(cwd, tasks, story_id, front, path)
             stories[story_id] = dict(state=state, start=start, detail=detail, deps=depends_on(front),
                                      holds=state != "delivered" and os.path.isfile(
                                          os.path.join(tasks, story_id, STAGE_FILES["test"])))
@@ -2040,6 +2065,10 @@ def main(argv):
     except GateError as error:
         result.fail("gate", str(error))
         return result.report(args.story, args.stage, args.json)
+    if not result.failed and args.stage == "plan":
+        write_mark(args.tasks, story_id, STORY_DIGEST, file_digest(story_path))
+    if not result.failed and args.stage == "document":
+        write_mark(args.tasks, story_id, DELIVERED, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     return result.report(story_id, args.stage, args.json)
 
 

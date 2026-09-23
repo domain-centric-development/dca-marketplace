@@ -74,8 +74,14 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 
 ## Do not
 
-- Do not change a test to make it pass. A test that is wrong goes back to the test stage, with
-  the reason, in `## Deviations from the plan`.
+- Do not change a test to make it pass. A test that cannot pass for a reason in the test itself —
+  two assertions that exclude each other, a substring that also matches what must be there — is a
+  question, not a deviation: write `## needs-human` naming a decision record (`decision:
+  <story>-<nn>`, written to `.agents/factory/decisions/<story>-<nn>.md` with the front matter
+  `id: <story>-<nn>`, `story:`, `stage: build`, `asked:` (UTC) and `## Question`, `## Options`,
+  `## Recommendation`) that names the test, the line and why it cannot hold, and stop. Once a human
+  has answered — and repaired the test where the answer says so — the build runs again and cites
+  the id.
 - Do not write a criterion key into code, documentation or a comment.
 - Do not leave commented-out code, a `TODO` for the criterion you were asked to deliver, or a
   disabled test behind.

@@ -5,8 +5,8 @@ description: Judge stage of a factory run — reviews the story's change from th
 
 # Judge one story's change
 
-Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, and the diff of the change.
-Nothing else.
+Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, and the diff of the change —
+and, in a repeat round, the previous verdict, `tasks/<story>/.judge-previous.md`. Nothing else.
 Output: `tasks/<story>/judge.md`. You change no code.
 
 ## Do
@@ -117,7 +117,16 @@ verdict: <pass | changes-requested | story-conflict>
 
 ## Criteria re-checked
 - <criterion key>: met | met only nominally — <what the test does not assert>
+
+## Previous round                  (repeat rounds only)
+- <defect the previous verdict confirmed>: fixed — <file:line that shows it> | withdrawn — <why it
+  was not a defect after all> | still open — listed above
 ```
+
+In a repeat round, account for **every** defect the previous verdict confirmed before you judge
+anew. A defect does not disappear because this round's reading missed it: it is fixed, with the
+line that shows it, or withdrawn, with the reason — and a withdrawal that contradicts the source
+the previous round cited (a glossary line, a criterion) is a `story-conflict`, not a `pass`.
 
 `verdict: pass` means the change is deliverable. Say it plainly when it is true; inventing a
 finding to look thorough costs a build round and teaches the pipeline nothing. Every finding
