@@ -81,6 +81,44 @@ gate reports and the run journal — or **check the machinery** itself against t
 did not hold, what held, and what it could not observe. The last one is not decoration: a check
 that was not observed is not a check that passed.
 
+## How to see what a story cost
+
+The runner records every stage's tokens; nothing else is needed.
+
+```
+bash .agents/factory/factory.sh run --story STORY-1 --tool claude       # or: backlog, --watch
+python3 .agents/factory/story-gate.py --usage --story STORY-1
+```
+
+```
+story/stage              runs measured     input  cache read cache write   output   cost $
+STORY-1/plan                1        1        18      419063       32121     2596     0.24
+STORY-1/test                1        1        18      411307       24978     2386     0.21
+STORY-1/build               1        1        16      359248       23996     1977     0.19
+STORY-1/tidy                1        1        14      306109       23342     1796     0.17
+STORY-1/judge               1        1        16      367718       28256     2806     0.21
+STORY-1/document            1        1        20      471299       27528     3275     0.24
+STORY-1 total               6        6       102     2334744      160221    14836     1.26
+```
+
+A small story on a small library, one round, Sonnet. Almost everything is cache read: every stage
+starts fresh and reads the skill, the story and its predecessor's file again.
+
+- `runs` counts invocations, repeat rounds included; `measured` those the tool reported on. The
+  difference is shown as "without a usage report" — unknown, not zero.
+- Leave out `--story` for every story. `--schedule` shows each story's total in one line.
+- `--story-budget <tokens>` on `run` or `backlog` stops before the next stage once the story has
+  used that many. The count comes from the journal, so a restart does not reset it.
+- In a session (`/factory-run` without the runner) the orchestrator marks each stage with
+  `--stage-start`/`--stage-end`; the numbers come from the session's own log, without a price, so
+  `cost` reads `—`.
+- An old session log is read whole: `--usage-from claude-session <log>` or `codex-session <log>`
+  (`~/.claude/projects/<project>/<session>.jsonl`, `~/.codex/sessions/<date>/rollout-*.jsonl`).
+
+Claude Code and Codex report their usage; OpenCode's is unknown until its output format is
+checked against a real run. The numbers are the tool's, read from its machine-readable output or
+its session log — neither is a documented interface, and what cannot be read stays unknown.
+
 ## What it carries, and what it does not
 
 It carries no architecture method of its own. Markers, rules, the knowledge catalog, glossary
