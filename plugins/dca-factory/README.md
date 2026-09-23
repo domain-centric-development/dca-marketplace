@@ -128,6 +128,13 @@ starts fresh and reads the skill, the story and its predecessor's file again.
 - An old session log is read whole: `--usage-from claude-session <log>` or `codex-session <log>`
   (`~/.claude/projects/<project>/<session>.jsonl`, `~/.codex/sessions/<date>/rollout-*.jsonl`).
 
+**History.** Every number lives in the project: `tasks/<story>/.verify/journal.tsv`, next to the gate
+reports and each invocation's raw output (`*.out`). Commit `tasks/` and the history travels with the
+repository — `--usage` without `--story` shows every story ever run. An in-session stage first
+records its window and the session log it read from; once that log has caught up, the next mark or
+`--usage` writes the numbers into the journal and drops the machine-local path, so the history
+survives a clone and the tool's cleanup of old session logs.
+
 Claude Code and Codex report their usage; OpenCode's is unknown until its output format is
 checked against a real run. The numbers are the tool's, read from its machine-readable output or
 its session log — neither is a documented interface, and what cannot be read stays unknown.

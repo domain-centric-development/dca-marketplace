@@ -1930,6 +1930,10 @@ def main(argv=None):
              "synthetic entries left out", row.split()[1:7] == ["1", "1", "2", "200", "20", "57"], row),
             ("usage in a session: a session log has no cost, and the report says so rather than 0.00",
              row.split()[-1:] == ["—"], row),
+            ("usage in a session: once read, the numbers are written into the journal and the machine-local "
+             "log path leaves it",
+             any("output=57" in l and "log=" not in l for l in open(journal, encoding="utf-8").read().splitlines()),
+             [l for l in open(journal, encoding="utf-8").read().splitlines() if "usage" in l][:1]),
             ("usage in a session: Codex's running totals are differenced over the window",
              test_row.split()[3:7] == ["800", "1200", "0", "30"], test_row),
             ("usage from a whole old log: a Codex session is read to its last total",

@@ -2109,6 +2109,7 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     """`--stage-start`/`--stage-end` for a stage run inside a session: the same journal the runner writes."""
     journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
     os.makedirs(os.path.dirname(journal), exist_ok=True)
+    freeze_windows(journal)                   # the earlier stages' logs have caught up by now
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
     kind = "claude-session" if session_log and "/.claude/" in session_log else \
@@ -2137,6 +2138,31 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
             handle.write(f"{stamp}\tusage\t{stage}\ttool={kind}\tunknown\n")
             print(f"usage: stage {stage} of {story_id} — unknown (no stage start, or no session log this tool writes)")
     return 0
+
+
+def freeze_windows(journal):
+    """Write the numbers of every session window that can be read now into the journal itself.
+
+    The window points at a session log on this machine, which a clone does not have and the tool
+    deletes after a while. Once read, the journal carries the numbers and no path, so the history
+    stays with the project."""
+    if not os.path.isfile(journal):
+        return
+    lines, changed = read_text(journal).splitlines(), False
+    for i, line in enumerate(lines):
+        parts = line.split("\t")
+        if len(parts) < 4 or parts[1] != "usage" or not any(p.startswith("window=") for p in parts):
+            continue
+        fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
+        read = resolve_window(fields)
+        if read is None:
+            continue
+        lines[i] = "\t".join(parts[:3] + [f"tool={fields.get('tool', '')}", usage_fields(read),
+                                            f"window={fields['window']}"])
+        changed = True
+    if changed:
+        with open(journal, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
 
 
 def resolve_window(fields):
@@ -2181,7 +2207,7 @@ def journal_usage(tasks, story_id):
             entry["invocations"] += 1
         elif parts[1] == "usage" and "unknown" not in parts[3:]:
             fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
-            if "window" in fields:
+            if "window" in fields and "log" in fields:
                 read = resolve_window(fields)
                 if read is None:
                     continue
@@ -2211,6 +2237,8 @@ def usage_report(tasks, story_filter=None, total_only=False):
         if os.path.isdir(tasks) else []
     if story_filter:
         stories = [s for s in stories if s == story_filter]
+    for story in stories:
+        freeze_windows(os.path.join(tasks, story, ".verify", "journal.tsv"))
     if total_only:
         print(sum(tokens_of(e) for s in stories for e in journal_usage(tasks, s).values()))
         return 0
