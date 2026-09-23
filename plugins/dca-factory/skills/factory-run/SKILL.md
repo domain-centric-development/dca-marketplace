@@ -33,17 +33,17 @@ say precisely which file to create, create it when the user agrees, then continu
    code implements. If it has none, ask the developer to run the project's DCA bootstrap skill
    first; it also settles the facts the profile needs (build commands, source sets, conventions).
    The factory delivers stories, it does not install an architecture: one is a once-per-project
-   step that belongs to the method, the other repeats per story. `factory.sh install` says so and
-   installs the pipeline anyway, so a project can adopt the two in either order.
-1. Run the pipeline's installer from this skill's folder, for the tool you are:
-   `bash <this skill's folder>/scripts/factory.sh install --tool <claude|codex|opencode>`. It puts
-   the gate and the runner under `.agents/factory/`, the commit hook under `.githooks/` (and sets
-   `core.hooksPath`), `.gitattributes`, the pipeline's section in `AGENTS.md` and, for Claude Code,
-   the permissions and the SessionStart hook; it writes the stack profile from what it detects.
-   The hook runs the same checks the gate does: tool hooks and deny rules do not port between agent
-   tools, but every tool commits through git, so that is where the guard belongs. Report what it
-   printed. Where it cannot run, copy `scripts/story-gate.py` and `scripts/factory.sh` to
-   `.agents/factory/` and `templates/githooks/pre-commit` to `.githooks/pre-commit` by hand.
+   step that belongs to the method, the other repeats per story. The installer says so and installs
+   the pipeline anyway, so a project can adopt the two in either order.
+1. **The person installs the pipeline, in a shell — never you.** `factory.sh` is theirs: no skill
+   runs it. Give them the one command with this skill's folder filled in, for the tool you are:
+   `bash <this skill's folder>/scripts/factory.sh install --tool <claude|codex|opencode>`, and
+   continue when they say it ran. It puts the gate and the runner under `.agents/factory/`, the
+   commit hook under `.githooks/`, `.gitattributes`, the pipeline's section in `AGENTS.md` and, for
+   Claude Code, the gate's permission and a SessionStart hook; it writes the stack profile from
+   what it detects. The hook runs the same checks the gate does: tool hooks and deny rules do not
+   port between agent tools, but every tool commits through git, so that is where the guard
+   belongs.
 2. Check the stack profile the installer wrote (`.agents/factory/factory.profile.yaml`, from
    `templates/factory.profile.yaml.tmpl`), and add the `required:` line with what the human says
    must hold for every change. Where a command is wrong or missing, fix it there.
@@ -166,11 +166,12 @@ Who runs the stages is the human's choice, not yours, and it decides what the ru
 | Asked for | Stages run | Tool processes |
 |---|---|---|
 | `/factory-run [story]`, "deliver STORY-1", `/loop /factory-run` | **in this session** — a subagent per stage where the tool can start one and it comes back, otherwise in-session | none beyond this session |
-| `/factory-run --watch`, "in the background", "unattended" | **the runner**, one process per stage (`factory.sh backlog --watch`, see *Without a story*) | one per stage |
-| "one process per stage" for a single story, or the human runs `factory.sh run` | **the runner**: `bash .agents/factory/factory.sh run --story <id> --tool <tool>` | one per stage |
+| the person runs `factory.sh run` or `backlog` in a shell | **the runner**, one process per stage | one per stage |
 
-Never switch to the runner on your own: it starts a tool process per stage on top of this session —
-usage the human did not ask for. Say in the report which tier ran.
+The runner is the person's, never yours: no skill starts `factory.sh`, because it starts a tool
+process per stage on top of this session. Asked for "one process per stage", "unattended" or "in the
+background", say that this is the runner and that they start it in a shell. Say in the report which
+tier ran.
 
 - **subagent per stage**: the stage gets the story and its predecessor file as its whole input and a
   fresh context of its own — the isolation the runner gives, without a process per stage.
@@ -211,8 +212,9 @@ reported success — a stage judging its own work is exactly what the gate repla
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
-`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
-person asks how to do it without a session.
+`/factory-backlog`) — never a shell command to type. Two exceptions: the pipeline's install and
+update, which the person runs in a shell with `factory.sh` (no skill runs it), and a person who asks
+how to do something without a session.
 
 ## Escalation
 
@@ -253,8 +255,8 @@ implementations each prove a scenario contract from their reports (`reference/fi
 
 `/factory-run` with no story named works the backlog instead of one story:
 
-1. Run `bash .agents/factory/factory.sh schedule` (or `python3 .agents/factory/story-gate.py
-   --schedule`). Its last line is `next: <story> <stage>` or `next: none — <why>`.
+1. Run `python3 .agents/factory/story-gate.py --schedule`. Its last line is `next: <story> <stage>`
+   or `next: none — <why>`.
 2. For `next: <story> <stage>`: deliver that story from that stage, exactly as a named story —
    the gates, the stage marks, the escalations. When it is delivered or stops for a decision, go
    back to 1. Never pick a story yourself; the schedule orders by dependencies and keeps one story
@@ -266,25 +268,15 @@ implementations each prove a scenario contract from their reports (`reference/fi
 
 **One worker per checkout.** `--stage-start` takes the checkout for this session and exits 3 when
 another worker holds it — a second session, or a runner. Then stop, say who holds it (the gate prints
-it; `factory.sh status` too), and end the turn; never work around it. A holder that shows no sign of
+it; `/factory-status` too), and end the turn; never work around it. A holder that shows no sign of
 life for two hours (`FACTORY_STALE_AFTER`) is taken as stopped, and the next worker takes over.
-
-**`/factory-run --watch` — the runner in the background.** Asked to watch the backlog, start the
-runner as a background command where the tool can run one (Claude Code can):
-`bash .agents/factory/factory.sh backlog --tool <this tool> --watch`, with `--story-budget` if the
-human named one. Say that it runs, where its output goes, and that `touch .agents/factory/stop` ends
-it before the next story; then the session is free — for `/factory-status`, `/factory-decisions`,
-`/factory-backlog`. Every stage runs in a process of its own, with its cost priced. The watch lives as
-long as the session that started it; for longer, run the same command in a terminal. Where the tool
-cannot run a background command, give the human that command instead.
 
 **Listening on the backlog.** A session that should pick up new stories and answered decisions
 by itself in its own context runs this under a scheduler: in Claude Code `/loop /factory-run` (it
 wakes, works what is ready, and sleeps again). A second session — or a person — manages meanwhile: writes stories with
 `/factory-backlog`, answers questions with `/factory-decisions`, watches with `/factory-status`. It
-changes backlog and decision files only, never code; the working session is the one writer. Where
-the tool has no scheduler, `bash .agents/factory/factory.sh backlog --watch` is the same loop outside
-the session, one process per stage.
+changes backlog and decision files only, never code; the working session is the one writer. The
+same loop outside any session is the runner's `backlog --watch`, which the person starts in a shell.
 
 ## Several stories
 
@@ -307,7 +299,7 @@ unknown or on a cycle), `unreleased`/`superseded` — and ends with `next: <stor
 or is stopped no other story starts — the next one would build on its tests and code. A story that
 stopped with a question at its plan stage wrote no code, so independent stories run past it.
 
-The runner does the loop: `factory.sh backlog [--tool <t>]` runs the next story from the stage the
+The runner — the person's, in a shell — does the same loop: `factory.sh backlog [--tool <t>]` runs the next story from the stage the
 schedule names, asks again, and ends when nothing can run. A story that stops for a decision does
 not end it (`run` exits 3 there); any other stop does, because retrying a failure spends a run on
 the same refusal. `--watch` keeps it waiting while a story waits on a human: it re-reads the

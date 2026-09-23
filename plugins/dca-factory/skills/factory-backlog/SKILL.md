@@ -76,8 +76,9 @@ key gets a key that names its behaviour. Do not rewrite the parts the gate did n
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
-`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
-person asks how to do it without a session.
+`/factory-backlog`) — never a shell command to type. Two exceptions: the pipeline's install and
+update, which the person runs in a shell with `factory.sh` (no skill runs it), and a person who asks
+how to do something without a session.
 
 ## Do not
 

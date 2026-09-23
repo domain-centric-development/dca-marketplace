@@ -62,7 +62,8 @@ python3 <this skill>/scripts/verify.py            # add -v for the gate output o
 ```
 
 It builds a throwaway project per case and calls the project's own `story-gate.py` and
-`factory.sh`, so it checks the code a run would actually use, not a description of it. Three groups:
+`factory.sh`, so it checks the code a run would actually use, not a description of it. It never
+starts an agent tool: every runner case uses a stand-in or a dry run. Three groups:
 
 - **the gate's checks** — an incomplete epic, a draft story, a context that is not on the map, an
   unmapped criterion, a selector with no test behind it, a test that is green too early, a green

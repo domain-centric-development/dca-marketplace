@@ -1122,10 +1122,10 @@ exit 0
         commands = [h["command"] for e in settings["hooks"]["SessionStart"] for h in e["hooks"]]
         check("priming: AGENTS.md carries the pipeline's section once, and keeps the project's own lines",
               agents.count("<!-- dca-factory: start -->") == 1 and "The project's own line." in agents
-              and "factory.sh status --brief" in agents, agents[-300:])
+              and "story-gate.py --status --brief" in agents and "factory.sh status" not in agents, agents[-300:])
         check("priming: Claude's SessionStart hook is added once, beside the project's own hooks",
-              commands.count("bash .agents/factory/factory.sh status --brief --session-start") == 1
-              and "echo mine" in commands, commands)
+              sum(1 for c in commands if c.endswith(".agents/factory/story-gate.py --status --brief --session-start")) == 1
+              and "echo mine" in commands and not any("factory.sh" in c for c in commands), commands)
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief")
         check("priming: `factory.sh status --brief` prints two lines, ending in what comes next",
               code == 0 and len([l for l in output.splitlines() if l.startswith("factory: ")]) == 2

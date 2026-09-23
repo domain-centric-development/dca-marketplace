@@ -17,8 +17,8 @@ once per project. The state of a record is read off the file: no `## Answer` is 
 
 ## Do
 
-1. **List what is waiting.** Run `bash .agents/factory/factory.sh decisions` (add `--story <id>`
-   for one story; `python3 .agents/factory/story-gate.py --list-decisions` does the same). It prints one line per record — id, state, story and
+1. **List what is waiting.** Run `python3 .agents/factory/story-gate.py --list-decisions` (add
+   `--story <id>` for one story). It prints one line per record — id, state, story and
    stage, when it was asked, the question — open ones first. Show that, in that order. Where the
    gate is not installed, read the directory yourself and say that you did.
 2. **Explain one from its files, not from memory.** Read the record: the question, the options,
@@ -48,15 +48,16 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    and why the old answer stays as history. A draft (an `## Answer` without `by:` or `at:`) may be
    completed with the missing lines once the human confirms it is theirs.
 8. **Say what happens next, and do not do it.** After writing: name the stage that asked and how the
-   story continues — a worker that is running (`/factory-run --watch`, `/loop /factory-run`) picks it
-   up by itself; otherwise `/factory-run <story>` resumes it at that stage. Answering a question is not taking over the story; the worker that asked
+   story continues — a worker that is running (`/loop /factory-run`, or the person's runner) picks
+   it up by itself; otherwise `/factory-run <story>` resumes it at that stage. Answering a question is not taking over the story; the worker that asked
    applies the answer, and the gate stamps the record applied when it has. If the human wants to
    go on interactively in *this* session, they say so — then it is a hand-over, named as one.
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
-`/factory-backlog`) — never a shell command to type. A command belongs in your answer only when the
-person asks how to do it without a session.
+`/factory-backlog`) — never a shell command to type. Two exceptions: the pipeline's install and
+update, which the person runs in a shell with `factory.sh` (no skill runs it), and a person who asks
+how to do something without a session.
 
 ## Do not
 

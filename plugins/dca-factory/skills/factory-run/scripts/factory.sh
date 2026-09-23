@@ -634,11 +634,11 @@ block = start + """
 ## Delivery pipeline
 
 This project delivers stories through the dca-factory pipeline. At the start of a session, unless the
-person names a task right away, run `bash .agents/factory/factory.sh status --brief`, show its lines,
-and ask what they want to do: write or release a story (`/factory-backlog`), answer a waiting
-question (`/factory-decisions`), start working the backlog (`/factory-run --watch`, or
-`/loop /factory-run`), or look closer (`/factory-status`). One worker per checkout: a managing
-session writes backlog and decision files only.
+person names a task right away, run `python3 .agents/factory/story-gate.py --status --brief`, show
+its lines, and ask what they want to do: write or release a story (`/factory-backlog`), answer a
+waiting question (`/factory-decisions`), work the backlog (`/factory-run`, or `/loop /factory-run` to
+keep listening), or look closer (`/factory-status`). `factory.sh` is the person's, in a shell — no
+session runs it. One worker per checkout: a managing session writes backlog and decision files only.
 """ + end
 text = open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
 if start in text and end in text:
@@ -680,14 +680,15 @@ if os.path.isfile(profile):
             head = command.split()[0] if command else ""
             if head and not head.startswith("{{"):
                 wanted.append(f"Bash({head}:*)")
-# the reading commands, so a managing session looks without being asked; `run` and `backlog` still ask
-for verb in ("status", "usage", "decisions", "schedule"):
-    wanted.append(f"Bash(bash .agents/factory/factory.sh {verb}:*)")
 added = [entry for entry in dict.fromkeys(wanted) if entry not in allow]
 allow.extend(added)
-# The session starts knowing where the pipeline stands: the hook's output lands in its context.
-hook_command = "bash .agents/factory/factory.sh status --brief --session-start"
+# The session starts knowing where the pipeline stands: the hook's output lands in its context. It
+# calls the gate, which only reads — `factory.sh` is the person's, and no hook or skill runs it.
+hook_command = f"{python} .agents/factory/story-gate.py --status --brief --session-start"
 starts = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
+for entry in starts:                         # an earlier install's hook through factory.sh is replaced
+    entry["hooks"] = [h for h in entry.get("hooks", []) if "factory.sh status --brief" not in h.get("command", "")]
+starts[:] = [entry for entry in starts if entry.get("hooks")]
 if not any(h.get("command") == hook_command for entry in starts for h in entry.get("hooks", [])):
     starts.append({"hooks": [{"type": "command", "command": hook_command}]})
     added.append("a SessionStart hook with the pipeline's status")
