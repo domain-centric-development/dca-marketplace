@@ -81,6 +81,19 @@ gate reports and the run journal — or **check the machinery** itself against t
 did not hold, what held, and what it could not observe. The last one is not decoration: a check
 that was not observed is not a check that passed.
 
+## How to see where it stands
+
+From any session in the project — beside a running `backlog --watch` too, since it only reads:
+
+```
+/factory-status
+python3 .agents/factory/story-gate.py --status          # the same, without a skill
+```
+
+It shows the stage that runs and since when, the decisions waiting for a human, every story's state
+with what comes next, and the tokens spent. "Running" means started and not ended in the journal —
+a stopped runner looks the same, which is why the start time is shown.
+
 ## How to see what a story cost
 
 The runner records every stage's tokens; nothing else is needed.
@@ -141,6 +154,7 @@ what must be true before the next one starts.
 | `stage-document` | the change → `tasks/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them |
 | — `decisions/` | the questions a run may not answer, one file each under `.agents/factory/decisions/<story>-<nn>.md`, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
+| `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent (`story-gate.py --status`). Reads files; changes and starts nothing |
 | `factory-decisions` | the inbox for those records: lists what waits on a human (`story-gate.py --list-decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer |
 | `factory-scope` | answers the question a run may not answer itself — a new bounded context, a new relationship, a surface its actor lacks — as a recorded decision plus the map, never as code |
 | `factory-verify` | checks the pipeline itself: every gate check against throwaway fixtures, the runner's stage order, verdict handling and install shapes, and — when asked — one tiny story delivered end to end. Reports; it repairs nothing |

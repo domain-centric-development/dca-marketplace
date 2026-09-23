@@ -8,6 +8,7 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
     story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
     story-gate.py --schedule                           every story's state and the next one to run
     story-gate.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
+    story-gate.py --status                             what runs, what waits, every story, the cost
     story-gate.py --change [--staged] [--checks <c>]   the profile's checks outside a story; --staged
                                                        checks what the commit contains (the hook, CI)
     story-gate.py --parity <config>                    every implementation's reports prove every
@@ -94,7 +95,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 4
-VERSION = "0.15.0"
+VERSION = "0.16.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2239,6 +2240,84 @@ def usage_report(tasks, story_filter=None, total_only=False):
     return 0
 
 
+# --- status: one look at the whole pipeline -----------------------------------------
+
+def running_stages(tasks):
+    """[(story, stage, started)] for every stage whose journal shows a start and no end yet.
+
+    The journal knows that a stage began, not whether its process is still alive: a stage whose
+    runner was killed reads the same, which is why the start time is shown with it."""
+    found = []
+    if not os.path.isdir(tasks):
+        return found
+    for story in sorted(os.listdir(tasks)):
+        journal = os.path.join(tasks, story, ".verify", "journal.tsv")
+        if not os.path.isfile(journal):
+            continue
+        open_stage = None
+        for line in read_text(journal).splitlines():
+            parts = line.split("\t")
+            if len(parts) < 3:
+                continue
+            if parts[1] == "stage-start":
+                open_stage = (parts[2], parts[0])
+            elif parts[1] == "stage-end" and open_stage and parts[2] == open_stage[0]:
+                open_stage = None
+        if open_stage:
+            found.append((story, open_stage[0], open_stage[1]))
+    return found
+
+
+def status(cwd, backlog, tasks):
+    now = datetime.now(timezone.utc)
+    print("== running")
+    running = running_stages(tasks)
+    for story, stage, started in running:
+        since = parse_time(started)
+        minutes = int((now - since).total_seconds() // 60) if since else None
+        print(f"{story}  stage {stage}  since {started}" + (f"  ({minutes} min)" if minutes is not None else ""))
+    if not running:
+        print("nothing — no stage has a start without an end in any journal")
+    print("\n== waiting for a human")
+    store = os.path.join(cwd, DECISIONS_DIR)
+    waiting = 0
+    if os.path.isdir(store):
+        for name in sorted(os.listdir(store)):
+            if not name.endswith(".md"):
+                continue
+            try:
+                front, body = read_front_matter(os.path.join(store, name))
+            except GateError as error:
+                print(f"{name[:-3]}  unreadable — {error}")
+                waiting += 1
+                continue
+            state, _answer = decision_state(body)
+            if state in ("open", "draft"):
+                waiting += 1
+                question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
+                print(f"{front.get('id', name[:-3])}  {state}  {front.get('story', '?')}/{front.get('stage', '?')}  "
+                      f"{question}")
+    if not waiting:
+        print("nothing — no open decision record")
+    print("\n== stories")
+    schedule(cwd, backlog, tasks)
+    print("\n== cost")
+    stories = sorted(d for d in os.listdir(tasks) if os.path.isdir(os.path.join(tasks, d))) if os.path.isdir(tasks) else []
+    tokens = runs = measured = priced = 0
+    cost = 0.0
+    for story in stories:
+        for entry in journal_usage(tasks, story).values():
+            tokens += tokens_of(entry)
+            runs += entry["invocations"]
+            measured += entry["measured"]
+            priced += entry["priced"]
+            cost += entry["cost"]
+    print(f"{runs} stage invocation(s), {measured} measured, {tokens:,} tokens"
+          + (f", ${cost:.2f} where the tool named a price" if priced else "")
+          + " — per stage: --usage")
+    return 0
+
+
 # --- schedule -----------------------------------------------------------------
 
 # Several stories are a loop over one story run, and the loop needs to know what comes next without
@@ -2530,6 +2609,8 @@ def main(argv):
     parser.add_argument("--checks", help="with --change: only these checks (compile test architecture format)")
     parser.add_argument("--parity", metavar="CONFIG",
                         help="check every implementation's reports against a scenario contract and exit")
+    parser.add_argument("--status", action="store_true",
+                        help="print what runs, what waits for a human, every story's state and the cost")
     parser.add_argument("--usage", action="store_true",
                         help="print the tokens each story and stage used, from the runner's journals")
     parser.add_argument("--total", action="store_true", help="with --usage: print only the token total")
@@ -2555,6 +2636,8 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.status:
+        return status(cwd, args.backlog, args.tasks)
     if args.stage_start or args.stage_end:
         if not args.story:
             parser.error("--stage-start/--stage-end need --story")

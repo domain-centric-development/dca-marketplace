@@ -1151,7 +1151,7 @@ exit 0
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
         pipeline = {"factory-run", "stage-plan", "stage-test", "stage-build", "stage-tidy",
                     "stage-judge", "stage-document", "factory-backlog", "factory-scope",
-                    "factory-decisions"}
+                    "factory-decisions", "factory-status"}
         check("install: a tool without plugins also gets the craft the profile may name",
               pipeline.issubset(set(entries)) and len(entries) > len(pipeline),
               f"{len(entries)} skills: {sorted(entries)[:6]}…")
@@ -1934,6 +1934,33 @@ def main(argv=None):
              test_row.split()[3:7] == ["800", "1200", "0", "30"], test_row),
             ("usage from a whole old log: a Codex session is read to its last total",
              whole.startswith("model=codex-model\tinput=1000\tcache_read=2000\tcache_write=0\toutput=40"), whole),
+        ]
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            failures.append((name, [], ""))
+
+    # --- status: what runs, what waits, every story, the cost — in one look -------------------------
+    with tmpdir() as root:
+        backlog_project(root, ("STORY-2", []), extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_ASKING),
+            (".agents/factory/decisions/STORY-1-01.md", DECISION),
+            ("tasks/STORY-2/.verify/journal.tsv",
+             "2026-09-23T10:00:00Z\tstage-start\tplan\ttool=x\n2026-09-23T10:01:00Z\tstage-end\tplan\texit=0\n"
+             "2026-09-23T10:01:00Z\tusage\tplan\ttool=x\tmodel=m\tinput=10\tcache_read=0\tcache_write=0\toutput=90\tcost=0.01\n"
+             "2026-09-23T10:02:00Z\tstage-start\ttest\ttool=x\n")))
+        out = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+                             encoding="utf-8").stdout
+        section = lambda name: out.split(f"== {name}")[1].split("\n== ")[0] if f"== {name}" in out else ""
+        expectations = [
+            ("status: a stage with a start and no end is shown as running, with when it started",
+             "STORY-2  stage test  since 2026-09-23T10:02:00Z" in section("running"), section("running")),
+            ("status: an open decision is listed with the story it blocks",
+             "STORY-1-01  open  STORY-1/plan" in section("waiting for a human"), section("waiting for a human")),
+            ("status: every story's state is there, and the cost in total",
+             "STORY-1  waiting" in section("stories") and "2 stage invocation(s), 1 measured, 100 tokens, $0.01"
+             in section("cost"), section("cost")),
         ]
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
