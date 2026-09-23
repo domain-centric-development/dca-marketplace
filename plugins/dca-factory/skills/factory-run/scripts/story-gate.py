@@ -94,8 +94,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 4
-VERSION = "0.17.0"
+CONTRACT = 5
+VERSION = "0.18.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2001,24 +2001,24 @@ def claude_session_logs(session_id=None):
     return main[:1] + sorted(glob.glob(os.path.join(os.path.dirname(main[0]), session_id, "subagents", "*.jsonl")))
 
 
-def codex_session_log(cwd, since=None):
-    """The newest Codex session log whose working directory is this project, touched since `since`."""
+def codex_session_log(session_id=None):
+    """The Codex session log of CODEX_SESSION_ID (or the given id) — found by its file name, which ends
+    in the id, so no other session's log is opened."""
+    session_id = session_id or os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID", "")
+    if not session_id or not re.fullmatch(r"[\w-]+", session_id):
+        return None
     home = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
-    here = os.path.realpath(cwd)
-    candidates = sorted(glob.glob(os.path.join(home, "sessions", "**", "rollout-*.jsonl"), recursive=True),
-                        key=os.path.getmtime, reverse=True)
-    for path in candidates[:50]:
-        if since and os.path.getmtime(path) < since.timestamp():
-            break
-        try:
-            with open(path, encoding="utf-8", errors="replace") as handle:
-                first = json.loads(handle.readline() or "{}")
-        except (OSError, ValueError):
-            continue
-        meta = first.get("payload") or {}
-        if first.get("type") == "session_meta" and os.path.realpath(str(meta.get("cwd", ""))) == here:
-            return path
-    return None
+    found = glob.glob(os.path.join(home, "sessions", "**", f"rollout-*{session_id}.jsonl"), recursive=True)
+    return found[0] if found else None
+
+
+def session_usage_allowed(cwd):
+    """Reading a tool's session log can be switched off: per person (FACTORY_SESSION_USAGE=off) or for
+    the project (`sessionUsage: off` in the stack profile). In-session stages are then unknown."""
+    if os.environ.get("FACTORY_SESSION_USAGE", "").strip().lower() in ("off", "0", "no", "false"):
+        return False
+    profile = read_profile(resolve_profile(None, cwd))
+    return str(profile.get("sessionUsage", "on")).strip().lower() not in ("off", "0", "no", "false")
 
 
 def session_usage(kind, paths, start=None, end=None):
@@ -2097,12 +2097,14 @@ def usage_fields(usage):
     return "\t".join(f"{k}={usage[k]}" for k in ("model",) + USAGE_FIELDS + (("cost",) if "cost" in usage else ()))
 
 
-def session_kind(cwd):
-    if claude_session_logs():
-        return "claude-session"
-    if codex_session_log(cwd, since=datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)):
-        return "codex-session"
-    return "in-session"
+def current_session():
+    """(kind, id) of the session this command runs in, from the tool's own environment variable."""
+    if os.environ.get("CLAUDE_CODE_SESSION_ID"):
+        return "claude-session", os.environ["CLAUDE_CODE_SESSION_ID"]
+    codex = os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID")
+    if codex:
+        return "codex-session", codex
+    return "in-session", ""
 
 
 def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
@@ -2112,8 +2114,10 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     freeze_windows(journal)                   # the earlier stages' logs have caught up by now
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
-    kind = "claude-session" if session_log and "/.claude/" in session_log else \
-        "codex-session" if session_log else session_kind(cwd)
+    kind, session_id = current_session()
+    if session_log:
+        kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
+    allowed = session_usage_allowed(cwd)
     with open(journal, "a", encoding="utf-8") as handle:
         if edge == "start":
             handle.write(f"{stamp}\tstage-start\t{stage}\ttool={kind}\n")
@@ -2127,12 +2131,17 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
         # The window is recorded, not summed: a session log lags behind the session — Claude Code writes
         # a response after the tool call it made returns, so the response running this very command is
         # not in the log yet. `--usage` reads the window when the log has caught up.
-        source = session_log or (",".join(claude_session_logs()) if kind == "claude-session" else
-                                 codex_session_log(cwd, started) if kind == "codex-session" else "")
+        # Only the session's id goes into the journal, never a path: the journal is committed with the
+        # project, and a path names the machine and the person. The log is found again when it is read.
+        source = f"log={session_log}" if session_log else \
+            f"session={kind.split('-')[0]}:{session_id}" if session_id and kind != "in-session" else ""
         handle.write(f"{stamp}\tstage-end\t{stage}\texit=0\n")
-        if started and source:
+        if not allowed:
+            handle.write(f"{stamp}\tusage\t{stage}\ttool={kind}\tunknown\n")
+            print(f"usage: stage {stage} of {story_id} — unknown (session usage is switched off)")
+        elif started and source:
             begun = started.strftime("%Y-%m-%dT%H:%M:%S.") + f"{started.microsecond // 1000:03d}Z"
-            handle.write(f"{stamp}\tusage\t{stage}\ttool={kind}\twindow={begun}/{stamp}\tlog={source}\n")
+            handle.write(f"{stamp}\tusage\t{stage}\ttool={kind}\twindow={begun}/{stamp}\t{source}\n")
             print(f"usage: stage {stage} of {story_id} ended — its usage is read from the session log by --usage")
         else:
             handle.write(f"{stamp}\tusage\t{stage}\ttool={kind}\tunknown\n")
@@ -2167,9 +2176,16 @@ def freeze_windows(journal):
 
 def resolve_window(fields):
     """A recorded session window, read now: {usage fields} or None."""
+    if not session_usage_allowed(os.getcwd()):
+        return None
     kind = fields.get("tool", "")
     start, _, end = fields.get("window", "").partition("/")
     paths = [p for p in fields.get("log", "").split(",") if p]
+    tool, _, session_id = fields.get("session", "").partition(":")
+    if session_id and tool == "claude":
+        paths = claude_session_logs(session_id)
+    elif session_id and tool == "codex":
+        paths = [p for p in [codex_session_log(session_id)] if p]
     return session_usage(kind, paths, parse_time(start), parse_time(end)) if paths else None
 
 
@@ -2216,7 +2232,7 @@ def journal_usage(tasks, story_id):
             entry["invocations"] += 1
         elif parts[1] == "usage" and "unknown" not in parts[3:]:
             fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
-            if "window" in fields and "log" in fields:
+            if "window" in fields and ("log" in fields or "session" in fields):
                 read = resolve_window(fields)
                 if read is None:
                     continue

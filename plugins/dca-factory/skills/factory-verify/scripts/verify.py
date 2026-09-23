@@ -2037,8 +2037,10 @@ def main(argv=None):
                                  capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         test_row = next((l for l in report2.splitlines() if l.startswith("S-1/test")), "")
         expectations = [
-            ("usage in a session: the mark records the window and the log, not a number the log lags behind",
-             bool(recorded) and "window=" in recorded[0] and "log=" in recorded[0], recorded[:1]),
+            ("usage in a session: the mark records the window and the session's id — no path, which would name "
+             "the machine and the person in a committed file",
+             bool(recorded) and "window=" in recorded[0] and "session=claude:0000-session" in recorded[0]
+             and "log=" not in recorded[0] and home not in recorded[0], recorded[:1]),
             ("usage in a session: Claude's log is read for the window, each response once, subagents included, "
              "synthetic entries left out", row.split()[1:7] == ["1", "1", "2", "200", "20", "57"], row),
             ("usage in a session: a session log has no cost, and the report says so rather than 0.00",
@@ -2079,6 +2081,53 @@ def main(argv=None):
              "STORY-1  waiting" in section("stories") and "2 stage invocation(s), 1 measured, 100 tokens, $0.01"
              in section("cost"), section("cost")),
         ]
+    with tmpdir() as root:
+        # switched off: the gate records the stage and reads no session log
+        journal = os.path.join(root, "tasks", "S-1", ".verify", "journal.tsv")
+        os.makedirs(os.path.dirname(journal))
+        with open(journal, "w", encoding="utf-8") as handle:
+            handle.write("2026-09-23T10:00:30.000Z\tstage-start\tplan\ttool=claude-session\n")
+        environment = dict(os.environ, CLAUDE_CODE_SESSION_ID="0000-session", FACTORY_SESSION_USAGE="off")
+        out = subprocess.run([sys.executable, args.gate, "--stage-end", "plan", "--story", "S-1"], cwd=root,
+                             env=environment, capture_output=True, text=True, encoding="utf-8").stdout
+        expectations.append(("usage in a session: FACTORY_SESSION_USAGE=off records the stage as unknown and "
+                             "no session", "switched off" in out and "session=" not in open(journal, encoding="utf-8").read(),
+                             out.strip()))
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml") if os.path.isdir(
+                os.path.join(root, ".agents", "factory")) else os.path.join(root, "factory.profile.yaml"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("sessionUsage: off\n")
+        with open(journal, "a", encoding="utf-8") as handle:
+            handle.write("2026-09-23T10:06:00.000Z\tstage-start\ttest\ttool=claude-session\n")
+        out = subprocess.run([sys.executable, args.gate, "--stage-end", "test", "--story", "S-1"], cwd=root,
+                             env=dict(os.environ, CLAUDE_CODE_SESSION_ID="0000-session"), capture_output=True,
+                             text=True, encoding="utf-8").stdout
+        expectations.append(("usage in a session: `sessionUsage: off` in the profile does the same for the project",
+                             "switched off" in out, out.strip()))
+    with tmpdir() as root:
+        # Codex: found by the id in its file name; no other session's log is opened
+        codex_home = os.path.join(root, "codex-home")
+        day = os.path.join(codex_home, "sessions", "2026", "09", "23")
+        os.makedirs(day)
+        entry = lambda stamp, out: json.dumps({"timestamp": stamp, "type": "event_msg", "payload": {
+            "type": "token_count", "info": {"total_token_usage": {"input_tokens": 100, "cached_input_tokens": 0,
+                                                                  "output_tokens": out}}}})
+        with open(os.path.join(day, "rollout-2026-09-23T10-00-00-abc-123.jsonl"), "w", encoding="utf-8") as handle:
+            handle.write(entry("2026-09-23T10:02:00.000Z", 7) + "\n")
+        with open(os.path.join(day, "rollout-2026-09-23T10-00-00-other-999.jsonl"), "w", encoding="utf-8") as handle:
+            handle.write("not json — a log that must not be opened\n")
+        journal = os.path.join(root, "tasks", "S-1", ".verify", "journal.tsv")
+        os.makedirs(os.path.dirname(journal))
+        with open(journal, "w", encoding="utf-8") as handle:
+            handle.write("2026-09-23T10:01:00.000Z\tstage-start\tplan\ttool=codex-session\n"
+                         "2026-09-23T10:03:00.000Z\tusage\tplan\ttool=codex-session\t"
+                         "window=2026-09-23T10:01:00.000Z/2026-09-23T10:03:00.000Z\tsession=codex:abc-123\n")
+        report = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
+                                env=dict(os.environ, CODEX_HOME=codex_home), capture_output=True, text=True,
+                                encoding="utf-8").stdout
+        row = next((l for l in report.splitlines() if l.startswith("S-1/plan")), "")
+        expectations.append(("usage in a session: a Codex session is found by its id alone",
+                             row.split()[1:3] == ["1", "1"] and row.split()[6] == "7", row))
     with tmpdir() as root:
         # a union merge: one branch read the window, the other still points at the log; lines interleave
         journal = os.path.join(root, "tasks", "S-1", ".verify", "journal.tsv")

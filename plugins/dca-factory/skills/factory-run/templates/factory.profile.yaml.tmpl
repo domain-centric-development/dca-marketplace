@@ -36,6 +36,9 @@
 #              names rules and markers that no longer exist, and a citation makes that look verified.
 #              Unnamed means the stages work from the project's own rules, markers and documents
 # contract     the gate file contract this profile was written for (see below)
+# sessionUsage `off` to keep the gate out of the tools' session logs (~/.claude, ~/.codex): stages run
+#              inside a session are then recorded as unknown. Default on; FACTORY_SESSION_USAGE=off
+#              switches it off for one person
 # required     the checks that must hold for any change: `compile`, `architecture`, `format` and
 #              each test command by its own key (`test`, `test.<name>`, `e2eTest`) — an end-user
 #              suite that needs a running system can stay out of it. `story-gate.py --change` (the commit hook, CI, a direct edit) then fails
@@ -55,7 +58,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 4
+contract: 5
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}

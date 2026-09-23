@@ -188,6 +188,25 @@ Claude Code and Codex report their usage; OpenCode's is unknown until its output
 checked against a real run. The numbers are the tool's, read from its machine-readable output or
 its session log — neither is a documented interface, and what cannot be read stays unknown.
 
+## What it reads outside the project, and what it keeps
+
+Only for stages run inside a session, marked with `--stage-start`/`--stage-end`, and for an explicit
+`--usage-from`:
+
+- **Claude Code:** the log of the running session and its subagents, found by
+  `CLAUDE_CODE_SESSION_ID` under `~/.claude/projects/`. No other session is opened.
+- **Codex:** the log of the running session, found by `CODEX_SESSION_ID` in its file name under
+  `~/.codex/sessions/`. No other session is opened; without the id nothing is searched.
+- **Taken from them:** token counts, the model's name, timestamps — no content. Nothing leaves the
+  machine.
+- **Kept in the project:** the journal records the session's id and the window, never a path; once
+  read, the numbers replace the id. The runner keeps each stage's final message (`*.out`).
+
+It reads with the rights of whoever runs it, so only their own logs. `FACTORY_SESSION_USAGE=off`
+switches it off for one person, `sessionUsage: off` in the stack profile for the project; in-session
+stages are then unknown. A committed `tasks/` carries token counts, models, times and the stages'
+final messages — leave `tasks/**/.verify/` out of the repository where that is internal.
+
 ## What it carries, and what it does not
 
 It carries no architecture method of its own. Markers, rules, the knowledge catalog, glossary
