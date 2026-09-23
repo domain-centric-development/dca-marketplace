@@ -1738,6 +1738,58 @@ def main(argv=None):
             parity_failures.append(name)
     failures += [(name, [], "") for name in parity_failures]
 
+    # --- the red proof is about one version of a test ------------------------------------------------
+    print()
+    proof_failures, expectations = [], []
+    with tmpdir() as root:
+        build_project(root)
+        run_gate(args.gate, root, "test")
+        ledger = open(os.path.join(root, "tasks", "STORY-1", ".tests-red"), encoding="utf-8").read()
+        expectations.append(("red-proof: the test gate records each red test with its file's digest",
+                             ledger.count("\t") == 2, ledger.strip()))
+        os.makedirs(os.path.join(root, "green"), exist_ok=True)
+        for selector in both_green:
+            with open(os.path.join(root, "green", re.sub(r"[./#]", "", selector)), "w") as handle:
+                handle.write("")
+        code, output = run_gate(args.gate, root, "build")
+        expectations.append(("red-proof: the build gate passes a test that is the version seen failing",
+                             "red-proof" in checks_by_verdict(output)["pass"], [l for l in output.splitlines() if "red-proof" in l]))
+        page_test = os.path.join(root, "src", "test-pages", "java", "com", "example", "WidgetPageTest.java")
+        with open(page_test, "w", encoding="utf-8") as handle:
+            handle.write("class WidgetPageTest { void showsTheThing() { /* the assertion went */ } }\n")
+        code, output = run_gate(args.gate, root, "build")
+        expectations.append(("red-proof: a test changed after it was seen failing fails the build gate",
+                             code == 1 and "red-proof" in checks_by_verdict(output)["fail"]
+                             and "WidgetPageTest.java" in output, [l for l in output.splitlines() if "red-proof" in l]))
+        os.makedirs(os.path.join(root, ".agents", "factory", "decisions"), exist_ok=True)
+        with open(os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md"), "w", encoding="utf-8") as handle:
+            handle.write(CONFLICT + ANSWER)
+        with open(os.path.join(root, "tasks", "STORY-1", "tests.md"), "a", encoding="utf-8") as handle:
+            handle.write("\nDecision STORY-1-01 answered b: the expectation of shows-the-thing changed.\n")
+        code, output = run_gate(args.gate, root, "build")
+        expectations.append(("red-proof: the same change passes on an answered decision of the test stage",
+                             "red-proof" in checks_by_verdict(output)["pass"], [l for l in output.splitlines() if "red-proof" in l]))
+    with tmpdir() as root:
+        build_project(root, green=both_green, ledger=both_green)
+        code, output = run_gate(args.gate, root, "build")
+        expectations.append(("red-proof: a red record without digests (an older gate) is skipped and named",
+                             code == 0 and "red-proof" in checks_by_verdict(output)["skip"],
+                             [l for l in output.splitlines() if "red-proof" in l]))
+    with tmpdir() as root:
+        backlog_project(root, extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),
+                                             ("tasks/STORY-1/.verify/journal.tsv",
+                                              "t\tstage-start\tplan\ttool=x\nt\tstage-end\tplan\texit=0\n"
+                                              "t\tstage-start\ttest\ttool=x\n")))
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: each story shows the stage invocations its journal recorded",
+                             "2 stage invocation(s)" in output, [l for l in output.splitlines() if "STORY-1" in l]))
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok:
+            print(f"          {detail}")
+            proof_failures.append(name)
+    failures += [(name, [], "") for name in proof_failures]
+
     # --- existing tests keep their expectations: the plan gate's baseline, the later gates' check -----
     print()
     kept_failures, expectations = [], []

@@ -19,6 +19,12 @@ like a passing one: without the record, a criterion with a mistyped or misplaced
 certified green. When the file is absent altogether — the run artefacts need not be committed — the
 green run is skipped and named rather than trusted or refused.
 
+Each line is `<selector><TAB><sha256 of the test file>` (file contract 4): a red proof is a proof
+about one version of a test. The build and tidy gates compare the digest with the file as it is
+(`red-proof`); a test changed after it was seen failing no longer carries its proof, unless an
+answered decision of stage `test` changed what it expects. A line without a digest, from an older
+gate, is still read, and the comparison is skipped and named.
+
 `tasks/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
 the orchestrator remembers, because an in-session run has no other honest way to count and a
 resumed run must see the same number. At three the run stops.

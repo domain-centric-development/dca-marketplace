@@ -111,7 +111,7 @@ python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy
 |---|---|
 | `plan` | the story names a context that is **on the context map**, has keyed criteria and is not left in `draft`; its epic has `intent`, `goal`, `metric`, `domain_contact`; the repeat counter is below three; a note when the instruction file exceeds what a tool loads |
 | `test` | every criterion mapped to a test; that test exists in the sources; test sources compile; every mapped test **red** |
-| `build` | every mapped test **green**; the profile's `architecture:` and `format:` commands succeed |
+| `build` | every mapped test **green**, and the same version of it the test stage saw fail (`red-proof`); the required suites whole; the profile's `architecture:` and `format:` commands succeed |
 | `tidy` | the build gate's checks again — the tidy stage's whole claim is that it changed no behaviour |
 | `document` | every file, path and identifier the document stage claims **exists**; every claim names how it was checked; every term the plan proposed has landed in a glossary or is named as open |
 | test, build, tidy | a test that existed before the story still expects what it did — added cases pass; a changed or removed line passes only when the plan lists it under `## Changed tests`, backed by the story's `## Changed expectations` or by an answered decision (`tests-kept`, from the plan gate's git baseline) |

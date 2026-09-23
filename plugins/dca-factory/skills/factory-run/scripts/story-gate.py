@@ -92,8 +92,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 3
-VERSION = "0.13.0"
+CONTRACT = 4
+VERSION = "0.14.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1198,7 +1198,37 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                     f"{', ' + evidence if evidence else ''})",
                 )
     if expected == "red":
-        write_red_ledger(tasks, story, now_red)
+        write_red_ledger(tasks, story, now_red, located, cwd)
+    elif have_ledger:
+        check_red_proof(result, cwd, located, read_red_digests(tasks, story), story)
+
+
+def check_red_proof(result, cwd, located, digests, story):
+    """At build and tidy: every test's red proof was taken against the test as it is now."""
+    unbound = [s for s, d in digests.items() if d is None]
+    if unbound and len(unbound) == len(digests):
+        result.skip("red-proof", "the red record names no test-file digests (written by an older gate) — "
+                                 "whether a test changed since it was seen failing is not checked")
+        return
+    moved = []
+    for selector, digest in sorted(digests.items()):
+        test_file = located.get(selector)
+        if not digest or not test_file or not os.path.isfile(os.path.join(cwd, test_file)):
+            continue
+        if file_digest(os.path.join(cwd, test_file)) != digest:
+            moved.append(f"{selector} ({test_file})")
+    if not moved:
+        result.ok("red-proof", f"{len(digests) - len(unbound)} test(s) are the version that was seen failing")
+    elif answered_decisions(cwd, story, "test"):
+        result.ok("red-proof", f"{', '.join(moved)} changed after it was seen failing, on decision "
+                               f"{', '.join(answered_decisions(cwd, story, 'test'))}")
+    else:
+        result.fail(
+            "red-proof",
+            f"{', '.join(moved)} changed after the test stage saw it fail — the red proof is about the "
+            f"earlier version, so its green now proves nothing. The test stage runs again and records "
+            f"it red as it is; a change of what it expects is a human's decision.",
+        )
 
 
 #: Which selectors the test stage saw fail. Kept as a file next to the round counter for the same
@@ -1209,21 +1239,39 @@ def red_ledger_path(tasks, story):
     return os.path.join(tasks, story, ".tests-red")
 
 
-def read_red_ledger(tasks, story):
+def read_red_digests(tasks, story):
+    """{selector: sha256 of its test file when it was recorded red, or None for an older ledger}.
+
+    A red proof is a proof about one version of a test. The digest binds it to that version, so a
+    test weakened after it was seen failing no longer carries the proof into the build gate."""
     path = red_ledger_path(tasks, story)
     if not path or not os.path.isfile(path):
-        return set()
+        return {}
+    digests = {}
     with open(path, encoding="utf-8") as handle:
-        return {line.strip() for line in handle if line.strip()}
+        for line in handle:
+            selector, _, digest = line.strip().partition("\t")
+            if selector:
+                digests[selector] = digest.strip() or None
+    return digests
 
 
-def write_red_ledger(tasks, story, selectors):
+def read_red_ledger(tasks, story):
+    return set(read_red_digests(tasks, story))
+
+
+def write_red_ledger(tasks, story, selectors, located=None, cwd="."):
     path = red_ledger_path(tasks, story)
     if not path:
         return
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    lines = []
+    for selector in sorted(selectors):
+        test_file = (located or {}).get(selector)
+        full = os.path.join(cwd, test_file) if test_file else None
+        lines.append(f"{selector}\t{file_digest(full)}" if full and os.path.isfile(full) else selector)
     with open(path, "w", encoding="utf-8") as handle:
-        handle.write("\n".join(sorted(selectors)) + ("\n" if selectors else ""))
+        handle.write("\n".join(lines) + ("\n" if lines else ""))
 
 
 def tail(output, limit=1200):
@@ -2053,7 +2101,14 @@ def schedule(cwd, backlog, tasks):
     for story_id in order:
         story = stories[story_id]
         start = f"from {story['start']}" if story["start"] else ""
-        print(f"{story_id}  {story['state']:<11} {start:<13} {story['detail']}".rstrip())
+        # What the story cost so far, from the runner's journal — kept per story on disk, so a
+        # restart, a second session or a new run never resets it. An in-session run writes none.
+        journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
+        spent = ""
+        if os.path.isfile(journal):
+            count = sum(1 for line in read_text(journal).splitlines() if "\tstage-start\t" in line)
+            spent = f" · {count} stage invocation(s)" if count else ""
+        print(f"{story_id}  {story['state']:<11} {start:<13} {story['detail']}{spent}".rstrip())
     counts = {}
     for story in stories.values():
         counts[story["state"]] = counts.get(story["state"], 0) + 1
