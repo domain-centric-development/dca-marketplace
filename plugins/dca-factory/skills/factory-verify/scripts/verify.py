@@ -236,7 +236,7 @@ architecture: true
 
 def pytest_available():
     probe = subprocess.run([sys.executable, "-m", "pytest", "--version"],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
     return probe.returncode == 0
 
 
@@ -944,7 +944,7 @@ exit 0
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         journal = open(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv"), encoding="utf-8").read()
         report = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
-                                 "--usage", "--story", "STORY-2"], cwd=root, capture_output=True, text=True).stdout
+                                 "--usage", "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         check("usage: each invocation's tokens land in the story's journal",
               code == 0 and journal.count("\tusage\t") == 6 and "output=900" in journal,
               f"exit {code}; usage lines {journal.count(chr(9) + 'usage' + chr(9))}")
@@ -970,7 +970,7 @@ exit 0
         env = backlog_fixture(root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         report = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
-                                 "--usage", "--story", "STORY-2"], cwd=root, capture_output=True, text=True).stdout
+                                 "--usage", "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         check("usage: a tool that reports nothing is counted as unknown, never as zero",
               "6 invocation(s) without a usage report" in report, report.strip().splitlines()[-2:])
 
@@ -1003,9 +1003,13 @@ exit 0
         check("update: run from the project's own runner, it brings the stamp to the pipeline it names",
               code == 0 and "updated 0.0.1 →" in output and "version: 0.0.1" not in open(stamp, encoding="utf-8").read(),
               output.strip().splitlines()[-3:])
-        check("update: a tool that had links keeps links, and no tool is added",
-              os.path.islink(os.path.join(root, ".codex", "skills", "factory-run")) and "factory-run" in entries
-              and not os.path.exists(os.path.join(root, ".opencode")), sorted(entries)[:4])
+        # Without symlinks the install copied in the first place (the probe above), so the update keeps copies.
+        kept_kind = os.path.islink(os.path.join(root, ".codex", "skills", "factory-run")) if SYMLINKS else \
+            os.path.isdir(os.path.join(root, ".codex", "skills", "factory-run"))
+        check("update: a tool keeps how it holds the skills (links, or copies where the shell cannot link), "
+              "and no tool is added",
+              kept_kind and "factory-run" in entries and not os.path.exists(os.path.join(root, ".opencode")),
+              sorted(entries)[:4])
         check("update: an older contract line in the profile is named, and the profile is left alone",
               "raise it to 'contract:" in output
               and "contract: 1" in open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), encoding="utf-8").read(),
@@ -1208,7 +1212,7 @@ exit 0
                 [BASH, "-c",
                  f'TASKS=tasks; sed -n "/^verdict_of/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
                  f'. ./fn.sh; verdict_of STORY-1'],
-                cwd=root, capture_output=True, text=True).stdout.strip()
+                cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
             check(f"runner: reads the verdict '{verdict}' from the file", parsed == expect,
                   f"parsed {parsed!r}")
 
@@ -1219,7 +1223,7 @@ exit 0
             [BASH, "-c",
              f'TASKS=tasks; sed -n "/^bump_rounds/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
              f'. ./fn.sh; bump_rounds STORY-1; bump_rounds STORY-1'],
-            cwd=root, capture_output=True, text=True).stdout.split()
+            cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.split()
         check("runner: the round counter is a file and counts up", counted == ["1", "2"],
               f"got {counted}")
 
@@ -1812,7 +1816,7 @@ def main(argv=None):
         refused = subprocess.run(commit + ["broken"], cwd=root, capture_output=True, text=True, env=environment)
         write_file(root, "src/state", "fixed, and changed\n")
         accepted = subprocess.run(commit + ["fixed"], cwd=root, capture_output=True, text=True, env=environment)
-        log = subprocess.run(["git", "log", "--format=%s"], cwd=root, capture_output=True, text=True).stdout.split()
+        log = subprocess.run(["git", "log", "--format=%s"], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.split()
         expectations.append(("change: the commit hook refuses `git commit -a` of a failing version",
                              refused.returncode != 0 and "commit refused" in refused.stderr
                              and "1 failing case(s)" in refused.stderr and "not staged" not in refused.stderr,
@@ -1997,7 +2001,7 @@ def main(argv=None):
         environment = dict(os.environ, CLAUDE_CODE_SESSION_ID=session, CLAUDE_CONFIG_DIR=home)
         # the mark runs "now"; the log is from the past, so the window is closed by hand as the mark would
         subprocess.run([sys.executable, args.gate, "--stage-end", "plan", "--story", "S-1"], cwd=root,
-                       env=environment, capture_output=True, text=True)
+                       env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace")
         lines = open(journal, encoding="utf-8").read().splitlines()
         recorded = [l for l in lines if "\tusage\t" in l]
         if recorded:
@@ -2007,7 +2011,7 @@ def main(argv=None):
             with open(journal, "w", encoding="utf-8") as handle:
                 handle.write("\n".join(l for l in lines if "\tusage\t" not in l) + "\n" + "\t".join(fixed) + "\n")
         report = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
-                                env=environment, capture_output=True, text=True).stdout
+                                env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         row = next((l for l in report.splitlines() if l.startswith("S-1/plan")), "")
         codex_home = os.path.join(root, "codex-home")
         rollout = os.path.join(codex_home, "sessions", "2026", "09", "23", "rollout-x.jsonl")
@@ -2024,13 +2028,13 @@ def main(argv=None):
                 totals("2026-09-23T10:02:00.000Z", 3000, 2000, 40),
                 totals("2026-09-23T10:02:00.000Z", 3000, 2000, 40)]) + "\n")      # repeated: totals, not sums
         whole = subprocess.run([sys.executable, args.gate, "--usage-from", "codex-session", rollout],
-                               capture_output=True, text=True).stdout
+                               capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         with open(journal, "a", encoding="utf-8") as handle:
             handle.write("2026-09-23T10:01:00.000Z\tstage-start\ttest\ttool=codex-session\n"
                          f"2026-09-23T10:03:00.000Z\tusage\ttest\ttool=codex-session\t"
                          f"window=2026-09-23T10:01:00.000Z/2026-09-23T10:03:00.000Z\tlog={rollout}\n")
         report2 = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
-                                 capture_output=True, text=True).stdout
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         test_row = next((l for l in report2.splitlines() if l.startswith("S-1/test")), "")
         expectations = [
             ("usage in a session: the mark records the window and the log, not a number the log lags behind",
@@ -2087,9 +2091,9 @@ def main(argv=None):
                          f"2026-09-23T10:05:00.000Z\tusage\tplan\ttool=claude-session\t{window}\tlog=/gone.jsonl\n"
                          "2026-09-23T10:00:00.000Z\tstage-start\tplan\ttool=claude-session\n")
         report = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
-                                capture_output=True, text=True).stdout
+                                capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         status_out = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
-                                    text=True).stdout
+                                    text=True, encoding="utf-8", errors="replace").stdout
         row = next((l for l in report.splitlines() if l.startswith("S-1/plan")), "")
         expectations.append(("usage after a union merge: one window read on one branch and pending on the other "
                              "counts once", row.split()[1:3] == ["1", "1"] and row.split()[6] == "9", row))
@@ -2135,7 +2139,7 @@ def main(argv=None):
                             ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
                 subprocess.run(["git", *command], cwd=root, capture_output=True)
             subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
             with open(os.path.join(root, "tasks", "STORY-1", "plan.md"), "w", encoding="utf-8") as handle:
                 handle.write(PLAN_APPLIED + "\n" + plan_extra)
             if record:
@@ -2162,7 +2166,7 @@ def main(argv=None):
                             ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
                 subprocess.run(["git", *command], cwd=root, capture_output=True)
             subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
             baseline = os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".tests-baseline"))
             if change is None:
                 os.remove(os.path.join(root, unit))
@@ -2273,7 +2277,7 @@ def main(argv=None):
         expectations.append(("schedule: a document file without its gate's mark is not delivered",
                              rows.get("STORY-1") == ("in-progress", "document"), rows.get("STORY-1")))
         subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "document"], cwd=root,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: the document gate's pass is what makes a story delivered",
                              rows.get("STORY-1") == ("delivered", None)
@@ -2282,7 +2286,7 @@ def main(argv=None):
     with tmpdir() as root:
         backlog_project(root, extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),))
         subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         unchanged = rows.get("STORY-1")
         with open(os.path.join(root, "backlog", "sample", "STORY-1.md"), "a", encoding="utf-8") as handle:
