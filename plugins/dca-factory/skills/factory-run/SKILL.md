@@ -35,14 +35,18 @@ say precisely which file to create, create it when the user agrees, then continu
    The factory delivers stories, it does not install an architecture: one is a once-per-project
    step that belongs to the method, the other repeats per story. `factory.sh install` says so and
    installs the pipeline anyway, so a project can adopt the two in either order.
-1. Copy `scripts/story-gate.py` to `.agents/factory/story-gate.py`, and
-   `templates/githooks/pre-commit` to `.githooks/pre-commit` (then `git config core.hooksPath
-   .githooks`). The hook runs the same profile commands the gate does: tool hooks and deny rules do
-   not port between agent tools, but every tool commits through git, so that is where the guard
-   belongs. Skills are
-   installed read-only and per tool; the gate must live in the repository so every tool and CI
-   run the same check.
-2. Write `.agents/factory/factory.profile.yaml` from `templates/factory.profile.yaml.tmpl`.
+1. Run the pipeline's installer from this skill's folder, for the tool you are:
+   `bash <this skill's folder>/scripts/factory.sh install --tool <claude|codex|opencode>`. It puts
+   the gate and the runner under `.agents/factory/`, the commit hook under `.githooks/` (and sets
+   `core.hooksPath`), `.gitattributes`, the pipeline's section in `AGENTS.md` and, for Claude Code,
+   the permissions and the SessionStart hook; it writes the stack profile from what it detects.
+   The hook runs the same checks the gate does: tool hooks and deny rules do not port between agent
+   tools, but every tool commits through git, so that is where the guard belongs. Report what it
+   printed. Where it cannot run, copy `scripts/story-gate.py` and `scripts/factory.sh` to
+   `.agents/factory/` and `templates/githooks/pre-commit` to `.githooks/pre-commit` by hand.
+2. Check the stack profile the installer wrote (`.agents/factory/factory.profile.yaml`, from
+   `templates/factory.profile.yaml.tmpl`), and add the `required:` line with what the human says
+   must hold for every change. Where a command is wrong or missing, fix it there.
    **Detect, do not assume:** look at what the project actually has — a Gradle wrapper, a Maven
    wrapper, a `*.sln`/`*.csproj`, a `package.json` — and fill in the commands from it. Two
    worked examples, not defaults to copy blindly:
