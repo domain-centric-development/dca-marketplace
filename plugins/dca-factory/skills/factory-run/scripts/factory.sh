@@ -7,6 +7,12 @@
 #   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--story-budget <tokens>] [--dry-run]
 #   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>]
 #                      [--story-budget <tokens>] [--dry-run]
+#   factory.sh status                     what runs, what waits for a human, every story, the cost
+#   factory.sh usage [--story <id>]       tokens per story and stage
+#   factory.sh decisions [--story <id>]   the decision inbox
+#   factory.sh schedule                   every story's state and the next one
+#   factory.sh change [--staged] [--checks "<c> …"]   the profile's checks outside a story
+#   factory.sh parity <config>            every implementation proves the scenario contract
 #
 # `run` exits 0 when the story ran through, 3 when it stopped for a decision, 4 at --max-stages,
 # anything else on a failure. `backlog` runs story after story in the order `story-gate.py
@@ -73,7 +79,7 @@ stage_file() {
   esac
 }
 
-usage() { sed -n '2,18p' "$0" >&2; exit 2; }
+usage() { sed -n '2,24p' "$0" >&2; exit 2; }
 
 # An install step that had to work and did not. `set -e` is deliberately *not* used: the run loop
 # expects non-zero exits in several places — a gate that refuses, a tool that stops, a verdict that
@@ -374,6 +380,11 @@ install_skills() {
   check_dca_setup
   must "create .agents/factory and .githooks" mkdir -p .agents/factory .githooks
   must "copy the gate to $GATE" cp "$from/factory-run/scripts/story-gate.py" "$GATE"
+  # The runner goes beside the gate, so the project has one entry point for everything it does with
+  # the pipeline: `bash .agents/factory/factory.sh run|backlog|status|usage|…`. Installing again is
+  # done from the plugin's copy, which knows where the skills are.
+  must "copy the runner to .agents/factory/factory.sh" cp "$from/factory-run/scripts/factory.sh" .agents/factory/factory.sh
+  must "make the runner executable" chmod +x .agents/factory/factory.sh
   must "copy the commit hook to .githooks/pre-commit" \
     cp "$from/factory-run/templates/githooks/pre-commit" .githooks/pre-commit
   must "make the gate and the commit hook executable" chmod +x .githooks/pre-commit "$GATE"
@@ -876,6 +887,20 @@ run_backlog() {                             # run_backlog <tool> <watch> <interv
 [ $# -ge 1 ] || usage
 command=$1; shift
 story=""; tool=""; from="plan"; dry=""; source_dir=""; copy_mode=""; watch=""; interval=60
+
+# The reading commands are the gate's; the runner passes them on, so a project calls one script.
+read_command() {                            # read_command <gate flags…>
+  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh install' from the plugin" >&2; exit 2; }
+  exec "$PY" "$GATE" "$@"
+}
+case "$command" in
+  status)    [ $# -eq 0 ] || usage; read_command --status ;;
+  schedule)  [ $# -eq 0 ] || usage; read_command --schedule ;;
+  usage)     read_command --usage "$@" ;;
+  decisions) read_command --list-decisions "$@" ;;
+  change)    read_command --change "$@" ;;
+  parity)    [ $# -eq 1 ] || usage; read_command --parity "$1" ;;
+esac
 
 while [ $# -gt 0 ]; do
   case "$1" in

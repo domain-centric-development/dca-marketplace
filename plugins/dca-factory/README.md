@@ -68,7 +68,7 @@ rounds and restarts, for runner stages and for in-session stages alike (those th
 `run` or `backlog` stops dispatch at a limit:
 
 ```
-python3 .agents/factory/story-gate.py --usage
+bash .agents/factory/factory.sh usage
 ```
 
 ```
@@ -81,13 +81,32 @@ gate reports and the run journal — or **check the machinery** itself against t
 did not hold, what held, and what it could not observe. The last one is not decoration: a check
 that was not observed is not a check that passed.
 
+## One entry point
+
+`factory.sh install` puts the runner next to the gate, so everything a person does with the pipeline
+in a project goes through one script:
+
+| Command | Does |
+|---|---|
+| `bash .agents/factory/factory.sh run --story <id>` | one story through the six stages |
+| `bash .agents/factory/factory.sh backlog [--watch]` | every story in dependency order, waiting for answers with `--watch` |
+| `bash .agents/factory/factory.sh status` | what runs, what waits for a human, every story, the cost |
+| `bash .agents/factory/factory.sh usage [--story <id>]` | tokens per story and stage |
+| `bash .agents/factory/factory.sh decisions [--story <id>]` | the decision inbox |
+| `bash .agents/factory/factory.sh schedule` | every story's state and the next one |
+| `bash .agents/factory/factory.sh change [--staged]` | the profile's checks outside a story, as the commit hook runs them |
+| `bash .agents/factory/factory.sh parity <config>` | several implementations against one scenario contract |
+
+The gate stays a Python script underneath: the commit hook, CI and the stage skills call it
+directly. Install again from the plugin's copy of `factory.sh`, which knows where the skills are.
+
 ## How to see where it stands
 
 From any session in the project — beside a running `backlog --watch` too, since it only reads:
 
 ```
 /factory-status
-python3 .agents/factory/story-gate.py --status          # the same, without a skill
+bash .agents/factory/factory.sh status          # the same, without a skill
 ```
 
 It shows the stage that runs and since when, the decisions waiting for a human, every story's state
@@ -100,7 +119,7 @@ The runner records every stage's tokens; nothing else is needed.
 
 ```
 bash .agents/factory/factory.sh run --story STORY-1 --tool claude       # or: backlog, --watch
-python3 .agents/factory/story-gate.py --usage --story STORY-1
+bash .agents/factory/factory.sh usage --story STORY-1
 ```
 
 ```
@@ -119,18 +138,19 @@ starts fresh and reads the skill, the story and its predecessor's file again.
 
 - `runs` counts invocations, repeat rounds included; `measured` those the tool reported on. The
   difference is shown as "without a usage report" — unknown, not zero.
-- Leave out `--story` for every story. `--schedule` shows each story's total in one line.
+- Leave out `--story` for every story. `factory.sh schedule` shows each story's total in one line.
 - `--story-budget <tokens>` on `run` or `backlog` stops before the next stage once the story has
   used that many. The count comes from the journal, so a restart does not reset it.
 - In a session (`/factory-run` without the runner) the orchestrator marks each stage with
   `--stage-start`/`--stage-end`; the numbers come from the session's own log, without a price, so
   `cost` reads `—`.
-- An old session log is read whole: `--usage-from claude-session <log>` or `codex-session <log>`
+- An old session log is read whole: `python3 .agents/factory/story-gate.py --usage-from claude-session
+  <log>` or `codex-session <log>`
   (`~/.claude/projects/<project>/<session>.jsonl`, `~/.codex/sessions/<date>/rollout-*.jsonl`).
 
 **History.** Every number lives in the project: `tasks/<story>/.verify/journal.tsv`, next to the gate
 reports and each invocation's raw output (`*.out`). Commit `tasks/` and the history travels with the
-repository — `--usage` without `--story` shows every story ever run. The journal is append-only, so
+repository — `factory.sh usage` without `--story` shows every story ever run. The journal is append-only, so
 the install marks it `merge=union` in `.gitattributes`: two branches that ran the same story merge
 without a conflict, a window read on one side and pending on the other counts once, and "running" is
 judged by time, not by line order. An in-session stage first

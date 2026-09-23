@@ -1143,6 +1143,16 @@ exit 0
                   [l for l in output.splitlines() if "skills" in l][:2])
         check("install: the gate is copied into the project, where every tool and CI can call it",
               os.path.isfile(os.path.join(root, ".agents", "factory", "story-gate.py")))
+        project_runner = os.path.join(root, ".agents", "factory", "factory.sh")
+        status_code, status_out = run_runner(project_runner, root, "status") if os.path.isfile(project_runner) \
+            else (None, "")
+        check("install: the runner is copied beside the gate, and `factory.sh status` works from there",
+              status_code == 0 and "== running" in status_out and "== cost" in status_out,
+              f"exit {status_code}; {status_out[:120]}")
+        usage_code, usage_out = run_runner(project_runner, root, "usage") if os.path.isfile(project_runner) \
+            else (None, "")
+        check("install: `factory.sh usage` passes on to the gate", usage_code == 0 and "usage:" in usage_out,
+              f"exit {usage_code}; {usage_out[:120]}")
         check("install: a stack profile is written when the project has none",
               os.path.isfile(os.path.join(root, ".agents", "factory", "factory.profile.yaml")))
     with tmpdir() as root:

@@ -14,10 +14,11 @@ start nothing and answer nothing on anyone's behalf.
 1. **Run the one command.** From the project root:
 
    ```
-   python3 .agents/factory/story-gate.py --status
+   bash .agents/factory/factory.sh status
    ```
 
-   It prints four sections — *running*, *waiting for a human*, *stories*, *cost*. Show it as it is;
+   (`python3 .agents/factory/story-gate.py --status` where the project has no runner copy.) It
+   prints four sections — *running*, *waiting for a human*, *stories*, *cost*. Show it as it is;
    where the gate is not installed, say so and stop rather than reconstructing it by hand.
 2. **Lead with what needs someone.** An open decision blocks its story and everything that depends
    on it: name it first, with the story it blocks, and point to `/factory-decisions` to answer it.
@@ -28,12 +29,13 @@ start nothing and answer nothing on anyone's behalf.
    "why does STORY-1 run from document?" — its document gate has not passed yet. Read the file the
    state comes from before you repeat the reason.
 5. **Give cost on request, in detail.** The status shows totals. For a story's stages run
-   `python3 .agents/factory/story-gate.py --usage --story <id>`. Unmeasured invocations are unknown,
+   `bash .agents/factory/factory.sh usage --story <id>`. Unmeasured invocations are unknown,
    not free; a session log has no price, so its cost reads `—`.
 
 ## Do not
 
-- Do not run a stage, the runner, a gate for a stage or `--stage-start`/`--stage-end`. Looking is not
-  taking over a story.
+- Do not run a stage, `factory.sh run` or `backlog`, a gate for a stage, or `--stage-start`/
+  `--stage-end`. `status`, `usage`, `decisions` and `schedule` only read; nothing else here does.
+  Looking is not taking over a story.
 - Do not answer or edit a decision record — that is `/factory-decisions`, on the human's confirmation.
 - Do not report a state from memory or from an earlier look; run the command again.
