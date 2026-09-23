@@ -1,6 +1,6 @@
 ---
 name: factory-run
-description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready"), or to set up the pipeline's files in a project that has none. Works in any project: it reads the backlog, the stack profile and the stage hand-over files, never project knowledge baked into itself.
+description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), to keep a session working on the backlog as it fills ("/loop /factory-run"), or to set up the pipeline's files in a project that has none. Works in any project: it reads the backlog, the stack profile and the stage hand-over files, never project knowledge baked into itself.
 ---
 
 # Run one story
@@ -237,6 +237,28 @@ what a commit contains and refuses when the working tree differs from the index;
 is that command, and CI runs `--change` on its checkout. Recommend it when someone asks whether a
 change is ready to commit — do not invent a story for it. `--parity <config>` checks that several
 implementations each prove a scenario contract from their reports (`reference/file-contracts.md`).
+
+## Without a story — work the backlog
+
+`/factory-run` with no story named works the backlog instead of one story:
+
+1. Run `bash .agents/factory/factory.sh schedule` (or `python3 .agents/factory/story-gate.py
+   --schedule`). Its last line is `next: <story> <stage>` or `next: none — <why>`.
+2. For `next: <story> <stage>`: deliver that story from that stage, exactly as a named story —
+   the gates, the stage marks, the escalations. When it is delivered or stops for a decision, go
+   back to 1. Never pick a story yourself; the schedule orders by dependencies and keeps one story
+   with unfinished code at a time.
+3. For `next: none`: say why in one or two lines — which decision waits (and that it is answered
+   through `/factory-decisions`), which story is stopped, or that the backlog is done — and end the
+   turn. Do not wait inside the turn and do not poll: files do not change while you wait.
+
+**Listening on the backlog.** A session that should pick up new stories and answered decisions
+by itself runs this under a scheduler: in Claude Code `/loop /factory-run` (it wakes, works what is
+ready, and sleeps again). A second session — or a person — manages meanwhile: writes stories with
+`/factory-backlog`, answers questions with `/factory-decisions`, watches with `/factory-status`. It
+changes backlog and decision files only, never code; the working session is the one writer. Where
+the tool has no scheduler, `bash .agents/factory/factory.sh backlog --watch` is the same loop outside
+the session, one process per stage.
 
 ## Several stories
 
