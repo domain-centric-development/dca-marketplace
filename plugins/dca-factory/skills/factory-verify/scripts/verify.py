@@ -1299,6 +1299,12 @@ def main(argv=None):
               must_fail=("documented",), text=("the row saying nothing was updated",)),
          dict(document=DOCUMENT.replace("| `README.md` | one sentence about the thing | read `README.md:1` |",
                                         "| — | none | |"))),
+        (Case("build: a required suite that ran nothing fails the build gate, though the story's tests are green",
+              "build", 1, must_fail=("suite",), text=("no report written by this run shows an executed test",)),
+         dict(green=both_green, ledger=both_green, profile=PROFILE + "required: test\n")),
+        (Case("build: without a policy the build gate runs only the story's tests, as before", "build", 0,
+              must_pass=("tests-green",)),
+         dict(green=both_green, ledger=both_green)),
         # --- the build gate -----------------------------------------------
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),

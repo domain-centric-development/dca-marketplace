@@ -45,6 +45,9 @@ Body sections:
 - `## Story` — one sentence in the project's own ubiquitous language.
 - `## Acceptance criteria` — one `- <key>: <criterion>` line each. Criteria are observable
   end-user behaviour, small enough that one agent run delivers the whole story.
+  Each criterion is behaviour the system does not show yet — its test is red until the build
+  stage, and the gate refuses one that is green before it. Behaviour that must keep working is
+  what the existing tests guard; it is not a criterion.
   The **key** is lowercase, hyphenated and names the behaviour (`shows-empty-state`), because it
   is committed: the test stage records it next to the test that proves it. A running number
   would point at nothing once the list is reordered.

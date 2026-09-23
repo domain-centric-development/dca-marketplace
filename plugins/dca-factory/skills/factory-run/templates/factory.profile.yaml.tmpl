@@ -40,7 +40,11 @@
 #              each test command by its own key (`test`, `test.<name>`, `e2eTest`) — an end-user
 #              suite that needs a running system can stay out of it. `story-gate.py --change` (the commit hook, CI, a direct edit) then fails
 #              a required check that is not declared, not run in its scope, or ran no test at all.
-#              Absent: report-only — declared checks run, the rest is named, nothing is mandatory
+#              Absent: report-only — declared checks run, the rest is named, nothing is mandatory.
+#              The build and tidy gates also run the required test commands whole, so a story
+#              cannot break what the stories before it delivered. A build tool that skips an
+#              up-to-date task writes no new report — give a required test command its rerun flag
+#              (Gradle: `./gradlew test --rerun`), since only a report from this run counts
 # contextMap   where the project keeps its context map (found by convention when absent)
 # glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
 # reviews      perspectives the judge stage covers *in addition to* domain, boundaries and craft

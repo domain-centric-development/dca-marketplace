@@ -36,6 +36,9 @@ item in a project. The templates are `factory-run/templates/backlog/{epic,story}
    the test stage records it next to the test that proves it — so never a number and never renamed
    later. Every concrete detail the human states (wording, order, placement) is its own criterion:
    a detail that is not a criterion is a detail no test will cover.
+   A criterion is behaviour the system **does not show yet**: its test must be red before the build
+   stage, and the gate refuses one that is already green. What has to keep working is the job of
+   the tests that already exist — "posting still works" is not a criterion.
 6. **Use the project's own words.** Read the context's glossary first and write the story in those
    terms. A term the story needs that no glossary carries goes into `## Assumptions` as a question
    for the domain contact, not into the story as if it were established.

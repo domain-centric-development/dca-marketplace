@@ -27,8 +27,9 @@ Checks by stage:
            the test exists in the sources, the test sources compile, every mapped test is red.
            Which selectors were red is recorded in tasks/<story>/.tests-red
     build  epic + mapping + every mapped test is green **and was recorded red by the test stage**,
-           plus every extra check the profile declares for this stage (architecture suite,
-           formatter, …). Without the record the green run is skipped and named, never taken as
+           every test command the profile's `required:` names, run whole (the stories before this
+           one still hold), plus every extra check the profile declares for this stage
+           (architecture suite, formatter, …). Without the record the green run is skipped and named, never taken as
            evidence: a runner that matched no test at all exits 0 exactly like a passing one
     tidy   the same as build: nothing the refactor touched may have changed what the code does
     document  every path, file and identifier the document stage claims actually exists, every
@@ -1169,7 +1170,10 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                 result.fail(
                     "tests-red",
                     f"{selector} passes before the build stage — a test that is green "
-                    f"before the code exists proves nothing about {key!r}.",
+                    f"before the code exists proves nothing about {key!r}. Either the test "
+                    f"asserts nothing new (the test stage fixes it), or {key!r} describes "
+                    f"behaviour the system already has — then the criterion does not belong in "
+                    f"the story, and that is the story author's call, not a stage's.",
                 )
             elif expected == "green" and not passed:
                 result.fail(
@@ -1516,7 +1520,28 @@ def run_test_command(result, cwd, profile, key, command, required, strict=False)
     else:
         message = (f"`{command}` ({key}) exited 0, but no report written by this run shows an "
                    f"executed test — a runner that matched nothing exits 0 too")
-        (result.fail if required else result.skip)("test", message)
+        (result.fail if required else result.note if strict else result.skip)("test", message)
+
+
+def check_required_suites(result, profile, cwd):
+    """At build and tidy: the test commands the policy requires, run whole.
+
+    The mapped tests say this story's behaviour holds; they say nothing about the behaviour the
+    stories before it delivered. Without a policy the stage gates stay as they were."""
+    required = set(split_list(profile.get("required")))
+    keys = [k for k in test_command_keys(profile) if k in required and profile.get(k)]
+    if not required:
+        return
+    if not keys:
+        result.skip("suite", "`required:` names no declared test command")
+    seen = set()
+    for key in keys:
+        if profile[key] in seen:
+            continue
+        seen.add(profile[key])
+        before = len(result.entries)
+        run_test_command(result, cwd, profile, key, profile[key], True, True)
+        result.entries[before:] = [(state, "suite", message) for state, _check, message in result.entries[before:]]
 
 
 def change_check(result, cwd, profile, staged, only):
@@ -2007,6 +2032,8 @@ def main(argv):
                 args.tasks,
                 story_id,
             )
+            if args.stage in ("build", "tidy"):
+                check_required_suites(result, profile, cwd)
             check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:
         result.fail("gate", str(error))
