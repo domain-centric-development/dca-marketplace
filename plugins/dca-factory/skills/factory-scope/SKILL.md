@@ -31,7 +31,12 @@ write `backlog/product.md` — or where the profile's `product:` points — from
 4. **The map follows.** `## Surfaces` and `## How it works` name the contexts and the external
    systems the product relies on: bring the context map in line in the same step (items 4–7
    below apply).
-5. **Check it with the gate:** `--product` exits 0. Then hand back to `/factory-backlog` for the
+5. **The browser runner, when the product has pages.** When `## Surfaces` names a page and the stack
+   profile has no `browser:` line, ask the stack question now, not in the first story: set up a
+   browser runner (the `e2e-testing` skill's `reference/setup.md`; the bootstrap does it for a
+   greenfield project) and record `browser: playwright`, or record `browser: none` with the reason.
+   Without it, the first story that needs a browser stops at its plan.
+6. **Check it with the gate:** `--product` exits 0. Then hand back to `/factory-backlog` for the
    first epic.
 
 Later changes to the product scope come through here too — a story that needs a surface the scope

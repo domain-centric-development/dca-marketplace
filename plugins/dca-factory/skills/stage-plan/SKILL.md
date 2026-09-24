@@ -48,7 +48,13 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
    project **already has**: read the stack profile and look at the existing tests. A browser test
    is the shape only where a browser runner is installed; otherwise the shape is the highest
    end-user level the project can run today — an HTTP-level test against the running application,
-   a controller-slice test, an API test, a message- or scheduler-level test. Never pick a shape
+   a controller-slice test, an API test, a message- or scheduler-level test. **A criterion only a
+   browser can observe** — a countdown, a script's reaction to a click, a notification, anything that
+   happens after the page has loaded — needs a browser runner. With the profile's `browser: none`
+   the project has decided without one: plan the next best shape and name what it cannot show.
+   With no `browser:` line and no runner, stop once with a `## needs-human` naming the stack
+   decision (set up a browser runner, or record `browser: none`), because a fallback taken story by
+   story is a decision nobody took. Never pick a shape
    that would need a test framework the project does not have; adding one is a stack decision,
    not part of a story. Where the shape you would want is missing, name it under
    `## Open assumptions` and plan the next best shape. A test shape is never a reason to build a

@@ -194,6 +194,15 @@ G. **Catalog wiring (`CLAUDE.md`)** — wire the project's coding agent to the D
      locally regenerable `dca-knowledge-catalog/bundle` (verify it holds `index.md` and `log.md`).
    - `No`.
 
+H. **Browser tests** — does the application show pages? Then it gets a browser runner now, before its first
+   feature: `Yes` (the default for a greenfield web application, and for a retrofit with templates or a
+   frontend but no browser runner yet) or `No, no pages`. The setup is the `e2e-testing` skill's
+   (software-craftsmanship plugin), `reference/setup.md`: Playwright, the application started inside the test on
+   a free port, the browser installed by the build, a fake clock and permission stand-ins, and one smoke test on
+   the start page. Where that skill is not installed, say so and leave the decision open rather than inventing a
+   setup. Without a runner, every later test of a page falls back to reading markup or script text, which proves
+   the wording but not the behaviour.
+
 ### Phase 3 — Generation
 
 Only after Phase 2. Placeholders use `{{name}}`; `{{#if}}` / `{{#each}}` blocks are resolved by you.
@@ -249,6 +258,10 @@ nothing — the first commit is the user's, after Phase 4.
    `.agents/dca/conventions.md` for every project, with the resolved-configuration section; `catalog_path` is
    optional. Write to `.claude/dca/conventions.md` instead only when that file already exists — a project
    bootstrapped before this path changed keeps the file it has, and every skill reads both.
+9. Decision H: set up the browser runner as the `e2e-testing` skill's `reference/setup.md` says for Gradle or
+   Maven — `gradle/plugins/test-e2e.gradle` applied from `build.gradle`, the base test class, and one smoke test
+   that opens the start page and asserts one element the page shows. A `package-info.java` or other DCA marker is
+   not needed in the `test-e2e` source set; the architecture rules do not import it.
 
 **.NET**
 
@@ -267,6 +280,8 @@ nothing — the first commit is the user's, after Phase 4.
    `[BoundedContext]` / `[SharedKernel]` exists.
 6. Decision A as for Java (`: IAggregateRoot<T, TId>`, `: IValue`, …). Decision G as for Java with
    `{{verifyCommand}}` = `dotnet test tests/{{solutionName}}.ArchitectureTests`.
+7. Decision H: a `tests/{{solutionName}}.E2eTests` project with `Microsoft.Playwright`, set up as the
+   `e2e-testing` skill's `reference/setup.md` says for .NET, with one smoke test on the start page.
 
 ### Phase 4 — Verification
 
@@ -274,7 +289,12 @@ nothing — the first commit is the user's, after Phase 4.
 ./gradlew test-architecture          # Java, Gradle
 mvn test -Dtest='ArchitectureTest'   # Java, Maven
 dotnet test tests/<Solution>.ArchitectureTests   # .NET — Debug; the rules refuse Release builds
+./gradlew test-e2e                   # decision H: the browser smoke test (installs Chromium on first use)
+dotnet test tests/<Solution>.E2eTests --logger trx
 ```
+
+With decision H, the smoke test must be green, and it must fail when the element it asserts is removed:
+try that once, then restore it. A browser suite that stays green while the page is broken tests nothing.
 
 Report which rules passed and which failed. On a greenfield bootstrap two entries are expected and not
 failures: `DCA-STR-012` on `warn` (no layered module yet) and, with decision F, a skipped

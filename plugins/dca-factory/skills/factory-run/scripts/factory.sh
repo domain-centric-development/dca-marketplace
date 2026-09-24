@@ -784,21 +784,35 @@ write_profile() {
     filter_format='"{file}::{method}"'
     covers="**"
   fi
+  # A browser runner the project already has: the end-user command drives it, and the profile says so,
+  # so the plan stage takes browser tests as the shape instead of falling back to reading page text.
+  local e2e="" browser=""
+  if [ -f gradle/plugins/test-e2e.gradle ] || grep -qs "com.microsoft.playwright" build.gradle build.gradle.kts gradle/plugins/*.gradle; then
+    e2e="./gradlew test-e2e"; browser="playwright"
+    [ -n "$compile" ] && compile="$compile testE2eClasses"     # the browser tests compile with the rest
+  elif grep -qs "com.microsoft.playwright" pom.xml; then
+    browser="playwright"
+  elif grep -rqs --include="*.csproj" "Microsoft.Playwright" . 2>/dev/null; then
+    local project; project=$(grep -rls --include="*.csproj" "Microsoft.Playwright" . | head -1)
+    e2e="dotnet test ${project#./} --logger trx"; browser="playwright"
+  elif grep -qs '"@playwright/test"' package.json; then
+    browser="playwright"
+  fi
   if [ -n "$conventions" ]; then
     local stated
     stated=$(grep -oE '`[^`]*(gradlew|mvnw|dotnet)[^`]*`' "$conventions" | tr -d '`' | grep -iE "arch" | head -1)
     [ -n "$stated" ] && architecture="$stated"
     echo "factory: read build facts from $conventions"
   fi
-  "$PY" - "$compile" "$test" "$architecture" "$filter_flag" "$filter_format" "$covers" <<'PYEOF'
+  "$PY" - "$compile" "$test" "$architecture" "$filter_flag" "$filter_format" "$covers" "$e2e" "$browser" <<'PYEOF'
 import sys
-compile_, test, architecture, filter_flag, filter_format, covers = sys.argv[1:7]
+compile_, test, architecture, filter_flag, filter_format, covers, e2e, browser = sys.argv[1:9]
 path = ".agents/factory/factory.profile.yaml"
 lines = open(path).read().splitlines()
 values = {
     "compile": compile_,
     "test": test,
-    "e2eTest": test,
+    "e2eTest": e2e or test,
     "architecture": architecture,
     "filterFlag": filter_flag,
     "filterFormat": filter_format,
@@ -816,6 +830,8 @@ for line in lines:
         out.append(line)
 if covers:
     out.append(f"covers.test: {covers}")
+if browser:
+    out.append(f"browser: {browser}")
 open(path, "w").write("\n".join(out) + "\n")
 PYEOF
   echo "factory: wrote .agents/factory/factory.profile.yaml — check the commands, then add"

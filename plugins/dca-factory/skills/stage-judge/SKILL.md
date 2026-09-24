@@ -56,6 +56,10 @@ silently stands in for it.
    abstraction; no duplication that carries a decision twice; no dead code, no leftover stub, no
    comment describing history instead of the present state.
 
+Where the profile says `browser: playwright`, an end-user test that reads a page's script or markup as
+text in place of driving the browser is a **major** finding: it proves the wording, not the behaviour,
+and the project has the runner that would prove the behaviour.
+
 Across the three, check the change against the story itself. A criterion written as a scenario is
 covered only when its test arranges the `Given`, performs the `When` and asserts every `Then` and
 `And` with the scenario's values: an outcome the test does not assert is a finding. Behaviour listed

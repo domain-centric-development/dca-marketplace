@@ -26,6 +26,11 @@ files written. You write **no** production behaviour.
    `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
    `story:`, `stage: test`, `asked:` (UTC) and the sections `## Question`, `## Options`,
    `## Recommendation` — never an answer (full shape: `factory-run/templates/decision.md.tmpl`).
+   Where the profile says `browser: playwright`, an end-user test of a page drives the browser: use
+   the end-user testing craft (the `e2e-testing` skill, or the profile's `carrier.test`) — the
+   application started by the test, the fake clock for anything that counts or expires, a stand-in for
+   a permission the user answers. Never read the page's script or markup as text to infer what the
+   browser would do.
 3. Add unit tests for the invariants the plan names: the rules an aggregate or value object must
    never break. These belong to the domain's own vocabulary and are the part of the suite that
    survives a rewrite of the adapters.

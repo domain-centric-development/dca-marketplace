@@ -929,6 +929,19 @@ def verify_runner(runner, verbose=False):
 
     # 1e. install keeps what the project owns
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
+    # 1e'. a project that already drives a browser gets that command and `browser: playwright` in its profile
+    with tmpdir() as root:
+        for path, text in (("build.gradle", "plugins { id 'java' }\napply from: \"gradle/plugins/test-e2e.gradle\"\n"),
+                           ("gradle/plugins/test-e2e.gradle", "dependencies { testE2eImplementation 'com.microsoft.playwright:playwright:1.62.0' }\n")):
+            os.makedirs(os.path.dirname(os.path.join(root, path)) or root, exist_ok=True)
+            with open(os.path.join(root, path), "w", encoding="utf-8") as handle:
+                handle.write(text)
+        run_runner(runner, root, "install", "--tool", "claude", "--from", source, "--copy")
+        profile_text = open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), encoding="utf-8").read() \
+            if os.path.isfile(os.path.join(root, ".agents", "factory", "factory.profile.yaml")) else ""
+        check("install: a Playwright setup it finds becomes the end-user command and `browser: playwright`",
+              "e2eTest: ./gradlew test-e2e" in profile_text and "\nbrowser: playwright" in profile_text,
+              [l for l in profile_text.splitlines() if l.startswith(("e2eTest", "browser"))])
     # 1d'. the carriers a profile names reach Claude's own skill directory, and only those
     carrier = next((name for name in ("ddd-modelling", "review-craft", "e2e-testing")
                     if any(os.path.isdir(os.path.join(plugins_dir, plugin, "skills", name))

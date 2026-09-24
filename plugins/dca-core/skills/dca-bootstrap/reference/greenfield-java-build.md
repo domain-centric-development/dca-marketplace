@@ -116,6 +116,7 @@ repositories {
 }
 
 apply from: "gradle/plugins/test-architecture.gradle"   // from templates/gradle/
+apply from: "gradle/plugins/test-e2e.gradle"            // decision H: the e2e-testing skill's reference/setup.md
 
 dependencies {
   implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)

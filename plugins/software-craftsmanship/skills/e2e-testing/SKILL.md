@@ -23,11 +23,23 @@ Before writing a test, gather the facts — never assume a layout:
    chain through return values.
 3. **A project with nothing yet**: propose defaults — Playwright plus Page Objects plus a
    stable-selector attribute plus the project's unit-test framework — and ask before establishing a
-   layout. Establishing one is a stack decision, not part of a story.
+   layout. Establishing one is a stack decision, not part of a story. When it is taken, set it up as
+   `reference/setup.md` describes: the application started inside the test, the browser installed by
+   the build, a fake clock and permission stand-ins, and one smoke test that fails when the page is
+   broken.
 
 The discipline below is library-agnostic; the API specifics are not. Default to **Playwright** in
 any binding; where the project uses Cypress, Selenium or WebDriverIO, adapt and say which you
 target.
+
+## Time and permissions belong to the test
+
+A page that counts, polls or expires is tested with the fake clock, never with a sleep or a real wait:
+install it before the page loads and move it with `runFor`. A browser API whose answer is the user's —
+notifications, geolocation, the clipboard — is replaced before the page loads with a stand-in that
+records what it is asked and answers as the test decides. Both are in `reference/setup.md`. A test that
+reads the page's script or markup as text to infer what the browser would do is not a browser test: it
+proves the wording, not the behaviour.
 
 ## 1. Stable selectors only
 

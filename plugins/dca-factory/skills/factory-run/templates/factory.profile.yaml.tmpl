@@ -27,6 +27,10 @@
 #              or one source set is knowledge about that build tool — the gate refuses to
 #              guess it, and running the wrong task would call a criterion covered that
 #              nothing executes
+# browser      `playwright` when the end-user tests drive a real browser (e2eTest runs them), `none`
+#              when the project deliberately has none. With `none` the plan may fall back to a lower
+#              test level for a page; unset, a criterion only a browser can observe stops the plan
+#              once for the stack decision. Install sets it where it finds a Playwright setup
 # architecture runs the architecture rule suite — the gate runs it in the build stage
 # format       runs the formatter check — the gate runs it in the build stage
 # carrier.<s>  the skill or agent that carries one stage's craft (`carrier.test`, `carrier.build`,
