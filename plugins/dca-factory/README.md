@@ -234,9 +234,10 @@ repository — `factory.sh usage` without `--story` shows every story ever run. 
 the install marks it `merge=union` in `.gitattributes`: two branches that ran the same story merge
 without a conflict, a window read on one side and pending on the other counts once, and "running" is
 judged by time, not by line order. An in-session stage first
-records its window and the session log it read from; once that log has caught up, the next mark or
-`--usage` writes the numbers into the journal and drops the machine-local path, so the history
-survives a clone and the tool's cleanup of old session logs.
+records its window and the session log it read from; once that log has caught up (five minutes after
+the window), the next stage mark writes the numbers into the journal and drops the machine-local path,
+so the history survives a clone and the tool's cleanup of old session logs. `--usage` and the status
+only read.
 
 Claude Code and Codex report their usage; OpenCode's is unknown until its output format is
 checked against a real run. The numbers are the tool's, read from its machine-readable output or
@@ -330,8 +331,11 @@ report-only. `--staged` checks the Git index, including the temporary one `git c
 **refuses** when the working tree differs from it — modified-not-staged or untracked files — because
 tests passing against an unstaged fix say nothing about the commit.
 
-`templates/githooks/pre-commit` is exactly that command (`git config core.hooksPath .githooks`);
-`FACTORY_PRECOMMIT_CHECKS="compile architecture"` narrows it on a slow stack, and a required check
+`templates/githooks/pre-commit` is exactly that command (`git config core.hooksPath .githooks`; where
+another hook manager already set `core.hooksPath`, the install leaves it and says to call
+`.githooks/pre-commit` from there). The agent tools' own folders (`.claude/`, `.codex/`, `.opencode/`)
+are no input to the check, so skill links and settings the install left untracked do not refuse a commit.
+`FACTORY_PRECOMMIT_CHECKS="compile architecture"` narrows the hook on a slow stack, and a required check
 left out is reported as not run here, never as passed. That is the enforcement boundary — a tool's
 own hooks are a fast feedback loop, but only git is common to every tool, and a hook can be skipped
 with `--no-verify`, so CI runs `--change` as well.

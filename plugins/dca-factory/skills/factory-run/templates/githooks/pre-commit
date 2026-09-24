@@ -25,11 +25,13 @@ if [ ! -f "$GATE" ]; then
   exit 0
 fi
 
+# Asked to run, not only looked up: on Windows `python3` is often the WindowsApps alias.
 PY="${FACTORY_PYTHON:-}"
 if [ -z "$PY" ]; then
-  if command -v python3 >/dev/null 2>&1; then PY=python3
-  elif command -v python >/dev/null 2>&1; then PY=python
-  else PY=python3; fi
+  for candidate in python3 python py; do
+    "$candidate" -c 'import sys; sys.exit(sys.version_info[0] != 3)' >/dev/null 2>&1 && { PY=$candidate; break; }
+  done
+  PY=${PY:-python3}
 fi
 
 args=(--change --staged)

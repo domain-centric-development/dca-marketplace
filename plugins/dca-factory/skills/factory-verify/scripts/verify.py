@@ -1557,6 +1557,104 @@ exit 0
         check("runner: the round counter is a file and counts up", counted == ["1", "2"],
               f"got {counted}")
 
+    # 1s. installing from a plugin cache, re-installing copies, and what an install leaves for git
+    def cache_fixture(home, with_core=True):
+        """A Claude plugin cache: `<plugin>/<version>/skills`, two versions of the pipeline and of a neighbour."""
+        cache = os.path.join(home, ".claude", "plugins", "cache", "m")
+        pipeline = os.path.normpath(os.path.join(os.path.dirname(runner), "..", ".."))
+        for plugin, version in (("dca-factory", "0.1.0"), ("dca-factory", "0.2.0"), ("dca-core", "0.1.0"),
+                                ("dca-core", "0.2.0")):
+            if plugin == "dca-core" and not with_core:
+                continue
+            folder = os.path.join(cache, plugin, version)
+            os.makedirs(os.path.join(folder, ".claude-plugin"))
+            write_file(folder, ".claude-plugin/plugin.json", json.dumps({"name": plugin, "version": version}))
+            if plugin == "dca-factory" and version == "0.2.0":
+                shutil.copytree(pipeline, os.path.join(folder, "skills"), symlinks=True)
+            else:
+                name = "ddd-modelling" if plugin == "dca-core" else "stage-plan"
+                write_file(folder, f"skills/{name}/SKILL.md",
+                           f"---\nname: {name}\ndescription: {plugin} {version}\n---\n")
+        return os.path.join(cache, "dca-factory", "0.2.0", "skills")
+    if SYMLINKS:
+        with tmpdir() as root, tmpdir() as home:
+            build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\n")
+            cached = cache_fixture(home)
+            run_runner(runner, root, "install", "--tool", "codex", "--from", shell_path(cached), env={"HOME": home})
+            skills = os.path.join(root, ".codex", "skills")
+            targets = {e: os.path.realpath(os.path.join(skills, e)) for e in os.listdir(skills)} \
+                if os.path.isdir(skills) else {}
+            check("install: from a plugin cache the neighbours' newest versions are linked, never an older "
+                  "version of the pipeline itself",
+                  targets.get("ddd-modelling", "").endswith(os.path.join("dca-core", "0.2.0", "skills", "ddd-modelling"))
+                  and not any(os.sep + "0.1.0" + os.sep in t for t in targets.values()),
+                  {k: v[-40:] for k, v in targets.items() if "0.1.0" in v or k == "ddd-modelling"})
+    with tmpdir() as root, tmpdir() as home:
+        build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\n")
+        cached = cache_fixture(home)
+        run_runner(runner, root, "install", "--tool", "claude", "--from", shell_path(cached), "--copy", env={"HOME": home})
+        shutil.rmtree(os.path.join(home, ".claude", "plugins", "cache", "m", "dca-core"))
+        code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", shell_path(cached), "--copy",
+                                  env={"HOME": home})
+        carrier_copy = os.path.join(root, ".claude", "skills", "ddd-modelling", "SKILL.md")
+        manifest = os.path.join(root, ".claude", "skills", ".dca-factory-skills")
+        check("copies: a copied carrier survives a re-install, also when no neighbour has it any more",
+              code == 0 and os.path.isfile(carrier_copy)
+              and "ddd-modelling" in open(manifest, encoding="utf-8").read().split(), output.strip().splitlines()[-4:])
+    with tmpdir() as root:
+        build_project(root)
+        shells = [b for b in ("/bin/bash",) if os.path.isfile(b)] or [BASH]
+        completed = subprocess.run([shells[0], runner, "install", "--tool", "none"], cwd=root, capture_output=True,
+                                   text=True, encoding="utf-8", errors="replace")
+        check("install: `--tool none` writes gate, runner and hook — also under the system bash",
+              completed.returncode == 0 and os.path.isfile(os.path.join(root, ".agents", "factory", "story-gate.py")),
+              f"{shells[0]}: exit {completed.returncode}; {(completed.stderr or completed.stdout).strip()[-200:]}")
+    with tmpdir() as root:
+        build_project(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        subprocess.run(["git", "config", "core.hooksPath", ".husky"], cwd=root, capture_output=True)
+        with open(os.path.join(root, ".gitattributes"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("*.png binary")                          # no newline at the end
+        code, output = run_runner(runner, root, "install", "--tool", "claude")
+        hooks = subprocess.run(["git", "config", "--get", "core.hooksPath"], cwd=root, capture_output=True,
+                               text=True).stdout.strip()
+        attributes = open(os.path.join(root, ".gitattributes"), encoding="utf-8").read().splitlines()
+        check("install: another hook manager's `core.hooksPath` is kept, and the install says how to chain",
+              hooks == ".husky" and "left as it is" in output, f"hooksPath {hooks!r}")
+        check("install: `.gitattributes` without a final newline keeps its last line whole",
+              attributes[:1] == ["*.png binary"] and any(l.startswith("tasks/**") for l in attributes), attributes)
+        for command in (["add", "-A"], ["reset", "-q", "--", ".claude"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        staged = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--change",
+                                 "--staged", "--checks", "compile"], cwd=root, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
+        check("hook: right after a link install the commit check does not refuse the tool folders it left untracked",
+              "gate:fail snapshot" not in staged.stdout and os.path.exists(os.path.join(root, ".claude", "skills")),
+              [l for l in staged.stdout.splitlines() if "snapshot" in l][:2])
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", "--max-stages", "x",
+                                  env=env)
+        check("runner: `run` refuses a --max-stages that is not a number, before any stage",
+              code == 2 and invocations(root) == [], f"exit {code}")
+    if os.name != "nt":
+        with tmpdir() as root:
+            env = backlog_fixture(root)
+            subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+            lock = os.path.join(root, ".git", "dca-factory-worker.lock")
+            process = subprocess.Popen([BASH, runner, "run", "--story", "STORY-2", "--tool", "stand-in"], cwd=root,
+                                       env=dict(os.environ, FACTORY_TOOL_CMD="sleep 3"),
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            time.sleep(1.2)
+            process.terminate()
+            time.sleep(0.8)
+            held_while_running = os.path.exists(lock)
+            process.communicate(timeout=30)
+            check("runner: a TERM while a stage runs gives the checkout back only after that stage has ended",
+                  held_while_running and not os.path.exists(lock) and process.returncode == 143,
+                  f"held while running {held_while_running}, released {not os.path.exists(lock)}, "
+                  f"exit {process.returncode}")
+
     # 5. install leaves a live link, not a copy — and the whole set where it can
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
     with tmpdir() as root:
@@ -1956,6 +2054,9 @@ def main(argv=None):
         (Case("document: `## needs-human` with a sentence-cased `None.` stops nothing either", "document", 0,
               must_pass=("documented",)),
          dict(document=DOCUMENT + "\n## needs-human\nNone.\n")),
+        (Case("document: `## needs-human` with `- None.` or `_None._` stops nothing either", "document", 0,
+              must_pass=("documented",)),
+         dict(document=DOCUMENT + "\n## needs-human\n- None.\n_None._\n")),
         (Case("test: a test recorded red before may be green when its expectation changed on a decision",
               "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
          dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,
@@ -2458,6 +2559,9 @@ def main(argv=None):
         report2 = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         test_row = next((l for l in report2.splitlines() if l.startswith("S-1/test")), "")
+        # the next stage mark writes what can be read into the journal; `--usage` itself only reads
+        subprocess.run([sys.executable, args.gate, "--stage-start", "document", "--story", "S-1"], cwd=root,
+                       env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace")
         expectations = [
             ("usage in a session: the mark records the window and the session's id — no path, which would name "
              "the machine and the person in a committed file",
@@ -2467,8 +2571,8 @@ def main(argv=None):
              "synthetic entries left out", row.split()[1:7] == ["1", "1", "2", "200", "20", "57"], row),
             ("usage in a session: a session log has no cost, and the report says so rather than 0.00",
              row.split()[-1:] == ["—"], row),
-            ("usage in a session: once read, the numbers are written into the journal and the machine-local "
-             "log path leaves it",
+            ("usage in a session: at the next stage mark the numbers are written into the journal and the "
+             "machine-local log path leaves it",
              any("output=57" in l and "log=" not in l for l in open(journal, encoding="utf-8").read().splitlines()),
              [l for l in open(journal, encoding="utf-8").read().splitlines() if "usage" in l][:1]),
             ("usage in a session: Codex's running totals are differenced over the window",
@@ -2911,6 +3015,51 @@ def main(argv=None):
                              waiting[0] == "waiting" and resumable == ("resumable", "test")
                              and rows.get("STORY-1") == ("in-progress", "build"),
                              f"open {waiting}, answered {resumable}, applied {rows.get('STORY-1')}"))
+    with tmpdir() as root:
+        backlog_project(root, ("STORY-2", []), extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),
+                                                             ("tasks/STORY-1/tests.md", TESTS)))
+        path = os.path.join(root, "backlog", "sample", "STORY-1.md")
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read().replace("status: approved", "status: superseded")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a superseded story holds the checkout for nobody, tests or not",
+                             rows.get("STORY-1", ("",))[0] == "superseded" and nxt == "STORY-2 plan", f"next: {nxt}"))
+    with tmpdir() as root:
+        backlog_project(root, extra_sources=(("tasks/STORY-1/.gate-plan.txt", "gate:fail epic\n"),))
+        refused = os.path.join(root, "tasks", "STORY-1", ".gate-plan.txt")
+        os.utime(refused, (time.time() - 60, time.time() - 60))
+        story_file = os.path.join(root, "backlog", "sample", "STORY-1.md")
+        for name in ("STORY-1.md", "epic.md"):
+            os.utime(os.path.join(root, "backlog", "sample", name), (time.time() - 120, time.time() - 120))
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        stopped = rows.get("STORY-1")
+        os.utime(story_file, None)                              # repaired after the refusal
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a story the plan gate refused runs from plan again once it was repaired",
+                             stopped[0] == "stopped" and rows.get("STORY-1") == ("in-progress", "plan"),
+                             f"before {stopped}, after {rows.get('STORY-1')}"))
+    with tmpdir() as root:
+        os.makedirs(os.path.join(root, "tasks", "S-1", ".verify"))
+        journal = os.path.join(root, "tasks", "S-1", ".verify", "journal.tsv")
+        line = "2026-01-01T00:00:00Z\tusage\tbuild\ttool=claude-session\twindow=2026-01-01T00:00:00Z/2026-01-01T00:01:00Z\tsession=claude:abc\n"
+        write_file(root, "tasks/S-1/.verify/journal.tsv", "2026-01-01T00:00:00Z\tstage-start\tbuild\ttool=claude-session\n" + line)
+        before = open(journal, encoding="utf-8").read()
+        home = os.path.join(root, "home")
+        write_file(home, "projects/p/abc.jsonl", json.dumps({"timestamp": "2026-01-01T00:00:30Z", "type": "assistant",
+                   "message": {"id": "m1", "model": "x", "usage": {"input_tokens": 5, "output_tokens": 7}}}) + "\n")
+        subprocess.run([sys.executable, args.gate, "--usage"], cwd=root, capture_output=True, text=True,
+                       encoding="utf-8", env=dict(os.environ, CLAUDE_CONFIG_DIR=home))
+        expectations.append(("usage: `--usage` only reads — the journal is not rewritten",
+                             open(journal, encoding="utf-8").read() == before, ""))
+    with tmpdir() as root:
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        write_file(root, ".git/dca-factory-worker.lock", "")
+        taken = subprocess.run([sys.executable, args.gate, "--claim", "someone"], cwd=root, capture_output=True,
+                               text=True, encoding="utf-8")
+        expectations.append(("claim: a claim file that cannot be read yet is aged by its file, not taken over on sight",
+                             taken.returncode == 3, taken.stdout.strip()))
     # --- what a story changed: the record and the diff a stage is handed, in a repository without a commit
     with tmpdir() as root:
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)

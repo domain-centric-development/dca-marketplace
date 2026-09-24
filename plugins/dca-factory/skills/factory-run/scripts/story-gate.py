@@ -54,6 +54,7 @@ A command the profile does not declare is skipped and named, never failed.
 """
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -108,7 +109,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 6
-VERSION = "0.30.1"
+VERSION = "0.30.2"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -782,11 +783,11 @@ def run(command, cwd):
     bash = posix_shell()
     if bash:
         completed = subprocess.run(
-            [bash, "-c", command], cwd=cwd, capture_output=True, text=True
+            [bash, "-c", command], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
         )
         return completed.returncode, completed.stdout + completed.stderr
     completed = subprocess.run(
-        command, cwd=cwd, shell=True, capture_output=True, text=True
+        command, cwd=cwd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace"
     )
     return completed.returncode, (completed.stdout + completed.stderr)
 
@@ -1533,14 +1534,19 @@ def answered_decisions(cwd, story_id, stage):
             if state in ("answered", "applied") and str(front.get("stage", "")).strip() == stage]
 
 
+def nothing_line(line):
+    """`(none)`, `- None.`, `_None._`, `—` and the like: a line that says there is nothing."""
+    text = line.strip().lstrip("-*").strip().strip("_*()").strip().rstrip(".").strip()
+    return text.lower() in NOTHING
+
+
 def needs_human_ids(text):
     """The decision ids a `## needs-human` section names (`decision: <id>`), or [] without one;
     None when the file has no such section at all — or only the heading, left empty or filled with
     `(none)` from the file template: that asks nobody anything, and reading it as a stop halts a
     finished stage."""
     section = section_of(text, "needs-human")
-    if section is None or all(line.strip().strip("()").strip().rstrip(".").strip().lower() in NOTHING
-                              for line in section):
+    if section is None or all(nothing_line(line) for line in section):
         return None
     return [value for key, value in fields_of(section).items() if key == "decision" and value]
 
@@ -1551,33 +1557,42 @@ def stamp_applied(path, stage):
                      f"stage: {stage}\n")
 
 
+def decision_files(cwd):
+    """(id from the file name, front, body, state, error) for every record in the store, sorted by name."""
+    store = os.path.join(cwd, DECISIONS_DIR)
+    if not os.path.isdir(store):
+        return
+    for name in sorted(os.listdir(store)):
+        if not name.endswith(".md"):
+            continue
+        try:
+            front, body = read_front_matter(os.path.join(store, name))
+        except GateError as error:
+            yield name[:-3], {}, "", "unreadable", error
+            continue
+        yield name[:-3], front, body, decision_state(body)[0], None
+
+
 def list_decisions(cwd, story_id=None):
     """The inbox: one line per record, open ones first, then drafts, answered, applied.
 
     `<id>  <state>  <story>/<stage>  asked <time>  <question>` — what a second session needs to
     pick one up without any transcript. Read from the files alone; nothing is inferred."""
-    store = os.path.join(cwd, DECISIONS_DIR)
     rows = []
-    if os.path.isdir(store):
-        for name in sorted(os.listdir(store)):
-            if not name.endswith(".md"):
-                continue
-            path = os.path.join(store, name)
-            try:
-                front, body = read_front_matter(path)
-            except GateError as error:
-                rows.append((-1, name[:-3], "unreadable", "?", "?", "?", str(error)))
-                continue
-            story = str(front.get("story", "")).strip()
-            if story_id and story != story_id:
-                continue
-            state, answer = decision_state(body)
-            question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-            rank = {"open": 0, "draft": 1, "answered": 2, "applied": 3}[state]
-            rows.append((rank, str(front.get("id", name[:-3])).strip(), state, story,
-                         str(front.get("stage", "?")).strip(), str(front.get("asked", "?")).strip(),
-                         question + (f"  → {answer.get('answer')} by {answer.get('by')}"
-                                     if state in ("answered", "applied") else "")))
+    for name, front, body, state, error in decision_files(cwd):
+        if error:
+            rows.append((-1, name, "unreadable", "?", "?", "?", str(error)))
+            continue
+        story = str(front.get("story", "")).strip()
+        if story_id and story != story_id:
+            continue
+        answer = decision_state(body)[1]
+        question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
+        rank = {"open": 0, "draft": 1, "answered": 2, "applied": 3}[state]
+        rows.append((rank, str(front.get("id", name)).strip(), state, story,
+                     str(front.get("stage", "?")).strip(), str(front.get("asked", "?")).strip(),
+                     question + (f"  → {answer.get('answer')} by {answer.get('by')}"
+                                 if state in ("answered", "applied") else "")))
     rows.sort()
     for _rank, rid, state, story, stage, asked, text in rows:
         print(f"{rid}  {state:<9} {story}/{stage}  asked {asked}  {text}")
@@ -1691,7 +1706,10 @@ CHANGE_CHECKS = ("compile", "test", "architecture", "format")
 
 def git(cwd, *args, env=None):
     try:
-        completed = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, env=env)
+        # UTF-8, not the locale: on Windows a cp1252 reading turns an umlaut into another character (a
+        # test that did not change looks changed) and raises on bytes like 0x81.
+        completed = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, env=env,
+                                   encoding="utf-8", errors="replace")
     except OSError as error:
         return 1, str(error)
     return completed.returncode, (completed.stdout + completed.stderr).strip()
@@ -1699,6 +1717,9 @@ def git(cwd, *args, env=None):
 
 def split_list(value):
     return [part for part in re.split(r"[\s,]+", str(value or "").strip()) if part]
+
+
+TOOL_FOLDERS = ("/.claude/", "/.codex/", "/.opencode/")
 
 
 def staged_snapshot(result, cwd, env):
@@ -1716,8 +1737,11 @@ def staged_snapshot(result, cwd, env):
         return None
     _, unstaged = git(cwd, "diff", "--name-only", env=env)
     _, untracked = git(cwd, "ls-files", "--others", "--exclude-standard", env=env)
-    drift = [f"modified, not staged: {p}" for p in unstaged.splitlines() if p] \
-        + [f"untracked: {p}" for p in untracked.splitlines() if p]
+    # The agent tools' own folders — skill links, a settings file the install wrote — are no input to
+    # any check here, and refusing every commit over them would stop the first commit after an install.
+    tooling = lambda p: any(folder in "/" + p for folder in TOOL_FOLDERS)
+    drift = [f"modified, not staged: {p}" for p in unstaged.splitlines() if p and not tooling(p)] \
+        + [f"untracked: {p}" for p in untracked.splitlines() if p and not tooling(p)]
     if drift:
         shown = "\n".join("  " + line for line in drift[:10])
         more = f"\n  … and {len(drift) - 10} more" if len(drift) > 10 else ""
@@ -2368,13 +2392,13 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     """`--stage-start`/`--stage-end` for a stage run inside a session: the same journal the runner writes."""
     journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
     os.makedirs(os.path.dirname(journal), exist_ok=True)
-    freeze_windows(journal)                   # the earlier stages' logs have caught up by now
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
     kind, session_id = current_session()
     owner = session_owner()
     if owner and claim(cwd, owner) == 3:
         return 3                               # another worker holds the checkout: this stage does not start
+    freeze_windows(journal)                    # the earlier stages' logs have caught up by now
     if session_log:
         kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
     allowed = session_usage_allowed(cwd)
@@ -2625,6 +2649,11 @@ def check_files_listed(result, tasks, story_id, stage):
     result.ok("files-listed", f"{STAGE_FILES[stage]} lists the {len(changed)} file(s) the stage changed")
 
 
+#: Seconds after a window's end before its numbers are written into the journal: a session log is
+#: written after the tool call that marked the end returns, so a younger window may still grow.
+FREEZE_AFTER = 300
+
+
 def freeze_windows(journal):
     """Write the numbers of every session window that can be read now into the journal itself.
 
@@ -2633,12 +2662,17 @@ def freeze_windows(journal):
     stays with the project."""
     if not os.path.isfile(journal):
         return
-    lines, changed = read_text(journal).splitlines(), False
+    text = read_text(journal)
+    lines, changed = text.splitlines(), False
+    settled = datetime.now(timezone.utc).timestamp() - FREEZE_AFTER
     for i, line in enumerate(lines):
         parts = line.split("\t")
         if len(parts) < 4 or parts[1] != "usage" or not any(p.startswith("window=") for p in parts):
             continue
         fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
+        end = parse_time(fields.get("window", "").partition("/")[2])
+        if end is None or end.timestamp() > settled:
+            continue                            # the log may still lag behind this window
         read = resolve_window(fields)
         if read is None:
             continue
@@ -2646,8 +2680,14 @@ def freeze_windows(journal):
                                             f"window={fields['window']}"])
         changed = True
     if changed:
-        with open(journal, "w", encoding="utf-8") as handle:
-            handle.write("\n".join(lines) + "\n")
+        # Written aside and moved into place, with whatever was appended while the logs were read —
+        # the runner or a stage mark may write a line at any moment.
+        grown = read_text(journal)
+        tail = grown[len(text):] if grown.startswith(text) else ""
+        temporary = f"{journal}.{os.getpid()}"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n" + tail)
+        os.replace(temporary, journal)
 
 
 def resolve_window(fields):
@@ -2683,8 +2723,10 @@ def usage_from(fmt, path, model=None):
     return 0
 
 
-def journal_usage(tasks, story_id):
-    """{stage: {invocations, measured, input, cache_read, cache_write, output, cost}} from the journal."""
+def journal_usage(tasks, story_id, resolve=True):
+    """{stage: {invocations, measured, input, cache_read, cache_write, output, cost}} from the journal.
+
+    `resolve=False` counts only what the journal carries itself, without opening a session log."""
     journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
     stages = {}
     if not os.path.isfile(journal):
@@ -2718,7 +2760,7 @@ def journal_usage(tasks, story_id):
         elif parts[1] == "usage" and "unknown" not in parts[3:]:
             fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
             if "window" in fields and ("log" in fields or "session" in fields):
-                read = resolve_window(fields)
+                read = resolve_window(fields) if resolve else None
                 if read is None:
                     continue
                 fields.update({k: str(v) for k, v in read.items()})
@@ -2754,8 +2796,6 @@ def usage_report(tasks, story_filter=None, total_only=False):
         if os.path.isdir(tasks) else []
     if story_filter:
         stories = [s for s in stories if s == story_filter]
-    for story in stories:
-        freeze_windows(os.path.join(tasks, story, ".verify", "journal.tsv"))
     if total_only:
         print(sum(tokens_of(e) for s in stories for e in journal_usage(tasks, s).values()))
         return 0
@@ -2781,7 +2821,10 @@ def usage_report(tasks, story_filter=None, total_only=False):
             print(f"{'':<24} {unknown} invocation(s) without a usage report — not counted, not zero")
         grand = total if grand is None else {k: grand[k] + total[k] for k in grand}
     if grand is None:
-        print("usage: no stage invocation recorded — an in-session run writes no journal")
+        print("usage: no stage invocation recorded")
+    elif len([s for s in stories if journal_usage(tasks, s)]) > 1:
+        print(f"{'total':<24} {grand['invocations']:>4} {grand['measured']:>8} {grand['input']:>9} "
+              f"{grand['cache_read']:>11} {grand['cache_write']:>11} {grand['output']:>8} {money(grand):>8}")
     return 0
 
 
@@ -2831,19 +2874,38 @@ def claim(cwd, owner):
     """0 when `owner` holds the checkout now (claimed, renewed or taken over), 3 when another does."""
     path = claim_path(cwd)
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    # Written aside, then linked into place: a link fails when the claim exists, so the file appears
+    # with its content or not at all — an empty claim between create and write would read as unreadable.
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    temporary = f"{path}.{os.getpid()}.new"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump({"owner": owner, "since": stamp, "beat": stamp}, handle)
     try:
-        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.close(descriptor)
-        write_claim(path, owner, None)
+        os.link(temporary, path)
         print(f"claim: {owner} holds the checkout")
         return 0
     except FileExistsError:
         pass
+    except OSError:                              # a file system without hard links
+        try:
+            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(read_text(temporary))
+            print(f"claim: {owner} holds the checkout")
+            return 0
+        except FileExistsError:
+            pass
+    finally:
+        with contextlib.suppress(OSError):
+            os.remove(temporary)
     held = read_claim(path) or {}
     if held.get("owner") == owner:
         write_claim(path, owner, held.get("since"))
         return 0
     beat = parse_time(held.get("beat"))
+    if beat is None:                             # unreadable: aged by the file, not taken on sight
+        with contextlib.suppress(OSError):
+            beat = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc)
     age = (datetime.now(timezone.utc) - beat).total_seconds() if beat else None
     if age is None or age > stale_after():
         write_claim(path, owner, None)
@@ -2949,22 +3011,11 @@ def status_brief(cwd, backlog, tasks, session_start=False):
         parts = line.split()
         if len(parts) >= 2:
             states.setdefault(parts[1], []).append(parts[0])
-    store = os.path.join(cwd, DECISIONS_DIR)
-    open_ids = []
-    if os.path.isdir(store):
-        for name in sorted(os.listdir(store)):
-            if not name.endswith(".md"):
-                continue
-            try:
-                _front, body = read_front_matter(os.path.join(store, name))
-            except GateError:
-                continue
-            if decision_state(body)[0] in ("open", "draft"):
-                open_ids.append(name[:-3])
+    open_ids = [name for name, _f, _b, state, _e in decision_files(cwd) if state in ("open", "draft")]
     held = read_claim(claim_path(cwd))
     stories = sorted(d for d in os.listdir(tasks) if os.path.isdir(os.path.join(tasks, d))) \
         if os.path.isdir(tasks) else []
-    tokens = sum(tokens_of(e) for s in stories for e in journal_usage(tasks, s).values())
+    tokens = sum(tokens_of(e) for s in stories for e in journal_usage(tasks, s, resolve=False).values())
     summary = " · ".join(f"{len(v)} {k}" for k, v in sorted(states.items())) or "no stories yet"
     print(f"factory: {summary}" + (f" · {tokens:,} tokens so far" if tokens else ""))
     print("factory: " + (f"{len(open_ids)} question(s) wait for you: {', '.join(open_ids)} · " if open_ids else "")
@@ -3028,24 +3079,16 @@ def status(cwd, backlog, tasks, story_filter=None):
     if duplicate:
         print(duplicate)
     print("\n== waiting for a human")
-    store = os.path.join(cwd, DECISIONS_DIR)
     waiting = 0
-    if os.path.isdir(store):
-        for name in sorted(os.listdir(store)):
-            if not name.endswith(".md"):
-                continue
-            try:
-                front, body = read_front_matter(os.path.join(store, name))
-            except GateError as error:
-                print(f"{name[:-3]}  unreadable — {error}")
-                waiting += 1
-                continue
-            state, _answer = decision_state(body)
-            if state in ("open", "draft"):
-                waiting += 1
-                question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-                print(f"{front.get('id', name[:-3])}  {state}  {front.get('story', '?')}/{front.get('stage', '?')}  "
-                      f"{question}")
+    for name, front, body, state, error in decision_files(cwd):
+        if error:
+            print(f"{name}  unreadable — {error}")
+            waiting += 1
+        elif state in ("open", "draft"):
+            waiting += 1
+            question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
+            print(f"{front.get('id', name)}  {state}  {front.get('story', '?')}/{front.get('stage', '?')}  "
+                  f"{question}")
     if not waiting:
         print("nothing — no open decision record")
     print("\n== stories")
@@ -3199,8 +3242,14 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     if os.path.isfile(rounds_file) and (read_text(rounds_file).strip() or "0").isdigit() \
             and int(read_text(rounds_file).strip() or "0") >= MAX_ROUNDS:
         return "stopped", None, f"{MAX_ROUNDS} rounds did not converge"
-    if os.path.isfile(os.path.join(folder, ".gate-plan.txt")):
-        return "stopped", None, "the plan gate refused the story — the backlog needs a fix"
+    refusal = os.path.join(folder, ".gate-plan.txt")
+    if os.path.isfile(refusal):
+        # Repaired since: the story or its epic is newer than the refusal, so the plan gate asks again.
+        sources = [p for p in (story_path, story_path and os.path.join(os.path.dirname(story_path), "epic.md"))
+                   if p and os.path.isfile(p)]
+        if not any(os.path.getmtime(p) > os.path.getmtime(refusal) for p in sources):
+            return "stopped", None, "the plan gate refused the story — the backlog needs a fix"
+        return "in-progress", "plan", "the story changed after the plan gate refused it — planned again"
     conflict = needs_human_ids(texts.get("judge", "")) or []
     if verdict_in(texts.get("judge", "")) == "story-conflict" and conflict and all(i in resolved for i in conflict):
         applied_at = max((resolved[i] for i in conflict),
@@ -3262,7 +3311,7 @@ def schedule(cwd, backlog, tasks):
             story_id = str(front.get("id") or name[:-3]).strip()
             state, start, detail = story_state(cwd, tasks, story_id, front, path)
             stories[story_id] = dict(state=state, start=start, detail=detail, deps=depends_on(front),
-                                     holds=state != "delivered" and os.path.isfile(
+                                     holds=state not in ("delivered", "superseded") and os.path.isfile(
                                          os.path.join(tasks, story_id, STAGE_FILES["test"])))
 
     # dependency order, ties by id; whatever is left after that sits on a cycle

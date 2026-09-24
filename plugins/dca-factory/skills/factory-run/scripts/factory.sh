@@ -48,7 +48,7 @@ INVOCATIONS=0                                # agent invocations in this process
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
 SHARED_BUILDER="${FACTORY_SHARED_BUILDER:-}"  # --shared-builder: plan to tidy in one process (off by default)
-[ "$SHARED_BUILDER" = 0 ] || [ "$SHARED_BUILDER" = off ] && SHARED_BUILDER=""
+case "$(printf '%s' "$SHARED_BUILDER" | tr '[:upper:]' '[:lower:]')" in 0|off|no|false) SHARED_BUILDER="" ;; esac
 WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
 
 # Inside an agent session the stages run in that session (`/factory-run`); a runner started from
@@ -74,17 +74,24 @@ take_checkout() {
     echo "factory: another worker holds this checkout — see 'factory.sh status'. Nothing was started." >&2
     return 5; }
   trap '"$PY" "$GATE" --release "$WORKER" >/dev/null 2>&1' EXIT
+  # Without these, a TERM or HUP ends the runner at once — its EXIT trap gives the claim back while
+  # the stage's tool process runs on, and a second worker starts beside it. With a trap set, bash
+  # runs it once the foreground stage has ended, so the claim is released only after that.
+  trap 'echo "factory: stopped by a signal — after the running stage, nothing more starts" >&2; exit 143' TERM
+  trap 'echo "factory: stopped by a hang-up — after the running stage, nothing more starts" >&2; exit 129' HUP
 }
 
 # Which Python runs the gate. `python3` is the POSIX spelling; on Windows the interpreter is
-# `python` and `python3` is often a Store stub that opens a shop window. FACTORY_PYTHON overrides,
-# for a project that pins one. Resolved once, and the *name* is what reaches the profile and the
-# permission list, so both stay portable between machines.
+# `python` or `py`, and `python3` is often the WindowsApps alias that opens a shop window instead of
+# running — found on PATH all the same. So each name is asked to run, not only looked up.
+# FACTORY_PYTHON overrides, for a project that pins one. Resolved once, and the *name* is what
+# reaches the profile and the permission list, so both stay portable between machines.
 PY="${FACTORY_PYTHON:-}"
 if [ -z "$PY" ]; then
-  if command -v python3 >/dev/null 2>&1; then PY=python3
-  elif command -v python >/dev/null 2>&1; then PY=python
-  else PY=python3; fi                          # named in the error the first call then produces
+  for candidate in python3 python py; do
+    "$candidate" -c 'import sys; sys.exit(sys.version_info[0] != 3)' >/dev/null 2>&1 && { PY=$candidate; break; }
+  done
+  PY=${PY:-python3}                            # named in the error the first call then produces
 fi
 
 # Whether `ln -s` in this shell makes a symlink. On Windows (Git Bash, MSYS2) it needs developer
@@ -152,8 +159,7 @@ plugin_gate() {
 # copied, and Claude Code's plugin cache. A copy of the skills in the project is a candidate too, so
 # "newest" decides, not the order — the project's own copy is never the answer when a newer one exists.
 plugin_skills() {
-  local candidate dir best="" best_version="" version own
-  own=$(cd "$(dirname "$GATE")" 2>/dev/null && pwd)
+  local candidate dir best="" best_version="" version
   for candidate in \
       "${FACTORY_PLUGIN_DIR:-}" \
       "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)" \
@@ -161,7 +167,6 @@ plugin_skills() {
       "$HOME"/.claude/plugins/cache/*/dca-factory/*/skills; do
     [ -n "$candidate" ] && [ -f "$candidate/factory-run/scripts/story-gate.py" ] || continue
     dir=$(cd "$candidate" && pwd -P)
-    [ "$dir/factory-run/scripts" = "$own" ] && continue                # the project's own copy of the gate
     version=$(gate_field "$dir/factory-run/scripts/story-gate.py" VERSION)
     if [ -z "$best" ] || [ "$(printf '%s\n%s\n' "$best_version" "$version" | sort -V | tail -1)" != "$best_version" ]; then
       best=$dir; best_version=$version
@@ -478,8 +483,24 @@ ours() {                                    # ours <target> <source> <method dir
   return 1
 }
 
+# The skill folders of the plugins beside this one. In a checkout they are `plugins/<plugin>/skills`;
+# in a plugin cache every plugin has a folder per version — `<plugin>/<version>/skills` — and there
+# `../../*/skills` would be the *other versions of this pipeline*, so each neighbour's newest is taken.
 method_skill_dirs() {
-  local source_abs=$1 plugins dir found=""
+  local source_abs=$1 plugin plugins dir found="" newest
+  plugin=$(cd "$source_abs/.." 2>/dev/null && pwd) || return 0
+  if [ -f "$plugin/.claude-plugin/plugin.json" ] && [ "$(basename "$plugin")" != dca-factory ] \
+     && [ "$(basename "$(dirname "$plugin")")" = dca-factory ]; then
+    plugins=$(cd "$plugin/../.." && pwd)                            # the cache: <plugin>/<version>/
+    for dir in "$plugins"/*; do
+      [ -d "$dir" ] && [ "$(basename "$dir")" != dca-factory ] || continue
+      newest=$(for version in "$dir"/*/skills; do [ -d "$version" ] && basename "$(dirname "$version")"; done \
+        | sort -V | tail -1)
+      [ -n "$newest" ] && found="$found $(cd "$dir/$newest/skills" && pwd)"
+    done
+    echo "$found"
+    return 0
+  fi
   plugins=$(cd "$source_abs/../.." 2>/dev/null && pwd) || return 0
   for dir in "$plugins"/*/skills; do
     [ -d "$dir" ] || continue
@@ -507,16 +528,28 @@ only_links_into() {
 install_named_carriers() {                  # install_named_carriers <target> <source_abs> <copy_mode>
   local target=$1 source_abs=$2 copy_mode=$3 name dir found method_dirs
   method_dirs=$(method_skill_dirs "$source_abs")
+  local manifest="$target/.dca-factory-skills" ours_copy
   for name in $(named_carriers); do
-    [ -f "$target/$name/SKILL.md" ] && ! { [ -L "$target/$name" ] && ! [ -e "$target/$name" ]; } && continue
+    # A copy this install made (in its list) is refreshed; any other skill of that name is the project's.
+    ours_copy=""
+    [ -n "$copy_mode" ] && grep -qsx "$name" "$manifest" && ours_copy=1
+    if [ -f "$target/$name/SKILL.md" ] && ! { [ -L "$target/$name" ] && ! [ -e "$target/$name" ]; } \
+       && [ -z "$ours_copy" ]; then
+      continue
+    fi
     found=""
     for dir in $method_dirs; do [ -d "$dir/$name" ] && { found="$dir/$name"; break; }; done
     if [ -z "$found" ]; then
-      echo "factory: the profile names carrier '$name', which no plugin beside the pipeline provides — add it to $target" >&2
+      if [ -n "$ours_copy" ] && [ -f "$target/$name/SKILL.md" ]; then
+        echo "factory: kept the copied carrier $target/$name — no plugin beside the pipeline has a newer one" >&2
+      else
+        echo "factory: the profile names carrier '$name', which no plugin beside the pipeline provides — add it to $target" >&2
+      fi
       continue
     fi
     if [ -n "$copy_mode" ]; then
-      rm -rf "${target:?}/$name" && cp -R "$found" "$target/$name" && echo "$name" >> "$target/.dca-factory-skills"
+      rm -rf "${target:?}/$name" && cp -R "$found" "$target/$name" \
+        && { grep -qsx "$name" "$manifest" || echo "$name" >> "$manifest"; }
     else
       ln -sfn "$found" "$target/$name"
     fi
@@ -543,7 +576,8 @@ install_skills() {
   if [ -z "$copy_mode" ] && ! can_symlink; then
     copy_mode=1; copy_reason=" — this shell cannot make symlinks (Windows without developer mode or MSYS=winsymlinks:nativestrict), so the install copies"
   fi
-  for target in "${targets[@]}"; do
+  # `${targets[@]+…}`: an empty array under `set -u` is an unbound variable to bash 3.2 (macOS /bin/bash).
+  for target in ${targets[@]+"${targets[@]}"}; do
     # A copy of a skill folder is a second truth: an edit at the source does not reach the project,
     # and the project keeps running yesterday's process while its author believes otherwise (that
     # is how a whole set of runs can use a stale stage). So a local source is *linked* by default;
@@ -581,6 +615,12 @@ install_skills() {
       done
       for name in $previous; do
         [ -d "$source_abs/$name" ] && continue
+        # A carrier the profile names is not the pipeline's skill but one it copied beside it: it
+        # stays, on the list, for install_named_carriers to refresh — never removed as outdated.
+        if printf '%s\n' $(named_carriers) | grep -qx "$name" && [ -d "$target/$name" ]; then
+          echo "$name" >> "$manifest.new"
+          continue
+        fi
         rm -rf "${target:?}/$name"
         removed=$((removed + 1))
         echo "factory: removed $target/$name — the pipeline no longer has it" >&2
@@ -663,7 +703,7 @@ install_skills() {
       echo "factory:   re-run install after a skill is added to the source" >&2
     fi
   done
-  for target in "${targets[@]}"; do
+  for target in ${targets[@]+"${targets[@]}"}; do
     # The whole-directory link to the pipeline cannot take a carrier beside it: the carrier would be
     # written into the plugin's own folder. Then the tool finds the carrier through its plugins, and
     # an isolated stage does not — the runner's carrier check says so before a run.
@@ -697,7 +737,13 @@ install_skills() {
   echo "factory: gate → $GATE (version $(gate_field "$GATE" VERSION), file contract $(gate_field "$GATE" CONTRACT))"
   # Not a `must`: the project need not be a git repository for the gate to work, and a checkout
   # without git is a legitimate place to run the pipeline. The hook is then absent, and said to be.
-  if git config core.hooksPath .githooks 2>/dev/null; then
+  local hooks_path; hooks_path=$(git config --get core.hooksPath 2>/dev/null || true)
+  if [ -n "$hooks_path" ] && [ "$hooks_path" != .githooks ]; then
+    # Another hook manager (husky, lefthook, …) owns the hooks: overwriting its path would switch its
+    # hooks off without a word. It calls ours instead.
+    echo "factory: core.hooksPath is $hooks_path, not .githooks — left as it is. Call .githooks/pre-commit" >&2
+    echo "factory:   from $hooks_path/pre-commit, or nothing checks a commit." >&2
+  elif git config core.hooksPath .githooks 2>/dev/null; then
     echo "factory: git hooks → .githooks"
   else
     echo "factory: no git repository here — .githooks/pre-commit is installed but nothing runs it." >&2
@@ -709,6 +755,7 @@ install_skills() {
   # The journal is append-only, one line per event: two branches that ran the same story both add
   # lines at its end, which git reports as a conflict although keeping both is always right.
   if ! grep -qs "journal.tsv merge=union" .gitattributes; then
+    [ -s .gitattributes ] && [ -n "$(tail -c 1 .gitattributes)" ] && printf '\n' >> .gitattributes
     printf '%s\n' "tasks/**/.verify/journal.tsv merge=union" >> .gitattributes
     echo "factory: .gitattributes merges the story journals by keeping both sides (merge=union)"
   fi
@@ -716,7 +763,7 @@ install_skills() {
   if [ -n "$copy_mode" ]; then
     echo "factory: the skills are copies — commit .claude/.codex/.opencode skills with the project, and"
     echo "factory:   every clone delivers stories with this pipeline, without the marketplace."
-  elif [ "${#targets[@]}" -gt 0 ]; then
+  elif [ -n "${targets[*]+x}" ] && [ "${#targets[@]}" -gt 0 ]; then
     echo "factory: the skill links point into $source_abs — they belong in .gitignore; a clone"
     echo "factory:   installs them again, or use --copy to commit the skills with the project."
   fi
@@ -934,7 +981,7 @@ verdict_of() {                              # verdict_of <story>
 # heading — empty, or `(none)` copied from the file template — asks nobody anything.
 asks_human() {                              # asks_human <file>
   sed -n '/^## needs-human/,/^## /p' "$1" | sed '1d; /^## /d' \
-    | grep -v -i -E '^[[:space:]]*(\(?(none|n/a|nothing)\.?\)?\.?|—|–|-)?[[:space:]]*$' | grep -q .
+    | grep -v -i -E '^[[:space:]]*([-*][[:space:]]*)?[(_*]*(none|n/a|nothing|—|–)?[.]?[)_*]*[.]?[[:space:]]*$' | grep -q .
 }
 
 # A stage that ends with a needs-human section has stopped. The question is a record of its own, so
@@ -1411,7 +1458,10 @@ case "$command" in
   run)
     [ -n "$story" ] || usage
     [ -n "$tool" ] || tool=$(detect_tool)
-    [ -n "$tool" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
+    [ -n "$tool" ] || [ -n "${FACTORY_TOOL_CMD:-}" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
+    tool=${tool:-stand-in}
+    case "$MAX_STAGES" in *[!0-9]*) echo "factory: --max-stages takes a number" >&2; exit 2 ;; esac
+    case "$STORY_BUDGET" in *[!0-9]*) echo "factory: --story-budget takes a number of tokens" >&2; exit 2 ;; esac
     check_gate_freshness                    # once per invocation; run_story recurses on a verdict
     [ -n "$dry" ] || refuse_nested || exit $?
     check_carriers "$tool" || exit $?
