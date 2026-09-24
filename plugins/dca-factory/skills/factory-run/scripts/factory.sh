@@ -320,6 +320,21 @@ check_carriers() {                          # check_carriers <tool>
   return 2
 }
 
+# The profile's contract and model keys, before any stage is paid for: a run started --from a later
+# stage has no plan gate in front of it, and a stage run on the wrong model is spent money.
+check_contract_first() {
+  [ -f "$GATE" ] || return 0
+  local out code=0
+  out=$("$PY" "$GATE" --check-contract 2>&1) || code=$?
+  [ "$code" = 0 ] && return 0
+  if [ "$code" = 1 ]; then
+    printf '%s\n' "$out" >&2
+    echo "factory: the stack profile does not hold for this gate — nothing was started." >&2
+    return 2
+  fi
+  return 0                                  # an older gate without the check: its stage gates still run
+}
+
 # A local model loaded with a context window smaller than a stage grows to truncates or aborts in
 # silence. LM Studio says how large the loaded window is; below this, the run warns before it starts.
 LOCAL_CONTEXT_MIN=${FACTORY_LOCAL_CONTEXT_MIN:-65536}
@@ -344,6 +359,34 @@ for m in data.get('data',[]):
   return 0
 }
 
+# The model a stage runs on is the project's choice, stated in the profile per tool and stage
+# (`model.<tool>.<stage>`, falling back to `model.<tool>`); the pipeline itself names no model. A
+# `--model`/`-m` the person puts in FACTORY_<TOOL>_ARGS wins — it is their local override, for
+# example for a provider that does not work here — and the run says so. Exactly one model flag is
+# ever passed: which of two a tool would honour is its behaviour, not something to rely on.
+model_key() {                               # model_key <tool> <stage> — the profile's choice, or nothing
+  local profile="${FACTORY_PROFILE:-.agents/factory/factory.profile.yaml}" value
+  [ -f "$profile" ] || profile=factory.profile.yaml
+  [ -f "$profile" ] || return 0
+  value=$(sed -n "s/^model\.$1\.$2:[[:space:]]*//p" "$profile" | head -1 | tr -d '"'"'"'"' | awk '{print $1}')
+  [ -n "$value" ] || value=$(sed -n "s/^model\.$1:[[:space:]]*//p" "$profile" | head -1 | tr -d '"'"'"'"' | awk '{print $1}')
+  printf '%s' "$value"
+}
+tool_args() { case "$1" in claude) printf '%s' "${FACTORY_CLAUDE_ARGS:-}" ;; codex) printf '%s' "${FACTORY_CODEX_ARGS:-}" ;; opencode) printf '%s' "${FACTORY_OPENCODE_ARGS:-}" ;; esac; }
+env_model() { tool_args "$1" | sed -n -E 's/.*(^| )(-m|--model)[ =]([^ ]*).*/\3/p' | head -1; }
+# The model flag for one stage, and why a request does not become one: "<flag args>|<note>".
+model_choice() {                            # model_choice <tool> <stage>
+  local requested; requested=$(model_key "$1" "$2")
+  [ -n "$requested" ] || { printf '|'; return; }
+  if [ -n "${FACTORY_TOOL_CMD:-}" ]; then printf '|passed as FACTORY_MODEL to the custom command'; return; fi
+  if [ -n "$(env_model "$1")" ]; then printf '|overridden by FACTORY_%s_ARGS (%s)' "$(printf '%s' "$1" | tr a-z A-Z)" "$(env_model "$1")"; return; fi
+  case "$1" in
+    claude) printf -- '--model %s|' "$requested" ;;
+    codex|opencode) printf -- '-m %s|' "$requested" ;;
+    *) printf '|no model flag for tool %s' "$1" ;;
+  esac
+}
+
 invoke() {                                  # invoke <tool> <prompt>
   local tool=$1 prompt=$2
   # Which model, which effort, which sandbox a tool runs with is the tool's configuration and not
@@ -359,9 +402,10 @@ invoke() {                                  # invoke <tool> <prompt>
   # what the stage cost. Claude and Codex are asked for their machine-readable form; the runner
   # prints the stage's final message from it, so the log still reads as text.
   local raw="${invocation_raw:-/dev/null}"
+  local choice model_args; choice=$(model_choice "$tool" "${stage_in_flight:-}"); model_args=${choice%%|*}
   if [ -n "${FACTORY_TOOL_CMD:-}" ]; then
     FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}" FACTORY_PROMPT="$prompt" \
-      sh -c "$FACTORY_TOOL_CMD" > "$raw"
+      FACTORY_MODEL="$(model_key "$tool" "${stage_in_flight:-}")" sh -c "$FACTORY_TOOL_CMD" > "$raw"
     local code=$?
     [ "$raw" = /dev/null ] || { [ -n "${FACTORY_USAGE_FORMAT:-}" ] || cat "$raw"; }
     return $code
@@ -369,12 +413,12 @@ invoke() {                                  # invoke <tool> <prompt>
   case "$tool" in
     claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format json \
                 --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
-                $(isolation_flags claude) ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
+                $(isolation_flags claude) $model_args ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
     # stdin closed: `codex exec` also reads a prompt from stdin, and an unattended run has none.
-    codex)    codex exec --json -s workspace-write $(isolation_flags codex) \
+    codex)    codex exec --json -s workspace-write $(isolation_flags codex) $model_args \
                 -c sandbox_workspace_write.network_access=true \
                 ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" < /dev/null > "$raw" ;;
-    opencode) opencode run --format json $(isolation_flags opencode) \
+    opencode) opencode run --format json $(isolation_flags opencode) $model_args \
                 ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" < /dev/null > "$raw" ;;
     *)        echo "factory: unknown tool '$tool'" >&2; return 2 ;;
   esac
@@ -392,7 +436,8 @@ usage_format() {                            # usage_format <tool>
 }
 
 # The model a tool ran with, where its output does not say: the -m/--model in its extra flags.
-model_flag() {                              # model_flag <tool>
+model_flag() {                              # model_flag <tool> [stage]
+  [ -n "${2:-}" ] && [ -n "$(model_key "$1" "$2")" ] && [ -z "$(env_model "$1")" ] && { model_key "$1" "$2"; return; }
   local args=""
   case "$1" in codex) args="${FACTORY_CODEX_ARGS:-}" ;; opencode) args="${FACTORY_OPENCODE_ARGS:-}" ;; esac
   # -E: BSD sed (macOS) has no `\|` in a basic expression, so the alternation is written extended
@@ -402,7 +447,7 @@ model_flag() {                              # model_flag <tool>
 # One `usage` line in the story's journal per invocation, and the stage's final message on screen.
 record_usage() {                            # record_usage <story> <stage> <tool> <raw> [seconds]
   local out fields
-  out=$("$PY" "$GATE" --usage-from "$(usage_format "$3")" "$4" --usage-model "$(model_flag "$3")" 2>/dev/null) \
+  out=$("$PY" "$GATE" --usage-from "$(usage_format "$3")" "$4" --usage-model "$(model_flag "$3" "$2")" 2>/dev/null) \
     || out="unknown"
   fields=$(printf '%s\n' "$out" | head -1)
   [ -n "${5:-}" ] && fields="$fields	seconds=$5"
@@ -1009,6 +1054,8 @@ run_story() {
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
       echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
+      local dry_choice; dry_choice=$(model_choice "$tool" "$stage")
+      echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
     elif [ -f "$GATE" ] && ! "$PY" "$GATE" --claim "$WORKER" >/dev/null; then
       echo "factory: the checkout was taken over by another worker before stage '$stage' — stopping." >&2
       return 5
@@ -1033,7 +1080,12 @@ run_story() {
       [ "$stage" = judge ] && [ -f "$TASKS/$story/judge.md" ] && mv "$TASKS/$story/judge.md" "$TASKS/$story/.judge-previous.md"
       [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
       snapshot "$story" "before-$stage"
-      printf '%s\tstage-start\t%s\ttool=%s\n' "$stage_started" "$stage" "$tool" >> "$TASKS/$story/.verify/journal.tsv"
+      local choice requested note model_fields=""
+      choice=$(model_choice "$tool" "$stage"); note=${choice#*|}; requested=$(model_key "$tool" "$stage")
+      [ -n "$requested" ] && model_fields="	model_requested=$requested"
+      [ -n "$note" ] && model_fields="$model_fields	model_applied=no ($note)"
+      [ -n "$note" ] && echo "factory: model.$tool.$stage: $requested — $note"
+      printf '%s\tstage-start\t%s\ttool=%s%s\n' "$stage_started" "$stage" "$tool" "$model_fields" >> "$TASKS/$story/.verify/journal.tsv"
       local raw_out; raw_out="$TASKS/$story/.verify/$stage.$(date -u +%H%M%S).out"
       local invoked=0
       local began; began=$(date +%s)
@@ -1250,6 +1302,7 @@ case "$command" in
     check_gate_freshness                    # once per invocation; run_story recurses on a verdict
     [ -n "$dry" ] || refuse_nested || exit $?
     check_carriers "$tool" || exit $?
+    check_contract_first || exit $?
     check_local_context "$tool"
     isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
     [ -n "$dry" ] || take_checkout || exit $?
@@ -1268,6 +1321,7 @@ case "$command" in
     check_gate_freshness
     [ -n "$dry" ] || refuse_nested || exit $?
     check_carriers "${tool:-}" || exit $?
+    check_contract_first || exit $?
     check_local_context "${tool:-}"
     isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
     [ -n "$dry" ] || take_checkout || exit $?

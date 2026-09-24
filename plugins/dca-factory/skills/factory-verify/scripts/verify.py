@@ -672,6 +672,62 @@ def verify_runner(runner, verbose=False):
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         check("isolation: a carrier the project does not hold stops the run before the first stage, named",
               code == 2 and "no-such-craft" in output and "── stage" not in output, output[-300:])
+    # a model per stage: the one flag it becomes, per tool, and who wins against the person's own flags
+    def models_of(output):
+        rows, stage = {}, None
+        for line in output.splitlines():
+            if line.startswith("── stage "):
+                stage = line.split()[2]
+            elif line.strip().startswith("model:") and stage:
+                rows[stage] = line.strip()[len("model:"):].strip()
+        return rows
+    with tmpdir() as root:
+        build_project(root, profile=PROFILE + "model.claude.tidy: model-a\nmodel.codex.tidy: model-c\n")
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        rows = models_of(output)
+        check("model: `model.claude.tidy` becomes exactly one --model on the tidy stage, and no other stage gets one",
+              rows.get("tidy") == "--model model-a" and all(rows.get(s) == "" for s in
+                                                              ("plan", "test", "build", "judge", "document")), rows)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "codex", "--dry-run")
+        rows = models_of(output)
+        check("model: the same profile run with Codex passes only Codex's own key",
+              rows.get("tidy") == "-m model-c" and rows.get("build") == "", rows)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "opencode", "--dry-run")
+        check("model: a tool without a key in the profile gets no model flag and no complaint",
+              all(v == "" for v in models_of(output).values()) and "not applied" not in output, models_of(output))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                                  env=dict(os.environ, FACTORY_CLAUDE_ARGS="--model model-z"))
+        check("model: a --model in FACTORY_CLAUDE_ARGS wins over the profile, and the run says so",
+              "overridden by FACTORY_CLAUDE_ARGS (model-z)" in models_of(output).get("tidy", ""), models_of(output))
+    with tmpdir() as root:
+        build_project(root, profile=PROFILE + "model.claude: model-b\n")
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        check("model: `model.<tool>` is the default for every stage without a key of its own",
+              set(models_of(output).values()) == {"--model model-b"} and len(models_of(output)) == 6,
+              models_of(output))
+    with tmpdir() as root:
+        build_project(root, profile=PROFILE.replace("contract: 6", "") + "contract: 99\n")
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "build", "--tool", "claude",
+                                  "--dry-run")
+        check("contract: a profile newer than the gate stops the run before the first stage, also --from a later one",
+              code == 2 and "── stage" not in output and "contract" in output, output[-300:])
+    # no model name lives in the pipeline itself
+    pipeline_dir = os.path.dirname(os.path.dirname(runner))
+    named = []
+    for folder, _, names in os.walk(os.path.dirname(pipeline_dir)):
+        for name in names:
+            if name.endswith(("SKILL.md", ".sh", ".py", ".tmpl")) and "factory-verify" not in folder:
+                with open(os.path.join(folder, name), encoding="utf-8", errors="replace") as handle:
+                    if re.search(r"\b(opus|sonnet|haiku|gpt-\d|qwen|gemma)\b", handle.read(), re.I):
+                        named.append(name)
+    check("model: no model name in the runner, the gate, a template or a skill", not named, named)
+
     # an OpenCode invocation's usage, from the events `opencode run --format json` writes
     with tmpdir() as root:
         raw = os.path.join(root, "stage.out")
@@ -1223,6 +1279,29 @@ exit 0
         check("runner: a stand-in starts no tool and is not refused inside a session",
               code == 0 and len(invocations(root)) == 6, f"exit {code}")
 
+    # 1q. a custom command is handed the stage's model and the journal says it was not applied by the runner
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("model.claude.build: model-q\n")
+        env = dict(env, FACTORY_TOOL_CMD='echo "$FACTORY_STAGE=$FACTORY_MODEL" >> models.log; sh stand-in.sh')
+        with open(os.path.join(root, ".gitignore"), "a", encoding="utf-8") as handle:
+            handle.write("models.log\n")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "claude", env=env)
+        seen = open(os.path.join(root, "models.log"), encoding="utf-8").read().split() \
+            if os.path.isfile(os.path.join(root, "models.log")) else []
+        journal = open(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv"), encoding="utf-8").read() \
+            if os.path.isfile(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv")) else ""
+        status = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--status",
+                                 "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8").stdout
+        build_row = next((l for l in status.splitlines() if l.startswith("build ")), "")
+        check("model: a custom command gets FACTORY_MODEL for its stage only, the journal records the request "
+              "as not applied by the runner, and the status says so",
+              "build=model-q" in seen and "plan=" in seen
+              and "model_requested=model-q\tmodel_applied=no (passed as FACTORY_MODEL" in journal
+              and "(requested model-q: not applied)" in build_row,
+              f"exit {code}; {seen}; {build_row}")
+
     # 1p. a runner does not start while another worker holds the checkout
     with tmpdir() as root:
         env = backlog_fixture(root)
@@ -1509,6 +1588,20 @@ def main(argv=None):
          dict(extra_sources=(("backlog/product.md", PRODUCT.replace("## Qualities", "## Quality")),))),
         (Case("plan: a `product:` that names no file is refused", "plan", 1, must_fail=("product",)),
          dict(profile=PROFILE + "product: docs/product.md\n")),
+        # --- a model per stage, bound to a tool -------------------------------
+        (Case("plan: model keys bound to a tool pass", "plan", 0, must_pass=("models",)),
+         dict(profile=PROFILE + "model.claude.tidy: model-a\nmodel.claude: model-b\nmodel.codex.document: model-c\n")),
+        (Case("plan: an unqualified model key is refused, naming the tool-bound form", "plan", 1,
+              must_fail=("models",), text=("`model.tidy` names no tool", "model.<tool>.<stage>")),
+         dict(profile=PROFILE + "model.tidy: model-a\n")),
+        (Case("plan: a bare `model:` is refused too", "plan", 1, must_fail=("models",), text=("`model` names no tool",)),
+         dict(profile=PROFILE + "model: model-a\n")),
+        (Case("plan: a misspelt stage in a model key is refused", "plan", 1, must_fail=("models",),
+              text=("no stage `tdy`",)),
+         dict(profile=PROFILE + "model.claude.tdy: model-a\n")),
+        (Case("plan: a misspelt tool in a model key is refused", "plan", 1, must_fail=("models",),
+              text=("no tool `clade`",)),
+         dict(profile=PROFILE + "model.clade.tidy: model-a\n")),
         # --- the scenario form of acceptance criteria -----------------------
         (Case("plan: keyed scenarios under rules pass, beside an out-of-scope section", "plan", 0,
               must_pass=("story",), text=("with 2 criterion(s)",)),
@@ -2323,7 +2416,7 @@ def main(argv=None):
                              capture_output=True, text=True, encoding="utf-8").stdout
         expectations += [
             ("status of one story: its cost per stage, each stage its own row, and the story's total",
-             re.search(r"^plan\s+1\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01$", section("cost of STORY-2, per stage"), re.M)
+             re.search(r"^plan\s+1\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01\s+m$", section("cost of STORY-2, per stage"), re.M)
              and re.search(r"^test\s+1\s+0\s+0\s+0\s+0\s+0\s+0\s+—$", section("cost of STORY-2, per stage"), re.M)
              and re.search(r"^total\s+2\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01$",
                            section("cost of STORY-2, per stage"), re.M)

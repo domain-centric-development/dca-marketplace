@@ -108,7 +108,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 6
-VERSION = "0.27.0"
+VERSION = "0.28.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -412,6 +412,38 @@ def check_context_map(result, cwd, profile, context):
             f"{path}: context {context!r} does not appear — a story either changes a context that "
             f"exists on the map, or it is a scoping question, not a story",
         )
+
+
+MODEL_TOOLS = ("claude", "codex", "opencode")
+
+
+def check_models(result, profile):
+    """`model.<tool>.<stage>` and `model.<tool>`: the model a tool runs a stage on. The key names the tool
+    because model names are the tool's: a profile is checked in and shared, and an unqualified
+    `model.tidy: <a model name>` would break a colleague's run with another tool at the first stage it names.
+    So the unqualified forms are refused, and so is a key whose tool or stage is misspelled — an
+    ignored key is a cost saving nobody gets while everyone believes in it."""
+    keys = [key for key in profile if key == "model" or key.startswith("model.")]
+    if not keys:
+        return
+    bad = []
+    for key in keys:
+        parts = key.split(".")
+        if len(parts) == 1 or (len(parts) == 2 and parts[1] in STAGE_ORDER):
+            bad.append(f"`{key}` names no tool — write `model.<tool>.<stage>` or `model.<tool>` "
+                       f"({', '.join(MODEL_TOOLS)})")
+        elif parts[1] not in MODEL_TOOLS:
+            bad.append(f"`{key}`: no tool `{parts[1]}` ({', '.join(MODEL_TOOLS)})")
+        elif len(parts) == 3 and parts[2] not in STAGE_ORDER:
+            bad.append(f"`{key}`: no stage `{parts[2]}` ({', '.join(STAGE_ORDER)})")
+        elif len(parts) > 3:
+            bad.append(f"`{key}` is not `model.<tool>.<stage>`")
+        elif not str(profile[key]).strip():
+            bad.append(f"`{key}` has no value")
+    if bad:
+        result.fail("models", "; ".join(bad))
+    else:
+        result.ok("models", f"{len(keys)} model key(s), each bound to a tool")
 
 
 def check_product(result, cwd, profile, backlog="backlog"):
@@ -2284,7 +2316,17 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     allowed = session_usage_allowed(cwd)
     with open(journal, "a", encoding="utf-8") as handle:
         if edge == "start":
-            handle.write(f"{stamp}\tstage-start\t{stage}\ttool={kind}\n")
+            # The model the profile asks this tool to run the stage on. A session cannot switch its own
+            # model; a subagent may run on it. Which model the window actually used is read from the
+            # session log later, and the status shows a request that did not reach the stage.
+            profile = read_profile(resolve_profile(None, cwd))
+            tool = kind.split("-")[0]
+            requested = str(profile.get(f"model.{tool}.{stage}") or profile.get(f"model.{tool}") or "").strip()
+            extra = f"\tmodel_requested={requested}" if requested else ""
+            handle.write(f"{stamp}\tstage-start\t{stage}\ttool={kind}{extra}\n")
+            if requested:
+                print(f"model: the profile asks for {requested} — run this stage as a subagent on it where the "
+                      f"tool allows; in this session's own context it cannot take effect")
             record_base(cwd, tasks, story_id)
             write_snapshot(cwd, tasks, story_id, f"before-{stage}")
             print(f"usage: stage {stage} of {story_id} started ({kind})")
@@ -2566,6 +2608,11 @@ def journal_usage(tasks, story_id):
             entry["seconds"] += sum(int(p[8:]) for p in parts[3:] if p.startswith("seconds=") and p[8:].isdigit())
         if parts[1] == "stage-start":
             entry["invocations"] += 1
+            for p in parts[3:]:
+                if p.startswith("model_requested="):
+                    entry.setdefault("requested", set()).add(p.split("=", 1)[1])
+                if p.startswith("model_applied=no"):
+                    entry["not_applied"] = entry.get("not_applied", 0) + 1
         elif parts[1] == "usage" and "unknown" not in parts[3:]:
             fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
             if "window" in fields and ("log" in fields or "session" in fields):
@@ -2574,6 +2621,8 @@ def journal_usage(tasks, story_id):
                     continue
                 fields.update({k: str(v) for k, v in read.items()})
             entry["measured"] += 1
+            if fields.get("model") and fields["model"] != "unknown":
+                entry.setdefault("models", set()).update(fields["model"].split(","))
             for k in USAGE_FIELDS:
                 entry[k] += int(fields.get(k, 0) or 0)
             if fields.get("cost"):
@@ -2900,6 +2949,19 @@ def status(cwd, backlog, tasks, story_filter=None):
     return cost_by_story(tasks)
 
 
+def model_cell(entry):
+    """The model(s) a stage actually ran on, and a request that did not reach it, said as such."""
+    models = sorted(entry.get("models", ()))
+    requested = sorted(r for r in entry.get("requested", ()) if r and r != "default")
+    cell = ",".join(models) if models else ("—" if "models" in entry or "requested" in entry else "")
+    missing = [r for r in requested if not any(r in m for m in models)]
+    if entry.get("not_applied"):
+        cell += f"  (requested {','.join(requested) or '?'}: not applied)"
+    elif missing and models:
+        cell += f"  (requested {','.join(missing)}: not what ran)"
+    return cell
+
+
 def duration(seconds):
     return f"{seconds // 60}m{seconds % 60:02d}s" if seconds else "—"
 
@@ -2936,14 +2998,17 @@ def cost_by_stage(tasks, story):
         print(f"nothing — no stage invocation recorded for {story}")
         return 0
     order = sorted(stages, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 99)
-    total = {k: sum(stages[s][k] for s in order) for k in stages[order[0]]}
+    numeric = [k for k, v in stages[order[0]].items() if isinstance(v, (int, float))]
+    total = {k: sum(stages[s].get(k, 0) for s in order) for k in numeric}
     timed = total.get("seconds", 0) > 0
     print(f"{'stage':<24} {'runs':>4} {'measured':>8} {'input':>9} {'cache read':>11} "
-          f"{'cache write':>11} {'output':>8} {'tokens':>12} {'cost $':>8}" + (f" {'time':>8}" if timed else ""))
+          f"{'cache write':>11} {'output':>8} {'tokens':>12} {'cost $':>8}" + (f" {'time':>8}" if timed else "")
+          + "  model")
+    # (rows are right-stripped, so a stage without a model reading ends at its cost)
     for name, e in [(s, stages[s]) for s in order] + [("total", total)]:
         print(f"{name:<24} {e['invocations']:>4} {e['measured']:>8} {e['input']:>9} {e['cache_read']:>11} "
               f"{e['cache_write']:>11} {e['output']:>8} {tokens_of(e):>12,} {money(e):>8}"
-              + (f" {duration(e.get('seconds', 0)):>8}" if timed else ""))
+              + ((f" {duration(e.get('seconds', 0)):>8}" if timed else "") + "  " + model_cell(e)).rstrip())
     unknown = total["invocations"] - total["measured"]
     if unknown > 0:
         print(f"{unknown} invocation(s) without a usage report — not counted, not zero")
@@ -3259,6 +3324,8 @@ def main(argv):
     parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
     parser.add_argument("--release", nargs="?", const="", metavar="OWNER",
                         help="give the checkout back (default: this session's claim)")
+    parser.add_argument("--check-contract", action="store_true",
+                        help="check the profile's contract and model keys alone (the runner, before its first stage)")
     parser.add_argument("--record-base", action="store_true",
                         help="with --story: record the tree the story's diff is taken against (the first stage)")
     parser.add_argument("--record-changes", metavar="STAGE",
@@ -3297,6 +3364,15 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.check_contract:
+        result = Result()
+        profile = read_profile(resolve_profile(args.profile, cwd))
+        check_contract(result, profile)
+        check_models(result, profile)
+        for state, check, message in result.entries:
+            if state != "pass":
+                print(f"gate:{state} {check} — {message}")
+        return 1 if result.failed else 0
     if args.record_base or args.record_changes:
         if not args.story:
             parser.error("--record-base/--record-changes need --story")
@@ -3381,6 +3457,7 @@ def main(argv):
             )
             check_instruction_size(result, cwd)
             check_product(result, cwd, profile, args.backlog)
+            check_models(result, profile)
         if args.stage == "document":
             check_documented(result, args.tasks, story_id, cwd)
             check_proposals_landed(result, args.tasks, story_id, cwd, profile)

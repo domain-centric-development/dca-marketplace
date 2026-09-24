@@ -39,7 +39,9 @@ start nothing and answer nothing on anyone's behalf.
    "why does STORY-1 run from document?" — its document gate has not passed yet. Read the file the
    state comes from before you repeat the reason.
 7. **Give cost as the table says it.** The status shows each story and the total; `status <story>`
-   shows the stages of one, with input, cache and output tokens. Unmeasured invocations are unknown,
+   shows the stages of one, with input, cache and output tokens, the time where the runner measured
+   it, and the model each stage ran on — marked where the profile asked for another one that did
+   not reach the stage. Unmeasured invocations are unknown,
    not free; a session log has no price, so its cost reads `—`, and `+` after a price means some of
    the invocations it sums named none.
 

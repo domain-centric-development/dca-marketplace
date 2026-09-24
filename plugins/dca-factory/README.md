@@ -164,6 +164,21 @@ It shows the stage that runs and since when, the decisions waiting for a human, 
 with what comes next, and the tokens spent. "Running" means started and not ended in the journal —
 a stopped runner looks the same, which is why the start time is shown.
 
+## A model per stage
+
+```yaml
+model.claude.tidy: <model>        # in .agents/factory/factory.profile.yaml
+model.claude: <model>             # the default for every other stage of that tool
+```
+
+Keys are bound to a tool, because a model name means nothing to another one: a profile written for
+Claude does not break a colleague's Codex run, and the gate refuses an unqualified `model.tidy`. The
+runner passes the value as the tool's model flag (`--model`, `-m`); a `--model` in
+`FACTORY_<TOOL>_ARGS` overrides it for one person, and the run says so. A custom `FACTORY_TOOL_CMD`
+gets it as `FACTORY_MODEL`. In a session, a subagent can run on it; the session's own context cannot.
+`factory.sh status <story>` shows the model each stage actually ran on and marks a request that did not
+reach it. The pipeline names no model: which stages can run cheaper is the project's to measure.
+
 ## How to see what a story cost
 
 The runner records every stage's tokens; nothing else is needed.

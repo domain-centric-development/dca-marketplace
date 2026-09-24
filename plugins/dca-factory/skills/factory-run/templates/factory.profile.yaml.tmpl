@@ -35,6 +35,12 @@
 #              the project vouches for it being current: a vendored catalog from an older release
 #              names rules and markers that no longer exist, and a citation makes that look verified.
 #              Unnamed means the stages work from the project's own rules, markers and documents
+# model.<tool>.<stage>  the model <tool> (claude, codex, opencode) runs <stage> on (plan, test,
+#              build, tidy, judge, document); model.<tool> is that tool's default for every stage
+#              without a key of its own. Values are the tool's own model names or aliases. Always
+#              bound to a tool: a profile is shared, and a model name means nothing to another tool —
+#              the gate refuses an unqualified model key. Unset: the tool's default. A --model/-m
+#              in FACTORY_<TOOL>_ARGS overrides it for one person, and the run says so
 # contract     the gate file contract this profile was written for (see below)
 # sessionUsage `off` to keep the gate out of the tools' session logs (~/.claude, ~/.codex): stages run
 #              inside a session are then recorded as unknown. Default on; FACTORY_SESSION_USAGE=off
@@ -75,5 +81,9 @@ format: {{FORMAT_COMMAND}}
 #carrier.build: <the skill that carries this project's implementation craft>
 # A perspective is found by description when a matching review skill is installed; name a carrier
 # here only to override that choice or to bind an added perspective.
+# Which stages can run on a cheaper model without the judge finding more: fill in only what the
+# project has measured (factory.sh status <story> shows the model and the cost per stage).
+#model.claude.tidy: <model>
+#model.claude.document: <model>
 #reviews: security, performance
 #review.security: <the review skill that carries it>

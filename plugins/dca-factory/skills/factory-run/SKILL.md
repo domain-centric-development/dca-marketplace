@@ -185,6 +185,14 @@ tier ran.
   sandbox) come from the environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`,
   `FACTORY_OPENCODE_ARGS` — because they are the tool's configuration and never the process's.
 
+**A model per stage.** The profile may name one: `model.<tool>.<stage>`, or `model.<tool>` for
+every stage. The runner passes it as the tool's model flag. In the subagent tier, start the stage's
+subagent on that model where the tool lets a subagent take one (Claude Code's subagents take an
+alias such as the ones the profile names; a full model name the subagent tool does not accept runs
+on the session's model). In-session the model cannot change. `--stage-start` records the request
+either way, and the status shows a stage whose model is not the one requested — so a request that
+had no effect is visible, not assumed.
+
 In the subagent and in-session tiers, mark every stage so its cost is known: run
 `python3 .agents/factory/story-gate.py --stage-start <stage> --story <id>` right before it and
 `--stage-end <stage> --story <id>` right after its file is written. The gate records the window in
