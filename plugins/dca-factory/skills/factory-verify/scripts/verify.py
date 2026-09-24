@@ -884,7 +884,8 @@ def verify_runner(runner, verbose=False):
             build_project(root, profile=PROFILE + f"carrier.build: {carrier}\n")
             code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", source)
             skills_dir = os.path.join(root, ".claude", "skills")
-            entries = sorted(os.listdir(skills_dir)) if os.path.isdir(skills_dir) else []
+            # skill folders only: a copying install (no symlinks, as on Windows) keeps its list beside them
+            entries = sorted(e for e in os.listdir(skills_dir) if not e.startswith(".")) if os.path.isdir(skills_dir) else []
             check("install: a carrier the profile names is placed in .claude/skills beside the pipeline, "
                   "no other craft skill", os.path.isdir(skills_dir) and not os.path.islink(skills_dir)
                   and os.path.isfile(os.path.join(skills_dir, carrier, "SKILL.md"))

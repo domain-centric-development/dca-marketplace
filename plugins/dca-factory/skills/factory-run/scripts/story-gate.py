@@ -454,7 +454,7 @@ def check_product(result, cwd, profile, backlog="backlog"):
     file with a required heading missing or empty is a scope nobody finished: both fail. Guidance in
     HTML comments does not count as content, so an untouched template does not pass."""
     named = str(profile.get("product", "")).strip()
-    default = os.path.join(backlog, "product.md")
+    default = backlog.rstrip("/\\").replace("\\", "/") + "/product.md"   # as the project writes it, on every OS
     path = named or default
     full = os.path.join(cwd, path)
     if not os.path.isfile(full):
