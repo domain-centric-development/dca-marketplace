@@ -260,8 +260,8 @@ nothing — the first commit is the user's, after Phase 4.
    bootstrapped before this path changed keeps the file it has, and every skill reads both.
 9. Decision H: set up the browser runner as the `e2e-testing` skill's `reference/setup.md` says for Gradle or
    Maven — `gradle/plugins/test-e2e.gradle` applied from `build.gradle`, the base test class, and one smoke test.
-   The bootstrap writes no controller for it: a controller needs a context and a use case no feature has
-   decided, and the rules would reject an adapter that calls none. The smoke test opens a **static** start
+   The bootstrap writes no controller for it: a controller needs a context and a package no feature has
+   decided, and it would be code no feature asked for, which the first story then has to remove. The smoke test opens a **static** start
    page instead (`src/main/resources/static/index.html` with a `<title>` — Spring Boot serves it at `/`), and
    asserts only that the page loads and has a title, so the first feature's real page keeps it green. Where
    the project already has a start page, the smoke test opens that one. A `package-info.java` or other DCA marker is
