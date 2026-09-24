@@ -292,6 +292,10 @@ def observe(project, tasks, backlog, story_id):
                 continue
             was = before.get(path)
             now = digest(os.path.join(project, path))
+            if was == "deleted":                   # gone at the end of the test stage
+                if now is not None:
+                    touched.append(path)
+                continue
             if was is None:
                 # No digest for it in the snapshot: the file was not tracked as changed at that
                 # point, or the snapshot missed it. Either way this check saw nothing — saying

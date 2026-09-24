@@ -1090,7 +1090,7 @@ NO_HASHES="# no-sha256-command: names only, no content hashes"
 # What the working tree looks like right now, so a later stage's claim about what it changed can be
 # checked rather than believed. Cheap: one porcelain listing plus a hash per file git reports.
 snapshot() {                                # snapshot <story> <label>
-  local journal="$TASKS/$1/.verify" file hash
+  local journal="$TASKS/$1/.verify" file hash prefix entry code origin
   mkdir -p "$journal"
   hash=$(hasher)
   if [ "$hash" = none ]; then
@@ -1106,16 +1106,30 @@ snapshot() {                                # snapshot <story> <label>
     [ "$hash" = none ] && echo "$NO_HASHES"
     # -uall: without it a newly added directory is listed as one entry and every file in it is
     # missing from the snapshot — so a test added by this run, and edited afterwards, would look
-    # untouched. `--porcelain` also quotes unusual names, hence the -z form and the NUL split.
-    git -c core.fileMode=false status --porcelain -z -uall 2>/dev/null \
-      | tr '\0' '\n' | sed 's/^...//' | while read -r file; do
-      { [ -n "$file" ] && [ -f "$file" ]; } || continue
+    # untouched. `--porcelain` also quotes unusual names, hence the -z form and the NUL split. Its
+    # paths are the repository's; `-- .` and the prefix make them the project's, which may be a
+    # directory inside it. A tracked file that is gone is recorded as `deleted` — left out, its
+    # removal would be in no stage's record.
+    prefix=$(git rev-parse --show-prefix 2>/dev/null)
+    git -c core.fileMode=false status --porcelain -z -uall -- . 2>/dev/null \
+      | tr '\0' '\n' | { origin=""; while IFS= read -r entry; do
+      [ -n "$entry" ] || continue
+      if [ -n "$origin" ]; then           # -z writes a rename's source as the next entry
+        [ "$origin" = R ] && printf '%s  %s\n' deleted "${entry#"$prefix"}"
+        origin=""
+        continue
+      fi
+      code=${entry:0:2} file=${entry:3}
+      file=${file#"$prefix"}
+      case $code in R*|C*) origin=${code:0:1} ;; esac
+      case $code in *D*) printf '%s  %s\n' deleted "$file"; continue ;; esac
+      [ -f "$file" ] || continue
       if [ "$hash" = none ]; then
         printf '%s  %s\n' "-" "$file"
       else
         printf '%s  %s\n' "$($hash "$file" 2>/dev/null | cut -d" " -f1)" "$file"
       fi
-    done
+    done; }
   } > "$journal/tree-$2.txt" 2>/dev/null || true
 }
 

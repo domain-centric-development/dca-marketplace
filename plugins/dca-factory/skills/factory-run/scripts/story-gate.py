@@ -108,7 +108,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 6
-VERSION = "0.30.0"
+VERSION = "0.30.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -139,6 +139,9 @@ def read_front_matter(path):
             raise GateError(f"{path}: cannot read front-matter line {line!r}")
         key, value = line.split(":", 1)
         key, value = key.strip(), value.strip()
+        # `key: ""` is YAML for an empty string: read quoted, it would count as a filled field.
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1].strip()
         data[key] = value if value else []
     return data, parts[2]
 
@@ -1796,6 +1799,12 @@ def record_tests_baseline(cwd, tasks, story_id):
     write_mark(tasks, story_id, TESTS_BASELINE, "\n".join(blobs))
 
 
+def human_line(text):
+    """A line a person wrote: not empty, not "none", not a template placeholder or an HTML comment."""
+    text = re.sub(r"<!--.*?-->", "", text).strip()
+    return bool(text) and text.lower() not in NOTHING and "{{" not in text
+
+
 def changed_tests_in_plan(tasks, story_id):
     """{test file: backed-by cell} from the plan's `## Changed tests` table."""
     path = os.path.join(tasks, story_id, "plan.md")
@@ -1812,13 +1821,43 @@ def changed_tests_in_plan(tasks, story_id):
     return rows
 
 
+# What a test file's lines mean once comments are gone: an added `/* … */` around an old assertion keeps
+# every old line in the text and takes it out of the test. Applied to both versions alike, so a line
+# the story left alone compares equal whatever the stripping does to it.
+HASH_COMMENTS = (".py", ".rb", ".ex", ".exs")
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+TRIPLE_QUOTED = re.compile(r'""".*?"""|\'\'\'.*?\'\'\'', re.S)
+DISABLED_BLOCK = re.compile(r"^[ \t]*#if\s+(false|0)\b.*?^[ \t]*#endif\b", re.S | re.M)
+# Lines that switch a test off without touching what it asserts: an added one is a changed test.
+SKIP_MARKER = re.compile(
+    r"@Disabled\b|@Ignore\b|@DisabledIf|@EnabledIf|\[Ignore\b|\bSkip\s*=|@pytest\.mark\.(skip|xfail)"
+    r"|\bpytest\.skip\(|\bunittest\.skip|@skip\b|\b(xit|xdescribe|xtest|fit|fdescribe)\s*\("
+    r"|\.(skip|only|todo)\s*\(|\bt\.Skip(Now|f)?\(|\bskip\s+[\"']")
+
+
+def meaningful_lines(text, path):
+    if path.endswith(HASH_COMMENTS):
+        text = TRIPLE_QUOTED.sub("", text)
+        lines = [re.sub(r"(^|\s)#.*$", "", line) for line in text.splitlines()]
+    else:
+        text = DISABLED_BLOCK.sub("", BLOCK_COMMENT.sub("", text))
+        lines = [re.sub(r"(^|\s)//.*$", "", line) for line in text.splitlines()]
+    return [line.rstrip() for line in lines if line.strip()]
+
+
+def switched_off(before, now):
+    """Whether the new version carries more skip markers than the old one."""
+    count = lambda lines: sum(1 for line in lines if SKIP_MARKER.search(line))
+    return count(now) > count(before)
+
+
 def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
     path = os.path.join(tasks, story_id, TESTS_BASELINE)
     if not os.path.isfile(path):
         result.skip("tests-kept", "no baseline of the tests that existed before this story "
                                   "(the plan gate records one in a git repository)")
         return
-    changed = []
+    changed, lost = [], []
     for line in read_text(path).splitlines():
         if "  " not in line:
             continue
@@ -1829,13 +1868,21 @@ def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
             continue
         code, before = git(cwd, "cat-file", "blob", blob)
         if code:
+            lost.append(rel)
             continue
         with open(full, encoding="utf-8", errors="replace") as handle:
-            now = handle.read().splitlines()
-        # Additions only: every line the test had is still there, in the same order.
+            now = meaningful_lines(handle.read(), rel)
+        was = meaningful_lines(before, rel)
+        # Additions only: every line the test had is still there, in the same order, outside a comment
+        # — and no added line switches it off.
         remaining = iter(now)
-        if not all(any(old == new for new in remaining) for old in before.splitlines()):
+        if not all(any(old == new for new in remaining) for old in was):
             changed.append(rel)
+        elif switched_off(was, now):
+            changed.append(f"{rel} (switched off)")
+    if lost:
+        result.skip("tests-kept", f"the baseline of {', '.join(lost)} is gone from the object store (pruned by "
+                                  f"`git gc`?) — not compared")
     if not changed:
         result.ok("tests-kept", "no test that existed before this story changed what it expects")
         return
@@ -1846,8 +1893,10 @@ def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
     # The story may say itself that behaviour changes (`## Changed expectations`); the plan names the
     # tests that change with it (`## Changed tests`), each backed by that section or by a decision a
     # human answered. Nobody has to know which story wrote a test — or whether a story did at all.
+    # Only list items count: the template's instruction prose and its `{{…}}` placeholder are no
+    # human's approval.
     story_says = [l for l in (section_of(story_body, "changed expectations") or [])
-                  if l.strip().lstrip("-").strip() and l.strip().lstrip("-").strip().lower() not in NOTHING]
+                  if l.strip().startswith(("-", "*")) and human_line(l.strip()[1:].strip())]
     try:
         answered = {str(front["id"]).strip() for _p, front, _b, state, _a in
                     read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id) if state in ("answered", "applied")}
@@ -1856,7 +1905,7 @@ def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
     listed = changed_tests_in_plan(tasks, story_id)
     backed, unbacked, unlisted = [], [], []
     for entry in changed:
-        rel = entry.replace(" (removed)", "")
+        rel = entry.replace(" (removed)", "").replace(" (switched off)", "")
         if rel not in listed:
             unlisted.append(entry)
         elif story_says or any(rid in listed[rel] for rid in answered):
@@ -1889,10 +1938,16 @@ def check_required_suites(result, profile, cwd):
     The mapped tests say this story's behaviour holds; they say nothing about the behaviour the
     stories before it delivered. Without a policy the stage gates stay as they were."""
     required = set(split_list(profile.get("required")))
-    keys = [k for k in test_command_keys(profile) if k in required and profile.get(k)]
     if not required:
         return
-    if not keys:
+    # A required test key without its command fails here as it does in `--change`: silently passed,
+    # the stage gate would certify a suite nobody can run.
+    wanted = sorted(set(test_command_keys(profile)) | {r for r in required if r == "e2eTest" or r.startswith("test.")})
+    for key in wanted:
+        if key in required and not profile.get(key):
+            result.fail("suite", f"no `{key}:` command in the stack profile — and `{key}` is required")
+    keys = [k for k in test_command_keys(profile) if k in required and profile.get(k)]
+    if not keys and not any(k in required for k in wanted):
         result.skip("suite", "`required:` names no declared test command")
     seen = set()
     for key in keys:
@@ -1996,7 +2051,7 @@ def read_scenarios(path):
         elif current is not None and ":" in line and line.split(":", 1)[0].strip().lower() in ("title", "runs"):
             key, value = line.split(":", 1)
             current[key.strip().lower()] = value.strip()
-    return [s for s in scenarios if s["title"]]
+    return scenarios
 
 
 def reported_names(paths):
@@ -2040,6 +2095,12 @@ def parity(result, config_path):
     scenarios = read_scenarios(contract)
     with open(contract, "rb") as handle:
         digest = hashlib.sha256(handle.read()).hexdigest()[:12]
+    # A scenario without its `Title:` line binds to no test: dropped, it would leave parity silently.
+    untitled = [s["id"] for s in scenarios if not s["title"]]
+    scenarios = [s for s in scenarios if s["title"]]
+    if untitled:
+        result.fail("contract", f"{', '.join(untitled)} in {config['scenarios']} carry no `Title:` line — "
+                                f"the title is what binds a scenario to a test")
     result.ok("contract", f"{len(scenarios)} scenario(s) in {config['scenarios']} (sha256 {digest})")
     implementations = sorted(k for k in config if k.startswith("implementation."))
     if not implementations:
@@ -2180,7 +2241,9 @@ def parse_time(text):
 def claude_session_logs(session_id=None):
     """The session's log and its subagents' logs, for CLAUDE_CODE_SESSION_ID or the given id."""
     session_id = session_id or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
-    if not session_id:
+    # The id may come from the journal, which is a file in the project: as a glob pattern, `*` would
+    # open every session's log.
+    if not session_id or not re.fullmatch(r"[\w-]+", session_id):
         return []
     home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
     main = glob.glob(os.path.join(home, "projects", "*", f"{session_id}.jsonl"))
@@ -2363,25 +2426,41 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
 # --- what a story changed: a record every stage and every mode hands on ------------------------------
 
 # The runner snapshots the working tree before and after every stage (path and sha256 of every file
-# git reports as differing from HEAD, untracked ones included). What a stage changed follows from two
-# snapshots, deterministically; so does what the whole story changed so far. Both are written as files
-# the next stage reads first, instead of reconstructing them — and a project without a commit, where
-# `git diff` has nothing to compare against, still gets its diff: a tree object recorded at the story's
-# first stage, written without committing anything.
+# git reports as differing from HEAD, untracked ones included, and `deleted` for a tracked file that is
+# gone). What a stage changed follows from two snapshots and the list of tracked files,
+# deterministically. What the whole story changed follows from two git trees: the one recorded at the
+# story's first stage, written without committing anything, and the working tree now — so a project
+# without a commit, where `git diff` has nothing to compare against, still gets its diff, and a stage
+# run again does not move the story's starting point. Both are written as files the next stage reads
+# first, instead of reconstructing them. Paths are relative to the project, which may be a directory
+# inside a larger repository.
 CHANGE_EXCLUDED = (".agents/factory/",)
+DELETED = "deleted"
 
 
 def tree_snapshot(cwd):
-    """{path: sha256} of every file git reports as differing from HEAD, untracked ones included."""
-    listing = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain", "-z", "-uall"],
+    """{path: sha256 or `deleted`} of every file under `cwd` that git reports as differing from HEAD."""
+    listing = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain", "-z", "-uall", "--", "."],
                              cwd=cwd, capture_output=True)
     files = {}
     if listing.returncode != 0:
         return files
-    for entry in listing.stdout.decode("utf-8", "replace").split("\0"):
-        path = entry[3:]
+    prefix = subprocess.run(["git", "rev-parse", "--show-prefix"], cwd=cwd, capture_output=True,
+                            text=True).stdout.strip()
+    local = lambda path: path[len(prefix):] if prefix and path.startswith(prefix) else path
+    entries = iter(listing.stdout.decode("utf-8", "replace").split("\0"))
+    for entry in entries:
+        code, path = entry[:2], local(entry[3:])
+        if not path:
+            continue
+        if code[0] in "RC":
+            origin = local(next(entries, ""))       # -z writes a rename's source as the next entry
+            if code[0] == "R" and origin:
+                files[origin] = DELETED
         full = os.path.join(cwd, path)
-        if path and os.path.isfile(full):
+        if "D" in code:
+            files[path] = DELETED
+        elif os.path.isfile(full):
             with open(full, "rb") as handle:
                 files[path] = hashlib.sha256(handle.read()).hexdigest()
     return files
@@ -2409,30 +2488,49 @@ def load_snapshot(path):
     return files
 
 
-def changes_between(before, after, tasks):
+def tracked_files(cwd):
+    listing = subprocess.run(["git", "ls-files", "-z"], cwd=cwd, capture_output=True)
+    return set(listing.stdout.decode("utf-8", "replace").split("\0")) if listing.returncode == 0 else set()
+
+
+def changes_between(before, after, tasks, tracked=frozenset()):
+    """A path missing from a snapshot is as HEAD has it: there when git tracks it, absent otherwise."""
     excluded = CHANGE_EXCLUDED + (tasks.rstrip("/") + "/",)
+    state = lambda snapshot, path: snapshot.get(path, "head" if path in tracked else None)
+    exists = lambda value: value not in (None, DELETED)
     rows = []
     for path in sorted(set(before) | set(after)):
         if path.startswith(excluded):
             continue
-        if path not in before:
-            rows.append(("added", path))
-        elif path not in after:
-            rows.append(("removed", path))
-        elif before[path] != after[path]:
-            rows.append(("modified", path))
+        was, now = state(before, path), state(after, path)
+        if was == now or not (exists(was) or exists(now)):
+            continue
+        rows.append(("removed" if not exists(now) else "added" if not exists(was) else "modified", path))
     return rows
 
 
 def git_tree(cwd):
-    """A tree object of the working tree as it is — `git add -A` into a throwaway index, never a commit."""
+    """A tree object of the project as it is — `git add -A` into a throwaway index, never a commit."""
     import tempfile
     with tempfile.TemporaryDirectory() as scratch:
         env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
-        if subprocess.run(["git", "add", "-A"], cwd=cwd, env=env, capture_output=True).returncode != 0:
+        if subprocess.run(["git", "add", "-A", "--", "."], cwd=cwd, env=env, capture_output=True).returncode != 0:
             return None
         tree = subprocess.run(["git", "write-tree"], cwd=cwd, env=env, capture_output=True, text=True)
         return tree.stdout.strip() if tree.returncode == 0 and tree.stdout.strip() else None
+
+
+def tree_changes(cwd, base, now, tasks):
+    """[(kind, path)] between two trees, relative to the project, the run's own files left out."""
+    listing = subprocess.run(["git", "diff", "--name-status", "-z", "--no-renames", "--relative", base, now, "--", "."],
+                             cwd=cwd, capture_output=True)
+    if listing.returncode != 0:
+        return None
+    excluded = CHANGE_EXCLUDED + (tasks.rstrip("/") + "/",)
+    fields = listing.stdout.decode("utf-8", "replace").split("\0")
+    kinds = {"A": "added", "D": "removed"}
+    return [(kinds.get(code[:1], "modified"), path) for code, path in zip(fields[0::2], fields[1::2])
+            if path and not path.startswith(excluded)]
 
 
 def record_base(cwd, tasks, story_id):
@@ -2453,24 +2551,27 @@ def record_changes(cwd, tasks, story_id, stage):
     before = load_snapshot(os.path.join(folder, f"tree-before-{stage}.txt"))
     if after is None or before is None:
         return
+    tracked = tracked_files(cwd)
     with open(os.path.join(folder, f"changed-{stage}.txt"), "w", encoding="utf-8") as handle:
-        handle.writelines(f"{kind}\t{path}\n" for kind, path in changes_between(before, after, tasks))
-    first = next((load_snapshot(os.path.join(folder, f"tree-before-{name}.txt")) for name in STAGE_ORDER
-                  if os.path.isfile(os.path.join(folder, f"tree-before-{name}.txt"))), before)
-    story_rows = changes_between(first, after, tasks)
-    with open(os.path.join(folder, "changed.txt"), "w", encoding="utf-8") as handle:
-        handle.writelines(f"{kind}\t{path}\n" for kind, path in story_rows)
+        handle.writelines(f"{kind}\t{path}\n" for kind, path in changes_between(before, after, tasks, tracked))
     base_file = os.path.join(folder, "base-tree")
     base = read_text(base_file).strip() if os.path.isfile(base_file) else "none"
-    diff_path = os.path.join(folder, "story.diff")
     now = git_tree(cwd) if base != "none" else None
+    story_rows = tree_changes(cwd, base, now, tasks) if now else None
+    if story_rows is None:
+        first = next((load_snapshot(os.path.join(folder, f"tree-before-{name}.txt")) for name in STAGE_ORDER
+                      if os.path.isfile(os.path.join(folder, f"tree-before-{name}.txt"))), before)
+        story_rows = changes_between(first, after, tasks, tracked)
+    with open(os.path.join(folder, "changed.txt"), "w", encoding="utf-8") as handle:
+        handle.writelines(f"{kind}\t{path}\n" for kind, path in story_rows)
+    diff_path = os.path.join(folder, "story.diff")
     if base == "none" or not now:
         with open(diff_path, "w", encoding="utf-8") as handle:
             handle.write("# no diff: the project is not a git repository, or no base tree was recorded — "
                          "changed.txt lists the files\n")
         return
     paths = [path for _, path in story_rows]
-    diff = subprocess.run(["git", "diff", "--no-color", base, now, "--"] + paths, cwd=cwd,
+    diff = subprocess.run(["git", "diff", "--no-color", "--relative", base, now, "--"] + paths, cwd=cwd,
                           capture_output=True, text=True, encoding="utf-8", errors="replace") if paths else None
     with open(diff_path, "w", encoding="utf-8") as handle:
         handle.write(diff.stdout if diff and diff.returncode == 0 else "")

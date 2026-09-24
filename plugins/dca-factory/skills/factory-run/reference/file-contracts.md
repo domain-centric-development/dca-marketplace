@@ -17,12 +17,14 @@ fresh context, in a subagent or in a separate process without changing the resul
 
 The pipeline records what a story changes; no stage reconstructs it. Around every stage the
 runner — or `--stage-start`/`--stage-end` in a session — snapshots the working tree (every file git
-reports as differing from HEAD, untracked ones included, with its sha256). After the stage the gate
-writes `changed-<stage>.txt` (`added` / `modified` / `removed` and a path, one per line), the story's
-cumulative `changed.txt`, and `story.diff` against a tree object recorded at the story's first
-stage — written without committing, so a repository without a commit gets a diff as well. Run
-artefacts (`tasks/`, `.agents/factory/`) and gitignored files are left out. Without git there is no
-diff, and `story.diff` says so.
+reports as differing from HEAD, untracked ones included, with its sha256; a tracked file that is gone
+as `deleted`). After the stage the gate writes `changed-<stage>.txt` (`added` / `modified` /
+`removed` and a path, one per line), and the story's cumulative `changed.txt` and `story.diff`
+against a tree object recorded at the story's first stage — written once, without committing, so a
+repository without a commit gets a diff as well and a stage run again does not move the story's
+starting point. Paths are the project's, also where the project is a directory inside a larger
+repository. Run artefacts (`tasks/`, `.agents/factory/`) and gitignored files are left out. Without
+git there is no diff, and `story.diff` says so.
 
 Each hand-over names files: the plan's `## Files` (what changes, and what a later stage should
 read), the tests' `## Files` (the test files written), the build's `## Changed` and the tidy's
@@ -154,16 +156,19 @@ process guarantees, not security ones.
 The plan gate runs before any stage of a story touches a test. In a git repository it records every
 test file — found by name: `test_*.py`, `*Test.java`, `*Tests.cs`, `*IT.java`, `*.spec.ts`,
 `*_spec.rb` and the like — as a git blob, once per story. The test, build and tidy gates compare
-against it: a file that still holds every line it had, in order, has only gained cases and passes;
-a changed or removed line fails `tests-kept` unless it is **authorised**:
+against it: a file that still holds every line it had, in order and outside a comment, has only
+gained cases and passes; a changed or removed line — or an added line that switches a test off, such
+as `@Disabled`, `[Fact(Skip = …)]`, `@pytest.mark.skip`, `it.skip(` or `.only(` — fails `tests-kept`
+unless it is **authorised**:
 
-- the plan lists the file under `## Changed tests` and the story says `## Changed expectations` —
+- the plan lists the file under `## Changed tests` and the story says `## Changed expectations`, in
+  at least one list item a person wrote (a `{{…}}` placeholder or the template's prose is none) —
   the human released a story that changes that behaviour, and the plan found the tests (A); or
 - the plan lists the file and its row cites an answered decision of this story — the plan stage found
   contradicting tests the story did not mention and asked once, with the list (B); or
 - the story has an answered decision of stage `test` — a judge's conflict landed there.
 
-A listed file without either backing fails, and so does a changed file the plan does not list. Outside git the check is skipped and named. What it does not see: a test this story itself
+A listed file without either backing fails, and so does a changed file the plan does not list. Outside git the check is skipped and named, and so is a file whose recorded blob `git gc` has pruned. What it does not see: a test this story itself
 wrote and later rewrote, and a test file named against the conventions.
 
 ## The change policy — `required:` in the stack profile
@@ -172,9 +177,10 @@ wrote and later rewrote, and a test file named against the conventions.
 when the working tree differs from it. The profile's `required:` line lists the checks that must
 hold: `compile`, `architecture`, `format`, and each test command by its own profile key (`test`,
 `test.<name>`, `e2eTest`), so an end-user suite that needs a running system can be declared without
-every commit waiting for one. A required check fails when its command is not declared, when it is
-left out of the scope (`--checks`, reported as not run here), or — for a test command — when no
-report written by the run shows an executed case. Once `required:` is declared, the policy
+every commit waiting for one. A required check fails when its command is not declared (at the build and tidy gates too) or — for
+a test command — when no report written by the run shows an executed case. A required check outside
+this run's scope (`--checks`) is reported as not run here, for a later scope such as CI to run; this
+run does not fail on it. Once `required:` is declared, the policy
 decides: a check outside it that ran red or ran nothing is reported, and does not fail the verdict.
 Without `required:` every declared command that runs red fails, as it always did. Without `required:` the check is
 report-only. An older gate would ignore the key and pass what the project declared mandatory,

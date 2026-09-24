@@ -415,6 +415,7 @@ def run_change(gate, root, *args):
 
 
 def write_file(root, path, content):
+    os.makedirs(os.path.dirname(os.path.join(root, path)), exist_ok=True)
     with open(os.path.join(root, path), "w", encoding="utf-8") as handle:
         handle.write(content)
 
@@ -1426,6 +1427,7 @@ exit 0
         os.makedirs(os.path.join(root, "src", "brand-new"))
         with open(os.path.join(root, "src", "brand-new", "Added.java"), "w", encoding="utf-8") as handle:
             handle.write("class Added {}\n")
+        os.remove(os.path.join(root, "README.md"))
         run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in", "--from", "judge",
                    env={"FACTORY_TOOL_CMD": 'mkdir -p tasks/STORY-1; printf "## Verdict\\nverdict: pass\\n" '
                                             '> tasks/STORY-1/judge.md'})
@@ -1433,6 +1435,8 @@ exit 0
         check("snapshot: a file inside a directory this run added is hashed, not skipped",
               "src/brand-new/Added.java" in snap,
               f"{len(snap)} entries: {sorted(snap)[:4]}…")
+        check("snapshot: a tracked file that is gone is recorded as deleted, not left out",
+              snap.get("README.md") == "deleted", f"{len(snap)} entries: {sorted(snap.items())[:4]}…")
 
     # 1g. no sha256 command on the machine: the snapshot says so instead of recording empty
     # digests, because empty digests compare equal and would read as "this stage changed nothing".
@@ -1937,6 +1941,12 @@ def main(argv=None):
         (Case("build: a required suite that ran nothing fails the build gate, though the story's tests are green",
               "build", 1, must_fail=("suite",), text=("no report written by this run shows an executed test",)),
          dict(green=both_green, ledger=both_green, profile=PROFILE + "required: test\n")),
+        (Case("build: a required test command the profile does not declare fails the build gate", "build", 1,
+              must_fail=("suite",), text=("no `test.integration:` command",)),
+         dict(green=both_green, ledger=both_green, profile=PROFILE + "required: test.integration\n")),
+        (Case("plan: an epic field written as `\"\"` is empty, not filled", "plan", 1, must_fail=("epic",),
+              text=("missing intent",)),
+         dict(epic=EPIC.replace("intent: Someone cannot see something they need", 'intent: ""'))),
         (Case("build: without a policy the build gate runs only the story's tests, as before", "build", 0,
               must_pass=("tests-green",)),
          dict(green=both_green, ledger=both_green)),
@@ -2284,6 +2294,17 @@ def main(argv=None):
             ("parity: the verdict names the contract's digest, and one failure fails the whole check",
              completed.returncode == 1 and "sha256" in output, output.strip().splitlines()[-1:]),
         ]
+    with tmpdir() as root:
+        os.makedirs(os.path.join(root, "one"))
+        write_file(root, "scenarios.md", SCENARIOS + "\n## scenario.thing.untitled\n**Title:** Bold is not the line\n")
+        write_file(root, "one/TEST-x.xml", junit(("The reader sees the thing", "passed"),
+                                                 ("An empty list shows v1.0 of nothing", "passed")))
+        write_file(root, "parity.conf", "scenarios: scenarios.md\nimplementation.one: one/**/*.xml\n")
+        completed = subprocess.run([sys.executable, args.gate, "--parity", "parity.conf"], cwd=root,
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
+        expectations.append(("parity: a scenario without its `Title:` line fails the contract, not left out",
+                             completed.returncode == 1 and "gate:fail contract" in completed.stdout
+                             and "scenario.thing.untitled" in completed.stdout, completed.stdout.strip()[-300:]))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         if not ok:
@@ -2673,6 +2694,9 @@ def main(argv=None):
              "", listing.format(backing="the plan thinks so"), None, "fail"),
             ("the story says what changes, but a test the plan does not list is still refused",
              says, "", None, "fail"),
+            ("the template's prose and `{{…}}` placeholder under `## Changed expectations` back nothing",
+             "\n## Changed expectations\n\nOnly when the story changes behaviour the system already has.\n\n"
+             "- {{WHAT_CHANGES}}\n", listing.format(backing="the story's changed expectation"), None, "fail"),
             ("B: the plan asked once, the row cites the answered decision — the change passes",
              "", listing.format(backing="decision STORY-1-01"), DECISION + ANSWER, "pass")):
         with tmpdir() as root:
@@ -2701,6 +2725,14 @@ def main(argv=None):
             ("an existing test whose assertion changed is refused without a decision",
              lambda t: t.replace("isEmpty()", "size() == 0 || true"), False, "fail"),
             ("an existing test that was removed is refused without a decision", None, False, "fail"),
+            ("an added skip marker on an existing test is refused, though every old line is kept",
+             lambda t: t.replace("  void showsNothing", "  @Disabled\n  void showsNothing"), False, "fail"),
+            ("an added block comment around an existing test is refused, though every old line is kept",
+             lambda t: t.replace("  void showsNothing", "  /*\n  void showsNothing").replace("}\n}\n", "}\n  */\n}\n"),
+             False, "fail"),
+            ("a new case with its own doc comment still only adds",
+             lambda t: t.replace("}\n}", "}\n  /** One thing. */\n  void showsOne() { assert list.size() == 1; }\n}"),
+             False, "pass"),
             ("the same changed assertion passes on an answered decision of the test stage",
              lambda t: t.replace("isEmpty()", "size() == 0 || true"), True, "pass")):
         with tmpdir() as root:
@@ -2727,6 +2759,22 @@ def main(argv=None):
             expectations.append((f"tests-kept: {label.replace('change: ', '')}", baseline and verdict == expected,
                                  f"baseline {baseline}, verdict {verdict}; "
                                  + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    with tmpdir() as root:
+        build_project(root, extra_sources=((unit, old_test),))
+        for command in (["init", "-q"], ["add", "-A"],
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+        baseline = os.path.join(root, "tasks", "STORY-1", ".tests-baseline")
+        with open(baseline, encoding="utf-8") as handle:
+            text = re.sub(r"^[0-9a-f]{40}", "0" * 40, handle.read(), flags=re.M)
+        with open(baseline, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        verdict, output = kept_verdict(root)
+        expectations.append(("tests-kept: a baseline blob that is gone is skipped and named, not passed in silence",
+                             "gate:skip tests-kept" in output and "pruned" in output,
+                             "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
     with tmpdir() as root:
         build_project(root)
         verdict, output = kept_verdict(root)
@@ -2897,6 +2945,60 @@ def main(argv=None):
              "+a, changed" in read("story.diff") and "src/C.txt" in read("story.diff")
              and "src/B.txt" in read("story.diff") and "build.md" not in read("story.diff"), read("story.diff")[:300]),
         ]
+    commit = lambda root: [subprocess.run(["git", *command], cwd=root, capture_output=True) for command in (
+        ["init", "-q"], ["add", "-A"], ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"])]
+    marker = lambda cwd, stage, edge: subprocess.run(
+        [sys.executable, args.gate, f"--stage-{edge}", stage, "--story", "S-1"], cwd=cwd, capture_output=True,
+        text=True, encoding="utf-8", env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
+    rows_of = lambda cwd, name: sorted(open(os.path.join(cwd, "tasks", "S-1", ".verify", name),
+                                            encoding="utf-8").read().splitlines()) \
+        if os.path.isfile(os.path.join(cwd, "tasks", "S-1", ".verify", name)) else []
+    with tmpdir() as root:
+        for name in ("A", "B", "D"):
+            write_file(root, f"src/{name}.txt", name.lower() + "\n")
+        commit(root)
+        write_file(root, "src/D.txt", "d, dirty before the stage\n")
+        marker(root, "build", "start")
+        write_file(root, "src/A.txt", "a, changed\n")
+        write_file(root, "src/C.txt", "c\n")
+        write_file(root, "src/D.txt", "d\n")
+        os.remove(os.path.join(root, "src", "B.txt"))
+        marker(root, "build", "end")
+        want = ["added\tsrc/C.txt", "modified\tsrc/A.txt", "modified\tsrc/D.txt", "removed\tsrc/B.txt"]
+        expectations += [
+            ("changes: after a commit, a deleted tracked file is removed, a clean one edited is modified, a dirty "
+             "one put back is modified", rows_of(root, "changed-build.txt") == want, rows_of(root, "changed-build.txt")),
+            ("changes: the story's record says the same, from the tree recorded at its first stage",
+             rows_of(root, "changed.txt") == want, rows_of(root, "changed.txt")),
+        ]
+    with tmpdir() as root:
+        write_file(root, "src/A.txt", "a\n")
+        commit(root)
+        marker(root, "plan", "start")
+        write_file(root, "src/E.txt", "first pass\n")
+        marker(root, "plan", "end")
+        marker(root, "plan", "start")                                 # the stage runs again
+        write_file(root, "src/F.txt", "second pass\n")
+        marker(root, "plan", "end")
+        diff = open(os.path.join(root, "tasks", "S-1", ".verify", "story.diff"), encoding="utf-8").read()
+        expectations.append(("changes: a stage run again keeps the first pass in the story's record and diff",
+                             rows_of(root, "changed.txt") == ["added\tsrc/E.txt", "added\tsrc/F.txt"]
+                             and "first pass" in diff, rows_of(root, "changed.txt")))
+    with tmpdir() as root:
+        write_file(root, "other/X.txt", "x\n")
+        write_file(root, "project/src/A.txt", "a\n")
+        commit(root)
+        project = os.path.join(root, "project")
+        marker(project, "build", "start")
+        write_file(root, "project/src/A.txt", "a, changed\n")
+        write_file(root, "other/X.txt", "x, outside the project\n")
+        marker(project, "build", "end")
+        diff = open(os.path.join(project, "tasks", "S-1", ".verify", "story.diff"), encoding="utf-8").read()
+        expectations.append(("changes: a project inside a larger repository gets its own paths, and nothing "
+                             "outside it", rows_of(project, "changed-build.txt") == ["modified\tsrc/A.txt"]
+                             and rows_of(project, "changed.txt") == ["modified\tsrc/A.txt"]
+                             and "+a, changed" in diff and "X.txt" not in diff,
+                             f"{rows_of(project, 'changed-build.txt')} / {rows_of(project, 'changed.txt')}"))
     with tmpdir() as root:
         mark = lambda edge: subprocess.run([sys.executable, args.gate, f"--stage-{edge}", "plan", "--story", "S-1"],
                                            cwd=root, capture_output=True, text=True, encoding="utf-8",
