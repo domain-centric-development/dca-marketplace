@@ -1536,7 +1536,8 @@ def needs_human_ids(text):
     `(none)` from the file template: that asks nobody anything, and reading it as a stop halts a
     finished stage."""
     section = section_of(text, "needs-human")
-    if section is None or all(line.strip().strip("()").strip().lower() in NOTHING for line in section):
+    if section is None or all(line.strip().strip("()").strip().rstrip(".").strip().lower() in NOTHING
+                              for line in section):
         return None
     return [value for key, value in fields_of(section).items() if key == "decision" and value]
 

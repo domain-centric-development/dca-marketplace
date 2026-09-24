@@ -843,6 +843,13 @@ def verify_runner(runner, verbose=False):
         check("runner: an empty needs-human heading does not stop the run",
               stages[:2] == ["plan", "test"] and "ends with a needs-human section" not in output,
               f"stages that ran: {stages}")
+        bare = bare.replace("(none)", "None.")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": bare})
+        stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
+        check("runner: a needs-human heading that says `None.` does not stop the run",
+              stages[:2] == ["plan", "test"] and "ends with a needs-human section" not in output,
+              f"stages that ran: {stages}")
 
     # 1d2. a stage that asks writes the record; the run names it and how to resume
     with tmpdir() as root:
@@ -1875,6 +1882,9 @@ def main(argv=None):
         (Case("document: an empty `## needs-human` left from the template stops nothing", "document", 0,
               must_pass=("documented",)),
          dict(document=DOCUMENT + "\n## needs-human\n(none)\n")),
+        (Case("document: `## needs-human` with a sentence-cased `None.` stops nothing either", "document", 0,
+              must_pass=("documented",)),
+         dict(document=DOCUMENT + "\n## needs-human\nNone.\n")),
         (Case("test: a test recorded red before may be green when its expectation changed on a decision",
               "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
          dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,

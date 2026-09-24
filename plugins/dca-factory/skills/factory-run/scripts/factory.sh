@@ -916,7 +916,7 @@ verdict_of() {                              # verdict_of <story>
 # heading — empty, or `(none)` copied from the file template — asks nobody anything.
 asks_human() {                              # asks_human <file>
   sed -n '/^## needs-human/,/^## /p' "$1" | sed '1d; /^## /d' \
-    | grep -v -i -E '^[[:space:]]*(\(?(none|n/a|nothing)\)?|—|–|-)?[[:space:]]*$' | grep -q .
+    | grep -v -i -E '^[[:space:]]*(\(?(none|n/a|nothing)\.?\)?\.?|—|–|-)?[[:space:]]*$' | grep -q .
 }
 
 bump_rounds() {                             # bump_rounds <story> -> current count
