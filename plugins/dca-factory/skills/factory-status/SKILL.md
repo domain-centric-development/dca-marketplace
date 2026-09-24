@@ -26,16 +26,19 @@ start nothing and answer nothing on anyone's behalf.
    reconstructing it by hand.
 2. **Lead with what needs someone.** An open decision blocks its story and everything that depends
    on it: name it first, with the story it blocks, and point to `/factory-decisions` to answer it.
-3. **Say whether a session listens.** `listening:` names the session that last looked at the backlog
+3. **Name a duplicate pipeline.** A `note:` line under *running* says the dca-factory plugin is
+   enabled for the person while the project holds its own copy: stages run in a session may then
+   pick the plugin's skills. Say so, and that the runner's stages see only the project's.
+4. **Say whether a session listens.** `listening:` names the session that last looked at the backlog
    and when. A look within the hour means a `/loop /factory-run` is waiting for work; a long silence
    means it has probably ended — then the backlog is worked by nobody until someone starts one.
-4. **Read "running" for what it is.** It means a stage started and its end is not in the journal. The
+5. **Read "running" for what it is.** It means a stage started and its end is not in the journal. The
    journal cannot tell a running stage from one whose runner was stopped: say how long ago it
    started, and, when that is far longer than a stage takes, that it may have been interrupted.
-5. **Explain a state from its files when asked.** "Why is STORY-3 blocked?" — the dependency it names;
+6. **Explain a state from its files when asked.** "Why is STORY-3 blocked?" — the dependency it names;
    "why does STORY-1 run from document?" — its document gate has not passed yet. Read the file the
    state comes from before you repeat the reason.
-6. **Give cost as the table says it.** The status shows each story and the total; `status <story>`
+7. **Give cost as the table says it.** The status shows each story and the total; `status <story>`
    shows the stages of one, with input, cache and output tokens. Unmeasured invocations are unknown,
    not free; a session log has no price, so its cost reads `—`, and `+` after a price means some of
    the invocations it sums named none.

@@ -177,7 +177,9 @@ tier ran.
 - **in-session** where the tool has no subagents: you carry out the stage assignment yourself, in
   order, reading only the story and the predecessor file for that stage — not what you remember
   from earlier stages. The file contract plus the gate is what keeps this honest.
-- **the runner**: it calls the tool once per stage, so every stage begins with an empty context by
+- **the runner**: it calls the tool once per stage, and each stage process sees only the project —
+  its skills, the carriers the profile names, its settings — not the person's plugins or MCP
+  servers, with one prefix shared by every stage. So every stage begins with an empty context by
   construction; it applies the gates, the judge's verdict, the round counter and the file checks
   itself, and records each stage's cost with its price. Per-tool flags (a model, an effort level, a
   sandbox) come from the environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`,

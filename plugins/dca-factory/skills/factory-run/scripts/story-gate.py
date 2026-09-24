@@ -108,7 +108,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 6
-VERSION = "0.25.0"
+VERSION = "0.26.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2095,6 +2095,31 @@ def parse_usage(fmt, path):
             if event.get("type") == "item.completed" and item.get("type") in ("agent_message", "assistant_message"):
                 text = str(item.get("text", text))
         return (usage if seen else None), text
+    if fmt == "opencode-json":
+        # `opencode run --format json`: one event per line; every model step ends in a `step_finish`
+        # whose part carries that step's tokens, and the answer arrives as `text` parts. A local model
+        # has no price (cost 0), which is reported as no price rather than as free.
+        usage, seen, text, cost = {k: 0 for k in USAGE_FIELDS}, False, [], 0.0
+        for line in raw.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            part = event.get("part") or {}
+            if event.get("type") == "text" and part.get("text"):
+                text.append(str(part["text"]))
+            if event.get("type") == "step_finish" and isinstance(part.get("tokens"), dict):
+                seen = True
+                t = part["tokens"]
+                cache = t.get("cache") or {}
+                usage["input"] += int(t.get("input", 0) or 0)
+                usage["cache_read"] += int(cache.get("read", 0) or 0)
+                usage["cache_write"] += int(cache.get("write", 0) or 0)
+                usage["output"] += int(t.get("output", 0) or 0) + int(t.get("reasoning", 0) or 0)
+                cost += float(part.get("cost", 0) or 0)
+        if seen and cost > 0:
+            usage["cost"] = f"{cost:.4f}"
+        return (usage if seen else None), "".join(text).strip()
     return None, raw
 
 
@@ -2366,7 +2391,11 @@ def journal_usage(tasks, story_id):
                 continue
             counted_windows.add((parts[2], window))
         entry = stages.setdefault(parts[2], {"invocations": 0, "measured": 0, "cost": 0.0, "priced": 0,
-                                             **{k: 0 for k in USAGE_FIELDS}})
+                                             "seconds": 0, **{k: 0 for k in USAGE_FIELDS}})
+        if parts[1] == "usage":
+            # wall-clock time of the invocation, recorded by the runner — known even when its tokens
+            # are not, and the only cost a local model has
+            entry["seconds"] += sum(int(p[8:]) for p in parts[3:] if p.startswith("seconds=") and p[8:].isdigit())
         if parts[1] == "stage-start":
             entry["invocations"] += 1
         elif parts[1] == "usage" and "unknown" not in parts[3:]:
@@ -2630,6 +2659,26 @@ def status_brief(cwd, backlog, tasks, session_start=False):
     return 0
 
 
+def duplicate_pipeline_note(cwd):
+    """A session sees the person's plugins as well as the project's skills. With the dca-factory plugin
+    enabled and a project copy installed, a stage run in the session may pick either copy — the
+    runner's stage processes see only the project, a session does not."""
+    if not os.path.isfile(os.path.join(cwd, ".claude", "skills", "factory-run", "SKILL.md")):
+        return None
+    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    for settings in (os.path.join(home, "settings.json"), os.path.join(cwd, ".claude", "settings.json"),
+                     os.path.join(cwd, ".claude", "settings.local.json")):
+        try:
+            with open(settings, encoding="utf-8") as handle:
+                enabled = (json.load(handle) or {}).get("enabledPlugins") or {}
+        except (OSError, ValueError):
+            continue
+        if any(str(key).startswith("dca-factory@") and value for key, value in enabled.items()):
+            return ("note: the dca-factory plugin is enabled and the project has its own copy — a stage run in a "
+                    "session may pick the plugin's skills; the runner's stages see only the project's")
+    return None
+
+
 def status(cwd, backlog, tasks, story_filter=None):
     now = datetime.now(timezone.utc)
     print("== running")
@@ -2651,6 +2700,9 @@ def status(cwd, backlog, tasks, story_filter=None):
         print("worker: none holds the checkout")
     listening = listener_line(cwd)
     print(listening or "listening: no session has looked at the backlog")
+    duplicate = duplicate_pipeline_note(cwd)
+    if duplicate:
+        print(duplicate)
     print("\n== waiting for a human")
     store = os.path.join(cwd, DECISIONS_DIR)
     waiting = 0
@@ -2678,6 +2730,10 @@ def status(cwd, backlog, tasks, story_filter=None):
     if story_filter:
         return cost_by_stage(tasks, story_filter)
     return cost_by_story(tasks)
+
+
+def duration(seconds):
+    return f"{seconds // 60}m{seconds % 60:02d}s" if seconds else "—"
 
 
 def cost_by_story(tasks):
@@ -2713,11 +2769,13 @@ def cost_by_stage(tasks, story):
         return 0
     order = sorted(stages, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 99)
     total = {k: sum(stages[s][k] for s in order) for k in stages[order[0]]}
+    timed = total.get("seconds", 0) > 0
     print(f"{'stage':<24} {'runs':>4} {'measured':>8} {'input':>9} {'cache read':>11} "
-          f"{'cache write':>11} {'output':>8} {'tokens':>12} {'cost $':>8}")
+          f"{'cache write':>11} {'output':>8} {'tokens':>12} {'cost $':>8}" + (f" {'time':>8}" if timed else ""))
     for name, e in [(s, stages[s]) for s in order] + [("total", total)]:
         print(f"{name:<24} {e['invocations']:>4} {e['measured']:>8} {e['input']:>9} {e['cache_read']:>11} "
-              f"{e['cache_write']:>11} {e['output']:>8} {tokens_of(e):>12,} {money(e):>8}")
+              f"{e['cache_write']:>11} {e['output']:>8} {tokens_of(e):>12,} {money(e):>8}"
+              + (f" {duration(e.get('seconds', 0)):>8}" if timed else ""))
     unknown = total["invocations"] - total["measured"]
     if unknown > 0:
         print(f"{unknown} invocation(s) without a usage report — not counted, not zero")
@@ -3046,7 +3104,7 @@ def main(argv):
                         help="print the tokens each story and stage used, from the runner's journals")
     parser.add_argument("--total", action="store_true", help="with --usage: print only the token total")
     parser.add_argument("--usage-from", nargs=2, metavar=("FORMAT", "FILE"),
-                        help="read one invocation's usage from a tool's raw output (claude-json, codex-jsonl)")
+                        help="read one invocation's usage from a tool's raw output (claude-json, codex-jsonl, opencode-json)")
     parser.add_argument("--usage-model", help="with --usage-from: the model, where the output does not name it")
     parser.add_argument("--stage-start", metavar="STAGE", help="mark a stage's start inside a session (with --story)")
     parser.add_argument("--stage-end", metavar="STAGE",

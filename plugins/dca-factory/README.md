@@ -336,6 +336,22 @@ rather than leaving a reader to find it in a failing run.
 plugs in through `FACTORY_TOOL_CMD`. Run the stage skills in-session and no adapter is needed at
 all — the file contracts and the gate are what make a run honest, not the runner.
 
+**What a runner stage sees.** Only the project. Each tool gets the isolation it offers:
+
+| Tool | Isolation the runner applies | Not isolated |
+|---|---|---|
+| Claude Code | `--setting-sources project` (no user skills, user plugins or user settings), `--strict-mcp-config` (no MCP server), `--tools` with the stage tools only, `--exclude-dynamic-system-prompt-sections` (no per-machine text in the system prompt, so every stage shares one cached prefix); flags an older CLI does not know are left out | Claude Code's own built-in skills |
+| OpenCode | `--pure` (no external plugins); usage read from `--format json` | its tool set, which the runner does not restrict |
+| Codex | `--ignore-user-config` (no `~/.codex/config.toml`: its MCP servers, profiles and model stay out; the login stays) — a model then comes from `FACTORY_CODEX_ARGS` | user skills under `~/.codex/skills` |
+
+Carriers the profile names (`carrier.<stage>`, `review.<perspective>`, `knowledge`) are therefore installed into
+the project: `install --tool claude` links them into `.claude/skills/` (one link per skill, beside the pipeline's
+own), and the runner stops before the first stage when one is missing. `FACTORY_ISOLATION=off` runs the stages
+with the tool's full setup instead, and says so. Measured in a small project (claude 2.1.281): the first turn of a
+stage starts at 16.2k tokens instead of 25.9k. For a local model through OpenCode and LM Studio, the runner reads
+the loaded context window and warns below `FACTORY_LOCAL_CONTEXT_MIN` (default 65536 tokens). The journal records
+each invocation's wall-clock time, and `status <story>` shows it.
+
 **Operating systems.** The gate is standard-library Python 3 and runs wherever Python does. The
 runner and the commit hook are bash, so both want a POSIX shell. Linux, macOS and **Windows under
 Git Bash** are what the pipeline's own suite runs on in CI. On Windows the install copies the skills

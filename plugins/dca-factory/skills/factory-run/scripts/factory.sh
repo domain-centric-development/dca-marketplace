@@ -261,6 +261,89 @@ allowed_commands() {
   echo "$list"
 }
 
+# A stage process sees the project and nothing else: not the person's own skills, plugins or MCP
+# servers, and not a second copy of this pipeline from an installed plugin — which one a stage would
+# pick is chance, and a colleague with other plugins would get another pipeline. It also starts
+# smaller: the built-in tools no stage uses cost context on every turn. The tool list is the same
+# for every stage, and nothing in the system prompt changes between stages, so from the second
+# stage on the tool's prompt cache serves the prefix instead of writing it again.
+# FACTORY_ISOLATION=off runs a stage with the tool's full setup, for a run that needs something the
+# project does not carry; the run says so.
+STAGE_TOOLS="Read,Write,Edit,Glob,Grep,Bash,Skill"
+isolated() { [ "${FACTORY_ISOLATION:-on}" != off ]; }
+isolation_flags() {                         # isolation_flags <tool>
+  isolated || return 0
+  case "$1" in
+    claude)
+      local help="" flag want
+      # An older CLI refuses a flag it does not know and the stage would not start; ask it once.
+      command -v claude >/dev/null 2>&1 && help=${CLAUDE_HELP:-$(claude --help 2>/dev/null)}
+      for want in "--setting-sources project" "--strict-mcp-config" "--tools $STAGE_TOOLS" \
+                  "--exclude-dynamic-system-prompt-sections"; do
+        flag=${want%% *}
+        if [ -z "$help" ] || printf '%s' "$help" | grep -q -- "$flag"; then printf '%s ' "$want"; fi
+      done ;;
+    codex)
+      # The user's config.toml (MCP servers, profiles, a model) stays out; the login does not.
+      local help=""
+      command -v codex >/dev/null 2>&1 && help=$(codex exec --help 2>/dev/null)
+      if [ -z "$help" ] || printf '%s' "$help" | grep -q -- "--ignore-user-config"; then
+        printf '%s ' "--ignore-user-config"
+      fi ;;
+    opencode) printf '%s ' "--pure" ;;
+  esac
+}
+
+# The craft a profile names — carrier.<stage>, review.<perspective>, knowledge — has to be in the
+# project's own skill directory, because an isolated stage sees nothing else. Checked before the
+# first invocation, so a missing carrier stops the run instead of every stage quietly falling back.
+skill_dir_of() { case "$1" in claude) echo .claude/skills ;; codex) echo .codex/skills ;; opencode) echo .opencode/skills ;; esac; }
+named_carriers() {
+  local profile="${FACTORY_PROFILE:-.agents/factory/factory.profile.yaml}"
+  [ -f "$profile" ] || profile=factory.profile.yaml      # the gate's second place for it
+  [ -f "$profile" ] || return 0
+  sed -n -E 's/^(carrier\.[a-z]+|review\.[a-z-]+|knowledge):[[:space:]]*//p' "$profile" \
+    | tr -d '"'"'"'"' | awk '{print $1}' | sed 's/.*://' | sort -u
+}
+check_carriers() {                          # check_carriers <tool>
+  [ -n "${FACTORY_TOOL_CMD:-}" ] && return 0
+  isolated || return 0
+  local dir missing="" name; dir=$(skill_dir_of "$1")
+  [ -n "$dir" ] || return 0
+  for name in $(named_carriers); do
+    [ -f "$dir/$name/SKILL.md" ] || missing="$missing $name"
+  done
+  [ -z "$missing" ] && return 0
+  echo "factory: the profile names carrier(s) the project does not hold in $dir:$missing" >&2
+  echo "factory:   a stage process sees only the project — run 'factory.sh install --tool $1' (or update)" >&2
+  echo "factory:   so they are linked there, or FACTORY_ISOLATION=off to use the tool's own setup." >&2
+  return 2
+}
+
+# A local model loaded with a context window smaller than a stage grows to truncates or aborts in
+# silence. LM Studio says how large the loaded window is; below this, the run warns before it starts.
+LOCAL_CONTEXT_MIN=${FACTORY_LOCAL_CONTEXT_MIN:-65536}
+check_local_context() {                     # check_local_context <tool>
+  [ "$1" = opencode ] || return 0
+  local model; model=$(model_flag opencode)
+  case "$model" in lmstudio*/*) ;; *) return 0 ;; esac
+  command -v curl >/dev/null 2>&1 || return 0
+  local id=${model#*/} loaded
+  loaded=$(curl -s -m 2 "${FACTORY_LMSTUDIO_URL:-http://localhost:1234}/api/v0/models" 2>/dev/null \
+    | "$PY" -c "import json,sys
+try: data=json.load(sys.stdin)
+except Exception: sys.exit(0)
+for m in data.get('data',[]):
+    if m.get('id')==sys.argv[1]: print(m.get('loaded_context_length') or 0)" "$id" 2>/dev/null)
+  if [ -z "$loaded" ]; then
+    echo "factory: note — the context window of $model could not be read; a stage needs ${LOCAL_CONTEXT_MIN}+ tokens" >&2
+  elif [ "$loaded" -lt "$LOCAL_CONTEXT_MIN" ]; then
+    echo "factory: $model is loaded with a ${loaded}-token context window; a stage grows past ${LOCAL_CONTEXT_MIN}." >&2
+    echo "factory:   reload it with a larger context length in LM Studio, or set FACTORY_LOCAL_CONTEXT_MIN." >&2
+  fi
+  return 0
+}
+
 invoke() {                                  # invoke <tool> <prompt>
   local tool=$1 prompt=$2
   # Which model, which effort, which sandbox a tool runs with is the tool's configuration and not
@@ -286,23 +369,24 @@ invoke() {                                  # invoke <tool> <prompt>
   case "$tool" in
     claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format json \
                 --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
-                ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
+                $(isolation_flags claude) ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
     # stdin closed: `codex exec` also reads a prompt from stdin, and an unattended run has none.
-    codex)    codex exec --json -s workspace-write \
+    codex)    codex exec --json -s workspace-write $(isolation_flags codex) \
                 -c sandbox_workspace_write.network_access=true \
                 ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" < /dev/null > "$raw" ;;
-    opencode) opencode run ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" | tee "$raw" ;;
+    opencode) opencode run --format json $(isolation_flags opencode) \
+                ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" < /dev/null > "$raw" ;;
     *)        echo "factory: unknown tool '$tool'" >&2; return 2 ;;
   esac
 }
 
-# Which format a tool's raw output is in, for the usage reading. OpenCode's JSON events were not
-# verified against a real run, so its usage is recorded as unknown rather than guessed.
+# Which format a tool's raw output is in, for the usage reading.
 usage_format() {                            # usage_format <tool>
   if [ -n "${FACTORY_TOOL_CMD:-}" ]; then echo "${FACTORY_USAGE_FORMAT:-none}"; return; fi
   case "$1" in
     claude) echo claude-json ;;
     codex)  echo codex-jsonl ;;
+    opencode) echo opencode-json ;;
     *)      echo none ;;
   esac
 }
@@ -311,15 +395,17 @@ usage_format() {                            # usage_format <tool>
 model_flag() {                              # model_flag <tool>
   local args=""
   case "$1" in codex) args="${FACTORY_CODEX_ARGS:-}" ;; opencode) args="${FACTORY_OPENCODE_ARGS:-}" ;; esac
-  printf '%s\n' "$args" | sed -n 's/.*\(-m\|--model\)[ =]\([^ ]*\).*/\2/p' | head -1
+  # -E: BSD sed (macOS) has no `\|` in a basic expression, so the alternation is written extended
+  printf '%s\n' "$args" | sed -n -E 's/.*(-m|--model)[ =]([^ ]*).*/\2/p' | head -1
 }
 
 # One `usage` line in the story's journal per invocation, and the stage's final message on screen.
-record_usage() {                            # record_usage <story> <stage> <tool> <raw>
+record_usage() {                            # record_usage <story> <stage> <tool> <raw> [seconds]
   local out fields
   out=$("$PY" "$GATE" --usage-from "$(usage_format "$3")" "$4" --usage-model "$(model_flag "$3")" 2>/dev/null) \
     || out="unknown"
   fields=$(printf '%s\n' "$out" | head -1)
+  [ -n "${5:-}" ] && fields="$fields	seconds=$5"
   [ "$(usage_format "$3")" = none ] || printf '%s\n' "$out" | sed '1d'
   printf '%s\tusage\t%s\ttool=%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "$3" "$fields" \
     >> "$TASKS/$1/.verify/journal.tsv"
@@ -365,6 +451,30 @@ only_links_into() {
     case "$(readlink "$entry")" in "$source_abs"/*) ;; *) return 1 ;; esac
   done
   return 0
+}
+
+# The carriers the profile names, into a skill directory that does not already get every craft
+# skill: Claude Code's (whose stage processes see only the project) and any directory a copy install
+# wrote. Only what the profile names, so an isolated stage's prefix does not grow by skills it never
+# uses; linked where the install links, copied where it copies (and then listed as the pipeline's).
+install_named_carriers() {                  # install_named_carriers <target> <source_abs> <copy_mode>
+  local target=$1 source_abs=$2 copy_mode=$3 name dir found method_dirs
+  method_dirs=$(method_skill_dirs "$source_abs")
+  for name in $(named_carriers); do
+    [ -f "$target/$name/SKILL.md" ] && ! { [ -L "$target/$name" ] && ! [ -e "$target/$name" ]; } && continue
+    found=""
+    for dir in $method_dirs; do [ -d "$dir/$name" ] && { found="$dir/$name"; break; }; done
+    if [ -z "$found" ]; then
+      echo "factory: the profile names carrier '$name', which no plugin beside the pipeline provides — add it to $target" >&2
+      continue
+    fi
+    if [ -n "$copy_mode" ]; then
+      rm -rf "${target:?}/$name" && cp -R "$found" "$target/$name" && echo "$name" >> "$target/.dca-factory-skills"
+    else
+      ln -sfn "$found" "$target/$name"
+    fi
+    echo "factory: carrier $name → $target"
+  done
 }
 
 install_skills() {
@@ -475,6 +585,21 @@ install_skills() {
       [ "$pruned" -gt 0 ] && echo "factory: pruned $pruned link(s) whose skill is gone from the source" >&2
       echo "factory: skills → $target ($linked linked: the pipeline plus the craft it names as carriers)"
       echo "factory:   per skill, because they come from several sources — re-run install after a skill is added" >&2
+    elif [ "$target" = ".claude/skills" ] && [ -n "$(named_carriers)" ] \
+         && { [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; }; then
+      # The profile names carriers, and an isolated Claude stage sees only this directory — so it
+      # holds the pipeline's skills one link each, with the named carriers beside them. Per skill
+      # freezes the set: a skill added to the pipeline later needs another install (or update).
+      [ -L "$target" ] && must "replace the $target link" rm -f "$target"
+      must "create $target" mkdir -p "$target"
+      local skill linked=0
+      for skill in "$source_abs"/*; do
+        [ -d "$skill" ] || continue
+        ln -sfn "$skill" "$target/$(basename "$skill")"
+        linked=$((linked + 1))
+      done
+      echo "factory: skills → $target ($linked linked one by one, beside the carriers the profile names)"
+      echo "factory:   re-run install after a skill is added to the pipeline" >&2
     elif [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; then
       must "replace $target" rm -rf "$target"
       must "create $(dirname "$target")" mkdir -p "$(dirname "$target")"
@@ -489,6 +614,15 @@ install_skills() {
       done
       echo "factory: skills → $target (per skill: the directory holds skills of its own)" >&2
       echo "factory:   re-run install after a skill is added to the source" >&2
+    fi
+  done
+  for target in "${targets[@]}"; do
+    # The whole-directory link to the pipeline cannot take a carrier beside it: the carrier would be
+    # written into the plugin's own folder. Then the tool finds the carrier through its plugins, and
+    # an isolated stage does not — the runner's carrier check says so before a run.
+    [ -L "$target" ] && continue
+    if [ "$target" = ".claude/skills" ] || [ -n "$copy_mode" ]; then
+      install_named_carriers "$target" "$source_abs" "$copy_mode"
     fi
   done
   check_dca_setup
@@ -874,6 +1008,7 @@ run_story() {
     echo "── stage $stage  (tool: $tool, fresh context)"
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
+      echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
     elif [ -f "$GATE" ] && ! "$PY" "$GATE" --claim "$WORKER" >/dev/null; then
       echo "factory: the checkout was taken over by another worker before stage '$stage' — stopping." >&2
       return 5
@@ -900,9 +1035,10 @@ run_story() {
       printf '%s\tstage-start\t%s\ttool=%s\n' "$stage_started" "$stage" "$tool" >> "$TASKS/$story/.verify/journal.tsv"
       local raw_out; raw_out="$TASKS/$story/.verify/$stage.$(date -u +%H%M%S).out"
       local invoked=0
+      local began; began=$(date +%s)
       invocation_raw="$raw_out" stage_in_flight="$stage" story_in_flight="$story" \
         invoke "$tool" "$(prompt_for "$stage" "$story")" || invoked=$?
-      record_usage "$story" "$stage" "$tool" "$raw_out"
+      record_usage "$story" "$stage" "$tool" "$raw_out" "$(( $(date +%s) - began ))"
       [ "$invoked" = 0 ] || {
         printf '%s\tstage-end\t%s\texit=nonzero\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
           >> "$TASKS/$story/.verify/journal.tsv"
@@ -1110,6 +1246,9 @@ case "$command" in
     [ -n "$tool" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
     check_gate_freshness                    # once per invocation; run_story recurses on a verdict
     [ -n "$dry" ] || refuse_nested || exit $?
+    check_carriers "$tool" || exit $?
+    check_local_context "$tool"
+    isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
     [ -n "$dry" ] || take_checkout || exit $?
     run_story "$story" "$tool" "$from" "$dry"
     ;;
@@ -1125,6 +1264,9 @@ case "$command" in
     [ "$interval" -gt 3600 ] && interval=3600
     check_gate_freshness
     [ -n "$dry" ] || refuse_nested || exit $?
+    check_carriers "${tool:-}" || exit $?
+    check_local_context "${tool:-}"
+    isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
     [ -n "$dry" ] || take_checkout || exit $?
     run_backlog "${tool:-stand-in}" "$watch" "$interval" "$dry"
     ;;

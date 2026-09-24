@@ -646,6 +646,50 @@ def verify_runner(runner, verbose=False):
               order == expected, f"got {order}")
         check("runner: a dry run changes nothing", code == 0 and not os.path.isdir(os.path.join(root, "tasks", "STORY-1", "plan.md")))
 
+    # 1a. the stage process sees only the project: the isolation flags, one prefix for every stage
+    with tmpdir() as root:
+        build_project(root)
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        flags = [line.split("tool flags:", 1)[1].strip() for line in output.splitlines() if "tool flags:" in line]
+        wanted = ("--setting-sources project", "--strict-mcp-config", "--tools Read,Write,Edit,Glob,Grep,Bash,Skill",
+                  "--exclude-dynamic-system-prompt-sections")
+        check("isolation: a Claude stage runs with the project's settings only, no MCP, the stage tools and no "
+              "per-machine system prompt", bool(flags) and all(w in flags[0] for w in wanted), flags[:1])
+        check("isolation: every stage gets the same flags, so the prompt prefix is shared across stages",
+              len(flags) == 6 and len(set(flags)) == 1, flags)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                                  env=dict(os.environ, FACTORY_ISOLATION="off"))
+        flags = [line.split("tool flags:", 1)[1].strip() for line in output.splitlines() if "tool flags:" in line]
+        check("isolation: FACTORY_ISOLATION=off drops the flags and the run says so",
+              flags and not any(w.split()[0] in flags[0] for w in wanted) and "FACTORY_ISOLATION=off" in output,
+              flags[:1])
+    with tmpdir() as root:
+        build_project(root, profile=PROFILE + "carrier.build: no-such-craft\n")
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        check("isolation: a carrier the project does not hold stops the run before the first stage, named",
+              code == 2 and "no-such-craft" in output and "── stage" not in output, output[-300:])
+    # an OpenCode invocation's usage, from the events `opencode run --format json` writes
+    with tmpdir() as root:
+        raw = os.path.join(root, "stage.out")
+        with open(raw, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(e) for e in [
+                {"type": "step_start", "part": {"type": "step-start"}},
+                {"type": "text", "part": {"type": "text", "text": "the plan is written"}},
+                {"type": "step_finish", "part": {"type": "step-finish", "cost": 0, "tokens": {
+                    "total": 12123, "input": 11773, "output": 4, "reasoning": 346, "cache": {"write": 0, "read": 0}}}},
+                {"type": "step_finish", "part": {"type": "step-finish", "cost": 0, "tokens": {
+                    "input": 200, "output": 50, "reasoning": 0, "cache": {"write": 0, "read": 11700}}}}]) + "\n")
+        gate = os.path.join(os.path.dirname(runner), "story-gate.py")
+        read = subprocess.run([sys.executable, gate, "--usage-from", "opencode-json", raw, "--usage-model",
+                               "lmstudio-local/some-model"], capture_output=True, text=True, encoding="utf-8").stdout
+        check("opencode: usage is read from the step_finish events, a local model has no price, the answer is shown",
+              read.splitlines()[:1] == ["model=lmstudio-local/some-model\tinput=11973\tcache_read=11700\tcache_write=0\toutput=400"]
+              and "the plan is written" in read, read)
+
     # 1b. a whole run without a model: the loop, the journal and the final report
     # FACTORY_TOOL_CMD stands in for the tool and writes each stage's artefact, so a defect in the
     # loop — a stage silently skipped, a report naming stages that never ran — fails here rather
@@ -773,6 +817,25 @@ def verify_runner(runner, verbose=False):
 
     # 1e. install keeps what the project owns
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
+    # 1d'. the carriers a profile names reach Claude's own skill directory, and only those
+    carrier = next((name for name in ("ddd-modelling", "review-craft", "e2e-testing")
+                    if any(os.path.isdir(os.path.join(plugins_dir, plugin, "skills", name))
+                           for plugin in os.listdir(plugins_dir))), None) \
+        if os.path.isdir(plugins_dir := os.path.dirname(os.path.dirname(source))) else None
+    if carrier:
+        with tmpdir() as root:
+            build_project(root, profile=PROFILE + f"carrier.build: {carrier}\n")
+            code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", source)
+            skills_dir = os.path.join(root, ".claude", "skills")
+            entries = sorted(os.listdir(skills_dir)) if os.path.isdir(skills_dir) else []
+            check("install: a carrier the profile names is placed in .claude/skills beside the pipeline, "
+                  "no other craft skill", os.path.isdir(skills_dir) and not os.path.islink(skills_dir)
+                  and os.path.isfile(os.path.join(skills_dir, carrier, "SKILL.md"))
+                  and "factory-run" in entries and len(entries) == 14,
+                  f"exit {code}; {entries}")
+            code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+            check("install: after it, the runner's carrier check passes", code == 0 and "── stage plan" in output,
+                  output[-200:])
     with tmpdir() as root:
         build_project(root)
         own = os.path.join(root, ".codex", "skills", "our-own-skill")
