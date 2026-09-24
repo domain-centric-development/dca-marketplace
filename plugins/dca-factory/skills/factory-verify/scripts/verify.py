@@ -2050,8 +2050,10 @@ def main(argv=None):
         with open(os.path.join(log_dir, f"{session}.jsonl"), "w", encoding="utf-8") as handle:
             handle.write("\n".join([
                 response("2026-09-23T10:00:00.000Z", "m0", 999),                    # before the stage
-                response("2026-09-23T10:01:00.000Z", "m1", 50),                     # in it, three blocks
-                response("2026-09-23T10:01:00.100Z", "m1", 50),
+                # in it: one response written as three blocks, the output growing to its last one — as
+                # Claude Code writes it; counting the first block alone would read 3 instead of 50
+                response("2026-09-23T10:01:00.000Z", "m1", 3),
+                response("2026-09-23T10:01:00.100Z", "m1", 3),
                 response("2026-09-23T10:01:00.200Z", "m1", 50),
                 response("2026-09-23T10:01:30.000Z", "s1", 0, "<synthetic>"),       # no model call
                 response("2026-09-23T10:09:00.000Z", "m9", 999)]) + "\n")          # after it

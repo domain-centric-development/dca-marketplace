@@ -2027,7 +2027,11 @@ def session_usage(kind, paths, start=None, end=None):
     def inside(stamp):
         return stamp is not None and (start is None or stamp >= start) and (end is None or stamp <= end)
     if kind == "claude-session":
-        seen, models, usage = set(), set(), {k: 0 for k in USAGE_FIELDS}
+        # One API response is written as several log entries — one per content block — that share its
+        # message id. The entries repeat the input and cache counts, and the output count grows until
+        # the last one: counting the first entry alone undercounts output many times over. So each
+        # field is the largest any entry of that message states.
+        seen, models, per_message = set(), set(), {}
         for path in paths:
             try:
                 handle = open(path, encoding="utf-8", errors="replace")
@@ -2044,18 +2048,20 @@ def session_usage(kind, paths, start=None, end=None):
                             or str(message.get("model", "")).startswith("<"):   # `<synthetic>`: no model call
                         continue
                     key = message.get("id") or entry.get("requestId") or entry.get("uuid")
-                    if key in seen or not inside(parse_time(entry.get("timestamp"))):
+                    if key not in seen and not inside(parse_time(entry.get("timestamp"))):
                         continue
                     seen.add(key)
                     u = message["usage"]
-                    usage["input"] += int(u.get("input_tokens", 0) or 0)
-                    usage["cache_read"] += int(u.get("cache_read_input_tokens", 0) or 0)
-                    usage["cache_write"] += int(u.get("cache_creation_input_tokens", 0) or 0)
-                    usage["output"] += int(u.get("output_tokens", 0) or 0)
+                    counts = per_message.setdefault(key, {k: 0 for k in USAGE_FIELDS})
+                    for field, name in (("input", "input_tokens"), ("cache_read", "cache_read_input_tokens"),
+                                        ("cache_write", "cache_creation_input_tokens"),
+                                        ("output", "output_tokens")):
+                        counts[field] = max(counts[field], int(u.get(name, 0) or 0))
                     if message.get("model"):
                         models.add(str(message["model"]))
         if not seen:
             return None
+        usage = {k: sum(c[k] for c in per_message.values()) for k in USAGE_FIELDS}
         usage["model"] = ",".join(sorted(models)) or "unknown"
         return usage
     if kind == "codex-session":
