@@ -1,5 +1,6 @@
-package {{basePackage}}.infrastructure;
+package {{basePackage}}.infrastructure.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -13,10 +14,15 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
  * listeners) runs. Replace with the data starter's manager when persistence arrives, and delete
  * this class.
  *
- * <p>It lives in the global infrastructure package on purpose: DCA-LAY-004 allows transaction
- * manager wiring only there (the composition root) and in the shared kernel's infrastructure
- * package.
+ * <p>It steps aside by itself once {@code spring-jdbc} is on the class path: a bean of the project's
+ * would otherwise make the data starter's auto-configured manager back off, and real writes would run
+ * without a transaction that can roll back.
+ *
+ * <p>It lives below the global infrastructure package on purpose: DCA-LAY-004 allows transaction
+ * manager wiring in {@code <base>.infrastructure..} (the composition root) and in the shared kernel's
+ * infrastructure package.
  */
+@ConditionalOnMissingClass("org.springframework.jdbc.datasource.DataSourceTransactionManager")
 @Configuration(proxyBeanMethods = false)
 class InMemoryTransactionManagerConfiguration {
 

@@ -35,7 +35,8 @@ target.
 ## Time and permissions belong to the test
 
 A page that counts, polls or expires is tested with the fake clock, never with a sleep or a real wait:
-install it before the page loads and move it with `runFor`. A browser API whose answer is the user's —
+install it before the page loads at a fixed time, **pause it there** (`install` alone lets time run on at
+real speed), and move it with `runFor`. A browser API whose answer is the user's —
 notifications, geolocation, the clipboard — is replaced before the page loads with a stand-in that
 records what it is asked and answers as the test decides. Both are in `reference/setup.md`. A test that
 reads the page's script or markup as text to infer what the browser would do is not a browser test: it

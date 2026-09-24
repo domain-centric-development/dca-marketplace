@@ -1,0 +1,56 @@
+using DomainCentric.ArchRules;
+using DomainCentric.ArchRules.ContextMap;
+
+namespace {{rootNamespace}}.ArchitectureTests;
+
+/// <summary>
+/// Renders <c>{{contextMapPath}}</c> from the <c>[BoundedContext]</c>, <c>[Upstream]</c>, <c>[ExternalUpstream]</c>
+/// and <c>[Partnership]</c> attributes — the context map as a fully derived view. The test regenerates the file on
+/// every run and fails if it was stale, so CI catches a map that drifted from the declarations; the fix is to
+/// commit the regenerated file. A missing file is created and the test fails once with "commit it": xUnit 2 has no
+/// run-time skip, and a pass would hide that the map is not committed yet.
+/// </summary>
+public sealed class ContextMapDocumentationTest
+{
+    private const string ContextMapPath = "{{contextMapPath}}";
+    // `dotnet new sln` writes `.slnx` since .NET 10, `.sln` before
+    private static readonly string[] SolutionFiles = ["{{solutionName}}.slnx", "{{solutionName}}.sln"];
+
+    [Fact]
+    public void ContextMapDocumentMatchesTheDeclaredContextMap()
+    {
+        var assemblies = new[]
+        {
+{{#each assemblyAnchors}}
+            typeof({{this}}).Assembly,
+{{/each}}
+        };
+        var arch = DcaArchitecture.Load(DcaLayout.ForRootNamespace("{{rootNamespace}}"), assemblies);
+        var generated = ContextMapRenderer.Of(arch).Render();
+
+        var root = RepositoryRoot();
+        Assert.True(root is not null, $"{SolutionFiles[0]} (or .sln) was not found above the test assembly, so the map was never compared");
+
+        var target = Path.Combine(root!, ContextMapPath);
+        var existing = File.Exists(target) ? File.ReadAllText(target) : null;
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target, generated);
+
+        Assert.True(existing is not null, $"{ContextMapPath} did not exist and has been generated — commit it");
+        Assert.True(generated == existing,
+            $"{ContextMapPath} was stale and has been regenerated from the context attributes — review and commit it");
+    }
+
+    private static string? RepositoryRoot()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (SolutionFiles.Any(name => File.Exists(Path.Combine(dir.FullName, name))))
+            {
+                return dir.FullName;
+            }
+        }
+
+        return null;
+    }
+}

@@ -185,7 +185,7 @@ E. **Spring Modulith** (Java, only when detected) — add `dev.domaincentric:dca
 
 F. **Context map** — install `ContextMapDocumentationTest`, which renders `docs/architecture/context-map.md`
    from the `@BoundedContext` / `@Upstream` / `@Partnership` declarations and fails when the committed
-   file is stale? Recommend yes for more than one context.
+   file is stale? Recommend yes for more than one context. Java and .NET alike.
 
 G. **Catalog wiring (`CLAUDE.md`)** — wire the project's coding agent to the DCA knowledge catalog?
    - `Yes, vendored catalog` (default) — append the DCA section to `CLAUDE.md`; `/dca-knowledge`
@@ -227,10 +227,14 @@ nothing — the first commit is the user's, after Phase 4.
    project** (a visible placeholder until a database arrives — `dca-spring` publishes none on purpose) and,
    with Modulith, `spring-modulith-events-api` for `@ApplicationModuleListener`. Say so in the summary.
    The bean comes from `templates/java/InMemoryTransactionManagerConfiguration.java.tmpl` →
-   `src/main/java/{{basePackagePath}}/infrastructure/InMemoryTransactionManagerConfiguration.java`. The package
-   is not a style choice: `DCA-LAY-004` allows transaction-manager wiring only in the global infrastructure
-   package (`<base>.infrastructure..`) and in `<base>.sharedkernel.infrastructure..` — a `config/` package or a
-   context's own package fails the rule.
+   `src/main/java/{{basePackagePath}}/infrastructure/config/InMemoryTransactionManagerConfiguration.java`. The
+   package is not a style choice: `DCA-LAY-004` allows transaction-manager wiring in the global infrastructure package and below it
+   (`<base>.infrastructure..`, `infrastructure/config/` included, where the conventions put `@Configuration`
+   classes) and in `<base>.sharedkernel.infrastructure..` — a top-level `<base>.config` package or a context's
+   own package fails the rule. The template steps aside by itself once
+   `spring-jdbc` is on the class path (`@ConditionalOnMissingClass`), so adding a data starter cannot leave the
+   placeholder in charge of real writes — verified: with `spring-boot-starter-jdbc` Boot's
+   `JdbcTransactionManager` is the one bean, without it the placeholder. Delete the class then anyway.
 2. `templates/gradle/test-architecture.gradle.tmpl` → `gradle/plugins/test-architecture.gradle`, plus
    `apply from: "gradle/plugins/test-architecture.gradle"` in `build.gradle`. Creates the
    `testArchitecture` source set and the `test-architecture` task, wired into `check`.
@@ -259,7 +263,11 @@ nothing — the first commit is the user's, after Phase 4.
    optional. Write to `.claude/dca/conventions.md` instead only when that file already exists — a project
    bootstrapped before this path changed keeps the file it has, and every skill reads both.
 9. Decision H: set up the browser runner as the `e2e-testing` skill's `reference/setup.md` says for Gradle or
-   Maven — `gradle/plugins/test-e2e.gradle` applied from `build.gradle`, the base test class, and one smoke test.
+   Maven — `gradle/plugins/test-e2e.gradle` applied from `build.gradle` (with
+   `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, so only Chromium is downloaded), the base test class, and one smoke
+   test. The base class names the application class (`@SpringBootTest(classes = <Application>.class, …)`):
+   where the main class sits in `<base>.infrastructure`, a test in the base package does not find it on its
+   own. With Maven the smoke test is named `*IT`, or Failsafe never runs it.
    The bootstrap writes no controller for it: a controller needs a context and a package no feature has
    decided, and it would be code no feature asked for, which the first story then has to remove. The smoke test opens a **static** start
    page instead (`src/main/resources/static/index.html` with a `<title>` — Spring Boot serves it at `/`), and
@@ -284,9 +292,19 @@ nothing — the first commit is the user's, after Phase 4.
    `[BoundedContext]` / `[SharedKernel]` exists.
 6. Decision A as for Java (`: IAggregateRoot<T, TId>`, `: IValue`, …). Decision G as for Java with
    `{{verifyCommand}}` = `dotnet test tests/{{solutionName}}.ArchitectureTests`.
-7. Decision H: a `tests/{{solutionName}}.E2eTests` project with `Microsoft.Playwright`, set up as the
-   `e2e-testing` skill's `reference/setup.md` says for .NET, with one smoke test on a static start page
-   (`wwwroot/index.html`, served with `UseDefaultFiles()` + `UseStaticFiles()`) — no controller, as for Java.
+7. Decision F: `templates/dotnet/ContextMapDocumentationTest.cs.tmpl` → next to `ArchitectureTest.cs`, with the
+   same assemblies (`{{assemblyAnchors}}`), `{{contextMapPath}}` and the solution file that marks the
+   repository root (`{{solutionName}}.slnx`, or `.sln` before .NET 10). xUnit 2 cannot skip at run time, so where Java reports the first
+   run as skipped, the .NET test writes the map and fails once with "commit it"; the report names that.
+8. Decision H: a `tests/{{solutionName}}.E2eTests` project, set up as the `e2e-testing` skill's
+   `reference/setup.md` says for .NET: the packages `Microsoft.Playwright` and `Microsoft.AspNetCore.Mvc.Testing`,
+   a project reference to the web project, the `BrowserTest` base class (Kestrel on a free port through
+   `WebApplicationFactory.UseKestrel(0)`, the browser installed by `Microsoft.Playwright.Program.Main`, the clock
+   installed and paused), and one smoke test on a static start page — no controller, as for Java. The web
+   project's `Program.cs` gets `app.UseDefaultFiles(); app.UseStaticFiles();` before `app.Run()`, and
+   `public partial class Program;` at its end so the factory can name it; the page is `wwwroot/index.html` with a
+   `<title>`. Add the project to the solution. Verified on a fresh ASP.NET Core 10 project: green, red with an
+   empty title.
 
 ### Phase 4 — Verification
 
@@ -295,6 +313,7 @@ nothing — the first commit is the user's, after Phase 4.
 mvn test -Dtest='ArchitectureTest'   # Java, Maven
 dotnet test tests/<Solution>.ArchitectureTests   # .NET — Debug; the rules refuse Release builds
 ./gradlew test-e2e                   # decision H: the browser smoke test (installs Chromium on first use)
+mvn verify                           # decision H with Maven: Failsafe runs the *IT browser tests
 dotnet test tests/<Solution>.E2eTests --logger trx
 ```
 
@@ -302,8 +321,9 @@ With decision H, the smoke test must be green, and it must fail when the start p
 that once, then restore it. A browser suite that stays green while the page is broken tests nothing.
 
 Report which rules passed and which failed. On a greenfield bootstrap two entries are expected and not
-failures: `DCA-STR-012` on `warn` (no layered module yet) and, with decision F, a skipped
-`ContextMapDocumentationTest` that has just generated `{{contextMapPath}}` — both named in the report. Where Phase 3 initialised the repository, say that
+failures: `DCA-STR-012` on `warn` (no layered module yet) and, with decision F, a
+`ContextMapDocumentationTest` that has just generated `{{contextMapPath}}` — skipped in Java, failed once with
+"commit it" in .NET (green from the second run on) — both named in the report. Where Phase 3 initialised the repository, say that
 nothing is committed yet and that the project is ready for its first commit. In a retrofit, failures are findings about the existing
 code, not bootstrap bugs: point the user to `dca.rules.warn` / `dca.rules.freeze` (Java) for a
 staged adoption, `/dca-review` to triage, `/dca-scaffold` for new code that complies from the start.
