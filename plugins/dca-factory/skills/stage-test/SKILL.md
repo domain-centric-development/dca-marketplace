@@ -6,8 +6,10 @@ description: Test stage of a factory run — writes one end-user test per accept
 # Write the tests for one story
 
 Input: the story, `tasks/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
-product scope where the plan says a criterion touches them. Nothing else.
-Output: the test sources, plus `tasks/<story>/tests.md`. You write **no** production behaviour.
+product scope where the plan says a criterion touches them. Nothing else. Open the files the plan's
+`## Files` names first — the pattern to mirror, the fixture to reuse; search only for the rest.
+Output: the test sources, plus `tasks/<story>/tests.md` with a `## Files` section naming the test
+files written. You write **no** production behaviour.
 
 ## Do
 

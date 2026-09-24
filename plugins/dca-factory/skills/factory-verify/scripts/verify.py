@@ -701,8 +701,9 @@ def verify_runner(runner, verbose=False):
         'case "$FACTORY_STAGE" in '
         '  plan) printf "## Context\\n## Changes\\n## Acceptance criteria\\n" ;; '
         '  test) cat "$FIXTURE_TESTS" ;; '
-        '  build) printf "## Changed\\n## Criteria\\n## Checks\\n" ;; '
-        '  tidy) printf "## Moves\\n## Checks\\n" ;; '
+        '  build) printf "## Changed\\n## Criteria\\n## Checks\\n## Files\\n"; '
+        '    for s in $(cat "$FIXTURE_GREEN" 2>/dev/null); do printf -- "- green/%s\\n" "$s"; done ;; '
+        '  tidy) printf "## Moves\\n## Checks\\n## Files\\n" ;; '
         '  judge) printf "## Verdict\\nverdict: pass\\n" ;; '
         '  document) printf "## Glossary\\n" ;; '
         'esac > "tasks/STORY-1/$f"; '
@@ -884,8 +885,8 @@ case "$FACTORY_STAGE" in
     elif [ "$FACTORY_STORY" = STORY-1 ]; then cat fixture/plan-applied.md > "$d/plan.md"
     else printf '## Context\\n## Changes\\n## Acceptance criteria\\n' > "$d/plan.md"; fi ;;
   test) cat fixture/tests.md > "$d/tests.md" ;;
-  build) printf '## Changed\\n' > "$d/build.md" ;;
-  tidy) printf '## Moves\\n' > "$d/tidy.md" ;;
+  build) printf '## Changed\\n\\n## Files\\n' > "$d/build.md" ;;
+  tidy) printf '## Moves\\n\\n## Files\\n' > "$d/tidy.md" ;;
   judge) printf '## Verdict\\nverdict: pass\\n' > "$d/judge.md" ;;
   document) printf '## Glossary\\n' > "$d/document.md" ;;
 esac
@@ -898,7 +899,9 @@ exit 0
                         extra_sources=(("fixture/decision.md", DECISION),
                                        ("fixture/plan-asking.md", PLAN_ASKING),
                                        ("fixture/plan-applied.md", PLAN_APPLIED),
-                                       ("fixture/tests.md", TESTS)))
+                                       ("fixture/tests.md", TESTS),
+                                       # the stand-in's own log is not the story's change
+                                       (".gitignore", "invocations.log\n")))
         # LF on every platform: a shell script with CRLF endings is not the script it looks like
         with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
             handle.write(stand_in_backlog)
@@ -1786,6 +1789,26 @@ def main(argv=None):
               must_fail=("tests-red",), text=("passes before the build stage",)),
          dict(green=both_green, ledger=both_green)),
         # --- the build gate -----------------------------------------------
+        # --- the hand-over names what the stage changed ------------------------
+        (Case("build: a hand-over that lists every changed file passes the files check", "build", 0,
+              must_pass=("files-listed",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("tasks/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
+             ("tasks/STORY-1/build.md", "## Changed\n\n## Files\n\n- `src/main/Thing.java` — new\n"
+                                        "- `src/main/Page.java` — shows it\n")))),
+        (Case("build: a changed file the hand-over does not list is refused, named", "build", 1,
+              must_fail=("files-listed",), text=("src/main/Page.java",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("tasks/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
+             ("tasks/STORY-1/build.md", "## Changed\n| File | Why |\n|---|---|\n| `src/main/Thing.java` | new |\n")))),
+        (Case("build: a hand-over without a Files section is refused", "build", 1,
+              must_fail=("files-listed",), text=("has no `## Files` section",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("tasks/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\n"),
+             ("tasks/STORY-1/build.md", "## Criteria\n")))),
+        (Case("build: without a changed-files record the files check is skipped and named", "build", 0,
+              must_skip=("files-listed",)),
+         dict(green=both_green, ledger=both_green)),
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
               text=("via `test.pages:`", "via `test:`")),
@@ -2675,6 +2698,49 @@ def main(argv=None):
                              waiting[0] == "waiting" and resumable == ("resumable", "test")
                              and rows.get("STORY-1") == ("in-progress", "build"),
                              f"open {waiting}, answered {resumable}, applied {rows.get('STORY-1')}"))
+    # --- what a story changed: the record and the diff a stage is handed, in a repository without a commit
+    with tmpdir() as root:
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        for name, text in (("src/A.txt", "a\n"), ("src/B.txt", "b\n")):
+            os.makedirs(os.path.join(root, "src"), exist_ok=True)
+            with open(os.path.join(root, name), "w", encoding="utf-8") as handle:
+                handle.write(text)
+        mark = lambda edge: subprocess.run([sys.executable, args.gate, f"--stage-{edge}", "build", "--story", "S-1"],
+                                           cwd=root, capture_output=True, text=True, encoding="utf-8",
+                                           env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
+        mark("start")
+        with open(os.path.join(root, "src", "A.txt"), "w", encoding="utf-8") as handle:
+            handle.write("a, changed\n")
+        with open(os.path.join(root, "src", "C.txt"), "w", encoding="utf-8") as handle:
+            handle.write("c\n")
+        os.remove(os.path.join(root, "src", "B.txt"))
+        os.makedirs(os.path.join(root, "tasks", "S-1"), exist_ok=True)
+        with open(os.path.join(root, "tasks", "S-1", "build.md"), "w", encoding="utf-8") as handle:
+            handle.write("## Files\n")                      # a run artefact: never part of the change
+        mark("end")
+        folder = os.path.join(root, "tasks", "S-1", ".verify")
+        read = lambda name: open(os.path.join(folder, name), encoding="utf-8").read() if os.path.isfile(
+            os.path.join(folder, name)) else ""
+        expectations += [
+            ("changes: a stage's added, changed and removed files are recorded, run artefacts left out",
+             sorted(read("changed-build.txt").splitlines()) == ["added\tsrc/C.txt", "modified\tsrc/A.txt",
+                                                                "removed\tsrc/B.txt"],
+             read("changed-build.txt")),
+            ("changes: the story's record sums its stages", sorted(read("changed.txt").splitlines()) ==
+             ["added\tsrc/C.txt", "modified\tsrc/A.txt", "removed\tsrc/B.txt"], read("changed.txt")),
+            ("changes: a repository without a commit still gets the story's diff",
+             "+a, changed" in read("story.diff") and "src/C.txt" in read("story.diff")
+             and "src/B.txt" in read("story.diff") and "build.md" not in read("story.diff"), read("story.diff")[:300]),
+        ]
+    with tmpdir() as root:
+        mark = lambda edge: subprocess.run([sys.executable, args.gate, f"--stage-{edge}", "plan", "--story", "S-1"],
+                                           cwd=root, capture_output=True, text=True, encoding="utf-8",
+                                           env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
+        mark("start"); mark("end")
+        diff = os.path.join(root, "tasks", "S-1", ".verify", "story.diff")
+        expectations.append(("changes: outside a repository there is no diff, and the file says so",
+                             os.path.isfile(diff) and "no diff" in open(diff, encoding="utf-8").read(), ""))
+
     # --- the product scope before the first story, checked without a story ---------------------------
     with tmpdir() as root:
         product = lambda: subprocess.run([sys.executable, args.gate, "--product"], cwd=root,

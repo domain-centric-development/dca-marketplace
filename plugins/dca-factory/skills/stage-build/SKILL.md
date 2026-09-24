@@ -7,7 +7,8 @@ description: Build stage of a factory run — writes the production code that tu
 
 Input: the story, `tasks/<story>/plan.md`, `tasks/<story>/tests.md`, the product scope's
 `## Look and feel` and `## Qualities`, and — in a repeat round — the gate or judge report. Nothing
-else.
+else. Open the files the plan's and the tests' `## Files` name first; search the tree only for what
+they do not answer.
 Output: the production code, plus `tasks/<story>/build.md`.
 
 ## Do
@@ -65,6 +66,8 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 
 ## Changed
 | File | Why |
+(one row per file this stage changed — the gate checks the table against the files the pipeline
+recorded as changed, and the next stages read these files first)
 
 ## Criteria
 - <criterion key>: met by <what the code now does>

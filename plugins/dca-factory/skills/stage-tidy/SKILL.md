@@ -6,7 +6,9 @@ description: Tidy stage of a factory run — the refactor step the build stage d
 # Tidy one story's code
 
 Input: the story, `tasks/<story>/plan.md`, `tasks/<story>/build.md`, and the code as the build
-stage left it — green. Nothing else.
+stage left it — green: the files `tasks/<story>/.verify/changed.txt` lists, which the pipeline
+recorded from the working tree. Nothing else. Every file you change is a row under `## Moves`; the
+gate checks the table against what changed.
 Output: the tidied code, plus `tasks/<story>/tidy.md`.
 
 The build stage answers the criteria with the smallest change that works, which is the right thing

@@ -13,6 +13,23 @@ fresh context, in a subagent or in a separate process without changing the resul
 | `stage-judge` | the story and all its predecessors, the diff, the product scope, and the profile's `reviews:`/`review.<perspective>:` lines | `tasks/<story>/judge.md` |
 | `stage-document` | the story, all predecessors, the project's documents and glossaries | `tasks/<story>/document.md` |
 
+## What changed — `tasks/<story>/.verify/changed-<stage>.txt`, `changed.txt`, `story.diff`
+
+The pipeline records what a story changes; no stage reconstructs it. Around every stage the
+runner — or `--stage-start`/`--stage-end` in a session — snapshots the working tree (every file git
+reports as differing from HEAD, untracked ones included, with its sha256). After the stage the gate
+writes `changed-<stage>.txt` (`added` / `modified` / `removed` and a path, one per line), the story's
+cumulative `changed.txt`, and `story.diff` against a tree object recorded at the story's first
+stage — written without committing, so a repository without a commit gets a diff as well. Run
+artefacts (`tasks/`, `.agents/factory/`) and gitignored files are left out. Without git there is no
+diff, and `story.diff` says so.
+
+Each hand-over names files: the plan's `## Files` (what changes, and what a later stage should
+read), the tests' `## Files` (the test files written), the build's `## Changed` and the tidy's
+`## Moves` tables. The build and tidy gates check those tables against `changed-<stage>.txt`: a
+changed file the table does not list fails the gate, a listed file that did not change is a note.
+The next stages open these files first and search the tree only for what they do not answer.
+
 `tasks/<story>/.tests-red` records which selectors the test stage actually saw fail. The build gate
 requires each green test to appear in it, because a runner that matched **no** test exits 0 exactly
 like a passing one: without the record, a criterion with a mistyped or misplaced test would be

@@ -108,7 +108,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 6
-VERSION = "0.26.0"
+VERSION = "0.27.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2285,6 +2285,8 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     with open(journal, "a", encoding="utf-8") as handle:
         if edge == "start":
             handle.write(f"{stamp}\tstage-start\t{stage}\ttool={kind}\n")
+            record_base(cwd, tasks, story_id)
+            write_snapshot(cwd, tasks, story_id, f"before-{stage}")
             print(f"usage: stage {stage} of {story_id} started ({kind})")
             return 0
         started = None
@@ -2300,6 +2302,8 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
         source = f"log={session_log}" if session_log else \
             f"session={kind.split('-')[0]}:{session_id}" if session_id and kind != "in-session" else ""
         handle.write(f"{stamp}\tstage-end\t{stage}\texit=0\n")
+        write_snapshot(cwd, tasks, story_id, f"after-{stage}")
+        record_changes(cwd, tasks, story_id, stage)
         if not allowed:
             handle.write(f"{stamp}\tusage\t{stage}\ttool={kind}\tunknown\n")
             print(f"usage: stage {stage} of {story_id} — unknown (session usage is switched off)")
@@ -2311,6 +2315,170 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
             handle.write(f"{stamp}\tusage\t{stage}\ttool={kind}\tunknown\n")
             print(f"usage: stage {stage} of {story_id} — unknown (no stage start, or no session log this tool writes)")
     return 0
+
+
+# --- what a story changed: a record every stage and every mode hands on ------------------------------
+
+# The runner snapshots the working tree before and after every stage (path and sha256 of every file
+# git reports as differing from HEAD, untracked ones included). What a stage changed follows from two
+# snapshots, deterministically; so does what the whole story changed so far. Both are written as files
+# the next stage reads first, instead of reconstructing them — and a project without a commit, where
+# `git diff` has nothing to compare against, still gets its diff: a tree object recorded at the story's
+# first stage, written without committing anything.
+CHANGE_EXCLUDED = (".agents/factory/",)
+
+
+def tree_snapshot(cwd):
+    """{path: sha256} of every file git reports as differing from HEAD, untracked ones included."""
+    listing = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain", "-z", "-uall"],
+                             cwd=cwd, capture_output=True)
+    files = {}
+    if listing.returncode != 0:
+        return files
+    for entry in listing.stdout.decode("utf-8", "replace").split("\0"):
+        path = entry[3:]
+        full = os.path.join(cwd, path)
+        if path and os.path.isfile(full):
+            with open(full, "rb") as handle:
+                files[path] = hashlib.sha256(handle.read()).hexdigest()
+    return files
+
+
+def write_snapshot(cwd, tasks, story_id, label):
+    folder = os.path.join(tasks, story_id, ".verify")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, f"tree-{label}.txt"), "w", encoding="utf-8") as handle:
+        for path, digest in sorted(tree_snapshot(cwd).items()):
+            handle.write(f"{digest}  {path}\n")
+
+
+def load_snapshot(path):
+    """{path: digest} from a snapshot file, or None when there is none (or it carries no digests)."""
+    if not os.path.isfile(path):
+        return None
+    files = {}
+    for line in read_text(path).splitlines():
+        if line.startswith("#"):
+            return None
+        digest, _, name = line.partition("  ")
+        if name:
+            files[name] = digest
+    return files
+
+
+def changes_between(before, after, tasks):
+    excluded = CHANGE_EXCLUDED + (tasks.rstrip("/") + "/",)
+    rows = []
+    for path in sorted(set(before) | set(after)):
+        if path.startswith(excluded):
+            continue
+        if path not in before:
+            rows.append(("added", path))
+        elif path not in after:
+            rows.append(("removed", path))
+        elif before[path] != after[path]:
+            rows.append(("modified", path))
+    return rows
+
+
+def git_tree(cwd):
+    """A tree object of the working tree as it is — `git add -A` into a throwaway index, never a commit."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as scratch:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
+        if subprocess.run(["git", "add", "-A"], cwd=cwd, env=env, capture_output=True).returncode != 0:
+            return None
+        tree = subprocess.run(["git", "write-tree"], cwd=cwd, env=env, capture_output=True, text=True)
+        return tree.stdout.strip() if tree.returncode == 0 and tree.stdout.strip() else None
+
+
+def record_base(cwd, tasks, story_id):
+    """At a story's first stage: the tree the story's diff is taken against. Written once."""
+    folder = os.path.join(tasks, story_id, ".verify")
+    os.makedirs(folder, exist_ok=True)
+    base = os.path.join(folder, "base-tree")
+    if not os.path.isfile(base):
+        tree = git_tree(cwd)
+        with open(base, "w", encoding="utf-8") as handle:
+            handle.write((tree or "none") + "\n")
+
+
+def record_changes(cwd, tasks, story_id, stage):
+    """`changed-<stage>.txt`, the story's `changed.txt` and `story.diff`, after a stage has ended."""
+    folder = os.path.join(tasks, story_id, ".verify")
+    after = load_snapshot(os.path.join(folder, f"tree-after-{stage}.txt"))
+    before = load_snapshot(os.path.join(folder, f"tree-before-{stage}.txt"))
+    if after is None or before is None:
+        return
+    with open(os.path.join(folder, f"changed-{stage}.txt"), "w", encoding="utf-8") as handle:
+        handle.writelines(f"{kind}\t{path}\n" for kind, path in changes_between(before, after, tasks))
+    first = next((load_snapshot(os.path.join(folder, f"tree-before-{name}.txt")) for name in STAGE_ORDER
+                  if os.path.isfile(os.path.join(folder, f"tree-before-{name}.txt"))), before)
+    story_rows = changes_between(first, after, tasks)
+    with open(os.path.join(folder, "changed.txt"), "w", encoding="utf-8") as handle:
+        handle.writelines(f"{kind}\t{path}\n" for kind, path in story_rows)
+    base_file = os.path.join(folder, "base-tree")
+    base = read_text(base_file).strip() if os.path.isfile(base_file) else "none"
+    diff_path = os.path.join(folder, "story.diff")
+    now = git_tree(cwd) if base != "none" else None
+    if base == "none" or not now:
+        with open(diff_path, "w", encoding="utf-8") as handle:
+            handle.write("# no diff: the project is not a git repository, or no base tree was recorded — "
+                         "changed.txt lists the files\n")
+        return
+    paths = [path for _, path in story_rows]
+    diff = subprocess.run(["git", "diff", "--no-color", base, now, "--"] + paths, cwd=cwd,
+                          capture_output=True, text=True, encoding="utf-8", errors="replace") if paths else None
+    with open(diff_path, "w", encoding="utf-8") as handle:
+        handle.write(diff.stdout if diff and diff.returncode == 0 else "")
+
+
+def listed_files(handover):
+    """The paths a hand-over names under `## Files`, or in the build's `## Changed` / tidy's `## Moves`
+    table: in backticks, as a list item's first word, or in a table's first column."""
+    if not os.path.isfile(handover):
+        return None
+    names, inside, found = set(), False, False
+    for line in read_text(handover).splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip().lower() in ("files", "changed", "moves")
+            found = found or inside
+            continue
+        if inside:
+            names.update(re.findall(r"`([^`\s]+)`", line))
+            item = re.match(r"^\s*[-*]\s+([^\s`|]+)", line)
+            if item:
+                names.add(item.group(1))
+            row = re.match(r"^\|\s*([^|`\s]+)\s*\|", line)
+            if row and not set(row.group(1)) <= set("-:"):
+                names.add(row.group(1))
+    return names if found else None
+
+
+def check_files_listed(result, tasks, story_id, stage):
+    """The build and tidy hand-overs name every file the stage changed, so the next stage can read
+    those instead of searching. Checked against the changed-files record, never against the claim."""
+    record = os.path.join(tasks, story_id, ".verify", f"changed-{stage}.txt")
+    if not os.path.isfile(record):
+        result.skip("files-listed", f"no changed-files record for {stage} — the stage was not snapshotted")
+        return
+    changed = [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
+    handover = os.path.join(tasks, story_id, STAGE_FILES[stage])
+    listed = listed_files(handover)
+    if listed is None:
+        result.fail("files-listed", f"{STAGE_FILES[stage]} has no `## Files` section (nor a `## Changed` or "
+                                    f"`## Moves` table) — list every file the stage changed, one line each")
+        return
+    missing = [path for path in changed if path not in listed and not any(path.endswith("/" + n) for n in listed)]
+    if missing:
+        result.fail("files-listed", f"{STAGE_FILES[stage]} does not list what the stage changed: "
+                                    f"{', '.join(missing[:8])}" + (" …" if len(missing) > 8 else ""))
+        return
+    unchanged = sorted(n for n in listed if "/" in n and n not in changed
+                       and not any(p.endswith("/" + n) or p == n for p in changed))
+    if unchanged:
+        result.note("files-listed", f"listed but not changed by this stage: {', '.join(unchanged[:5])}")
+    result.ok("files-listed", f"{STAGE_FILES[stage]} lists the {len(changed)} file(s) the stage changed")
 
 
 def freeze_windows(journal):
@@ -3091,6 +3259,10 @@ def main(argv):
     parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
     parser.add_argument("--release", nargs="?", const="", metavar="OWNER",
                         help="give the checkout back (default: this session's claim)")
+    parser.add_argument("--record-base", action="store_true",
+                        help="with --story: record the tree the story's diff is taken against (the first stage)")
+    parser.add_argument("--record-changes", metavar="STAGE",
+                        help="with --story: write changed-<stage>.txt, changed.txt and story.diff from the snapshots")
     parser.add_argument("--product", action="store_true",
                         help="check the product description alone (before the first story) and exit")
     parser.add_argument("--listening", action="store_true",
@@ -3125,6 +3297,14 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.record_base or args.record_changes:
+        if not args.story:
+            parser.error("--record-base/--record-changes need --story")
+        if args.record_base:
+            record_base(cwd, args.tasks, args.story)
+        if args.record_changes:
+            record_changes(cwd, args.tasks, args.story, args.record_changes)
+        return 0
     if args.product:
         result = Result()
         try:
@@ -3221,6 +3401,7 @@ def main(argv):
             )
             if args.stage in ("build", "tidy"):
                 check_required_suites(result, profile, cwd)
+                check_files_listed(result, args.tasks, story_id, args.stage)
             check_existing_tests(result, cwd, args.tasks, story_id, body)
             check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:

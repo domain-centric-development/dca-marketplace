@@ -5,7 +5,9 @@ description: Judge stage of a factory run — reviews the story's change from th
 
 # Judge one story's change
 
-Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change, the
+Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
+`tasks/<story>/.verify/story.diff`, which the pipeline writes; open a whole file only where the
+diff's context does not carry the question, and explore no further than a finding needs — the
 product scope — and, in a repeat round, the previous verdict, `tasks/<story>/.judge-previous.md`.
 Nothing else. A change that contradicts the product scope — a surface it does not list, state kept
 where it says otherwise, a page without its stated look or accessibility, something under

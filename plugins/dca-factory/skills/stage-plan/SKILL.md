@@ -114,6 +114,11 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 | --- | --- |
 | <path from the project root> | <the story's changed-expectation line, or the decision id> |
 
+## Files
+- `<path>` — changes: <what>          (every file the plan expects to change)
+- `<path>` — read: <why>              (the pattern to mirror, the fixture to reuse — what a later
+                                       stage must read to understand the change)
+
 ## Glossary proposals
 - <term>: <definition>            (omit the section when there are none)
 

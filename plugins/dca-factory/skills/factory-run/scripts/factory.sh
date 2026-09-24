@@ -1031,6 +1031,7 @@ run_story() {
       # The previous verdict is an input to the next one, not something to overwrite: a defect a judge
       # confirmed may not vanish in the next round without a word.
       [ "$stage" = judge ] && [ -f "$TASKS/$story/judge.md" ] && mv "$TASKS/$story/judge.md" "$TASKS/$story/.judge-previous.md"
+      [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
       snapshot "$story" "before-$stage"
       printf '%s\tstage-start\t%s\ttool=%s\n' "$stage_started" "$stage" "$tool" >> "$TASKS/$story/.verify/journal.tsv"
       local raw_out; raw_out="$TASKS/$story/.verify/$stage.$(date -u +%H%M%S).out"
@@ -1046,6 +1047,8 @@ run_story() {
       printf '%s\tstage-end\t%s\texit=0\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
         >> "$TASKS/$story/.verify/journal.tsv"
       snapshot "$story" "after-$stage"
+      # What the stage changed and the story's diff so far, for the next stage to read first.
+      [ -f "$GATE" ] && "$PY" "$GATE" --record-changes "$stage" --story "$story" >/dev/null 2>&1
       local artefact="$TASKS/$story/$(stage_file "$stage")"
       [ -f "$artefact" ] || {
         echo "factory: stage '$stage' produced no $artefact — a stage is finished when its file exists." >&2

@@ -5,7 +5,9 @@ description: Documentation stage of a factory run — brings the project's own d
 
 # Document what the story changed
 
-Input: the story, `tasks/<story>/plan.md`, `build.md`, `judge.md`, and the diff. Nothing else.
+Input: the story, `tasks/<story>/plan.md`, `build.md`, `judge.md`, and the diff —
+`tasks/<story>/.verify/story.diff`, which the pipeline writes (where it says there is no diff,
+`changed.txt` lists the files). Nothing else.
 Output: the updated documents, plus `tasks/<story>/document.md`.
 
 A story is not delivered when its code is green and its documents describe the system as it was
