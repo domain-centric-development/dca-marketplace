@@ -36,7 +36,8 @@ missing. An epic's intent must fit the product it belongs to.
 
 ## Epic
 
-Front matter, all four fields mandatory and non-empty:
+Front matter, every field non-empty; the gate refuses an epic without `intent`, `goal`, `metric` or
+`domain_contact`:
 
 | Field | Meaning |
 |---|---|
@@ -85,7 +86,7 @@ Body sections:
     after the `When` is a second one; two triggers are two scenarios) or without a `Then`, a step
     outside a scenario, an unknown step and a key used twice. Concrete values belong in the steps:
     they are what turns a range or a default into a question someone answers;
-  - **lines**: one `- <key>: <criterion>` line each, the form existing stories use.
+  - **lines**: one `- <key>: <criterion>` line each, the shorter form.
 
   Criteria are observable end-user behaviour, small enough that one agent run delivers the whole
   story. They are specification, not executable feature files: the test stage turns each into one

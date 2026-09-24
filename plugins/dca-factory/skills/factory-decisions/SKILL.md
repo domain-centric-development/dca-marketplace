@@ -43,12 +43,12 @@ once per project. The state of a record is read off the file: no `## Answer` is 
 6. **`by:` is the person, `at:` is now.** Ask whose decision it is if it is not obvious from the
    session; the git `user.name` is a suggestion to confirm, not an answer. `at:` is the current
    time in UTC, ISO 8601. You are not the decider and your name goes nowhere in the record.
-7. **Never overwrite an answer.** A record that already has `## Answer` is answered; say so, show
-   it, and stop. A change of mind is a new question — say that the stage would have to ask again,
+7. **Never overwrite an answer.** A record whose `## Answer` carries `answer:`, `by:` and `at:` is
+   answered; say so, show it, and stop. A change of mind is a new question — say that the stage would have to ask again,
    and why the old answer stays as history. A draft (an `## Answer` without `by:` or `at:`) may be
    completed with the missing lines once the human confirms it is theirs.
 8. **Say what happens next, and do not do it.** After writing: name the stage that asked and how the
-   story continues — a worker that is running (`/loop /factory-run`, or the person's runner) picks
+   story continues — a worker that is running (a listening session, or the person's runner) picks
    it up by itself; otherwise `/factory-run <story>` resumes it at that stage. Answering a question is not taking over the story; the worker that asked
    applies the answer, and the gate stamps the record applied when it has. If the human wants to
    go on interactively in *this* session, they say so — then it is a hand-over, named as one.

@@ -115,7 +115,7 @@ your domain, and nothing in the method knows your build.
 ## Other tools
 
 The pipeline's carriers are deliberately portable: `SKILL.md` folders and one dependency-free
-script — no plugin manifest, no hooks, no agent frontmatter. Codex and OpenCode discover skills
+script — no stage needs a plugin manifest, a tool's hooks or agent frontmatter. Codex and OpenCode discover skills
 from a project-local directory, so the installer writes them there:
 
 ```

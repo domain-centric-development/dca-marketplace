@@ -1,6 +1,6 @@
 # Stack profile — the only place that knows how this project builds and tests.
 # Flat `key: value` pairs. A command that is not declared here is skipped by the
-# gate and named in its report; it never fails a stage. Every value is run through a
+# gate and named in its report; it fails a stage only when `required:` names it. Every value is run through a
 # shell, so a stack that needs two commands chains them (`a && b`) — except the command
 # the gate appends a single-test selector to (`e2eTest:`, or `test:` when there is no
 # `e2eTest:`), which stays one command, because the selector would reach only the last.
@@ -27,7 +27,8 @@
 #              or one source set is knowledge about that build tool — the gate refuses to
 #              guess it, and running the wrong task would call a criterion covered that
 #              nothing executes
-# browser      `playwright` when the end-user tests drive a real browser (e2eTest runs them), `none`
+# browser      the browser runner's name (`playwright`, or the one the project uses) when the end-user
+#              tests drive a real browser (e2eTest runs them) — any value but `none` means "has one"; `none`
 #              when the project deliberately has none. With `none` the plan may fall back to a lower
 #              test level for a page; unset, a criterion only a browser can observe stops the plan
 #              once for the stack decision. Install sets it where it finds a Playwright setup
@@ -53,7 +54,7 @@
 #              each test command by its own key (`test`, `test.<name>`, `e2eTest`) — an end-user
 #              suite that needs a running system can stay out of it. `story-gate.py --change` (the commit hook, CI, a direct edit) then fails
 #              a required check that is not declared, not run in its scope, or ran no test at all.
-#              Absent: report-only — declared checks run, the rest is named, nothing is mandatory.
+#              Absent: nothing is mandatory — a declared check that runs red fails, an undeclared one is named.
 #              The build and tidy gates also run the required test commands whole, so a story
 #              cannot break what the stories before it delivered. A build tool that skips an
 #              up-to-date task writes no new report — give a required test command its rerun flag

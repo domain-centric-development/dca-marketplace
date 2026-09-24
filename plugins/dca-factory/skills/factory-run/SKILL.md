@@ -1,6 +1,6 @@
 ---
 name: factory-run
-description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), to keep a session working on the backlog as it fills ("/loop /factory-run"), or to set up the pipeline's files in a project that has none. Works in any project: it reads the backlog, the stack profile and the stage hand-over files, never project knowledge baked into itself.
+description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), to keep a session working on the backlog as it fills, or to set up the pipeline in a project that has none. Reads the backlog, the stack profile and the hand-over files — no project knowledge of its own.
 ---
 
 # Run one story
@@ -18,8 +18,8 @@ them apart is what makes a run reproducible.
 | the epic | `backlog/<epic>/epic.md` | same |
 | the stack profile | `.agents/factory/factory.profile.yaml` | create it from the template by detecting the build (see below) |
 | an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with its DCA bootstrap skill, and the factory calls that skill rather than owning it. Without one, the build gate skips the architecture check and names it |
-| the gate | `.agents/factory/story-gate.py` | copy it from this skill's `scripts/story-gate.py` |
-| the commit guard | `.githooks/pre-commit` | copy it from this skill's `templates/githooks/pre-commit` and run `git config core.hooksPath .githooks` |
+| the gate | `.agents/factory/story-gate.py` | the installer writes it (step 1 below) |
+| the commit guard | `.githooks/pre-commit` | the installer writes it and sets `core.hooksPath` (step 1 below) |
 
 Read `reference/backlog-contract.md` for the backlog format and `reference/file-contracts.md`
 for what each stage reads and writes. Both are part of this skill.
@@ -339,7 +339,7 @@ counted from the journal, so a restart or a second session continues the same co
 that crosses the line still finishes, because usage is known only after it ran. A tool that reports
 nothing — OpenCode today, a custom `FACTORY_TOOL_CMD` without `FACTORY_USAGE_FORMAT` — is shown as
 invocations without a report, never as zero. An in-session run is measured through the stage marks
-(below, *Execution tier*); a session log carries tokens but no price, so its cost reads `—`, not 0.
+(above, *Execution tier*); a session log carries tokens but no price, so its cost reads `—`, not 0.
 An old session log can be read whole: `story-gate.py --usage-from claude-session|codex-session <log>`. The watch lives as long as its process: a closed session or terminal ends it, and a
 file wakes nobody. In-session, do the same loop yourself — ask the schedule, run the story it
 names, ask again — and stop instead of waiting.

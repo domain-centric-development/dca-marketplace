@@ -1,6 +1,6 @@
 ---
 name: stage-plan
-description: Plan stage of a factory run — turns one backlog story into an implementation plan with numbered acceptance criteria and names the architecture elements that change. Use when a story is to be planned before any test or code is written, when the orchestrator hands over a story, or on "/stage-plan". Reads only the story and the project's own glossary and context map.
+description: Plan stage of a factory run — turns one backlog story into an implementation plan with numbered acceptance criteria and names the architecture elements that change. Use when a story is to be planned before any test or code is written, when the orchestrator hands over a story, or on "/stage-plan". Reads the story, the product scope, the stack profile, the project's glossary and context map and its existing tests — nothing else.
 ---
 
 # Plan one story

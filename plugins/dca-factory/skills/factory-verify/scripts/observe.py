@@ -273,8 +273,8 @@ def observe(project, tasks, backlog, story_id):
             for entry in skipped:
                 report.blind("gate", f"{name.split('.')[0]} skipped: {entry}")
     else:
-        report.blind("gate", "no gate reports in the run journal — the run was not driven by the runner, "
-                             "so only the files can be cross-checked")
+        report.blind("gate", "no gate reports in the run journal — the runner keeps them, a run in a session "
+                             "does not, so only the files can be cross-checked")
 
     # --- 4. did a stage change a test after the test stage? --------------
     before_path = os.path.join(journal_dir, "tree-after-test.txt")

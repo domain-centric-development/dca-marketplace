@@ -9,7 +9,8 @@
 # One command, the gate's change check, against what the commit contains: the Git index, and
 # refused when the working tree differs from it — tests that pass against an unstaged fix
 # certify nothing about the commit. The stack profile declares the commands and, in its
-# `required:` line, which of them must hold; without that line the check is report-only.
+# `required:` line, which of them must hold; without that line nothing is mandatory, and a
+# declared command that runs red still refuses the commit.
 
 set -uo pipefail
 

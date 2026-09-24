@@ -834,9 +834,17 @@ write_profile() {
   # A browser runner the project already has: the end-user command drives it, and the profile says so,
   # so the plan stage takes browser tests as the shape instead of falling back to reading page text.
   local e2e="" browser=""
-  if [ -f gradle/plugins/test-e2e.gradle ] || grep -qs "com.microsoft.playwright" build.gradle build.gradle.kts gradle/plugins/*.gradle; then
-    e2e="./gradlew test-e2e"; browser="playwright"
-    [ -n "$compile" ] && compile="$compile testE2eClasses"     # the browser tests compile with the rest
+  # Gradle: Playwright on any build script. The command is named only where the build declares the
+  # `test-e2e` task the e2e-testing skill's setup writes; any other layout gets `browser:` and leaves
+  # the command to the person, rather than a guessed task name that fails on the first run.
+  local gradle_scripts; gradle_scripts=$(find . -maxdepth 3 \( -name build -o -name .gradle -o -name node_modules \) -prune \
+    -o \( -name '*.gradle' -o -name '*.gradle.kts' \) -print 2>/dev/null)
+  if [ -n "$gradle_scripts" ] && printf '%s\n' "$gradle_scripts" | xargs grep -qs "com.microsoft.playwright"; then
+    browser="playwright"
+    if printf '%s\n' "$gradle_scripts" | xargs grep -qsE "test-e2e|testE2e"; then
+      e2e="./gradlew test-e2e"
+      [ -n "$compile" ] && compile="$compile testE2eClasses"     # the browser tests compile with the rest
+    fi
   elif grep -qs "com.microsoft.playwright" pom.xml; then
     browser="playwright"
   elif grep -rqs --include="*.csproj" "Microsoft.Playwright" . 2>/dev/null; then
@@ -897,8 +905,8 @@ block = start + """
 This project delivers stories through the dca-factory pipeline. At the start of a session, unless the
 person names a task right away, run `python3 .agents/factory/story-gate.py --status --brief`, show
 its lines, and ask what they want to do: write or release a story (`/factory-backlog`), answer a
-waiting question (`/factory-decisions`), work the backlog (`/factory-run`, or `/loop /factory-run` to
-keep listening), or look closer (`/factory-status`). A session never runs `factory.sh run` or
+waiting question (`/factory-decisions`), work the backlog (`/factory-run`; to keep listening, a tool
+that repeats a prompt runs it again — in Claude Code `/loop /factory-run`), or look closer (`/factory-status`). A session never runs `factory.sh run` or
 `backlog` — they start a tool process per stage. One worker per checkout: a managing session writes
 backlog and decision files only.
 """ + end

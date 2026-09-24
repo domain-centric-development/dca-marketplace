@@ -1,6 +1,6 @@
 # dca-factory
 
-The **delivery pipeline** for a Domain-Centric Architecture project: a backlog contract, four
+The **delivery pipeline** for a Domain-Centric Architecture project: a backlog contract, six
 stage skills with file hand-overs, a deterministic story gate and one orchestrator.
 
 ## Install
@@ -309,7 +309,8 @@ python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy
 | test, build, tidy | a test that existed before the story still expects what it did — added cases pass; a changed or removed line passes only when the plan lists it under `## Changed tests`, backed by the story's `## Changed expectations` or by an answered decision (`tests-kept`, from the plan gate's git baseline) |
 | every stage | the story's **decision records** (`.agents/factory/decisions/`): a `## needs-human` names one; an open one blocks the story and says where to answer; an answered one is applied by the stage that asked and stamped `## Applied` |
 
-A command the stack profile does not declare is skipped and named in the report — never failed.
+A command the stack profile does not declare is skipped and named in the report — never failed,
+unless the profile's `required:` names it (below).
 The gate is a build-level check, not a hook and not a stage's self-assessment: a stage cannot
 declare its own work done.
 
@@ -326,8 +327,8 @@ only when its reports show executed cases — a runner that matched nothing exit
 `required:` line (`required: compile test architecture`) makes checks mandatory — each test command
 by its own key (`test`, `test.integration`, `e2eTest`), so an end-user suite that needs a running
 system stays optional: a required check that is not declared, not run in this scope or ran nothing
-fails, and a red check outside the policy is reported without deciding the verdict. Without it the check is
-report-only. `--staged` checks the Git index, including the temporary one `git commit -a` uses, and
+fails, and a red check outside the policy is reported without deciding the verdict. Without it nothing
+is mandatory: a declared command that runs red fails, one that is not declared is skipped and named. `--staged` checks the Git index, including the temporary one `git commit -a` uses, and
 **refuses** when the working tree differs from it — modified-not-staged or untracked files — because
 tests passing against an unstaged fix say nothing about the commit.
 
@@ -355,10 +356,12 @@ fails. Each implementation is held to the contract, not to the other one.
 ## Portability
 
 Skills are plain `SKILL.md` folders and the gate is a script, so the same folder works in any
-agent tool that reads the Agent Skills format. Nothing in the pipeline depends on a plugin
-manifest, an orchestration script, agent frontmatter or hooks. Where a tool can start a
-subagent per stage, `factory-run` uses it; where it cannot, the file contracts plus the gate
-keep an in-session run honest.
+agent tool that reads the Agent Skills format. No stage depends on a plugin manifest, agent
+frontmatter or a tool's hooks. The runner (`factory.sh`) is optional — a session runs the stages
+without it; the git pre-commit hook is the one hook the pipeline relies on, because every tool
+commits through git; Claude Code's SessionStart hook only tells a session where the pipeline stands.
+Where a tool can start a subagent per stage, `factory-run` uses it; where it cannot, the file
+contracts plus the gate keep an in-session run honest.
 
 ## What is actually supported
 

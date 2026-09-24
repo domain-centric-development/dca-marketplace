@@ -157,6 +157,10 @@ TESTS = """# Tests — STORY-1
 | --- | --- |
 | shows-the-thing | com.example.WidgetPageTest#showsTheThing |
 | shows-nothing-when-empty | com.example.WidgetUnitTest#showsNothingWhenEmpty |
+
+## Files
+- src/test-pages/java/com/example/WidgetPageTest.java
+- src/test/java/com/example/WidgetUnitTest.java
 """
 
 # The fixture's runner: exit 1 while the marker for that test is absent, 0 once it is there. It
@@ -1799,6 +1803,10 @@ def main(argv=None):
         (Case("test: every criterion mapped and red passes", "test", 0,
               must_pass=("tests-mapped", "tests-exist", "compiles", "tests-red")),
          dict()),
+        (Case("test: a tests.md without `## Files` is refused once the stage's changes are recorded", "test", 1,
+              must_fail=("files-listed",)),
+         dict(tests=TESTS.split("\n## Files")[0] + "\n", extra_sources=(
+             ("tasks/STORY-1/.verify/changed-test.txt", "modified\tsrc/test/java/com/example/WidgetUnitTest.java\n"),))),
         (Case("test: an unmapped criterion is refused", "test", 1, must_fail=("tests-mapped",)),
          dict(tests="\n".join(TESTS.splitlines()[:5]) + "\n")),
         (Case("test: a selector with no source file is refused", "test", 1,
@@ -2025,6 +2033,12 @@ def main(argv=None):
         (Case("decisions: the plan gate lets an answered plan question through — its stage runs next",
               "plan", 0, text=("the plan stage runs next and applies it",)),
          with_decisions(("STORY-1-01", DECISION + ANSWER), plan=PLAN_ASKING)),
+        (Case("decisions: a judge's story conflict answered for the plan stage lets the plan gate through",
+              "plan", 0, text=("the plan stage runs next and applies it",)),
+         dict(extra_sources=((".agents/factory/decisions/STORY-1-01.md",
+                              CONFLICT.replace("stage: test", "stage: plan") + ANSWER),
+                             ("tasks/STORY-1/plan.md", PLAN_APPLIED.replace("Decision STORY-1-01 answered b: ", "")),
+                             ("tasks/STORY-1/judge.md", JUDGE_CONFLICT)))),
         (Case("decisions: an open plan question still stops the plan gate", "plan", 1,
               must_fail=("decisions",), text=("STORY-1-01 is open",)),
          with_decisions(("STORY-1-01", DECISION), plan=PLAN_ASKING)),
@@ -2235,8 +2249,8 @@ def main(argv=None):
         change_project(root, "compile: true\n")
         code, output = run_change(args.gate, root)
         verdicts = checks_by_verdict(output)
-        expectations.append(("change: without `required:` the check is report-only and names what it skipped",
-                             code == 0 and "test" in verdicts["skip"] and "report-only" in output,
+        expectations.append(("change: without `required:` nothing is mandatory, and what it skipped is named",
+                             code == 0 and "test" in verdicts["skip"] and "nothing is mandatory" in output,
                              output.strip().splitlines()[-3:]))
     with tmpdir() as root:
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test architecture\n")
@@ -3157,6 +3171,15 @@ def main(argv=None):
         expectations.append(("changes: outside a repository there is no diff, and the file says so",
                              os.path.isfile(diff) and "no diff" in open(diff, encoding="utf-8").read(), ""))
 
+    with tmpdir() as root:
+        write_file(root, "tasks/S-1/judge.md", "## Verdict\nverdict: changes-requested\n")
+        started = subprocess.run([sys.executable, args.gate, "--stage-start", "judge", "--story", "S-1"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8",
+                                 env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
+        expectations.append(("judge: in a session, the repeat round's stage mark moves the verdict before it aside",
+                             os.path.isfile(os.path.join(root, "tasks", "S-1", ".judge-previous.md"))
+                             and not os.path.exists(os.path.join(root, "tasks", "S-1", "judge.md"))
+                             and ".judge-previous.md" in started.stdout, started.stdout.strip()))
     # --- the product scope before the first story, checked without a story ---------------------------
     with tmpdir() as root:
         product = lambda: subprocess.run([sys.executable, args.gate, "--product"], cwd=root,

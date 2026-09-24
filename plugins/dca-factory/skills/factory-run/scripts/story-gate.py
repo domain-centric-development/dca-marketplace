@@ -109,7 +109,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 6
-VERSION = "0.30.2"
+VERSION = "0.30.3"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1665,7 +1665,9 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
         elif state == "answered":
             text = stage_texts.get(stage)
             still_asking = text is not None and rid in (needs_human_ids(text) or [])
-            if gating == "plan" and stage == "plan" and (text is None or still_asking):
+            # Before the plan stage runs, an answer it has to apply is its input — also one a judge's
+            # story conflict routed here, which the plan written before the conflict cannot cite yet.
+            if gating == "plan" and stage == "plan" and (text is None or still_asking or rid not in text):
                 result.note(
                     "decisions",
                     f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}) — the plan "
@@ -1996,8 +1998,8 @@ def change_check(result, cwd, profile, staged, only):
     if required:
         result.ok("policy", "required: " + " ".join(sorted(required)))
     else:
-        result.note("policy", "the profile declares no `required:` — report-only: what is declared "
-                              "runs, what is not is named, nothing is mandatory")
+        result.note("policy", "the profile declares no `required:` — nothing is mandatory: what is declared "
+                              "runs and fails when red, what is not is named")
     env = dict(os.environ)
     tree = None
     if staged:
@@ -2417,6 +2419,11 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
                       f"tool allows; in this session's own context it cannot take effect")
             record_base(cwd, tasks, story_id)
             write_snapshot(cwd, tasks, story_id, f"before-{stage}")
+            # A repeat judge round reads the verdict before it — the runner moves it aside the same way.
+            verdict = os.path.join(tasks, story_id, "judge.md")
+            if stage == "judge" and os.path.isfile(verdict):
+                os.replace(verdict, os.path.join(tasks, story_id, ".judge-previous.md"))
+                print(f"judge: the previous verdict is {tasks}/{story_id}/.judge-previous.md — account for it")
             print(f"usage: stage {stage} of {story_id} started ({kind})")
             return 0
         started = None
@@ -2624,7 +2631,7 @@ def listed_files(handover):
 
 
 def check_files_listed(result, tasks, story_id, stage):
-    """The build and tidy hand-overs name every file the stage changed, so the next stage can read
+    """The test, build and tidy hand-overs name every file the stage changed, so the next stage can read
     those instead of searching. Checked against the changed-files record, never against the claim."""
     record = os.path.join(tasks, story_id, ".verify", f"changed-{stage}.txt")
     if not os.path.isfile(record):
@@ -3028,7 +3035,8 @@ def status_brief(cwd, backlog, tasks, session_start=False):
         print("dca-factory: this project delivers stories through the factory. At the person's first message, "
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
               "release a story (/factory-backlog), answer a waiting question (/factory-decisions), start working "
-              "the backlog (/factory-run --watch, or /loop /factory-run), or look closer (/factory-status). A "
+              "the backlog (/factory-run, which keeps asking the schedule; in Claude Code also /loop /factory-run), "
+              "or look closer (/factory-status). A "
               "managing session writes backlog and decision files only; the worker is the one writer in the "
               "checkout.")
     return 0
@@ -3634,7 +3642,7 @@ def main(argv):
             )
             if args.stage in ("build", "tidy"):
                 check_required_suites(result, profile, cwd)
-                check_files_listed(result, args.tasks, story_id, args.stage)
+            check_files_listed(result, args.tasks, story_id, args.stage)
             check_existing_tests(result, cwd, args.tasks, story_id, body)
             check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:

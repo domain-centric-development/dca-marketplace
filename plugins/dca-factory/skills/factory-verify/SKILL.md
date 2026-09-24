@@ -47,9 +47,10 @@ see. It cross-checks claims against evidence, which is the whole point:
 - **escalations** — a `needs-human` section, extra build/judge rounds, a verdict that is not
   `pass`, and every place a stage recorded a fall-back.
 
-Report its three sections as they stand. The third one matters as much as the first: a run the
-runner did not drive has no journal, so the diff-based checks cannot run, and the report says so
-rather than passing them.
+Report its three sections as they stand. The third one matters as much as the first: a run in a
+session keeps a journal and the tree snapshots through its stage marks, but no copies of the gate
+reports, and a stage run without marks leaves nothing to compare — the report names what it could
+not check rather than passing it.
 
 What only you can add, when the human asks for it: whether the stage files *reason* well — whether
 the plan's design actually follows from the story, whether the judge's findings are real. Say
@@ -106,8 +107,8 @@ sequence is: check the machinery when it changed, observe the next real run eith
   reading, not as a measurement
 ```
 
-The "not observed" line is not decoration. A run the runner did not drive has no journal, so the
-diff-based checks cannot run at all; a fixture cannot see a stack this project does not have. A
+The "not observed" line is not decoration. A stage run without stage marks has no snapshots, so the
+diff-based checks cannot run for it at all; a fixture cannot see a stack this project does not have. A
 verification that does not name its own blind spots invites exactly the trust it has not earned.
 
 ## Do not

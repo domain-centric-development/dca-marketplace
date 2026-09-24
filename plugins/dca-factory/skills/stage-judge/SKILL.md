@@ -1,6 +1,6 @@
 ---
 name: stage-judge
-description: Judge stage of a factory run — reviews the story's change from three perspectives (domain, boundaries, craft), keeps only defects it can confirm in the code, and returns one verdict. Use after the build stage of a story, when the orchestrator asks for the review, or on "/stage-judge". Reports defects; it does not fix them.
+description: Judge stage of a factory run — reviews the story's change from three perspectives (domain, boundaries, craft), keeps only defects it can confirm in the code, and returns one verdict. Use after the tidy stage of a story, when the orchestrator asks for the review, or on "/stage-judge". Reports defects; it does not fix them.
 ---
 
 # Judge one story's change
@@ -56,7 +56,7 @@ silently stands in for it.
    abstraction; no duplication that carries a decision twice; no dead code, no leftover stub, no
    comment describing history instead of the present state.
 
-Where the profile says `browser: playwright`, an end-user test that reads a page's script or markup as
+Where the profile names a browser runner (`browser:` other than `none`), an end-user test that reads a page's script or markup as
 text in place of driving the browser is a **major** finding: it proves the wording, not the behaviour,
 and the project has the runner that would prove the behaviour.
 
@@ -116,7 +116,7 @@ A `story-conflict` is a question to a human, so it is a **decision record** like
 has to change, `test` when an agreed expectation has to change. Say in `## Question` that the judge
 asked. The run waits for the answer and resumes at that stage; everything after it runs again.
 Never resolve a `story-conflict` by quietly reinterpreting the criterion — a correction that
-changes an agreed decision belongs in the document, or after five rounds the story describes
+changes an agreed decision belongs in the story, where a human decides it, or after five rounds the story describes
 something the code no longer does and nobody notices.
 
 ## The judge file

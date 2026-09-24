@@ -74,9 +74,10 @@ dca-marketplace/
   `factory-backlog` writes the backlog it reads and `factory-scope` answers what a run may not decide
   itself — a new bounded context, a new relationship between contexts, a surface an actor lacks; `skills/factory-run/scripts/story-gate.py`
   is the deterministic check between the stages, copied into a consuming project as
-  `.agents/factory/story-gate.py`. Carriers are portable by rule: `SKILL.md` folders and one script, no hooks,
-  no orchestration script, no agent frontmatter, no `disable-model-invocation` — Codex discovers the same folder
-  from a project's `.codex/skills/`. Project knowledge lives in two places the project owns: the stack profile
+  `.agents/factory/story-gate.py`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
+  frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
+  discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`) is optional, the git
+  pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile
   (`.agents/factory/factory.profile.yaml`) and the backlog, glossary and context map.
 - **software-craftsmanship** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`; agents `e2e-tester`,
   `clean-code-reviewer`. No DCA assumptions; usable alone. `e2e-testing` holds the end-user-testing craft

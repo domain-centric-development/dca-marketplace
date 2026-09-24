@@ -30,7 +30,8 @@ start nothing and answer nothing on anyone's behalf.
    enabled for the person while the project holds its own copy: stages run in a session may then
    pick the plugin's skills. Say so, and that the runner's stages see only the project's.
 4. **Say whether a session listens.** `listening:` names the session that last looked at the backlog
-   and when. A look within the hour means a `/loop /factory-run` is waiting for work; a long silence
+   and when. A look within the hour means a listening session (`/factory-run` asking the schedule again; in
+   Claude Code `/loop /factory-run`) is waiting for work; a long silence
    means it has probably ended — then the backlog is worked by nobody until someone starts one.
 5. **Read "running" for what it is.** It means a stage started and its end is not in the journal. The
    journal cannot tell a running stage from one whose runner was stopped: say how long ago it

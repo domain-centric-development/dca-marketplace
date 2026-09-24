@@ -26,7 +26,7 @@ files written. You write **no** production behaviour.
    `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
    `story:`, `stage: test`, `asked:` (UTC) and the sections `## Question`, `## Options`,
    `## Recommendation` — never an answer (full shape: `factory-run/templates/decision.md.tmpl`).
-   Where the profile says `browser: playwright`, an end-user test of a page drives the browser: use
+   Where the profile names a browser runner (`browser:` other than `none`), an end-user test of a page drives the browser: use
    the end-user testing craft (the `e2e-testing` skill, or the profile's `carrier.test`) — the
    application started by the test, the fake clock for anything that counts or expires, a stand-in for
    a permission the user answers. Never read the page's script or markup as text to infer what the
@@ -91,6 +91,9 @@ nothing else from the file:
 | criterion | test |
 | --- | --- |
 | <criterion key> | <fully.qualified.Class>#<method> |
+
+## Files
+- <every test file this stage wrote or changed, one per line>
 
 ## Notes
 - <test>: currently fails on <the assertion>, because <what is missing>

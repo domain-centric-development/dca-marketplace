@@ -1,6 +1,6 @@
 ---
 name: factory-scope
-description: Writes the product scope before a project's first story — what is built, for whom, through which surfaces, how it works, how it looks — and handles the one question a delivery run may not answer for itself — a story that would need a new bounded context, a new relationship between contexts, or a surface its actor does not have yet. Use when the backlog skill reported the product scope missing, when a plan stopped with needs-human for one of those questions, when the backlog skill refused a story for a context that is not on the map, or on "/factory-scope". Produces a product scope, a decision and a map, never code.
+description: Writes the product scope before a project's first story — what is built, for whom, through which surfaces, how it works, how it looks — and decides what a delivery run may not: a new bounded context, a new relationship between contexts, a surface an actor lacks. Use when the product scope is missing, when a plan stopped with needs-human for one of those questions, or on "/factory-scope". Writes no story (that is /factory-backlog) and no code.
 ---
 
 # Answer one scoping question
@@ -34,7 +34,7 @@ write `backlog/product.md` — or where the profile's `product:` points — from
 5. **The browser runner, when the product has pages.** When `## Surfaces` names a page and the stack
    profile has no `browser:` line, ask the stack question now, not in the first story: set up a
    browser runner (the `e2e-testing` skill's `reference/setup.md`; the bootstrap does it for a
-   greenfield project) and record `browser: playwright`, or record `browser: none` with the reason.
+   greenfield project) and record its name (`browser: playwright`), or record `browser: none` with the reason.
    Without it, the first story that needs a browser stops at its plan.
 6. **Check it with the gate:** `--product` exits 0. Then hand back to `/factory-backlog` for the
    first epic.

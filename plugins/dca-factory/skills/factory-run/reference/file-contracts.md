@@ -6,12 +6,15 @@ fresh context, in a subagent or in a separate process without changing the resul
 
 | Stage | Reads | Writes |
 |---|---|---|
-| `stage-plan` | the story, the product scope, the project's glossary and context map if present | `tasks/<story>/plan.md` |
+| `stage-plan` | the story, the product scope, the stack profile, the project's glossary and context map if present, and its existing tests (for `## Changed tests`) | `tasks/<story>/plan.md` |
 | `stage-test` | the story, `plan.md`, the product scope's qualities where the plan names them | `tasks/<story>/tests.md` (with the `gate:tests` table) |
 | `stage-build` | the story, `plan.md`, `tests.md`, the product scope's look and qualities | `tasks/<story>/build.md` |
 | `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `tasks/<story>/tidy.md` |
-| `stage-judge` | the story and all its predecessors, the diff, the product scope, and the profile's `reviews:`/`review.<perspective>:` lines | `tasks/<story>/judge.md` |
-| `stage-document` | the story, all predecessors, the project's documents and glossaries | `tasks/<story>/document.md` |
+| `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product scope, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `tasks/<story>/judge.md` |
+| `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries | `tasks/<story>/document.md` |
+
+The tidy stage's moves reach the judge and the document stage through the story diff, not through
+`tidy.md`: what a stage reads is what it needs, not everything that exists.
 
 ## What changed — `tasks/<story>/.verify/changed-<stage>.txt`, `changed.txt`, `story.diff`
 
@@ -38,11 +41,11 @@ like a passing one: without the record, a criterion with a mistyped or misplaced
 certified green. When the file is absent altogether — the run artefacts need not be committed — the
 green run is skipped and named rather than trusted or refused.
 
-Each line is `<selector><TAB><sha256 of the test file>` (file contract 4): a red proof is a proof
-about one version of a test. The build and tidy gates compare the digest with the file as it is
+Each line is `<selector><TAB><sha256 of the test file>`: a red proof is a proof about one version of
+a test. The build and tidy gates compare the digest with the file as it is
 (`red-proof`); a test changed after it was seen failing no longer carries its proof, unless an
-answered decision of stage `test` changed what it expects. A line without a digest, from an older
-gate, is still read, and the comparison is skipped and named.
+answered decision of stage `test` changed what it expects. A line without a digest proves the red run
+but not the version, so the comparison is skipped and named.
 
 `tasks/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
 the orchestrator remembers, because an in-session run has no other honest way to count and a
@@ -180,11 +183,13 @@ hold: `compile`, `architecture`, `format`, and each test command by its own prof
 every commit waiting for one. A required check fails when its command is not declared (at the build and tidy gates too) or — for
 a test command — when no report written by the run shows an executed case. A required check outside
 this run's scope (`--checks`) is reported as not run here, for a later scope such as CI to run; this
-run does not fail on it. Once `required:` is declared, the policy
-decides: a check outside it that ran red or ran nothing is reported, and does not fail the verdict.
-Without `required:` every declared command that runs red fails, as it always did. Without `required:` the check is
-report-only. An older gate would ignore the key and pass what the project declared mandatory,
-which is why it raised the file contract to 3.
+run does not fail on it. Once `required:` is declared, the policy decides: a check outside it that
+ran red or ran nothing is reported, and does not fail the verdict.
+
+Without `required:` nothing is mandatory, and what runs still counts: a declared command that runs
+red fails, a command that is not declared is skipped and named. So "skipped and named, never failed"
+holds for what the project did not declare, not for what `required:` names. A gate that does not know
+the key would pass what the project declared mandatory, which is why the key needs file contract 3.
 
 ## Scenario contract — for `--parity`
 
