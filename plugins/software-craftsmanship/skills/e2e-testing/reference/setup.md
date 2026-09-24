@@ -149,6 +149,26 @@ headless browsers show no notification, so a stand-in is what makes the notifica
 
 ## Proving the runner works
 
-Before the first story, one smoke test opens the start page and asserts one visible element. Then break
-that element on purpose and see the test fail. A browser suite that stays green while the page is broken
-is not testing the page.
+Before the first story, one smoke test proves that the browser reaches the application.
+
+- **The page it opens exists without code.** A new project has no controller yet, and it should not get
+  one just to be tested — a controller needs a place in the architecture that no feature has decided.
+  A static start page does the job: `src/main/resources/static/index.html` with Spring Boot, which serves
+  it at `/` by itself; `wwwroot/index.html` with ASP.NET Core and `UseDefaultFiles()` + `UseStaticFiles()`;
+  the start page of a JavaScript app. Give it a `<title>`. The first feature that maps `/` takes over, and
+  the placeholder can go.
+- **It asserts what every start page keeps:** the page loads and its title is not empty — never the
+  placeholder's text. The first real page then leaves the smoke test green, instead of turning it into a
+  test the first story has to change.
+
+```java
+@Test
+void theStartPageOpensInTheBrowser() {
+  Response response = page.navigate(baseUrl() + "/");
+  assertThat(response.status()).isEqualTo(200);
+  assertThat(page.title()).isNotBlank();
+}
+```
+
+Then empty the title on purpose and watch the test fail, and restore it. A browser suite that stays green
+while the page is broken is not testing the page.

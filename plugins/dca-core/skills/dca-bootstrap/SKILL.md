@@ -259,8 +259,12 @@ nothing — the first commit is the user's, after Phase 4.
    optional. Write to `.claude/dca/conventions.md` instead only when that file already exists — a project
    bootstrapped before this path changed keeps the file it has, and every skill reads both.
 9. Decision H: set up the browser runner as the `e2e-testing` skill's `reference/setup.md` says for Gradle or
-   Maven — `gradle/plugins/test-e2e.gradle` applied from `build.gradle`, the base test class, and one smoke test
-   that opens the start page and asserts one element the page shows. A `package-info.java` or other DCA marker is
+   Maven — `gradle/plugins/test-e2e.gradle` applied from `build.gradle`, the base test class, and one smoke test.
+   The bootstrap writes no controller for it: a controller needs a context and a use case no feature has
+   decided, and the rules would reject an adapter that calls none. The smoke test opens a **static** start
+   page instead (`src/main/resources/static/index.html` with a `<title>` — Spring Boot serves it at `/`), and
+   asserts only that the page loads and has a title, so the first feature's real page keeps it green. Where
+   the project already has a start page, the smoke test opens that one. A `package-info.java` or other DCA marker is
    not needed in the `test-e2e` source set; the architecture rules do not import it.
 
 **.NET**
@@ -281,7 +285,8 @@ nothing — the first commit is the user's, after Phase 4.
 6. Decision A as for Java (`: IAggregateRoot<T, TId>`, `: IValue`, …). Decision G as for Java with
    `{{verifyCommand}}` = `dotnet test tests/{{solutionName}}.ArchitectureTests`.
 7. Decision H: a `tests/{{solutionName}}.E2eTests` project with `Microsoft.Playwright`, set up as the
-   `e2e-testing` skill's `reference/setup.md` says for .NET, with one smoke test on the start page.
+   `e2e-testing` skill's `reference/setup.md` says for .NET, with one smoke test on a static start page
+   (`wwwroot/index.html`, served with `UseDefaultFiles()` + `UseStaticFiles()`) — no controller, as for Java.
 
 ### Phase 4 — Verification
 
@@ -293,8 +298,8 @@ dotnet test tests/<Solution>.ArchitectureTests   # .NET — Debug; the rules ref
 dotnet test tests/<Solution>.E2eTests --logger trx
 ```
 
-With decision H, the smoke test must be green, and it must fail when the element it asserts is removed:
-try that once, then restore it. A browser suite that stays green while the page is broken tests nothing.
+With decision H, the smoke test must be green, and it must fail when the start page's title is emptied: try
+that once, then restore it. A browser suite that stays green while the page is broken tests nothing.
 
 Report which rules passed and which failed. On a greenfield bootstrap two entries are expected and not
 failures: `DCA-STR-012` on `warn` (no layered module yet) and, with decision F, a skipped
