@@ -192,31 +192,108 @@ def find_story(backlog, story_id):
     )
 
 
+STEP = re.compile(r"^-\s+(Given|When|Then|And|But)\b\s*(.*)$")
+SCENARIO_KEY = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
 def criteria_of(story_path, body):
-    """Acceptance criteria as (key, text) pairs, read from the `## Acceptance criteria`
-    section: one `- <key>: <text>` line each. The key is a name, never a number."""
-    lines, collecting, found = body.splitlines(), False, []
-    for line in lines:
-        if line.strip().lower().startswith("## acceptance criteria"):
+    """Acceptance criteria as (key, text) pairs, read from the `## Acceptance criteria` section.
+
+    Two forms, mixable. The line form: one `- <key>: <text>` line per criterion. The scenario form:
+    `#### <key>` followed by `- Given / When / Then / And / But` steps, optionally grouped under
+    `### Rule: <text>` headings — Gherkin's own shape. The key is a name, never a number, and is
+    what the test stage binds. The shape is checked here, deterministically: a rule without a
+    scenario, a scenario without exactly one trigger or without an outcome, a step outside a
+    scenario, an unknown step and a repeated key are refused. Whether a scenario covers its rule
+    is not a question a script can answer; the backlog skill asks it."""
+    collecting, found, keys = False, [], set()
+    rule, rule_scenarios, scenario = None, 0, None
+
+    def refuse(message):
+        raise GateError(f"{story_path}: {message}")
+
+    def close_scenario():
+        nonlocal scenario
+        if scenario is None:
+            return
+        key, steps = scenario
+        triggers, outcome, phase = 0, False, None
+        for word, _ in steps:
+            if word in ("Given", "When", "Then"):
+                phase = word
+            if word == "When" or (word in ("And", "But") and phase == "When"):
+                triggers += 1
+            if word == "Then":
+                outcome = True
+        if not steps:
+            refuse(f"scenario `{key}` has no steps — write `- Given / When / Then` lines under it")
+        if triggers != 1:
+            refuse(f"scenario `{key}` has {triggers} triggers — exactly one `When` (an `And` after it is "
+                   f"a second trigger); two triggers are two scenarios")
+        if not outcome:
+            refuse(f"scenario `{key}` has no `Then` — a scenario states what is observed")
+        found.append((key, "; ".join(f"{word} {text}".strip() for word, text in steps)))
+        scenario = None
+
+    def close_rule():
+        if rule is not None and rule_scenarios == 0:
+            refuse(f"rule `{rule}` has no scenario — every rule gets at least one `#### <key>` scenario")
+
+    def add_key(key):
+        if key in keys:
+            refuse(f"acceptance criterion key `{key}` appears twice — a key names one behaviour")
+        keys.add(key)
+
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("## acceptance criteria"):
             collecting = True
             continue
         if collecting and line.startswith("## "):
             break
-        if not collecting:
+        if not collecting or not stripped:
             continue
-        match = CRITERION.match(line.strip())
+        if line.startswith("### "):
+            close_scenario()
+            close_rule()
+            heading = line[4:].strip()
+            if not heading.lower().startswith("rule:"):
+                refuse(f"`### {heading}` — a third-level heading under the criteria is a `### Rule: <text>`")
+            rule, rule_scenarios = heading[5:].strip(), 0
+            continue
+        if line.startswith("#### "):
+            close_scenario()
+            key = line[5:].strip()
+            if not SCENARIO_KEY.match(key):
+                refuse(f"scenario heading `#### {key}` is not a key — lowercase and hyphenated, naming the behaviour")
+            add_key(key)
+            scenario = (key, [])
+            if rule is not None:
+                rule_scenarios += 1
+            continue
+        step = STEP.match(stripped)
+        if step:
+            if scenario is None:
+                refuse(f"step {stripped!r} stands outside a scenario — put it under a `#### <key>` heading")
+            scenario[1].append((step.group(1), step.group(2).strip()))
+            continue
+        if scenario is not None and stripped.startswith("-"):
+            refuse(f"scenario `{scenario[0]}`: {stripped!r} is not a step — steps begin with Given, When, "
+                   f"Then, And or But")
+        match = CRITERION.match(stripped)
         if match:
+            close_scenario()
+            add_key(match.group(1))
             found.append((match.group(1), match.group(2).strip()))
-        elif line.strip().startswith("-"):
-            raise GateError(
-                f"{story_path}: acceptance criterion {line.strip()!r} has no key — "
-                f"write `- <key>: <criterion>` with a lowercase, hyphenated key that "
-                f"names the behaviour"
-            )
+        elif stripped.startswith("-"):
+            refuse(f"acceptance criterion {stripped!r} has no key — write `- <key>: <criterion>` with a "
+                   f"lowercase, hyphenated key that names the behaviour, or a `#### <key>` scenario")
+    close_scenario()
+    close_rule()
     if not found:
         raise GateError(
             f"{story_path}: no acceptance criteria — add a `## Acceptance criteria` "
-            f"section with one `- <key>: <criterion>` line per criterion"
+            f"section with one `- <key>: <criterion>` line or one `#### <key>` scenario per criterion"
         )
     return found
 

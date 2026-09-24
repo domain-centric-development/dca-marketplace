@@ -40,7 +40,8 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
    changed per transaction. Ask the project's knowledge skill where one is
    installed (see below) rather than deciding a pattern question from memory.
 7. Restate the acceptance criteria, keeping the story's **keys** verbatim — the later stages and
-   the gate join on them. Add a criterion for every concrete detail the story specifies (wording,
+   the gate join on them. A story written in scenarios keeps its rules and each scenario's steps;
+   plan within `## Out of scope` — what it lists is not planned, however close it lies. Add a criterion for every concrete detail the story specifies (wording,
    placement, ordering): a detail that is not a criterion is a detail no test will cover and no
    stage will build.
 8. Decide the shape of the end-user test for each criterion and record it. Choose from what the

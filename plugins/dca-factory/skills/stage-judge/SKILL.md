@@ -54,6 +54,12 @@ silently stands in for it.
    abstraction; no duplication that carries a decision twice; no dead code, no leftover stub, no
    comment describing history instead of the present state.
 
+Across the three, check the change against the story itself. A criterion written as a scenario is
+covered only when its test arranges the `Given`, performs the `When` and asserts every `Then` and
+`And` with the scenario's values: an outcome the test does not assert is a finding. Behaviour listed
+under the story's `## Out of scope`, or under the product scope's `## Not part of the product`, that
+the change delivers anyway is a finding too.
+
 An added perspective is one more pass with its own rows in the report. Adding one is a profile
 line plus the skill that carries it — never an edit to this file.
 

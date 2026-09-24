@@ -127,6 +127,29 @@ depends_on: []
 - open: Does an archived thing count?
 """
 
+#: The same two criteria in the scenario form: keyed Given/When/Then scenarios under Gherkin rules.
+STORY_SCENARIOS = STORY.replace("""- shows-the-thing: The reader sees the thing.
+- shows-nothing-when-empty: With nothing recorded, the reader sees an empty list, not an error.
+""", """### Rule: What is recorded is shown
+
+#### shows-the-thing
+- Given one thing is recorded
+- When the reader opens the list
+- Then the list shows the thing
+
+### Rule: An empty record is not an error
+
+#### shows-nothing-when-empty
+- Given nothing is recorded
+- When the reader opens the list
+- Then the list is empty
+- And no error is shown
+
+## Out of scope
+
+- Sharing things with others.
+""")
+
 TESTS = """# Tests — STORY-1
 
 <!-- gate:tests -->
@@ -1420,6 +1443,28 @@ def main(argv=None):
          dict(extra_sources=(("backlog/product.md", PRODUCT.replace("## Qualities", "## Quality")),))),
         (Case("plan: a `product:` that names no file is refused", "plan", 1, must_fail=("product",)),
          dict(profile=PROFILE + "product: docs/product.md\n")),
+        # --- the scenario form of acceptance criteria -----------------------
+        (Case("plan: keyed scenarios under rules pass, beside an out-of-scope section", "plan", 0,
+              must_pass=("story",), text=("with 2 criterion(s)",)),
+         dict(story=STORY_SCENARIOS)),
+        (Case("test: a scenario's key is what the test stage binds", "test", 0,
+              must_pass=("tests-mapped", "tests-red")),
+         dict(story=STORY_SCENARIOS)),
+        (Case("plan: a rule without a scenario is refused", "plan", 1, must_fail=("gate",),
+              text=("has no scenario",)),
+         dict(story=STORY_SCENARIOS.replace("### Rule: An empty record is not an error\n",
+                                             "### Rule: An empty record is not an error\n\n### Rule: Nothing is lost\n"))),
+        (Case("plan: a scenario with two triggers is refused", "plan", 1, must_fail=("gate",),
+              text=("has 2 triggers",)),
+         dict(story=STORY_SCENARIOS.replace("- When the reader opens the list\n- Then the list shows the thing",
+                                             "- When the reader opens the list\n- And sorts it\n- Then the list shows the thing"))),
+        (Case("plan: a scenario without an outcome is refused", "plan", 1, must_fail=("gate",),
+              text=("has no `Then`",)),
+         dict(story=STORY_SCENARIOS.replace("- Then the list shows the thing\n", ""))),
+        (Case("plan: an unknown step is refused", "plan", 1, must_fail=("gate",), text=("is not a step",)),
+         dict(story=STORY_SCENARIOS.replace("- Then the list is empty", "- Expect the list is empty"))),
+        (Case("plan: a key used twice is refused", "plan", 1, must_fail=("gate",), text=("appears twice",)),
+         dict(story=STORY_SCENARIOS.replace("#### shows-nothing-when-empty", "#### shows-the-thing"))),
         # --- the test gate ------------------------------------------------
         (Case("test: every criterion mapped and red passes", "test", 0,
               must_pass=("tests-mapped", "tests-exist", "compiles", "tests-red")),

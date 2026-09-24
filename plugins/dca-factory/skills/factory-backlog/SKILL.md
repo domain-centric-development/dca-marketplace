@@ -47,7 +47,11 @@ scoping question for `/factory-scope`, not a story.
    project's map already carries. If the behaviour would need a new context or a new relationship
    between contexts, do not write the story: say that it is a scoping question and what it would
    need. That decision is not one a story may smuggle in.
-5. **Write criteria as observable behaviour, with keys.** One `- <key>: <criterion>` line each; the
+5. **Write criteria as observable behaviour, with keys** — as scenarios by default: the story's
+   business rules as `### Rule: <text>`, under each at least one `#### <key>` scenario with
+   `- Given / When / Then / And` steps and concrete values (the line form `- <key>: <criterion>`
+   stays valid). One `When` per scenario: a scenario with two causes ("the value fails the format
+   check *or* is unknown") is two scenarios, even though the gate can only count the `When`s. The
    key is lowercase, hyphenated and names the behaviour (`shows-empty-state`). It is committed —
    the test stage records it next to the test that proves it — so never a number and never renamed
    later. Every concrete detail the human states (wording, order, placement) is its own criterion:
@@ -62,19 +66,57 @@ scoping question for `/factory-scope`, not a story.
    is a criterion waiting for its answer, not a footnote: the plan stage builds the next best shape
    around an open assumption, and that shape then reaches delivery unconfirmed. Ask for it before
    the story is released, or write the answer in as a criterion.
-6. **Use the project's own words.** Read the context's glossary first and write the story in those
+6. **Run the question pass before the story is released.** Read the story, the product scope, the
+   context map, the glossary and the code the story touches, and go through this list. Ask the
+   human what it turns up, while they are here — a question left for the plan stage stops a loop
+   later, when nobody is there to answer:
+   - **surface:** does a trigger or an outcome need an entry point, a page or a message the system
+     does not have? Who may reach it? (Ask *whether* a way exists, never *which* one to build.)
+   - **external dependency:** a system the context map does not carry is a scoping question for
+     `/factory-scope`, not a story. Its contract (endpoints, status codes, what counts as
+     unavailable) goes into the map and the configuration once, never into the story;
+   - **inputs:** format, allowed range, boundaries, and what happens at them — a scenario per boundary
+     that matters;
+   - **defaults:** one stated value, and where the user sees it;
+   - **failure of a dependency:** the behaviour, and after how long a slow answer counts as a failure;
+   - **state and lifecycle:** every transition a rule names, including the conflict case where two
+     sources of the same value meet;
+   - **changed behaviour:** what looks different afterwards → `## Changed expectations`;
+   - **already green:** check every scenario whose outcome is an absence or a non-change — "no …
+     is shown", "nothing changes", "… still works" — against the code as it is today. If it already
+     holds (the element does not exist yet, so it is not shown), it is a guarantee, not a
+     criterion: its test would be green before the build, and the gate refuses that. Take it out
+     of the criteria and say so; the plan stage turns it into a guard for the existing tests. Keep
+     it only when today's system does show what the scenario forbids;
+   - **repeated or abusive use:** a rule a user can probe or exhaust;
+   - **coverage:** a rule without a scenario, a scenario with two causes, a `Then` no test can observe;
+   - **out of scope:** what this story leaves to another → `## Out of scope`.
+
+   What the product scope already answers is not asked again. Answers go into rules, scenarios or
+   `answered:` assumptions; what stays open is an `open:` assumption.
+7. **Use the project's own words.** Read the context's glossary first and write the story in those
    terms. A term the story needs that no glossary carries goes into `## Assumptions` as a question
    for the domain contact, not into the story as if it were established.
-7. **Assumptions are questions, never decisions.** Each line is `open:` or `answered:`. What the
+8. **Assumptions are questions, never decisions.** Each line is `open:` or `answered:`. What the
    team decided itself belongs in the criteria or in a plan, not here. A story whose criterion
    contradicts one of its own open assumptions is not ready — the judge will stop the run for it,
    so resolve it now: either the assumption is answered, or the criterion is not yet a criterion.
-8. **Leave `status: draft` unless the human releases it.** The gate refuses to plan a draft story,
+9. **Leave `status: draft` unless the human releases it.** The gate refuses to plan a draft story,
    which is the one check no script can replace. Say plainly that the story is waiting for their
    release, and set `approved` only when they say so.
-9. **Check it with the gate, not with your own judgement:**
+10. **Check it with the gate, not with your own judgement:**
    `python3 .agents/factory/story-gate.py --story <id> --stage plan`. Every finding it reports is
    yours to fix before you hand the item over. Report what it said.
+
+## A story pasted from a tracker
+
+A story pasted from an issue tracker — Jira wiki markup, GitHub Markdown, a document — is rewritten
+into the contract, not copied: its goal becomes `## Story`; its scope rules become `### Rule:`
+headings; its scenarios become keyed scenarios with one `When` each; its out-of-scope sentences go
+to `## Out of scope`; integration notes (endpoints, environments, status codes) become a scoping
+question for `/factory-scope` (item 6, external dependency); open points become `open:`
+assumptions. Then run the question pass over the result. The wording of criteria and messages stays
+the human's.
 
 ## Splitting
 

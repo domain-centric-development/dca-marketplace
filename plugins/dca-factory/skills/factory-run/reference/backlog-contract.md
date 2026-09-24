@@ -66,14 +66,39 @@ Front matter:
 Body sections:
 
 - `## Story` — one sentence in the project's own ubiquitous language.
-- `## Acceptance criteria` — one `- <key>: <criterion>` line each. Criteria are observable
-  end-user behaviour, small enough that one agent run delivers the whole story.
+- `## Acceptance criteria` — in one of two forms, mixable:
+  - **scenarios** (the default for a new story): `#### <key>` followed by `- Given`, `- When`,
+    `- Then`, `- And`, `- But` steps, grouped under `### Rule: <text>` headings where the story has
+    business rules — Gherkin's own shape, written as Markdown:
+
+    ```markdown
+    ### Rule: A value the service does not know is not applied
+
+    #### unknown-value-is-rejected
+    - Given the input is shown
+    - When the user submits a value the service does not know
+    - Then the message "…" is shown at the input
+    - And no value is applied
+    ```
+
+    The gate refuses a rule without a scenario, a scenario without exactly one trigger (an `And`
+    after the `When` is a second one; two triggers are two scenarios) or without a `Then`, a step
+    outside a scenario, an unknown step and a key used twice. Concrete values belong in the steps:
+    they are what turns a range or a default into a question someone answers;
+  - **lines**: one `- <key>: <criterion>` line each, the form existing stories use.
+
+  Criteria are observable end-user behaviour, small enough that one agent run delivers the whole
+  story. They are specification, not executable feature files: the test stage turns each into one
+  end-user test in the project's own runner.
   Each criterion is behaviour the system does not show yet — its test is red until the build
   stage, and the gate refuses one that is green before it. Behaviour that must keep working is
   what the existing tests guard; it is not a criterion.
   The **key** is lowercase, hyphenated and names the behaviour (`shows-empty-state`), because it
   is committed: the test stage records it next to the test that proves it. A running number
   would point at nothing once the list is reordered.
+- `## Out of scope` — optional: one line per behaviour the story deliberately does not deliver,
+  with the story or the reason that owns it. The plan does not plan it; the judge reports a change
+  that implements it.
 - `## Changed expectations` — optional: when the story changes behaviour the system already has,
   one line per expectation that no longer holds, in the project's language (what is seen now, what
   is seen after). No story ids, no file names — nobody has to know which story or which hand wrote

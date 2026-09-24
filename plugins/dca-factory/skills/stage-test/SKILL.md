@@ -12,7 +12,9 @@ Output: the test sources, plus `tasks/<story>/tests.md`. You write **no** produc
 ## Do
 
 1. Read the plan's criteria and the test shape it chose for each.
-2. Write **one end-user test per criterion** in the shape the plan named, using the test
+2. Write **one end-user test per criterion** — for a scenario, the test follows its steps: `Given`
+   is the arrangement, `When` the one action, `Then` and each `And` after it an assertion, with the
+   scenario's own values — in the shape the plan named, using the test
    frameworks the project already has. It asserts the behaviour a user or a caller can observe,
    not the internals. **Change no build file**: adding a dependency, a plugin, a source set or a
    runner is a stack decision, not part of a story. If the planned shape is impossible with what
