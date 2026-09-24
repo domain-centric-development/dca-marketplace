@@ -49,6 +49,9 @@
 #              up-to-date task writes no new report — give a required test command its rerun flag
 #              (Gradle: `./gradlew test --rerun`), since only a report from this run counts
 # contextMap   where the project keeps its context map (found by convention when absent)
+# product      where the project keeps its product scope (default: backlog/product.md) — what is
+#              built, for whom, its surfaces, how it works, how it looks. Written by /factory-scope
+#              before the first story; the plan gate fails a `product:` that names no file
 # glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
 # reviews      perspectives the judge stage covers *in addition to* domain, boundaries and craft
 # review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
@@ -58,7 +61,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 5
+contract: 6
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}

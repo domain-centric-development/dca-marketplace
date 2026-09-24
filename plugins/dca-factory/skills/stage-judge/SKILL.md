@@ -5,8 +5,11 @@ description: Judge stage of a factory run — reviews the story's change from th
 
 # Judge one story's change
 
-Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, and the diff of the change —
-and, in a repeat round, the previous verdict, `tasks/<story>/.judge-previous.md`. Nothing else.
+Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change, the
+product scope — and, in a repeat round, the previous verdict, `tasks/<story>/.judge-previous.md`.
+Nothing else. A change that contradicts the product scope — a surface it does not list, state kept
+where it says otherwise, a page without its stated look or accessibility, something under
+`## Not part of the product` — is a finding like any other.
 Output: `tasks/<story>/judge.md`. You change no code.
 
 ## Do

@@ -5,7 +5,8 @@ description: Test stage of a factory run — writes one end-user test per accept
 
 # Write the tests for one story
 
-Input: the story and `tasks/<story>/plan.md`. Nothing else.
+Input: the story, `tasks/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
+product scope where the plan says a criterion touches them. Nothing else.
 Output: the test sources, plus `tasks/<story>/tests.md`. You write **no** production behaviour.
 
 ## Do

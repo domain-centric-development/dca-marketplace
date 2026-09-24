@@ -11,6 +11,29 @@ backlog/
     <story>.md       one story
 ```
 
+## Product scope
+
+One file per project, above every epic: `backlog/product.md`, or wherever the profile's
+`product:` points. It is written once, before the first story, by `factory-scope` with the person
+who decides what is built, and changed only through `factory-scope` afterwards. Six headings, fixed
+in this spelling so the gate can read them; the text under them is in the project's language:
+
+| Heading | Says |
+|---|---|
+| `## What and for whom` | the product in two or three sentences, and its actors |
+| `## Surfaces` | how each actor reaches it — pages, notifications, an API, a tool — and on which devices |
+| `## How it works` | the main flow across epics; where state lives and what is persisted |
+| `## Look and feel` | style direction, language, accessibility level, a design system or styling approach |
+| `## Qualities` | security and authorisation stance, privacy, performance, availability, as the product needs them |
+| `## Not part of the product` | what it deliberately will not do |
+
+Product decisions only, never code design: "the server stores what is submitted" belongs here, an
+endpoint or a package does not. A heading with nothing to decide gets one honest line, never a
+placeholder. The gate reports a missing file as a note — a project without one is not blocked —
+and fails a `product:` that names no file and a file with a heading missing or empty (text in
+HTML comments does not count). `factory-backlog` writes no epic and no story while the file is
+missing. An epic's intent must fit the product it belongs to.
+
 ## Epic
 
 Front matter, all four fields mandatory and non-empty:

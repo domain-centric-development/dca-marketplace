@@ -1,6 +1,6 @@
 ---
 name: factory-scope
-description: Handles the one question a delivery run may not answer for itself — a story that would need a new bounded context, a new relationship between contexts, or a surface its actor does not have yet. Use when a plan stopped with needs-human for one of those, when the backlog skill refused a story for a context that is not on the map, or on "/factory-scope". Produces a decision and a map, never code.
+description: Writes the product scope before a project's first story — what is built, for whom, through which surfaces, how it works, how it looks — and handles the one question a delivery run may not answer for itself — a story that would need a new bounded context, a new relationship between contexts, or a surface its actor does not have yet. Use when the backlog skill reported the product scope missing, when a plan stopped with needs-human for one of those questions, when the backlog skill refused a story for a context that is not on the map, or on "/factory-scope". Produces a product scope, a decision and a map, never code.
 ---
 
 # Answer one scoping question
@@ -9,6 +9,36 @@ Input: the question — from a plan's `## needs-human`, from a story the backlog
 write, or from a human — plus the project's context map, its glossaries and its decision records.
 Output: a decision recorded where the project keeps such decisions, and the context map brought in
 line with it. You write no story, no plan, no test and no production code.
+
+## First: the product scope
+
+A project's first scoping question is the whole product. When
+`python3 .agents/factory/story-gate.py --product` exits 3 (no product scope) or 1 (incomplete),
+write `backlog/product.md` — or where the profile's `product:` points — from
+`factory-run/templates/product.md.tmpl`, with the person who decides what is built:
+
+1. **One question per heading, in their words.** What is built and for whom; how each actor
+   reaches it; how it works — where state lives, what is persisted; how it looks; the qualities it
+   needs; what it will not do. Never invent an answer: a stage that reads an invented look builds
+   it, and a placeholder passes the gate. A heading with nothing to decide gets one honest line.
+2. **Product decisions only.** "The client keeps the draft; the server stores what is submitted"
+   belongs here; an endpoint, a package or a class does not — that is the plan stage's.
+3. **Brownfield: draft from the code, ask for the rest.** Where code exists, draft `## Surfaces`,
+   `## How it works` and `## Look and feel` from what is there — entry points, templates,
+   stylesheets, persistence — and mark each as read from the code. Ask for `## What and for
+   whom`, `## Qualities` and `## Not part of the product`, which code cannot tell. The person
+   confirms the whole file before it counts.
+4. **The map follows.** `## Surfaces` and `## How it works` name the contexts and the external
+   systems the product relies on: bring the context map in line in the same step (items 4–7
+   below apply).
+5. **Check it with the gate:** `--product` exits 0. Then hand back to `/factory-backlog` for the
+   first epic.
+
+Later changes to the product scope come through here too — a story that needs a surface the scope
+does not list is a scoping question, and its answer updates the product scope as well as the map.
+No stage edits it: it records decisions people took, not facts a stage can check against code.
+
+## A scoping question
 
 A scoping question is exactly one of these, and nothing else belongs here:
 

@@ -318,6 +318,32 @@ verdict: story-conflict
 decision: STORY-1-01
 The judge asks whether an agreed expectation may change; the test stage applies the answer.
 """
+PRODUCT = """# Widgets
+
+## What and for whom
+
+A page that shows the things a person has recorded.
+
+## Surfaces
+
+One web page, desktop and phone.
+
+## How it works
+
+The server keeps the things; the page reads them.
+
+## Look and feel
+
+Plain, readable, the project's own stylesheet.
+
+## Qualities
+
+No accounts; one person per installation.
+
+## Not part of the product
+
+Sharing things with others.
+"""
 TESTS_ON_DECISION = TESTS + "\nDecision STORY-1-01 answered b: the expectation of shows-the-thing changed.\n"
 
 
@@ -1380,6 +1406,20 @@ def main(argv=None):
          dict(context_map=None)),
         (Case("plan: three rounds stop the run", "plan", 1, must_fail=("rounds",)),
          dict(rounds=3)),
+        (Case("plan: no product scope is a note, not a failure", "plan", 0,
+              text=("no product description at backlog/product.md",)),
+         dict()),
+        (Case("plan: a complete product scope passes", "plan", 0, must_pass=("product",)),
+         dict(extra_sources=(("backlog/product.md", PRODUCT),))),
+        (Case("plan: a product scope with an empty heading is refused, comments do not count", "plan", 1,
+              must_fail=("product",), text=("empty `## Look and feel`",)),
+         dict(extra_sources=(("backlog/product.md", PRODUCT.replace(
+             "Plain, readable, the project's own stylesheet.", "<!-- style direction -->")),))),
+        (Case("plan: a product scope missing a heading is refused", "plan", 1,
+              must_fail=("product",), text=("missing `## Qualities`",)),
+         dict(extra_sources=(("backlog/product.md", PRODUCT.replace("## Qualities", "## Quality")),))),
+        (Case("plan: a `product:` that names no file is refused", "plan", 1, must_fail=("product",)),
+         dict(profile=PROFILE + "product: docs/product.md\n")),
         # --- the test gate ------------------------------------------------
         (Case("test: every criterion mapped and red passes", "test", 0,
               must_pass=("tests-mapped", "tests-exist", "compiles", "tests-red")),
@@ -2527,6 +2567,36 @@ def main(argv=None):
                              waiting[0] == "waiting" and resumable == ("resumable", "test")
                              and rows.get("STORY-1") == ("in-progress", "build"),
                              f"open {waiting}, answered {resumable}, applied {rows.get('STORY-1')}"))
+    # --- the product scope before the first story, checked without a story ---------------------------
+    with tmpdir() as root:
+        product = lambda: subprocess.run([sys.executable, args.gate, "--product"], cwd=root,
+                                         capture_output=True, text=True, encoding="utf-8")
+        none = product()
+        os.makedirs(os.path.join(root, "backlog"))
+        with open(os.path.join(root, "backlog", "product.md"), "w", encoding="utf-8") as handle:
+            handle.write(PRODUCT.replace("## Surfaces\n\nOne web page, desktop and phone.\n", "## Surfaces\n\n"))
+        incomplete = product()
+        with open(os.path.join(root, "backlog", "product.md"), "w", encoding="utf-8") as handle:
+            handle.write(PRODUCT)
+        complete = product()
+        expectations.append(("product: `--product` exits 3 without a scope, 1 when a heading is empty, 0 when "
+                             "it stands", (none.returncode, incomplete.returncode, complete.returncode) == (3, 1, 0)
+                             and "/factory-scope" in none.stdout,
+                             f"exits {none.returncode}/{incomplete.returncode}/{complete.returncode}; {none.stdout.strip()}"))
+    # --- the pipeline's texts carry no sample vocabulary ----------------------------------------------
+    skills_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    vocabulary = re.compile(r"\b(cart|basket|timer|pricing|e-?commerce|breakstarted|work interval)\b", re.I)
+    hits = []
+    for folder, _, names in os.walk(skills_root):
+        for name in names:
+            if name.endswith((".md", ".tmpl")):
+                path = os.path.join(folder, name)
+                with open(path, encoding="utf-8") as handle:
+                    for number, line in enumerate(handle, 1):
+                        if vocabulary.search(line):
+                            hits.append(f"{os.path.relpath(path, skills_root)}:{number}")
+    expectations.append(("vocabulary: no skill, reference or template names a sample's domain",
+                         not hits, ", ".join(hits[:5])))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         if not ok:

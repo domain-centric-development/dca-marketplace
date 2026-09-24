@@ -8,6 +8,8 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
     story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
     story-gate.py --schedule                           every story's state and the next one to run
     story-gate.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
+    story-gate.py --product                            the product description alone; exit 3 while
+                                                       there is none, 1 when it is incomplete
     story-gate.py --status [--story <id>]              what runs, what waits, every story, the cost —
                                                        per story, or per stage of --story
     story-gate.py --change [--staged] [--checks <c>]   the profile's checks outside a story; --staged
@@ -81,6 +83,16 @@ CONTEXT_MAP_CANDIDATES = (
     "context-map.md",
 )
 INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md")
+#: The product scope a project writes once, before its first story (`/factory-scope` writes it),
+#: at `<backlog>/product.md` unless the profile's `product:` names another place.
+PRODUCT_HEADINGS = (
+    "What and for whom",
+    "Surfaces",
+    "How it works",
+    "Look and feel",
+    "Qualities",
+    "Not part of the product",
+)
 CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)\s*:\s*(\S.*)$")
 MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
 SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
@@ -95,8 +107,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 5
-VERSION = "0.24.0"
+CONTRACT = 6
+VERSION = "0.25.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -323,6 +335,46 @@ def check_context_map(result, cwd, profile, context):
             f"{path}: context {context!r} does not appear — a story either changes a context that "
             f"exists on the map, or it is a scoping question, not a story",
         )
+
+
+def check_product(result, cwd, profile, backlog="backlog"):
+    """The product scope: what is built, for whom, through which surfaces, how it works, how it looks.
+
+    Absent is a note, not a failure — a project that runs without one is not blocked, and a brownfield
+    project may never write one. A `product:` that names a missing file is a broken reference, and a
+    file with a required heading missing or empty is a scope nobody finished: both fail. Guidance in
+    HTML comments does not count as content, so an untouched template does not pass."""
+    named = str(profile.get("product", "")).strip()
+    default = os.path.join(backlog, "product.md")
+    path = named or default
+    full = os.path.join(cwd, path)
+    if not os.path.isfile(full):
+        if named:
+            result.fail("product", f"the profile's `product: {named}` names no file")
+        else:
+            result.note("product", f"no product description at {default} — `/factory-scope` "
+                                   f"writes one before the first story")
+        return False
+    text = re.sub(r"<!--.*?-->", "", read_text(full), flags=re.S)
+    sections, current = {}, None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip().lower()
+            sections[current] = []
+        elif current is not None:
+            sections[current].append(line)
+    missing = [h for h in PRODUCT_HEADINGS if h.lower() not in sections]
+    empty = [h for h in PRODUCT_HEADINGS
+             if h.lower() in sections and not "".join(sections[h.lower()]).strip()]
+    if missing or empty:
+        detail = "; ".join(filter(None, [
+            f"missing `## {'`, `## '.join(missing)}`" if missing else "",
+            f"empty `## {'`, `## '.join(empty)}`" if empty else "",
+        ]))
+        result.fail("product", f"{path}: {detail} — every heading gets one honest line, never a placeholder")
+        return False
+    result.ok("product", f"{path} describes the product under all {len(PRODUCT_HEADINGS)} headings")
+    return True
 
 
 def check_instruction_size(result, cwd):
@@ -2904,6 +2956,8 @@ def main(argv):
     parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
     parser.add_argument("--release", nargs="?", const="", metavar="OWNER",
                         help="give the checkout back (default: this session's claim)")
+    parser.add_argument("--product", action="store_true",
+                        help="check the product description alone (before the first story) and exit")
     parser.add_argument("--listening", action="store_true",
                         help="record that this session looked at the backlog (a listening loop's sign of life)")
     parser.add_argument("--status", action="store_true",
@@ -2936,6 +2990,15 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.product:
+        result = Result()
+        try:
+            check_product(result, cwd, read_profile(resolve_profile(args.profile, cwd)), args.backlog)
+        except GateError as error:
+            result.fail("product", str(error))
+        for state, check, message in result.entries:
+            print(f"gate:{state} {check} — {message}")
+        return 1 if result.failed else (3 if any(e[0] == "note" for e in result.entries) else 0)
     if args.listening:
         return mark_listening(cwd)
     if args.claim:
@@ -3002,6 +3065,7 @@ def main(argv):
                 result, cwd, profile, str(front.get("context", "")).strip()
             )
             check_instruction_size(result, cwd)
+            check_product(result, cwd, profile, args.backlog)
         if args.stage == "document":
             check_documented(result, args.tasks, story_id, cwd)
             check_proposals_landed(result, args.tasks, story_id, cwd, profile)

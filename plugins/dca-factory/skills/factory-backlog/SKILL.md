@@ -5,12 +5,28 @@ description: Writes and checks the backlog a delivery run reads — an epic with
 
 # Write one backlog item
 
-Input: what the human tells you, plus the project's context map and glossaries.
+Input: what the human tells you, plus the project's product scope, context map and glossaries.
 Output: `backlog/<epic>/epic.md`, `backlog/<epic>/<story>.md`, or a correction to one of them.
 You write no plan, no test and no code. Run the pipeline separately once the item stands.
 
 The full contract is in `factory-run/reference/backlog-contract.md`; read it before your first
 item in a project. The templates are `factory-run/templates/backlog/{epic,story}.md.tmpl`.
+
+## Before the first item: the product scope
+
+Run `python3 .agents/factory/story-gate.py --product` first, every time. It exits 0 when the
+product scope stands, 1 when it is incomplete, and 3 when the project has none yet. On 3 or 1,
+write **no** epic and **no** story. Say in one sentence that the product scope has not been
+written (or which heading is missing), and that `/factory-scope` writes it first — what is built,
+for whom, through which surfaces, how it works, how it looks. Every story would otherwise carry
+product decisions nobody took, and a plan stage would stop for them later, when no one is there
+to answer.
+
+If the human insists on a story anyway, write it with `status: draft` and a first assumption
+`- open: the product scope is not written yet — /factory-scope` — and never approve it while the
+gate still reports the scope missing. Once the product scope stands, write within it: a story that
+needs a surface it does not list, or state kept where `## How it works` says otherwise, is a
+scoping question for `/factory-scope`, not a story.
 
 ## Do
 

@@ -5,8 +5,9 @@ description: Plan stage of a factory run — turns one backlog story into an imp
 
 # Plan one story
 
-Input: the story file, and the project's glossary and context map if it has them. Nothing else —
-not the chat history, not an earlier run.
+Input: the story file, the project's product scope (`backlog/product.md`, or where the profile's
+`product:` points), and its glossary and context map if it has them. Nothing else — not the chat
+history, not an earlier run.
 Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no production code.
 
 ## Do
@@ -16,7 +17,12 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
    `context` is not in it, stop: write the plan file with a `## needs-human` section stating that
    the story needs a new context or a new relationship between contexts. That is a scoping
    decision. A project without a context map is not blocked by this — note the absence and go on.
-3. **Check that the story's actor can already reach the behaviour.** The criteria name someone —
+3. **Take the product decisions from the product scope.** Its `## Surfaces`, `## How it works` and
+   `## Look and feel` answer where state lives, which surfaces the product has and how a page
+   looks. Plan within them. A question they already answer is not a question for the human; one
+   they leave open, or a story that contradicts them, is — through `## needs-human`, like any
+   other. Without a product scope, say so in the plan and plan from the story alone.
+4. **Check that the story's actor can already reach the behaviour.** The criteria name someone —
    a customer, an operator, an administrator — and a way in: a page, an endpoint, a message, a
    command line. If the context has no such way in today, the plan does **not** invent one. A new
    surface for an actor is a decision about the product and, where the surface needs a guard, about
@@ -25,19 +31,19 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
    specified, and a rule about who may call it that nobody reviewed.
    The exception is a story whose criteria name the surface themselves — then it is specified, and
    it belongs in the change list like any other element.
-4. Name the elements that change, in the project's own vocabulary: aggregates, value objects,
+5. Name the elements that change, in the project's own vocabulary: aggregates, value objects,
    domain events, use cases with their ports, adapters, read models. Say for each whether it is
    new or changed, and where it belongs — layer and package/namespace as this project lays them
    out, not as any sample does.
-5. Respect the architecture the project has adopted: the domain free of framework types, ports
+6. Respect the architecture the project has adopted: the domain free of framework types, ports
    declared inward and implemented in adapters, no raw cross-context imports, one aggregate
    changed per transaction. Ask the project's knowledge skill where one is
    installed (see below) rather than deciding a pattern question from memory.
-6. Restate the acceptance criteria, keeping the story's **keys** verbatim — the later stages and
+7. Restate the acceptance criteria, keeping the story's **keys** verbatim — the later stages and
    the gate join on them. Add a criterion for every concrete detail the story specifies (wording,
    placement, ordering): a detail that is not a criterion is a detail no test will cover and no
    stage will build.
-7. Decide the shape of the end-user test for each criterion and record it. Choose from what the
+8. Decide the shape of the end-user test for each criterion and record it. Choose from what the
    project **already has**: read the stack profile and look at the existing tests. A browser test
    is the shape only where a browser runner is installed; otherwise the shape is the highest
    end-user level the project can run today — an HTTP-level test against the running application,
@@ -46,8 +52,8 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
    not part of a story. Where the shape you would want is missing, name it under
    `## Open assumptions` and plan the next best shape. A test shape is never a reason to build a
    surface: if the criterion could only be driven end to end through a page or an endpoint the
-   project does not have, that is the `needs-human` of step 3, not a new adapter.
-8. **Find the existing tests the story contradicts** — every test in the project, whoever wrote it:
+   project does not have, that is the `needs-human` of step 4, not a new adapter.
+9. **Find the existing tests the story contradicts** — every test in the project, whoever wrote it:
    the ones that assert the behaviour the criteria change. Read the test sources, not the backlog;
    a test need not belong to any story. List each under `## Changed tests` with what backs the
    change: the line of the story's `## Changed expectations` it follows. Where the story has no
@@ -56,9 +62,9 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
    expectation each holds today and what the story would need instead, and stop. Once answered,
    plan again and cite the id in each row. A test the story does not contradict is not listed; the
    gate lets the later stages change only what is listed and backed.
-9. Name business terms in the criteria that are not in the glossary yet, as proposals with a
+10. Name business terms in the criteria that are not in the glossary yet, as proposals with a
    one-line definition. Do not silently invent domain language.
-10. Back every statement about the code with evidence: the file, and the line or symbol you read
+11. Back every statement about the code with evidence: the file, and the line or symbol you read
    it from. A statement without evidence is a guess and is marked as one.
 
 ## Ask, do not recall — but only a source the project named
@@ -149,6 +155,6 @@ stamp the record applied.
 - Do not widen the story. A change you consider necessary but that no criterion asks for goes
   into `## Open assumptions`, not into the plan's change list.
 - Do not add an incoming adapter — a page, an endpoint, a consumer, a tool — that no criterion
-  names. That is step 3's `needs-human`, and it stays one whether or not the project has an
+  names. That is step 4's `needs-human`, and it stays one whether or not the project has an
   obvious precedent for such an adapter.
 - Do not renumber or rename the criterion keys; they are committed identifiers.

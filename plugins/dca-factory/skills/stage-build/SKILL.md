@@ -5,13 +5,17 @@ description: Build stage of a factory run — writes the production code that tu
 
 # Build one story
 
-Input: the story, `tasks/<story>/plan.md`, `tasks/<story>/tests.md`, and — in a repeat round —
-the gate or judge report. Nothing else.
+Input: the story, `tasks/<story>/plan.md`, `tasks/<story>/tests.md`, the product scope's
+`## Look and feel` and `## Qualities`, and — in a repeat round — the gate or judge report. Nothing
+else.
 Output: the production code, plus `tasks/<story>/build.md`.
 
 ## Do
 
-1. Read the plan and the failing tests. Implement the **smallest** change that makes them pass.
+1. Read the plan and the failing tests. Implement the **smallest** change that makes them pass —
+   the smallest that also meets the product scope's `## Look and feel` and `## Qualities`, where
+   the change has a surface. A page built to no stated look is correct only where the product
+   scope states none.
 2. Follow the plan's change list. An element the plan did not name is a sign the plan was wrong:
    note it in the build file rather than quietly extending the design.
 3. Keep the architecture intact — the same rules the plan worked under: no framework types in the
