@@ -185,6 +185,16 @@ tier ran.
   sandbox) come from the environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`,
   `FACTORY_OPENCODE_ARGS` — because they are the tool's configuration and never the process's.
 
+**Plan to tidy in one context — only when asked.** The person may ask for the builder stages to share
+a context ("shared builder", `factory.sh run --shared-builder`, `FACTORY_SHARED_BUILDER=1`); it is off
+otherwise, every run. In the runner, one process then carries plan, test, build and tidy and runs each
+stage's gate itself; the runner checks that the red proof exists and runs the build and tidy gates
+again. In a session, the same variant is one subagent for plan to tidy, running the gate after each
+stage and stopping on a refusal it cannot fix in three attempts. In both, the judge and the document
+stage keep a fresh context of their own, and every stage still writes its own file, so the story can
+be resumed stage by stage. It costs less — the stages build on what the one before read — and it gives
+up one thing: build knows how the tests were written. Say in the report which variant ran.
+
 **A model per stage.** The profile may name one: `model.<tool>.<stage>`, or `model.<tool>` for
 every stage. The runner passes it as the tool's model flag. In the subagent tier, start the stage's
 subagent on that model where the tool lets a subagent take one (Claude Code's subagents take an

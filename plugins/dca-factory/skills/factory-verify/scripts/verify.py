@@ -804,6 +804,54 @@ def verify_runner(runner, verbose=False):
         check("runner: every gate run is kept, not only a refusal",
               len([f for f in kept if f.startswith("gate-")]) >= 4)
 
+    # 1b'. --shared-builder: plan to tidy in one process, gated by it and re-checked by the runner
+    builder_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then for s in plan test build tidy; do '
+                   'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
+                   'if [ "$s" = test ] && [ -z "${FIXTURE_SKIP_TEST_GATE:-}" ]; then '
+                   '"$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; done; '
+                   'else sh -c "$FIXTURE_STAND_IN"; fi')
+    def shared_run(skip_test_gate=False, dry=False):
+        with tmpdir() as root:
+            build_project(root)
+            shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                        os.path.join(root, ".agents", "factory", "story-gate.py"))
+            tests_path = os.path.join(root, "fixture-tests.md")
+            with open(tests_path, "w", encoding="utf-8") as handle:
+                handle.write(TESTS)
+            os.remove(os.path.join(root, "tasks", "STORY-1", "tests.md"))
+            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+            env = {"FACTORY_TOOL_CMD": builder_cmd, "FIXTURE_STAND_IN": stand_in,
+                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_PY": shell_path(sys.executable),
+                   "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+            if skip_test_gate:
+                env["FIXTURE_SKIP_TEST_GATE"] = "1"
+            args = ["run", "--story", "STORY-1", "--tool", "stand-in", "--shared-builder"] + (["--dry-run"] if dry else [])
+            code, output = run_runner(runner, root, *args, env=env)
+            journal = os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv")
+            starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                      if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+            delivered = os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".delivered"))
+            return code, output, starts, delivered
+    code, output, starts, delivered = shared_run()
+    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
+    check("shared builder: plan to tidy run as one process, then judge and document each in their own",
+          code == 0 and starts == ["builder", "judge", "document"] and delivered
+          and stage_lines == ["stage plan+test+build+tidy", "stage judge", "stage document"]
+          and "ran through plan,test,build,tidy,judge,document." in output,
+          f"exit {code}; starts {starts}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+    check("shared builder: the runner re-checks the build and tidy gates itself",
+          "── gate build  (re-checked by the runner)" in output and "── gate tidy  (re-checked by the runner)" in output,
+          [l for l in output.splitlines() if l.startswith("── gate")])
+    code, output, starts, delivered = shared_run(skip_test_gate=True)
+    check("shared builder: a process that never ran the test gate is caught — no red proof, no judge",
+          code == 1 and "no red proof" in output and "judge" not in starts and not delivered,
+          f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
+    code, output, starts, delivered = shared_run(dry=True)
+    check("shared builder: the dry run shows the one shared invocation and starts nothing",
+          "stage plan+test+build+tidy  (tool: stand-in, one shared context)" in output and starts == [],
+          [l for l in output.splitlines() if l.startswith("── stage")])
+
     # 1c. a stage that writes no file stops the run, and says which file was missing
     with tmpdir() as root:
         build_project(root)

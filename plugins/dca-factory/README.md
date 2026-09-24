@@ -179,6 +179,20 @@ gets it as `FACTORY_MODEL`. In a session, a subagent can run on it; the session'
 `factory.sh status <story>` shows the model each stage actually ran on and marks a request that did not
 reach it. The pipeline names no model: which stages can run cheaper is the project's to measure.
 
+## Plan to tidy in one context
+
+```
+bash .agents/factory/factory.sh run --story STORY-3 --shared-builder     # or FACTORY_SHARED_BUILDER=1
+```
+
+Off unless you ask for it, per run; leave the flag out (or set `FACTORY_SHARED_BUILDER=0`) and every
+stage has its own process again. With it, one process carries plan, test, build and tidy and runs each
+stage's gate itself; the runner then checks that the red proof exists and runs the build and tidy gates
+again, so a process that skipped a gate is stopped, not trusted. The judge and the document stage
+still run in processes of their own, so the review keeps its fresh look. Measured on one story: −31 %
+cost at the same verdict. In a second story, the shared process stopped with a question the separate
+run did not have. Per-stage model keys do not apply to the shared process; `model.<tool>` does.
+
 ## How to see what a story cost
 
 The runner records every stage's tokens; nothing else is needed.

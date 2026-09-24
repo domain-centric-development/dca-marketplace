@@ -108,7 +108,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 6
-VERSION = "0.28.0"
+VERSION = "0.29.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2632,6 +2632,11 @@ def journal_usage(tasks, story_id):
     return {s: e for s, e in stages.items() if e["invocations"] or e["measured"]}
 
 
+def stage_rank(stage):
+    """Stage order for reports; the shared builder process (plan to tidy in one) sits before the judge."""
+    return STAGE_ORDER.index(stage) if stage in STAGE_ORDER else 3.5 if stage == "builder" else 99
+
+
 def tokens_of(entry):
     return sum(entry[k] for k in USAGE_FIELDS)
 
@@ -2660,7 +2665,7 @@ def usage_report(tasks, story_filter=None, total_only=False):
         stages = journal_usage(tasks, story)
         if not stages:
             continue
-        order = sorted(stages, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 99)
+        order = sorted(stages, key=stage_rank)
         total = {"invocations": 0, "measured": 0, "cost": 0.0, "priced": 0, **{k: 0 for k in USAGE_FIELDS}}
         for stage in order:
             e = stages[stage]
@@ -2998,7 +3003,7 @@ def cost_by_stage(tasks, story):
     if not stages:
         print(f"nothing — no stage invocation recorded for {story}")
         return 0
-    order = sorted(stages, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 99)
+    order = sorted(stages, key=stage_rank)
     numeric = [k for k, v in stages[order[0]].items() if isinstance(v, (int, float))]
     total = {k: sum(stages[s].get(k, 0) for s in order) for k in numeric}
     timed = total.get("seconds", 0) > 0

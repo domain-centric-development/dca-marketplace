@@ -5,8 +5,8 @@
 #
 #   factory.sh install [--tool claude|codex|opencode|all] [--from <skill folder>] [--copy]
 #   factory.sh update [--from <skill folder>]   the newest pipeline found, same tools, links or copies
-#   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--story-budget <tokens>] [--dry-run]
-#   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>]
+#   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--story-budget <tokens>] [--shared-builder] [--dry-run]
+#   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>] [--shared-builder]
 #                      [--story-budget <tokens>] [--dry-run]
 #   factory.sh status [--brief]           what runs, what waits for a human, every story, its cost
 #   factory.sh status <story>             the same, with that story's cost per stage
@@ -47,6 +47,8 @@ STOP_FILE=".agents/factory/stop"             # exists → a backlog run stops be
 INVOCATIONS=0                                # agent invocations in this process
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
+SHARED_BUILDER="${FACTORY_SHARED_BUILDER:-}"  # --shared-builder: plan to tidy in one process (off by default)
+[ "$SHARED_BUILDER" = 0 ] || [ "$SHARED_BUILDER" = off ] && SHARED_BUILDER=""
 WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
 
 # Inside an agent session the stages run in that session (`/factory-run`); a runner started from
@@ -919,6 +921,100 @@ asks_human() {                              # asks_human <file>
     | grep -v -i -E '^[[:space:]]*(\(?(none|n/a|nothing)\.?\)?\.?|—|–|-)?[[:space:]]*$' | grep -q .
 }
 
+# A stage that ends with a needs-human section has stopped. The question is a record of its own, so
+# the answer has a place to land and a second session finds it without this transcript: name the
+# file, and the command that resumes. 3 only when the question is a record — that is what a backlog
+# run can wait on; a section without one is a stop a human has to look at, like any other failure.
+stopped_for_human() {                       # stopped_for_human <artefact> <stage> <story>
+  local artefact=$1 stage=$2 story=$3 ids id applies
+  echo "factory: stage '$stage' ends with a needs-human section — the run stops here." >&2
+  ids=$(sed -n '/^## needs-human/,/^## /p' "$artefact" | sed -n 's/^[[:space:]-]*decision:[[:space:]]*//p')
+  if [ -z "$ids" ]; then
+    echo "factory:   the section names no 'decision: <id>' — the stage has to write the question as" >&2
+    echo "factory:   $DECISIONS/<story>-<nn>.md; the next gate refuses a question nobody was asked." >&2
+  fi
+  for id in $ids; do
+    if [ -f "$DECISIONS/$id.md" ]; then
+      # The record names the stage that applies the answer — for a judge's story conflict that is
+      # not the judge. That is where the story resumes.
+      applies=$(sed -n 's/^stage:[[:space:]]*//p' "$DECISIONS/$id.md" | head -1)
+      echo "factory:   decision $id → $DECISIONS/$id.md — answer it there under '## Answer'" >&2
+      echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story --from ${applies:-$stage}" >&2
+    else
+      echo "factory:   decision $id is named but $DECISIONS/$id.md does not exist." >&2
+    fi
+  done
+  echo "factory:   read $artefact and decide; the stages after it were not run." >&2
+  [ -n "$ids" ] && return 3
+  return 1
+}
+
+# --shared-builder: plan, test, build and tidy in ONE tool process, so each stage builds on what the
+# one before read instead of reading it again (measured: −31 % on a story, the same tokens but far
+# fewer cache writes). Off unless asked for, per run. The process runs each stage's gate itself; the
+# runner then checks, not believes: the red proof must exist (the test gate ran and saw the tests
+# fail) and the build and tidy gates run again here. The judge and the document stage stay separate
+# processes with a fresh context — the judge's independence is the point of it. Only `model.<tool>`
+# applies to the shared process; per-stage model keys need a process per stage.
+BUILDER_STAGES=(plan test build tidy)
+run_shared_builder() {                      # run_shared_builder <story> <tool> <from> <dry>
+  local story=$1 tool=$2 from=$3 dry=$4 range=() on=0 st
+  for st in "${BUILDER_STAGES[@]}"; do [ "$st" = "$from" ] && on=1; [ "$on" = 1 ] && range+=("$st"); done
+  local list; list=$(IFS=+; echo "${range[*]}")
+  local prompt="Carry out these stages of the delivery pipeline for backlog story $story, one after another, \
+in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//') — apply each stage's skill in turn, \
+reading only the story and the files that stage's skill names as its input, and writing its output file under \
+$TASKS/$story/. After the test, build and tidy stages run that stage's gate, \
+\`$PY $GATE --story $story --stage <stage>\`, and fix exactly what it names before the next stage, at most \
+three attempts per stage. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
+document stage."
+  echo "── stage $list  (tool: $tool, one shared context)"
+  if [ -n "$dry" ]; then
+    echo "   would run: $prompt"
+    echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
+    local dry_choice; dry_choice=$(model_choice "$tool" builder)
+    echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
+    return 0
+  fi
+  if [ -f "$GATE" ] && ! "$PY" "$GATE" --claim "$WORKER" >/dev/null; then
+    echo "factory: the checkout was taken over by another worker before the shared stages — stopping." >&2; return 5
+  fi
+  if [ -n "$STORY_BUDGET" ] && [ "$("$PY" "$GATE" --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
+    echo "factory: story $story has reached its --story-budget $STORY_BUDGET — the shared stages are not dispatched." >&2; return 4
+  fi
+  if [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
+    echo "factory: --max-stages $MAX_STAGES reached before the shared stages of $story." >&2; return 4
+  fi
+  local journal="$TASKS/$story/.verify/journal.tsv" began raw_out invoked=0
+  [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
+  snapshot "$story" "before-builder"
+  printf '%s\tstage-start\tbuilder\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" >> "$journal"
+  raw_out="$TASKS/$story/.verify/builder.$(date -u +%H%M%S).out"
+  began=$(date +%s)
+  invocation_raw="$raw_out" stage_in_flight=builder story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
+  record_usage "$story" builder "$tool" "$raw_out" "$(( $(date +%s) - began ))"
+  printf '%s\tstage-end\tbuilder\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$invoked" = 0 ] && echo 0 || echo nonzero)" >> "$journal"
+  [ "$invoked" = 0 ] || { echo "factory: the tool exited non-zero during the shared stages." >&2; return 1; }
+  snapshot "$story" "after-builder"
+  [ -f "$GATE" ] && "$PY" "$GATE" --record-changes builder --story "$story" >/dev/null 2>&1
+  for st in "${range[@]}"; do
+    local artefact="$TASKS/$story/$(stage_file "$st")"
+    [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage '$st' is not finished." >&2; return 1; }
+    if asks_human "$artefact"; then stopped_for_human "$artefact" "$st" "$story"; return $?; fi
+  done
+  # Checked, not believed: the process says it ran the gates; the runner looks.
+  if [[ " ${range[*]} " == *" test "* ]] && [ ! -s "$TASKS/$story/.tests-red" ]; then
+    echo "factory: the shared stages left no red proof ($TASKS/$story/.tests-red) — the test gate never saw the tests fail." >&2
+    return 1
+  fi
+  for st in build tidy; do
+    [[ " ${range[*]} " == *" $st "* ]] || continue
+    echo "── gate $st  (re-checked by the runner)"
+    gate "$st" "$story" || { echo "factory: the runner's re-check of gate '$st' refused the shared stages' work." >&2; return 1; }
+  done
+  return 0
+}
+
 bump_rounds() {                             # bump_rounds <story> -> current count
   local file="$TASKS/$1/.rounds" count=0
   [ -f "$file" ] && count=$(tr -dc '0-9' < "$file")
@@ -1022,7 +1118,7 @@ open_decisions() {                          # open_decisions <story>
 
 run_story() {
   local story=$1 tool=$2 from=${3:-plan} dry=${4:-}
-  local started=0 ran="" waiting
+  local started=0 ran="" waiting built=""
   waiting=$(open_decisions "$story")
   if [ -n "$waiting" ]; then
     echo "factory: story $story waits for a decision — no stage runs until it is answered:" >&2
@@ -1037,6 +1133,15 @@ run_story() {
     if [[ " ${PRE_GATED[*]} " == *" $stage "* ]]; then
       echo "── gate $stage"
       gate "$stage" "$story" || { echo "factory: gate '$stage' refused the story. Fix it before the stage runs." >&2; return 1; }
+    fi
+
+    if [ -n "$SHARED_BUILDER" ] && [[ " ${BUILDER_STAGES[*]} " == *" $stage "* ]]; then
+      if [ -z "$built" ]; then
+        run_shared_builder "$story" "$tool" "$stage" "$dry" || return $?
+        built=1
+      fi
+      ran="${ran:+$ran,}$stage"
+      continue
     fi
 
     # A resumed story whose document file exists and was never refused: its gate decides first, and a
@@ -1109,31 +1214,8 @@ run_story() {
       # Reading only "does the file exist" turns an escalation into a hand-over, and the next stage
       # then builds on a decision nobody took.
       if asks_human "$artefact"; then
-        echo "factory: stage '$stage' ends with a needs-human section — the run stops here." >&2
-        # The question is a record of its own, so the answer has a place to land and a second
-        # session finds it without this transcript. Name the file, and the command that resumes.
-        local ids id
-        ids=$(sed -n '/^## needs-human/,/^## /p' "$artefact" | sed -n 's/^[[:space:]-]*decision:[[:space:]]*//p')
-        if [ -z "$ids" ]; then
-          echo "factory:   the section names no 'decision: <id>' — the stage has to write the question as" >&2
-          echo "factory:   $DECISIONS/<story>-<nn>.md; the next gate refuses a question nobody was asked." >&2
-        fi
-        for id in $ids; do
-          if [ -f "$DECISIONS/$id.md" ]; then
-            # The record names the stage that applies the answer — for a judge's story conflict that is
-            # not the judge. That is where the story resumes.
-            local applies; applies=$(sed -n 's/^stage:[[:space:]]*//p' "$DECISIONS/$id.md" | head -1)
-            echo "factory:   decision $id → $DECISIONS/$id.md — answer it there under '## Answer'" >&2
-            echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story --from ${applies:-$stage}" >&2
-          else
-            echo "factory:   decision $id is named but $DECISIONS/$id.md does not exist." >&2
-          fi
-        done
-        echo "factory:   read $artefact and decide; the stages after it were not run." >&2
-        # 3 only when the question is a record: that is what a backlog run can wait on. A section
-        # without one is a stop a human has to look at, like any other failure.
-        [ -n "$ids" ] && return 3
-        return 1
+        stopped_for_human "$artefact" "$stage" "$story"
+        return $?
       fi
     fi
 
@@ -1288,6 +1370,7 @@ while [ $# -gt 0 ]; do
     --interval) interval=$2; shift 2 ;;
     --max-stages) MAX_STAGES=$2; shift 2 ;;
     --story-budget) STORY_BUDGET=$2; shift 2 ;;
+    --shared-builder) SHARED_BUILDER=1; shift ;;
     *) usage ;;
   esac
 done
