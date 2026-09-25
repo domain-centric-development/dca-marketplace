@@ -124,6 +124,20 @@ that smuggles the decision in.
    that the commit hook then refuses. Every finding it reports is yours to fix before you hand the
    item over. Report what it said.
 
+11. **Measure the work on the story.** Writing a story costs tokens too, and what a story cost
+   includes it. As soon as the story's id is settled — before the question pass — run
+   `python3 .agents/factory/story-gate.py --window-start backlog --story <id>`, and when you hand the
+   story over — released and committed, or stopped with open questions — first
+   `python3 .agents/factory/story-gate.py --window-end backlog --story <id>`, then commit (the journal
+   under `tasks/<id>/` is part of the commit). One window per session; a session that picks the story
+   up again opens its own. The window claims nothing: a runner working another story is not held up.
+   An epic alone opens no window.
+
+12. **Showing the backlog.** When someone asks what is in the backlog or where it stands, run
+   `bash .agents/factory/factory.sh backlog --format md` and show it as it is — the tables by epic,
+   the tokens and *Next* — without retelling it, reformatting it or adding after its *Next*. Say more
+   only when asked, read from the file the answer comes from.
+
 ## A story pasted from a tracker
 
 A story pasted from an issue tracker — Jira wiki markup, GitHub Markdown, a document — is rewritten

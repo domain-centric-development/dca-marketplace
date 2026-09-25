@@ -18,8 +18,9 @@ once per project. The state of a record is read off the file: no `## Answer` is 
 ## Do
 
 1. **List what is waiting.** Run `bash .agents/factory/factory.sh decisions` (add `--story <id>` for
-   one story; `python3 .agents/factory/story-gate.py --list-decisions` where there is no runner copy). It prints one line per record — id, state, story and
-   stage, when it was asked, the question — open ones first. Show that, in that order. Where the
+   one story, `--format md` in a session; `python3 .agents/factory/story-gate.py --list-decisions` where there is no runner copy). It prints one row per record — id, state, story and
+   stage, when it was asked, the question — open ones first. Show it as it is — do not retell it as a
+   table of your own, do not drop its lines, do not add after its *Next*. Where the
    gate is not installed, read the directory yourself and say that you did.
 2. **Explain one from its files, not from memory.** Read the record: the question, the options,
    the evidence the stage cited, its recommendation. Read the story it names and the stage file
@@ -35,6 +36,10 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    find best, not a default, and not silence. If what they said is incomplete — "b, but only for
    archived ones older than a year" is an answer *and* a constraint the story must carry — say
    what you would write and where the rest goes (the story, via the backlog skill).
+4a. **Measure the answering.** Explaining and answering a story's questions is part of what the story
+   cost. When you start on a record, run `python3 .agents/factory/story-gate.py --window-start decisions
+   --story <its story>`; once its answer is written (or the human defers), `--window-end decisions
+   --story <its story>`. The window claims nothing and starts nothing.
 5. **Show the exact wording before it is written.** Present the `## Answer` block you are about to
    append — `answer:`, `by:`, `at:`, `rationale:` — and the record it goes into. Write it when the
    human confirms **that block**. An instruction explicit enough to leave nothing open ("write

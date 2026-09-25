@@ -114,8 +114,8 @@ something to see stops after the last gate instead of being delivered: an accept
 `<story>-accept-<n>` lists the criteria with their tests and the profile's `run:` command, the gate
 exits 3 and the story holds the checkout. Answer it through `/factory-decisions`: *accepted*
 delivers it; a correction goes into **the same story**, which runs again from plan and is asked
-again. A story delivered earlier is taken back for a correction with `story-gate.py --reopen
-<story>` — not while another story holds the checkout, and after an acceptance only to add what the
+again. A story delivered earlier is taken back for a correction the same way, through
+`/factory-decisions` — not while another story holds the checkout, and after an acceptance only to add what the
 story left unsaid (changing a criterion is a new wish, a new story). Stories name page sizes by the
 table in the product description (`s`, `m`, `l`, `xl`), never in pixels.
 
@@ -158,7 +158,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
 | `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
 | `factory.sh run [--story <id>] [--watch]` | `factory-run` | one story through the six stages · without `--story` every story in dependency order, waiting for answers with `--watch` |
-| `factory.sh status [--story <id>] [--usage] [--brief]` | `factory-status` | what runs, what waits for a human, every story, the cost · one story's cost per stage · tokens per story and stage |
+| `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh update [--from <dir>]` | `factory-update` | the newest pipeline found, same tools, links or copies |
 | `factory.sh verify --story <id>` · `--fixtures` | `factory-verify` | observe a delivered story · check the machinery |
@@ -193,7 +193,7 @@ Skills are held one of two ways, and the update keeps whichever the project chos
   folder lists what the pipeline copied; a skill of the project's own — even with a pipeline skill's
   name — is never overwritten, and one the pipeline dropped is removed.
 
-`factory.sh status` says when the project is behind the pipeline it found.
+`factory.sh status --live` says when the project is behind the pipeline it found.
 
 ## A session that starts knowing where things stand
 
@@ -216,9 +216,18 @@ From any session in the project — beside a running `run --watch` too, since it
 bash .agents/factory/factory.sh status          # the same, without a skill
 ```
 
-It shows the stage that runs and since when, the decisions waiting for a human, every story's state
-with what comes next, and the tokens spent. "Running" means started and not ended in the journal —
-a stopped runner looks the same, which is why the start time is shown.
+First what waits for you — a story to accept, a question to answer, a draft to release, a story that
+stopped — each with what to do; then what runs; then the backlog grouped by epic, one row per story
+with its state, stage, passes, when it started and was delivered, how long its stages worked and its
+tokens; then what comes next. The same files give the same text: times are UTC stamps and durations
+from the journal. `--live` adds what the clock says (how long ago, the running stage's last activity,
+the worker, a listening session, a newer pipeline on this machine). `--story <id>` shows one story:
+its passes — a correction after acceptance is a pass of its own — its stages and its decisions.
+
+In a terminal the marks are `!` look at it · `?` answer · `✗` stopped · `▶` running · `✓` delivered ·
+`·` nothing to do, in colour where the output is a terminal (`--color always|never`, `NO_COLOR`).
+`--format md` renders the same rows as Markdown tables with 👀 ❓ ⛔ ⏳ ✅ ➖ — what a session shows —
+and `--format json` for tools.
 
 ## A model per stage
 
@@ -232,8 +241,8 @@ Claude does not break a colleague's Codex run, and the gate refuses an unqualifi
 runner passes the value as the tool's model flag (`--model`, `-m`); a `--model` in
 `FACTORY_<TOOL>_ARGS` overrides it for one person, and the run says so. A custom `FACTORY_TOOL_CMD`
 gets it as `FACTORY_MODEL`. In a session, a subagent can run on it; the session's own context cannot.
-`factory.sh status --story <story>` shows the model each stage actually ran on and marks a request that did not
-reach it. The pipeline names no model: which stages can run cheaper is the project's to measure.
+`factory.sh status --story <story>` names the model the stages ran on — per stage where they differ — and marks a
+request that did not reach a stage. The pipeline names no model: which stages can run cheaper is the project's to measure.
 
 ## Plan to tidy in one context
 
@@ -332,7 +341,7 @@ what must be true before the next one starts.
 
 | Skill | Does |
 |---|---|
-| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `story-gate.py --schedule` reads every story's state off the files, and `factory.sh run` without `--story` runs them in that order |
+| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `factory.sh backlog` reads every story's state off the files, and `factory.sh run` without `--story` runs them in that order |
 | `stage-plan` | story → `tasks/<story>/plan.md`: elements that change, criteria, test shape per criterion |
 | `stage-test` | plan → tests plus `tasks/<story>/tests.md` with the criterion-to-test table |
 | `stage-build` | red tests → production code plus `tasks/<story>/build.md` |
@@ -343,8 +352,8 @@ what must be true before the next one starts.
 | `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
 | — `decisions/` | the questions a run may not answer, one file each under `.agents/factory/decisions/<story>-<nn>.md`, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
 | `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies. Reports the versions and the profile's contract line; commits nothing |
-| `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`story-gate.py --status [--story <id>]`). Reads files; changes and starts nothing |
-| `factory-decisions` | the inbox for those records: lists what waits on a human (`story-gate.py --list-decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer. A structural answer — a new bounded context, a new relationship, a surface an actor lacks — also brings `project/domain.md` and the product description in line |
+| `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`factory.sh status [--story <id>]`). Reads files; changes and starts nothing |
+| `factory-decisions` | the inbox for those records: lists what waits on a human (`factory.sh decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer. A structural answer — a new bounded context, a new relationship, a surface an actor lacks — also brings `project/domain.md` and the product description in line |
 | `factory-verify` | checks the pipeline itself: every gate check against throwaway fixtures, the runner's stage order, verdict handling and install shapes, and — when asked — one tiny story delivered end to end. Reports; it repairs nothing |
 
 ## The gate

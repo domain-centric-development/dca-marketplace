@@ -22,7 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # The reports use `—` and `→`. A Windows console decodes stdout as cp1252 and a Python that
 # inherits that raises on the first arrow; the files this writes are UTF-8 in every other respect,
@@ -498,6 +498,16 @@ def backlog_project(root, *stories, **more):
     build_project(root, tests=None, profile="compile: true\n",
                   extra_sources=tuple(sources) + tuple(more.pop("extra_sources", ())), **more)
     return root
+
+
+def usage_json(gate, root, story, env=None):
+    """{stage: figures} of one story's journal, as the status computes them."""
+    done = subprocess.run([sys.executable, gate, "--usage", "--story", story, "--format", "json"], cwd=root,
+                          env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    try:
+        return json.loads(done.stdout or "{}")
+    except ValueError:
+        return {}
 
 
 def schedule_of(gate, root):
@@ -1248,14 +1258,15 @@ exit 0
         env.update({"FIXTURE_USAGE": claude_like, "FACTORY_USAGE_FORMAT": "claude-json"})
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         journal = open(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv"), encoding="utf-8").read()
-        report = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
-                                 "--usage", "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        stages = usage_json(os.path.join(root, ".agents", "factory", "story-gate.py"), root, "STORY-2")
         check("usage: each invocation's tokens land in the story's journal",
               code == 0 and journal.count("\tusage\t") == 6 and "output=900" in journal,
               f"exit {code}; usage lines {journal.count(chr(9) + 'usage' + chr(9))}")
         check("usage: the report sums tokens and cost per stage and per story",
-              "STORY-2/plan" in report and "STORY-2 total" in report and "5400" in report and "0.06" in report,
-              report.strip().splitlines()[-3:])
+              len(stages) == 6 and sum(e["tokens"] for e in stages.values()) == 6000
+              and round(sum(e["cost"] for e in stages.values()), 2) == 0.06
+              and sum(e["output"] for e in stages.values()) == 5400,
+              {k: (e["tokens"], e["output"], e["cost"]) for k, e in stages.items()})
         check("usage: the stage's final message still reaches the log", "done" in output, output[-200:])
         _, _, _, sched = schedule_of(os.path.join(root, ".agents", "factory", "story-gate.py"), root)
         check("usage: the schedule shows a story's tokens", "6,000 tokens" in sched,
@@ -1274,10 +1285,10 @@ exit 0
     with tmpdir() as root:
         env = backlog_fixture(root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
-        report = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
-                                 "--usage", "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        stages = usage_json(os.path.join(root, ".agents", "factory", "story-gate.py"), root, "STORY-2")
         check("usage: a tool that reports nothing is counted as unknown, never as zero",
-              "6 invocation(s) without a usage report" in report, report.strip().splitlines()[-2:])
+              sum(e["runs"] - e["measured"] for e in stages.values()) == 6
+              and all(e["tokens"] == 0 for e in stages.values()), {k: (e["runs"], e["measured"]) for k, e in stages.items()})
 
     # 1l. a resumed document stage whose file already holds is not invoked again
     with tmpdir() as root:
@@ -1339,9 +1350,9 @@ exit 0
         text = open(stamp, encoding="utf-8").read()
         with open(stamp, "w", encoding="utf-8") as handle:
             handle.write(re.sub(r"version: .*", "version: 0.0.1", text))
-        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status",
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--live",
                                   env={"FACTORY_PLUGIN_DIR": source})
-        check("status: a project behind the pipeline is told so, with the update to run",
+        check("status --live: a project behind the pipeline is told so, with the update to run",
               code == 0 and "installed from pipeline 0.0.1" in output, [l for l in output.splitlines() if "pipeline" in l][:2])
 
     with tmpdir() as root:
@@ -1427,12 +1438,12 @@ exit 0
             if os.path.isfile(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv")) else ""
         status = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--status",
                                  "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8").stdout
-        build_row = next((l for l in status.splitlines() if l.startswith("build ")), "")
+        build_row = next((l for l in status.splitlines() if "Stages" in l), "")
         check("model: a custom command gets FACTORY_MODEL for its stage only, the journal records the request "
               "as not applied by the runner, and the status says so",
               "build=model-q" in seen and "plan=" in seen
               and "model_requested=model-q\tmodel_applied=no (passed as FACTORY_MODEL" in journal
-              and "(requested model-q: not applied)" in build_row,
+              and "requested model-q: not applied" in build_row,
               f"exit {code}; {seen}; {build_row}")
 
     # 1p. a runner does not start while another worker holds the checkout
@@ -1751,11 +1762,11 @@ exit 0
         status_code, status_out = run_runner(project_runner, root, "status") if os.path.isfile(project_runner) \
             else (None, "")
         check("install: the runner is copied beside the gate, and `factory.sh status` works from there",
-              status_code == 0 and "== running" in status_out and "== cost" in status_out,
+              status_code == 0 and "Waiting for you" in status_out and "Backlog" in status_out,
               f"exit {status_code}; {status_out[:120]}")
         usage_code, usage_out = run_runner(project_runner, root, "status", "--usage") if os.path.isfile(project_runner) \
             else (None, "")
-        check("install: `factory.sh status --usage` passes on to the gate", usage_code == 0 and "usage:" in usage_out,
+        check("install: `factory.sh status --usage` passes on to the gate", usage_code == 0 and "Tokens" in usage_out,
               f"exit {usage_code}; {usage_out[:120]}")
         check("install: a stack profile is written when the project has none",
               os.path.isfile(os.path.join(root, ".agents", "factory", "factory.profile.yaml")))
@@ -1937,10 +1948,10 @@ def verify_setup(runner, verbose=False):
             handle.write(text.replace("browser: playwright\n", "").replace("\ntest: ./gradlew test --rerun", "\ntest: ./gradlew test"))
         code, output = run_runner(runner, root, "setup", "--check")
         check("setup --check: a missing detected key exits 1 and names the check it switches on",
-              code == 1 and "add   browser: playwright" in output and "the plan takes browser tests" in output,
+              code == 1 and "? browser   missing" in output and "playwright" in output and "the plan takes browser tests" in output,
               output.strip().splitlines())
         check("setup --check: a value that differs is a note — kept, with the key --replace takes",
-              "note  test:" in output and "--replace test" in output, [l for l in output.splitlines() if "note" in l])
+              "· test   differs" in output and "--replace test" in output, [l for l in output.splitlines() if "differs" in l])
         before = tree_digest(root)
         run_runner(runner, root, "setup", "--check")
         check("setup --check: read-only", tree_digest(root) == before)
@@ -1977,7 +1988,7 @@ def verify_setup(runner, verbose=False):
                          .replace("covers.test: **\n", ""))
         code, output = run_runner(runner, root, "setup", "--check")
         check("setup --check: `covers.test` is not proposed to a `test:` the person narrowed",
-              code == 0 and "covers.test" not in output and "note  test:" in output, output.strip().splitlines())
+              code == 0 and "covers.test" not in output and "· test   differs" in output, output.strip().splitlines())
     with tmpdir() as root:
         write_file(root, ".editorconfig", "root = true\n")
         write_file(root, "build.gradle", "plugins { id 'java' }\n")
@@ -2053,8 +2064,8 @@ def verify_setup(runner, verbose=False):
         code, output = run_runner(project_runner(root), root, "status", "STORY-1")
         check("verbs: `status <story>` is gone — `status --story X`", code == 2, f"exit {code}")
         code, output = run_runner(project_runner(root), root, "backlog")
-        check("verbs: `backlog` prints the schedule and works nothing off",
-              code == 0 and "next: STORY-1" in output
+        check("verbs: `backlog` shows the backlog by epic with what comes next, and works nothing off",
+              code == 0 and "Backlog —" in output and "STORY-1 can start from plan" in output
               and not os.path.exists(os.path.join(root, "tasks", "STORY-1", "plan.md")),
               output.strip().splitlines()[-2:])
         code, output = run_runner(project_runner(root), root, "backlog", "--check")
@@ -2766,23 +2777,23 @@ def main(argv=None):
             ("STORY-9-01", DECISION.replace("STORY-1", "STORY-9"))))
         listing = subprocess.run([sys.executable, args.gate, "--list-decisions"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
-        lines = [l for l in listing.stdout.splitlines() if l and not l.startswith("decisions:")]
-        states = [l.split()[1] for l in lines]
+        inbox = json.loads(subprocess.run([sys.executable, args.gate, "--list-decisions", "--format", "json"], cwd=root,
+                                          capture_output=True, text=True, encoding="utf-8").stdout or "{}")
+        states = [r["state"] for r in inbox.get("records", [])]
         expectations = [
             ("inbox: every record is listed, open first, then draft, answered, applied",
              states == ["open", "open", "draft", "answered", "applied"], f"states in order: {states}"),
             ("inbox: an answered record shows its answer and who gave it",
-             any("STORY-1-03" in l and "→ b by the-expert" in l for l in lines),
-             [l for l in lines if "STORY-1-03" in l]),
-            ("inbox: the summary counts what waits on a human",
-             "5 record(s), 3 waiting for an answer" in listing.stdout,
-             listing.stdout.strip().splitlines()[-1:] if listing.stdout.strip() else "no output"),
+             "→ b (the-expert)" in listing.stdout, listing.stdout[-600:]),
+            ("inbox: the summary counts what waits on a human, and Next says how to answer — in an agent and in a shell",
+             "5 records · 3 wait for you" in listing.stdout and "/factory-decisions" in listing.stdout
+             and "under `## Answer`" in listing.stdout, listing.stdout[-600:]),
         ]
         one_story = subprocess.run([sys.executable, args.gate, "--list-decisions", "--story", "STORY-9"],
                                    cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
         expectations.append(("inbox: --story narrows the listing to one story",
                              "STORY-9-01" in one_story.stdout and "STORY-1-01" not in one_story.stdout
-                             and "1 record(s), 1 waiting" in one_story.stdout,
+                             and "1 record · 1 waits for you" in one_story.stdout,
                              one_story.stdout.strip().splitlines()[-1:]))
         for name, ok, detail in expectations:
             print(f"  {'ok   ' if ok else 'FAIL '} {name}")
@@ -3098,9 +3109,7 @@ def main(argv=None):
                      for f in fixed]
             with open(journal, "w", encoding="utf-8") as handle:
                 handle.write("\n".join(l for l in lines if "\tusage\t" not in l) + "\n" + "\t".join(fixed) + "\n")
-        report = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
-                                env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
-        row = next((l for l in report.splitlines() if l.startswith("S-1/plan")), "")
+        plan = usage_json(args.gate, root, "S-1", environment).get("plan", {})
         codex_home = os.path.join(root, "codex-home")
         rollout = os.path.join(codex_home, "sessions", "2026", "09", "23", "rollout-x.jsonl")
         os.makedirs(os.path.dirname(rollout))
@@ -3121,9 +3130,7 @@ def main(argv=None):
             handle.write("2026-09-23T10:01:00.000Z\tstage-start\ttest\ttool=codex-session\n"
                          f"2026-09-23T10:03:00.000Z\tusage\ttest\ttool=codex-session\t"
                          f"window=2026-09-23T10:01:00.000Z/2026-09-23T10:03:00.000Z\tlog={rollout}\n")
-        report2 = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
-                                 capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
-        test_row = next((l for l in report2.splitlines() if l.startswith("S-1/test")), "")
+        test_stage = usage_json(args.gate, root, "S-1").get("test", {})
         # the next stage mark writes what can be read into the journal; `--usage` itself only reads
         subprocess.run([sys.executable, args.gate, "--stage-start", "document", "--story", "S-1"], cwd=root,
                        env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -3133,15 +3140,18 @@ def main(argv=None):
              bool(recorded) and "window=" in recorded[0] and "session=claude:0000-session" in recorded[0]
              and "log=" not in recorded[0] and home not in recorded[0], recorded[:1]),
             ("usage in a session: Claude's log is read for the window, each response once, subagents included, "
-             "synthetic entries left out", row.split()[1:7] == ["1", "1", "2", "200", "20", "57"], row),
+             "synthetic entries left out",
+             [plan.get(k) for k in ("runs", "measured", "input", "cache_read", "cache_write", "output")]
+             == [1, 1, 2, 200, 20, 57], plan),
             ("usage in a session: a session log has no cost, and the report says so rather than 0.00",
-             row.split()[-1:] == ["—"], row),
+             plan.get("priced") == 0, plan),
             ("usage in a session: at the next stage mark the numbers are written into the journal and the "
              "machine-local log path leaves it",
              any("output=57" in l and "log=" not in l for l in open(journal, encoding="utf-8").read().splitlines()),
              [l for l in open(journal, encoding="utf-8").read().splitlines() if "usage" in l][:1]),
             ("usage in a session: Codex's running totals are differenced over the window",
-             test_row.split()[3:7] == ["800", "1200", "0", "30"], test_row),
+             [test_stage.get(k) for k in ("input", "cache_read", "cache_write", "output")] == [800, 1200, 0, 30],
+             test_stage),
             ("usage from a whole old log: a Codex session is read to its last total",
              whole.startswith("model=codex-model\tinput=1000\tcache_read=2000\tcache_write=0\toutput=40"), whole),
         ]
@@ -3160,29 +3170,54 @@ def main(argv=None):
              "2026-09-23T10:00:00Z\tstage-start\tplan\ttool=x\n2026-09-23T10:01:00Z\tstage-end\tplan\texit=0\n"
              "2026-09-23T10:01:00Z\tusage\tplan\ttool=x\tmodel=m\tinput=10\tcache_read=0\tcache_write=0\toutput=90\tcost=0.01\n"
              "2026-09-23T10:02:00Z\tstage-start\ttest\ttool=x\n")))
-        out = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
-                             encoding="utf-8").stdout
-        section = lambda name: out.split(f"== {name}")[1].split("\n== ")[0] if f"== {name}" in out else ""
+        run = lambda *more: subprocess.run([sys.executable, args.gate, "--status", *more], cwd=root,
+                                           capture_output=True, text=True, encoding="utf-8").stdout
+        out = run()
+        part = lambda text, name, until: text.split(name, 1)[1].split(until, 1)[0] if name in text else ""
+        story2 = next((l for l in part(out, "Backlog", "Tokens").splitlines() if "STORY-2" in l), "")
         expectations = [
-            ("status: a stage with a start and no end is shown as running, with when it started",
-             "STORY-2  stage test  since 2026-09-23T10:02:00Z" in section("running"), section("running")),
-            ("status: an open decision is listed with the story it blocks",
-             "STORY-1-01  open  STORY-1/plan" in section("waiting for a human"), section("waiting for a human")),
-            ("status: every story's state is there, and the cost per story and in total",
-             "STORY-1  waiting" in section("stories")
-             and re.search(r"^STORY-2\s+2\s+1\s+100\s+0\.01$", section("cost"), re.M)
-             and re.search(r"^total\s+2\s+1\s+100\s+0\.01$", section("cost"), re.M)
-             and "1 invocation(s) without a usage report" in section("cost"), section("cost")),
+            ("status: a stage with a start and no end is shown with when it started (UTC) — as interrupted once it is "
+             "older than a stage may take, on top as well",
+             "✗ STORY-2   test   since 2026-09-23 10:02 UTC · never ended — possibly interrupted" in part(out, "Running", "Backlog")
+             and "✗ STORY-2" in part(out, "Waiting for you", "Running")
+             and re.search(r"✗ STORY-2\s+interrupted\?\s+test", story2) is not None,
+             part(out, "Waiting for you", "Backlog") + story2),
+            ("status: what needs a person is listed first, with the story and what to do",
+             re.search(r"\? STORY-1\s+waiting for your answer\n\s+agent\s+/factory-decisions\n\s+shell\s+write the answer "
+                       r"into \.agents/factory/decisions/STORY-1-01\.md", part(out, "Waiting for you", "Running")) is not None,
+             part(out, "Waiting for you", "Running")),
+            ("status: one row per story, grouped under its epic; its tokens by class, per epic and in total, with the cost",
+             "sample" in part(out, "Backlog", "Tokens") and "STORY-1" in part(out, "Backlog", "Tokens")
+             and re.search(r"^\s+↳ STORY-2\s+2\s+10\s+90\s+0\s+0\s+100\s+0\.01$", part(out, "Tokens", "\n" + "─" * 72), re.M)
+             and re.search(r"^\s+sample\s+2\s+10\s+90\s+0\s+0\s+100\s+0\.01$", part(out, "Tokens", "\n" + "─" * 72), re.M)
+             and re.search(r"^\s+total\s+2\s+10\s+90\s+0\s+0\s+100\s+0\.01$", part(out, "Tokens", "\n" + "─" * 72), re.M),
+             part(out, "Tokens", "\n" + "─" * 72)),
+            ("status: the same files give the same text — no clock in the view without --live",
+             out == run(), ""),
+            ("status: no colour when the output is not a terminal, colour when asked for",
+             "\x1b[" not in out and "\x1b[" in run("--color", "always"), ""),
         ]
-        out = subprocess.run([sys.executable, args.gate, "--status", "--story", "STORY-2"], cwd=root,
-                             capture_output=True, text=True, encoding="utf-8").stdout
+        md = run("--format", "md")
+        cells = lambda text: sorted(c.strip() for l in text.splitlines() if l.startswith("|") and "---" not in l
+                                    for c in l.strip("|").split("|")[1:])
+        text_rows = [l for l in part(out, "Backlog", "Tokens").splitlines() if re.match(r"^\s+[?!✗▶✓·] STORY", l)]
+        md_rows = [l for l in md.splitlines() if re.match(r"^\| [👀❓⛔⏳✅➖] STORY", l)]
         expectations += [
-            ("status of one story: its cost per stage, each stage its own row, and the story's total",
-             re.search(r"^plan\s+1\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01\s+m$", section("cost of STORY-2, per stage"), re.M)
-             and re.search(r"^test\s+1\s+0\s+0\s+0\s+0\s+0\s+0\s+—$", section("cost of STORY-2, per stage"), re.M)
-             and re.search(r"^total\s+2\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01$",
-                           section("cost of STORY-2, per stage"), re.M)
-             and "== stories" in out, out.split("== cost")[-1]),
+            ("status --format md: the same rows as the terminal view, with the session's marks",
+             len(text_rows) == len(md_rows) == 2 and "⛔ STORY-2" in md and "❓ STORY-1" in md
+             and all(r.split("|")[2].strip() in out for r in md_rows), "\n".join(md_rows)),
+            ("status --format json: the model, readable by a tool",
+             json.loads(run("--format", "json"))["total"] == 2, ""),
+        ]
+        story_view = run("--story", "STORY-2")
+        stages = part(story_view, "Stages", "\n" + "─" * 72)
+        expectations += [
+            ("status of one story: each stage its own row with runs, the four token classes, the cost, and a total",
+             re.search(r"^\s+plan\s+1\s+1 min\s+10\s+90\s+0\s+0\s+100\s+0\.01$", stages, re.M)
+             and re.search(r"^\s+test\s+1 \(1 not measured\)\s+—\s+—\s+—\s+—\s+—\s+not measured\s+—$", stages, re.M)
+             and re.search(r"^\s+total\s+2\s+1 min\s+10\s+90\s+0\s+0\s+100\s+0\.01$", stages, re.M), stages),
+            ("status of one story: its passes and what waits", "Passes" in story_view and "1  first delivery" in story_view,
+             story_view),
         ]
     with tmpdir() as root:
         # switched off: the gate records the stage and reads no session log
@@ -3225,12 +3260,9 @@ def main(argv=None):
             handle.write("2026-09-23T10:01:00.000Z\tstage-start\tplan\ttool=codex-session\n"
                          "2026-09-23T10:03:00.000Z\tusage\tplan\ttool=codex-session\t"
                          "window=2026-09-23T10:01:00.000Z/2026-09-23T10:03:00.000Z\tsession=codex:abc-123\n")
-        report = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
-                                env=dict(os.environ, CODEX_HOME=codex_home), capture_output=True, text=True,
-                                encoding="utf-8").stdout
-        row = next((l for l in report.splitlines() if l.startswith("S-1/plan")), "")
+        plan = usage_json(args.gate, root, "S-1", dict(os.environ, CODEX_HOME=codex_home)).get("plan", {})
         expectations.append(("usage in a session: a Codex session is found by its id alone",
-                             row.split()[1:3] == ["1", "1"] and row.split()[6] == "7", row))
+                             plan.get("runs") == 1 and plan.get("measured") == 1 and plan.get("output") == 7, plan))
     with tmpdir() as root:
         # a union merge: one branch read the window, the other still points at the log; lines interleave
         journal = os.path.join(root, "tasks", "S-1", ".verify", "journal.tsv")
@@ -3242,16 +3274,15 @@ def main(argv=None):
                          f"cache_read=0\tcache_write=0\toutput=9\t{window}\n"
                          f"2026-09-23T10:05:00.000Z\tusage\tplan\ttool=claude-session\t{window}\tlog=/gone.jsonl\n"
                          "2026-09-23T10:00:00.000Z\tstage-start\tplan\ttool=claude-session\n")
-        report = subprocess.run([sys.executable, args.gate, "--usage", "--story", "S-1"], cwd=root,
-                                capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        plan = usage_json(args.gate, root, "S-1").get("plan", {})
         status_out = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
                                     text=True, encoding="utf-8", errors="replace").stdout
-        row = next((l for l in report.splitlines() if l.startswith("S-1/plan")), "")
         expectations.append(("usage after a union merge: one window read on one branch and pending on the other "
-                             "counts once", row.split()[1:3] == ["1", "1"] and row.split()[6] == "9", row))
+                             "counts once", plan.get("runs") == 1 and plan.get("measured") == 1
+                             and plan.get("output") == 9, plan))
         expectations.append(("status after a union merge: a stage is running only if its start is the latest "
-                             "event by time, not by line", "S-1  stage plan" not in status_out,
-                             status_out.split("== waiting")[0]))
+                             "event by time, not by line", "Nothing is running." in status_out,
+                             status_out[:400]))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         if not ok:
@@ -3283,21 +3314,21 @@ def main(argv=None):
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         environment = dict(os.environ, CLAUDE_CODE_SESSION_ID="listening-session")
-        before = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+        before = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                 encoding="utf-8").stdout
         subprocess.run([sys.executable, args.gate, "--listening"], cwd=root, env=environment, capture_output=True)
-        after = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+        after = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                encoding="utf-8").stdout
-        ended = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+        ended = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                encoding="utf-8", env=dict(os.environ, FACTORY_LISTEN_STALE="60")).stdout
         brief = subprocess.run([sys.executable, args.gate, "--status", "--brief"], cwd=root, capture_output=True,
                                text=True, encoding="utf-8").stdout
         expectations += [
             ("listening: before any look the status says no session has looked",
-             "no session has looked at the backlog" in before, before.split("== waiting")[0]),
+             "no session has looked at the backlog" in before, before[-400:]),
             ("listening: a look is shown with the session and how long ago",
              "listening: claude-session:listening-session, last look 0 min ago" in after
-             and "listening:" in brief, after.split("== waiting")[0]),
+             and "listening:" in brief, after[-400:]),
             ("listening: it lives in the git directory, never committed",
              os.path.isfile(os.path.join(root, ".git", "dca-factory-listener.json")), ""),
         ]
@@ -3305,10 +3336,10 @@ def main(argv=None):
         data = json.load(open(write_old, encoding="utf-8"))
         data["beat"] = "2026-01-01T00:00:00Z"
         json.dump(data, open(write_old, "w", encoding="utf-8"))
-        old = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+        old = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
                              encoding="utf-8").stdout
         expectations.append(("listening: a long silence reads as a loop that has probably ended",
-                             "probably ended" in old, old.split("== waiting")[0]))
+                             "probably ended" in old, old[-400:]))
     with tmpdir() as root:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         backlog_project(root, ("STORY-2", []), extra_sources=(
@@ -3593,17 +3624,62 @@ def main(argv=None):
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
         subprocess.run([sys.executable, args.gate, "--claim", f"claude-session:{session}"], cwd=root, env=env,
                        capture_output=True)
-        seen = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, env=env, capture_output=True,
+        seen = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, env=env, capture_output=True,
                               text=True, encoding="utf-8", errors="replace").stdout
         expectations.append(("status: a running stage shows its session log's last activity and tool call",
                              re.search(r"activity: \d+ s ago — last tool call Bash: ./gradlew test --rerun", seen)
                              is not None, [l for l in seen.splitlines() if l.startswith(("activity", "worker"))]))
-        off = subprocess.run([sys.executable, args.gate, "--status"], cwd=root,
+        off = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root,
                              env=dict(env, FACTORY_SESSION_USAGE="off"), capture_output=True, text=True,
                              encoding="utf-8", errors="replace").stdout
         expectations.append(("status: with session usage off the log is not read, and that is said",
                              "activity: not read" in off and "gradlew" not in off,
                              [l for l in off.splitlines() if l.startswith("activity")]))
+    with tmpdir() as root, tmpdir() as home:
+        # writing a story is measured like a stage, but it is not one: the story does not run, nothing waits
+        backlog_project(root)
+        session = "0d0d0d0d-aaaa-bbbb-cccc-565656565656"
+        env = dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDE_CODE_SESSION_ID=session)
+        gate = lambda *more: subprocess.run([sys.executable, args.gate, *more], cwd=root, env=env,
+                                            capture_output=True, text=True, encoding="utf-8")
+        gate("--window-start", "backlog", "--story", "STORY-1")
+        rows_during, _nxt, _wait, _ = schedule_of(args.gate, root)
+        time.sleep(1.1)
+        moment = datetime.now(timezone.utc) - timedelta(seconds=0.5)       # inside the window, to the millisecond
+        stamp = moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
+        write_file(home, f"projects/-any/{session}.jsonl", json.dumps({"timestamp": stamp, "message": {
+            "id": "w1", "model": "model-x", "usage": {"input_tokens": 5, "cache_read_input_tokens": 40,
+                                                        "cache_creation_input_tokens": 50, "output_tokens": 5}}}) + "\n")
+        gate("--window-end", "backlog", "--story", "STORY-1")
+        detail = gate("--status", "--story", "STORY-1").stdout
+        backlog_row = next((l for l in detail.splitlines() if l.strip().startswith("backlog")), "")
+        expectations.append(("window: writing a story is measured — its own row, its tokens, what it was — and the "
+                             "story is not running meanwhile",
+                             rows_during.get("STORY-1", ("",))[0] != "running"
+                             and re.search(r"backlog\s+1\s+\d+ s\s+5\s+5\s+50\s+40\s+100\s+writing the story",
+                                           backlog_row) is not None, backlog_row or detail[-400:]))
+        expectations.append(("window: a name that is not backlog or decisions is refused",
+                             gate("--window-start", "judge", "--story", "STORY-1").returncode == 2, ""))
+    with tmpdir() as root:
+        # a story delivered before the pipeline kept a journal says so once; a long answer wraps, whole
+        long_question = "Does " + " ".join(["an archived entry"] * 12) + " count as the thing the reader sees?"
+        backlog_project(root, ("STORY-2", []), extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_APPLIED), ("tasks/STORY-1/tests.md", TESTS),
+            ("tasks/STORY-1/document.md", DOCUMENT), ("tasks/STORY-1/.delivered", "2026-09-20T10:00:00Z\n"),
+            (".agents/factory/decisions/STORY-1-01.md", DECISION.replace(
+                "# Does an archived thing count?", "# " + long_question) + ANSWER)))
+        overview = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
+                                  text=True, encoding="utf-8").stdout
+        detail = subprocess.run([sys.executable, args.gate, "--status", "--story", "STORY-1"], cwd=root,
+                                capture_output=True, text=True, encoding="utf-8").stdout
+        row1 = next((l for l in overview.splitlines() if "STORY-1" in l and "delivered" in l), "")
+        row2 = next((l for l in overview.splitlines() if "STORY-2" in l and "ready" in l), "")
+        expectations.append(("status: a story delivered without a journal says so once; one not run yet does not",
+                             "no journal" in row1 and "no journal" not in row2
+                             and "delivered before the pipeline measured" in detail, row1 + "\n" + row2))
+        expectations.append(("status: a long answer wraps inside its column and is never cut",
+                             "…" not in detail and "count as the thing the reader sees?" in detail
+                             and all(len(l) <= 120 for l in detail.splitlines()), detail[-600:]))
     with tmpdir() as root:
         # the observer reads the gate's own records the way the gate writes them: the red ledger as
         # `selector<TAB>digest`, the build's `## Changed` table with its paths in plain cells

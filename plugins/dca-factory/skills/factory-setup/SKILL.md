@@ -44,7 +44,8 @@ docs/                      what exists and why — written after the code, some 
 4. **What the profile does not know yet.** The runner is there → run
    `bash .agents/factory/factory.sh setup --check`. It lists the detected keys the profile lacks
    (a browser runner, a formatter, a carrier skill installed since) and the values that differ from
-   detection. Show them. On the person's confirmation run `setup --write`; it adds the missing keys
+   detection. Show its output as it is — each key as a block with the profile's value, the detected one
+   and the command that takes it; do not retell it. On the person's confirmation run `setup --write`; it adds the missing keys
    and never overwrites a value a person wrote. A differing value is theirs to keep or to replace
    (`setup --write --replace <key>`, on their word).
 4a. **Acceptance.** Where the product description's `## Surfaces` names web pages and the profile
