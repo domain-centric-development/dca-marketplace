@@ -1708,9 +1708,17 @@ exit 0
             subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
             lock = os.path.join(root, ".git", "dca-factory-worker.lock")
             process = subprocess.Popen([BASH, runner, "run", "--story", "STORY-2", "--tool", "stand-in"], cwd=root,
-                                       env=dict(os.environ, FACTORY_TOOL_CMD="sleep 3"),
+                                       env=dict(os.environ, FACTORY_TOOL_CMD="sleep 6"),
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            time.sleep(1.2)
+            # Wait for the stage itself to be under way — the claim taken and the stage's start in the
+            # journal — rather than for a fixed time a loaded machine does not keep.
+            journal = os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv")
+            deadline = time.time() + 20
+            while time.time() < deadline and not (
+                    os.path.exists(lock) and os.path.isfile(journal)
+                    and "stage-start" in open(journal, encoding="utf-8", errors="replace").read()):
+                time.sleep(0.1)
+            time.sleep(0.3)
             process.terminate()
             time.sleep(0.8)
             held_while_running = os.path.exists(lock)
