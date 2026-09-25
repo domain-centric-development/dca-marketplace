@@ -3527,7 +3527,8 @@ def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False,
     widths = widths or column_widths(headers, rows)
     fmt = lambda cells: "   ".join((str(c).rjust(widths[i]) if i in right else str(c).ljust(widths[i]))
                                    for i, c in enumerate(cells)).rstrip()
-    lines = [indent + fmt(headers), indent + "   ".join("─" * w for w in widths)]
+    lines = [indent + (bold(fmt(headers), True) if colour else fmt(headers)),
+             indent + "   ".join("─" * w for w in widths)]
     for n, row in enumerate(rows):
         if total and n == len(rows) - 1:
             lines.append(indent + "   ".join("─" * w for w in widths))
@@ -3792,7 +3793,7 @@ def render_story_text(model, colour=False):
     for label, value in facts:
         if label == "State":
             value = paint(f"{MARKS_TEXT[row['mark']]} {value}", row["mark"], colour)
-        out.append(f"  {label.ljust(width)}   {value}")
+        out.append(f"  {bold(label.ljust(width), colour)}   {value}")
     for w in model["waiting"]:
         out += ["", "  " + paint(f"{MARKS_TEXT[w['mark']]} {w['what']}", w["mark"], colour)
                 + (f"   {w['action']}" if w["action"] else "")]
@@ -3801,14 +3802,14 @@ def render_story_text(model, colour=False):
         out += table_text(["pass", "started", "ended", "worked", "tokens"],
                           [[f"{i + 1}  {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
                             took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
-                           for i, p in enumerate(model["passes"])], {3, 4})
+                           for i, p in enumerate(model["passes"])], {3, 4}, colour=colour)
     if model["stages"]:
         headers, rows, right = stage_cells(model)
-        out += section(stage_caption(model), colour) + table_text(headers, rows, right, total=True)
+        out += section(stage_caption(model), colour) + table_text(headers, rows, right, total=True, colour=colour)
     if model["decisions"]:
         out += section("Decisions", colour)
         out += table_text(["record", "state", "answer or question"],
-                          [[d["id"], d["state"], d["text"]] for d in model["decisions"]])
+                          [[d["id"], d["state"], d["text"]] for d in model["decisions"]], colour=colour)
     out += ["", "─" * 72, f"Next: {model['next']}", "Times in UTC.", ""]
     return "\n".join(out)
 
