@@ -22,8 +22,9 @@ a report of what changed. You commit nothing; the human reviews and commits.
    runner, the observer, the commit hook, the permissions and the `AGENTS.md` section, and leaves the
    stack profile alone. Where the project has no pipeline yet, that is `/factory-setup`'s, not this
    skill's.
-2. **Report what it says, in this order:** the versions (`updated A → B`), the file contract, and
-   whether the stack profile's `contract:` line has to be raised. Raising that line is the human's
+2. **Report what it says, in this order:** the versions (`updated A → B`), the file contract,
+   whether the stack profile's `contract:` line has to be raised, and — where the backlog still sits
+   at the project root — the move to `project/` it names (the gate reads no other layout). Raising that line is the human's
    edit — the profile belongs to the project — so show the line and do not change it.
 3. **Say how the skills are held.** Links point into the plugin or a checkout and follow it live; they
    belong in `.gitignore`. Copies are the project's pinned pipeline: they belong in the repository,

@@ -224,6 +224,8 @@ update_project() {                          # update_project <explicit skill fol
     echo "factory: the stack profile declares contract $declared — raise it to 'contract: $after_contract' once" >&2
     echo "factory:   the profile uses what that contract describes; the gate reads it as older until then." >&2
   fi
+  # the layout before `project/` is not read by the new gate; the move is said here as well
+  "$PY" "$GATE" --schedule 2>/dev/null | sed -n 's/^layout: /factory: /p' >&2
   echo "factory: review and commit the changed files — the update commits nothing. 'factory.sh setup --check'"
   echo "factory:   names what the project gained since, as profile lines to confirm; the update writes none."
 }
@@ -831,8 +833,33 @@ presets_dir() {                             # presets_dir [<skill folder>] — w
 #   new <template> <profile>       write a first profile from the template and what was detected
 #   check <profile> [brief]        what detection proposes against the profile; exit 1 on a missing key
 #   write <profile> [<key>]        add the missing keys; with <key>, take the detected value for that one
+# The roles a method skill fills, and whether the role needs the architecture governance a preset
+# detects. A line is written only where the skill is installed beside the pipeline — a named carrier
+# that is missing stops a run — and stays commented out otherwise, so resolution by description applies.
+CARRIERS="carrier.build dca-modelling governance
+carrier.guard dca-discipline governance
+review.dca dca-review governance
+carrier.glossary ubiquitous-language -
+carrier.domain context-map -
+carrier.test e2e-testing -"
+
+# The skill names of the method plugins beside the pipeline whose presets are in <dir>.
+method_skill_names() {                      # method_skill_names <presets dir>
+  local skills="" dir entry
+  if [ -f "$1/../../scripts/story-gate.py" ]; then
+    skills=$(cd "$1/../../.." && pwd)                 # the pipeline the presets belong to
+  else
+    skills=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)
+    [ -f "$skills/factory-run/scripts/story-gate.py" ] || skills=$(plugin_skills) || return 0
+  fi
+  for dir in $(method_skill_dirs "$skills"); do
+    for entry in "$dir"/*/SKILL.md; do [ -f "$entry" ] && basename "$(dirname "$entry")"; done
+  done | sort -u | tr '\n' ' '
+}
+
 presets() {                                 # presets <dir> <mode> [args…]
   local dir=$1; shift
+  FACTORY_SKILLS="$(method_skill_names "$dir")" FACTORY_CARRIERS="$CARRIERS" \
   "$PY" - "$dir" "$PY" "$(conventions_file)" "$@" <<'PRESETEOF'
 import os, re, sys
 
@@ -843,6 +870,8 @@ KINDS = ("stack", "browser", "format", "governance")
 PRUNED = {".git", ".gradle", ".idea", ".vs", "build", "bin", "obj", "target", "dist", "out",
           "node_modules", ".venv", "venv", "__pycache__", ".agents", ".claude", ".codex", ".opencode", "tasks"}
 DEPTH = 4
+#: The project description's default places — the gate's defaults, so no key is needed for them.
+LOCATIONS = {"product": "project/product.md", "tech": "project/tech.md", "domain": "project/domain.md"}
 #: Which check or stage a profile key switches on — what `--check` says beside a proposed line.
 SWITCHES = {
     "compile": "the test, build and tidy gates compile the tests",
@@ -961,6 +990,24 @@ def detect():
             hit = next((s for s in stated if re.search(pattern, s, re.I)), None)
             if hit:
                 values[key] = hit
+    # What depends on the installed method skills: a carrier line only for a skill that is there.
+    installed = set(os.environ.get("FACTORY_SKILLS", "").split())
+    for row in os.environ.get("FACTORY_CARRIERS", "").splitlines():
+        key, skill, needs = row.split()
+        if skill in installed and (needs == "-" or governance):
+            values[key] = skill
+            if key.startswith("review."):
+                values["reviews"] = ", ".join(filter(None, [values.get("reviews", ""), key[len("review."):]]))
+    # Where the project description is, from the method's line in AGENTS.md — the line is the source,
+    # the profile the factory's view of it. A default location needs no key.
+    if os.path.isfile("AGENTS.md"):
+        text = open("AGENTS.md", encoding="utf-8").read()
+        start, end = "<!-- dca-describe: start -->", "<!-- dca-describe: end -->"
+        if start in text and end in text:
+            block = text.split(start, 1)[1].split(end, 1)[0]
+            for key, path in re.findall(r"^\s*-\s*(product|tech|domain):\s*`([^`]+)`", block, re.M):
+                if path != LOCATIONS[key]:
+                    values[key] = path
     return values, applied, governance
 
 
@@ -1000,6 +1047,14 @@ def switch(key):
         key = "test"
     if key.startswith("covers."):
         return f"says which tests `{key[len('covers.'):]}:` runs"
+    if key.startswith("carrier."):
+        return f"the {key[len('carrier.'):]} role is carried by that skill"
+    if key.startswith("review."):
+        return f"the judge's {key[len('review.'):]} perspective is carried by that skill"
+    if key == "reviews":
+        return "the judge covers these perspectives as well"
+    if key in LOCATIONS:
+        return "the stages read it there"
     return SWITCHES.get(key, "")
 
 
@@ -1023,7 +1078,15 @@ elif mode == "new":
             continue
         out.append(line)
     written = {l.split(":", 1)[0].strip() for l in out if l and not l.startswith("#") and ":" in l}
-    out += [f"{key}: {value}" for key, value in values.items() if key not in written]
+    for key, value in values.items():
+        if key in written:
+            continue
+        # a commented line of the template is the key's place; otherwise it goes at the end
+        slot = next((i for i, line in enumerate(out) if re.match(rf"#\s*{re.escape(key)}\s*:", line)), None)
+        if slot is None:
+            out.append(f"{key}: {value}")
+        else:
+            out[slot] = f"{key}: {value}"
     with open(target, "w", encoding="utf-8") as handle:
         handle.write("\n".join(out) + "\n")
     print(f"factory: wrote {target} from {', '.join(applied) or 'no preset (nothing detected)'} — check the")

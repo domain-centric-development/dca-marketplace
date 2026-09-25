@@ -6,7 +6,7 @@ does is cross-check the **claims** in the stage files against what the repositor
 run's journal show. A stage saying "all tests green" is a claim; the gate's own report is evidence;
 a test file whose content changed after the test stage is a fact.
 
-    observe.py --story <id> [--tasks tasks] [--backlog backlog] [--project .] [--json]
+    observe.py --story <id> [--tasks tasks] [--backlog <dir>] [--root .] [--json]
 
 Exit code 0 means every claim it could check held. Anything it could not see is listed as such
 rather than counted as fine.
@@ -461,12 +461,16 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="observe one real factory run")
     parser.add_argument("--story", required=True)
     parser.add_argument("--tasks", default="tasks")
-    parser.add_argument("--backlog", default="backlog")
-    parser.add_argument("--project", default=".")
+    parser.add_argument("--backlog", help="default: the profile's `backlog:`, else project/backlog")
+    parser.add_argument("--root", default=".")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    project = os.path.abspath(args.project)
+    project = os.path.abspath(args.root)
+    if not args.backlog:
+        profile = read(os.path.join(project, ".agents", "factory", "factory.profile.yaml")) or ""
+        named = [l.split(":", 1)[1].strip().strip("\"'") for l in profile.splitlines() if l.startswith("backlog:")]
+        args.backlog = (named[0] if named and named[0] else "project/backlog")
     report = observe(project, args.tasks, args.backlog, args.story)
 
     if args.json:

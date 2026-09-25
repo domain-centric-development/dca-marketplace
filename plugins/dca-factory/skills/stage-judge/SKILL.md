@@ -8,10 +8,13 @@ description: Judge stage of a factory run — reviews the story's change from th
 Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
 `tasks/<story>/.verify/story.diff`, which the pipeline writes; open a whole file only where the
 diff's context does not carry the question, and explore no further than a finding needs — the
-product scope — and, in a repeat round, the previous verdict, `tasks/<story>/.judge-previous.md`.
-Nothing else. A change that contradicts the product scope — a surface it does not list, state kept
-where it says otherwise, a page without its stated look or accessibility, something under
-`## Not part of the product` — is a finding like any other.
+product and the technical description (`project/product.md`, `project/tech.md`, or where the
+profile's `product:` and `tech:` point) — and, in a repeat round, the previous verdict,
+`tasks/<story>/.judge-previous.md`. Nothing else. A change that contradicts the product description
+— a surface it does not list, state kept where it says otherwise, a page without its stated look or
+accessibility, something under `## Not part of the product` — is a finding like any other, and so
+is a change that brings in what the technical description excludes: a second persistence, a client
+framework where the pages are server-rendered, an integration it does not list.
 Output: `tasks/<story>/judge.md`. You change no code.
 
 ## Do
@@ -63,7 +66,7 @@ and the project has the runner that would prove the behaviour.
 Across the three, check the change against the story itself. A criterion written as a scenario is
 covered only when its test arranges the `Given`, performs the `When` and asserts every `Then` and
 `And` with the scenario's values: an outcome the test does not assert is a finding. Behaviour listed
-under the story's `## Out of scope`, or under the product scope's `## Not part of the product`, that
+under the story's `## Out of scope`, or under the product description's `## Not part of the product`, that
 the change delivers anyway is a finding too.
 
 An added perspective is one more pass with its own rows in the report. Adding one is a profile

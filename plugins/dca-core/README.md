@@ -24,10 +24,11 @@ In a project that already follows the conventions, skip the bootstrap and start 
 
 ## What's inside
 
-### Skills (10) — applied while writing
+### Skills (11) — applied while writing
 
 | Skill | Purpose | When it triggers |
 |---|---|---|
+| `/dca-describe` | Writes the project description with the person — `project/product.md`, `project/tech.md`, `project/domain.md` (through `/context-map`) — and the `AGENTS.md` line that makes every implementation read them first; drafts from the code where there is code, never invents an answer | Before the first code or story, or when the description is missing |
 | `/dca-discipline` | Framework-free domain, dependency inversion, bounded-context isolation, event hygiene | Editing `domain/`, `application/`, `adapter/` |
 | `/ubiquitous-language` | Per-context glossary, naming consistency checks, polysemy detection | Adding/renaming a domain concept |
 | `/context-map` | Strategic DDD context map: with the packages present, maintains the `@Upstream`/`@Partnership` declarations and renders `docs/architecture/context-map.md` through `ContextMapRenderer`; otherwise a hand-maintained Mermaid map with auto-detection from code | Introducing a context, changing integration |

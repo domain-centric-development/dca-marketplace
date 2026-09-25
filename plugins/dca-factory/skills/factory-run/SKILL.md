@@ -1,6 +1,6 @@
 ---
 name: factory-run
-description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), to keep a session working on the backlog as it fills, or to set up the pipeline in a project that has none. Reads the backlog, the stack profile and the hand-over files — no project knowledge of its own.
+description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), or to keep a session working on the backlog as it fills; a project without a pipeline goes to /factory-setup first. Reads the backlog, the stack profile and the hand-over files — no project knowledge of its own.
 ---
 
 # Run one story
@@ -14,8 +14,9 @@ them apart is what makes a run reproducible.
 
 | Thing | Where | Missing? |
 |---|---|---|
-| the story | `backlog/<epic>/<story>.md` | offer to write one from the templates and stop |
-| the epic | `backlog/<epic>/epic.md` | same |
+| the project description | `project/product.md`, `project/tech.md` (and the optional designed map `project/domain.md`), or where the profile points | `/factory-setup` writes it with the person, through the project's description skill; stop and say so |
+| the story | `project/backlog/<epic>/<story>.md`, or under the profile's `backlog:` | offer to write one (`/factory-backlog`) and stop |
+| the epic | `project/backlog/<epic>/epic.md` | same |
 | the stack profile | `.agents/factory/factory.profile.yaml` | create it from the template by detecting the build (see below) |
 | an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with its DCA bootstrap skill, and the factory calls that skill rather than owning it. Without one, the build gate skips the architecture check and names it |
 | the gate | `.agents/factory/story-gate.py` | the installer writes it (step 1 below) |
@@ -29,12 +30,14 @@ say precisely which file to create, create it when the user agrees, then continu
 
 ## First run in a project
 
-0. Check that the project has an architecture to gate on — a rule suite and the building blocks its
-   code implements. If it has none, ask the developer to run the project's DCA bootstrap skill
-   first; it also settles the facts the profile needs (build commands, source sets, conventions).
-   The factory delivers stories, it does not install an architecture: one is a once-per-project
-   step that belongs to the method, the other repeats per story. The installer says so and installs
-   the pipeline anyway, so a project can adopt the two in either order.
+The entry is `/factory-setup`: it checks the project description, git, the runner and the stack
+profile, and does only what is missing. Where you are asked to run a story in a project without a
+pipeline, say so and hand over to it. What it runs:
+
+0. The project has an architecture to gate on — a rule suite and the building blocks its code
+   implements — or the architecture check is skipped and named. Installing one is the method's
+   (in a DCA project `/dca-init`), once per project; the factory delivers stories and calls no skill
+   that writes code.
 1. Run the pipeline's setup from this skill's folder, for the tool you are:
    `bash <this skill's folder>/scripts/factory.sh setup --tool <claude|codex|opencode>`, and report
    what it printed. It starts no tool, and it stops with one line where the directory is not a git
@@ -68,7 +71,7 @@ from the project root. Exit code 0 means proceed; any `gate:fail` line stops the
 about to run, and the fix belongs to the stage that produced the artefact, not to you.
 
 1. **gate `plan`** — refuses an incomplete epic, a story without a context or criteria, a story
-   still in `draft`, and a context that is not on the project's context map. It also reports when
+   still in `draft`, and a context that is not on the designed map (or, without one, the generated map). It also reports when
    the project's instruction file is past the size a tool loads, since the rest is truncated in
    silence. Do not
    repair the backlog yourself beyond obvious typos; an epic without an intent is a question for
@@ -213,7 +216,8 @@ inside one anyway.
 Stop the run and hand back to the human when:
 
 - the plan needs a **new bounded context** or a new relationship between contexts — that is a
-  scoping decision, not a story;
+  structural decision, not a story: a decision record, answered through `/factory-decisions`, which
+  also brings the designed map in line;
 - a business term in the criteria is neither in the project's glossary nor marked as a proposal;
 - three rounds did not converge;
 - a stage wrote a `## needs-human` section;

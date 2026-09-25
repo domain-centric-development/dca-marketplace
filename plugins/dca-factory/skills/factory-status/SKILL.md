@@ -6,7 +6,7 @@ description: Shows where the delivery pipeline stands in this project — which 
 # Show where the pipeline stands
 
 Input: the project's files — the story journals under `tasks/<story>/.verify/`, the decision records
-under `.agents/factory/decisions/`, the backlog. Output: an answer in the session. You write nothing,
+under `.agents/factory/decisions/`, the backlog under `project/backlog/`. Output: an answer in the session. You write nothing,
 start nothing and answer nothing on anyone's behalf.
 
 ## Do
@@ -26,7 +26,12 @@ start nothing and answer nothing on anyone's behalf.
    reconstructing it by hand.
 2. **Lead with what needs someone.** An open decision blocks its story and everything that depends
    on it: name it first, with the story it blocks, and point to `/factory-decisions` to answer it.
-3. **Name a duplicate pipeline.** A `note:` line under *running* says the dca-factory plugin is
+3. **Name the part of the factory that is missing.** Also run
+   `bash .agents/factory/factory.sh status --brief`: its lines say when the project description is
+   missing (`/factory-setup`), when the backlog is empty (`/factory-backlog`), when the backlog still
+   sits at the project root (the move to `project/`), and when detection finds something the stack
+   profile does not declare (`setup --check`). Name what it says with the skill that fixes it.
+3a. **Name a duplicate pipeline.** A `note:` line under *running* says the dca-factory plugin is
    enabled for the person while the project holds its own copy: stages run in a session may then
    pick the plugin's skills. Say so, and that the runner's stages see only the project's.
 4. **Say whether a session listens.** `listening:` names the session that last looked at the backlog
@@ -39,7 +44,7 @@ start nothing and answer nothing on anyone's behalf.
 6. **Explain a state from its files when asked.** "Why is STORY-3 blocked?" — the dependency it names;
    "why does STORY-1 run from document?" — its document gate has not passed yet. Read the file the
    state comes from before you repeat the reason.
-7. **Give cost as the table says it.** The status shows each story and the total; `status <story>`
+7. **Give cost as the table says it.** The status shows each story and the total; `status --story <story>`
    shows the stages of one, with input, cache and output tokens, the time where the runner measured
    it, and the model each stage ran on — marked where the profile asked for another one that did
    not reach the stage. Unmeasured invocations are unknown,

@@ -1,7 +1,8 @@
 ---
 name: context-map
 description: |
-  Maintains a strategic DDD Context Map (`docs/context-map.md` with Mermaid
+  Maintains a strategic DDD Context Map (the designed map the project
+  instructions name — `docs/context-map.md` by default — with a Mermaid
   diagram) showing relationships between bounded contexts (Customer/Supplier,
   Anti-Corruption Layer, Open Host Service, Shared Kernel, Published Language,
   Conformist, Separate Ways, Partnership) and each context's subdomain type
@@ -27,9 +28,9 @@ two modes:
   `docs/architecture/context-map.md` from an opt-in test. The skill **edits the
   declarations and runs that test**; it never hand-edits the rendered file.
   What the declarations cannot carry — the pattern name a relationship goes by
-  and the subdomain type of each context — belongs in the hand-maintained map at
-  `docs/context-map.md`, which the skill does own.
-- **Manual mode** (no packages): the skill maintains `docs/context-map.md`
+  and the subdomain type of each context — belongs in the hand-maintained map
+  (see *Map location*), which the skill does own.
+- **Manual mode** (no packages): the skill maintains the hand-maintained map
   itself from the heuristics below.
 
 Detect the mode first: `grep -rln "@Upstream\|\[Upstream\|@BoundedContext\|\[BoundedContext" --include=*.java --include=*.cs`.
@@ -43,14 +44,19 @@ Two files, two owners — never one file with two meanings:
 | File | Owner | Content |
 |---|---|---|
 | `docs/architecture/context-map.md` | the renderer, from an opt-in test | which contexts exist and which dependencies they declare. Generated; a test rewrites it and fails when it was stale |
-| `docs/context-map.md` | this skill, by hand | the strategic reading: relationship pattern names, subdomain types, and the reason a relationship has the shape it has |
+| the designed map — where the project instructions name it, `docs/context-map.md` otherwise | this skill, by hand | the strategic reading: relationship pattern names, subdomain types, and the reason a relationship has the shape it has — "as designed", written before the code where a context is planned |
 
 In manual mode only the second file exists. In declared mode the hand-maintained
 map states which of the two is authoritative about a dependency — the generated
 one — and links to it, so a reader who finds a difference knows which side to
 trust.
 
-Alternative paths can be set in the conventions overlay, `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`).
+**Where the designed map is.** Read the project instructions (`AGENTS.md`) first: a project
+description section names it as `- domain: \`<path>\`` (typically `project/domain.md`). Where no
+line names it, the default is `docs/context-map.md`. Never write a second designed map beside the
+one the instructions name, and never read another tool's configuration for the path. A difference
+between the designed map and the generated one is a finding — a context planned and not built yet,
+or built without being designed — not a duplicate to reconcile silently.
 
 ## Map structure
 

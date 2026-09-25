@@ -39,8 +39,12 @@
 # formatFix    corrects the formatting (`./gradlew spotlessApply`, `dotnet format`). The stages that write
 #              code — test, build, tidy — run it before they finish; the gate and the commit hook run
 #              only `format:` and change no file
-# carrier.<s>  the skill or agent that carries one stage's craft (`carrier.test`, `carrier.build`,
-#              `carrier.plan`). A skill works in every tool; an agent only where a tool has them
+# carrier.<r>  the skill that carries a stage's craft or a role — `carrier.plan`, `carrier.test`,
+#              `carrier.build`, `carrier.tidy`, `carrier.guard` (the invariants build and tidy keep),
+#              `carrier.glossary`, `carrier.domain` (the designed context map); the list is open. A
+#              skill works in every tool; an agent only where a tool has them. `factory.sh setup`
+#              writes a line only for a skill installed beside the pipeline — a named carrier that is
+#              missing stops a run — and leaves the rest commented out, found by description
 # knowledge    the ONE skill a stage may treat as an authority, with citations. Name it only when
 #              the project vouches for it being current: a vendored catalog from an older release
 #              names rules and markers that no longer exist, and a citation makes that look verified.
@@ -64,12 +68,20 @@
 #              cannot break what the stories before it delivered. A build tool that skips an
 #              up-to-date task writes no new report — give a required test command its rerun flag
 #              (Gradle: `./gradlew test --rerun`), since only a report from this run counts
-# contextMap   where the project keeps its context map (found by convention when absent)
-# product      where the project keeps its product scope (default: backlog/product.md) — what is
-#              built, for whom, its surfaces, how it works, how it looks. Written by /factory-scope
-#              before the first story; the plan gate fails a `product:` that names no file
+# product      the product description (default: project/product.md) — what is built, for whom, its
+#              surfaces, how it works, how it looks. Mandatory before the first story, with `tech`
+# tech         the technical description (default: project/tech.md) — stack, frontend approach,
+#              persistence, runtime, integrations, version policy
+# domain       the designed context map (default: project/domain.md) — contexts, subdomain types,
+#              relationships and why. Optional; read first by the plan gate's context check
+#              The three are written with the person by /factory-setup (through the project's
+#              description skill); `setup` writes a key only where the project instructions name
+#              another place. A key that names no file fails the gate
+# backlog      where the epics and stories are (default: project/backlog)
+# contextMap   the context map generated from the code, "as built" (found by convention when absent);
+#              a difference to `domain` is a finding, not a duplicate
 # glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
-# reviews      perspectives the judge stage covers *in addition to* domain, boundaries and craft
+# reviews      perspectives the judge stage covers *in addition to* its built-in ones
 # review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
 #              tool; a review *agent* only in a tool that has agents — where it is missing, the
 #              judge runs the built-in pass itself and says so
@@ -77,7 +89,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 6
+contract: 7
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}
@@ -90,6 +102,9 @@ formatFix: {{FORMAT_FIX_COMMAND}}
 #required: compile test architecture
 #carrier.test: <the skill that carries this project's end-user testing craft>
 #carrier.build: <the skill that carries this project's implementation craft>
+#carrier.guard: <the skill that holds the invariants while build and tidy edit>
+#carrier.glossary: <the skill that keeps the glossary>
+#carrier.domain: <the skill that keeps the designed context map>
 # A perspective is found by description when a matching review skill is installed; name a carrier
 # here only to override that choice or to bind an added perspective.
 # Which stages can run on a cheaper model without the judge finding more: fill in only what the

@@ -50,7 +50,7 @@ dca-marketplace/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
 │   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
-│   ├── skills/{factory-backlog,factory-scope,factory-decisions,factory-status,factory-update}/   # write the backlog; answer a scoping question; the decision inbox; where the pipeline stands; update a project
+│   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
 ├── plugins/software-craftsmanship/        # project-agnostic skills + agents (any Java or .NET project)
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
@@ -61,7 +61,7 @@ dca-marketplace/
 
 ## The three plugins
 
-- **dca-core** — `/dca-bootstrap`, `/dca-discipline`, `/ubiquitous-language`, `/context-map`, `/dca-scaffold`,
+- **dca-core** — `/dca-describe`, `/dca-bootstrap`, `/dca-discipline`, `/ubiquitous-language`, `/context-map`, `/dca-scaffold`,
   `/dca-review`, `/dca-knowledge`; agents `ddd-expert` (builder), `ddd-reviewer`, `hexagonal-reviewer`. Every skill
   and agent speaks both languages: Java/Spring (`UseCase<I,O>`, packages, `package-info.java`) and .NET/C#
   (`IUseCase<TIn,TOut>`, namespaces, a `[BoundedContext]` marker class). Since 0.4.0 the tactical-modelling
@@ -71,14 +71,17 @@ dca-marketplace/
 - **dca-factory** — the *delivery* layer, kept apart from the method on purpose (three layers, three owners:
   methodology → `dca-core`, stack profile → the project, pipeline → here). `factory-run` runs one backlog story
   through `stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stage-judge` and `stage-document`;
-  `factory-backlog` writes the backlog it reads and `factory-scope` answers what a run may not decide
-  itself — a new bounded context, a new relationship between contexts, a surface an actor lacks; `skills/factory-run/scripts/story-gate.py`
+  `factory-setup` sets the factory up — project description (through `dca-core`'s `dca-describe`), git,
+  runner, profile — `factory-backlog` writes the backlog it reads, and `factory-decisions` takes the
+  answers a run may not give itself — a new bounded context, a new relationship between contexts, a
+  surface an actor lacks; `skills/factory-run/scripts/story-gate.py`
   is the deterministic check between the stages, copied into a consuming project as
   `.agents/factory/story-gate.py`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
   discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`) is optional, the git
   pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile
-  (`.agents/factory/factory.profile.yaml`) and the backlog, glossary and context map.
+  (`.agents/factory/factory.profile.yaml`) and `project/` — the description (product, tech, designed
+  domain) and the backlog — beside the glossaries and the generated context map.
 - **software-craftsmanship** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`; agents `e2e-tester`,
   `clean-code-reviewer`. No DCA assumptions; usable alone. `e2e-testing` holds the end-user-testing craft
   (Page Objects, stable selectors, diagnosis-first protocol) and `review-craft` the craft review perspective;

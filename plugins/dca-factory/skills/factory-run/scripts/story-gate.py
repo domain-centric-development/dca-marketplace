@@ -10,8 +10,9 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
     story-gate.py --check-backlog                      the plan gate's backlog checks over every story
                                                        that is not done; exit 1 when one is refused
     story-gate.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
-    story-gate.py --product                            the product description alone; exit 3 while
-                                                       there is none, 1 when it is incomplete
+    story-gate.py --project                            the project description (product and technical)
+                                                       alone; exit 3 while a part is missing, 1 when
+                                                       one is incomplete
     story-gate.py --status [--story <id>]              what runs, what waits, every story, the cost —
                                                        per story, or per stage of --story
     story-gate.py --change [--staged] [--checks <c>]   the profile's checks outside a story; --staged
@@ -20,7 +21,8 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
                                                        mandatory scenario of a scenario contract
 
 Options:
-    --backlog <dir>     backlog root (default: backlog)
+    --backlog <dir>     backlog root (default: the profile's `backlog:`, else project/backlog)
+    --root <dir>        the project's root (default: .)
     --tasks <dir>       run artefact root (default: tasks)
     --profile <file>    stack profile (default: .agents/factory/factory.profile.yaml,
                         falling back to factory.profile.yaml in the project root)
@@ -81,13 +83,22 @@ MAX_ROUNDS = 3
 #: have comparable budgets. Reported as a note, never a failure — the size is not this story's fault.
 DOC_BUDGET_BYTES = 32 * 1024
 CONTEXT_MAP_CANDIDATES = (
+    "project/domain.md",
     "docs/context-map.md",
     "docs/architecture/context-map.md",
     "context-map.md",
 )
 INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md")
-#: The product scope a project writes once, before its first story (`/factory-scope` writes it),
-#: at `<backlog>/product.md` unless the profile's `product:` names another place.
+#: The project description: what is to be built, written before the code and read as a story's input.
+#: `project/` unless the profile names another place — the files a person writes, apart from what the
+#: machine keeps under `.agents/factory/` and the stages' hand-overs under `tasks/`.
+DEFAULTS = {
+    "product": "project/product.md",
+    "tech": "project/tech.md",
+    "domain": "project/domain.md",
+    "backlog": "project/backlog",
+}
+#: The product description's headings — what is built, for whom, through which surfaces.
 PRODUCT_HEADINGS = (
     "What and for whom",
     "Surfaces",
@@ -95,6 +106,15 @@ PRODUCT_HEADINGS = (
     "Look and feel",
     "Qualities",
     "Not part of the product",
+)
+#: The technical description's headings — the decisions a stage may not take in passing.
+TECH_HEADINGS = (
+    "Stack",
+    "Frontend approach",
+    "Persistence",
+    "Runtime",
+    "Integrations",
+    "Version policy",
 )
 CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)\s*:\s*(\S.*)$")
 MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
@@ -110,8 +130,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 6
-VERSION = "0.31.0"
+CONTRACT = 7
+VERSION = "0.32.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -194,7 +214,7 @@ def find_story(backlog, story_id):
                 return path
     raise GateError(
         f"no story {story_id!r} under {backlog}/ — a story is one markdown file "
-        f"backlog/<epic>/<story>.md with front matter (see the backlog contract)"
+        f"{backlog}/<epic>/<story>.md with front matter (see the backlog contract)"
     )
 
 
@@ -400,12 +420,19 @@ def find_first(cwd, candidates):
 
 
 def check_context_map(result, cwd, profile, context):
-    """A story names the context it changes; that context must be on the map. A project without
-    a map is not blocked — it has nothing to contradict yet."""
+    """A story names the context it changes; that context must be on the map. The designed map
+    (`domain:`) is read first, so a story for a context that is designed but not built yet passes;
+    then the one generated from the code (`contextMap:`), then the conventional places. A project
+    without a map is not blocked — it has nothing to contradict yet."""
+    named_domain = str(profile.get("domain", "")).strip()
+    if named_domain and not os.path.isfile(os.path.join(cwd, named_domain)):
+        result.fail("context-map", f"the profile's `domain: {named_domain}` names no file")
+        return
+    candidates = [location(profile, "domain")]
     named = profile.get("contextMap")
-    path = named if named and os.path.isfile(os.path.join(cwd, named)) else find_first(
-        cwd, CONTEXT_MAP_CANDIDATES
-    )
+    if named and os.path.isfile(os.path.join(cwd, named)):
+        candidates.append(named)
+    path = find_first(cwd, candidates + list(CONTEXT_MAP_CANDIDATES))
     if not path:
         result.skip("context-map", "the project keeps no context map")
         return
@@ -452,23 +479,39 @@ def check_models(result, profile):
         result.ok("models", f"{len(keys)} model key(s), each bound to a tool")
 
 
-def check_product(result, cwd, profile, backlog="backlog"):
-    """The product scope: what is built, for whom, through which surfaces, how it works, how it looks.
+def location(profile, key):
+    """Where the profile puts one part of the project description, or its default under `project/`."""
+    return str(profile.get(key, "")).strip().replace("\\", "/") or DEFAULTS[key]
 
-    Absent is a note, not a failure — a project that runs without one is not blocked, and a brownfield
-    project may never write one. A `product:` that names a missing file is a broken reference, and a
-    file with a required heading missing or empty is a scope nobody finished: both fail. Guidance in
-    HTML comments does not count as content, so an untouched template does not pass."""
-    named = str(profile.get("product", "")).strip()
-    default = backlog.rstrip("/\\").replace("\\", "/") + "/product.md"   # as the project writes it, on every OS
-    path = named or default
+
+def layout_hint(cwd, profile):
+    """The layout before `project/`: a backlog at the root. No fallback reads it; the move is named."""
+    if os.path.isdir(os.path.join(cwd, "project")) or profile.get("backlog"):
+        return None
+    moves = []
+    if os.path.isfile(os.path.join(cwd, "backlog", "product.md")):
+        moves.append("git mv backlog/product.md project/product.md")
+    if os.path.isdir(os.path.join(cwd, "backlog")):
+        moves.append("git mv backlog project/backlog")
+    if not moves:
+        return None
+    return ("the backlog now lives under project/ — mkdir -p project && " + " && ".join(moves)
+            + ", then `contract: 7` in the profile")
+
+
+def check_described(result, cwd, profile, key, headings, what):
+    """One part of the project description. Absent is a note — the gate does not block a project
+    that has none, the backlog skill does. A key that names a missing file is a broken reference,
+    and a heading missing or empty is a description nobody finished: both fail. Guidance in HTML
+    comments does not count as content, so an untouched template does not pass."""
+    named = str(profile.get(key, "")).strip()
+    path = location(profile, key)
     full = os.path.join(cwd, path)
     if not os.path.isfile(full):
         if named:
-            result.fail("product", f"the profile's `product: {named}` names no file")
+            result.fail(key, f"the profile's `{key}: {named}` names no file")
         else:
-            result.note("product", f"no product description at {default} — `/factory-scope` "
-                                   f"writes one before the first story")
+            result.note(key, f"no {what} at {path} — `/factory-setup` writes it before the first story")
         return False
     text = re.sub(r"<!--.*?-->", "", read_text(full), flags=re.S)
     sections, current = {}, None
@@ -478,18 +521,25 @@ def check_product(result, cwd, profile, backlog="backlog"):
             sections[current] = []
         elif current is not None:
             sections[current].append(line)
-    missing = [h for h in PRODUCT_HEADINGS if h.lower() not in sections]
-    empty = [h for h in PRODUCT_HEADINGS
-             if h.lower() in sections and not "".join(sections[h.lower()]).strip()]
+    missing = [h for h in headings if h.lower() not in sections]
+    empty = [h for h in headings if h.lower() in sections and not "".join(sections[h.lower()]).strip()]
     if missing or empty:
         detail = "; ".join(filter(None, [
             f"missing `## {'`, `## '.join(missing)}`" if missing else "",
             f"empty `## {'`, `## '.join(empty)}`" if empty else "",
         ]))
-        result.fail("product", f"{path}: {detail} — every heading gets one honest line, never a placeholder")
+        result.fail(key, f"{path}: {detail} — every heading gets one honest line, never a placeholder")
         return False
-    result.ok("product", f"{path} describes the product under all {len(PRODUCT_HEADINGS)} headings")
+    result.ok(key, f"{path} describes the {what.split()[0]} under all {len(headings)} headings")
     return True
+
+
+def check_project(result, cwd, profile):
+    """The two mandatory parts of the project description: the product and the technical decisions.
+    The designed context map (`domain:`) is read by the context check and stays optional here."""
+    product = check_described(result, cwd, profile, "product", PRODUCT_HEADINGS, "product description")
+    tech = check_described(result, cwd, profile, "tech", TECH_HEADINGS, "technical description")
+    return product and tech
 
 
 def check_instruction_size(result, cwd):
@@ -582,6 +632,8 @@ def check_backlog(cwd, backlog, tasks, profile):
     its own — the same functions the plan gate calls, so a story that passes here passes there on
     these points. A draft is a story still being written, named and not refused."""
     checked, refused = 0, []
+    if layout_hint(cwd, profile):
+        print(f"gate:note layout — {layout_hint(cwd, profile)}")
     for root, _dirs, files in sorted(os.walk(backlog)):
         if os.path.normpath(root) == os.path.normpath(backlog):
             continue
@@ -3060,7 +3112,7 @@ def status_brief(cwd, backlog, tasks, session_start=False):
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         schedule(cwd, backlog, tasks)
-    rows = [l for l in buffer.getvalue().splitlines() if l and not l.startswith(("schedule:", "wait:"))]
+    rows = [l for l in buffer.getvalue().splitlines() if l and not l.startswith(("schedule:", "wait:", "layout:"))]
     nxt = next((l[6:] for l in rows if l.startswith("next: ")), "none")
     states = {}
     for line in rows:
@@ -3082,6 +3134,15 @@ def status_brief(cwd, backlog, tasks, session_start=False):
     listening = listener_line(cwd)
     if listening:
         print(f"factory: {listening}")
+    # The part of the factory that is missing, where the files show it: the description, the backlog.
+    profile = read_profile(resolve_profile(None, cwd))
+    undescribed = [key for key in ("product", "tech") if not os.path.isfile(os.path.join(cwd, location(profile, key)))]
+    if layout_hint(cwd, profile):
+        print(f"factory: {layout_hint(cwd, profile)}")
+    elif undescribed:
+        print(f"factory: no project description ({', '.join(location(profile, k) for k in undescribed)}) — /factory-setup")
+    elif not states:
+        print("factory: the backlog is empty — /factory-backlog writes the first epic and story")
     if session_start:
         print("dca-factory: this project delivers stories through the factory. At the person's first message, "
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
@@ -3354,6 +3415,9 @@ def schedule(cwd, backlog, tasks):
     would build on them. Such a story is next if it can run, and nothing else starts while it
     cannot. A story that stopped at its plan stage wrote no code, so independent work runs past it."""
     stories, order = {}, []
+    hint = layout_hint(cwd, read_profile(resolve_profile(None, cwd)))
+    if hint:
+        print(f"layout: {hint}")
     for root, _dirs, files in os.walk(backlog):
         # A story is `backlog/<epic>/<story>.md`; a file beside the epics — a README — is not one.
         if os.path.normpath(root) == os.path.normpath(backlog):
@@ -3545,8 +3609,8 @@ def main(argv):
                         help="with --story: record the tree the story's diff is taken against (the first stage)")
     parser.add_argument("--record-changes", metavar="STAGE",
                         help="with --story: write changed-<stage>.txt, changed.txt and story.diff from the snapshots")
-    parser.add_argument("--product", action="store_true",
-                        help="check the product description alone (before the first story) and exit")
+    parser.add_argument("--project", action="store_true",
+                        help="check the project description — product and technical — alone, and exit")
     parser.add_argument("--listening", action="store_true",
                         help="record that this session looked at the backlog (a listening loop's sign of life)")
     parser.add_argument("--status", action="store_true",
@@ -3568,15 +3632,19 @@ def main(argv):
                         help="print every story's state and the next one to run, and exit")
     parser.add_argument("--check-backlog", action="store_true",
                         help="the plan gate's backlog checks over every story that is not done, and exit")
-    parser.add_argument("--backlog", default="backlog")
+    parser.add_argument("--backlog", help="backlog root (default: the profile's `backlog:`, else project/backlog)")
     parser.add_argument("--tasks", default="tasks")
     parser.add_argument("--profile")
-    parser.add_argument("--project", default=".")
+    parser.add_argument("--root", default=".", help="the project's root directory")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    cwd = os.path.abspath(args.project)
+    cwd = os.path.abspath(args.root)
     os.chdir(cwd)
+    # Where the backlog is: the flag, else the profile, else `project/backlog`. No default depends on
+    # the contract, and none reads the layout before `project/` — the gate names the move instead.
+    if not args.backlog:
+        args.backlog = location(read_profile(resolve_profile(args.profile, cwd)), "backlog")
     if args.list_decisions:
         return list_decisions(cwd, args.story)
     if args.schedule:
@@ -3600,12 +3668,15 @@ def main(argv):
         if args.record_changes:
             record_changes(cwd, args.tasks, args.story, args.record_changes)
         return 0
-    if args.product:
+    if args.project:
         result = Result()
         try:
-            check_product(result, cwd, read_profile(resolve_profile(args.profile, cwd)), args.backlog)
+            profile = read_profile(resolve_profile(args.profile, cwd))
+            check_project(result, cwd, profile)
+            if layout_hint(cwd, profile):
+                result.note("layout", layout_hint(cwd, profile))
         except GateError as error:
-            result.fail("product", str(error))
+            result.fail("project", str(error))
         for state, check, message in result.entries:
             print(f"gate:{state} {check} — {message}")
         return 1 if result.failed else (3 if any(e[0] == "note" for e in result.entries) else 0)
@@ -3647,6 +3718,9 @@ def main(argv):
     if not args.story or not args.stage:
         parser.error("--story and --stage are required (or --list-decisions, --schedule, --change, --parity)")
     result = Result()
+    hint = layout_hint(cwd, read_profile(resolve_profile(args.profile, cwd)))
+    if hint:
+        result.note("layout", hint)
     try:
         story_path = find_story(args.backlog, args.story)
         front, body = read_front_matter(story_path)
@@ -3675,7 +3749,7 @@ def main(argv):
                 result, cwd, profile, str(front.get("context", "")).strip()
             )
             check_instruction_size(result, cwd)
-            check_product(result, cwd, profile, args.backlog)
+            check_project(result, cwd, profile)
             check_models(result, profile)
         if args.stage == "document":
             check_documented(result, args.tasks, story_id, cwd)

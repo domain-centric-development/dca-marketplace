@@ -1,18 +1,53 @@
 # dca-factory
 
-The **delivery pipeline** for a Domain-Centric Architecture project: a backlog contract, six
-stage skills with file hand-overs, a deterministic story gate and one orchestrator.
+The **delivery pipeline** for a Domain-Centric Architecture project, in three parts: a **project
+description** (what is to be built), a **backlog** of epics and stories, and a **runner** that works
+through them — six stage skills with file hand-overs, a deterministic story gate between them and
+one orchestrator.
+
+```
+project/                   what is to be built (a person writes it)
+  product.md               what, for whom, surfaces, qualities, what it is not
+  tech.md                  stack, frontend approach, persistence, runtime, integrations, version policy
+  domain.md                the designed cut: contexts, subdomain types, relationship patterns and why
+  backlog/<epic>/epic.md · <story>.md
+.agents/factory/           how it is worked through (the machine: profile, gate, runner)
+tasks/<story>/             the stages' hand-overs
+docs/                      what exists and why — written after the code; generated maps live here
+```
+
+`project/` holds intent, written before the code and read as a story's input; `docs/` holds what
+exists, written after the code by people and by `stage-document`. Where the two meet — the designed
+`project/domain.md` against a map generated from the code — a difference is a finding, not a
+duplicate.
 
 ## Install
 
 ```
 /plugin marketplace add domain-centric-development/dca-marketplace
 /plugin install dca-factory@dca-marketplace
-/plugin install dca-core@dca-marketplace          # the method the stages call
+/plugin install dca-core@dca-marketplace          # the method: the description skill, the carriers
 ```
 
-Then, once per project — this writes the gate, the stack profile and the commit hook into the
-repository, because that is where a process has to live to survive a change of tool:
+Then, once per project:
+
+```
+/factory-setup
+```
+
+It checks each part and does only what is missing, in any order relative to the code: the project
+description (through `dca-core`'s `dca-describe`, where installed — the factory writes no template of
+its own), a git repository (`git init` on your confirmation), the runner, and the stack-profile
+lines for what the code has gained since. A second run says what is there and writes nothing; an
+installed pipeline is `/factory-update`'s to replace.
+
+```
+/factory-setup → /dca-new → /factory-setup → /factory-backlog → /factory-run    description first
+/dca-new → /factory-setup → /factory-backlog → /factory-run                     code first
+/factory-setup                                                                  an existing project
+```
+
+Underneath it runs the same command a terminal or CI uses:
 
 ```
 bash <plugin>/skills/factory-run/scripts/factory.sh setup --tool claude
@@ -23,8 +58,11 @@ needs a git repository and stops without one. It detects the build from the **pr
 (`skills/factory-run/templates/presets/`: one flat file per build tool, browser runner, formatter
 or rule package it recognises — the files that give it away and the profile lines it writes) and
 leaves a command no preset detects *out* rather than writing a placeholder the gate would try to
-run. A new stack is one more preset file, no change to the script. Check the file it wrote before
-the first run:
+run. A new stack is one more preset file, no change to the script. It names a carrier skill only
+where that skill is installed beside the pipeline (`dca-modelling`, `dca-discipline`, `dca-review`
+where the project has the DCA rule packages; `ubiquitous-language`, `context-map`, `e2e-testing`
+wherever they are installed) and links it in the same run. Check the file it wrote before the first
+run:
 
 ```
 .agents/factory/factory.profile.yaml     your build and test commands, one per test source set
@@ -32,17 +70,17 @@ the first run:
 .githooks/pre-commit                     the change check on what every commit contains (core.hooksPath)
 ```
 
-## The product scope, before the first story
+## The project description, before the first story
 
-```
-/factory-scope
-```
-
-It writes `backlog/product.md` with you, one question per heading: what is built and for whom,
-through which surfaces, how it works (where state lives, what is persisted), how it looks, the
-qualities it needs, and what it will not do. Product decisions only, no code design. The stages read
-it, so a story does not have to carry product decisions and a plan does not have to invent them.
-`/factory-backlog` writes nothing while it is missing and says so.
+The description skill writes `project/product.md` and `project/tech.md` with you, one question per
+heading: what is built and for whom, through which surfaces, how it works (where state lives, what
+is persisted), how it looks, the qualities it needs, what it will not do — and the stack, the
+frontend approach, the persistence, where it runs, what it talks to, how versions are chosen. The
+designed domain, `project/domain.md`, is optional. Decisions only, no code design. It also writes a
+line into `AGENTS.md` that makes every implementation — a stage or a person in a session — read the
+three files first. `/factory-backlog` writes nothing while product or tech is missing, and reads
+all three before it writes a story; `stage-plan` plans within them and `stage-judge` reports a
+change that contradicts them.
 
 ## Your first story
 
@@ -53,7 +91,7 @@ it, so a story does not have to carry product decisions and a plan does not have
 (Installed as a plugin, the skills are namespaced: `/dca-factory:factory-backlog`. The bare
 `factory.sh` and gate commands below are the same in every tool.)
 
-Say what the behaviour is. It writes `backlog/<epic>/epic.md` and one story, asks for the four
+Say what the behaviour is. It writes `project/backlog/<epic>/epic.md` and one story, asks for the four
 epic fields rather than inventing them (`intent`, `goal`, `metric`, `domain_contact`), and leaves
 the story `status: draft` until you release it — the one check no script can replace.
 
@@ -289,12 +327,12 @@ what must be true before the next one starts.
 | `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `tasks/<story>/tidy.md`; changes no test and no behaviour |
 | `stage-judge` | the change → `tasks/<story>/judge.md`: domain, boundaries and craft in one verdict, plus any perspective the profile adds |
 | `stage-document` | the change → `tasks/<story>/document.md`: glossary, context map and reader documentation follow the code |
-| `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, and stops while the product scope is missing |
+| `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
+| `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
 | — `decisions/` | the questions a run may not answer, one file each under `.agents/factory/decisions/<story>-<nn>.md`, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
 | `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies. Reports the versions and the profile's contract line; commits nothing |
 | `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`story-gate.py --status [--story <id>]`). Reads files; changes and starts nothing |
-| `factory-decisions` | the inbox for those records: lists what waits on a human (`story-gate.py --list-decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer |
-| `factory-scope` | writes the product scope before the first story (`backlog/product.md`: what and for whom, surfaces, how it works, look and feel, qualities, not part of the product), and answers the question a run may not answer itself — a new bounded context, a new relationship, a surface its actor lacks — as a recorded decision plus the map, never as code |
+| `factory-decisions` | the inbox for those records: lists what waits on a human (`story-gate.py --list-decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer. A structural answer — a new bounded context, a new relationship, a surface an actor lacks — also brings `project/domain.md` and the product description in line |
 | `factory-verify` | checks the pipeline itself: every gate check against throwaway fixtures, the runner's stage order, verdict handling and install shapes, and — when asked — one tiny story delivered end to end. Reports; it repairs nothing |
 
 ## The gate

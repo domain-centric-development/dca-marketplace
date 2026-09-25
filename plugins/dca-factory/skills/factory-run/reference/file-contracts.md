@@ -6,11 +6,11 @@ fresh context, in a subagent or in a separate process without changing the resul
 
 | Stage | Reads | Writes |
 |---|---|---|
-| `stage-plan` | the story, the product scope, the stack profile, the project's glossary and context map if present, and its existing tests (for `## Changed tests`) | `tasks/<story>/plan.md` |
-| `stage-test` | the story, `plan.md`, the product scope's qualities where the plan names them | `tasks/<story>/tests.md` (with the `gate:tests` table) |
-| `stage-build` | the story, `plan.md`, `tests.md`, the product scope's look and qualities | `tasks/<story>/build.md` |
+| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `tasks/<story>/plan.md` |
+| `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `tasks/<story>/tests.md` (with the `gate:tests` table) |
+| `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `tasks/<story>/build.md` |
 | `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `tasks/<story>/tidy.md` |
-| `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product scope, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `tasks/<story>/judge.md` |
+| `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `tasks/<story>/judge.md` |
 | `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries | `tasks/<story>/document.md` |
 
 The tidy stage's moves reach the judge and the document stage through the story diff, not through

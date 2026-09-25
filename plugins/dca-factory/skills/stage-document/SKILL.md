@@ -20,8 +20,11 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    — needs an entry in the bounded context's glossary. Add the missing ones in the project's own
    words, taking the definition from the plan's proposal where there is one. A term nobody can
    define is a term the model should not carry: say so rather than inventing a definition.
-2. Update the context map when the story changed how contexts relate — a new upstream, a new
-   translation site, a relationship that changed kind. A story that *needs* a new context or
+2. Update the context maps when the story changed how contexts relate — a new upstream, a new
+   translation site, a relationship that changed kind. The designed map (`domain:` in the profile,
+   `project/domain.md` by default) through the skill the profile names as `carrier.domain:`, where
+   the story built what it designs; a map generated from the code by running what generates it,
+   never by hand. A story that *needs* a new context or
    relationship should never have reached this stage; if you find one, write `## needs-human`
    naming a decision record (`decision: <story>-<nn>`), written to
    `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
