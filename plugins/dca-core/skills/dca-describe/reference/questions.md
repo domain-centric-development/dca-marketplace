@@ -18,7 +18,9 @@ A question that depends on an answer still open in the same pass is asked with i
 ("Where the product has pages: …"); its answer is dropped where the condition turns out false.
 
 "Open" means the heading is missing, empty, or holds only the template's comment or a `{{…}}`
-placeholder. A heading drafted from existing code counts as open until the person confirms it. The
+placeholder. A heading drafted — from existing code, or from what the person said with the call — counts
+as open until the person confirms it: its question is asked word for word all the same, with the draft
+offered as the first option. The
 paths are the defaults; the `dca-describe` section of `AGENTS.md` names the places a project uses.
 
 ## Product — `project/product.md`
