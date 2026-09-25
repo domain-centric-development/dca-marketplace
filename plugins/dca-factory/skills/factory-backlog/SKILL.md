@@ -133,6 +133,11 @@ that smuggles the decision in.
    up again opens its own. The window claims nothing: a runner working another story is not held up.
    An epic alone opens no window.
 
+12. **Showing the backlog.** When someone asks what is in the backlog or where it stands, run
+   `bash .agents/factory/factory.sh backlog --format md` and show it as it is — the tables by epic,
+   the tokens and *Next* — without retelling it, reformatting it or adding after its *Next*. Say more
+   only when asked, read from the file the answer comes from.
+
 ## A story pasted from a tracker
 
 A story pasted from an issue tracker — Jira wiki markup, GitHub Markdown, a document — is rewritten
