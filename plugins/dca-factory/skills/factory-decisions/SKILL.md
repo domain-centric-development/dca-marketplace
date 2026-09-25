@@ -35,6 +35,10 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    find best, not a default, and not silence. If what they said is incomplete — "b, but only for
    archived ones older than a year" is an answer *and* a constraint the story must carry — say
    what you would write and where the rest goes (the story, via the backlog skill).
+4a. **Measure the answering.** Explaining and answering a story's questions is part of what the story
+   cost. When you start on a record, run `python3 .agents/factory/story-gate.py --window-start decisions
+   --story <its story>`; once its answer is written (or the human defers), `--window-end decisions
+   --story <its story>`. The window claims nothing and starts nothing.
 5. **Show the exact wording before it is written.** Present the `## Answer` block you are about to
    append — `answer:`, `by:`, `at:`, `rationale:` — and the record it goes into. Write it when the
    human confirms **that block**. An instruction explicit enough to leave nothing open ("write

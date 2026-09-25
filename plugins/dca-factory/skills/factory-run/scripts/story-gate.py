@@ -2516,6 +2516,48 @@ def current_session():
     return "in-session", ""
 
 
+#: Work on a story outside its stages: writing it (the backlog skill) and answering its questions (the
+#: decisions skill). Measured like a stage — a window over the session log — but it is not a stage: it
+#: claims no checkout and makes no story "running", so a runner working another story is not held up.
+WINDOWS = ("backlog", "decisions")
+
+
+def mark_window(cwd, tasks, story_id, name, edge, session_log=None):
+    """`--window-start`/`--window-end`: the session's tokens and time spent on a story outside a stage."""
+    if name not in WINDOWS:
+        print(f"window: {name!r} is none of {', '.join(WINDOWS)}")
+        return 2
+    journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
+    os.makedirs(os.path.dirname(journal), exist_ok=True)
+    now = datetime.now(timezone.utc)
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
+    kind, session_id = current_session()
+    if session_log:
+        kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
+    freeze_all(tasks)
+    with open(journal, "a", encoding="utf-8") as handle:
+        if edge == "start":
+            handle.write(f"{stamp}\twindow-start\t{name}\ttool={kind}\n")
+            print(f"window: {name} of {story_id} started ({kind})")
+            return 0
+        started = None
+        for line in read_text(journal).splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3 and parts[1] == "window-start" and parts[2] == name:
+                started = parse_time(parts[0])
+        source = f"log={session_log}" if session_log else \
+            f"session={kind.split('-')[0]}:{session_id}" if session_id and kind != "in-session" else ""
+        handle.write(f"{stamp}\twindow-end\t{name}\n")
+        if not session_usage_allowed(cwd) or not started or not source:
+            handle.write(f"{stamp}\tusage\t{name}\ttool={kind}\tunknown\n")
+            print(f"window: {name} of {story_id} ended — its usage is unknown")
+        else:
+            begun = started.strftime("%Y-%m-%dT%H:%M:%S.") + f"{started.microsecond // 1000:03d}Z"
+            handle.write(f"{stamp}\tusage\t{name}\ttool={kind}\twindow={begun}/{stamp}\t{source}\n")
+            print(f"window: {name} of {story_id} ended — its usage is read from the session log")
+    return 0
+
+
 def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     """`--stage-start`/`--stage-end` for a stage run inside a session: the same journal the runner writes."""
     journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
@@ -2920,7 +2962,8 @@ def journal_usage(tasks, story_id, resolve=True):
 
 def stage_rank(stage):
     """Stage order for reports; the shared builder process (plan to tidy in one) sits before the judge."""
-    return STAGE_ORDER.index(stage) if stage in STAGE_ORDER else 3.5 if stage == "builder" else 99
+    return STAGE_ORDER.index(stage) if stage in STAGE_ORDER else 3.5 if stage == "builder" \
+        else -1 if stage == "backlog" else 98 if stage == "decisions" else 99
 
 
 def tokens_of(entry):
@@ -3366,6 +3409,12 @@ def story_facts(cwd, tasks, story_id):
                 entry["requested"].add(fields["model_requested"])
             if str(fields.get("model_applied", "")).startswith("no"):
                 entry["not_applied"] += 1
+        elif kind == "window-start":
+            open_starts[stage] = moment
+            stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS},
+                                          cost=0.0, priced=0, requested=set(), not_applied=0))["runs"] += 1
+        elif kind == "window-end" and stage in open_starts:
+            stages[stage]["seconds"] += (moment - open_starts.pop(stage)).total_seconds()
         elif kind == "stage-end" and stage in open_starts:
             took = (moment - open_starts.pop(stage)).total_seconds()
             stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS}, cost=0.0,
@@ -3389,7 +3438,7 @@ def story_facts(cwd, tasks, story_id):
             if cost is not None:
                 entry["cost"] += cost
                 entry["priced"] += 1
-            if passes:
+            if passes and stage not in WINDOWS:
                 passes[-1]["tokens"] += tokens
                 passes[-1]["measured"] += 1
     started = events[0][0] if events else None
@@ -3862,6 +3911,10 @@ def story_model(cwd, backlog, tasks, story_id, live=False):
         if not is_acceptance(front):
             questions.setdefault(str(front.get("stage", "")).strip(), []).append(str(front["id"]).strip())
     for stage, entry in facts["stages"].items():
+        if stage in WINDOWS:
+            entry["why"] = {"backlog": "writing the story", "decisions": "answering its questions"}[stage] \
+                + (f" · {entry['runs']} sessions" if entry["runs"] > 1 else "")
+            continue
         extra = entry["runs"] - sum(1 for p in facts["passes"] if stage in p["stages"])
         asked = questions.get(stage, [])[:max(extra, 0)]
         repeats = max(extra, 0) - len(asked)
@@ -4591,6 +4644,9 @@ def main(argv):
     parser.add_argument("--usage-from", nargs=2, metavar=("FORMAT", "FILE"),
                         help="read one invocation's usage from a tool's raw output (claude-json, codex-jsonl, opencode-json)")
     parser.add_argument("--usage-model", help="with --usage-from: the model, where the output does not name it")
+    parser.add_argument("--window-start", metavar="WORK", help="with --story: start measuring work on the story "
+                                                              "outside a stage — backlog or decisions")
+    parser.add_argument("--window-end", metavar="WORK", help="with --story: end that measuring window")
     parser.add_argument("--stage-start", metavar="STAGE", help="mark a stage's start inside a session (with --story)")
     parser.add_argument("--stage-end", metavar="STAGE",
                         help="mark its end and record what it used, read from the session's own log")
@@ -4670,6 +4726,11 @@ def main(argv):
             return 0
     if args.status:
         return status(cwd, args.backlog, args.tasks, args.story, args.format, args.color, args.live)
+    if args.window_start or args.window_end:
+        if not args.story:
+            parser.error("--window-start/--window-end need --story")
+        return mark_window(cwd, args.tasks, args.story, args.window_start or args.window_end,
+                           "start" if args.window_start else "end", args.session_log)
     if args.stage_start or args.stage_end:
         if not args.story:
             parser.error("--stage-start/--stage-end need --story")

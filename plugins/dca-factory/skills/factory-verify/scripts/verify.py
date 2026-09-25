@@ -3629,6 +3629,30 @@ def main(argv=None):
         expectations.append(("status: with session usage off the log is not read, and that is said",
                              "activity: not read" in off and "gradlew" not in off,
                              [l for l in off.splitlines() if l.startswith("activity")]))
+    with tmpdir() as root, tmpdir() as home:
+        # writing a story is measured like a stage, but it is not one: the story does not run, nothing waits
+        backlog_project(root)
+        session = "0d0d0d0d-aaaa-bbbb-cccc-565656565656"
+        env = dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDE_CODE_SESSION_ID=session)
+        gate = lambda *more: subprocess.run([sys.executable, args.gate, *more], cwd=root, env=env,
+                                            capture_output=True, text=True, encoding="utf-8")
+        gate("--window-start", "backlog", "--story", "STORY-1")
+        rows_during, _nxt, _wait, _ = schedule_of(args.gate, root)
+        time.sleep(1.1)
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - 0.5))
+        write_file(home, f"projects/-any/{session}.jsonl", json.dumps({"timestamp": stamp, "message": {
+            "id": "w1", "model": "model-x", "usage": {"input_tokens": 5, "cache_read_input_tokens": 40,
+                                                        "cache_creation_input_tokens": 50, "output_tokens": 5}}}) + "\n")
+        gate("--window-end", "backlog", "--story", "STORY-1")
+        detail = gate("--status", "--story", "STORY-1").stdout
+        backlog_row = next((l for l in detail.splitlines() if l.strip().startswith("backlog")), "")
+        expectations.append(("window: writing a story is measured — its own row, its tokens, what it was — and the "
+                             "story is not running meanwhile",
+                             rows_during.get("STORY-1", ("",))[0] != "running"
+                             and re.search(r"backlog\s+1\s+\d+ s\s+5\s+5\s+50\s+40\s+100\s+writing the story",
+                                           backlog_row) is not None, backlog_row or detail[-400:]))
+        expectations.append(("window: a name that is not backlog or decisions is refused",
+                             gate("--window-start", "judge", "--story", "STORY-1").returncode == 2, ""))
     with tmpdir() as root:
         # a story delivered before the pipeline kept a journal says so once; a long answer wraps, whole
         long_question = "Does " + " ".join(["an archived entry"] * 12) + " count as the thing the reader sees?"
