@@ -3614,9 +3614,10 @@ def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False,
     lines = [indent + (bold(fmt(headers), True) if colour else fmt(headers)),
              indent + "   ".join("─" * w for w in widths)]
     for n, row in enumerate(rows):
-        if total and n == len(rows) - 1:
+        is_total = total and n == len(rows) - 1
+        if is_total:
             lines.append(indent + "   ".join("─" * w for w in widths))
-        line = fmt(row)
+        line = bold(fmt(row), colour) if is_total else fmt(row)
         if marks and colour:
             head = "   ".join(str(c).ljust(widths[i]) for i, c in enumerate(row[:2]))
             line = paint(head, marks[n], True) + line[len(head):]
@@ -3921,6 +3922,7 @@ def render_story_md(model):
                          for i, p in enumerate(model["passes"])], {3, 4})
     if model["stages"]:
         headers, rows, right = stage_cells(model)
+        rows = rows[:-1] + [[f"**{c}**" if str(c) else c for c in rows[-1]]]
         out += ["", f"**{stage_caption(model)}**", ""] + table_md(headers, rows, right)
     if model["decisions"]:
         out += ["", "**Decisions**", ""]
