@@ -138,6 +138,17 @@ that smuggles the decision in.
    the tokens and *Next* — without retelling it, reformatting it or adding after its *Next*. Say more
    only when asked, read from the file the answer comes from.
 
+## A story from a wish
+
+`/factory-run <words>` hands you a wish: a user story in the person's words, with the id still to give.
+Draft the story from it in the contract — the words become `## Story`, rules and keyed scenarios, open points
+`open:` assumptions — and then ask from `reference/questions.md`: only the open entries, all at once, in the
+catalogue's order, word for word, followed by what the question pass (step 6) turns up. A new epic gets its
+four fields from these answers, never from the wish alone. Everything else is as for any story — the checks
+against the description, the gate's `--check-backlog`, the measuring window. On "run it now" the story is
+released (`status: approved`) and you hand its id back to `/factory-run`; on "keep it as a draft" it waits for
+its release like any other.
+
 ## A story pasted from a tracker
 
 A story pasted from an issue tracker — Jira wiki markup, GitHub Markdown, a document — is rewritten

@@ -86,6 +86,7 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 /factory-setup            # the project description, git, the runner — only what is missing
 /factory-backlog          # write the epic and the story, in the contract the gate reads
 /factory-run              # plan → test → build → tidy → judge → document, gated
+/factory-run <your words> # a wish: written as a story (which epic, the criteria), then run
 /factory-status           # what runs, what waits for a human, what each story cost
 /factory-decisions        # answer what a run may not decide — and accept a story you looked at
 /factory-verify           # check what that run actually did, and the pipeline itself

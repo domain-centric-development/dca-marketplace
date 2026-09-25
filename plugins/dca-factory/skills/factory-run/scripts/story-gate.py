@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.36.3"
+VERSION = "0.37.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -217,6 +217,46 @@ def find_story(backlog, story_id):
         f"no story {story_id!r} under {backlog}/ — a story is one markdown file "
         f"{backlog}/<epic>/<story>.md with front matter (see the backlog contract)"
     )
+
+
+def story_ids(backlog):
+    """Every story id under the backlog, in the order of the files — front matter first, else the file name."""
+    ids = []
+    for root, dirs, files in os.walk(backlog):
+        dirs.sort()
+        for name in sorted(files):
+            if not name.endswith(".md") or name == "epic.md":
+                continue
+            try:
+                front, _ = read_front_matter(os.path.join(root, name))
+            except GateError:
+                continue
+            ids.append(str(front.get("id", "")).strip() or os.path.splitext(name)[0])
+    return ids
+
+
+def resolve(backlog, argument):
+    """What `/factory-run <argument>` means — decided here, not by a model: one word naming a story is that
+    story; one word naming none is an unknown id, never a new story (a typo stays a typo); more than one
+    word is a wish, for the backlog skill to turn into a story; nothing is the backlog."""
+    words = argument.split()
+    if not words:
+        print("backlog")
+        return 0
+    if len(words) > 1:
+        print("wish")
+        return 0
+    try:
+        path = find_story(backlog, words[0])
+    except GateError:
+        known = story_ids(backlog) if os.path.isdir(backlog) else []
+        print(f"unknown {words[0]} — no story by that id under {backlog.replace(os.sep, '/')}/"
+              + (f"; the backlog has: {', '.join(known)}" if known else "; the backlog has no story yet")
+              + ". A wish takes more than one word.")
+        return 2
+    front, _ = read_front_matter(path)
+    print(f"story {str(front.get('id', '')).strip() or os.path.splitext(os.path.basename(path))[0]}")
+    return 0
 
 
 STEP = re.compile(r"^-\s+(Given|When|Then|And|But)\b\s*(.*)$")
@@ -3278,7 +3318,10 @@ def status_brief(cwd, backlog, tasks, session_start=False):
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
               "release a story (/factory-backlog), answer a waiting question (/factory-decisions), start working "
               "the backlog (/factory-run, which keeps asking the schedule; in Claude Code also /loop /factory-run), "
-              "look closer (/factory-status), or learn how the factory works (/factory-help). A session never runs `factory.sh run` — it starts a tool "
+              "look closer (/factory-status), or learn how the factory works (/factory-help). An instruction that "
+              "changes what an actor can see or do is a story: ask once, \"As a story through the factory — to an "
+              "existing epic, a new epic — or directly by hand?\", and for the factory run /factory-run with the "
+              "person's words. A session never runs `factory.sh run` — it starts a tool "
               "process per stage. A managing session writes backlog and decision files only; the worker is the "
               "one writer in the checkout.")
     return 0
@@ -3404,6 +3447,8 @@ BUILD_FILES = ("build.gradle", "build.gradle.kts", "pom.xml", "package.json", "p
 SHELL_NAME = "factory.sh"          # the help's tables name the runner short; the view says its full path once
 
 HELP_COMMANDS = (
+    ("deliver a wish", "your words become a backlog story — which epic, the criteria — and it runs at once",
+     "/factory-run <your words>", ""),
     ("where it stands", "what runs, what waits for you, every story with its times and tokens",
      "/factory-status", "status"),
     ("one story", "its stages, passes and tokens", "/factory-status <story>", "status --story <story>"),
@@ -3515,7 +3560,8 @@ def render_help_text(model, colour=False):
                       marks=[f["mark"] if f["mark"] != "none" else None for f in model["flow"]], colour=colour, painted=2)
     out += section("Commands", colour)
     out += table_text(["to see", "agent", "shell", "what it shows"],
-                      [[c["name"], c["skill"], shell_form(c["shell"]), c["what"]] for c in model["commands"]],
+                      [[c["name"], c["skill"], shell_form(c["shell"]) or "— needs an agent session", c["what"]]
+                       for c in model["commands"]],
                       colour=colour, first_bold=True)
     note = f"{SHELL_NAME} is {model['runner']}, in a terminal of its own; a session uses the agent form."
     out += ["", "    " + dim(note, colour)]
@@ -3537,7 +3583,8 @@ def render_help_md(model):
                      for f in model["flow"]])
     out += ["", "**Commands**", ""]
     out += table_md(["to see", "agent", "shell", "what it shows"],
-                    [[c["name"], f"`{c['skill']}`", f"`{shell_form(c['shell'])}`", c["what"]] for c in model["commands"]],
+                    [[c["name"], f"`{c['skill']}`", f"`{shell_form(c['shell'])}`" if c["shell"] else "— needs an agent session",
+                      c["what"]] for c in model["commands"]],
                     first_bold=True)
     out += ["", f"`{SHELL_NAME}` is `{model['runner']}`, in a terminal of its own; a session uses the agent form.",
             "", "**Marks**", ""]
@@ -4922,6 +4969,9 @@ def main(argv):
     parser.add_argument("--reopen", metavar="STORY",
                         help="take a delivered story back for a human's correction (an answered acceptance "
                              "record the story cites), and exit")
+    parser.add_argument("--resolve", metavar="ARGUMENT",
+                        help="what /factory-run <argument> means: `story <id>`, `wish`, `backlog`, or `unknown <word>` "
+                             "(exit 2), and exit")
     parser.add_argument("--schedule", action="store_true",
                         help="print every story's state and the next one to run, and exit")
     parser.add_argument("--check-backlog", action="store_true",
@@ -4942,6 +4992,8 @@ def main(argv):
         args.backlog = location(read_profile(resolve_profile(args.profile, cwd)), "backlog")
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
+    if args.resolve is not None:
+        return resolve(args.backlog, args.resolve)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
     if args.reopen:

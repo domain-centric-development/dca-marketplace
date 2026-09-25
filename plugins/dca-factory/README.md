@@ -342,7 +342,7 @@ what must be true before the next one starts.
 
 | Skill | Does |
 |---|---|
-| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `factory.sh backlog` reads every story's state off the files, and `factory.sh run` without `--story` runs them in that order |
+| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `factory.sh backlog` reads every story's state off the files, and `factory.sh run` without `--story` runs them in that order. `/factory-run <your words>` takes a wish: the gate tells an id from a wish (`--resolve`), `factory-backlog` writes the story with fixed questions (`reference/questions.md`: which epic, the criteria, run now), and the run follows once it is released |
 | `stage-plan` | story → `tasks/<story>/plan.md`: elements that change, criteria, test shape per criterion |
 | `stage-test` | plan → tests plus `tasks/<story>/tests.md` with the criterion-to-test table |
 | `stage-build` | red tests → production code plus `tasks/<story>/build.md` |
@@ -350,7 +350,7 @@ what must be true before the next one starts.
 | `stage-judge` | the change → `tasks/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-review` in a DCA project) |
 | `stage-document` | the change → `tasks/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
-| `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
+| `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
 | — `decisions/` | the questions a run may not answer, one file each under `.agents/factory/decisions/<story>-<nn>.md`, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
 | `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies. Reports the versions and the profile's contract line; commits nothing |
 | `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`factory.sh status [--story <id>]`). Reads files; changes and starts nothing |

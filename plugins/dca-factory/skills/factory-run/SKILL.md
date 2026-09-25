@@ -1,6 +1,6 @@
 ---
 name: factory-run
-description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), or to keep a session working on the backlog as it fills; a project without a pipeline goes to /factory-setup first. Reads the backlog, the stack profile and the hand-over files — no project knowledge of its own.
+description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), to deliver a wish in prose ("/factory-run show the newest products on the homepage" — it becomes a backlog story first), or to keep a session working on the backlog as it fills; a project without a pipeline goes to /factory-setup first. Reads the backlog, the stack profile and the hand-over files — no project knowledge of its own.
 ---
 
 # Run one story
@@ -257,6 +257,18 @@ what a commit contains and refuses when the working tree differs from the index;
 is that command, and CI runs `--change` on its checkout. Recommend it when someone asks whether a
 change is ready to commit — do not invent a story for it. `--parity <config>` checks that several
 implementations each prove a scenario contract from their reports (`reference/file-contracts.md`).
+
+## A wish instead of a story
+
+What `/factory-run <argument>` means is the gate's to say, not yours: run
+`python3 .agents/factory/story-gate.py --resolve "<argument>"` and follow its one line.
+
+| It prints | Then |
+|---|---|
+| `story <id>` | run that story, as above |
+| `wish` | the argument is a user story in the person's words: hand it to `/factory-backlog`, which drafts the story, asks its fixed questions (which epic, the criteria, run now or keep as a draft) and writes it; once it is released, run the id it names, as above; kept as a draft, stop and say it waits for its release |
+| `unknown <word> …` | stop and show the line — the ids the backlog has; a word that names no story is never a new one |
+| `backlog` | no argument: work the backlog, below |
 
 ## Without a story — work the backlog
 
