@@ -67,6 +67,7 @@ import hashlib
 import shutil
 import subprocess
 import sys
+import textwrap
 import time
 from xml.etree import ElementTree
 
@@ -3342,8 +3343,8 @@ def usage_tokens(fields, resolve=True):
             return None
         fields = dict(fields, **{k: str(v) for k, v in read.items()})
     counts = {k: int(fields.get(k, 0) or 0) for k in USAGE_FIELDS}
-    return (sum(counts.values()), counts["input"] + counts["cache_write"] + counts["output"],
-            fields.get("model", ""), float(fields["cost"]) if fields.get("cost") else None)
+    return (sum(counts.values()), counts, fields.get("model", ""),
+            float(fields["cost"]) if fields.get("cost") else None)
 
 
 def story_facts(cwd, tasks, story_id):
@@ -3354,9 +3355,10 @@ def story_facts(cwd, tasks, story_id):
     for moment, kind, stage, fields in events:
         if kind == "stage-start":
             if stage == "plan" or not passes:
-                passes.append(dict(start=moment, end=None, seconds=0, tokens=0, measured=0, runs=0))
+                passes.append(dict(start=moment, end=None, seconds=0, tokens=0, measured=0, runs=0, stages=set()))
+            passes[-1]["stages"].add(stage)
             open_starts[stage] = moment
-            entry = stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, new=0, measured=0, models=set(),
+            entry = stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS},
                                                   cost=0.0, priced=0, requested=set(), not_applied=0))
             entry["runs"] += 1
             passes[-1]["runs"] += 1
@@ -3366,20 +3368,21 @@ def story_facts(cwd, tasks, story_id):
                 entry["not_applied"] += 1
         elif kind == "stage-end" and stage in open_starts:
             took = (moment - open_starts.pop(stage)).total_seconds()
-            stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, new=0, measured=0, models=set(), cost=0.0,
+            stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS}, cost=0.0,
                                           priced=0, requested=set(), not_applied=0))["seconds"] += took
             if passes:
                 passes[-1]["seconds"] += took
                 passes[-1]["end"] = moment
         elif kind == "usage":
             read = usage_tokens(fields)
-            entry = stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, new=0, measured=0, models=set(),
+            entry = stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS},
                                                   cost=0.0, priced=0, requested=set(), not_applied=0))
             if read is None:
                 continue
-            tokens, new, model, cost = read
+            tokens, counts, model, cost = read
             entry["tokens"] += tokens
-            entry["new"] += new
+            for k in USAGE_FIELDS:
+                entry[k] = entry.get(k, 0) + counts[k]
             entry["measured"] += 1
             if model and model != "unknown":
                 entry["models"].update(model.split(","))
@@ -3463,10 +3466,12 @@ def status_model(cwd, backlog, tasks, live=False):
         facts = story_facts(cwd, tasks, story_id)
         mark, words, action = story_attention(cwd, story_id, story, profile)
         stage = next((st for sid, st, _t in running_stages(tasks) if sid == story_id), story.get("start") or "")
-        rows.append(dict(epic=story.get("epic", ""), story=story_id, title=story.get("title", ""), mark=mark,
+        journal = os.path.isfile(os.path.join(tasks, story_id, ".verify", "journal.tsv"))
+        rows.append(dict(journal=journal, epic=story.get("epic", ""), story=story_id, title=story.get("title", ""), mark=mark,
                          state=words, stage=stage or "—", passes=len(facts["passes"]) or 0,
                          started=facts["started"], delivered=facts["delivered"], seconds=facts["seconds"],
                          tokens=facts["tokens"], measured=facts["measured"], runs=facts["runs"],
+                         **{k: sum(e.get(k, 0) for e in facts["stages"].values()) for k in USAGE_FIELDS},
                          cost=facts["cost"], priced=facts["priced"]))
         if mark in ("look", "question", "stopped"):
             waiting.append(dict(mark=mark, story=story_id, what=words, action=action))
@@ -3609,9 +3614,27 @@ def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False,
     """Aligned columns with a rule under the header; `marks[i]` colours row i's first two cells.
     `widths` makes several tables line up — the backlog's, one per epic; `total` sets the last row
     apart with a rule of its own."""
-    widths = widths or column_widths(headers, rows)
+    widths = list(widths or column_widths(headers, rows))
+    # The last column wraps inside its own column rather than being cut: nothing a reader needs is lost.
+    # The width is the terminal's where there is one, else a fixed 120 — the same text in a pipe.
+    room = view_width() - len(indent) - sum(widths[:-1]) - 3 * (len(widths) - 1)
+    wrap_last = len(widths) > 1 and (len(widths) - 1) not in right and widths[-1] > max(room, 30)
+    if wrap_last:
+        widths[-1] = max(room, 30)
     fmt = lambda cells: "   ".join((str(c).rjust(widths[i]) if i in right else str(c).ljust(widths[i]))
                                    for i, c in enumerate(cells)).rstrip()
+    if wrap_last:
+        wrapped = []
+        for row in rows:
+            pieces = textwrap.wrap(str(row[-1]), widths[-1]) or [""]
+            wrapped.append(list(row[:-1]) + [pieces[0]])
+            wrapped += [[""] * (len(row) - 1) + [piece] for piece in pieces[1:]]
+        if marks is not None:
+            expanded = []
+            for mark, row in zip(marks, rows):
+                expanded += [mark] + [None] * (len(textwrap.wrap(str(row[-1]), widths[-1]) or [""]) - 1)
+            marks = expanded
+        rows = wrapped
     lines = [indent + (bold(fmt(headers), True) if colour else fmt(headers)),
              indent + "   ".join("─" * w for w in widths)]
     for n, row in enumerate(rows):
@@ -3622,11 +3645,15 @@ def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False,
         if first_bold and colour and not is_total:
             first = str(row[0]).ljust(widths[0])
             line = bold(first, True) + line[len(first):]
-        if marks and colour:
+        if marks and colour and marks[n]:
             head = "   ".join(str(c).ljust(widths[i]) for i, c in enumerate(row[:2]))
             line = paint(head, marks[n], True) + line[len(head):]
         lines.append(indent + line)
     return lines
+
+
+def view_width():
+    return shutil.get_terminal_size((120, 24)).columns if sys.stdout.isatty() else 120
 
 
 def column_widths(headers, rows):
@@ -3652,21 +3679,42 @@ def epic_summary(item):
 
 
 def backlog_columns(model):
-    headers = ["story", "state", "stage", "passes", "started (UTC)", "delivered (UTC)", "worked", "tokens"]
-    right = {3, 6, 7}
-    if model["priced"]:
-        headers.append("cost $")
-        right = right | {8}
-    return headers, right
+    headers = ["story", "state", "stage", "passes", "started (UTC)", "delivered (UTC)", "worked"]
+    return headers, {3, 6}
 
 
 def backlog_cells(row, model, marks):
-    cells = [f"{marks[row['mark']]} {row['story']}", row["state"], row["stage"], row["passes"] or "—",
-             stamp_text(row["started"]), stamp_text(row["delivered"]), took_text(row["seconds"]),
-             tokens_text(row["tokens"], row["measured"])]
-    if model["priced"]:
-        cells.append(f"{row['cost']:.2f}" if row["priced"] else "—")
-    return cells
+    if not row.get("journal", True) and row["mark"] == "done":
+        # delivered before the pipeline kept a journal: said once, not in five empty cells
+        return [f"{marks[row['mark']]} {row['story']}", row["state"], "", "", "no journal",
+                stamp_text(row["delivered"]), ""]
+    return [f"{marks[row['mark']]} {row['story']}", row["state"], row["stage"], row["passes"] or "—",
+            stamp_text(row["started"]), stamp_text(row["delivered"]), took_text(row["seconds"])]
+
+
+def token_rows(model):
+    """The tokens per story, grouped by epic with a subtotal each and the total over every story — the
+    four classes as the tool reports them."""
+    classes = ("input", "output", "cache_write", "cache_read")
+    def cells(label, item, runs):
+        if not item["measured"]:
+            return [label, runs or "—", "—", "—", "—", "—", "not measured"] + (["—"] if model["priced"] else [])
+        row = [label, runs] + [f"{item.get(k, 0):,}" for k in classes] + [f"{item['tokens']:,}"]
+        return row + ([f"{item.get('cost', 0):.2f}" if item.get("priced") else "—"] if model["priced"] else [])
+    rows, kinds = [], []
+    for epic in model["epics"]:
+        subtotal = {k: sum(r.get(k, 0) for r in epic["rows"]) for k in classes + ("tokens", "measured", "runs", "cost", "priced")}
+        rows.append(cells(epic["epic"] or "(no epic)", subtotal, subtotal["runs"]))
+        kinds.append("epic")
+        for r in epic["rows"]:
+            rows.append(cells("  ↳ " + r["story"], r, r["runs"]))
+            kinds.append("story")
+    grand = {k: sum(r.get(k, 0) for r in model["rows"]) for k in classes + ("tokens", "measured", "runs", "cost", "priced")}
+    rows.append(cells("total", grand, grand["runs"]))
+    kinds.append("total")
+    headers = ["epic / story", "runs", "input", "output", "cache write", "cache read", "total"] \
+        + (["cost $"] if model["priced"] else [])
+    return headers, rows, kinds, set(range(1, len(headers)))
 
 
 def heading(text, colour, underline="─"):
@@ -3714,9 +3762,18 @@ def render_status_text(model, colour=False):
         cells = [backlog_cells(r, model, MARKS_TEXT) for r in epic["rows"]]
         out += table_text(headers, cells, right, indent="      ", marks=[r["mark"] for r in epic["rows"]],
                           colour=colour, widths=widths)
+    if model["rows"]:
+        headers, rows, kinds, right = token_rows(model)
+        caption = "Tokens" + ("" if model["priced"] or not model["measured"] else " — no price in a session log")
+        out += section(caption, colour)
+        lines = table_text(headers, rows, right, total=True, colour=colour)
+        # epic rows and the total in bold: the sums stand out
+        for n, kind in enumerate(kinds):
+            index = 2 + n + (1 if kind == "total" else 0)
+            if kind == "epic" and colour:
+                lines[index] = bold(lines[index], True)
+        out += lines
     out += ["", "─" * 72] + next_text(model, colour)
-    if model["measured"] and not model["priced"]:
-        out.append(dim("  Tokens only: a session log carries no prices.", colour))
     if model["extra"]:
         out += [""] + ["  " + line for line in model["extra"]]
     if model["hint"]:
@@ -3748,9 +3805,13 @@ def render_status_md(model):
     for epic in model["epics"]:
         out += ["", f"*{epic['epic'] or '(no epic)'}* — {epic_summary(epic)}", ""]
         out += table_md(headers, [backlog_cells(r, model, MARKS_MD) for r in epic["rows"]], right)
+    if model["rows"]:
+        headers, rows, kinds, right = token_rows(model)
+        rows = [[f"**{c}**" if kind in ("epic", "total") and str(c) else c for c in row] if kind != "story"
+                else [row[0].strip()] + row[1:] for row, kind in zip(rows, kinds)]  # "↳ story" in Markdown
+        caption = "Tokens" + ("" if model["priced"] or not model["measured"] else " — no price in a session log")
+        out += ["", f"**{caption}**", ""] + table_md(headers, rows, right)
     out += ["", next_md(model)]
-    if model["measured"] and not model["priced"]:
-        out += ["", "_Tokens only: a session log carries no prices._"]
     if model["extra"]:
         out += [""] + [f"- {line}" for line in model["extra"]]
     return "\n".join(out)
@@ -3763,7 +3824,7 @@ def pass_label(index, pass_, records):
     corrections = [str(f["id"]).strip() for _p, f, _b, st, a in records
                    if is_acceptance(f) and st in ("answered", "applied") and not accepted(a)
                    and parse_time(str(a.get("at", ""))) and parse_time(str(a.get("at", ""))) <= pass_["start"]]
-    return f"correction ({corrections[-1]})" if corrections else "again from plan"
+    return "correction" if corrections else "again from plan"
 
 
 def decision_mark(decision):
@@ -3790,7 +3851,24 @@ def story_model(cwd, backlog, tasks, story_id, live=False):
         criteria = 0
     accepted_by = next((str(f["id"]).strip() for _p, f, _b, st, a in reversed(records)
                         if is_acceptance(f) and st in ("answered", "applied") and accepted(a)), None)
-    passes = [dict(p, label=pass_label(i, p, records)) for i, p in enumerate(facts["passes"])]
+    passes = []
+    for i, p in enumerate(facts["passes"]):
+        before = facts["passes"][i - 1]["end"] if i else None
+        passes.append(dict(p, label=pass_label(i, p, records),
+                           waited=(p["start"] - before).total_seconds() if before and p["start"] else 0))
+    # why a stage ran more than once per pass: the questions it asked, else a repeat (a gate refused it)
+    questions = {}
+    for _p, front, _b, _st, _a in records:
+        if not is_acceptance(front):
+            questions.setdefault(str(front.get("stage", "")).strip(), []).append(str(front["id"]).strip())
+    for stage, entry in facts["stages"].items():
+        extra = entry["runs"] - sum(1 for p in facts["passes"] if stage in p["stages"])
+        asked = questions.get(stage, [])[:max(extra, 0)]
+        repeats = max(extra, 0) - len(asked)
+        why = [f"{len(asked)} question" + ("s" if len(asked) > 1 else "") + f" ({', '.join(asked)})"] if asked else []
+        if repeats:
+            why.append(f"{repeats} repeat" + ("s" if repeats > 1 else "") + " (a gate refused)")
+        entry["why"] = " · ".join(why)
     decisions = []
     for _p, front, body, state, answer in records:
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
@@ -3798,8 +3876,7 @@ def story_model(cwd, backlog, tasks, story_id, live=False):
         text = (f"{given}" if is_acceptance(front) and given else
                 f"{given} — {question}" if given else f"open — {question}")
         decisions.append(dict(id=str(front["id"]).strip(), state=state,
-                              kind="acceptance" if is_acceptance(front) else "question",
-                              text=text if len(text) <= 100 else text[:99].rstrip() + "…"))
+                              kind="acceptance" if is_acceptance(front) else "question", text=text))
     models = sorted({m for e in facts["stages"].values() for m in e["models"]})
     not_applied = sorted({r for e in facts["stages"].values() if e["not_applied"] for r in e["requested"]})
     return dict(row=row, story=story_id, title=data.get("title", ""), epic=data.get("epic", ""),
@@ -3809,15 +3886,22 @@ def story_model(cwd, backlog, tasks, story_id, live=False):
                 next=overview["next"])
 
 
+def token_cells(entry, measured):
+    """The four token classes as Claude Code reports them (and ccusage shows them), and their total."""
+    if not measured:
+        return ["—", "—", "—", "—", "not measured"]
+    return [f"{entry.get(k, 0):,}" for k in ("input", "output", "cache_write", "cache_read")] + [f"{entry['tokens']:,}"]
+
+
 def stage_cells(model):
     """One row per stage and a total. A model column only where the stages ran on different models or a
     requested one did not reach a stage — otherwise the one model is named in the caption."""
     per_stage = len(model["models"]) > 1 or bool(model["not_applied"])
+    any_why = any(e.get("why") for e in model["stages"].values())
     rows = []
     for stage in sorted(model["stages"], key=stage_rank):
         e = model["stages"][stage]
-        cells = [stage, e["runs"], took_text(e["seconds"]), tokens_text(e["tokens"], e["measured"]),
-                 f"{e['new']:,}" if e["measured"] else "—"]
+        cells = [stage, e["runs"], took_text(e["seconds"])] + token_cells(e, e["measured"])
         if e["measured"] < e["runs"]:
             cells[1] = f"{e['runs']} ({e['runs'] - e['measured']} not measured)"
         if model["priced"]:
@@ -3827,23 +3911,23 @@ def stage_cells(model):
             if e["not_applied"]:
                 ran += f" (requested {', '.join(sorted(e['requested']))}: not applied)"
             cells.append(ran)
+        if any_why:
+            cells.append(e.get("why", ""))
         rows.append(cells)
-    total = dict(runs=sum(e["runs"] for e in model["stages"].values()),
-                 seconds=sum(e["seconds"] for e in model["stages"].values()),
-                 tokens=sum(e["tokens"] for e in model["stages"].values()),
-                 new=sum(e["new"] for e in model["stages"].values()),
-                 measured=sum(e["measured"] for e in model["stages"].values()),
-                 cost=sum(e["cost"] for e in model["stages"].values()))
-    cells = ["total", total["runs"], took_text(total["seconds"]), tokens_text(total["tokens"], total["measured"]),
-             f"{total['new']:,}" if total["measured"] else "—"]
+    total = {k: sum(e.get(k, 0) for e in model["stages"].values())
+             for k in ("runs", "seconds", "tokens", "measured", "cost") + USAGE_FIELDS}
+    cells = ["total", total["runs"], took_text(total["seconds"])] + token_cells(total, total["measured"])
     if model["priced"]:
         cells.append(f"{total['cost']:.2f}")
     if per_stage:
         cells.append("")
+    if any_why:
+        cells.append("")
     rows.append(cells)
-    headers = ["stage", "runs", "worked", "tokens", "of which new"] + (["cost $"] if model["priced"] else []) \
-        + (["model"] if per_stage else [])
-    return headers, rows, {1, 2, 3, 4, 5}
+    headers = ["stage", "runs", "worked", "input", "output", "cache write", "cache read", "total"] \
+        + (["cost $"] if model["priced"] else []) + (["model"] if per_stage else []) + (["notes"] if any_why else [])
+    right = {1, 2, 3, 4, 5, 6, 7} | ({8} if model["priced"] else set())
+    return headers, rows, right
 
 
 def story_header(model):
@@ -3863,7 +3947,9 @@ def story_header(model):
         why.append("one correction" if corrections == 1 else f"{corrections} corrections")
     if again:
         why.append("planned again once" if again == 1 else f"planned again {again} times")
-    pass_text = "not run yet" if not passes else "1 pass — the first delivery" if len(passes) == 1 else \
+    pass_text = ("no journal — delivered before the pipeline measured"
+                 if not model["row"].get("journal", True) and model["row"]["mark"] == "done"
+                 else "not run yet") if not passes else "1 pass — the first delivery" if len(passes) == 1 else \
         f"{len(passes)} passes — the first delivery, then " + " and ".join(why)
     facts = [("Epic", model["epic"] or "—")]
     if model["context"]:
@@ -3884,6 +3970,7 @@ def stage_caption(model):
     return caption + (" — " + " · ".join(parts) if parts else "")
 
 
+
 def render_story_text(model, colour=False):
     row = model["row"]
     title, facts = story_header(model)
@@ -3898,10 +3985,10 @@ def render_story_text(model, colour=False):
         out += how_lines(w["action"], colour, "      ")
     if model["passes"]:
         out += section("Passes", colour)
-        out += table_text(["pass", "started (UTC)", "ended (UTC)", "worked", "tokens"],
+        out += table_text(["pass", "started (UTC)", "ended (UTC)", "worked", "waited before", "tokens"],
                           [[f"{i + 1}  {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
-                            took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
-                           for i, p in enumerate(model["passes"])], {3, 4}, colour=colour, first_bold=True)
+                            took_text(p["seconds"]), took_text(p["waited"]), tokens_text(p["tokens"], p["measured"])]
+                           for i, p in enumerate(model["passes"])], {3, 4, 5}, colour=colour, first_bold=True)
     if model["stages"]:
         headers, rows, right = stage_cells(model)
         out += section(stage_caption(model), colour) + table_text(headers, rows, right, total=True, colour=colour,
@@ -3924,10 +4011,10 @@ def render_story_md(model):
         out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {how_md(w['action'])}"]
     if model["passes"]:
         out += ["", "**Passes**", ""]
-        out += table_md(["pass", "started (UTC)", "ended (UTC)", "worked", "tokens"],
+        out += table_md(["pass", "started (UTC)", "ended (UTC)", "worked", "waited before", "tokens"],
                         [[f"{i + 1} {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
-                          took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
-                         for i, p in enumerate(model["passes"])], {3, 4}, first_bold=True)
+                          took_text(p["seconds"]), took_text(p["waited"]), tokens_text(p["tokens"], p["measured"])]
+                         for i, p in enumerate(model["passes"])], {3, 4, 5}, first_bold=True)
     if model["stages"]:
         headers, rows, right = stage_cells(model)
         rows = rows[:-1] + [[f"**{c}**" if str(c) else c for c in rows[-1]]]

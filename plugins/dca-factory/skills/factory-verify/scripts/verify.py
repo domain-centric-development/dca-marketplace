@@ -3164,7 +3164,7 @@ def main(argv=None):
                                            capture_output=True, text=True, encoding="utf-8").stdout
         out = run()
         part = lambda text, name, until: text.split(name, 1)[1].split(until, 1)[0] if name in text else ""
-        story2 = next((l for l in part(out, "Backlog", "\n" + "─" * 72).splitlines() if "STORY-2" in l), "")
+        story2 = next((l for l in part(out, "Backlog", "Tokens").splitlines() if "STORY-2" in l), "")
         expectations = [
             ("status: a stage with a start and no end is shown with when it started (UTC) — as interrupted once it is "
              "older than a stage may take, on top as well",
@@ -3176,9 +3176,12 @@ def main(argv=None):
              re.search(r"\? STORY-1\s+waiting for your answer\n\s+agent\s+/factory-decisions\n\s+shell\s+write the answer "
                        r"into \.agents/factory/decisions/STORY-1-01\.md", part(out, "Waiting for you", "Running")) is not None,
              part(out, "Waiting for you", "Running")),
-            ("status: one row per story, grouped under its epic, with its tokens and cost",
-             "sample" in part(out, "Backlog", "\n" + "─" * 72) and "STORY-1" in part(out, "Backlog", "\n" + "─" * 72)
-             and re.search(r"100\s+0\.01$", story2) is not None, part(out, "Backlog", "\n" + "─" * 72)),
+            ("status: one row per story, grouped under its epic; its tokens by class, per epic and in total, with the cost",
+             "sample" in part(out, "Backlog", "Tokens") and "STORY-1" in part(out, "Backlog", "Tokens")
+             and re.search(r"^\s+↳ STORY-2\s+2\s+10\s+90\s+0\s+0\s+100\s+0\.01$", part(out, "Tokens", "\n" + "─" * 72), re.M)
+             and re.search(r"^\s+sample\s+2\s+10\s+90\s+0\s+0\s+100\s+0\.01$", part(out, "Tokens", "\n" + "─" * 72), re.M)
+             and re.search(r"^\s+total\s+2\s+10\s+90\s+0\s+0\s+100\s+0\.01$", part(out, "Tokens", "\n" + "─" * 72), re.M),
+             part(out, "Tokens", "\n" + "─" * 72)),
             ("status: the same files give the same text — no clock in the view without --live",
              out == run(), ""),
             ("status: no colour when the output is not a terminal, colour when asked for",
@@ -3187,7 +3190,7 @@ def main(argv=None):
         md = run("--format", "md")
         cells = lambda text: sorted(c.strip() for l in text.splitlines() if l.startswith("|") and "---" not in l
                                     for c in l.strip("|").split("|")[1:])
-        text_rows = [l for l in part(out, "Backlog", "\n" + "─" * 72).splitlines() if re.match(r"^\s+[?!✗▶✓·] STORY", l)]
+        text_rows = [l for l in part(out, "Backlog", "Tokens").splitlines() if re.match(r"^\s+[?!✗▶✓·] STORY", l)]
         md_rows = [l for l in md.splitlines() if re.match(r"^\| [👀❓⛔⏳✅➖] STORY", l)]
         expectations += [
             ("status --format md: the same rows as the terminal view, with the session's marks",
@@ -3199,10 +3202,10 @@ def main(argv=None):
         story_view = run("--story", "STORY-2")
         stages = part(story_view, "Stages", "\n" + "─" * 72)
         expectations += [
-            ("status of one story: each stage its own row with runs, tokens, the new ones and the cost, and a total",
-             re.search(r"^\s+plan\s+1\s+1 min\s+100\s+100\s+0\.01$", stages, re.M)
-             and re.search(r"^\s+test\s+1 \(1 not measured\)\s+—\s+not measured\s+—\s+—$", stages, re.M)
-             and re.search(r"^\s+total\s+2\s+1 min\s+100\s+100\s+0\.01$", stages, re.M), stages),
+            ("status of one story: each stage its own row with runs, the four token classes, the cost, and a total",
+             re.search(r"^\s+plan\s+1\s+1 min\s+10\s+90\s+0\s+0\s+100\s+0\.01$", stages, re.M)
+             and re.search(r"^\s+test\s+1 \(1 not measured\)\s+—\s+—\s+—\s+—\s+—\s+not measured\s+—$", stages, re.M)
+             and re.search(r"^\s+total\s+2\s+1 min\s+10\s+90\s+0\s+0\s+100\s+0\.01$", stages, re.M), stages),
             ("status of one story: its passes and what waits", "Passes" in story_view and "1  first delivery" in story_view,
              story_view),
         ]
@@ -3626,6 +3629,26 @@ def main(argv=None):
         expectations.append(("status: with session usage off the log is not read, and that is said",
                              "activity: not read" in off and "gradlew" not in off,
                              [l for l in off.splitlines() if l.startswith("activity")]))
+    with tmpdir() as root:
+        # a story delivered before the pipeline kept a journal says so once; a long answer wraps, whole
+        long_question = "Does " + " ".join(["an archived entry"] * 12) + " count as the thing the reader sees?"
+        backlog_project(root, ("STORY-2", []), extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_APPLIED), ("tasks/STORY-1/tests.md", TESTS),
+            ("tasks/STORY-1/document.md", DOCUMENT), ("tasks/STORY-1/.delivered", "2026-09-20T10:00:00Z\n"),
+            (".agents/factory/decisions/STORY-1-01.md", DECISION.replace(
+                "# Does an archived thing count?", "# " + long_question) + ANSWER)))
+        overview = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
+                                  text=True, encoding="utf-8").stdout
+        detail = subprocess.run([sys.executable, args.gate, "--status", "--story", "STORY-1"], cwd=root,
+                                capture_output=True, text=True, encoding="utf-8").stdout
+        row1 = next((l for l in overview.splitlines() if "STORY-1" in l and "delivered" in l), "")
+        row2 = next((l for l in overview.splitlines() if "STORY-2" in l and "ready" in l), "")
+        expectations.append(("status: a story delivered without a journal says so once; one not run yet does not",
+                             "no journal" in row1 and "no journal" not in row2
+                             and "delivered before the pipeline measured" in detail, row1 + "\n" + row2))
+        expectations.append(("status: a long answer wraps inside its column and is never cut",
+                             "…" not in detail and "count as the thing the reader sees?" in detail
+                             and all(len(l) <= 120 for l in detail.splitlines()), detail[-600:]))
     with tmpdir() as root:
         # the observer reads the gate's own records the way the gate writes them: the red ledger as
         # `selector<TAB>digest`, the build's `## Changed` table with its paths in plain cells
