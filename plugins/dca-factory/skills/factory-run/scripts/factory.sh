@@ -703,9 +703,14 @@ install_project() {                         # install_project <tool> <skill fold
         previous=$(for skill in "$source_abs"/*; do [ -d "$skill" ] && basename "$skill"; done)
       fi
       : > "$manifest.new"
-      for skill in "$source_abs"/*; do
+      # The same set a link install gives this tool: for a tool without a plugin mechanism the craft
+      # of the method plugins beside the pipeline, not only the carriers the profile already names.
+      local copy_dirs="$source_abs"
+      [ "$target" != ".claude/skills" ] && copy_dirs=$(printf '%s\n%s' "$source_abs" "$(method_skill_dirs "$source_abs" | tr ' ' '\n')")
+      while IFS= read -r skill; do
         [ -d "$skill" ] || continue
         name=$(basename "$skill")
+        grep -qx "$name" "$manifest.new" && continue         # the pipeline's own wins a name clash
         if { [ -e "$target/$name" ] || [ -L "$target/$name" ]; } && ! printf '%s\n' "$previous" | grep -qx "$name"; then
           echo "factory: kept the project's own $target/$name — the pipeline's $name was not copied" >&2
           kept=$((kept + 1))
@@ -715,9 +720,9 @@ install_project() {                         # install_project <tool> <skill fold
         must "copy $name into $target" cp -R "$skill" "$target/$name"
         echo "$name" >> "$manifest.new"
         copied=$((copied + 1))
-      done
+      done < <(printf '%s\n' "$copy_dirs" | while IFS= read -r dir; do [ -n "$dir" ] && printf '%s\n' "$dir"/*; done)
       for name in $previous; do
-        [ -d "$source_abs/$name" ] && continue
+        grep -qx "$name" "$manifest.new" && continue            # copied again just now
         # A carrier the profile names is not the pipeline's skill but one it copied beside it: it
         # stays, on the list, for install_named_carriers to refresh — never removed as outdated.
         if printf '%s\n' $(named_carriers) | grep -qx "$name" && [ -d "$target/$name" ]; then
