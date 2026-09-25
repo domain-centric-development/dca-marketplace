@@ -6,12 +6,14 @@ source: guide
 tags: [guide, section]
 ---
 
-- [The product scope](#the-product-scope)
+- [Three parts](#three-parts)
+- [The project description](#the-project-description)
 - [The backlog contract](#the-backlog-contract)
 - [Outcome events](#outcome-events)
 - [The stages and their hand-over files](#the-stages-and-their-hand-over-files)
 - [Gates](#gates)
 - [What the project declares](#what-the-project-declares)
 - [Escalation: the three answers a run may not give itself](#escalation-the-three-answers-a-run-may-not-give-itself)
+- [Acceptance: a human looks before it counts](#acceptance-a-human-looks-before-it-counts)
 - [Building one: what actually holds](#building-one-what-actually-holds)
 - [Starting where you are](#starting-where-you-are)

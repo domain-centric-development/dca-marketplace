@@ -38,66 +38,72 @@ elsewhere, this repository follows.
 ```
 dca-marketplace/
 ├── .claude-plugin/marketplace.json        # manifest — owner: the domain-centric-development org
-├── plugins/dca-core/                      # DCA-specific skills + agents (Java/Spring and .NET/C#)
-│   ├── skills/{ddd-modelling,review-domain,review-boundaries}/  # craft + review perspectives as skills
+├── plugins/dca-core/                      # the DCA method as skills (Java/Spring and .NET/C#), no agents
 │   ├── .claude-plugin/plugin.json
-│   ├── skills/dca-bootstrap/              # installs the published packages, generates one architecture test
+│   ├── skills/{dca-describe,dca-new,dca-add}/   # describe → new → init → add
+│   ├── skills/dca-init/                   # installs the published packages, one architecture test, the AGENTS.md section
 │   │   ├── reference/archunit-rule-catalog.md   # GENERATED — see below
-│   │   └── templates/                     # Spring Modulith verification test only (WP-17 replaces it)
+│   │   └── templates/
 │   ├── skills/dca-knowledge/catalog/      # GENERATED mirror of dca-knowledge-catalog/bundle — never hand-edit
-│   ├── skills/{dca-discipline,dca-review,dca-scaffold,context-map,ubiquitous-language}/
-│   └── agents/{ddd-expert,ddd-reviewer,hexagonal-reviewer}.md
+│   └── skills/{dca-modelling,dca-discipline,dca-review}/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
 │   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
-│   ├── skills/{factory-backlog,factory-scope,factory-decisions,factory-status,factory-update}/   # write the backlog; answer a scoping question; the decision inbox; where the pipeline stands; update a project
+│   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
-├── plugins/software-craftsmanship/        # project-agnostic skills + agents (any Java or .NET project)
+├── plugins/dca-craft/                     # craft independent of the architecture style; names no DCA artifact
+│   ├── skills/{tdd,clean-code,adr,e2e-testing,ubiquitous-language,context-map}/
+│   ├── skills/{review-ddd,review-hexagonal,review-clean-code}/   # the three general review perspectives
+│   └── agents/{e2e-tester,ddd-reviewer,hexagonal-reviewer,clean-code-reviewer}.md
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
 ├── .github/workflows/check.yml            # syntax, manifests, skill front matter, factory-verify (Linux, macOS, Windows/Git Bash)
-├── scripts/check-skills.py                # every skill folder has a SKILL.md with name and description
+├── scripts/check-skills.py                # every skill folder has a SKILL.md with name and description; dca-craft names no DCA artifact (--self-test)
 └── MULTI-HARNESS-PORTABILITY-2026-09-03.md  # superseded plan, kept as history — see its header
 ```
 
 ## The three plugins
 
-- **dca-core** — `/dca-bootstrap`, `/dca-discipline`, `/ubiquitous-language`, `/context-map`, `/dca-scaffold`,
-  `/dca-review`, `/dca-knowledge`; agents `ddd-expert` (builder), `ddd-reviewer`, `hexagonal-reviewer`. Every skill
-  and agent speaks both languages: Java/Spring (`UseCase<I,O>`, packages, `package-info.java`) and .NET/C#
-  (`IUseCase<TIn,TOut>`, namespaces, a `[BoundedContext]` marker class). Since 0.4.0 the tactical-modelling
-  craft and the domain/boundaries review perspectives are **skills** (`ddd-modelling`, `review-domain`,
-  `review-boundaries`); `ddd-expert`, `ddd-reviewer` and `hexagonal-reviewer` are thin agents that apply them
-  and add only an isolated context and a tool restriction.
+- **dca-core** — `/dca-describe`, `/dca-new`, `/dca-init`, `/dca-add`, `/dca-modelling`, `/dca-discipline`,
+  `/dca-review`, `/dca-knowledge`; no agents. Every skill speaks both languages: Java/Spring (`UseCase<I,O>`,
+  packages, `package-info.java`) and .NET/C# (`IUseCase<TIn,TOut>`, namespaces, a `[BoundedContext]` marker
+  class). The verbs follow one another: describe (the project description under `project/`) → new (a skeleton
+  from a generator, or one more element) → init (the DCA part of an existing project) → add (one capability).
+  `dca-core` may use a `dca-craft` skill; the other direction is what `scripts/check-skills.py` forbids.
 - **dca-factory** — the *delivery* layer, kept apart from the method on purpose (three layers, three owners:
   methodology → `dca-core`, stack profile → the project, pipeline → here). `factory-run` runs one backlog story
   through `stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stage-judge` and `stage-document`;
-  `factory-backlog` writes the backlog it reads and `factory-scope` answers what a run may not decide
-  itself — a new bounded context, a new relationship between contexts, a surface an actor lacks; `skills/factory-run/scripts/story-gate.py`
+  `factory-setup` sets the factory up — project description (through `dca-core`'s `dca-describe`), git,
+  runner, profile — `factory-backlog` writes the backlog it reads, and `factory-decisions` takes the
+  answers a run may not give itself — a new bounded context, a new relationship between contexts, a
+  surface an actor lacks; `skills/factory-run/scripts/story-gate.py`
   is the deterministic check between the stages, copied into a consuming project as
   `.agents/factory/story-gate.py`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
   discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`) is optional, the git
   pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile
-  (`.agents/factory/factory.profile.yaml`) and the backlog, glossary and context map.
-- **software-craftsmanship** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`; agents `e2e-tester`,
-  `clean-code-reviewer`. No DCA assumptions; usable alone. `e2e-testing` holds the end-user-testing craft
-  (Page Objects, stable selectors, diagnosis-first protocol) and `review-craft` the craft review perspective;
-  `e2e-tester` and `clean-code-reviewer` are the thin agents around them — the split keeps both usable in
-  tools that have no agents.
+  (`.agents/factory/factory.profile.yaml`) and `project/` — the description (product, tech, designed
+  domain) and the backlog — beside the glossaries and the generated context map.
+- **dca-craft** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/ubiquitous-language`, `/context-map`,
+  `/review-ddd`, `/review-hexagonal`, `/review-clean-code`; agents `e2e-tester`, `ddd-reviewer`,
+  `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the
+  skills and agents name no DCA artifact (rule ids, `dca-*` names, the building blocks' namespaces and
+  DCA-only types, the conventions overlay path) — `scripts/check-skills.py` fails otherwise; the README may
+  say what it pairs with. The reviewers are the outside view; `dca-review` in dca-core is the DCA reviewer.
+  Knowledge lives in the skills; the agents are thin wrappers for an isolated context and a tool restriction.
 
 ## Generated content — never hand-edit
 
 | Path | Source | Regenerate |
 |---|---|---|
 | `plugins/dca-core/skills/dca-knowledge/catalog/` | `../dca-knowledge-catalog/bundle/` | `cd ../dca-knowledge-catalog && PYTHONPATH=src python3 -m dca_catalog.generate` (mirrors here by default; the mirror drops the `resource:` frontmatter) |
-| `plugins/dca-core/skills/dca-bootstrap/reference/archunit-rule-catalog.md` | `../dca-java/rules.json`, `../dca-dotnet/rules.json` | `python3 scripts/render-rule-catalog.py` |
+| `plugins/dca-core/skills/dca-init/reference/archunit-rule-catalog.md` | `../dca-java/rules.json`, `../dca-dotnet/rules.json` | `python3 scripts/render-rule-catalog.py` |
 
 The rendered files carry no link into a sibling repository — content travels, links do not. Check
 the sources, not the copies, when a rule text looks wrong.
 
 ## How the bootstrap works
 
-`/dca-bootstrap` installs DCA **via the published packages** and generates one thin architecture test:
+`/dca-init` installs DCA **via the published packages** and generates one thin architecture test:
 
 - Java: `dev.domaincentric:dca-building-blocks` (markers) + `dca-spring` (Spring implementations of
   `DomainEventPublisher`/`TransactionBoundary`, auto-configured) in production, `dca-archunit` (rules) + with Modulith
@@ -118,12 +124,12 @@ interfaces are aliased to the library ones or kept and declared through `DcaLayo
 | Change elsewhere | Update here |
 |---|---|
 | Rule added/changed in `dca-java` / `dca-dotnet` (`rules.json`) | `python3 scripts/render-rule-catalog.py`; `dca-review/reference/checklist.md` if the rule has a semantic counterpart; `dca-discipline/SKILL.md` layer table if it names rules |
-| Consumer API of the libraries (`DcaLayout` options, `DcaArchitectureTest`, `dca-archunit.properties` keys, package coordinates) | `dca-bootstrap/SKILL.md`, its templates and `reference/*` |
-| Building-block marker added/renamed | `dca-scaffold` templates, `dca-discipline`, `ddd-expert`, `ddd-reviewer`, `hexagonal-reviewer` (both language examples) |
-| Naming convention or package/namespace structure in the guide | `dca-review/reference/naming-conventions.md`, `dca-scaffold/SKILL.md` + templates, `dca-discipline/SKILL.md` |
-| Use-case / result pattern in the guide or samples | `dca-review/reference/use-case-pattern.md`, `dca-scaffold/templates/use-case/` |
+| Consumer API of the libraries (`DcaLayout` options, `DcaArchitectureTest`, `dca-archunit.properties` keys, package coordinates) | `dca-init/SKILL.md`, its templates and `reference/*`; `dca-add` for the rule modules and freezing |
+| Building-block marker added/renamed | `dca-new` templates, `dca-modelling`, `dca-discipline`, `dca-review` (both language examples) — never the dca-craft skills |
+| Naming convention or package/namespace structure in the guide | `dca-review/reference/naming-conventions.md`, `dca-new/SKILL.md` + templates, `dca-discipline/SKILL.md` |
+| Use-case / result pattern in the guide or samples | `dca-review/reference/use-case-pattern.md`, `dca-new/templates/use-case/` |
 | Guide text (`dca-guide/*.md`) or authored catalog nodes | regenerate the catalog; the mirror follows |
-| Context-map relationships or renderer options | `context-map/SKILL.md` |
+| Context-map relationship declarations or renderer options | `dca-init` (the renderer test) and `dca-review` (declarations against the map); `context-map` in dca-craft only for a change to DDD's relationship patterns themselves |
 | Craft that a delivery stage or a review perspective needs (test writing, implementation, a review angle) | the **skill** carries it (portable — every tool reads skills); an agent stays a thin wrapper around that skill for isolated context and a restricted tool set. Knowledge in an agent alone is Claude-only |
 | A gate check, a stage order or the runner changed | extend `plugins/dca-factory/skills/factory-verify/scripts/verify.py` with a case for what changed — the gate is the correctness argument for every stage, so it may not rest on a hand check. `.github/workflows/check.yml` runs the suite on every push and pull request, on Linux, macOS and Windows (Git Bash); never state a case count in prose, it drifts |
 | Delivery process: backlog fields, stage order, gate checks, file hand-overs | `dca-factory/skills/factory-run/SKILL.md`, its `reference/{backlog-contract,file-contracts}.md`, `scripts/story-gate.py`, and the affected `stage-*/SKILL.md`. A gate check is a script change, never a hook or a stage self-assessment |
@@ -153,10 +159,10 @@ bootstrap from templates to packages was such a change.
 ```
 /plugin marketplace add <path-to-this-clone>
 /plugin install dca-core@dca-marketplace
-/plugin install software-craftsmanship@dca-marketplace
+/plugin install dca-craft@dca-marketplace
 ```
 
-Try `/dca-bootstrap` on a fresh Spring Boot project and on a fresh .NET web project; both must end with a green
+Try `/dca-new` in an empty directory and `/dca-init` on a fresh Spring Boot project and on a fresh .NET web project; both must end with a green
 architecture test that runs the whole rule catalog. For `dca-factory`, run one story through `factory-run` on a
 project that is not a sample and check the gate's red→green transition; the skills must contain no sample
 vocabulary and no project path. Published installation:

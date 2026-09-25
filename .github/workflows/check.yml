@@ -52,7 +52,7 @@ jobs:
           python -c "import json,glob,sys; [json.load(open(p)) for p in \
             ['.claude-plugin/marketplace.json'] + glob.glob('plugins/*/.claude-plugin/plugin.json')]"
       - name: Every skill has a name and a description
-        run: python scripts/check-skills.py
+        run: python scripts/check-skills.py --self-test && python scripts/check-skills.py
       - name: factory-verify
         run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py
 
@@ -84,9 +84,9 @@ jobs:
         working-directory: dca-marketplace
         run: |
           python3 scripts/render-rule-catalog.py
-          if ! git diff --quiet -- plugins/dca-core/skills/dca-bootstrap/reference/archunit-rule-catalog.md; then
+          if ! git diff --quiet -- plugins/dca-core/skills/dca-init/reference/archunit-rule-catalog.md; then
             echo "::error::archunit-rule-catalog.md is stale - run scripts/render-rule-catalog.py and commit it"
-            git --no-pager diff -- plugins/dca-core/skills/dca-bootstrap/reference/archunit-rule-catalog.md
+            git --no-pager diff -- plugins/dca-core/skills/dca-init/reference/archunit-rule-catalog.md
             exit 1
           fi
       - name: The vendored knowledge catalog equals the canonical bundle

@@ -1,0 +1,8 @@
+# pytest selects by path, so the filter names the file the gate located; no `compile:` worth the name.
+kind: stack
+order: 40
+detect.exists: pytest.ini conftest.py
+test: {python} -m pytest -q --junitxml=test-results/pytest.xml
+e2eTest: {python} -m pytest -q --junitxml=test-results/pytest.xml
+filterFormat: "{file}::{method}"
+covers.test: **

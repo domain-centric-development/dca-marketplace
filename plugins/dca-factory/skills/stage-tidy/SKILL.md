@@ -41,6 +41,8 @@ freedom is that it may not change what the code *does*.
    finding and leave the code alone.
 7. Run what the stack profile declares — compile, the tests, the architecture suite, the formatter.
    The gate runs them again afterwards, so a stage that skips them only delays its own failure.
+8. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
+   formatting of what you moved. The gate and the commit hook only check `format:`.
 
 ## Who carries this stage
 
@@ -48,6 +50,12 @@ The stack profile may name a carrier — `carrier.tidy: <name>` — the skill or
 project's craft for readable code. A review **skill** works in every tool; an **agent** only where
 the tool has agents. Use the named carrier where this tool offers it; otherwise do the stage as
 described here and say in your file which it was ("in-session; `<carrier>` not available here").
+
+**The guard beside the carrier.** The profile may also name `carrier.guard: <name>` — the skill that
+holds the architecture's invariants while code is edited (in a DCA project `dca-discipline`). Apply
+it for every file you write, the same way you use the carrier: where this tool offers it; otherwise
+keep the invariants as described here and say so in your file. An absent key is skipped and named
+like any other.
 
 ## The tidy file
 

@@ -1,0 +1,4 @@
+kind: browser
+order: 10
+detect.contains: **/*.gradle **/*.gradle.kts :: com\.microsoft\.playwright
+browser: playwright

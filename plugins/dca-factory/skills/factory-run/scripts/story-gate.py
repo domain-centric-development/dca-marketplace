@@ -7,9 +7,12 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
     story-gate.py --story <id> --stage <plan|test|build|tidy|document> [options]
     story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
     story-gate.py --schedule                           every story's state and the next one to run
+    story-gate.py --check-backlog                      the plan gate's backlog checks over every story
+                                                       that is not done; exit 1 when one is refused
     story-gate.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
-    story-gate.py --product                            the product description alone; exit 3 while
-                                                       there is none, 1 when it is incomplete
+    story-gate.py --project                            the project description (product and technical)
+                                                       alone; exit 3 while a part is missing, 1 when
+                                                       one is incomplete
     story-gate.py --status [--story <id>]              what runs, what waits, every story, the cost —
                                                        per story, or per stage of --story
     story-gate.py --change [--staged] [--checks <c>]   the profile's checks outside a story; --staged
@@ -18,7 +21,8 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
                                                        mandatory scenario of a scenario contract
 
 Options:
-    --backlog <dir>     backlog root (default: backlog)
+    --backlog <dir>     backlog root (default: the profile's `backlog:`, else project/backlog)
+    --root <dir>        the project's root (default: .)
     --tasks <dir>       run artefact root (default: tasks)
     --profile <file>    stack profile (default: .agents/factory/factory.profile.yaml,
                         falling back to factory.profile.yaml in the project root)
@@ -79,13 +83,22 @@ MAX_ROUNDS = 3
 #: have comparable budgets. Reported as a note, never a failure — the size is not this story's fault.
 DOC_BUDGET_BYTES = 32 * 1024
 CONTEXT_MAP_CANDIDATES = (
+    "project/domain.md",
     "docs/context-map.md",
     "docs/architecture/context-map.md",
     "context-map.md",
 )
 INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md")
-#: The product scope a project writes once, before its first story (`/factory-scope` writes it),
-#: at `<backlog>/product.md` unless the profile's `product:` names another place.
+#: The project description: what is to be built, written before the code and read as a story's input.
+#: `project/` unless the profile names another place — the files a person writes, apart from what the
+#: machine keeps under `.agents/factory/` and the stages' hand-overs under `tasks/`.
+DEFAULTS = {
+    "product": "project/product.md",
+    "tech": "project/tech.md",
+    "domain": "project/domain.md",
+    "backlog": "project/backlog",
+}
+#: The product description's headings — what is built, for whom, through which surfaces.
 PRODUCT_HEADINGS = (
     "What and for whom",
     "Surfaces",
@@ -93,6 +106,15 @@ PRODUCT_HEADINGS = (
     "Look and feel",
     "Qualities",
     "Not part of the product",
+)
+#: The technical description's headings — the decisions a stage may not take in passing.
+TECH_HEADINGS = (
+    "Stack",
+    "Frontend approach",
+    "Persistence",
+    "Runtime",
+    "Integrations",
+    "Version policy",
 )
 CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)\s*:\s*(\S.*)$")
 MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
@@ -108,8 +130,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 6
-VERSION = "0.30.3"
+CONTRACT = 8
+VERSION = "0.34.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -192,7 +214,7 @@ def find_story(backlog, story_id):
                 return path
     raise GateError(
         f"no story {story_id!r} under {backlog}/ — a story is one markdown file "
-        f"backlog/<epic>/<story>.md with front matter (see the backlog contract)"
+        f"{backlog}/<epic>/<story>.md with front matter (see the backlog contract)"
     )
 
 
@@ -339,7 +361,7 @@ def check_contract(result, profile):
         result.fail(
             "contract",
             f"the profile is written for gate contract {declared} and this gate implements "
-            f"{CONTRACT} (gate {VERSION}) — re-run `factory.sh install` before trusting a run, "
+            f"{CONTRACT} (gate {VERSION}) — run `factory.sh update` before trusting a run, "
             f"because this script would ignore whatever the newer contract added",
         )
     elif int(declared) < CONTRACT:
@@ -398,12 +420,19 @@ def find_first(cwd, candidates):
 
 
 def check_context_map(result, cwd, profile, context):
-    """A story names the context it changes; that context must be on the map. A project without
-    a map is not blocked — it has nothing to contradict yet."""
+    """A story names the context it changes; that context must be on the map. The designed map
+    (`domain:`) is read first, so a story for a context that is designed but not built yet passes;
+    then the one generated from the code (`contextMap:`), then the conventional places. A project
+    without a map is not blocked — it has nothing to contradict yet."""
+    named_domain = str(profile.get("domain", "")).strip()
+    if named_domain and not os.path.isfile(os.path.join(cwd, named_domain)):
+        result.fail("context-map", f"the profile's `domain: {named_domain}` names no file")
+        return
+    candidates = [location(profile, "domain")]
     named = profile.get("contextMap")
-    path = named if named and os.path.isfile(os.path.join(cwd, named)) else find_first(
-        cwd, CONTEXT_MAP_CANDIDATES
-    )
+    if named and os.path.isfile(os.path.join(cwd, named)):
+        candidates.append(named)
+    path = find_first(cwd, candidates + list(CONTEXT_MAP_CANDIDATES))
     if not path:
         result.skip("context-map", "the project keeps no context map")
         return
@@ -450,23 +479,39 @@ def check_models(result, profile):
         result.ok("models", f"{len(keys)} model key(s), each bound to a tool")
 
 
-def check_product(result, cwd, profile, backlog="backlog"):
-    """The product scope: what is built, for whom, through which surfaces, how it works, how it looks.
+def location(profile, key):
+    """Where the profile puts one part of the project description, or its default under `project/`."""
+    return str(profile.get(key, "")).strip().replace("\\", "/") or DEFAULTS[key]
 
-    Absent is a note, not a failure — a project that runs without one is not blocked, and a brownfield
-    project may never write one. A `product:` that names a missing file is a broken reference, and a
-    file with a required heading missing or empty is a scope nobody finished: both fail. Guidance in
-    HTML comments does not count as content, so an untouched template does not pass."""
-    named = str(profile.get("product", "")).strip()
-    default = backlog.rstrip("/\\").replace("\\", "/") + "/product.md"   # as the project writes it, on every OS
-    path = named or default
+
+def layout_hint(cwd, profile):
+    """The layout before `project/`: a backlog at the root. No fallback reads it; the move is named."""
+    if os.path.isdir(os.path.join(cwd, "project")) or profile.get("backlog"):
+        return None
+    moves = []
+    if os.path.isfile(os.path.join(cwd, "backlog", "product.md")):
+        moves.append("git mv backlog/product.md project/product.md")
+    if os.path.isdir(os.path.join(cwd, "backlog")):
+        moves.append("git mv backlog project/backlog")
+    if not moves:
+        return None
+    return ("the backlog now lives under project/ — mkdir -p project && " + " && ".join(moves)
+            + f", then `contract: {CONTRACT}` in the profile")
+
+
+def check_described(result, cwd, profile, key, headings, what):
+    """One part of the project description. Absent is a note — the gate does not block a project
+    that has none, the backlog skill does. A key that names a missing file is a broken reference,
+    and a heading missing or empty is a description nobody finished: both fail. Guidance in HTML
+    comments does not count as content, so an untouched template does not pass."""
+    named = str(profile.get(key, "")).strip()
+    path = location(profile, key)
     full = os.path.join(cwd, path)
     if not os.path.isfile(full):
         if named:
-            result.fail("product", f"the profile's `product: {named}` names no file")
+            result.fail(key, f"the profile's `{key}: {named}` names no file")
         else:
-            result.note("product", f"no product description at {default} — `/factory-scope` "
-                                   f"writes one before the first story")
+            result.note(key, f"no {what} at {path} — `/factory-setup` writes it before the first story")
         return False
     text = re.sub(r"<!--.*?-->", "", read_text(full), flags=re.S)
     sections, current = {}, None
@@ -476,18 +521,25 @@ def check_product(result, cwd, profile, backlog="backlog"):
             sections[current] = []
         elif current is not None:
             sections[current].append(line)
-    missing = [h for h in PRODUCT_HEADINGS if h.lower() not in sections]
-    empty = [h for h in PRODUCT_HEADINGS
-             if h.lower() in sections and not "".join(sections[h.lower()]).strip()]
+    missing = [h for h in headings if h.lower() not in sections]
+    empty = [h for h in headings if h.lower() in sections and not "".join(sections[h.lower()]).strip()]
     if missing or empty:
         detail = "; ".join(filter(None, [
             f"missing `## {'`, `## '.join(missing)}`" if missing else "",
             f"empty `## {'`, `## '.join(empty)}`" if empty else "",
         ]))
-        result.fail("product", f"{path}: {detail} — every heading gets one honest line, never a placeholder")
+        result.fail(key, f"{path}: {detail} — every heading gets one honest line, never a placeholder")
         return False
-    result.ok("product", f"{path} describes the product under all {len(PRODUCT_HEADINGS)} headings")
+    result.ok(key, f"{path} fills all {len(headings)} headings of the {what}")
     return True
+
+
+def check_project(result, cwd, profile):
+    """The two mandatory parts of the project description: the product and the technical decisions.
+    The designed context map (`domain:`) is read by the context check and stays optional here."""
+    product = check_described(result, cwd, profile, "product", PRODUCT_HEADINGS, "product description")
+    tech = check_described(result, cwd, profile, "tech", TECH_HEADINGS, "technical description")
+    return product and tech
 
 
 def check_instruction_size(result, cwd):
@@ -572,6 +624,64 @@ def check_proposals_landed(result, tasks, story_id, cwd, profile):
         )
     else:
         result.ok("glossary", f"{len(proposals)} proposed term(s) accounted for")
+
+
+def check_backlog(cwd, backlog, tasks, profile, only=None):
+    """The plan gate's backlog checks over every story that is not done, or over `only`: front
+    matter, the epic's completeness, the criteria, the status and the context on the map. Nothing of
+    its own — the same functions the plan gate calls, so a story that passes here passes there on
+    these points. A draft is a story still being written, named and not refused. It writes nothing:
+    the plan gate's marks (the story digest, the tests baseline) belong to the run that plans the
+    story, and a baseline taken while the story is still being written would be the wrong one."""
+    checked, refused = 0, []
+    if layout_hint(cwd, profile):
+        print(f"gate:note layout — {layout_hint(cwd, profile)}")
+    for root, _dirs, files in sorted(os.walk(backlog)):
+        if os.path.normpath(root) == os.path.normpath(backlog):
+            continue
+        for name in sorted(files):
+            if not name.endswith(".md") or name == "epic.md":
+                continue
+            path = os.path.join(root, name)
+            result, label = Result(), name[:-3]
+            try:
+                front, body = read_front_matter(path)
+                label = str(front.get("id") or label).strip()
+                if only and only not in (label, name[:-3]):
+                    continue
+                status = str(front.get("status", "")).strip().lower()
+                if status == "superseded" or os.path.isfile(os.path.join(tasks, label, DELIVERED)):
+                    continue
+                if status == "draft":
+                    result.note("approved", f"{path}: a draft — released with `status: approved` once it is written")
+                elif status and status != "approved":
+                    result.fail("approved", f"{path}: status {status!r} is none of draft, approved, superseded")
+                context = str(front.get("context", "")).strip()
+                if not context:
+                    result.fail("story", f"{path}: front matter has no `context:` — a story names the bounded "
+                                         f"context it changes")
+                criteria = criteria_of(path, body)
+                if context:
+                    result.ok("story", f"{label} in context {context} with {len(criteria)} criterion(s)")
+                    check_context_map(result, cwd, profile, context)
+                check_epic(result, path, front, backlog)
+            except GateError as error:
+                result.fail("story", str(error))
+            checked += 1
+            for state, check, message in result.entries:
+                if state != "pass":
+                    print(f"gate:{state} {label} {check} — {message}")
+            if result.failed:
+                refused.append(label)
+    if not checked:
+        if only:
+            print(f"backlog: no story {only} to check under {backlog}/ (not there, delivered or superseded)")
+            return 1
+        print(f"backlog: no story to check under {backlog}/")
+        return 0
+    print(f"backlog: {checked} story(ies) checked" + (f", refused: {', '.join(refused)}" if refused
+                                                     else " — every one holds for the plan gate"))
+    return 1 if refused else 0
 
 
 def check_epic(result, story_path, front, backlog):
@@ -1134,6 +1244,12 @@ DISPLAY_NAME = (
 )
 
 
+def unescape_literal(text):
+    """A Java or C# string literal's content as the runtime sees it: `\\"` is `"`, `\\\\` is `\\`.
+    A report carries the name unescaped, so a title with a quote in it would otherwise never match."""
+    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), text)
+
+
 def display_name_of(test_path, method):
     """The name this method is reported under, read from the code that declares it.
 
@@ -1151,7 +1267,7 @@ def display_name_of(test_path, method):
                 for pattern in DISPLAY_NAME:
                     match = pattern.search(candidate)
                     if match:
-                        return match.group(1)
+                        return unescape_literal(match.group(1))
                 if candidate.strip().endswith("}") and candidate is not lines[index]:
                     break                     # left this method's declaration
     return None
@@ -1230,6 +1346,12 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
     # existed, the decision changed what it expects, and the code now meets it. Only that combination
     # lets a green test through the red check — without the decision it is the refusal below.
     changed_on = answered_decisions(cwd, story, "test") if expected == "red" else []
+    if expected == "red":
+        # A story that runs again for a human's correction keeps the criteria it had already met:
+        # their tests were red once, for this very story, and are green now for that reason.
+        with contextlib.suppress(GateError):
+            changed_on += [rid for rid, _f, state, answer in acceptance_records(cwd, story)
+                           if state in ("answered", "applied") and not accepted(answer)]
     control = {}                              # one control run per command, not per selector
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
@@ -1643,8 +1765,11 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
                     f"{DECISIONS_DIR}/{wanted}.md does not exist or names another story.",
                 )
 
-    # 2. every record: open blocks, a draft is still open, answered must be applied by its stage
+    # 2. every record: open blocks, a draft is still open, answered must be applied by its stage.
+    # An acceptance record is the document gate's own question; that gate reads it.
     for path, front, body, state, answer in records:
+        if is_acceptance(front):
+            continue
         rid = str(front["id"]).strip()
         stage = str(front.get("stage", "")).strip()
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
@@ -2400,7 +2525,7 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     owner = session_owner()
     if owner and claim(cwd, owner) == 3:
         return 3                               # another worker holds the checkout: this stage does not start
-    freeze_windows(journal)                    # the earlier stages' logs have caught up by now
+    freeze_all(tasks)                          # the earlier stages' logs have caught up by now
     if session_log:
         kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
     allowed = session_usage_allowed(cwd)
@@ -2695,6 +2820,16 @@ def freeze_windows(journal):
         with open(temporary, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines) + "\n" + tail)
         os.replace(temporary, journal)
+
+
+def freeze_all(tasks):
+    """`freeze_windows` over every story's journal. A story's last stages end its run, so no stage
+    start of its own ever comes back to freeze them; the next command that writes anyway — a stage
+    of another story, a claim, a release, a listening loop's look — does it for them. Never fails
+    the command it rides on."""
+    for journal in glob.glob(os.path.join(tasks, "*", ".verify", "journal.tsv")):
+        with contextlib.suppress(OSError, GateError, ValueError):
+            freeze_windows(journal)
 
 
 def resolve_window(fields):
@@ -3009,7 +3144,7 @@ def status_brief(cwd, backlog, tasks, session_start=False):
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         schedule(cwd, backlog, tasks)
-    rows = [l for l in buffer.getvalue().splitlines() if l and not l.startswith(("schedule:", "wait:"))]
+    rows = [l for l in buffer.getvalue().splitlines() if l and not l.startswith(("schedule:", "wait:", "layout:"))]
     nxt = next((l[6:] for l in rows if l.startswith("next: ")), "none")
     states = {}
     for line in rows:
@@ -3031,14 +3166,23 @@ def status_brief(cwd, backlog, tasks, session_start=False):
     listening = listener_line(cwd)
     if listening:
         print(f"factory: {listening}")
+    # The part of the factory that is missing, where the files show it: the description, the backlog.
+    profile = read_profile(resolve_profile(None, cwd))
+    undescribed = [key for key in ("product", "tech") if not os.path.isfile(os.path.join(cwd, location(profile, key)))]
+    if layout_hint(cwd, profile):
+        print(f"factory: {layout_hint(cwd, profile)}")
+    elif undescribed:
+        print(f"factory: no project description ({', '.join(location(profile, k) for k in undescribed)}) — /factory-setup")
+    elif not states:
+        print("factory: the backlog is empty — /factory-backlog writes the first epic and story")
     if session_start:
         print("dca-factory: this project delivers stories through the factory. At the person's first message, "
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
               "release a story (/factory-backlog), answer a waiting question (/factory-decisions), start working "
               "the backlog (/factory-run, which keeps asking the schedule; in Claude Code also /loop /factory-run), "
-              "or look closer (/factory-status). A "
-              "managing session writes backlog and decision files only; the worker is the one writer in the "
-              "checkout.")
+              "or look closer (/factory-status). A session never runs `factory.sh run` — it starts a tool "
+              "process per stage. A managing session writes backlog and decision files only; the worker is the "
+              "one writer in the checkout.")
     return 0
 
 
@@ -3062,6 +3206,65 @@ def duplicate_pipeline_note(cwd):
     return None
 
 
+def activity_logs(cwd, owner, since):
+    """The session logs a running stage writes into while it works: the worker's own session and its
+    subagents where the claim names a session, else the tool's logs for this project directory that
+    changed since the stage started (a runner's stage process has a session of its own)."""
+    kind, _, session_id = (owner or "").partition(":")
+    if kind == "claude-session":
+        return claude_session_logs(session_id)
+    if kind == "codex-session":
+        found = codex_session_log(session_id)
+        return [found] if found else []
+    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    folder = os.path.join(home, "projects", re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(cwd)))
+    floor = since.timestamp() if since else 0
+    return [path for path in glob.glob(os.path.join(folder, "**", "*.jsonl"), recursive=True)
+            if os.path.getmtime(path) >= floor]
+
+
+def last_tool_call(path):
+    """`Name: first words of its input` of the newest tool call in a Claude or Codex session log."""
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(max(0, os.path.getsize(path) - 262144))
+            lines = handle.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        content = (entry.get("message") or {}).get("content") if isinstance(entry.get("message"), dict) else None
+        for block in reversed(content if isinstance(content, list) else []):
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                given = block.get("input") or {}
+                detail = next((str(given[k]) for k in ("command", "description", "skill", "file_path", "pattern")
+                               if isinstance(given, dict) and given.get(k)), "")
+                detail = " ".join(detail.split())
+                return f"{block.get('name')}" + (f": {detail[:70]}" + ("…" if len(detail) > 70 else "") if detail else "")
+        payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
+        if payload.get("type") in ("function_call", "local_shell_call"):
+            return str(payload.get("name") or payload.get("type"))
+    return ""
+
+
+def activity_line(cwd, owner, started, now):
+    """The sign of life inside a stage: a stage writes to the journal only at its start and its end,
+    while its session log grows with every tool call. Read only where session logs may be read."""
+    if not session_usage_allowed(cwd):
+        return "activity: not read — session logs are switched off (sessionUsage)"
+    logs = [path for path in activity_logs(cwd, owner, parse_time(started)) if os.path.isfile(path)]
+    if not logs:
+        return "activity: unknown — no session log of this stage found on this machine"
+    newest = max(logs, key=os.path.getmtime)
+    age = int(now.timestamp() - os.path.getmtime(newest))
+    ago = f"{age} s ago" if age < 120 else f"{age // 60} min ago"
+    call = last_tool_call(newest)
+    return f"activity: {ago}" + (f" — last tool call {call}" if call else "")
+
+
 def status(cwd, backlog, tasks, story_filter=None):
     now = datetime.now(timezone.utc)
     print("== running")
@@ -3073,10 +3276,12 @@ def status(cwd, backlog, tasks, story_filter=None):
     if not running:
         print("nothing — no stage has a start without an end in any journal")
     held = read_claim(claim_path(cwd))
+    for story, stage, started in running:
+        print(activity_line(cwd, (held or {}).get("owner", ""), started, now))
     if held:
         beat = parse_time(held.get("beat"))
         age = int((now - beat).total_seconds() // 60) if beat else None
-        print(f"worker: {held.get('owner')} since {held.get('since')}, last sign of life "
+        print(f"worker: {held.get('owner')} since {held.get('since')}, last claim "
               + (f"{age} min ago" if age is not None else "unknown")
               + (" — stale, the next worker takes over" if age is not None and age * 60 > stale_after() else ""))
     else:
@@ -3215,6 +3420,166 @@ def write_mark(tasks, story_id, name, content):
         handle.write(content + "\n")
 
 
+#: A story delivered only once a human looked at it: the record kind, the modes of `acceptance:`.
+ACCEPTANCE_KIND = "acceptance"
+ACCEPTANCE_MODES = ("none", "pages", "all")
+STORY_PLANNED = ".story-planned"
+
+
+def acceptance_mode(profile):
+    mode = str(profile.get("acceptance", "none")).strip().lower() or "none"
+    if mode not in ACCEPTANCE_MODES:
+        raise GateError(f"`acceptance: {mode}` is none of {', '.join(ACCEPTANCE_MODES)}")
+    return mode
+
+
+def acceptance_applies(cwd, tasks, story_id, profile):
+    """Whether this story waits for a human before it is delivered. `pages`: it has a criterion
+    whose test the end-user command runs, in a project with a browser — something to look at."""
+    mode = acceptance_mode(profile)
+    if mode in ("none", "all"):
+        return mode == "all"
+    if str(profile.get("browser", "none")).strip().lower() in ("", "none"):
+        return False
+    try:
+        _path, mapping = read_mapping(tasks, story_id)
+    except GateError:
+        return False
+    located = check_exists(Result(), cwd, mapping) or {}
+    return any((command_for(profile, path) or ("", ""))[0] == "e2eTest" for path in located.values())
+
+
+def is_acceptance(front):
+    return str(front.get("kind", "")).strip().lower() == ACCEPTANCE_KIND
+
+
+def acceptance_records(cwd, story_id):
+    """This story's acceptance records, oldest first: [(id, front, state, answer)]."""
+    records = read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
+    found = [(str(f["id"]).strip(), f, state, answer) for _p, f, _b, state, answer in records if is_acceptance(f)]
+    number = lambda rid: int(re.search(r"(\d+)$", rid).group(1)) if re.search(r"(\d+)$", rid) else 0
+    return sorted(found, key=lambda r: number(r[0]))
+
+
+def accepted(answer):
+    return str(answer.get("answer", "")).strip().lower().startswith("accept")
+
+
+def acceptance_state(cwd, story_id, story_path):
+    """('ask' | 'open' | 'accepted' | 'correction', id or None) for the story as it is now.
+
+    An answer holds for the story it was given for: the record carries the story's digest, and a
+    story changed since — a correction written in — is asked again once it has run."""
+    records = acceptance_records(cwd, story_id)
+    if not records:
+        return "ask", None
+    rid, front, state, answer = records[-1]
+    if state in ("open", "draft"):
+        return "open", rid
+    if str(front.get("digest", "")).strip() != file_digest(story_path):
+        return "ask", rid
+    return ("accepted" if accepted(answer) else "correction"), rid
+
+
+def ask_acceptance(cwd, tasks, story_id, story_path, profile, criteria):
+    """Write the next acceptance record and return its id."""
+    records = acceptance_records(cwd, story_id)
+    rid = f"{story_id}-accept-{len(records) + 1}"
+    try:
+        _path, mapping = read_mapping(tasks, story_id)
+    except GateError:
+        mapping = {}
+    run = str(profile.get("run", "")).strip()
+    lines = [f"- {key}: {text}" + (f" — `{', '.join(mapping[key])}`" if mapping.get(key) else "")
+             for key, text in criteria]
+    store = os.path.join(cwd, DECISIONS_DIR)
+    os.makedirs(store, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with open(os.path.join(store, f"{rid}.md"), "w", encoding="utf-8") as handle:
+        handle.write(
+            f"---\nid: {rid}\nstory: {story_id}\nstage: document\nkind: {ACCEPTANCE_KIND}\n"
+            f"asked: {stamp}\ndigest: {file_digest(story_path)}\n---\n\n"
+            f"# Accept {story_id}?\n\n## Question\n"
+            f"Every gate passed. Look at what the story delivers before it counts as delivered:\n\n"
+            + "\n".join(lines) + "\n\n"
+            + (f"Start the application with `{run}`.\n\n" if run else
+               "Start the application the way the project runs it (the profile names no `run:`).\n\n")
+            + "## Options\n"
+              "- accepted: the story is delivered.\n"
+              "- a correction: what should be different, written into the story (criteria and an "
+              "`answered:` line naming this record); the story runs again from plan.\n")
+    return rid
+
+
+def checkout_holders(cwd, backlog, tasks, exclude=None):
+    """The stories with unfinished code in the checkout — past their test stage, not delivered — as
+    the schedule counts them."""
+    holders = []
+    for root, _dirs, files in os.walk(backlog):
+        if os.path.normpath(root) == os.path.normpath(backlog):
+            continue
+        for name in sorted(files):
+            if not name.endswith(".md") or name == "epic.md":
+                continue
+            path = os.path.join(root, name)
+            try:
+                front, _body = read_front_matter(path)
+            except GateError:
+                continue
+            story_id = str(front.get("id") or name[:-3]).strip()
+            if story_id == exclude or not os.path.isfile(os.path.join(tasks, story_id, STAGE_FILES["test"])):
+                continue
+            if story_state(cwd, tasks, story_id, front, path)[0] not in ("delivered", "superseded"):
+                holders.append(story_id)
+    return sorted(holders)
+
+
+def reopen(cwd, tasks, backlog, story_id):
+    """Take a delivered story back for a correction a human gave on looking at it.
+
+    Only with an answered acceptance record the story cites — the answer is in the story, not in a
+    prompt. Before a story was accepted every answer is a correction; after an acceptance, one that
+    changes or takes back a criterion is a new wish, and that is a new story, not this one."""
+    story_path = find_story(backlog, story_id)
+    folder = os.path.join(tasks, story_id)
+    mark = os.path.join(folder, DELIVERED)
+    if not os.path.isfile(mark):
+        print(f"reopen: {story_id} is not delivered — a correction before delivery goes into the story, "
+              f"and the schedule runs it from plan")
+        return 1
+    records = acceptance_records(cwd, story_id)
+    if not records or records[-1][2] not in ("answered", "applied") or accepted(records[-1][3]):
+        print(f"reopen: {story_id} has no answered correction — /factory-decisions records the human's "
+              f"correction as an acceptance record first")
+        return 1
+    rid = records[-1][0]
+    holders = checkout_holders(cwd, backlog, tasks, exclude=story_id)
+    if holders:
+        print(f"reopen: {', '.join(holders)} holds the checkout with unfinished code — one story at a time; "
+              f"reopen {story_id} once it is delivered")
+        return 1
+    text = read_text(story_path)
+    if rid not in text:
+        print(f"reopen: the story does not cite {rid} — write the correction into it first (criteria and "
+              f"an `answered:` line naming {rid})")
+        return 1
+    planned = os.path.join(folder, STORY_PLANNED)
+    if any(accepted(answer) for _r, _f, _s, answer in records[:-1]) and os.path.isfile(planned):
+        before = dict(criteria_of(planned, read_front_matter(planned)[1]))
+        now = dict(criteria_of(story_path, read_front_matter(story_path)[1]))
+        changed = sorted(key for key, value in before.items() if now.get(key) != value)
+        if changed:
+            print(f"reopen: after its acceptance the correction changes {', '.join(changed)} — that is a new "
+                  f"wish: a new story with `## Changed expectations`, not this one reopened")
+            return 1
+    moved = os.path.join(folder, ".verify", "delivered-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))
+    os.makedirs(os.path.dirname(moved), exist_ok=True)
+    os.replace(mark, moved)
+    print(f"reopen: {story_id} taken back for {rid} — it runs again from plan; the first delivery is "
+          f"kept as {os.path.relpath(moved, cwd)}")
+    return 0
+
+
 def story_state(cwd, tasks, story_id, front, story_path=None):
     """(state, stage to run from or None, detail) for one story, from its files alone."""
     status = str(front.get("status", "")).strip().lower()
@@ -3236,6 +3601,9 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     answered, resolved = {}, {}
     for _path, front_, _body, state, _answer in records:
         rid, asked_by = str(front_["id"]).strip(), str(front_.get("stage", "")).strip()
+        if is_acceptance(front_):
+            resolved[rid] = asked_by
+            continue                             # answered through the document gate, not a stage
         text = texts.get(asked_by)
         if state in ("answered", "applied"):
             resolved[rid] = asked_by
@@ -3286,6 +3654,11 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     if "document" in texts:
         if os.path.isfile(os.path.join(folder, DELIVERED)):
             return "delivered", None, ""
+        if story_path:
+            with contextlib.suppress(GateError, OSError):
+                verdict, rid = acceptance_state(cwd, story_id, story_path)
+                if verdict == "accepted":
+                    return "resumable", "document", f"{rid} accepted — the document gate delivers it"
         return "in-progress", "document", "document.md is written, its gate has not passed yet"
     if not texts:
         return "ready", "plan", ""
@@ -3303,6 +3676,9 @@ def schedule(cwd, backlog, tasks):
     would build on them. Such a story is next if it can run, and nothing else starts while it
     cannot. A story that stopped at its plan stage wrote no code, so independent work runs past it."""
     stories, order = {}, []
+    hint = layout_hint(cwd, read_profile(resolve_profile(None, cwd)))
+    if hint:
+        print(f"layout: {hint}")
     for root, _dirs, files in os.walk(backlog):
         # A story is `backlog/<epic>/<story>.md`; a file beside the epics — a README — is not one.
         if os.path.normpath(root) == os.path.normpath(backlog):
@@ -3420,6 +3796,14 @@ class Result:
         """A fact worth reading that fails nothing and covers nothing — it is not a skipped check."""
         self.entries.append(("note", check, message))
 
+    def wait(self, check, message):
+        """Nothing failed, and a human has to answer before the story goes on — exit 3, not 0."""
+        self.entries.append(("wait", check, message))
+
+    @property
+    def waiting(self):
+        return any(state == "wait" for state, _, _ in self.entries)
+
     @property
     def failed(self):
         return any(state == "fail" for state, _, _ in self.entries)
@@ -3433,7 +3817,7 @@ class Result:
                 f"gate:note stage {stage} ran without {', '.join(sorted(set(skipped)))} — "
                 f"a green run here does not cover them"
             )
-        verdict = "fail" if self.failed else "pass"
+        verdict = "fail" if self.failed else "wait" if self.waiting else "pass"
         print(f"gate:{verdict} {stage}" if story_id == stage else f"gate:{verdict} story {story_id} stage {stage}")
         if as_json:
             print(
@@ -3450,7 +3834,7 @@ class Result:
                     indent=2,
                 )
             )
-        return 1 if self.failed else 0
+        return 1 if self.failed else 3 if self.waiting else 0
 
 
 def resolve_profile(given, cwd):
@@ -3494,8 +3878,8 @@ def main(argv):
                         help="with --story: record the tree the story's diff is taken against (the first stage)")
     parser.add_argument("--record-changes", metavar="STAGE",
                         help="with --story: write changed-<stage>.txt, changed.txt and story.diff from the snapshots")
-    parser.add_argument("--product", action="store_true",
-                        help="check the product description alone (before the first story) and exit")
+    parser.add_argument("--project", action="store_true",
+                        help="check the project description — product and technical — alone, and exit")
     parser.add_argument("--listening", action="store_true",
                         help="record that this session looked at the backlog (a listening loop's sign of life)")
     parser.add_argument("--status", action="store_true",
@@ -3513,21 +3897,36 @@ def main(argv):
     parser.add_argument("--stage-end", metavar="STAGE",
                         help="mark its end and record what it used, read from the session's own log")
     parser.add_argument("--session-log", help="with --stage-end: the session log to read, where it is not found")
+    parser.add_argument("--reopen", metavar="STORY",
+                        help="take a delivered story back for a human's correction (an answered acceptance "
+                             "record the story cites), and exit")
     parser.add_argument("--schedule", action="store_true",
                         help="print every story's state and the next one to run, and exit")
-    parser.add_argument("--backlog", default="backlog")
+    parser.add_argument("--check-backlog", action="store_true",
+                        help="the plan gate's backlog checks over every story that is not done (or --story), "
+                             "writing nothing, and exit")
+    parser.add_argument("--backlog", help="backlog root (default: the profile's `backlog:`, else project/backlog)")
     parser.add_argument("--tasks", default="tasks")
     parser.add_argument("--profile")
-    parser.add_argument("--project", default=".")
+    parser.add_argument("--root", default=".", help="the project's root directory")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    cwd = os.path.abspath(args.project)
+    cwd = os.path.abspath(args.root)
     os.chdir(cwd)
+    # Where the backlog is: the flag, else the profile, else `project/backlog`. No default depends on
+    # the contract, and none reads the layout before `project/` — the gate names the move instead.
+    if not args.backlog:
+        args.backlog = location(read_profile(resolve_profile(args.profile, cwd)), "backlog")
     if args.list_decisions:
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.reopen:
+        return reopen(cwd, args.tasks, args.backlog, args.reopen)
+    if args.check_backlog:
+        return check_backlog(cwd, args.backlog, args.tasks, read_profile(resolve_profile(args.profile, cwd)),
+                             args.story)
     if args.check_contract:
         result = Result()
         profile = read_profile(resolve_profile(args.profile, cwd))
@@ -3545,15 +3944,20 @@ def main(argv):
         if args.record_changes:
             record_changes(cwd, args.tasks, args.story, args.record_changes)
         return 0
-    if args.product:
+    if args.project:
         result = Result()
         try:
-            check_product(result, cwd, read_profile(resolve_profile(args.profile, cwd)), args.backlog)
+            profile = read_profile(resolve_profile(args.profile, cwd))
+            check_project(result, cwd, profile)
+            if layout_hint(cwd, profile):
+                result.note("layout", layout_hint(cwd, profile))
         except GateError as error:
-            result.fail("product", str(error))
+            result.fail("project", str(error))
         for state, check, message in result.entries:
             print(f"gate:{state} {check} — {message}")
         return 1 if result.failed else (3 if any(e[0] == "note" for e in result.entries) else 0)
+    if args.listening or args.claim or args.release is not None:
+        freeze_all(args.tasks)
     if args.listening:
         return mark_listening(cwd)
     if args.claim:
@@ -3592,6 +3996,9 @@ def main(argv):
     if not args.story or not args.stage:
         parser.error("--story and --stage are required (or --list-decisions, --schedule, --change, --parity)")
     result = Result()
+    hint = layout_hint(cwd, read_profile(resolve_profile(args.profile, cwd)))
+    if hint:
+        result.note("layout", hint)
     try:
         story_path = find_story(args.backlog, args.story)
         front, body = read_front_matter(story_path)
@@ -3620,7 +4027,7 @@ def main(argv):
                 result, cwd, profile, str(front.get("context", "")).strip()
             )
             check_instruction_size(result, cwd)
-            check_product(result, cwd, profile, args.backlog)
+            check_project(result, cwd, profile)
             check_models(result, profile)
         if args.stage == "document":
             check_documented(result, args.tasks, story_id, cwd)
@@ -3650,9 +4057,35 @@ def main(argv):
         return result.report(args.story, args.stage, args.json)
     if not result.failed and args.stage == "plan":
         write_mark(args.tasks, story_id, STORY_DIGEST, file_digest(story_path))
+        write_mark(args.tasks, story_id, STORY_PLANNED, read_text(story_path).rstrip("\n"))
         record_tests_baseline(cwd, args.tasks, story_id)
     if not result.failed and args.stage == "document":
-        write_mark(args.tasks, story_id, DELIVERED, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        deliver = True
+        try:
+            if acceptance_applies(cwd, args.tasks, story_id, profile):
+                verdict, rid = acceptance_state(cwd, story_id, story_path)
+                if verdict == "accepted":
+                    result.ok("acceptance", f"{rid} accepted — the story is delivered")
+                elif verdict == "open":
+                    deliver = False
+                    result.wait("acceptance", f"{rid} waits for a human's look — answer it through "
+                                              f"/factory-decisions; the story holds the checkout until then")
+                elif verdict == "correction":
+                    deliver = False
+                    result.fail("acceptance", f"{rid} asked for a correction that is not in the story yet — "
+                                              f"write it in (criteria, an `answered:` line naming {rid}); the "
+                                              f"story then runs again from plan")
+                else:
+                    deliver = False
+                    asked = ask_acceptance(cwd, args.tasks, story_id, story_path, profile, criteria)
+                    result.wait("acceptance", f"{asked} asks a human to accept the story before it is "
+                                              f"delivered — {DECISIONS_DIR}/{asked}.md, answered through "
+                                              f"/factory-decisions")
+        except GateError as error:
+            result.fail("acceptance", str(error))
+            deliver = False
+        if deliver and not result.failed:
+            write_mark(args.tasks, story_id, DELIVERED, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     return result.report(story_id, args.stage, args.json)
 
 

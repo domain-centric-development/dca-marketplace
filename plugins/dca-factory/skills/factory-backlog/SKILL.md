@@ -5,28 +5,34 @@ description: Writes and checks the backlog a delivery run reads — an epic with
 
 # Write one backlog item
 
-Input: what the human tells you, plus the project's product scope, context map and glossaries.
-Output: `backlog/<epic>/epic.md`, `backlog/<epic>/<story>.md`, or a correction to one of them.
+Input: what the human tells you, plus the project description — the product, the technical
+decisions and the designed domain — and the glossaries. Output: `<backlog>/<epic>/epic.md`,
+`<backlog>/<epic>/<story>.md`, or a correction to one of them. The places are the stack profile's
+`product:`, `tech:`, `domain:` and `backlog:`, by default `project/product.md`, `project/tech.md`,
+`project/domain.md` and `project/backlog`.
 You write no plan, no test and no code. Run the pipeline separately once the item stands.
 
 The full contract is in `factory-run/reference/backlog-contract.md`; read it before your first
 item in a project. The templates are `factory-run/templates/backlog/{epic,story}.md.tmpl`.
 
-## Before the first item: the product scope
+## Before the first item: the project description
 
-Run `python3 .agents/factory/story-gate.py --product` first, every time. It exits 0 when the
-product scope stands, 1 when it is incomplete, and 3 when the project has none yet. On 3 or 1,
-write **no** epic and **no** story. Say in one sentence that the product scope has not been
-written (or which heading is missing), and that `/factory-scope` writes it first — what is built,
-for whom, through which surfaces, how it works, how it looks. Every story would otherwise carry
-product decisions nobody took, and a plan stage would stop for them later, when no one is there
-to answer.
+Run `python3 .agents/factory/story-gate.py --project` first, every time. It exits 0 when the product
+and the technical description both stand, 1 when one is incomplete, and 3 when one is missing. On 3
+or 1, write **no** epic and **no** story. Say in one sentence which part is missing (or which
+heading), and that `/factory-setup` writes it first — what is built, for whom, through which
+surfaces, how it works, how it looks, and the stack, frontend approach, persistence, runtime,
+integrations and version policy. Every story would otherwise carry decisions nobody took, and a
+plan stage would stop for them later, when no one is there to answer.
 
 If the human insists on a story anyway, write it with `status: draft` and a first assumption
-`- open: the product scope is not written yet — /factory-scope` — and never approve it while the
-gate still reports the scope missing. Once the product scope stands, write within it: a story that
-needs a surface it does not list, or state kept where `## How it works` says otherwise, is a
-scoping question for `/factory-scope`, not a story.
+`- open: the project description is not written yet — /factory-setup` — and never approve it while
+the gate still reports it missing. Once the description stands, write within it: a story that needs
+a surface the product description does not list, state kept where `## How it works` says otherwise,
+something `project/tech.md` excludes, or a context the designed map does not carry is a question
+about the description — ask it now, while the person is here, and change the description first
+(through the description skill or the context-map skill where they are installed) — not a story
+that smuggles the decision in.
 
 ## Do
 
@@ -44,7 +50,7 @@ scoping question for `/factory-scope`, not a story.
    production is the evidence. A story count, a burndown or "feature shipped" is not a metric. If
    the project publishes no such event yet, say so in the epic: the event is then part of the work.
 4. **Name the bounded context, and check the map.** A story's `context` must be a context the
-   project's map already carries. If the behaviour would need a new context or a new relationship
+   designed map (`project/domain.md`) already carries — designed, even where it is not built yet. If the behaviour would need a new context or a new relationship
    between contexts, do not write the story: say that it is a scoping question and what it would
    need. That decision is not one a story may smuggle in.
 5. **Write criteria as observable behaviour, with keys** — as scenarios by default: the story's
@@ -66,15 +72,22 @@ scoping question for `/factory-scope`, not a story.
    is a criterion waiting for its answer, not a footnote: the plan stage builds the next best shape
    around an open assumption, and that shape then reaches delivery unconfirmed. Ask for it before
    the story is released, or write the answer in as a criterion.
-6. **Run the question pass before the story is released.** Read the story, the product scope, the
-   context map, the glossary and the code the story touches, and go through this list. Ask the
+6. **Run the question pass before the story is released.** Read the story, the three files of the
+   project description, the glossary and the code the story touches, and go through this list. Ask the
    human what it turns up, while they are here — a question left for the plan stage stops a loop
    later, when nobody is there to answer:
-   - **surface:** does a trigger or an outcome need an entry point, a page or a message the system
-     does not have? Who may reach it? (Ask *whether* a way exists, never *which* one to build.)
-   - **external dependency:** a system the context map does not carry is a scoping question for
-     `/factory-scope`, not a story. Its contract (endpoints, status codes, what counts as
-     unavailable) goes into the map and the configuration once, never into the story;
+   - **context:** is the story's context on the designed map? If not, it is a question about the
+     description — a new context, a new relationship — asked now, not a story;
+   - **surface and actor:** does a trigger or an outcome need an entry point, a page or a message
+     `## Surfaces` does not list, or an actor `## What and for whom` does not name? Who may reach
+     it? (Ask *whether* a way exists, never *which* one to build.)
+   - **technical fit:** does the story need what `project/tech.md` excludes — a second persistence,
+     a client framework where pages are server-rendered — or what the stack cannot do? That is a
+     question about the technical description, not a detail of the story;
+   - **external dependency:** a system neither the designed map nor `## Integrations` carries is a
+     question about the description, not a story. Its contract (endpoints, status codes, what
+     counts as unavailable) goes into the description and the configuration once, never into the
+     story;
    - **inputs:** format, allowed range, boundaries, and what happens at them — a scenario per boundary
      that matters;
    - **defaults:** one stated value, and where the user sees it;
@@ -92,7 +105,7 @@ scoping question for `/factory-scope`, not a story.
    - **coverage:** a rule without a scenario, a scenario with two causes, a `Then` no test can observe;
    - **out of scope:** what this story leaves to another → `## Out of scope`.
 
-   What the product scope already answers is not asked again. Answers go into rules, scenarios or
+   What the project description already answers is not asked again. Answers go into rules, scenarios or
    `answered:` assumptions; what stays open is an `open:` assumption.
 7. **Use the project's own words.** Read the context's glossary first and write the story in those
    terms. A term the story needs that no glossary carries goes into `## Assumptions` as a question
@@ -105,16 +118,19 @@ scoping question for `/factory-scope`, not a story.
    which is the one check no script can replace. Say plainly that the story is waiting for their
    release, and set `approved` only when they say so.
 10. **Check it with the gate, not with your own judgement:**
-   `python3 .agents/factory/story-gate.py --story <id> --stage plan`. Every finding it reports is
-   yours to fix before you hand the item over. Report what it said.
+   `python3 .agents/factory/story-gate.py --check-backlog --story <id>` — the plan gate's checks on
+   the story, writing nothing. Not `--stage plan`: that one records the story and the tests as the run
+   found them, and a record taken while the story is still being written leaves files under `tasks/`
+   that the commit hook then refuses. Every finding it reports is yours to fix before you hand the
+   item over. Report what it said.
 
 ## A story pasted from a tracker
 
 A story pasted from an issue tracker — Jira wiki markup, GitHub Markdown, a document — is rewritten
 into the contract, not copied: its goal becomes `## Story`; its scope rules become `### Rule:`
 headings; its scenarios become keyed scenarios with one `When` each; its out-of-scope sentences go
-to `## Out of scope`; integration notes (endpoints, environments, status codes) become a scoping
-question for `/factory-scope` (item 6, external dependency); open points become `open:`
+to `## Out of scope`; integration notes (endpoints, environments, status codes) become a question
+about the project description (item 6, external dependency); open points become `open:`
 assumptions. Then run the question pass over the result. The wording of criteria and messages stays
 the human's.
 
@@ -135,10 +151,10 @@ key gets a key that names its behaviour. Do not rewrite the parts the gate did n
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
 `/factory-backlog`) — never a shell command to type, unless the person asks how to do something
-without a session. You may run `factory.sh` for everything that starts no tool — `install`,
-`update`, `status`, `usage`, `decisions`, `schedule`, `change`, `parity` — but never `run` or
-`backlog`: they start a tool process per stage (`claude -p` and the like) on top of this session,
-and the runner refuses them inside one anyway.
+without a session. You may run `factory.sh` for everything that starts no tool — `setup`,
+`backlog`, `status`, `decisions`, `update`, `verify`, `check` — but never `run`: it starts a tool
+process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
+inside one anyway.
 
 ## Do not
 

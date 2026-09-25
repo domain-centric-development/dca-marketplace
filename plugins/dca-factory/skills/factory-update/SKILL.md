@@ -18,23 +18,34 @@ a report of what changed. You commit nothing; the human reviews and commits.
    bash <this skill's folder>/../factory-run/scripts/factory.sh update --from <this skill's folder>/..
    ```
 
-   It starts no tool. Where the project has no pipeline yet, `install --tool <claude|codex|opencode>`
-   instead.
-2. **Report what it says, in this order:** the versions (`updated A → B`), the file contract, and
-   whether the stack profile's `contract:` line has to be raised. Raising that line is the human's
+   It starts no tool. It hands over to the newest pipeline's runner, which replaces the gate, the
+   runner, the observer, the commit hook, the permissions and the `AGENTS.md` section, and leaves the
+   stack profile alone. Where the project has no pipeline yet, that is `/factory-setup`'s, not this
+   skill's.
+2. **Report what it says, in this order:** the versions (`updated A → B`), the file contract,
+   whether the stack profile's `contract:` line has to be raised, and — where the backlog still sits
+   at the project root — the move to `project/` it names (the gate reads no other layout). Raising that line is the human's
    edit — the profile belongs to the project — so show the line and do not change it.
 3. **Say how the skills are held.** Links point into the plugin or a checkout and follow it live; they
    belong in `.gitignore`. Copies are the project's pinned pipeline: they belong in the repository,
    and the update listed which it copied, which of the project's own it kept and which it removed.
 4. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, the
    `AGENTS.md` section, and the skill copies where the project keeps copies.
+5. **Name what was renamed.** The method plugins renamed skills (`review-domain` → `review-ddd`,
+   `review-boundaries` → `review-hexagonal`, `review-craft` → `review-clean-code`, `ddd-modelling` →
+   `dca-modelling`, `dca-bootstrap` → `dca-init`, `dca-scaffold` → `dca-new`). The update removes a
+   copy under an old name that is byte for byte the old plugin's own and keeps one the project
+   edited; it names each profile line that still uses an old name with its new form. Show those
+   lines — the profile is the human's to change, and a run stops on an old name until it is.
+6. **End with what the project gained since.** Run `bash .agents/factory/factory.sh setup --check`
+   and show its lines: detected keys the profile lacks, and values that differ from detection. You
+   write nothing into the profile — the human adds a line, or confirms `setup --write`.
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
-skill that does it. You may run `factory.sh` for everything that starts no tool, never `run` or
-`backlog`.
+skill that does it. You may run `factory.sh` for everything that starts no tool, never `run`.
 
 ## Do not
 
-- Do not run `factory.sh run` or `backlog`.
-- Do not commit, push or change the stack profile.
+- Do not run `factory.sh run`.
+- Do not commit, push or change the stack profile — `setup --write` is the human's to confirm.
 - Do not update from a folder the human did not name or this skill does not belong to.

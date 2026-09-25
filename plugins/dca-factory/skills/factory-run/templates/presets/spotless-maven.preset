@@ -1,0 +1,5 @@
+kind: format
+order: 20
+detect.contains: **/pom.xml :: spotless-maven-plugin
+format: ./mvnw spotless:check
+formatFix: ./mvnw spotless:apply

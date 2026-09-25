@@ -5,8 +5,9 @@ description: Build stage of a factory run — writes the production code that tu
 
 # Build one story
 
-Input: the story, `tasks/<story>/plan.md`, `tasks/<story>/tests.md`, the product scope's
-`## Look and feel` and `## Qualities`, and — in a repeat round — the gate or judge report. Nothing
+Input: the story, `tasks/<story>/plan.md`, `tasks/<story>/tests.md`, the product
+description's `## Look and feel` and `## Qualities` (`project/product.md`, or where the profile's
+`product:` points), and — in a repeat round — the gate or judge report. Nothing
 else. Open the files the plan's and the tests' `## Files` name first; search the tree only for what
 they do not answer.
 Output: the production code, plus `tasks/<story>/build.md`.
@@ -14,9 +15,9 @@ Output: the production code, plus `tasks/<story>/build.md`.
 ## Do
 
 1. Read the plan and the failing tests. Implement the **smallest** change that makes them pass —
-   the smallest that also meets the product scope's `## Look and feel` and `## Qualities`, where
+   the smallest that also meets the product description's `## Look and feel` and `## Qualities`, where
    the change has a surface. A page built to no stated look is correct only where the product
-   scope states none.
+   description states none.
 2. Follow the plan's change list. An element the plan did not name is a sign the plan was wrong:
    note it in the build file rather than quietly extending the design.
 3. Keep the architecture intact — the same rules the plan worked under: no framework types in the
@@ -31,6 +32,10 @@ Output: the production code, plus `tasks/<story>/build.md`.
    own failure.
 6. In a repeat round, work only on what the gate or the judge confirmed. Do not take the
    opportunity to refactor elsewhere.
+7. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
+   formatting of what you wrote. The gate and the commit hook only check `format:` and change no
+   file. A file it reformats that this story never touched is not yours to keep quiet about — the
+   pipeline's record of what changed names it, and the judge reads it as the finding it is.
 
 ## Ask, do not recall — but only a source the project named
 
@@ -58,6 +63,12 @@ agent that holds this project's craft for it. A review **skill** works in every 
 only where the tool has agents. Use the named carrier when this tool offers it; otherwise do the
 stage as described here and say in your file which it was ("in-session; `<carrier>` not available
 here"). A missing carrier is a missing preference, never a reason to skip the stage.
+
+**The guard beside the carrier.** The profile may also name `carrier.guard: <name>` — the skill that
+holds the architecture's invariants while code is edited (in a DCA project `dca-discipline`). Apply
+it for every file you write, the same way you use the carrier: where this tool offers it; otherwise
+keep the invariants as described here and say so in your file. An absent key is skipped and named
+like any other.
 
 ## The build file
 

@@ -1,0 +1,24 @@
+using DomainCentric.BuildingBlocks.Ddd.Tactical;
+{{domainUsings}}
+
+namespace {{rootNamespace}}.{{Context}}.Domain.Service;
+
+/// <summary>
+/// {{Name}} — domain service: {{serviceDescription}}
+/// </summary>
+/// <remarks>
+/// Part of the domain: stateless, framework-free, named in the ubiquitous language, synchronous — the domain
+/// never awaits. The application calls it with the aggregates the rule spans and registers it in
+/// <c>Add{{Context}}Context()</c> (<c>services.AddSingleton&lt;{{Name}}&gt;()</c>); no aggregate constructs or
+/// calls it. Facts the domain does not own are passed alongside the aggregates, never instead of them.
+/// </remarks>
+public sealed class {{Name}} : IDomainService
+{
+    public {{ResultType}} {{Operation}}({{operationParameters}})
+    {
+        // TODO: the rule across {{aggregateList}} — built with the project's modelling craft.
+        //  A refused rule raises a named DomainException subtype beside the model; a null or range check
+        //  stays ArgumentException.
+        throw new NotImplementedException();
+    }
+}

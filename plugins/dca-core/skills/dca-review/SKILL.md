@@ -14,10 +14,21 @@ description: |
 Reviews changed code (or specific paths) for **DCA compliance** — focusing on issues that
 ArchUnit rules can't detect because they are semantic, not structural.
 
-This is the third skill in the DCA suite. It assumes `dca-bootstrap` may or may not have run.
-If it ran, the review reads the project's `DcaLayout` from the architecture test (and
-the conventions overlay, `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`)) for naming conventions; otherwise it falls back to defaults. Java and C# are
-reviewed against the same checklist — `reference/naming-conventions.md` carries the language mapping.
+It assumes `dca-init` may or may not have run. If it ran, the review reads the project's `DcaLayout`
+from the architecture test and the conventions file for naming conventions — the file the project
+instructions name (a ``- conventions: `<path>` `` line in `AGENTS.md`, which `dca-init` writes),
+`.agents/dca/conventions.md` otherwise (or `.claude/dca/conventions.md` where only that exists);
+without either it falls back to defaults. Java and C# are reviewed against the same checklist —
+`reference/naming-conventions.md` carries the language mapping.
+
+## The method's view beside the general ones
+
+This is the one DCA reviewer: it checks conformance with the method — use-case shape, port hierarchy,
+marker contracts, the failure-translation site, context isolation, naming — where the rules cannot.
+Its checklist is its own. The general perspectives `review-ddd`, `review-hexagonal` and
+`review-clean-code` (in `dca-craft`) give the outside view — Evans/Vernon, Cockburn, Martin/Fowler —
+without knowing the markers or the rules. The overlap is intended: where the two views disagree about
+the same code, that is a finding to report, not a drift to reconcile.
 
 ## Where ArchUnit ends and dca-review begins
 
@@ -287,7 +298,7 @@ Note: the Store half is now mechanical — ArchUnit checks the marker, both plac
 forbidden `save`/`delete` method names (`DCA-TAC-021`). What remains for review is the direction
 ArchUnit cannot see: a `*Repository` whose stored type has no aggregate lifecycle.
 
-## Reading dca-bootstrap conventions (if installed)
+## Reading the project's DCA setup (if `dca-init` ran)
 
 Find the architecture test (`grep -rn "DcaLayout\." --include='*.java' --include='*.cs'`) and read its
 `DcaLayout` builder chain — every `with…`/`With…` call is a deviation from the DCA default:
@@ -299,6 +310,16 @@ Find the architecture test (`grep -rn "DcaLayout\." --include='*.java' --include
 The markers are the library's (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`).
 
 This makes the review match the project's actual conventions, not DCA defaults.
+
+**The designed map and the glossary.** The designed context map is where the project instructions name
+it (a ``- domain: `<path>` `` line in `AGENTS.md`, typically `project/domain.md`), `docs/context-map.md`
+otherwise; the glossaries are where the `ubiquitous-language` skill puts them. Read the map's subdomain
+column to calibrate strictness, and check the strategic declarations against it — see *Declared
+relationships against the designed map* in `reference/checklist.md`.
+
+**Doctrine behind a finding.** When a finding needs the reason, consult `dca-knowledge` (the vendored
+catalog: `guide/elements.md`, `guide/rules.md`, the `pitfall/` and `decision/` nodes) and cite the node;
+never invent a DCA convention from memory.
 
 ## Things this review does NOT do
 
@@ -317,7 +338,7 @@ This makes the review match the project's actual conventions, not DCA defaults.
 
 - `reference/checklist.md` — the complete per-layer checklist (includes Output Port Granularity section)
 - `reference/use-case-pattern.md` — central reference for use-case folder structure, file roles, shared-vs-local output-port decision guide, ArchUnit rules
-- `reference/naming-conventions.md` — extracted from `dca-guide/architecture/package-structure.md`
+- `reference/naming-conventions.md` — extracted from the guide's package-structure chapter
 
 ### Wiring and metadata review
 

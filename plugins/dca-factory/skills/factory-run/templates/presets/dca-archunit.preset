@@ -1,0 +1,4 @@
+# Architecture governance: what the build gate checks against. Carries no profile value.
+kind: governance
+order: 10
+detect.contains: **/*.gradle **/*.gradle.kts **/pom.xml :: dca-archunit

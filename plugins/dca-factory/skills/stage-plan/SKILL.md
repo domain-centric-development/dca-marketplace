@@ -1,27 +1,37 @@
 ---
 name: stage-plan
-description: Plan stage of a factory run — turns one backlog story into an implementation plan with numbered acceptance criteria and names the architecture elements that change. Use when a story is to be planned before any test or code is written, when the orchestrator hands over a story, or on "/stage-plan". Reads the story, the product scope, the stack profile, the project's glossary and context map and its existing tests — nothing else.
+description: Plan stage of a factory run — turns one backlog story into an implementation plan with numbered acceptance criteria and names the architecture elements that change. Use when a story is to be planned before any test or code is written, when the orchestrator hands over a story, or on "/stage-plan". Reads the story, the project description (product, technical decisions, designed domain), the stack profile, the project's glossary and generated context map and its existing tests — nothing else.
 ---
 
 # Plan one story
 
-Input: the story file, the project's product scope (`backlog/product.md`, or where the profile's
-`product:` points), and its glossary and context map if it has them. Nothing else — not the chat
-history, not an earlier run.
+Input: the story file, the project description — `project/product.md`, `project/tech.md` and
+`project/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — and the
+glossary and the context map generated from the code (`contextMap:`) where the project has them.
+Nothing else — not the chat history, not an earlier run.
 Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no production code.
 
 ## Do
 
 1. Read the story: its context, its acceptance criteria, its open assumptions.
-2. Locate that bounded context in the code. If the project keeps a context map and the story's
-   `context` is not in it, stop: write the plan file with a `## needs-human` section stating that
-   the story needs a new context or a new relationship between contexts. That is a scoping
-   decision. A project without a context map is not blocked by this — note the absence and go on.
-3. **Take the product decisions from the product scope.** Its `## Surfaces`, `## How it works` and
-   `## Look and feel` answer where state lives, which surfaces the product has and how a page
-   looks. Plan within them. A question they already answer is not a question for the human; one
-   they leave open, or a story that contradicts them, is — through `## needs-human`, like any
-   other. Without a product scope, say so in the plan and plan from the story alone.
+2. Locate that bounded context — on the designed map first, then in the code. A context that is
+   designed but not built yet is planned as new; say so. If the story's `context` is on neither map,
+   stop: write the plan file with a `## needs-human` section stating that the story needs a new
+   context or a new relationship between contexts. That is a structural decision. Where the
+   designed map and the generated one disagree about the story's context or its relationships, say
+   so in the plan — a difference is a finding, not something to settle in passing. A project
+   without a map is not blocked by this — note the absence and go on.
+3. **Take the decisions from the project description.** The product description's `## Surfaces`,
+   `## How it works` and `## Look and feel` answer where state lives, which surfaces the product
+   has and how a page looks — including the named sizes a page is designed for (`s`, `m`, `l`, `xl`,
+   from the table under `## Look and feel`); a criterion names a size, never a pixel value, and one
+   naming a size the table lacks is a question; the technical description's `## Persistence`, `## Frontend approach`
+   and `## Integrations` answer how an element you name is built. Plan within them: an element that
+   contradicts `project/tech.md` — a second persistence, a client framework on server-rendered
+   pages, an integration it does not list — is not planned. A question they already answer is not
+   a question for the human; one they leave open, or a story that contradicts them, is — through
+   `## needs-human`, like any other. Without a description, say so in the plan and plan from the
+   story alone.
 4. **Check that the story's actor can already reach the behaviour.** The criteria name someone —
    a customer, an operator, an administrator — and a way in: a page, an endpoint, a message, a
    command line. If the context has no such way in today, the plan does **not** invent one. A new

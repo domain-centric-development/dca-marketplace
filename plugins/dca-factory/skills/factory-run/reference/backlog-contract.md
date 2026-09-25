@@ -1,22 +1,36 @@
 # Backlog contract
 
 The backlog is markdown with front matter, one file per item, readable and reviewable
-without any tooling. No database, no JSON as the source. A generated `backlog/index.json`
-may exist for tools; it is derived and gitignored.
+without any tooling. No database, no JSON as the source. A generated `index.json` may exist for
+tools; it is derived and gitignored.
+
+It lives beside the project description, under `project/` — what is to be built, written by people
+before the code. How it is worked through lives under `.agents/factory/` (the machine's), the
+stages' hand-overs under `tasks/`, and what exists and why under `docs/`:
 
 ```
-backlog/
-  <epic>/
-    epic.md          the epic
-    <story>.md       one story
+project/
+  product.md         the product description
+  tech.md            the technical decisions
+  domain.md          the designed domain (optional)
+  backlog/
+    <epic>/
+      epic.md        the epic
+      <story>.md     one story
 ```
 
-## Product scope
+The stack profile's `product:`, `tech:`, `domain:` and `backlog:` name other places; without them
+these are the places. There is no fallback to a backlog at the project root: where the gate finds
+`backlog/` and nothing under `project/`, it names the move in one line.
 
-One file per project, above every epic: `backlog/product.md`, or wherever the profile's
-`product:` points. It is written once, before the first story, by `factory-scope` with the person
-who decides what is built, and changed only through `factory-scope` afterwards. Six headings, fixed
-in this spelling so the gate can read them; the text under them is in the project's language:
+## Project description
+
+Two files are mandatory before the first story, a third is optional. They are written with the
+person who decides what is built, through the project's description skill (`/factory-setup` uses
+it), and changed only through it afterwards — no stage edits them. The headings are fixed in this
+spelling so the gate can read them; the text under them is in the project's language.
+
+`product.md`:
 
 | Heading | Says |
 |---|---|
@@ -27,12 +41,29 @@ in this spelling so the gate can read them; the text under them is in the projec
 | `## Qualities` | security and authorisation stance, privacy, performance, availability, as the product needs them |
 | `## Not part of the product` | what it deliberately will not do |
 
-Product decisions only, never code design: "the server stores what is submitted" belongs here, an
-endpoint or a package does not. A heading with nothing to decide gets one honest line, never a
-placeholder. The gate reports a missing file as a note — a project without one is not blocked —
-and fails a `product:` that names no file and a file with a heading missing or empty (text in
-HTML comments does not count). `factory-backlog` writes no epic and no story while the file is
-missing. An epic's intent must fit the product it belongs to.
+`tech.md`:
+
+| Heading | Says |
+|---|---|
+| `## Stack` | language, framework and build tool |
+| `## Frontend approach` | server-rendered pages, a client application or none — and what that excludes |
+| `## Persistence` | where state is kept and how, and what the product does not use |
+| `## Runtime` | where and how it runs |
+| `## Integrations` | the external systems it talks to |
+| `## Version policy` | how dependencies are chosen and kept current |
+
+`domain.md` — the designed cut: the bounded contexts with their responsibility and subdomain type,
+and the relationships with pattern, translation and reason. The map generated from the code
+(`contextMap:`) shows what was built; a difference between the two is a finding. The plan gate reads
+the designed map first, so a story for a context that is designed and not built yet passes.
+
+Decisions only, never code design: "the server stores what is submitted" belongs in the product
+description, "server-rendered pages, no client framework" in the technical one, an endpoint or a
+package in neither. A heading with nothing to decide gets one honest line, never a placeholder. The
+gate (`story-gate.py --project`) reports a missing file as a note and fails a key that names no file
+and a file with a heading missing or empty (text in HTML comments does not count).
+`factory-backlog` writes no epic and no story while either mandatory file is missing or incomplete,
+and reads all three before it writes one. An epic's intent must fit the product it belongs to.
 
 ## Epic
 
@@ -59,7 +90,7 @@ Front matter:
 |---|---|
 | `id` | stable identifier |
 | `epic` | the epic's `id`; its `epic.md` must exist |
-| `context` | the bounded context the story changes. It must exist in the project's context map — a story that would need a new context or a new context relationship is not a story, it is a scoping question |
+| `context` | the bounded context the story changes. It must exist on the designed map (`domain.md`), or on the one generated from the code where there is no designed map — a story that would need a new context or a new context relationship is not a story, it is a question about the project description |
 | `title` | short name |
 | `status` | `draft` while it is still being written, `approved` once a human released it for building, `superseded` when another story replaced it. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
 | `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by id; an unknown id or a cycle blocks the story and is named |
@@ -104,7 +135,8 @@ Body sections:
   one line per expectation that no longer holds, in the project's language (what is seen now, what
   is seen after). No story ids, no file names — nobody has to know which story or which hand wrote
   a test. Released with the story, it is the human's authority for the plan to change the tests
-  that follow from it; without it, a plan that finds such tests asks.
+  that follow from it; without it, a plan that finds such tests asks. A human's correction at
+  acceptance lands here too, in the same story, when it takes back something the story delivered.
 - `## Assumptions` — the asynchronous channel to the domain contact: one line per assumption,
   `open:` or `answered:`. An assumption is a question, never a decision the team took itself.
 

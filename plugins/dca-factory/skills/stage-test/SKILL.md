@@ -6,7 +6,8 @@ description: Test stage of a factory run — writes one end-user test per accept
 # Write the tests for one story
 
 Input: the story, `tasks/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
-product scope where the plan says a criterion touches them. Nothing else. Open the files the plan's
+product description (`project/product.md`, or where the profile's `product:` points) where the plan
+says a criterion touches them. Nothing else. Open the files the plan's
 `## Files` names first — the pattern to mirror, the fixture to reuse; search only for the rest.
 Output: the test sources, plus `tasks/<story>/tests.md` with a `## Files` section naming the test
 files written. You write **no** production behaviour.
@@ -51,6 +52,9 @@ files written. You write **no** production behaviour.
    a wiring error. A test red for the wrong reason proves nothing.
 8. Delete every spike, scratch or exploration test before you finish. A passing spike trips no
    gate, so nothing else will catch it.
+9. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
+   formatting of what you wrote, so the stages after you find their own files as the formatter
+   wants them. The gate and the commit hook only check `format:` and change no file.
 
 ## Ask, do not recall — but only a source the project named
 

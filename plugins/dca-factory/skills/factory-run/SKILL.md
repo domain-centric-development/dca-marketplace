@@ -1,6 +1,6 @@
 ---
 name: factory-run
-description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), to keep a session working on the backlog as it fills, or to set up the pipeline in a project that has none. Reads the backlog, the stack profile and the hand-over files — no project knowledge of its own.
+description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), or to keep a session working on the backlog as it fills; a project without a pipeline goes to /factory-setup first. Reads the backlog, the stack profile and the hand-over files — no project knowledge of its own.
 ---
 
 # Run one story
@@ -14,10 +14,11 @@ them apart is what makes a run reproducible.
 
 | Thing | Where | Missing? |
 |---|---|---|
-| the story | `backlog/<epic>/<story>.md` | offer to write one from the templates and stop |
-| the epic | `backlog/<epic>/epic.md` | same |
+| the project description | `project/product.md`, `project/tech.md` (and the optional designed map `project/domain.md`), or where the profile points | `/factory-setup` writes it with the person, through the project's description skill; stop and say so |
+| the story | `project/backlog/<epic>/<story>.md`, or under the profile's `backlog:` | offer to write one (`/factory-backlog`) and stop |
+| the epic | `project/backlog/<epic>/epic.md` | same |
 | the stack profile | `.agents/factory/factory.profile.yaml` | create it from the template by detecting the build (see below) |
-| an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with its DCA bootstrap skill, and the factory calls that skill rather than owning it. Without one, the build gate skips the architecture check and names it |
+| an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with the method's setup skill (in a DCA project `/dca-init`), and the factory never calls a skill that writes code. Without one, the build gate skips the architecture check and names it |
 | the gate | `.agents/factory/story-gate.py` | the installer writes it (step 1 below) |
 | the commit guard | `.githooks/pre-commit` | the installer writes it and sets `core.hooksPath` (step 1 below) |
 
@@ -29,66 +30,39 @@ say precisely which file to create, create it when the user agrees, then continu
 
 ## First run in a project
 
-0. Check that the project has an architecture to gate on — a rule suite and the building blocks its
-   code implements. If it has none, ask the developer to run the project's DCA bootstrap skill
-   first; it also settles the facts the profile needs (build commands, source sets, conventions).
-   The factory delivers stories, it does not install an architecture: one is a once-per-project
-   step that belongs to the method, the other repeats per story. The installer says so and installs
-   the pipeline anyway, so a project can adopt the two in either order.
-1. Run the pipeline's installer from this skill's folder, for the tool you are:
-   `bash <this skill's folder>/scripts/factory.sh install --tool <claude|codex|opencode>`, and report
-   what it printed. It starts no tool. It puts the gate and the runner under `.agents/factory/`, the
-   commit hook under `.githooks/`, `.gitattributes`, the pipeline's section in `AGENTS.md` and, for
-   Claude Code, the gate's permission and a SessionStart hook; it writes the stack profile from
-   what it detects. The hook runs the same checks the gate does: tool hooks and deny rules do not
-   port between agent tools, but every tool commits through git, so that is where the guard
-   belongs.
-2. Check the stack profile the installer wrote (`.agents/factory/factory.profile.yaml`, from
+The entry is `/factory-setup`: it checks the project description, git, the runner and the stack
+profile, and does only what is missing. Where you are asked to run a story in a project without a
+pipeline, say so and hand over to it. What it runs:
+
+0. The project has an architecture to gate on — a rule suite and the building blocks its code
+   implements — or the architecture check is skipped and named. Installing one is the method's
+   (in a DCA project `/dca-init`), once per project; the factory delivers stories and calls no skill
+   that writes code.
+1. Run the pipeline's setup from this skill's folder, for the tool you are:
+   `bash <this skill's folder>/scripts/factory.sh setup --tool <claude|codex|opencode>`, and report
+   what it printed. It starts no tool, and it stops with one line where the directory is not a git
+   repository. It puts the gate, the runner and the observer under `.agents/factory/`, the commit
+   hook under `.githooks/`, `.gitattributes`, the pipeline's section in `AGENTS.md` and, for Claude
+   Code, the gate's permission and a SessionStart hook; it writes the stack profile first, from what
+   it detects. The hook runs `factory.sh check --staged`: tool hooks and deny rules do not port
+   between agent tools, but every tool commits through git, so that is where the guard belongs.
+2. Check the stack profile setup wrote (`.agents/factory/factory.profile.yaml`, from
    `templates/factory.profile.yaml.tmpl`), and add the `required:` line with what the human says
    must hold for every change. Where a command is wrong or missing, fix it there.
-   **Detect, do not assume:** look at what the project actually has — a Gradle wrapper, a Maven
-   wrapper, a `*.sln`/`*.csproj`, a `package.json` — and fill in the commands from it. Two
-   worked examples, not defaults to copy blindly:
-
-   ```yaml
-   # Gradle, JUnit, end-user tests in their own source set
-   compile: ./gradlew testClasses
-   test: ./gradlew test
-   e2eTest: ./gradlew test-e2e
-   filterFlag: --tests
-   filterFormat: "{class}.{method}"
-   architecture: ./gradlew test-architecture
-   format: ./gradlew spotlessCheck
-   #knowledge: <the skill that answers from a catalog, with citations>
-   #carrier.test: <skill>              # optional: who carries a stage's craft
-   #reviews: security                  # optional: perspectives beyond the built-in three
-   #review.security: <review skill>     # optional: who carries a perspective
-   ```
-
-   ```yaml
-   # .NET, xUnit
-   compile: dotnet build
-   test: dotnet test
-   e2eTest: dotnet test
-   filterFlag: --filter
-   filterFormat: "FullyQualifiedName~{class}.{method}"
-   ```
-
-   ```yaml
-   # Python, pytest — tests are functions in a module, selected by file
-   test: python3 -m pytest -q --junitxml=test-results/pytest.xml
-   covers.test: "**"
-   filterFormat: "{file}::{method}"
-   ```
-
-   Leave a command out when the project has none. The gate then skips that check and names it —
-   which is honest, whereas gating on a command that does not exist turns governance off after
-   the second red run.
+   **Detected, not assumed:** the commands come from the presets in `templates/presets/` — one flat
+   file per build tool, browser runner, formatter or rule package the setup can recognise, each with
+   the files that give it away and the profile lines it writes. What no preset recognises stays out
+   of the profile. Leave a command out when the project has none: the gate then skips that check
+   and names it — which is honest, whereas gating on a command that does not exist turns governance
+   off after the second red run.
 3. Adding a capability later means one more line in the profile, not an edit to any stage: a
-   formatter under `format:`, a rule suite under `architecture:` (both run by the build gate), a
-   further review perspective under `reviews:`, the reviewer for an existing perspective under
-   `review.<perspective>:` (both read by `stage-judge`), or the skill that carries a stage's craft
-   under `carrier.<stage>:` (read by that stage).
+   formatter under `format:` and `formatFix:`, a rule suite under `architecture:` (both run by the
+   build gate), a further review perspective under `reviews:`, the reviewer for an existing
+   perspective under `review.<perspective>:` (both read by `stage-judge`), or the skill that carries
+   a stage's craft under `carrier.<stage>:` (read by that stage). Where the project set the
+   capability up since — a browser runner, a formatter —
+   `bash .agents/factory/factory.sh setup --check` names the lines detection would add, and
+   `setup --write` adds them once the human agrees; a value the human wrote is never overwritten.
 
 ## The run
 
@@ -97,7 +71,7 @@ from the project root. Exit code 0 means proceed; any `gate:fail` line stops the
 about to run, and the fix belongs to the stage that produced the artefact, not to you.
 
 1. **gate `plan`** — refuses an incomplete epic, a story without a context or criteria, a story
-   still in `draft`, and a context that is not on the project's context map. It also reports when
+   still in `draft`, and a context that is not on the designed map (or, without one, the generated map). It also reports when
    the project's instruction file is past the size a tool loads, since the rest is truncated in
    silence. Do not
    repair the backlog yourself beyond obvious typos; an epic without an intent is a question for
@@ -130,9 +104,18 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    project's reader documentation follow what the story changed.
 11. **gate `document`** — every file, path and identifier the stage claims exists, and every claim
    says how it was checked. A story whose documents still describe yesterday is not delivered.
+   Where the profile's `acceptance:` applies, the gate does not deliver yet: it writes an
+   acceptance record and exits **3** — a question to a human, not a refusal; count no round. Stop,
+   and name in the report what to look at (the record lists it) and `/factory-decisions` to answer.
+   "Accepted" delivers the story at the next document gate; a correction goes into the same story,
+   which runs again from plan.
 12. Report: the story, the criteria and their tests, what the gate checked, what it **skipped**,
    and every open assumption from the story. A run that skipped a check must not read as a
-   complete verification.
+   complete verification. The run commits nothing — and a story waiting for acceptance is not
+   ready to commit; say what the story's commit holds — the code
+   and tests the stages changed **and `tasks/<story>/`** with its hidden files (the red ledger,
+   the story digest, the journal under `.verify/`), which are the story's record. The commit hook
+   checks the index against the working tree, so a commit without them is refused.
 
 ## Where a run stands
 
@@ -165,9 +148,9 @@ Who runs the stages is the human's choice, not yours, and it decides what the ru
 | Asked for | Stages run | Tool processes |
 |---|---|---|
 | `/factory-run [story]`, "deliver STORY-1", `/loop /factory-run` | **in this session** — a subagent per stage where the tool can start one and it comes back, otherwise in-session | none beyond this session |
-| the person runs `factory.sh run` or `backlog` in a shell | **the runner**, one process per stage | one per stage |
+| the person runs `factory.sh run [--story X]` in a shell | **the runner**, one process per stage | one per stage |
 
-The runner — `factory.sh run` and `backlog` — is the person's, never yours: it starts a tool process
+The runner — `factory.sh run` — is the person's, never yours: it starts a tool process
 per stage on top of this session, and refuses to inside one. Asked for "one process per stage", "unattended" or "in the
 background", say that this is the runner and that they start it in a shell. Say in the report which
 tier ran.
@@ -232,17 +215,18 @@ reported success — a stage judging its own work is exactly what the gate repla
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
 `/factory-backlog`) — never a shell command to type, unless the person asks how to do something
-without a session. You may run `factory.sh` for everything that starts no tool — `install`,
-`update`, `status`, `usage`, `decisions`, `schedule`, `change`, `parity` — but never `run` or
-`backlog`: they start a tool process per stage (`claude -p` and the like) on top of this session,
-and the runner refuses them inside one anyway.
+without a session. You may run `factory.sh` for everything that starts no tool — `setup`,
+`backlog`, `status`, `decisions`, `update`, `verify`, `check` — but never `run`: it starts a tool
+process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
+inside one anyway.
 
 ## Escalation
 
 Stop the run and hand back to the human when:
 
 - the plan needs a **new bounded context** or a new relationship between contexts — that is a
-  scoping decision, not a story;
+  structural decision, not a story: a decision record, answered through `/factory-decisions`, which
+  also brings the designed map in line;
 - a business term in the criteria is neither in the project's glossary nor marked as a proposal;
 - three rounds did not converge;
 - a stage wrote a `## needs-human` section;
@@ -321,7 +305,7 @@ unknown or on a cycle), `unreleased`/`superseded` — and ends with `next: <stor
 or is stopped no other story starts — the next one would build on its tests and code. A story that
 stopped with a question at its plan stage wrote no code, so independent stories run past it.
 
-The runner — the person's, in a shell — does the same loop: `factory.sh backlog [--tool <t>]` runs the next story from the stage the
+The runner — the person's, in a shell — does the same loop: `factory.sh run [--tool <t>]` without `--story` runs the next story from the stage the
 schedule names, asks again, and ends when nothing can run. A story that stops for a decision does
 not end it (`run` exits 3 there); any other stop does, because retrying a failure spends a run on
 the same refusal. `--watch` keeps it waiting while a story waits on a human: it re-reads the
@@ -334,12 +318,15 @@ next story.
 records each invocation's tokens — input, cache read, cache write, output, and Claude's cost — as a
 `usage` line in the story's journal. `python3 .agents/factory/story-gate.py --usage [--story <id>]`
 sums them per story and stage, repeat rounds included; the schedule shows each story's total.
-`--story-budget <tokens>` (on `run` and `backlog`) stops dispatch once a story has used that many,
+`--story-budget <tokens>` (on `run`, with or without `--story`) stops dispatch once a story has used that many,
 counted from the journal, so a restart or a second session continues the same count; the stage
 that crosses the line still finishes, because usage is known only after it ran. A tool that reports
 nothing — OpenCode today, a custom `FACTORY_TOOL_CMD` without `FACTORY_USAGE_FORMAT` — is shown as
 invocations without a report, never as zero. An in-session run is measured through the stage marks
 (above, *Execution tier*); a session log carries tokens but no price, so its cost reads `—`, not 0.
+Its numbers are copied into the journal once a window is five minutes old, by the next command that
+writes — a stage start, a claim, a release, a listening look — for every story; until then the journal
+holds only the session's id, and a story's last stages are frozen by whatever runs next.
 An old session log can be read whole: `story-gate.py --usage-from claude-session|codex-session <log>`. The watch lives as long as its process: a closed session or terminal ends it, and a
 file wakes nobody. In-session, do the same loop yourself — ask the schedule, run the story it
 names, ask again — and stop instead of waiting.

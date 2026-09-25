@@ -1,0 +1,13 @@
+# `--logger trx`: the gate reads what ran from the report, and the .NET platform writes one only when
+# asked. Without a project argument `dotnet test` runs every test project, hence `covers.test: **`.
+kind: stack
+order: 30
+detect.exists: *.sln *.slnx *.csproj
+compile: dotnet build
+test: dotnet test --logger trx
+e2eTest: dotnet test --logger trx
+architecture: dotnet test --filter FullyQualifiedName~Architecture
+filterFlag: --filter
+filterFormat: "FullyQualifiedName~{class}.{method}"
+covers.test: **
+conventions.architecture: dotnet.*arch

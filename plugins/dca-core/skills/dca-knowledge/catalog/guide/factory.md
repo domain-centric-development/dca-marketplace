@@ -18,12 +18,14 @@ detail that may change without the process changing.
 ## Sections
 
 - [Table of Contents](/guide/factory/table-of-contents.md)
-- [The product scope](/guide/factory/the-product-scope.md)
+- [Three parts](/guide/factory/three-parts.md)
+- [The project description](/guide/factory/the-project-description.md)
 - [The backlog contract](/guide/factory/the-backlog-contract.md)
 - [Outcome events](/guide/factory/outcome-events.md)
 - [The stages and their hand-over files](/guide/factory/the-stages-and-their-hand-over-files.md)
 - [Gates](/guide/factory/gates.md)
 - [What the project declares](/guide/factory/what-the-project-declares.md)
 - [Escalation: the three answers a run may not give itself](/guide/factory/escalation-the-three-answers-a-run-may-not-give-itself.md)
+- [Acceptance: a human looks before it counts](/guide/factory/acceptance-a-human-looks-before-it-counts.md)
 - [Building one: what actually holds](/guide/factory/building-one-what-actually-holds.md)
 - [Starting where you are](/guide/factory/starting-where-you-are.md)

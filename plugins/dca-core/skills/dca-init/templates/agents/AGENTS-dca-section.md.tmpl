@@ -1,0 +1,33 @@
+<!-- dca-core: start -->
+## Architecture: Domain-Centric Architecture (DCA)
+
+This project follows DCA. The architecture rules run with `{{verifyCommand}}`; every change — by hand or in a
+delivery pipeline — keeps them green.
+
+- conventions: `{{conventionsPath}}` — layout, suffixes, allowed imports, the resolved framework configuration
+
+Before constructing anything (aggregate, use case, adapter, event, context), look it up in the DCA knowledge
+catalog through `dca-knowledge` and build from the recipe and template it names. Never invent a DCA convention
+from memory; where the catalog does not cover it, say so.
+
+The skill that carries each kind of work — use it in a session as a delivery stage does:
+
+{{#if build}}
+- build: `dca-modelling` — tactical domain types: aggregates, entities, value objects, events, domain services, failures
+{{/if}}
+{{#if guard}}
+- guard: `dca-discipline` — the invariants while editing domain, application and adapter code
+{{/if}}
+{{#if glossary}}
+- glossary: `ubiquitous-language` — a new domain term enters its context's glossary before it appears in code
+{{/if}}
+{{#if map}}
+- map: `context-map` — the designed context map, when a context or a relationship between contexts changes
+{{/if}}
+{{#if browserTests}}
+- browser tests: `e2e-testing` — end-user tests through the browser
+{{/if}}
+{{#if review}}
+- review: {{reviewSkills}} — before a change is committed
+{{/if}}
+<!-- dca-core: end -->

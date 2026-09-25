@@ -6,11 +6,11 @@ fresh context, in a subagent or in a separate process without changing the resul
 
 | Stage | Reads | Writes |
 |---|---|---|
-| `stage-plan` | the story, the product scope, the stack profile, the project's glossary and context map if present, and its existing tests (for `## Changed tests`) | `tasks/<story>/plan.md` |
-| `stage-test` | the story, `plan.md`, the product scope's qualities where the plan names them | `tasks/<story>/tests.md` (with the `gate:tests` table) |
-| `stage-build` | the story, `plan.md`, `tests.md`, the product scope's look and qualities | `tasks/<story>/build.md` |
+| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `tasks/<story>/plan.md` |
+| `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `tasks/<story>/tests.md` (with the `gate:tests` table) |
+| `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `tasks/<story>/build.md` |
 | `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `tasks/<story>/tidy.md` |
-| `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product scope, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `tasks/<story>/judge.md` |
+| `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `tasks/<story>/judge.md` |
 | `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries | `tasks/<story>/document.md` |
 
 The tidy stage's moves reach the judge and the document stage through the story diff, not through
@@ -138,6 +138,17 @@ rationale: <optional>
 - The state is **read off the file, never stored in it**: no `## Answer` is *open*; an
   `## Answer` with `answer:`, `by:` and `at:` is *answered*; a gate-written `## Applied` is
   *applied*. An `## Answer` missing the name or the time is a draft, and a draft unblocks nothing.
+- **An acceptance record** — `id` `<story>-accept-<n>`, front matter `kind: acceptance`,
+  `stage: document` and `digest:` (the story's SHA-256 when it was asked) — is written by the
+  document gate where the profile's `acceptance:` applies, in place of delivering. It lists the
+  criteria with their tests and the profile's `run:` command. `answer: accepted` given for the story
+  as it still is delivers it at the next document gate; any other answer is a correction, written
+  into the same story (criteria, an `answered:` line citing the id), which then runs again from
+  plan and is asked again in a record of its own. The gate exits 3 while one is open — a question,
+  not a refusal; the runner stops and counts no round. `story-gate.py --reopen <story>` takes a
+  delivered story back for a correction the story cites — not while another story holds the checkout
+  with unfinished code; after an accepted record it refuses a correction that changes a criterion
+  (a new wish is a new story).
 - Only a human writes `## Answer`, or a skill writing the human's exact words on their explicit
   confirmation. A recommendation, a timeout, a preselected option or an unconfirmed draft is not
   an answer.

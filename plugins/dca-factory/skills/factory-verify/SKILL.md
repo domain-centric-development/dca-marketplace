@@ -22,7 +22,8 @@ Which mode:
 ## 1. Observe a real run
 
 ```bash
-python3 <this skill>/scripts/observe.py --story <id>        # add --json for a machine-readable form
+bash .agents/factory/factory.sh verify --story <id>        # the observer the setup copied beside the gate
+python3 <this skill>/scripts/observe.py --story <id>        # the same from the plugin; add --json for a machine-readable form
 ```
 
 It reads the story, the six hand-over files, the gate reports and snapshots the runner journalled,
@@ -59,7 +60,8 @@ plainly that this part is a reading and not a measurement.
 ## 2. Check the machinery
 
 ```bash
-python3 <this skill>/scripts/verify.py            # add -v for the gate output of a failing case
+bash .agents/factory/factory.sh verify --fixtures   # the newest pipeline's suite on this machine
+python3 <this skill>/scripts/verify.py            # the same, this skill's; add -v for the gate output of a failing case
 ```
 
 It builds a throwaway project per case and calls the project's own `story-gate.py` and
@@ -73,7 +75,7 @@ starts an agent tool: every runner case uses a stand-in or a dry run. Three grou
 - **the runner's shape** — that the plan gate runs *before* its stage and every other gate after
   it, that the test stage's artefact is `tests.md` and not `test.md`, that the judge's verdict is
   read from the file, that the round counter is a file and counts up;
-- **install** — that the skills arrive as a live link rather than a copy, that the gate is copied
+- **setup** — the profile each preset writes, `setup --check` and `--write`, the verbs; that the skills arrive as a live link rather than a copy, that the gate is copied
   into the project where CI can call it, that a tool without a plugin mechanism also gets the
   craft a profile may name as a carrier, and that `--copy` still produces a copy.
 
@@ -100,7 +102,7 @@ sequence is: check the machinery when it changed, observe the next real run eith
 ## Machinery                                   (mode 2)
 - gate: <n>/<n> cases as specified             (name every failing case and what it did instead)
 - runner: <n>/<n> cases as specified
-- install: <the shapes it left behind>
+- setup: <the shapes it left behind>
 
 ## Reading                                     (only where the human asked)
 - whether the plan follows from the story, whether the judge's findings are real — stated as a

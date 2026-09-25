@@ -1,14 +1,14 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "dca-marketplace",
-  "description": "Claude Code plugins for Domain-Centric Architecture (DCA) and general software craftsmanship \u2014 composable skills and reviewer agents for daily practice.",
+  "description": "Claude Code plugins for Domain-Centric Architecture (DCA) and general software craftsmanship — composable skills and reviewer agents for daily practice.",
   "owner": {
     "name": "domain-centric-development"
   },
   "plugins": [
     {
       "name": "dca-core",
-      "description": "DCA-specific skills and agents for Java/Spring and .NET/C#: bootstrap that adds the published dca-building-blocks/dca-archunit or DomainCentric.BuildingBlocks/ArchRules packages and generates one architecture test, framework-free domain discipline, ubiquitous language glossaries, strategic context maps, scaffolding, semantic review, the tactical-modelling craft and the domain and boundaries review perspectives as skills, plus thin builder and reviewer agents around them. Pairs well with software-craftsmanship.",
+      "description": "The Domain-Centric Architecture method as skills, for Java/Spring and .NET/C#: dca-describe writes the project description (product, technical decisions, designed domain) under project/; dca-new starts a project from a generator and lays out contexts, use cases, aggregates, stores and domain services; dca-init adds the published dca-building-blocks/dca-archunit or DomainCentric.BuildingBlocks/ArchRules packages, one architecture test and the method's section in AGENTS.md; dca-add brings in one capability (rule module, freeze, formatter, browser runner); dca-modelling carries the tactical-modelling craft, dca-discipline the invariants, dca-review the DCA conformance review, dca-knowledge the cited knowledge catalog. Pairs with dca-craft.",
       "author": {
         "name": "Christoph Bloemer"
       },
@@ -16,17 +16,17 @@
       "source": "./plugins/dca-core"
     },
     {
-      "name": "software-craftsmanship",
-      "description": "Project-agnostic craftsmanship skills and agents: Test-Driven Development workflow, Clean Code principles while writing, Architecture Decision Records (Michael Nygard format), the craft of end-user browser tests (Page Objects, stable selectors), plus Clean-Code reviewer and E2E builder agents. Usable on any Java or .NET project without DCA assumptions. Pairs well with dca-core for full DCA practice.",
+      "name": "dca-craft",
+      "description": "Craft skills and agents independent of the architecture style: Test-Driven Development, Clean Code while writing, Architecture Decision Records, end-user browser tests (Page Objects, stable selectors, setting up a browser runner), the Ubiquitous Language glossary and the strategic context map, and three review perspectives with the familiar names — review-ddd, review-hexagonal, review-clean-code — plus thin reviewer and E2E agents around them. An outside view: it reads what any project has — code, glossary, context map, AGENTS.md — and names no DCA artifact. Pairs with dca-core, which adds the DCA method.",
       "author": {
         "name": "Christoph Bloemer"
       },
       "category": "development",
-      "source": "./plugins/software-craftsmanship"
+      "source": "./plugins/dca-craft"
     },
     {
       "name": "dca-factory",
-      "description": "Delivery pipeline for DCA projects: a markdown backlog contract (epics with intent, goal, outcome-event metric and domain contact; stories with keyed acceptance criteria), the stage skills plan/test/build/tidy/judge/document with one hand-over file each, factory-backlog to write the backlog and factory-scope for the questions a run may not answer itself, factory-verify to check the pipeline itself against throwaway fixtures, and a dependency-free story gate that checks epic completeness, one red-then-green end-user test per criterion, the architecture suite and the documentation claims. Portable by construction: plain skill folders and one dependency-free script, with no harness-specific tool in the contract. Run end to end in Claude Code; the carrier files for Codex and OpenCode ship with it and two stages have been exercised there. Carries no architecture method and no project knowledge \u2014 those stay in dca-core and in the project's stack profile.",
+      "description": "Delivery pipeline for DCA projects, in three parts: a project description under project/ (product, technical decisions, designed domain — written through the method's description skill), a markdown backlog contract (epics with intent, goal, outcome-event metric and domain contact; stories with keyed acceptance criteria), and a runner — the stage skills plan/test/build/tidy/judge/document with one hand-over file each and a dependency-free story gate between them that checks epic completeness, one red-then-green end-user test per criterion, the architecture suite and the documentation claims. factory-setup sets it up idempotently (stack detection from presets, carrier lines only for installed skills), factory-backlog writes the backlog, factory-decisions answers what a run may not decide itself, factory-status and factory-verify look at it. Portable by construction: plain skill folders and one dependency-free script, with no harness-specific tool in the contract. Carries no architecture method and no project knowledge — those stay in dca-core and in the project's stack profile.",
       "author": {
         "name": "Christoph Bloemer"
       },

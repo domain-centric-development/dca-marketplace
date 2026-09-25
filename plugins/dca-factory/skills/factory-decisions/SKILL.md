@@ -1,6 +1,6 @@
 ---
 name: factory-decisions
-description: The decision inbox of a delivery run — lists the questions stages could not answer, explains one from its record and the story it blocks, and writes the human's answer into the record on their explicit confirmation. Use when a run stopped with needs-human, when someone asks what is waiting on them, to answer a question from a second session, or on "/factory-decisions". Answers nothing itself and implements nothing.
+description: The decision inbox of a delivery run — lists the questions stages could not answer, explains one from its record and the story it blocks, and writes the human's answer into the record on their explicit confirmation; for a structural question (a new bounded context, a new relationship, a surface an actor lacks) it also brings the designed context map and the product description in line. Use when a run stopped with needs-human, when someone asks what is waiting on them, to answer a question from a second session, or on "/factory-decisions". Answers nothing itself and implements nothing.
 ---
 
 # Read, explain and record a decision
@@ -53,22 +53,84 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    applies the answer, and the gate stamps the record applied when it has. If the human wants to
    go on interactively in *this* session, they say so — then it is a hand-over, named as one.
 
+## A structural question
+
+Three questions no stage answers itself, and a plan that meets one writes a record for it like any
+other: the behaviour needs a **bounded context** the designed map does not have; it needs a
+**relationship between two contexts** that does not exist yet; its actor needs a **surface** — a
+page, an endpoint, a consumer — the context does not have, and with it a decision about who may use
+it. Explaining one takes more than the record:
+
+1. **Try the map there is first.** Read the designed map (`domain:` in the stack profile,
+   `project/domain.md` by default) and the one generated from the code. A new context is the
+   expensive answer, and most questions do not need it: the behaviour may belong to a context that
+   already owns the language, or be a second use case in one. Say why the existing contexts do
+   *not* fit — a different lifecycle, a different language for the same word, a different team, an
+   invariant that cannot span the boundary. "It feels separate" is not a reason.
+2. **Name the subdomain type** a new context would have — core, supporting or generic — because it
+   decides how much pattern the context earns, and **the relationship** in the project's own
+   vocabulary, with a direction and a reason, and who owns the contract.
+3. **For a surface, separate what it is from who may use it.** The second is an authorisation
+   decision; say where its check belongs by the project's own rule. A guard nobody decided is a
+   guard no test holds.
+4. **"Not now" is an answer too**, recorded like any other: the behaviour waits, the story is
+   dropped, or a smaller piece fits the map as it stands.
+
+Once the human has answered and the `## Answer` is written, bring the description in line **in the
+same step** — this is the one place you write beyond the record: the designed map through the
+skill the profile names as `carrier.domain:` (the context-map skill, where installed; by hand in its
+format otherwise), a new surface in the product description's `## Surfaces`. A decision that is not
+on the map is one the next plan cannot read: the plan gate checks the story's context against the
+designed map first. Where the answer still waits on the domain contact, the map stays as it is —
+say so, so it reads as a state and not as an oversight. Then say what changes for the story; the
+story itself is `/factory-backlog`'s.
+
+## An acceptance
+
+A record with `kind: acceptance` was written by the document gate, not by a stage: every gate
+passed and the profile's `acceptance:` asks a human to look before the story counts as delivered.
+The record lists the criteria with their tests and how to start the application (`run:`). A human
+accepts — no role is checked; the answer is theirs, on their confirmation, as always.
+
+- **Accepted** — write `answer: accepted`, then run the document gate
+  (`python3 .agents/factory/story-gate.py --story <story> --stage document`): it delivers the story.
+  The story's commit follows — the code, the tests and `tasks/<story>/`.
+- **A correction** — what the human wants different, in their words: write `answer: correction:
+  <their words>`, then bring it into **the same story** through the backlog skill's rules: changed or
+  new criteria, one `answered:` line under `## Assumptions` naming the record id, and under
+  `## Changed expectations` what the story had delivered that no longer holds. The story then runs
+  again from plan — the schedule sees it changed — in its own `tasks/<story>/`, holding the checkout
+  until it is accepted.
+- **Before a story was accepted, every answer is a correction**, a changed criterion included; the
+  rounds counter bounds how often. **After it was accepted**, adding what the story left unsaid is a
+  correction; changing or taking back a criterion is a **new wish** — a new story through
+  `/factory-backlog` with `## Changed expectations`. Say which it is and let the human decide; the
+  gate refuses to reopen a story for a changed criterion after an acceptance.
+- **A story already delivered** — the human looked after delivery: write a record for it yourself
+  (`<story>-accept-<n>`, `kind: acceptance`, `stage: document`, `digest:` of the story now) with their
+  correction as the answer, write the correction into the story as above, then take it back with
+  `python3 .agents/factory/story-gate.py --reopen <story>`. It refuses without an answered
+  correction the story cites.
+
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
 `/factory-backlog`) — never a shell command to type, unless the person asks how to do something
-without a session. You may run `factory.sh` for everything that starts no tool — `install`,
-`update`, `status`, `usage`, `decisions`, `schedule`, `change`, `parity` — but never `run` or
-`backlog`: they start a tool process per stage (`claude -p` and the like) on top of this session,
-and the runner refuses them inside one anyway.
+without a session. You may run `factory.sh` for everything that starts no tool — `setup`,
+`backlog`, `status`, `decisions`, `update`, `verify`, `check` — but never `run`: it starts a tool
+process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
+inside one anyway.
 
 ## Do not
 
 - Do not write `## Answer` from a recommendation, a timeout, a majority of options or your own
   judgement. The whole file exists so that a suggestion cannot be mistaken for a decision.
-- Do not edit anything but the record — not the story, not the plan, not the code. The stage that
-  asked propagates the answer; two writers on one plan is how an answer gets applied twice.
+- Do not edit anything but the record — not the story, not the plan, not the code — apart from the
+  project description after a structural answer, and the story after an acceptance correction
+  (both above). The stage that asked propagates the
+  answer; two writers on one plan is how an answer gets applied twice.
 - Do not invent a record. A question that reached you as a sentence and has no file is the asking
-  stage's omission; the next gate refuses it, and the fix is that stage writing the record.
+  stage's omission; the next gate refuses it, and the fix is that stage writing the record. The one
+  record you write is a human's acceptance correction for a story already delivered (above).
 - Do not summarise several records into one answer. Each is answered on its own, even when the
   same word settles them all.
 

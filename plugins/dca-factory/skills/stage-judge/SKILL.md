@@ -1,6 +1,6 @@
 ---
 name: stage-judge
-description: Judge stage of a factory run — reviews the story's change from three perspectives (domain, boundaries, craft), keeps only defects it can confirm in the code, and returns one verdict. Use after the tidy stage of a story, when the orchestrator asks for the review, or on "/stage-judge". Reports defects; it does not fix them.
+description: Judge stage of a factory run — reviews the story's change from three perspectives (ddd, hexagonal, clean-code) plus any the profile adds, keeps only defects it can confirm in the code, and returns one verdict. Use after the tidy stage of a story, when the orchestrator asks for the review, or on "/stage-judge". Reports defects; it does not fix them.
 ---
 
 # Judge one story's change
@@ -8,15 +8,18 @@ description: Judge stage of a factory run — reviews the story's change from th
 Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
 `tasks/<story>/.verify/story.diff`, which the pipeline writes; open a whole file only where the
 diff's context does not carry the question, and explore no further than a finding needs — the
-product scope — and, in a repeat round, the previous verdict, `tasks/<story>/.judge-previous.md`.
-Nothing else. A change that contradicts the product scope — a surface it does not list, state kept
-where it says otherwise, a page without its stated look or accessibility, something under
-`## Not part of the product` — is a finding like any other.
+product and the technical description (`project/product.md`, `project/tech.md`, or where the
+profile's `product:` and `tech:` point) — and, in a repeat round, the previous verdict,
+`tasks/<story>/.judge-previous.md`. Nothing else. A change that contradicts the product description
+— a surface it does not list, state kept where it says otherwise, a page without its stated look or
+accessibility, something under `## Not part of the product` — is a finding like any other, and so
+is a change that brings in what the technical description excludes: a second persistence, a client
+framework where the pages are server-rendered, an integration it does not list.
 Output: `tasks/<story>/judge.md`. You change no code.
 
 ## Do
 
-Review the change from **domain**, **boundaries** and **craft**, one pass each, kept apart in the
+Review the change from **ddd**, **hexagonal** and **clean-code**, one pass each, kept apart in the
 report. These three are part of the method, not project configuration: they always run and no
 profile switches them off.
 
@@ -24,8 +27,8 @@ What the project configures is what it *adds* and *who runs it*:
 
 | Profile key | Meaning |
 |---|---|
-| `reviews: security, performance` | **additional** perspectives, on top of the three. Default: none |
-| `review.domain: <carrier>` | the reviewer that should carry a perspective — for the three built-ins too |
+| `reviews: dca, security` | **additional** perspectives, on top of the three. Default: none |
+| `review.ddd: <carrier>` | the reviewer that should carry a perspective — for the three built-ins too (`review.hexagonal:`, `review.clean-code:`, `review.<added>:`) |
 
 A **carrier** is whatever this tool can actually run under that name: a review skill (portable —
 every tool reads skills) or, in a tool that has separate review agents, such an agent. Resolve each
@@ -33,7 +36,7 @@ perspective in this order:
 
 1. the carrier its `review.<name>:` names, when this tool offers it;
 2. otherwise a review skill of the project whose own description covers that perspective — a skill
-   named for the perspective (`review-domain`, `review-boundaries`, `review-craft`) is the obvious
+   named for the perspective (`review-ddd`, `review-hexagonal`, `review-clean-code`) is the obvious
    case, but match on what a skill's description says it reviews, never on its name alone;
 3. otherwise, for the three built-ins, the description below — you run the pass yourself.
 
@@ -43,16 +46,16 @@ missing *preference*, not a missing review: the built-in pass still runs, and th
 built-in description, so if its carrier is unavailable it is reported as **not covered** and nothing
 silently stands in for it.
 
-1. **domain** — is the model right? Real invariants inside the aggregate rather than an anemic
+1. **ddd** — is the model right? Real invariants inside the aggregate rather than an anemic
    record with setters; the correct choice between entity and value object; aggregate boundaries
    that one transaction can hold; domain events in the past tense, published where the fact
    occurs; the vocabulary of the criteria and the glossary in the code, with no synonym drift; a
    repository only for an aggregate root.
-2. **boundaries** — do the dependencies point inward? The domain free of framework types; ports
+2. **hexagonal** — do the dependencies point inward? The domain free of framework types; ports
    declared in the inner layers and implemented in adapters; no raw import across a bounded
    context; input ports carrying commands, queries and results rather than domain objects;
    translation at the edge, not in the middle.
-3. **craft** — is it readable? Names that say what a thing is; functions on one level of
+3. **clean-code** — is it readable? Names that say what a thing is; functions on one level of
    abstraction; no duplication that carries a decision twice; no dead code, no leftover stub, no
    comment describing history instead of the present state.
 
@@ -63,7 +66,7 @@ and the project has the runner that would prove the behaviour.
 Across the three, check the change against the story itself. A criterion written as a scenario is
 covered only when its test arranges the `Given`, performs the `When` and asserts every `Then` and
 `And` with the scenario's values: an outcome the test does not assert is a finding. Behaviour listed
-under the story's `## Out of scope`, or under the product scope's `## Not part of the product`, that
+under the story's `## Out of scope`, or under the product description's `## Not part of the product`, that
 the change delivers anyway is a finding too.
 
 An added perspective is one more pass with its own rows in the report. Adding one is a profile

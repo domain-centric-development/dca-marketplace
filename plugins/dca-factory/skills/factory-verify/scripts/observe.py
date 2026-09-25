@@ -6,7 +6,7 @@ does is cross-check the **claims** in the stage files against what the repositor
 run's journal show. A stage saying "all tests green" is a claim; the gate's own report is evidence;
 a test file whose content changed after the test stage is a fact.
 
-    observe.py --story <id> [--tasks tasks] [--backlog backlog] [--project .] [--json]
+    observe.py --story <id> [--tasks tasks] [--backlog <dir>] [--root .] [--json]
 
 Exit code 0 means every claim it could check held. Anything it could not see is listed as such
 rather than counted as fine.
@@ -32,6 +32,25 @@ CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)\s*:\s*\S")
 MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
 SELECTOR = re.compile(r"([\w.]+)#(\w+)")
 BACKTICKED = re.compile(r"`([^`\n]{2,120})`")
+
+
+def table_paths(text):
+    """The paths the build's `## Changed` table (or a `## Files` list) names without backticks — a
+    table row's first column, a list item's first word — read the way the gate's files check reads
+    them, so a hand-over the gate accepts is not a finding here."""
+    found, inside = [], False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip().lower() in ("files", "changed")
+            continue
+        if not inside:
+            continue
+        item = re.match(r"^\s*[-*]\s+([^\s`|]+)", line)
+        row = re.match(r"^\|\s*([^|`\s]+)\s*\|", line)
+        for match in (item, row):
+            if match and not set(match.group(1)) <= set("-:"):
+                found.append(match.group(1))
+    return found
 PROFILE_KEYS = ("compile", "test", "e2eTest", "architecture", "format")
 
 
@@ -239,7 +258,9 @@ def observe(project, tasks, backlog, story_id):
 
     # --- 3. red before, green after — from the gate, not from a claim ----
     ledger = read(os.path.join(run_dir, ".tests-red"))
-    recorded = {line.strip() for line in (ledger or "").splitlines() if line.strip()}
+    # One line per selector, `selector<TAB>sha256 of its test file` — the gate binds a red proof to
+    # the version of the test that failed; an older ledger has the selector alone.
+    recorded = {line.split("\t", 1)[0].strip() for line in (ledger or "").splitlines() if line.strip()}
     selectors = [s for group in mapping.values() for s in group]
     if not selectors:
         report.blind("red-green", "no mapped tests, so nothing to check")
@@ -339,14 +360,16 @@ def observe(project, tasks, backlog, story_id):
     if actual is None and not os.path.isdir(os.path.join(project, ".git")):
         report.blind("claims", "not a git repository — a stage's claim about changed files cannot be checked")
     if actual is not None and present.get("build.md"):
-        claimed = set()
+        # A table row or list item under `## Changed` is a path by position, as the gate reads it.
+        claimed = {path for path in table_paths(present["build.md"]) if "/" in path}
         for token in BACKTICKED.findall(present["build.md"]):
             candidate = re.sub(r"[:#][0-9,\-]+$", "", token).strip()
             # A path has no spaces in it, and its extension is short: `dotnet test tests/Foo.Bar`
             # is a command whose last segment merely looks like one, and reading it as a file
             # produces a finding about nothing.
             extension = os.path.splitext(candidate)[1]
-            if (" " not in candidate and "/" in candidate
+            # A leading `/` is a citation (a knowledge-catalog node), not a file of the project.
+            if (" " not in candidate and "/" in candidate and not candidate.startswith("/")
                     and re.fullmatch(r"\.[A-Za-z0-9]{1,6}", extension)):
                 claimed.add(candidate)
         code_changes = {f for f in actual
@@ -461,12 +484,16 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="observe one real factory run")
     parser.add_argument("--story", required=True)
     parser.add_argument("--tasks", default="tasks")
-    parser.add_argument("--backlog", default="backlog")
-    parser.add_argument("--project", default=".")
+    parser.add_argument("--backlog", help="default: the profile's `backlog:`, else project/backlog")
+    parser.add_argument("--root", default=".")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    project = os.path.abspath(args.project)
+    project = os.path.abspath(args.root)
+    if not args.backlog:
+        profile = read(os.path.join(project, ".agents", "factory", "factory.profile.yaml")) or ""
+        named = [l.split(":", 1)[1].strip().strip("\"'") for l in profile.splitlines() if l.startswith("backlog:")]
+        args.backlog = (named[0] if named and named[0] else "project/backlog")
     report = observe(project, args.tasks, args.backlog, args.story)
 
     if args.json:

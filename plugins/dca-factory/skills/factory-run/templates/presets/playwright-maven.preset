@@ -1,0 +1,4 @@
+kind: browser
+order: 20
+detect.contains: pom.xml :: com\.microsoft\.playwright
+browser: playwright

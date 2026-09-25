@@ -63,8 +63,8 @@ It MAY NOT import:
 **What to do when a use-case impl needs new infrastructure:**
 
 1. Define an output port interface in `application/shared/` (or in the use
-   case's own folder if it's only used there — see decision guide in
-   `../dca-review/reference/use-case-pattern.md` §3).
+   case's own folder if it's only used there — see the decision guide in
+   `dca-review`'s reference `use-case-pattern.md`, section 3).
 2. Reference the port from the use case.
 3. Add an implementation in `adapter/outgoing/...`.
 
@@ -241,7 +241,7 @@ The same table applies to the C# folders in PascalCase (`Domain/`, `Application/
 
 ## Conventions overlay
 
-Read the project's conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — for:
+Read the project's conventions file — the one the `AGENTS.md` line ``- conventions: `<path>` `` names, `.agents/dca/conventions.md` by default (`.claude/dca/conventions.md` in older projects) — for:
 
 - The actual base package / root namespace; markers come from the library
   (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`)
@@ -251,13 +251,12 @@ Read the project's conventions overlay — `.agents/dca/conventions.md` (or `.cl
 - Project-specific exceptions (e.g. "Bean Validation annotations allowed in
   domain")
 
-If no conventions file: use DCA defaults from
-`dca-guide/architecture/rules.md`.
+If no conventions file: use the DCA defaults the guide's rules state (`dca-knowledge` cites them).
 
 ## What this skill does NOT do
 
 - **Doesn't review existing code.** That's `dca-review` and the reviewer agents.
-- **Doesn't generate scaffolds.** That's `dca-scaffold`.
+- **Doesn't lay out new code.** That's `dca-new`; the domain types themselves are `dca-modelling`'s.
 - **Doesn't enforce naming.** That's `/clean-code` and `/ubiquitous-language`.
 - **Doesn't run ArchUnit.** ArchUnit is the safety net *after* this skill;
   if `dca-discipline` does its job, ArchUnit stays green.

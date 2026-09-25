@@ -1,0 +1,7 @@
+# The `test-e2e` task the e2e-testing skill's setup writes; any other layout gets `browser:` only.
+kind: browser
+order: 11
+detect.contains: **/*.gradle **/*.gradle.kts :: com\.microsoft\.playwright
+detect.contains: **/*.gradle **/*.gradle.kts :: test-e2e|testE2e
+e2eTest: ./gradlew test-e2e --rerun
+compile: ./gradlew testClasses testE2eClasses

@@ -1,0 +1,10 @@
+kind: stack
+order: 20
+detect.exists: pom.xml
+compile: ./mvnw test-compile
+test: ./mvnw test
+e2eTest: ./mvnw test
+architecture: ./mvnw -Dtest=*ArchitectureTest test
+filterFlag: -Dtest
+filterFormat: "{class}#{method}"
+conventions.architecture: mvnw.*arch
