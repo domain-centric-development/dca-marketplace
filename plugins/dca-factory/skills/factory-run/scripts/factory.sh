@@ -13,6 +13,8 @@
 #                    one story, or without --story the whole backlog in the schedule's order
 #   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
 #   factory.sh decisions [--story <id>]      the decision inbox
+#   factory.sh help [--format text|md|json]  the factory explained: the flow and where this project stands,
+#                                            every command in its agent and its shell form, the marks, the files
 #   factory.sh update [--from <skill folder>]   the newest pipeline found, same tools, links or copies
 #   factory.sh verify --story <id> | --fixtures   observe a delivered story | check the machinery
 #   factory.sh check [--staged] [--checks "<c> …"] | --parity <config>   for the commit hook and CI
@@ -1276,7 +1278,8 @@ This project delivers stories through the dca-factory pipeline. At the start of 
 person names a task right away, run `python3 .agents/factory/story-gate.py --status --brief`, show
 its lines, and ask what they want to do: write or release a story (`/factory-backlog`), answer a
 waiting question (`/factory-decisions`), work the backlog (`/factory-run`; to keep listening, a tool
-that repeats a prompt runs it again — in Claude Code `/loop /factory-run`), or look closer (`/factory-status`).
+that repeats a prompt runs it again — in Claude Code `/loop /factory-run`), look closer (`/factory-status`), or
+learn how the factory works (`/factory-help`).
 A session never runs `factory.sh run` — it starts a tool process per stage. One worker per checkout: a
 managing session writes backlog and decision files only. Every change — by a stage or by hand in a
 session — passes `bash .agents/factory/factory.sh check` before it is committed; the commit hook runs it
@@ -1904,6 +1907,11 @@ case "$command" in
       *) read_command --status --part backlog "$@" ;;
     esac ;;
   decisions) read_command --list-decisions "$@" ;;
+  help)
+    # The help works before the pipeline is installed too: then the plugin's gate explains it.
+    helper=$GATE
+    [ -f "$helper" ] || helper=$(plugin_gate) || { echo "factory: no gate found to explain the factory — FACTORY_PLUGIN_DIR names one" >&2; exit 2; }
+    exec "$PY" "$helper" --help-view "$@" ;;
   check)
     case "${1:-}" in
       --parity) [ $# -eq 2 ] || usage; read_command --parity "$2" ;;

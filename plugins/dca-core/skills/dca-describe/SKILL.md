@@ -20,18 +20,15 @@ could show goes to `docs/`.
    `<!-- dca-describe: end -->` names where the files are; use those places. Read what already
    exists there. A file that is complete stays as it is unless the person wants to change it — you
    check it, you do not rewrite it.
-2. **One question per heading, in their words.** The headings are fixed by the templates in
-   `templates/` — the product's six, the technical description's six, the domain's two tables. Ask
-   for what is missing; never invent an answer. A stage or a person that reads an invented look
-   builds it, and a placeholder passes a check that counts headings. A heading with nothing to
-   decide gets one honest line.
-   - **product** — what is built and for whom; how each actor reaches it (the surfaces, and on
-     which devices); how it works — where state lives, what is persisted; how it looks, and the sizes its pages are designed for, by name (`s`–`xl`); the
-     qualities it needs; what it will not do.
-   - **tech** — the stack and why; the frontend approach and what it excludes; the persistence and
-     what it excludes; where it runs; the systems it talks to; how versions are chosen.
-   - **domain** — the contexts with their responsibility and subdomain type, and the relationships
-     with a pattern, the translation and a reason.
+2. **One question per heading, from the catalogue.** The headings are fixed by the templates in
+   `templates/` — the product's six, the technical description's six, the domain's two tables — and
+   `reference/questions.md` holds the question for each, word for word, with its options and its
+   default. Look every heading up, then ask **only the open ones — all at once, in catalogue order,
+   word for word**; write the answers in the person's words. Never invent an answer: a stage or a
+   person that reads an invented look builds it, and a placeholder passes a check that counts
+   headings. A heading with nothing to decide gets one honest line.
+   Called with answers already given — `dca-new` asks the catalogue in its one pass — write those and
+   ask only what is still open.
 3. **Decisions only, no design.** "The client keeps the draft; the server stores what is
    submitted" belongs in the product description; "server-rendered pages, no client framework" in
    the technical one. An endpoint, a package or a class belongs in neither.

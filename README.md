@@ -90,6 +90,7 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 /factory-decisions        # answer what a run may not decide — and accept a story you looked at
 /factory-verify           # check what that run actually did, and the pipeline itself
 /factory-update           # bring the project's copy of the pipeline up to the newest one
+/factory-help             # the flow, every command for agent and shell, the marks, the files
 ```
 
 With `acceptance: pages` in the profile, a story with something to see waits for a human's look

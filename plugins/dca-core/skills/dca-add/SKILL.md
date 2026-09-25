@@ -146,6 +146,9 @@ What this skill checks afterwards, because a runner that cannot fail is worse th
 
 - the smoke test is green;
 - it fails when the start page's `<title>` is emptied — try it once, then restore the title;
+- the conventions file records the three answers, one line each, where the report and the general skills
+  read them: `browser:` (the runner), `selector:` (the stable-selector attribute) and `appStart:` (`started by
+  the suite on a free port`, or the base URL of a running application);
 - the `AGENTS.md` section of `dca-init` names `e2e-testing` for browser tests; where it does not, run
   `dca-init` again to refresh the section (or add the line in its form: ``- browser tests: `e2e-testing` ``).
 

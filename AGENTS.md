@@ -49,7 +49,7 @@ dca-marketplace/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
 │   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
-│   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; update a project
+│   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-help,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; the factory explained; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
 ├── plugins/dca-craft/                     # craft independent of the architecture style; names no DCA artifact
 │   ├── skills/{tdd,clean-code,adr,e2e-testing,ubiquitous-language,context-map}/
