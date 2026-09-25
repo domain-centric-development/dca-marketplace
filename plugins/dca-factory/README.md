@@ -108,6 +108,17 @@ stage, outside the session, is the runner, and it runs only when you start it:
 bash .agents/factory/factory.sh run --story STORY-1 --tool claude
 ```
 
+**A human looks before it counts.** With `acceptance: pages` in the profile (`factory-setup`
+proposes it where the product has web pages; `all` for every story, `none` for none), a story with
+something to see stops after the last gate instead of being delivered: an acceptance record
+`<story>-accept-<n>` lists the criteria with their tests and the profile's `run:` command, the gate
+exits 3 and the story holds the checkout. Answer it through `/factory-decisions`: *accepted*
+delivers it; a correction goes into **the same story**, which runs again from plan and is asked
+again. A story delivered earlier is taken back for a correction with `story-gate.py --reopen
+<story>` — not while another story holds the checkout, and after an acceptance only to add what the
+story left unsaid (changing a criterion is a new wish, a new story). Stories name page sizes by the
+table in the product description (`s`, `m`, `l`, `xl`), never in pixels.
+
 Several stories are one command. It runs them in dependency order, runs past a story that waits
 for a decision, and with `--watch` picks that story up again at the stage that asked, once the
 answer is written (`--max-stages` caps the agent invocations, `.agents/factory/stop` ends it):
@@ -480,6 +491,10 @@ would run together. Both are stated in `story-gate.py` and readable with
 | **file contract** (`CONTRACT`, and `contract:` in the stack profile) | can this gate read this project's files at all | the **gate**, on every run. A profile written for a higher contract is **refused**: this script would ignore whatever the newer contract added, and a key ignored in silence is a check that has quietly gone |
 | **script version** (`VERSION`) | which release governs this project | the **runner**, comparing `.agents/factory/gate.installed` — three machine-neutral lines written at install time and **committed with the project** — against the pipeline it finds beside it. A project on an older release of the same contract is valid and says so: an update to run, never a reason to refuse a story |
 
+The current file contract is 8: the project description and backlog under `project/`, and the
+`acceptance:` key with its record. `factory.sh update` says when a profile's `contract:` line is to
+be raised.
+
 The gate cannot answer the second one alone: a copied script has nothing to compare itself
 against. The record holds the *identity* of the pipeline — plugin, version, contract — and never a
 path or a timestamp, because those describe the machine that happened to run the install and would
@@ -491,8 +506,9 @@ guessing.
 ## Project knowledge
 
 None is baked in. Everything project-specific comes from two places the project owns: the
-**stack profile** (`.agents/factory/factory.profile.yaml` — build and test commands) and the
-**backlog, glossary and context map**. A skill that would break in a project without a
+**stack profile** (`.agents/factory/factory.profile.yaml` — build and test commands, `format:` and
+`formatFix:`, `browser:`, `acceptance:` and `run:`, the carriers) and `project/` with the
+**description, backlog**, beside the glossaries and the context map. A skill that would break in a project without a
 particular domain concept would be wrong.
 
 A stage may treat a knowledge skill as an authority only when the profile names it —

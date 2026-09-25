@@ -86,8 +86,14 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 /factory-setup            # the project description, git, the runner — only what is missing
 /factory-backlog          # write the epic and the story, in the contract the gate reads
 /factory-run              # plan → test → build → tidy → judge → document, gated
+/factory-status           # what runs, what waits for a human, what each story cost
+/factory-decisions        # answer what a run may not decide — and accept a story you looked at
 /factory-verify           # check what that run actually did, and the pipeline itself
+/factory-update           # bring the project's copy of the pipeline up to the newest one
 ```
+
+With `acceptance: pages` in the profile, a story with something to see waits for a human's look
+before it is delivered; a correction goes into the same story, which runs again.
 
 The pipeline needs three things from your project: a **project description** under `project/`, a
 **stack profile** (`.agents/factory/factory.profile.yaml` — your build and test commands, detected
