@@ -1280,6 +1280,13 @@ its lines, and ask what they want to do: write or release a story (`/factory-bac
 waiting question (`/factory-decisions`), work the backlog (`/factory-run`; to keep listening, a tool
 that repeats a prompt runs it again — in Claude Code `/loop /factory-run`), look closer (`/factory-status`), or
 learn how the factory works (`/factory-help`).
+
+An instruction that changes what an actor can see or do is a user story. Before any code, ask once, in
+these words: "As a story through the factory — to an existing epic, a new epic — or directly by hand?"
+For the factory, run `/factory-run` with the person's words: it writes the story through
+`/factory-backlog` and runs it once it is released. A fix, a refactoring, documentation, tooling or a
+question is done directly.
+
 A session never runs `factory.sh run` — it starts a tool process per stage. One worker per checkout: a
 managing session writes backlog and decision files only. Every change — by a stage or by hand in a
 session — passes `bash .agents/factory/factory.sh check` before it is committed; the commit hook runs it

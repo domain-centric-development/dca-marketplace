@@ -1479,6 +1479,9 @@ exit 0
         check("priming: AGENTS.md carries the pipeline's section once, and keeps the project's own lines",
               agents.count("<!-- dca-factory: start -->") == 1 and "The project's own line." in agents
               and "story-gate.py --status --brief" in agents and "factory.sh status" not in agents, agents[-300:])
+        check("priming: the section asks once, in fixed words, whether a user story goes through the factory",
+              '"As a story through the factory — to an existing epic, a new epic — or directly by hand?"' in agents
+              and "`/factory-run` with the person's words" in agents, agents[-900:])
         check("priming: Claude's SessionStart hook is added once, beside the project's own hooks",
               sum(1 for c in commands if c.endswith(".agents/factory/story-gate.py --status --brief --session-start")) == 1
               and "echo mine" in commands and not any("factory.sh" in c for c in commands), commands)
@@ -3214,6 +3217,21 @@ def main(argv=None):
                                               capture_output=True, text=True, encoding="utf-8").stdout
         help_text, help_md = helper(), helper("--format", "md")
         flow = json.loads(helper("--format", "json"))["flow"]
+        resolved = lambda argument: subprocess.run([sys.executable, args.gate, "--resolve", argument], cwd=root,
+                                                   capture_output=True, text=True, encoding="utf-8")
+        by_name, typo, wish, nothing = (resolved(a) for a in ("story-2", "STROY-2", "show the newest items first", ""))
+        expectations += [
+            ("resolve: one word naming a story is that story, whatever its case",
+             by_name.returncode == 0 and by_name.stdout.strip() == "story STORY-2", by_name.stdout),
+            ("resolve: one word naming no story is refused with the ids there are — never a new story",
+             typo.returncode == 2 and typo.stdout.startswith("unknown STROY-2") and "STORY-1, STORY-2" in typo.stdout,
+             typo.stdout),
+            ("resolve: more than one word is a wish, nothing is the backlog",
+             wish.stdout.strip() == "wish" and nothing.stdout.strip() == "backlog"
+             and wish.returncode == nothing.returncode == 0, wish.stdout + nothing.stdout),
+            ("help: a wish is one of the commands, agent only",
+             "`/factory-run <your words>` | — needs an agent session" in help_md, help_md[:600]),
+        ]
         expectations += [
             ("help: the flow in a fixed order, one place marked — where this project is now: an open question",
              [f["step"] for f in flow] == ["start", "set up", "write stories", "run", "answer or accept"]
