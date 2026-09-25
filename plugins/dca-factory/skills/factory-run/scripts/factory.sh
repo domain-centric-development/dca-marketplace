@@ -182,7 +182,12 @@ plugin_skills() {
 skills_mode() {                             # skills_mode <target dir>
   local target=$1
   [ -L "$target" ] && { echo link; return; }
-  [ -d "$target/factory-run" ] || { echo ""; return; }
+  if [ ! -d "$target/factory-run" ]; then
+    # Links are machine-local and kept out of git, so a fresh clone has none — the ignore rule is what
+    # says the project used them, and `update` is how a clone gets them back.
+    git check-ignore -q "$target/factory-run" 2>/dev/null && echo link || echo ""
+    return
+  fi
   [ -L "$target/factory-run" ] && echo link || echo copy
 }
 

@@ -1999,6 +1999,20 @@ def verify_setup(runner, verbose=False):
               and open(profile_of(root), encoding="utf-8").read() == profile_before and "setup --check" in output,
               output.strip().splitlines()[-3:])
 
+    # a clone of a project that keeps its skill links out of git has no links: update brings them back
+    if can_symlink():
+        with tmpdir() as root:
+            build_project(root)
+            subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+            run_setup(runner, root, "--tool", "claude", "--from", source)
+            write_file(root, ".gitignore", ".claude/skills/\n")
+            skills = os.path.join(root, ".claude", "skills")
+            os.remove(skills) if os.path.islink(skills) else shutil.rmtree(skills)
+            code, output = run_runner(project_runner(root), root, "update", "--from", source)
+            check("update: a clone without its ignored skill links gets them back as links",
+                  code == 0 and (os.path.islink(skills) or os.path.islink(os.path.join(skills, "factory-run"))),
+                  output.strip().splitlines()[-3:])
+
     # item 11: the verbs mirror the skills; the old ones are gone
     with tmpdir() as root:
         env = dict(os.environ)
