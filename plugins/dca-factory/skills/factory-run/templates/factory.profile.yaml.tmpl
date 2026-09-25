@@ -40,6 +40,8 @@
 # test.journey runs the journey tests — guards over an epic's delivered stories, walked to the epic's
 #              outcome event. They need the running application, so like `e2eTest` they stay out of
 #              `required:` and run in CI
+# adopt.breakProof  `all` to ask a break for every test an adopted story maps, not only for the tests the
+#              adoption writes itself; default: the written ones, the judge reads the others
 # http.stub    the stub an integration test puts in place of an external system, at the protocol:
 #              `wiremock` (Java), `wiremock-net` (.NET) or `none`. Never a mock of the port whose adapter
 #              the story changes, never a shared or real instance. `setup --check` proposes it where it

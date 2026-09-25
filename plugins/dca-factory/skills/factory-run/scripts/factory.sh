@@ -1599,6 +1599,24 @@ open_decisions() {                          # open_decisions <story>
   done
 }
 
+# The adopt gate: every scenario on a green test, the judge's pass, a break for every test the adoption
+# wrote. Passed, it delivers the story; refused, the test stage runs again, one round counted.
+adopt_gate() {                              # adopt_gate <story> <tool> <dry>
+  echo "── gate adopt"
+  [ -n "$3" ] && return 0
+  if gate adopt "$1"; then
+    echo "factory: story $1 is adopted."
+    return 0
+  fi
+  local rounds; rounds=$(bump_rounds "$1")
+  if [ "$rounds" -ge 3 ]; then
+    echo "factory: gate 'adopt' refused in round $rounds — three rounds did not converge. needs-human." >&2
+    return 1
+  fi
+  echo "factory: gate 'adopt' refused — round $rounds runs the test stage again with the gate's report." >&2
+  run_story "$1" "$2" test "$3"
+}
+
 run_story() {
   local story=$1 tool=$2 from=${3:-plan} dry=${4:-}
   local started=0 ran="" waiting built=""
@@ -1610,12 +1628,22 @@ run_story() {
     return 3
   fi
   local kind; kind=$("$PY" "$GATE" --story "$story" --kind 2>/dev/null || echo story)
+  # An adopted story whose judge passed: only the adopt gate is left, and it delivers the story.
+  if [ "$from" = adopt ]; then
+    adopt_gate "$story" "$tool" "$dry"
+    return $?
+  fi
   for stage in "${STAGES[@]}"; do
     [ "$stage" = "$from" ] && started=1
     [ "$started" = 1 ] || continue
     # A journey walks what is delivered: nothing to build, nothing to tidy.
     if [ "$kind" = journey ] && { [ "$stage" = build ] || [ "$stage" = tidy ]; }; then
       echo "── stage $stage  (skipped: a journey builds nothing)"
+      continue
+    fi
+    # An adoption builds nothing and documents nothing: plan, test, judge, then the adopt gate.
+    if [ "$kind" = adopt ] && { [ "$stage" = build ] || [ "$stage" = tidy ] || [ "$stage" = document ]; }; then
+      echo "── stage $stage  (skipped: an adopted story is not built)"
       continue
     fi
 
@@ -1737,14 +1765,20 @@ run_story() {
       local verdict rounds
       verdict=$(verdict_of "$story")
       case "$verdict" in
-        pass) echo "factory: judge verdict 'pass'." ;;
+        pass)
+          echo "factory: judge verdict 'pass'."
+          if [ "$kind" = adopt ]; then
+            adopt_gate "$story" "$tool" "$dry"
+            return $?
+          fi
+          ;;
         changes-requested)
           rounds=$(bump_rounds "$story")
           if [ "$rounds" -ge 3 ]; then
             echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
             return 1
           fi
-          local back=build; [ "$kind" = journey ] && back=test
+          local back=build; { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
           echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
           run_story "$story" "$tool" "$back" "$dry"
           return $?

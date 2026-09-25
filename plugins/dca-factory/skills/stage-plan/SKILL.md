@@ -97,6 +97,14 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
 11. Back every statement about the code with evidence: the file, and the line or symbol you read
    it from. A statement without evidence is a guess and is marked as one.
 
+## Adopt mode
+
+A story with `status: adopted` describes behaviour the project already has; nothing is built. The plan
+restates its scenarios with their keys and, for each, names **where the behaviour lives** (file and line)
+and **which existing test covers it** (file, class, method) — or that none does. It plans no change to
+production code and no change to an existing test. A scenario the code does not show at all is not
+adoptable: stop with a `## needs-human` — the story describes behaviour the system does not have.
+
 ## Ask, do not recall — but only a source the project named
 
 Where the stack profile names a **knowledge skill** — `knowledge: <skill>`, one that answers

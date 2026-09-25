@@ -124,6 +124,16 @@ One row per criterion, at least. A criterion you could not turn into a test is n
 under `uncovered` — never left silently missing, because the build gate can only fail on what a
 test covers.
 
+## Adopt mode
+
+For a story with `status: adopted`: map every scenario in the `gate:tests` table to the existing test the
+plan names, green as it is. For a scenario without one, write a **characterization test** — green on
+today's code, asserting the scenario's `Then` with its values — list it under `## Characterization` in
+`tests.md` (`- <Class>#<method>`), and write its **break**: `tasks/<story>/breaks/<Class>--<method>.patch`,
+a unified diff against the working tree that changes the production code minimally so that exactly this
+test turns red (`git diff` of the change, then revert it). Change no production code and no existing test;
+the gate applies the break to a scratch copy and expects red there.
+
 ## Do not
 
 - Do not implement production behaviour to make a test pass.
