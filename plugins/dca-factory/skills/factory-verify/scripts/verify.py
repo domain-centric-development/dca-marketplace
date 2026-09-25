@@ -3216,8 +3216,9 @@ def main(argv=None):
         flow = json.loads(helper("--format", "json"))["flow"]
         expectations += [
             ("help: the flow in a fixed order, one place marked — where this project is now: an open question",
-             [f["step"] for f in flow] == ["describe", "skeleton", "set up", "write stories", "run", "answer or accept"]
-             and [f["mark"] for f in flow if f["mark"] != "none"] == ["question"]
+             [f["step"] for f in flow] == ["start", "set up", "write stories", "run", "answer or accept"]
+             and [f["mark"] for f in flow if f["mark"] not in ("none", "done")] == ["question"]
+             and {f["step"]: f["mark"] for f in flow}["set up"] == "done"
              and flow[-1]["mark"] == "question", flow),
             ("help: every command in its agent and its shell form, the marks and the files",
              all(c in help_text for c in ("/factory-status", "factory.sh status", "/factory-decisions",
@@ -4082,9 +4083,9 @@ def main(argv=None):
             fresh = {}
         expectations.append(("help: works before the pipeline is installed, the first step marked next",
                              shown.returncode == 0 and fresh
-                             and [f["mark"] for f in fresh["flow"]] == ["next"] + ["none"] * 5
-                             and fresh["next"]["action"]["skill"] == "/dca-describe"
-                             and [f["number"] for f in fresh["flow"]] == [1, 2, 3, 4, 5, 6]
+                             and [f["mark"] for f in fresh["flow"]] == ["next"] + ["none"] * 4
+                             and fresh["next"]["action"]["skill"] == "/dca-new project"
+                             and [f["number"] for f in fresh["flow"]] == [1, 2, 3, 4, 5]
                              and {f["step"]: f["shell"] for f in fresh["flow"]}["set up"] == "setup",
                              f"exit {shown.returncode}; {shown.stdout[:200]} {shown.stderr[:200]}"))
     with tmpdir() as root:

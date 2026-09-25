@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.36.2"
+VERSION = "0.36.3"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3418,7 +3418,7 @@ HELP_COMMANDS = (
     ("this help", "the flow, the commands, the marks, the files", "/factory-help", "help"),
 )
 
-NOW_WORDS = {"next": "you are here", "look": "waits for your look", "question": "waits for your answer",
+NOW_WORDS = {"done": "done", "next": "you are here", "look": "waits for your look", "question": "waits for your answer",
              "running": "running"}
 
 HELP_MARKS = (("look", "waits for your look — an acceptance"), ("question", "waits for your answer"),
@@ -3438,28 +3438,26 @@ def help_model(cwd, backlog, tasks):
     delivered = bool(rows) and all(r["state"] in ("delivered", "superseded") for r in rows)
     has_stories = bool(rows) and not delivered
     waiting_mark = "look" if "look" in marks else ("question" if "question" in marks else "")
+    started = described and has_build
     # what waits for a person comes first: nothing of theirs moves until it is answered
     if waiting_mark:
         here = "answer or accept"
-    elif not described:
-        here = "describe"
-    elif not has_build:
-        here = "skeleton"
+    elif not started:
+        here = "start"
     elif not profile_path:
         here = "set up"
     elif not has_stories:
         here = "write stories"
     else:
         here = "run"
-    # No step is ever "done" — stories are written, run and accepted again and again. The flow marks one
-    # place: where this project is now, with the mark of what it is there (waiting, running, next).
+    # The first two steps happen once, so they can be done. The last three repeat with every story and
+    # never are: there the flow marks only where the project is now (waiting, running, next).
     flow = [
-        dict(step="describe", what="the product, the technical decisions, the designed domain — under project/",
-             skill="/dca-describe", shell=""),
-        dict(step="skeleton", what="a runnable project from a generator, with the architecture test and a formatter",
-             skill="/dca-new project", shell=""),
+        dict(step="start", what="the description and a runnable skeleton in one pass — an existing project: "
+                                "/dca-describe", skill="/dca-new project", shell="", once=True, done=started),
         dict(step="set up", what="the stack profile: build, test, format and browser commands, the carriers",
-             skill="/factory-setup", shell="setup --check" if profile_path else "setup"),
+             skill="/factory-setup", shell="setup --check" if profile_path else "setup", once=True,
+             done=bool(profile_path)),
         dict(step="write stories", what="epics and stories with acceptance criteria; a story runs once released",
              skill="/factory-backlog", shell=""),
         dict(step="run", what="plan → test → build → tidy → judge → document, a gate between the stages",
@@ -3470,21 +3468,20 @@ def help_model(cwd, backlog, tasks):
     ]
     for n, f in enumerate(flow, 1):
         f["number"] = n
-        if f["step"] != here:
-            f["mark"] = "none"
-        elif here == "answer or accept":
-            f["mark"] = waiting_mark
-        elif here == "run" and status_view["running"]:
-            f["mark"] = "running"
+        if f["step"] == here:
+            f["mark"] = waiting_mark if here == "answer or accept" else \
+                "running" if here == "run" and status_view["running"] else "next"
         else:
-            f["mark"] = "next"
+            f["mark"] = "done" if f.pop("done", False) else "none"
+        f.pop("done", None)
+        f.pop("once", None)
     if waiting_mark:
         nxt = status_view["next"]
-    elif not described:
-        nxt = dict(text="Describe the project first — what is built, for whom, on which stack.",
+    elif not described and has_build:
+        nxt = dict(text="Describe the project — drafted from its code, confirmed by you.",
                    action=make_action(skill="/dca-describe", shell=""))
     elif not has_build:
-        nxt = dict(text="Create the project — a skeleton from a generator, with DCA and its checks.",
+        nxt = dict(text="Start the project — the description and a skeleton from a generator, in one pass.",
                    action=make_action(skill="/dca-new project", shell=""))
     elif not profile_path:
         nxt = dict(text="Set the factory up — the stack profile is missing.",
@@ -3536,7 +3533,7 @@ def render_help_md(model):
     out += table_md(["step", "now", "agent", "shell", "what it is"],
                     [[f"{f['number']} {f['step']}", f"**{NOW_WORDS[f['mark']]}**" if f["mark"] in NOW_WORDS else "",
                       f"`{f['skill']}`",
-                      f"`{shell_form(f['shell'])}`" if f["shell"] else "— needs an agent session", f["what"]]
+                      f"`{shell_form(f['shell'])}`" if f["shell"] else "— needs an agent session", commands(f["what"], False, md=True)]
                      for f in model["flow"]])
     out += ["", "**Commands**", ""]
     out += table_md(["to see", "agent", "shell", "what it shows"],
