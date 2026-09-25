@@ -117,7 +117,7 @@ a delivery stage, which may touch only its own files, run the fix command withou
    - **.NET — `dotnet format`**, part of the SDK; its rules come from `.editorconfig` (`dotnet new editorconfig`
      where there is none — then review its severities with the user, they decide what `--verify-no-changes`
      reports).
-2. **Format everything once**, before any other change: `./gradlew spotlessApply`, `mvn spotless:apply`,
+2. **Format everything once**, before any other change: `./gradlew spotlessApply`, `./mvnw spotless:apply`,
    `dotnet format`. Build and run every suite afterwards — a formatter must not change behaviour. The result is
    one commit of its own that holds nothing but formatting (the person commits it), so a later review or
    `git blame` can skip it. Where the repository has a `.git-blame-ignore-revs`, add the commit there.
@@ -126,7 +126,7 @@ a delivery stage, which may touch only its own files, run the fix command withou
    | Build | Check (`format:`) | Fix (`formatFix:`) |
    |---|---|---|
    | Gradle | `./gradlew spotlessCheck` | `./gradlew spotlessApply` |
-   | Maven | `mvn spotless:check` | `mvn spotless:apply` |
+   | Maven | `./mvnw spotless:check` | `./mvnw spotless:apply` |
    | .NET | `dotnet format --verify-no-changes` | `dotnet format` |
 
    Record both in the conventions file, as `format:` and `formatFix:` lines, where the general skills look for

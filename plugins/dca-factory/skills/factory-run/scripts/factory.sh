@@ -743,6 +743,13 @@ install_project() {                         # install_project <tool> <skill fold
           [ -e "$entry" ] || { rm -f "$entry"; pruned=$((pruned + 1)); }   # its skill is gone
           continue
         fi
+        # A link that points nowhere is nobody's skill — typically one into a plugin folder that was
+        # renamed. It is pruned and named, so the skill of that name can be linked afresh.
+        if [ -L "$entry" ] && [ ! -e "$entry" ]; then
+          echo "factory: pruned $entry — it pointed to $(readlink "$entry"), which no longer exists" >&2
+          rm -f "$entry"; pruned=$((pruned + 1))
+          continue
+        fi
         kept=$((kept + 1))
       done
       for dir in "$source_abs" $method_dirs; do

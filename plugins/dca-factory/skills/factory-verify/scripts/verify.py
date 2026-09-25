@@ -2160,6 +2160,17 @@ def verify_setup(runner, verbose=False):
               "some-guard" in prompts.get("build", "") and "some-guard" in prompts.get("tidy", "")
               and not any("some-guard" in prompts.get(s, "") for s in ("plan", "test", "judge", "document")),
               {k: v[-90:] for k, v in prompts.items()})
+    if SYMLINKS:
+        with tmpdir() as root, tmpdir() as gone:
+            build_project(root)
+            os.makedirs(os.path.join(root, ".codex", "skills"))
+            os.symlink(os.path.join(gone, "renamed-plugin", "skills", "e2e-testing"),
+                       os.path.join(root, ".codex", "skills", "e2e-testing"))
+            code, output = run_setup(runner, root, "--tool", "codex", "--from", source)
+            link = os.path.join(root, ".codex", "skills", "e2e-testing")
+            check("renames: a link into a folder that no longer exists is pruned and the skill linked afresh",
+                  os.path.isfile(os.path.join(link, "SKILL.md")) and "no longer exists" in output,
+                  os.readlink(link) if os.path.islink(link) else "no link")
     shutil.rmtree(lone_home, ignore_errors=True)
 
     failures = [name for name, ok, _ in results if not ok]

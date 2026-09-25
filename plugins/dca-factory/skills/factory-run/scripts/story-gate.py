@@ -530,7 +530,7 @@ def check_described(result, cwd, profile, key, headings, what):
         ]))
         result.fail(key, f"{path}: {detail} — every heading gets one honest line, never a placeholder")
         return False
-    result.ok(key, f"{path} describes the {what.split()[0]} under all {len(headings)} headings")
+    result.ok(key, f"{path} fills all {len(headings)} headings of the {what}")
     return True
 
 
