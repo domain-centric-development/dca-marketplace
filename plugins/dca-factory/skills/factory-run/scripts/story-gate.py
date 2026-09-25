@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.35.3"
+VERSION = "0.35.4"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1738,9 +1738,10 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
         out = [f"### Decisions — {model['project']}" + (f" · {story_id}" if story_id else ""), "",
                f"{MARKS_MD[lead]} {summary}", ""]
         if records:
-            out += table_md(headers, cells(MARKS_MD))
-        if how:
-            out += ["", f"**Next:** answer {first['id']} — {how_md(how)}"]
+            # the question beside the record would make the table too wide to read: a list below it
+            out += table_md(headers[:-1], [c[:-1] for c in cells(MARKS_MD)], first_bold=True)
+            out += ["", "**Questions and answers**", ""] + [f"- **{r['id']}** — {r['text']}" for r in records]
+        out += ["", f"**Next:** answer {first['id']} — {how_md(how)}" if how else "**Next:** Nothing waits for you."]
         print("\n".join(out))
         return 0
     use = use_colour(colour)
