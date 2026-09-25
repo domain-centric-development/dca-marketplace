@@ -130,8 +130,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 7
-VERSION = "0.33.5"
+CONTRACT = 8
+VERSION = "0.34.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -496,7 +496,7 @@ def layout_hint(cwd, profile):
     if not moves:
         return None
     return ("the backlog now lives under project/ — mkdir -p project && " + " && ".join(moves)
-            + ", then `contract: 7` in the profile")
+            + f", then `contract: {CONTRACT}` in the profile")
 
 
 def check_described(result, cwd, profile, key, headings, what):
@@ -1346,6 +1346,12 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
     # existed, the decision changed what it expects, and the code now meets it. Only that combination
     # lets a green test through the red check — without the decision it is the refusal below.
     changed_on = answered_decisions(cwd, story, "test") if expected == "red" else []
+    if expected == "red":
+        # A story that runs again for a human's correction keeps the criteria it had already met:
+        # their tests were red once, for this very story, and are green now for that reason.
+        with contextlib.suppress(GateError):
+            changed_on += [rid for rid, _f, state, answer in acceptance_records(cwd, story)
+                           if state in ("answered", "applied") and not accepted(answer)]
     control = {}                              # one control run per command, not per selector
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
@@ -1759,8 +1765,11 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
                     f"{DECISIONS_DIR}/{wanted}.md does not exist or names another story.",
                 )
 
-    # 2. every record: open blocks, a draft is still open, answered must be applied by its stage
+    # 2. every record: open blocks, a draft is still open, answered must be applied by its stage.
+    # An acceptance record is the document gate's own question; that gate reads it.
     for path, front, body, state, answer in records:
+        if is_acceptance(front):
+            continue
         rid = str(front["id"]).strip()
         stage = str(front.get("stage", "")).strip()
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
@@ -3411,6 +3420,138 @@ def write_mark(tasks, story_id, name, content):
         handle.write(content + "\n")
 
 
+#: A story delivered only once a human looked at it: the record kind, the modes of `acceptance:`.
+ACCEPTANCE_KIND = "acceptance"
+ACCEPTANCE_MODES = ("none", "pages", "all")
+STORY_PLANNED = ".story-planned"
+
+
+def acceptance_mode(profile):
+    mode = str(profile.get("acceptance", "none")).strip().lower() or "none"
+    if mode not in ACCEPTANCE_MODES:
+        raise GateError(f"`acceptance: {mode}` is none of {', '.join(ACCEPTANCE_MODES)}")
+    return mode
+
+
+def acceptance_applies(cwd, tasks, story_id, profile):
+    """Whether this story waits for a human before it is delivered. `pages`: it has a criterion
+    whose test the end-user command runs, in a project with a browser — something to look at."""
+    mode = acceptance_mode(profile)
+    if mode in ("none", "all"):
+        return mode == "all"
+    if str(profile.get("browser", "none")).strip().lower() in ("", "none"):
+        return False
+    try:
+        _path, mapping = read_mapping(tasks, story_id)
+    except GateError:
+        return False
+    located = check_exists(Result(), cwd, mapping) or {}
+    return any((command_for(profile, path) or ("", ""))[0] == "e2eTest" for path in located.values())
+
+
+def is_acceptance(front):
+    return str(front.get("kind", "")).strip().lower() == ACCEPTANCE_KIND
+
+
+def acceptance_records(cwd, story_id):
+    """This story's acceptance records, oldest first: [(id, front, state, answer)]."""
+    records = read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
+    found = [(str(f["id"]).strip(), f, state, answer) for _p, f, _b, state, answer in records if is_acceptance(f)]
+    number = lambda rid: int(re.search(r"(\d+)$", rid).group(1)) if re.search(r"(\d+)$", rid) else 0
+    return sorted(found, key=lambda r: number(r[0]))
+
+
+def accepted(answer):
+    return str(answer.get("answer", "")).strip().lower().startswith("accept")
+
+
+def acceptance_state(cwd, story_id, story_path):
+    """('ask' | 'open' | 'accepted' | 'correction', id or None) for the story as it is now.
+
+    An answer holds for the story it was given for: the record carries the story's digest, and a
+    story changed since — a correction written in — is asked again once it has run."""
+    records = acceptance_records(cwd, story_id)
+    if not records:
+        return "ask", None
+    rid, front, state, answer = records[-1]
+    if state in ("open", "draft"):
+        return "open", rid
+    if str(front.get("digest", "")).strip() != file_digest(story_path):
+        return "ask", rid
+    return ("accepted" if accepted(answer) else "correction"), rid
+
+
+def ask_acceptance(cwd, tasks, story_id, story_path, profile, criteria):
+    """Write the next acceptance record and return its id."""
+    records = acceptance_records(cwd, story_id)
+    rid = f"{story_id}-accept-{len(records) + 1}"
+    try:
+        _path, mapping = read_mapping(tasks, story_id)
+    except GateError:
+        mapping = {}
+    run = str(profile.get("run", "")).strip()
+    lines = [f"- {key}: {text}" + (f" — `{', '.join(mapping[key])}`" if mapping.get(key) else "")
+             for key, text in criteria]
+    store = os.path.join(cwd, DECISIONS_DIR)
+    os.makedirs(store, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with open(os.path.join(store, f"{rid}.md"), "w", encoding="utf-8") as handle:
+        handle.write(
+            f"---\nid: {rid}\nstory: {story_id}\nstage: document\nkind: {ACCEPTANCE_KIND}\n"
+            f"asked: {stamp}\ndigest: {file_digest(story_path)}\n---\n\n"
+            f"# Accept {story_id}?\n\n## Question\n"
+            f"Every gate passed. Look at what the story delivers before it counts as delivered:\n\n"
+            + "\n".join(lines) + "\n\n"
+            + (f"Start the application with `{run}`.\n\n" if run else
+               "Start the application the way the project runs it (the profile names no `run:`).\n\n")
+            + "## Options\n"
+              "- accepted: the story is delivered.\n"
+              "- a correction: what should be different, written into the story (criteria and an "
+              "`answered:` line naming this record); the story runs again from plan.\n")
+    return rid
+
+
+def reopen(cwd, tasks, backlog, story_id):
+    """Take a delivered story back for a correction a human gave on looking at it.
+
+    Only with an answered acceptance record the story cites — the answer is in the story, not in a
+    prompt. Before a story was accepted every answer is a correction; after an acceptance, one that
+    changes or takes back a criterion is a new wish, and that is a new story, not this one."""
+    story_path = find_story(backlog, story_id)
+    folder = os.path.join(tasks, story_id)
+    mark = os.path.join(folder, DELIVERED)
+    if not os.path.isfile(mark):
+        print(f"reopen: {story_id} is not delivered — a correction before delivery goes into the story, "
+              f"and the schedule runs it from plan")
+        return 1
+    records = acceptance_records(cwd, story_id)
+    if not records or records[-1][2] not in ("answered", "applied") or accepted(records[-1][3]):
+        print(f"reopen: {story_id} has no answered correction — /factory-decisions records the human's "
+              f"correction as an acceptance record first")
+        return 1
+    rid = records[-1][0]
+    text = read_text(story_path)
+    if rid not in text:
+        print(f"reopen: the story does not cite {rid} — write the correction into it first (criteria and "
+              f"an `answered:` line naming {rid})")
+        return 1
+    planned = os.path.join(folder, STORY_PLANNED)
+    if any(accepted(answer) for _r, _f, _s, answer in records[:-1]) and os.path.isfile(planned):
+        before = dict(criteria_of(planned, read_front_matter(planned)[1]))
+        now = dict(criteria_of(story_path, read_front_matter(story_path)[1]))
+        changed = sorted(key for key, value in before.items() if now.get(key) != value)
+        if changed:
+            print(f"reopen: after its acceptance the correction changes {', '.join(changed)} — that is a new "
+                  f"wish: a new story with `## Changed expectations`, not this one reopened")
+            return 1
+    moved = os.path.join(folder, ".verify", "delivered-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))
+    os.makedirs(os.path.dirname(moved), exist_ok=True)
+    os.replace(mark, moved)
+    print(f"reopen: {story_id} taken back for {rid} — it runs again from plan; the first delivery is "
+          f"kept as {os.path.relpath(moved, cwd)}")
+    return 0
+
+
 def story_state(cwd, tasks, story_id, front, story_path=None):
     """(state, stage to run from or None, detail) for one story, from its files alone."""
     status = str(front.get("status", "")).strip().lower()
@@ -3432,6 +3573,9 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     answered, resolved = {}, {}
     for _path, front_, _body, state, _answer in records:
         rid, asked_by = str(front_["id"]).strip(), str(front_.get("stage", "")).strip()
+        if is_acceptance(front_):
+            resolved[rid] = asked_by
+            continue                             # answered through the document gate, not a stage
         text = texts.get(asked_by)
         if state in ("answered", "applied"):
             resolved[rid] = asked_by
@@ -3482,6 +3626,11 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     if "document" in texts:
         if os.path.isfile(os.path.join(folder, DELIVERED)):
             return "delivered", None, ""
+        if story_path:
+            with contextlib.suppress(GateError, OSError):
+                verdict, rid = acceptance_state(cwd, story_id, story_path)
+                if verdict == "accepted":
+                    return "resumable", "document", f"{rid} accepted — the document gate delivers it"
         return "in-progress", "document", "document.md is written, its gate has not passed yet"
     if not texts:
         return "ready", "plan", ""
@@ -3619,6 +3768,14 @@ class Result:
         """A fact worth reading that fails nothing and covers nothing — it is not a skipped check."""
         self.entries.append(("note", check, message))
 
+    def wait(self, check, message):
+        """Nothing failed, and a human has to answer before the story goes on — exit 3, not 0."""
+        self.entries.append(("wait", check, message))
+
+    @property
+    def waiting(self):
+        return any(state == "wait" for state, _, _ in self.entries)
+
     @property
     def failed(self):
         return any(state == "fail" for state, _, _ in self.entries)
@@ -3632,7 +3789,7 @@ class Result:
                 f"gate:note stage {stage} ran without {', '.join(sorted(set(skipped)))} — "
                 f"a green run here does not cover them"
             )
-        verdict = "fail" if self.failed else "pass"
+        verdict = "fail" if self.failed else "wait" if self.waiting else "pass"
         print(f"gate:{verdict} {stage}" if story_id == stage else f"gate:{verdict} story {story_id} stage {stage}")
         if as_json:
             print(
@@ -3649,7 +3806,7 @@ class Result:
                     indent=2,
                 )
             )
-        return 1 if self.failed else 0
+        return 1 if self.failed else 3 if self.waiting else 0
 
 
 def resolve_profile(given, cwd):
@@ -3712,6 +3869,9 @@ def main(argv):
     parser.add_argument("--stage-end", metavar="STAGE",
                         help="mark its end and record what it used, read from the session's own log")
     parser.add_argument("--session-log", help="with --stage-end: the session log to read, where it is not found")
+    parser.add_argument("--reopen", metavar="STORY",
+                        help="take a delivered story back for a human's correction (an answered acceptance "
+                             "record the story cites), and exit")
     parser.add_argument("--schedule", action="store_true",
                         help="print every story's state and the next one to run, and exit")
     parser.add_argument("--check-backlog", action="store_true",
@@ -3734,6 +3894,8 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.reopen:
+        return reopen(cwd, args.tasks, args.backlog, args.reopen)
     if args.check_backlog:
         return check_backlog(cwd, args.backlog, args.tasks, read_profile(resolve_profile(args.profile, cwd)),
                              args.story)
@@ -3867,9 +4029,35 @@ def main(argv):
         return result.report(args.story, args.stage, args.json)
     if not result.failed and args.stage == "plan":
         write_mark(args.tasks, story_id, STORY_DIGEST, file_digest(story_path))
+        write_mark(args.tasks, story_id, STORY_PLANNED, read_text(story_path).rstrip("\n"))
         record_tests_baseline(cwd, args.tasks, story_id)
     if not result.failed and args.stage == "document":
-        write_mark(args.tasks, story_id, DELIVERED, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        deliver = True
+        try:
+            if acceptance_applies(cwd, args.tasks, story_id, profile):
+                verdict, rid = acceptance_state(cwd, story_id, story_path)
+                if verdict == "accepted":
+                    result.ok("acceptance", f"{rid} accepted — the story is delivered")
+                elif verdict == "open":
+                    deliver = False
+                    result.wait("acceptance", f"{rid} waits for a human's look — answer it through "
+                                              f"/factory-decisions; the story holds the checkout until then")
+                elif verdict == "correction":
+                    deliver = False
+                    result.fail("acceptance", f"{rid} asked for a correction that is not in the story yet — "
+                                              f"write it in (criteria, an `answered:` line naming {rid}); the "
+                                              f"story then runs again from plan")
+                else:
+                    deliver = False
+                    asked = ask_acceptance(cwd, args.tasks, story_id, story_path, profile, criteria)
+                    result.wait("acceptance", f"{asked} asks a human to accept the story before it is "
+                                              f"delivered — {DECISIONS_DIR}/{asked}.md, answered through "
+                                              f"/factory-decisions")
+        except GateError as error:
+            result.fail("acceptance", str(error))
+            deliver = False
+        if deliver and not result.failed:
+            write_mark(args.tasks, story_id, DELIVERED, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     return result.report(story_id, args.stage, args.json)
 
 

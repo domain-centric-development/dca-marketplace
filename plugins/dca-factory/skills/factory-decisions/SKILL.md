@@ -85,6 +85,33 @@ designed map first. Where the answer still waits on the domain contact, the map 
 say so, so it reads as a state and not as an oversight. Then say what changes for the story; the
 story itself is `/factory-backlog`'s.
 
+## An acceptance
+
+A record with `kind: acceptance` was written by the document gate, not by a stage: every gate
+passed and the profile's `acceptance:` asks a human to look before the story counts as delivered.
+The record lists the criteria with their tests and how to start the application (`run:`). A human
+accepts — no role is checked; the answer is theirs, on their confirmation, as always.
+
+- **Accepted** — write `answer: accepted`, then run the document gate
+  (`python3 .agents/factory/story-gate.py --story <story> --stage document`): it delivers the story.
+  The story's commit follows — the code, the tests and `tasks/<story>/`.
+- **A correction** — what the human wants different, in their words: write `answer: correction:
+  <their words>`, then bring it into **the same story** through the backlog skill's rules: changed or
+  new criteria, one `answered:` line under `## Assumptions` naming the record id, and under
+  `## Changed expectations` what the story had delivered that no longer holds. The story then runs
+  again from plan — the schedule sees it changed — in its own `tasks/<story>/`, holding the checkout
+  until it is accepted.
+- **Before a story was accepted, every answer is a correction**, a changed criterion included; the
+  rounds counter bounds how often. **After it was accepted**, adding what the story left unsaid is a
+  correction; changing or taking back a criterion is a **new wish** — a new story through
+  `/factory-backlog` with `## Changed expectations`. Say which it is and let the human decide; the
+  gate refuses to reopen a story for a changed criterion after an acceptance.
+- **A story already delivered** — the human looked after delivery: write a record for it yourself
+  (`<story>-accept-<n>`, `kind: acceptance`, `stage: document`, `digest:` of the story now) with their
+  correction as the answer, write the correction into the story as above, then take it back with
+  `python3 .agents/factory/story-gate.py --reopen <story>`. It refuses without an answered
+  correction the story cites.
+
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
 `/factory-backlog`) — never a shell command to type, unless the person asks how to do something
@@ -98,10 +125,12 @@ inside one anyway.
 - Do not write `## Answer` from a recommendation, a timeout, a majority of options or your own
   judgement. The whole file exists so that a suggestion cannot be mistaken for a decision.
 - Do not edit anything but the record — not the story, not the plan, not the code — apart from the
-  project description after a structural answer (above). The stage that asked propagates the
+  project description after a structural answer, and the story after an acceptance correction
+  (both above). The stage that asked propagates the
   answer; two writers on one plan is how an answer gets applied twice.
 - Do not invent a record. A question that reached you as a sentence and has no file is the asking
-  stage's omission; the next gate refuses it, and the fix is that stage writing the record.
+  stage's omission; the next gate refuses it, and the fix is that stage writing the record. The one
+  record you write is a human's acceptance correction for a story already delivered (above).
 - Do not summarise several records into one answer. Each is answered on its own, even when the
   same word settles them all.
 

@@ -135,7 +135,8 @@ Body sections:
   one line per expectation that no longer holds, in the project's language (what is seen now, what
   is seen after). No story ids, no file names — nobody has to know which story or which hand wrote
   a test. Released with the story, it is the human's authority for the plan to change the tests
-  that follow from it; without it, a plan that finds such tests asks.
+  that follow from it; without it, a plan that finds such tests asks. A human's correction at
+  acceptance lands here too, in the same story, when it takes back something the story delivered.
 - `## Assumptions` — the asynchronous channel to the domain contact: one line per assumption,
   `open:` or `answered:`. An assumption is a question, never a decision the team took itself.
 

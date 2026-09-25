@@ -1,7 +1,7 @@
 {
   "name": "dca-core",
   "description": "The Domain-Centric Architecture method as skills, for Java/Spring and .NET/C#: dca-describe writes the project description (product, technical decisions, designed domain) under project/; dca-new starts a project from a generator and lays out contexts, use cases, aggregates, stores and domain services; dca-init adds the published dca-building-blocks/dca-archunit or DomainCentric.BuildingBlocks/ArchRules packages, one architecture test and the method's section in AGENTS.md; dca-add brings in one capability (rule module, freeze, formatter, browser runner); dca-modelling carries the tactical-modelling craft, dca-discipline the invariants, dca-review the DCA conformance review, dca-knowledge the cited knowledge catalog. Pairs with dca-craft.",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "author": {
     "name": "Christoph Bloemer"
   },

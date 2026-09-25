@@ -1480,7 +1480,8 @@ gate() {                                    # gate <stage> <story>
   # exactly the evidence the gate exists to replace.
   cp "$report" "$journal/gate-$1.$(date -u +%H%M%S).txt"
   printf '%s\tgate\t%s\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$code" >> "$journal/journal.tsv"
-  [ "$code" = 0 ] && rm -f "$report"
+  # 3 is not a refusal: every check passed and a human is asked (acceptance) — nothing to run again.
+  { [ "$code" = 0 ] || [ "$code" = 3 ]; } && rm -f "$report"
   return "$code"
 }
 
@@ -1667,7 +1668,14 @@ run_story() {
 
     if [[ " ${POST_GATED[*]} " == *" $stage "* ]]; then
       echo "── gate $stage"
-      if [ -z "$dry" ] && ! gate "$stage" "$story"; then
+      local gate_code=0
+      [ -z "$dry" ] && { gate "$stage" "$story" || gate_code=$?; }
+      if [ "$gate_code" = 3 ]; then
+        echo "factory: story $story waits for a human's acceptance — answer it with /factory-decisions;" >&2
+        echo "factory:   the story holds the checkout until then." >&2
+        return 3
+      fi
+      if [ "$gate_code" != 0 ]; then
         # The same way back a judge's `changes-requested` takes: the stage runs again with the gate's
         # report as its input, one round counted, and three rounds stop the story.
         local refused_rounds; refused_rounds=$(bump_rounds "$story")

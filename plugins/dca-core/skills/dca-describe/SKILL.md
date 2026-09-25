@@ -26,7 +26,7 @@ could show goes to `docs/`.
    builds it, and a placeholder passes a check that counts headings. A heading with nothing to
    decide gets one honest line.
    - **product** — what is built and for whom; how each actor reaches it (the surfaces, and on
-     which devices); how it works — where state lives, what is persisted; how it looks; the
+     which devices); how it works — where state lives, what is persisted; how it looks, and the sizes its pages are designed for, by name (`s`–`xl`); the
      qualities it needs; what it will not do.
    - **tech** — the stack and why; the frontend approach and what it excludes; the persistence and
      what it excludes; where it runs; the systems it talks to; how versions are chosen.

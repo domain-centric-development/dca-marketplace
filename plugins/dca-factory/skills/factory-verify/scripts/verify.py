@@ -1086,6 +1086,27 @@ exit 0
                   encoding="utf-8") as handle:
             handle.write(ANSWER)
 
+    # WP-66: a story that waits for acceptance stops the runner like a question, and counts no round
+    with tmpdir() as root:
+        env = backlog_fixture(root)
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as h:
+            h.write("acceptance: all\n")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", env=env)
+        folder = os.path.join(root, "tasks", "STORY-2")
+        check("acceptance: the runner stops with exit 3 at the document gate's question, counting no round",
+              code == 3 and not os.path.isfile(os.path.join(folder, ".delivered"))
+              and os.path.isfile(os.path.join(root, ".agents", "factory", "decisions", "STORY-2-accept-1.md"))
+              and not os.path.isfile(os.path.join(folder, ".gate-document.txt"))
+              and not os.path.isfile(os.path.join(folder, ".rounds")),
+              f"exit {code}; {output.strip().splitlines()[-2:]}")
+        with open(os.path.join(root, ".agents", "factory", "decisions", "STORY-2-accept-1.md"), "a",
+                  encoding="utf-8") as h:
+            h.write("\n## Answer\nanswer: accepted\nby: a-human\nat: 2026-09-25T15:00:00Z\n")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", env=env)
+        check("acceptance: once accepted, the runner's next run delivers the story",
+              code == 0 and os.path.isfile(os.path.join(folder, ".delivered")),
+              f"exit {code}; {output.strip().splitlines()[-2:]}")
+
     six = ["plan", "test", "build", "tidy", "judge", "document"]
     with tmpdir() as root:
         env = backlog_fixture(root)
@@ -2592,6 +2613,13 @@ def main(argv=None):
         (Case("test: without that decision, green before the build is still refused", "test", 1,
               must_fail=("tests-red",), text=("passes before the build stage",)),
          dict(green=both_green, ledger=both_green)),
+        (Case("test: a story running again for a human's correction keeps the tests it had met, green",
+              "test", 0, must_pass=("tests-red",), text=("expectation changed on decision STORY-1-accept-1",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             (".agents/factory/decisions/STORY-1-accept-1.md",
+              "---\nid: STORY-1-accept-1\nstory: STORY-1\nstage: document\nkind: acceptance\n"
+              "asked: 2026-09-25T15:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n\n## Answer\n"
+              "answer: correction: two cards on m\nby: a-human\nat: 2026-09-25T15:10:00Z\n"),))),
         # --- the build gate -----------------------------------------------
         # --- the hand-over names what the stage changed ------------------------
         (Case("build: a hand-over that lists every changed file passes the files check", "build", 0,
@@ -3591,6 +3619,120 @@ def main(argv=None):
         expectations.append(("observe: the build table's plain paths are claims, any extension, only under `## Changed`",
                              "src/main/App.java" in rows and "src/main/resources/app.properties" in rows
                              and "not/this.java" not in rows, rows))
+    # --- WP-66: acceptance before delivery --------------------------------
+    def accept_fixture(root, profile_lines, *stories, extra=()):
+        backlog_project(root, *stories, extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),
+                                                       ("tasks/STORY-1/tests.md", TESTS),
+                                                       ("tasks/STORY-1/document.md", DOCUMENT)) + tuple(extra))
+        with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as h:
+            h.write(profile_lines)
+
+    def gate_run(root, *argv):
+        return subprocess.run([sys.executable, args.gate] + list(argv), cwd=root, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace")
+
+    def answer(root, rid, text):
+        with open(os.path.join(root, ".agents", "factory", "decisions", f"{rid}.md"), "a", encoding="utf-8") as h:
+            h.write(f"\n## Answer\nanswer: {text}\nby: a-human\nat: 2026-09-25T15:00:00Z\n")
+
+    story_file = lambda root: os.path.join(root, "project", "backlog", "sample", "STORY-1.md")
+    delivered = lambda root: os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".delivered"))
+    record = lambda root, n: os.path.join(root, ".agents", "factory", "decisions", f"STORY-1-accept-{n}.md")
+
+    with tmpdir() as root:
+        accept_fixture(root, "acceptance: all\n", ("STORY-2", []))
+        asked = gate_run(root, "--story", "STORY-1", "--stage", "document")
+        rows, nxt, wait, _ = schedule_of(args.gate, root)
+        expectations.append(("acceptance: the document gate asks instead of delivering — exit 3, a record, the story "
+                             "waits and holds the checkout",
+                             asked.returncode == 3 and not delivered(root) and os.path.isfile(record(root, 1))
+                             and "kind: acceptance" in open(record(root, 1), encoding="utf-8").read()
+                             and rows.get("STORY-1", ("",))[0] == "waiting" and nxt.startswith("none"),
+                             f"exit {asked.returncode}; {rows.get('STORY-1')}; next: {nxt}"))
+        answer(root, "STORY-1-accept-1", "accepted")
+        rows, _n, _w, _ = schedule_of(args.gate, root)
+        given = gate_run(root, "--story", "STORY-1", "--stage", "document")
+        expectations.append(("acceptance: accepted — the schedule sends it to the document gate, which delivers",
+                             rows.get("STORY-1") == ("resumable", "document") and given.returncode == 0
+                             and delivered(root), f"{rows.get('STORY-1')}; exit {given.returncode}"))
+
+    with tmpdir() as root:
+        accept_fixture(root, "acceptance: all\n")
+        gate_run(root, "--story", "STORY-1", "--stage", "document")
+        answer(root, "STORY-1-accept-1", "correction: two cards on m")
+        pending = gate_run(root, "--story", "STORY-1", "--stage", "document")
+        with open(story_file(root), "a", encoding="utf-8") as h:
+            h.write("- answered: two cards on m (a-human, STORY-1-accept-1).\n")
+        gate_run(root, "--story", "STORY-1", "--stage", "plan")        # the digest of the story as planned
+        with open(story_file(root), "a", encoding="utf-8") as h:
+            h.write("- answered: and the buttons stay (a-human, STORY-1-accept-1).\n")
+        rows, _n, _w, _ = schedule_of(args.gate, root)
+        expectations.append(("acceptance: a correction not yet in the story fails the gate; written in, the same "
+                             "story runs again from plan",
+                             pending.returncode == 1 and "correction that is not in the story" in pending.stdout
+                             and rows.get("STORY-1") == ("in-progress", "plan") and not delivered(root),
+                             f"exit {pending.returncode}; {rows.get('STORY-1')}"))
+        asked_again = gate_run(root, "--story", "STORY-1", "--stage", "document")
+        expectations.append(("acceptance: after the correction ran, the story is asked again, in a record of its own",
+                             asked_again.returncode == 3 and os.path.isfile(record(root, 2)),
+                             asked_again.stdout.strip()[-200:]))
+
+    with tmpdir() as root:
+        accept_fixture(root, "acceptance: pages\n")
+        given = gate_run(root, "--story", "STORY-1", "--stage", "document")
+        expectations.append(("acceptance: pages — a project without a browser delivers without asking",
+                             given.returncode == 0 and delivered(root), given.stdout.strip()[-200:]))
+
+    with tmpdir() as root:
+        accept_fixture(root, "acceptance: pages\nbrowser: playwright\ne2eTest: ./gradlew test-pages\n",
+                       extra=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                               "class WidgetPageTest {\n  void showsTheThing() {}\n}\n"),
+                              ("src/test/java/com/example/WidgetUnitTest.java",
+                               "class WidgetUnitTest {\n  void showsNothingWhenEmpty() {}\n}\n")))
+        asked = gate_run(root, "--story", "STORY-1", "--stage", "document")
+        expectations.append(("acceptance: pages — a story whose test the end-user command runs waits for a human",
+                             asked.returncode == 3 and not delivered(root), asked.stdout.strip()[-200:]))
+
+    with tmpdir() as root:
+        accept_fixture(root, "")
+        gate_run(root, "--story", "STORY-1", "--stage", "plan")
+        gate_run(root, "--story", "STORY-1", "--stage", "document")
+        refused = gate_run(root, "--reopen", "STORY-1")
+        write_file(root, ".agents/factory/decisions/STORY-1-accept-1.md",
+                   "---\nid: STORY-1-accept-1\nstory: STORY-1\nstage: document\nkind: acceptance\n"
+                   "asked: 2026-09-25T15:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n")
+        answer(root, "STORY-1-accept-1", "correction: eight products")
+        uncited = gate_run(root, "--reopen", "STORY-1")
+        with open(story_file(root), "a", encoding="utf-8") as h:
+            h.write("- answered: eight products (a-human, STORY-1-accept-1).\n")
+        taken = gate_run(root, "--reopen", "STORY-1")
+        rows, _n, _w, _ = schedule_of(args.gate, root)
+        kept = [f for f in os.listdir(os.path.join(root, "tasks", "STORY-1", ".verify")) if f.startswith("delivered-")]
+        expectations.append(("reopen: only with an answered correction the story cites; then the mark moves aside "
+                             "and the same story runs from plan",
+                             refused.returncode == 1 and uncited.returncode == 1 and taken.returncode == 0
+                             and not delivered(root) and kept and rows.get("STORY-1") == ("in-progress", "plan"),
+                             f"{refused.returncode}/{uncited.returncode}/{taken.returncode}; {rows.get('STORY-1')}"))
+
+    with tmpdir() as root:
+        accept_fixture(root, "acceptance: all\n")
+        gate_run(root, "--story", "STORY-1", "--stage", "plan")
+        gate_run(root, "--story", "STORY-1", "--stage", "document")
+        answer(root, "STORY-1-accept-1", "accepted")
+        gate_run(root, "--story", "STORY-1", "--stage", "document")
+        text = open(story_file(root), encoding="utf-8").read()
+        write_file(root, "project/backlog/sample/STORY-1.md",
+                   text.replace("The reader sees the thing.", "The reader sees two things.")
+                   + "- answered: two things (a-human, STORY-1-accept-2).\n")
+        write_file(root, ".agents/factory/decisions/STORY-1-accept-2.md",
+                   "---\nid: STORY-1-accept-2\nstory: STORY-1\nstage: document\nkind: acceptance\n"
+                   "asked: 2026-09-25T16:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n")
+        answer(root, "STORY-1-accept-2", "correction: two things")
+        wish = gate_run(root, "--reopen", "STORY-1")
+        expectations.append(("reopen: after an acceptance, a changed criterion is a new wish, not a reopened story",
+                             wish.returncode == 1 and "new wish" in wish.stdout and delivered(root),
+                             wish.stdout.strip()[-200:]))
+
     with tmpdir() as root:
         # the backlog skill checks one story while it is still being written: the plan gate's checks,
         # none of its marks — a baseline taken then would be the wrong one, and the files it leaves

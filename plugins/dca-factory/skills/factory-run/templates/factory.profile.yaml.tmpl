@@ -81,6 +81,13 @@
 # contextMap   the context map generated from the code, "as built" (found by convention when absent);
 #              a difference to `domain` is a finding, not a duplicate
 # glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
+# acceptance   `none` (default), `pages` or `all`: which stories wait for a human's look before they
+#              are delivered. `pages` holds a story with a criterion the end-user command tests in a
+#              project with a browser. The document gate then writes an acceptance record instead of
+#              delivering; "accepted" delivers, a correction goes into the same story, which runs
+#              again from plan. /factory-setup writes `pages` where the product has web pages
+# run          how a person starts the application to look at it (`./gradlew bootRun`,
+#              `dotnet run --project src/App.Web`) — named in the acceptance record
 # reviews      perspectives the judge stage covers *in addition to* its built-in ones
 # review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
 #              tool; a review *agent* only in a tool that has agents — where it is missing, the
@@ -89,7 +96,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 7
+contract: 8
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}
@@ -100,6 +107,8 @@ architecture: {{ARCHITECTURE_COMMAND}}
 format: {{FORMAT_COMMAND}}
 formatFix: {{FORMAT_FIX_COMMAND}}
 #required: compile test architecture
+#acceptance: pages
+#run: <how a person starts the application>
 #carrier.test: <the skill that carries this project's end-user testing craft>
 #carrier.build: <the skill that carries this project's implementation craft>
 #carrier.guard: <the skill that holds the invariants while build and tidy edit>

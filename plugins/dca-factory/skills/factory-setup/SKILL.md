@@ -47,6 +47,10 @@ docs/                      what exists and why — written after the code, some 
    detection. Show them. On the person's confirmation run `setup --write`; it adds the missing keys
    and never overwrites a value a person wrote. A differing value is theirs to keep or to replace
    (`setup --write --replace <key>`, on their word).
+4a. **Acceptance.** Where the product description's `## Surfaces` names web pages and the profile
+   has no `acceptance:`, propose `acceptance: pages` — a story with something to see then waits for a
+   human's look before it is delivered — and a `run:` line with how a person starts the application.
+   Write both on the person's confirmation; `none` is their answer too.
 5. **Everything present** → say so in one line per part, and name the next step: `/factory-backlog`
    for the first epic, or `/dca-new` where the project has a description and no code yet.
 

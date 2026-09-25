@@ -104,9 +104,15 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    project's reader documentation follow what the story changed.
 11. **gate `document`** — every file, path and identifier the stage claims exists, and every claim
    says how it was checked. A story whose documents still describe yesterday is not delivered.
+   Where the profile's `acceptance:` applies, the gate does not deliver yet: it writes an
+   acceptance record and exits **3** — a question to a human, not a refusal; count no round. Stop,
+   and name in the report what to look at (the record lists it) and `/factory-decisions` to answer.
+   "Accepted" delivers the story at the next document gate; a correction goes into the same story,
+   which runs again from plan.
 12. Report: the story, the criteria and their tests, what the gate checked, what it **skipped**,
    and every open assumption from the story. A run that skipped a check must not read as a
-   complete verification. The run commits nothing; say what the story's commit holds — the code
+   complete verification. The run commits nothing — and a story waiting for acceptance is not
+   ready to commit; say what the story's commit holds — the code
    and tests the stages changed **and `tasks/<story>/`** with its hidden files (the red ledger,
    the story digest, the journal under `.verify/`), which are the story's record. The commit hook
    checks the index against the working tree, so a commit without them is refused.

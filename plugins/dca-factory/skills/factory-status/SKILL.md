@@ -26,6 +26,9 @@ start nothing and answer nothing on anyone's behalf.
    reconstructing it by hand.
 2. **Lead with what needs someone.** An open decision blocks its story and everything that depends
    on it: name it first, with the story it blocks, and point to `/factory-decisions` to answer it.
+   An open `<story>-accept-<n>` record is a story waiting for a human's look before it is
+   delivered: say so, with how to start the application (the record names it), and that the story
+   holds the checkout until it is accepted.
 3. **Name the part of the factory that is missing.** Also run
    `bash .agents/factory/factory.sh status --brief`: its lines say when the project description is
    missing (`/factory-setup`), when the backlog is empty (`/factory-backlog`), when the backlog still
