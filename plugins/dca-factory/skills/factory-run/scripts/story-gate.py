@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.36.1"
+VERSION = "0.36.2"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3418,7 +3418,10 @@ HELP_COMMANDS = (
     ("this help", "the flow, the commands, the marks, the files", "/factory-help", "help"),
 )
 
-HELP_MARKS = (("next", "where this project is now — the next step"), ("look", "waits for your look — an acceptance"), ("question", "waits for your answer"),
+NOW_WORDS = {"next": "you are here", "look": "waits for your look", "question": "waits for your answer",
+             "running": "running"}
+
+HELP_MARKS = (("look", "waits for your look — an acceptance"), ("question", "waits for your answer"),
               ("stopped", "stopped — read why before it runs again"), ("running", "running"),
               ("done", "done — a story, an epic, a decision"), ("none", "nothing to do there now"))
 
@@ -3452,7 +3455,7 @@ def help_model(cwd, backlog, tasks):
     # place: where this project is now, with the mark of what it is there (waiting, running, next).
     flow = [
         dict(step="describe", what="the product, the technical decisions, the designed domain — under project/",
-             skill="/factory-setup", shell=""),
+             skill="/dca-describe", shell=""),
         dict(step="skeleton", what="a runnable project from a generator, with the architecture test and a formatter",
              skill="/dca-new project", shell=""),
         dict(step="set up", what="the stack profile: build, test, format and browser commands, the carriers",
@@ -3465,7 +3468,8 @@ def help_model(cwd, backlog, tasks):
                                            "accepted delivers it, a correction goes back into the story",
              skill="/factory-decisions", shell="decisions"),
     ]
-    for f in flow:
+    for n, f in enumerate(flow, 1):
+        f["number"] = n
         if f["step"] != here:
             f["mark"] = "none"
         elif here == "answer or accept":
@@ -3478,7 +3482,7 @@ def help_model(cwd, backlog, tasks):
         nxt = status_view["next"]
     elif not described:
         nxt = dict(text="Describe the project first — what is built, for whom, on which stack.",
-                   action=make_action(skill="/factory-setup", shell=""))
+                   action=make_action(skill="/dca-describe", shell=""))
     elif not has_build:
         nxt = dict(text="Create the project — a skeleton from a generator, with DCA and its checks.",
                    action=make_action(skill="/dca-new project", shell=""))
@@ -3508,11 +3512,10 @@ def shell_form(command):
 def render_help_text(model, colour=False):
     out = [""] + heading(f"Factory help — {model['project']}", colour, "═")
     out += section("The flow — and where this project is now", colour)
-    flow_mark = lambda f, marks: marks[f["mark"]] if f["mark"] != "none" else " "
-    rows = [[f"{flow_mark(f, MARKS_TEXT)} {f['step']}", f["skill"], shell_form(f["shell"]) or "— needs an agent session",
-             f["what"]] for f in model["flow"]]
-    out += table_text(["step", "agent", "shell", "what it is"], rows, marks=[f["mark"] for f in model["flow"]],
-                      colour=colour, painted=1)
+    rows = [[f"{f['number']}  {f['step']}", NOW_WORDS.get(f["mark"], ""), f["skill"],
+             shell_form(f["shell"]) or "— needs an agent session", f["what"]] for f in model["flow"]]
+    out += table_text(["step", "now", "agent", "shell", "what it is"], rows,
+                      marks=[f["mark"] if f["mark"] != "none" else None for f in model["flow"]], colour=colour, painted=2)
     out += section("Commands", colour)
     out += table_text(["to see", "agent", "shell", "what it shows"],
                       [[c["name"], c["skill"], shell_form(c["shell"]), c["what"]] for c in model["commands"]],
@@ -3530,8 +3533,9 @@ def render_help_text(model, colour=False):
 
 def render_help_md(model):
     out = [f"### Factory help — {model['project']}", "", "**The flow — and where this project is now**", ""]
-    out += table_md(["", "step", "agent", "shell", "what it is"],
-                    [[MARKS_MD[f["mark"]] if f["mark"] != "none" else "", f["step"], f"`{f['skill']}`",
+    out += table_md(["step", "now", "agent", "shell", "what it is"],
+                    [[f"{f['number']} {f['step']}", f"**{NOW_WORDS[f['mark']]}**" if f["mark"] in NOW_WORDS else "",
+                      f"`{f['skill']}`",
                       f"`{shell_form(f['shell'])}`" if f["shell"] else "— needs an agent session", f["what"]]
                      for f in model["flow"]])
     out += ["", "**Commands**", ""]

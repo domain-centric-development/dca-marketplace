@@ -3222,7 +3222,8 @@ def main(argv=None):
             ("help: every command in its agent and its shell form, the marks and the files",
              all(c in help_text for c in ("/factory-status", "factory.sh status", "/factory-decisions",
                                           "factory.sh decisions", "factory.sh help", "Marks", "Files", "Next"))
-             and "`factory.sh backlog --check`" in help_md and "| 👀 | `!` |" in help_md, help_text[-400:]),
+             and "`factory.sh backlog --check`" in help_md and "| 👀 | `!` |" in help_md
+             and "**waits for your answer**" in help_md and help_md.count("`/factory-setup`") == 2, help_md[:900]),
             ("help: the same files give the same text, in the terminal and in the session",
              help_text == helper() and help_md == helper("--format", "md") and "\x1b[" not in help_text, ""),
         ]
@@ -4082,7 +4083,8 @@ def main(argv=None):
         expectations.append(("help: works before the pipeline is installed, the first step marked next",
                              shown.returncode == 0 and fresh
                              and [f["mark"] for f in fresh["flow"]] == ["next"] + ["none"] * 5
-                             and fresh["next"]["action"]["skill"] == "/factory-setup"
+                             and fresh["next"]["action"]["skill"] == "/dca-describe"
+                             and [f["number"] for f in fresh["flow"]] == [1, 2, 3, 4, 5, 6]
                              and {f["step"]: f["shell"] for f in fresh["flow"]}["set up"] == "setup",
                              f"exit {shown.returncode}; {shown.stdout[:200]} {shown.stderr[:200]}"))
     with tmpdir() as root:
