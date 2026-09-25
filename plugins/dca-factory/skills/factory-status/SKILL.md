@@ -24,12 +24,14 @@ start nothing and answer nothing on anyone's behalf.
    Asked about one story, add `--story <story>`: its criteria, its passes (a correction after
    acceptance is a pass of its own), its stages with the time they worked and their tokens, its
    decisions.
-2. **Show it as it is.** The view is written to be read without you: what waits for a person first,
-   then what runs, then the backlog by epic, then what comes next. Do not retell the tables in
-   sentences and do not reformat them. Add only what the view cannot know — the one thing to do now,
-   as the skill that does it — and, when asked, the reason behind a state, read from the file it
-   comes from ("why is STORY-3 blocked?" — the dependency its story names). Where the gate is not
-   installed, say so and stop rather than reconstructing it by hand.
+2. **Show it as it is, and nothing after it.** The view is written to be read without you: what waits
+   for a person first, then what runs, then the backlog by epic, and it ends with **Next** — the one
+   thing to do now, with its skill. Do not retell the tables in sentences, do not reformat them, do
+   not add an interpretation of the numbers, and do not repeat *Next* in your own words. Say more
+   only when asked — the reason behind a state, read from the file it comes from ("why is STORY-3
+   blocked?" — the dependency its story names; "why did test run three times?" — the journal and the
+   decision records). Where the gate is not installed, say so and stop rather than reconstructing it
+   by hand.
 3. **What the marks mean**, if someone asks: 👀 look at it and accept it, ❓ answer a question (or
    release a draft), ⛔ stopped or interrupted, ⏳ running, ✅ delivered, ➖ nothing to do. The terminal
    uses `!` `?` `✗` `▶` `✓` `·` for the same, in colour.

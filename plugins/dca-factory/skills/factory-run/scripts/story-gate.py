@@ -3581,13 +3581,12 @@ def how_lines(act, colour, indent):
 
 def how_md(act):
     parts = []
+    if act.get("text"):
+        parts.append(act["text"])
     if act.get("look"):
         parts.append(f"look at it: `{act['look']}`")
     if act.get("skill"):
-        parts.append(f"agent: `{act['skill']}`")
-        parts.append(f"shell: {act['shell']}" if act.get("shell") else "shell: — needs an agent session")
-    if act.get("text"):
-        parts.insert(0, act["text"])
+        parts.append(f"`{act['skill']}`" + (f" (in a shell: {act['shell']})" if act.get("shell") else ""))
     return " · ".join(parts)
 
 
@@ -3597,9 +3596,12 @@ def next_text(model, colour):
 
 
 def next_md(model):
-    nxt = model["next"]
-    how = how_md(nxt["action"])
-    return f"**Next:** {nxt['text']}" + (f" — {how}" if how else "")
+    """The session's form: the skill to use; the shell's command beside it where there is one."""
+    nxt, act = model["next"], model["next"]["action"]
+    line = f"**Next:** {nxt['text']}"
+    if act.get("skill"):
+        line += f" → `{act['skill']}`" + (f" (in a shell: `{act['shell']}`)" if act.get("shell") else "")
+    return line
 
 
 def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None, total=False):
@@ -3907,8 +3909,8 @@ def render_story_text(model, colour=False):
 def render_story_md(model):
     title, facts = story_header(model)
     out = [f"**{title}**", ""]
-    out += table_md(["", ""], [[f"**{label}**", (f"{MARKS_MD[model['row']['mark']]} " if label == "State" else "") + value]
-                               for label, value in facts])
+    out += [f"- **{label}:** " + (f"{MARKS_MD[model['row']['mark']]} " if label == "State" else "") + value
+            for label, value in facts]
     for w in model["waiting"]:
         out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {how_md(w['action'])}"]
     if model["passes"]:
