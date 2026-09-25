@@ -135,7 +135,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.38.0"
+VERSION = "0.38.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -779,6 +779,7 @@ def check_backlog(cwd, backlog, tasks, profile, only=None):
                     result.ok("story", f"{label} in context {context} with {len(criteria)} criterion(s)")
                     check_context_map(result, cwd, profile, context)
                 check_epic(result, path, front, backlog)
+                check_happy_path(result, path, front, body, profile)
             except GateError as error:
                 result.fail("story", str(error))
             checked += 1

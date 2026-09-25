@@ -4138,6 +4138,14 @@ def main(argv=None):
                              and "git mv backlog project/backlog" in planned and "no story 'STORY-1' under project/backlog" in planned,
                              f"{brief.strip()} | {planned.strip()[-200:]}"))
     with tmpdir() as root:
+        backlog_project(root, extra_sources=(("project/backlog/sample/STORY-2.md",
+                                               story("STORY-2").replace(" (happy path):", ":")),))
+        checked = subprocess.run([sys.executable, args.gate, "--check-backlog"], cwd=root, capture_output=True,
+                                 text=True, encoding="utf-8").stdout
+        expectations.append(("check-backlog: a story without a happy path is named, as the plan gate would",
+                             "happy-path" in checked and "STORY-2" in checked and "0 scenarios marked" in checked,
+                             checked[-500:]))
+    with tmpdir() as root:
         # a journey: after its test it goes to the judge, and an epic delivered with an open journey is named
         journey = (story("JOURNEY-1", ("STORY-1",)).replace("status: approved\n", "status: approved\nkind: journey\n")
                    .replace(" (happy path):", ":"))
