@@ -63,6 +63,12 @@ Where the profile names a browser runner (`browser:` other than `none`), an end-
 text in place of driving the browser is a **major** finding: it proves the wording, not the behaviour,
 and the project has the runner that would prove the behaviour.
 
+**Test levels are major findings too.** A browser test for a scenario that is neither the story's happy
+path nor `browser-only` with a reason in the plan; an adapter the plan changed that no integration test
+passes through; a port mocked where the plan changed its adapter — each is **major**: the first makes the
+suite slow and flaky where an integrated test would do, the other two leave the translation untested. A
+journey test that stops short of the epic's outcome event is **major** as well.
+
 Across the three, check the change against the story itself. A criterion written as a scenario is
 covered only when its test arranges the `Given`, performs the `When` and asserts every `Then` and
 `And` with the scenario's values: an outcome the test does not assert is a finding. Behaviour listed

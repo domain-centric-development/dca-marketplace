@@ -1,0 +1,5 @@
+# WireMock.Net in a .NET test project.
+kind: stub
+order: 30
+detect.contains: **/*.csproj :: Include="WireMock\.Net
+http.stub: wiremock-net

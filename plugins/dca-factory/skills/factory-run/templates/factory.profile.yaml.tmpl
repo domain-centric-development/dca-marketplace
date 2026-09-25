@@ -34,6 +34,16 @@
 #              when the project deliberately has none. With `none` the plan may fall back to a lower
 #              test level for a page; unset, a criterion only a browser can observe stops the plan
 #              once for the stack decision. `factory.sh setup` sets it where it finds a Playwright setup
+# integration  `none` when the project has decided to have no integration level; otherwise one
+#              `test.<name>:` source set runs the scenarios below the page (contract 9: every scenario but
+#              the happy path and a browser-only one is integrated). Neither declared: the plan stops once
+# test.journey runs the journey tests — guards over an epic's delivered stories, walked to the epic's
+#              outcome event. They need the running application, so like `e2eTest` they stay out of
+#              `required:` and run in CI
+# http.stub    the stub an integration test puts in place of an external system, at the protocol:
+#              `wiremock` (Java), `wiremock-net` (.NET) or `none`. Never a mock of the port whose adapter
+#              the story changes, never a shared or real instance. `setup --check` proposes it where it
+#              finds the dependency; `dca-add http-stub` sets it up
 # architecture runs the architecture rule suite — the gate runs it in the build stage
 # format       runs the formatter check — the gate runs it in the build and tidy stages
 # formatFix    corrects the formatting (`./gradlew spotlessApply`, `dotnet format`). The stages that write
@@ -96,7 +106,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 8
+contract: 9
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}

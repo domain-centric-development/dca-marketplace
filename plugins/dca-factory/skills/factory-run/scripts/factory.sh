@@ -962,7 +962,7 @@ presets() {                                 # presets <dir> <mode> [args…]
 import os, re, sys
 
 directory, python, conventions, mode, rest = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
-KINDS = ("stack", "browser", "format", "governance")
+KINDS = ("stack", "browser", "format", "governance", "stub")
 #: Folders no detection looks into: build output, dependencies, tool state. Bounded in depth as well,
 #: so a detection never walks a whole disk from a mistaken directory.
 PRUNED = {".git", ".gradle", ".idea", ".vs", "build", "bin", "obj", "target", "dist", "out",
@@ -1609,9 +1609,15 @@ run_story() {
     echo "factory:   answer under '## Answer' with answer:, by: and at:, then run the stage that asked (--from <stage>)." >&2
     return 3
   fi
+  local kind; kind=$("$PY" "$GATE" --story "$story" --kind 2>/dev/null || echo story)
   for stage in "${STAGES[@]}"; do
     [ "$stage" = "$from" ] && started=1
     [ "$started" = 1 ] || continue
+    # A journey walks what is delivered: nothing to build, nothing to tidy.
+    if [ "$kind" = journey ] && { [ "$stage" = build ] || [ "$stage" = tidy ]; }; then
+      echo "── stage $stage  (skipped: a journey builds nothing)"
+      continue
+    fi
 
     if [[ " ${PRE_GATED[*]} " == *" $stage "* ]]; then
       echo "── gate $stage"
@@ -1738,8 +1744,9 @@ run_story() {
             echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
             return 1
           fi
-          echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the build stage." >&2
-          run_story "$story" "$tool" build "$dry"
+          local back=build; [ "$kind" = journey ] && back=test
+          echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
+          run_story "$story" "$tool" "$back" "$dry"
           return $?
           ;;
         story-conflict)

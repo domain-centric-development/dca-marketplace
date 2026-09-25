@@ -80,7 +80,8 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
 3. **`stage-test`** → `tasks/<story>/tests.md`
 4. **gate `test`** — every criterion mapped, test sources compile, every mapped test red. A
    mapped test that is already green means the criterion is not new behaviour or the test asserts
-   nothing; send it back to `stage-test`.
+   nothing; send it back to `stage-test`. With contract 9 it also holds the levels: a test the
+   end-user command runs must belong to the happy path or to a scenario the plan gave `browser-only`.
 5. **`stage-build`** → `tasks/<story>/build.md`
 6. **gate `build`** — every mapped test green, and the profile's `architecture:` and `format:`
    commands succeed. Both run in the gate, not on a stage's word. On failure, hand the gate output back to
@@ -257,6 +258,14 @@ what a commit contains and refuses when the working tree differs from the index;
 is that command, and CI runs `--change` on its checkout. Recommend it when someone asks whether a
 change is ready to commit — do not invent a story for it. `--parity <config>` checks that several
 implementations each prove a scenario contract from their reports (`reference/file-contracts.md`).
+
+## A journey item
+
+A backlog item with `kind: journey` (`story-gate.py --story <id> --kind` prints it) is a guard over
+delivered stories. It runs **plan, test, judge, document** — skip build and tidy, there is nothing to
+build — and its test gate expects the journey test **green**, the inverse of a story. A judge's
+`changes-requested` sends it back to the test stage, not the build stage. Everything else — the gates,
+the rounds, the decisions — is a story's.
 
 ## A wish instead of a story
 

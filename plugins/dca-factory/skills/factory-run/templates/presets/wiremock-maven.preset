@@ -1,0 +1,5 @@
+# WireMock in a Maven build.
+kind: stub
+order: 20
+detect.contains: **/pom.xml :: <groupId>org\.wiremock</groupId>|<groupId>com\.github\.tomakehurst</groupId>
+http.stub: wiremock

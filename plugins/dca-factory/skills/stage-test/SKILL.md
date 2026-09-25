@@ -14,8 +14,9 @@ files written. You write **no** production behaviour.
 
 ## Do
 
-1. Read the plan's criteria and the test shape it chose for each.
-2. Write **one end-user test per criterion** — for a scenario, the test follows its steps: `Given`
+1. Read the plan's criteria and the level it gave each: `e2e` for the happy path, `integration` for
+   the others, `browser-only (<why>)` where only a browser observes the `Then`.
+2. Write **one test per criterion, at the level the plan gave it** — for a scenario, the test follows its steps: `Given`
    is the arrangement, `When` the one action, `Then` and each `And` after it an assertion, with the
    scenario's own values — in the shape the plan named, using the test
    frameworks the project already has. It asserts the behaviour a user or a caller can observe,
@@ -32,6 +33,20 @@ files written. You write **no** production behaviour.
    application started by the test, the fake clock for anything that counts or expires, a stand-in for
    a permission the user answers. Never read the page's script or markup as text to infer what the
    browser would do.
+2a. **An integration test** runs the use case through the wired application — through its input port
+   or its HTTP surface, whichever the scenario's `When` names — with real adapters and persistence as
+   the project runs it in tests, in the source set a `test.<name>:` key declares. An external system
+   is stubbed **at the protocol**, with the stub the profile names (`http.stub:` — WireMock,
+   WireMock.Net): the stub's answer is the test's arrangement, and allowed. Never a mock of the port
+   whose adapter the plan changes — that tests everything except the translation — and never a
+   shared or real instance, which makes the test pass or fail on another system. Every adapter the
+   plan lists as changed is passed by at least one mapped integration test; a case the adapter
+   handles that no scenario names (a malformed body, a status the story does not mention) gets an
+   integration test outside the table, named under `## Notes`, like the unit tests of step 3.
+2b. **A journey item** (`kind: journey`) is a guard over delivered stories: one test that walks the
+   epic's `## Journey` to its outcome event, in the source set `test.journey:` declares. It is
+   **green** when you finish — every step exists already — and it asserts the outcome event, not
+   only a page. It gets no stub for the production code and writes no production code.
 3. Add unit tests for the invariants the plan names: the rules an aggregate or value object must
    never break. These belong to the domain's own vocabulary and are the part of the suite that
    survives a rewrite of the adapters.

@@ -117,7 +117,10 @@ TECH_HEADINGS = (
     "Integrations",
     "Version policy",
 )
-CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)\s*:\s*(\S.*)$")
+CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)(?:\s*\(happy path\))?\s*:\s*(\S.*)$")
+#: The one scenario per story that shows its value, marked where the story is written: `#### <key> (happy path)`
+#: or `- <key> (happy path): <criterion>`. It gets the end-to-end test; the others are integrated.
+HAPPY_MARK = re.compile(r"^(?:####\s+|-\s+)([a-z0-9][a-z0-9-]*)\s*\(happy path\)\s*(?::.*)?$")
 MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
 SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 
@@ -131,8 +134,8 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 8
-VERSION = "0.37.1"
+CONTRACT = 9
+VERSION = "0.38.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -330,7 +333,7 @@ def criteria_of(story_path, body):
             continue
         if line.startswith("#### "):
             close_scenario()
-            key = line[5:].strip()
+            key = re.sub(r"\s*\(happy path\)$", "", line[5:].strip())
             if not SCENARIO_KEY.match(key):
                 refuse(f"scenario heading `#### {key}` is not a key — lowercase and hyphenated, naming the behaviour")
             add_key(key)
@@ -363,6 +366,76 @@ def criteria_of(story_path, body):
             f"section with one `- <key>: <criterion>` line or one `#### <key>` scenario per criterion"
         )
     return found
+
+
+def happy_paths(body):
+    """The keys marked `(happy path)` under the acceptance criteria."""
+    section = body.split("## Acceptance criteria", 1)[-1].split("\n## ", 1)[0] if "## Acceptance criteria" in body else ""
+    return [m.group(1) for m in (HAPPY_MARK.match(l.strip()) for l in section.splitlines()) if m]
+
+
+def story_kind(front):
+    """`story` (the default) or `journey` — a guard over an epic's delivered stories, run as plan, test,
+    judge and document, green at its test gate."""
+    return "journey" if str(front.get("kind", "")).strip().lower() == "journey" else "story"
+
+
+def contract_of(profile):
+    declared = str(profile.get("contract", "")).strip()
+    return int(declared) if declared.isdigit() else CONTRACT
+
+
+def check_happy_path(result, story_path, front, body, profile):
+    """Contract 9: exactly one happy path per story, marked in the backlog — never picked by a plan. A
+    journey has none: it is a guard, not acceptance, and it names the stories it depends on."""
+    if story_kind(front) == "journey":
+        needs = front.get("depends_on")
+        if isinstance(needs, str):
+            needs = [n.strip() for n in needs.strip("[] ").split(",") if n.strip()]
+        if not needs:
+            result.fail("journey", f"{story_path}: a `kind: journey` item names the stories whose steps it walks "
+                                   f"under `depends_on:` — it becomes ready when they are delivered")
+        else:
+            result.ok("journey", f"journey over {', '.join(needs) if isinstance(needs, list) else needs}")
+        return
+    if contract_of(profile) < 9:
+        result.skip("happy-path", f"the profile declares contract {contract_of(profile)} — the happy-path mark "
+                                  f"is contract 9's")
+        return
+    marked = happy_paths(body)
+    if len(marked) == 1:
+        result.ok("happy-path", f"happy path: {marked[0]}")
+    else:
+        result.fail("happy-path", f"{story_path}: {len(marked)} scenarios marked `(happy path)` — exactly one per "
+                                  f"story shows its value and gets the end-to-end test; mark it in the backlog "
+                                  f"(`#### <key> (happy path)`)" + (f": {', '.join(marked)}" if marked else ""))
+
+
+def plan_levels(tasks, story_id):
+    """The keys the plan gave `browser-only` — a `Then` only a browser can observe, with its reason."""
+    text = read_text(os.path.join(tasks, story_id, "plan.md")) if os.path.isfile(os.path.join(tasks, story_id, "plan.md")) else ""
+    return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*browser-only", text, re.M)}
+
+
+def check_levels(result, profile, tasks, story_id, front, body, mapping, located):
+    """Contract 9: a scenario's test runs at the lowest level that observes its `Then`. A test the
+    end-user command runs belongs to the happy path or to a scenario the plan gave `browser-only`;
+    every other end-user test is a browser test where an integrated one would do."""
+    if story_kind(front) == "journey" or contract_of(profile) < 9 or not mapping or not profile.get("e2eTest"):
+        return
+    allowed = set(happy_paths(body)) | plan_levels(tasks, story_id)
+    wrong = []
+    for key, selectors in sorted(mapping.items()):
+        for selector in selectors:
+            path = located.get(selector)
+            if path and command_for(profile, path)[0] == "e2eTest" and key not in allowed:
+                wrong.append(f"{key} ({selector})")
+    if wrong:
+        result.fail("levels", "end-user tests for scenarios that are neither the happy path nor `browser-only` in "
+                              "the plan — integrate them (a `test.<name>:` source set), or give the plan's line "
+                              "`level: browser-only (<why>)`: " + "; ".join(wrong))
+    else:
+        result.ok("levels", "every end-user test belongs to the happy path or a browser-only scenario")
 
 
 def epic_of(story_path, front, backlog):
@@ -1365,8 +1438,9 @@ def discriminates(command, flag, fmt, cwd, cache):
         cache[command] = (code, normalise(output, cwd))
     return cache[command]
 
-def check_test_state(result, profile, cwd, mapping, expected, located=None, tasks=None, story=None):
-    """expected 'red': every mapped test must fail. 'green': all must pass."""
+def check_test_state(result, profile, cwd, mapping, expected, located=None, tasks=None, story=None, guard=False):
+    """expected 'red': every mapped test must fail. 'green': all must pass. A `guard` — a journey over
+    delivered stories — is green without ever having been red: its steps exist before it is written."""
     fallback = profile.get("e2eTest") or profile.get("test")
     flag = profile.get("filterFlag", "")
     fmt = profile.get("filterFormat", "{class}.{method}")
@@ -1484,6 +1558,9 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
             passed = code == 0
             if not passed:
                 now_red.add(selector)
+            if expected == "green" and passed and guard:
+                result.ok("tests-green", f"{selector} passes — a journey guards what is delivered ({key})")
+                continue
             if expected == "green" and passed and not have_ledger:
                 # No test stage ran in this checkout — the run artefacts may simply not be
                 # committed. Say that the evidence is missing instead of inventing either verdict.
@@ -3831,6 +3908,7 @@ def status_model(cwd, backlog, tasks, live=False):
                     tokens=sum(r["tokens"] for r in epic["rows"]), measured=sum(r["measured"] for r in epic["rows"]),
                     seconds=sum(r["seconds"] for r in epic["rows"]))
     epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
+    journeys = journey_hints(stories, epics)
     nxt = data["next"]
     if nxt:
         next_line = dict(text=f"{nxt} can start from {stories[nxt]['start'] or 'plan'} — run it.",
@@ -3862,11 +3940,38 @@ def status_model(cwd, backlog, tasks, live=False):
         if note:
             extra.append(note)
     return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
-                rows=rows, next=next_line,
+                rows=rows, next=next_line, journeys=journeys,
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
                 delivered=sum(r["state"] == "delivered" for r in rows), total=len(rows),
                 tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
                 seconds=sum(r["seconds"] for r in rows))
+
+
+def journey_hints(stories, epics):
+    """An epic whose stories are all delivered and whose `## Journey` is still open, or named without a
+    `kind: journey` item — a hint, never a stop. An epic without the section has decided against one."""
+    hints = []
+    for epic in epics:
+        paths = [stories[r["story"]].get("path", "") for r in epic["rows"]]
+        kinds = []
+        for path in paths:
+            try:
+                kinds.append(story_kind(read_front_matter(path)[0]) if path else "story")
+            except GateError:
+                kinds.append("story")
+        built = [r for r, k in zip(epic["rows"], kinds) if k == "story"]
+        if not built or any(r["state"] != "delivered" for r in built) or "journey" in kinds or not paths[0]:
+            continue
+        text = read_text(os.path.join(os.path.dirname(paths[0]), "epic.md")) \
+            if os.path.isfile(os.path.join(os.path.dirname(paths[0]), "epic.md")) else ""
+        section = text.split("## Journey", 1)[1].split("\n## ", 1)[0] if "## Journey" in text else None
+        if section is None:
+            continue
+        said = "is still open" if re.search(r"^\s*-\s*open:", section, re.M) or not section.strip() \
+            else "has no journey test yet"
+        hints.append(dict(epic=epic["epic"], text=f"every story is delivered and its journey {said}",
+                          action=make_action(skill="/factory-backlog", shell="")))
+    return hints
 
 
 def paint(text, mark, colour):
@@ -4111,6 +4216,8 @@ def backlog_text(model, colour, heading_line=True):
         cells = [backlog_cells(r, model, MARKS_TEXT) for r in epic["rows"]]
         out += table_text(headers, cells, right, indent="      ", marks=[r["mark"] for r in epic["rows"]],
                           colour=colour, widths=widths)
+    for hint in model.get("journeys", []):
+        out += ["", f"    {dim('journey', colour)}   {hint['epic']}: {hint['text']} — {commands(hint['action']['skill'], colour)}"]
     if model["rows"]:
         headers, rows, kinds, right = token_rows(model)
         caption = "Tokens" + ("" if model["priced"] or not model["measured"] else " — no price in a session log")
@@ -4164,6 +4271,8 @@ def backlog_md_lines(model):
     for epic in model["epics"]:
         out += ["", f"{MARKS_MD[epic_mark(epic)]} *{epic['epic'] or '(no epic)'}* — {epic_summary(epic)}", ""]
         out += table_md(headers, [backlog_cells(r, model, MARKS_MD) for r in epic["rows"]], right)
+    for hint in model.get("journeys", []):
+        out += ["", f"*journey* — {hint['epic']}: {hint['text']} → `{hint['action']['skill']}`"]
     if model["rows"]:
         headers, rows, kinds, right = token_rows(model)
         rows = [[f"**{c}**" if kind in ("epic", "total") and str(c) else c for c in row] if kind != "story"
@@ -4416,6 +4525,7 @@ def use_colour(choice):
 # anyone remembering it. So the state is read off the same files a single run leaves — stage files,
 # refusal reports, the round counter, the verdict, the decision records — and never stored.
 STAGE_ORDER = ("plan", "test", "build", "tidy", "judge", "document")
+JOURNEY_ORDER = ("plan", "test", "judge", "document")       # nothing to build: the steps are delivered
 RUNNABLE = ("ready", "in-progress", "resumable")
 
 
@@ -4694,9 +4804,10 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
         return "in-progress", "document", "document.md is written, its gate has not passed yet"
     if not texts:
         return "ready", "plan", ""
+    journey = story_kind(front) == "journey"
     if verdict_in(texts.get("judge", "")) == "changes-requested":
-        return "in-progress", "build", "the judge requested changes"
-    missing = next(stage for stage in STAGE_ORDER if stage not in texts)
+        return "in-progress", "test" if journey else "build", "the judge requested changes"
+    missing = next(stage for stage in (JOURNEY_ORDER if journey else STAGE_ORDER) if stage not in texts)
     return "in-progress", missing, f"{STAGE_FILES[missing]} not written yet"
 
 
@@ -4969,6 +5080,8 @@ def main(argv):
     parser.add_argument("--reopen", metavar="STORY",
                         help="take a delivered story back for a human's correction (an answered acceptance "
                              "record the story cites), and exit")
+    parser.add_argument("--kind", action="store_true",
+                        help="with --story: print `story` or `journey` — the stages it runs — and exit")
     parser.add_argument("--resolve", metavar="ARGUMENT",
                         help="what /factory-run <argument> means: `story <id>`, `wish`, `backlog`, or `unknown <word>` "
                              "(exit 2), and exit")
@@ -4992,6 +5105,11 @@ def main(argv):
         args.backlog = location(read_profile(resolve_profile(args.profile, cwd)), "backlog")
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
+    if args.kind:
+        if not args.story:
+            parser.error("--kind needs --story")
+        print(story_kind(read_front_matter(find_story(args.backlog, args.story))[0]))
+        return 0
     if args.resolve is not None:
         return resolve(args.backlog, args.resolve)
     if args.schedule:
@@ -5104,6 +5222,7 @@ def main(argv):
         check_rounds(result, args.tasks, story_id)
         check_decisions(result, args.tasks, story_id, cwd, args.stage)
         if args.stage == "plan":
+            check_happy_path(result, story_path, front, body, profile)
             check_context_map(
                 result, cwd, profile, str(front.get("context", "")).strip()
             )
@@ -5118,16 +5237,20 @@ def main(argv):
             mapping = check_mapping(result, args.tasks, story_id, criteria)
             located = check_exists(result, cwd, mapping)
             check_compiles(result, profile, cwd)
+            # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
             check_test_state(
                 result,
                 profile,
                 cwd,
                 mapping,
-                "red" if args.stage == "test" else "green",
+                "red" if args.stage == "test" and story_kind(front) == "story" else "green",
                 located,
                 args.tasks,
                 story_id,
+                guard=story_kind(front) == "journey",
             )
+            if args.stage == "test":
+                check_levels(result, profile, args.tasks, story_id, front, body, mapping, located)
             if args.stage in ("build", "tidy"):
                 check_required_suites(result, profile, cwd)
             check_files_listed(result, args.tasks, story_id, args.stage)

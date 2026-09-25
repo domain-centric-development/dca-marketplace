@@ -54,22 +54,35 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
    plan within `## Out of scope` — what it lists is not planned, however close it lies. Add a criterion for every concrete detail the story specifies (wording,
    placement, ordering): a detail that is not a criterion is a detail no test will cover and no
    stage will build.
-8. Decide the shape of the end-user test for each criterion and record it. Choose from what the
-   project **already has**: read the stack profile and look at the existing tests. A browser test
-   is the shape only where a browser runner is installed; otherwise the shape is the highest
-   end-user level the project can run today — an HTTP-level test against the running application,
-   a controller-slice test, an API test, a message- or scheduler-level test. **A criterion only a
-   browser can observe** — a countdown, a script's reaction to a click, a notification, anything that
-   happens after the page has loaded — needs a browser runner. With the profile's `browser: none`
-   the project has decided without one: plan the next best shape and name what it cannot show.
-   With no `browser:` line and no runner, stop once with a `## needs-human` naming the stack
-   decision (set up a browser runner, or record `browser: none`), because a fallback taken story by
-   story is a decision nobody took. Never pick a shape
-   that would need a test framework the project does not have; adding one is a stack decision,
-   not part of a story. Where the shape you would want is missing, name it under
-   `## Open assumptions` and plan the next best shape. A test shape is never a reason to build a
-   surface: if the criterion could only be driven end to end through a page or an endpoint the
-   project does not have, that is the `needs-human` of step 4, not a new adapter.
+8. **Give every scenario its level, the lowest that observes its `Then` from outside.** Choose from
+   what the project **already has**: read the stack profile and look at the existing tests.
+   - **The happy path** — the one scenario the story marks `(happy path)` — gets `e2e`: a browser
+     test where the profile declares `e2eTest:` and a browser runner, otherwise the highest end-user
+     level the project runs today (an HTTP-level test against the running application, an API test).
+     The mark comes from the backlog; never pick it yourself — a story without one was refused by
+     the plan gate already.
+   - **Every other scenario** gets `integration`: the use case through the wired application —
+     through its input port or its HTTP surface, whichever the scenario's `When` names — with real
+     adapters, persistence as the project runs it in tests, and an external system stubbed at the
+     protocol (`http.stub:`). The test lives in the source set a `test.<name>:` key declares.
+   - **`browser-only (<why>)`** for a scenario whose `Then` only a browser can observe — a countdown,
+     a script's reaction to a click, a notification, anything that happens after the page has
+     loaded. It needs a browser runner; with `browser: none` the project has decided without one:
+     plan the next best level and name what it cannot show. With no `browser:` line and no runner,
+     stop once with a `## needs-human` naming the stack decision (set up a browser runner, or
+     record `browser: none`).
+   - **No integration source set** — no `test.<name>:` key and no `integration: none` — is a stack
+     decision too: stop once with a `## needs-human` (set one up, or record `integration: none`); a
+     fallback taken story by story is a decision nobody took. With `integration: none` the other
+     scenarios take the next level the project has, and the plan says so.
+   The gate holds the plan to it: at the test gate, a test the end-user command runs must belong to
+   the happy path or to a `browser-only` scenario. Never pick a level that would need a test
+   framework the project does not have; adding one is a stack decision, not part of a story. A test
+   level is never a reason to build a surface: if the criterion could only be driven through a page
+   or an endpoint the project does not have, that is the `needs-human` of step 4, not a new adapter.
+   A **journey** item (`kind: journey`) has no happy path and builds nothing: plan one journey test
+   that walks the steps its epic's `## Journey` names through the delivered stories and asserts the
+   epic's outcome event, in the source set `test.journey:` declares.
 9. **Find the existing tests the story contradicts** — every test in the project, whoever wrote it:
    the ones that assert the behaviour the criteria change. Read the test sources, not the backlog;
    a test need not belong to any story. List each under `## Changed tests` with what backs the
@@ -123,7 +136,7 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 | Element | Kind | Location | New or changed |
 
 ## Acceptance criteria
-- <key>: <criterion>  →  test shape: <the shape, and the runner in this project that runs it>
+- <key>: <criterion>  →  level: e2e | integration | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
 
 ## Changed tests                  (omit the section when the story contradicts no existing test)
 | Test file | Backed by |

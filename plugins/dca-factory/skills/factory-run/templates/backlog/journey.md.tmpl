@@ -1,0 +1,25 @@
+---
+id: {{JOURNEY_ID}}
+epic: {{EPIC_ID}}
+kind: journey
+status: draft
+context: {{BOUNDED_CONTEXT_WHERE_THE_JOURNEY_ENDS}}
+title: {{JOURNEY_TITLE}}
+depends_on: [{{STORY_IDS_THAT_BUILD_ITS_STEPS}}]
+---
+
+# {{JOURNEY_TITLE}}
+
+## Journey
+
+A guard over the epic's delivered stories, not new behaviour: the steps below are built by the stories
+under `depends_on`, and this item becomes ready when they are delivered. It runs plan, test, judge and
+document — nothing to build — and its test is green at its test gate. It asserts the epic's outcome
+event, not only a page.
+
+## Acceptance criteria
+
+#### {{JOURNEY_KEY}}
+- Given {{STARTING_STATE}}
+- When {{THE_USER_WALKS_THE_STEPS}}
+- Then {{THE_EPIC_OUTCOME_EVENT_IS_PUBLISHED}}
