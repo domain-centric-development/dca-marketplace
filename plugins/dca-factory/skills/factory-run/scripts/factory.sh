@@ -1195,16 +1195,34 @@ elif mode == "check":
             print(f"factory: profile — detection finds {', '.join(k for k, _ in missing)} the profile does not declare "
                   "(factory.sh setup --check)")
         raise SystemExit(0)
-    print(f"factory: detected {', '.join(applied) or 'nothing a preset knows'}")
+    # The same view as the status: a table, marks, and what to do in an agent and in a shell.
+    import os, shutil, textwrap
+    colour = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+    paint = lambda text, code: f"\x1b[{code}m{text}\x1b[0m" if colour else text
+    width = shutil.get_terminal_size((120, 24)).columns if sys.stdout.isatty() else 120
+    title = f"Profile — {os.path.basename(os.getcwd())}"
+    print("\n" + paint(title, "1") + "\n" + "═" * len(title) + "\n")
+    print(f"  detected   {', '.join(applied) or 'nothing a preset knows'}\n")
+    label = lambda text: paint(text.ljust(12), "2")
     for key, value in missing:
-        print(f"factory:   add   {key}: {value}" + (f"   → {switch(key)}" if switch(key) else ""))
+        print("    " + paint(f"? {key}", "33") + "   missing" + (f" — {switch(key)}" if switch(key) else ""))
+        print(f"        {label('detected')}   {norm(value)}\n")
     for key, have, value in differing:
-        print(f"factory:   note  {key}: the profile says `{norm(have)}`, detection `{norm(value)}` — kept, a person's "
-              f"decision (setup --write --replace {key} takes the detected one)")
+        print("    " + paint(f"· {key}", "2") + "   differs — kept: the profile's value is a person's decision")
+        print(f"        {label('the profile')}   {norm(have)}")
+        print(f"        {label('detected')}   {norm(value)}")
+        print(f"        {label('to take it')}   bash .agents/factory/factory.sh setup --write --replace {key}\n")
+    if not missing and not differing:
+        print("    The profile declares everything detection finds.\n")
+    print("─" * 72)
     if missing:
-        print(f"factory: {len(missing)} detected key(s) missing — `factory.sh setup --write` adds them")
+        print(f"  {paint('Next', '1')}   add the {len(missing)} missing key(s).")
+        print(f"         {paint('agent'.ljust(10), '2')}   {paint('/factory-setup', '36')}")
+        print(f"         {paint('shell'.ljust(10), '2')}   bash .agents/factory/factory.sh setup --write")
+        print()
         raise SystemExit(1)
-    print("factory: the profile declares everything detection finds")
+    print(f"  {paint('Next', '1')}   Nothing to add." + (" The notes are yours to keep." if differing else ""))
+    print()
 elif mode == "write":
     path, replace = rest[0], (rest[1] if len(rest) > 1 else "")
     if replace and replace not in values:
@@ -1880,10 +1898,10 @@ case "$command" in
     [ -n "${live:-}" ] && check_gate_freshness
     read_command --status ${story:+--story "$story"} ${view[@]+"${view[@]}"} ;;
   backlog)
-    case "$*" in
-      "") read_command --schedule ;;
+    # The person's view of the backlog; the runner reads the schedule's lines from the gate itself.
+    case "${1:-}" in
       --check) read_command --check-backlog ;;
-      *) usage ;;
+      *) read_command --status --part backlog "$@" ;;
     esac ;;
   decisions) read_command --list-decisions "$@" ;;
   check)

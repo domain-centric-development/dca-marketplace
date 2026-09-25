@@ -1696,33 +1696,72 @@ def decision_files(cwd):
         yield name[:-3], front, body, decision_state(body)[0], None
 
 
-def list_decisions(cwd, story_id=None):
-    """The inbox: one line per record, open ones first, then drafts, answered, applied.
-
-    `<id>  <state>  <story>/<stage>  asked <time>  <question>` — what a second session needs to
-    pick one up without any transcript. Read from the files alone; nothing is inferred."""
-    rows = []
+def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
+    """The inbox: every record, what waits for a person first — open, drafts, answered, applied — read
+    from the files alone; the same view as the status, in text, Markdown or JSON."""
+    records = []
     for name, front, body, state, error in decision_files(cwd):
         if error:
-            rows.append((-1, name, "unreadable", "?", "?", "?", str(error)))
+            records.append(dict(rank=-1, id=name, state="unreadable", kind="question", story="?", stage="?",
+                                asked=None, text=str(error)))
             continue
         story = str(front.get("story", "")).strip()
         if story_id and story != story_id:
             continue
         answer = decision_state(body)[1]
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-        rank = {"open": 0, "draft": 1, "answered": 2, "applied": 3}[state]
-        rows.append((rank, str(front.get("id", name)).strip(), state, story,
-                     str(front.get("stage", "?")).strip(), str(front.get("asked", "?")).strip(),
-                     question + (f"  → {answer.get('answer')} by {answer.get('by')}"
-                                 if state in ("answered", "applied") else "")))
-    rows.sort()
-    for _rank, rid, state, story, stage, asked, text in rows:
-        print(f"{rid}  {state:<9} {story}/{stage}  asked {asked}  {text}")
-    open_count = sum(1 for r in rows if r[2] in ("open", "draft"))
-    print(f"decisions: {len(rows)} record(s), {open_count} waiting for an answer"
-          + (f" (story {story_id})" if story_id else "")
-          + f" — store {DECISIONS_DIR}/")
+        given = f" → {answer.get('answer')} ({answer.get('by')})" if state in ("answered", "applied") else ""
+        records.append(dict(rank={"open": 0, "draft": 1, "answered": 2, "applied": 3}[state],
+                            id=str(front.get("id", name)).strip(), state=state,
+                            kind="acceptance" if is_acceptance(front) else "question", story=story,
+                            stage=str(front.get("stage", "?")).strip(),
+                            asked=parse_time(str(front.get("asked", ""))), text=question + given))
+    records.sort(key=lambda r: (r["rank"], r["id"]))
+    waiting = [r for r in records if r["state"] in ("open", "draft", "unreadable")]
+    model = dict(project=os.path.basename(os.path.abspath(cwd)), story=story_id, records=records,
+                 waiting=len(waiting), store=DECISIONS_DIR)
+    mark = lambda r: "look" if r["kind"] == "acceptance" and r["state"] in ("open", "draft") else \
+        "stopped" if r["state"] == "unreadable" else decision_mark(r)
+    headers = ["record", "state", "story / stage", "asked (UTC)", "question → answer"]
+    cells = lambda marks: [[f"{marks[mark(r)]} {r['id']}", r["state"], f"{r['story']} / {r['stage']}",
+                            stamp_text(r["asked"]), r["text"]] for r in records]
+    summary = f"{len(records)} record" + ("" if len(records) == 1 else "s") + " · " + \
+        (f"{len(waiting)} wait" + ("s" if len(waiting) == 1 else "") + " for you" if waiting else "nothing waits for you")
+    if fmt == "json":
+        print(json.dumps(json_ready(model), indent=2, ensure_ascii=False))
+        return 0
+    first = next((r for r in records if r in waiting), None)
+    how = make_action(skill="/factory-decisions",
+                      shell=f"write the answer into {DECISIONS_DIR}/{first['id']}.md under `## Answer`") if first else None
+    if fmt == "md":
+        out = [f"### Decisions — {model['project']}" + (f" · {story_id}" if story_id else ""), "", summary, ""]
+        if records:
+            out += table_md(headers, cells(MARKS_MD))
+        if how:
+            out += ["", f"**Next:** answer {first['id']} — {how_md(how)}"]
+        print("\n".join(out))
+        return 0
+    use = use_colour(colour)
+    out = [""] + heading(f"Decisions — {model['project']}" + (f" · {story_id}" if story_id else ""), use, "═")
+    out += ["", f"  {summary}", ""]
+    if records:
+        # the question and its answer under each record, over the full width — a column would crush it
+        lines = table_text(headers[:-1], [c[:-1] for c in cells(MARKS_TEXT)], colour=use,
+                           marks=[mark(r) for r in records], first_bold=True)
+        out += lines[:2]
+        for row_line, r in zip(lines[2:], records):
+            out.append(row_line)
+            out += [f"        {piece}" for piece in textwrap.wrap(r["text"], view_width() - 8)]
+            out.append("")
+        out = out[:-1]
+    else:
+        out.append(f"    No decision record under {DECISIONS_DIR}/.")
+    out += ["", "─" * 72]
+    if how:
+        out += [f"  {bold('Next', use)}   answer {first['id']}."] + how_lines(how, use, "         ")
+    else:
+        out.append(f"  {bold('Next', use)}   Nothing waits for you.")
+    print("\n".join(out + [""]))
     return 0
 
 
@@ -2977,7 +3016,16 @@ def money(entry):
     return f"{entry['cost']:.2f}" + ("" if entry["priced"] == entry["measured"] else "+")
 
 
-def usage_report(tasks, story_filter=None, total_only=False):
+def facts_model(cwd, tasks, story_id):
+    """A story's stage figures from its journal alone — for a journal whose story is not in the backlog."""
+    facts = story_facts(cwd, tasks, story_id)
+    return dict(stages=facts["stages"], models=sorted({m for e in facts["stages"].values() for m in e["models"]}),
+                not_applied=sorted({r for e in facts["stages"].values() if e["not_applied"] for r in e["requested"]}),
+                priced=facts["priced"] > 0)
+
+
+def usage_report(tasks, story_filter=None, total_only=False, cwd=".", backlog="project/backlog", fmt="text"):
+    """Tokens by class, as the status shows them: one story's stages, or every story by epic."""
     stories = sorted(d for d in os.listdir(tasks) if os.path.isdir(os.path.join(tasks, d))) \
         if os.path.isdir(tasks) else []
     if story_filter:
@@ -2985,32 +3033,29 @@ def usage_report(tasks, story_filter=None, total_only=False):
     if total_only:
         print(sum(tokens_of(e) for s in stories for e in journal_usage(tasks, s).values()))
         return 0
-    print(f"{'story/stage':<24} {'runs':>4} {'measured':>8} {'input':>9} {'cache read':>11} "
-          f"{'cache write':>11} {'output':>8} {'cost $':>8}")
-    grand = None
-    for story in stories:
-        stages = journal_usage(tasks, story)
-        if not stages:
-            continue
-        order = sorted(stages, key=stage_rank)
-        total = {"invocations": 0, "measured": 0, "cost": 0.0, "priced": 0, **{k: 0 for k in USAGE_FIELDS}}
-        for stage in order:
-            e = stages[stage]
-            for k in total:
-                total[k] += e[k]
-            print(f"{story + '/' + stage:<24} {e['invocations']:>4} {e['measured']:>8} {e['input']:>9} "
-                  f"{e['cache_read']:>11} {e['cache_write']:>11} {e['output']:>8} {money(e):>8}")
-        print(f"{story + ' total':<24} {total['invocations']:>4} {total['measured']:>8} {total['input']:>9} "
-              f"{total['cache_read']:>11} {total['cache_write']:>11} {total['output']:>8} {money(total):>8}")
-        unknown = total["invocations"] - total["measured"]
-        if unknown > 0:
-            print(f"{'':<24} {unknown} invocation(s) without a usage report — not counted, not zero")
-        grand = total if grand is None else {k: grand[k] + total[k] for k in grand}
-    if grand is None:
-        print("usage: no stage invocation recorded")
-    elif len([s for s in stories if journal_usage(tasks, s)]) > 1:
-        print(f"{'total':<24} {grand['invocations']:>4} {grand['measured']:>8} {grand['input']:>9} "
-              f"{grand['cache_read']:>11} {grand['cache_write']:>11} {grand['output']:>8} {money(grand):>8}")
+    colour = use_colour("auto")
+    if story_filter:
+        try:
+            model = story_model(cwd, backlog, tasks, story_filter)
+        except GateError:
+            model = facts_model(cwd, tasks, story_filter)
+        if fmt == "json":
+            print(json.dumps(json_ready(model["stages"]), indent=2, ensure_ascii=False))
+            return 0
+        if not model["stages"]:
+            print(f"usage: no stage recorded for {story_filter}")
+            return 0
+        headers, rows, right = stage_cells(model)
+        print("\n".join(section(stage_caption(model), colour) + table_text(headers, rows, right, total=True,
+                                                                           colour=colour, first_bold=True) + [""]))
+        return 0
+    model = status_model(cwd, backlog, tasks)
+    if not model["rows"]:
+        print("usage: no story yet")
+        return 0
+    headers, rows, kinds, right = token_rows(model)
+    caption = "Tokens" + ("" if model["priced"] or not model["measured"] else " — no price in a session log")
+    print("\n".join(section(caption, colour) + table_text(headers, rows, right, total=True, colour=colour) + [""]))
     return 0
 
 
@@ -3197,16 +3242,17 @@ def status_brief(cwd, backlog, tasks, session_start=False):
         parts = line.split()
         if len(parts) >= 2:
             states.setdefault(parts[1], []).append(parts[0])
-    open_ids = [name for name, _f, _b, state, _e in decision_files(cwd) if state in ("open", "draft")]
     held = read_claim(claim_path(cwd))
-    stories = sorted(d for d in os.listdir(tasks) if os.path.isdir(os.path.join(tasks, d))) \
-        if os.path.isdir(tasks) else []
-    tokens = sum(tokens_of(e) for s in stories for e in journal_usage(tasks, s, resolve=False).values())
-    summary = " · ".join(f"{len(v)} {k}" for k, v in sorted(states.items())) or "no stories yet"
-    print(f"factory: {summary}" + (f" · {tokens:,} tokens so far" if tokens else ""))
-    print("factory: " + (f"{len(open_ids)} question(s) wait for you: {', '.join(open_ids)} · " if open_ids else "")
+    view = status_model(cwd, backlog, tasks)
+    words = {}
+    for row in view["rows"]:
+        words.setdefault(row["state"], []).append(row["story"])
+    summary = " · ".join(f"{len(v)} {k}" for k, v in sorted(words.items())) or "no stories yet"
+    print(f"factory: {summary}" + (f" · {view['tokens']:,} tokens so far" if view["measured"] else ""))
+    waiting = "; ".join(f"{MARKS_TEXT[w['mark']]} {w['story']} {w['what']}" for w in view["waiting"])
+    print("factory: " + (f"waiting for you: {waiting} · " if waiting else "nothing waits for you · ")
           + (f"worker {held.get('owner')} holds the checkout · " if held else "no worker running · ")
-          + f"next: {nxt}")
+          + f"next: {view['next']['text']}")
     listening = listener_line(cwd)
     if listening:
         print(f"factory: {listening}")
@@ -3309,7 +3355,7 @@ def activity_line(cwd, owner, started, now):
     return f"activity: {ago}" + (f" — last tool call {call}" if call else "")
 
 
-def status(cwd, backlog, tasks, story_filter=None, fmt="text", colour="auto", live=False):
+def status(cwd, backlog, tasks, story_filter=None, fmt="text", colour="auto", live=False, part="all"):
     """The person's view: what waits for them, what runs, the backlog by epic with times and tokens —
     or one story's details. The same files give the same text; `--live` adds what the clock says."""
     try:
@@ -3318,6 +3364,7 @@ def status(cwd, backlog, tasks, story_filter=None, fmt="text", colour="auto", li
             text = render_story_md(model) if fmt == "md" else render_story_text(model, use_colour(colour))
         else:
             model = status_model(cwd, backlog, tasks, live)
+            model["part"] = part
             text = render_status_md(model) if fmt == "md" else render_status_text(model, use_colour(colour))
     except GateError as error:
         print(f"status: {error}")
@@ -3365,7 +3412,9 @@ def journal_events(tasks, story_id):
     if not os.path.isfile(journal):
         return []
     events = []
-    for line in read_text(journal).splitlines():
+    # A union merge can hold one window twice — read on one branch, still pending on the other: the read
+    # one first, so the pending one is the duplicate that is skipped.
+    for line in sorted(read_text(journal).splitlines(), key=lambda l: ("log=" in l or "session=" in l)):
         parts = line.split("\t")
         if len(parts) < 3 or parse_time(parts[0]) is None:
             continue
@@ -3394,8 +3443,12 @@ def story_facts(cwd, tasks, story_id):
     """What a story's journal says: when it started and ended, how long its stages took, its passes
     (a pass begins at every plan start), and its tokens — per stage and per pass."""
     events = journal_events(tasks, story_id)
-    stages, passes, open_starts = {}, [], {}
+    stages, passes, open_starts, counted = {}, [], {}, set()
     for moment, kind, stage, fields in events:
+        if kind == "usage" and fields.get("window"):
+            if (stage, fields["window"]) in counted:
+                continue
+            counted.add((stage, fields["window"]))
         if kind == "stage-start":
             if stage == "plan" or not passes:
                 passes.append(dict(start=moment, end=None, seconds=0, tokens=0, measured=0, runs=0, stages=set()))
@@ -3776,8 +3829,15 @@ def section(text, colour):
 
 
 def render_status_text(model, colour=False):
-    out = [""] + heading(f"Factory — {model['project']}", colour, "═")
-    out += section("Waiting for you", colour)
+    only_backlog = model.get("part") == "backlog"
+    out = [""] + heading(f"{'Backlog' if only_backlog else 'Factory'} — {model['project']}", colour, "═")
+    if not only_backlog:
+        out += waiting_running_text(model, colour)
+    return "\n".join(out + backlog_text(model, colour, heading_line=not only_backlog) + [""])
+
+
+def waiting_running_text(model, colour):
+    out = section("Waiting for you", colour)
     if model["waiting"]:
         width = max(len(w["story"]) for w in model["waiting"])
         what = max(len(w["what"]) for w in model["waiting"])
@@ -3801,7 +3861,12 @@ def render_status_text(model, colour=False):
                 out.append(f"        activity: {r['activity']}")
     else:
         out.append("    Nothing is running.")
-    out += section("Backlog" + (f" — {epic_summary(model)}" if model["rows"] else ""), colour)
+    return out
+
+
+def backlog_text(model, colour, heading_line=True):
+    out = section("Backlog" + (f" — {epic_summary(model)}" if model["rows"] else ""), colour) if heading_line \
+        else ["", "  " + (epic_summary(model) if model["rows"] else ""), ""]
     if not model["rows"]:
         out.append("    No story yet.")
     headers, right = backlog_columns(model)
@@ -3827,10 +3892,12 @@ def render_status_text(model, colour=False):
         out += [""] + ["  " + line for line in model["extra"]]
     if model["hint"]:
         out += ["", f"  layout: {model['hint']}"]
-    return "\n".join(out + [""])
+    return out
 
 
 def render_status_md(model):
+    if model.get("part") == "backlog":
+        return render_backlog_md(model)
     out = [f"### Factory — {model['project']}", "", "**Waiting for you**", ""]
     if model["waiting"]:
         out += table_md(["", "story", "what", "how"],
@@ -3847,7 +3914,15 @@ def render_status_md(model):
                          for r in model["running"]])
     else:
         out.append("Nothing is running.")
-    out += ["", "**Backlog**" + (f" — {epic_summary(model)}" if model["rows"] else "")]
+    return "\n".join(out + backlog_md_lines(model))
+
+
+def render_backlog_md(model):
+    return "\n".join([f"### Backlog — {model['project']}"] + backlog_md_lines(model))
+
+
+def backlog_md_lines(model):
+    out = ["", "**Backlog**" + (f" — {epic_summary(model)}" if model["rows"] else "")]
     if not model["rows"]:
         out += ["", "No story yet."]
     headers, right = backlog_columns(model)
@@ -3863,7 +3938,7 @@ def render_status_md(model):
     out += ["", next_md(model)]
     if model["extra"]:
         out += [""] + [f"- {line}" for line in model["extra"]]
-    return "\n".join(out)
+    return out
 
 
 def pass_label(index, pass_, records):
@@ -4634,6 +4709,8 @@ def main(argv):
                         help="with --status: aligned text for a terminal, Markdown for a session, JSON for tools")
     parser.add_argument("--color", choices=("auto", "always", "never"), default="auto",
                         help="with --status: colour on a terminal (auto), always (a screenshot) or never")
+    parser.add_argument("--part", choices=("all", "backlog"), default="all",
+                        help="with --status: the whole view, or only the backlog, its tokens and what comes next")
     parser.add_argument("--live", action="store_true",
                         help="with --status: add what depends on the clock — how long ago, the activity, the worker")
     parser.add_argument("--session-start", action="store_true",
@@ -4673,7 +4750,7 @@ def main(argv):
     if not args.backlog:
         args.backlog = location(read_profile(resolve_profile(args.profile, cwd)), "backlog")
     if args.list_decisions:
-        return list_decisions(cwd, args.story)
+        return list_decisions(cwd, args.story, args.format, args.color)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
     if args.reopen:
@@ -4725,7 +4802,7 @@ def main(argv):
             print(f"factory: status unavailable ({error.__class__.__name__})")
             return 0
     if args.status:
-        return status(cwd, args.backlog, args.tasks, args.story, args.format, args.color, args.live)
+        return status(cwd, args.backlog, args.tasks, args.story, args.format, args.color, args.live, args.part)
     if args.window_start or args.window_end:
         if not args.story:
             parser.error("--window-start/--window-end need --story")
@@ -4739,7 +4816,7 @@ def main(argv):
     if args.usage_from:
         return usage_from(args.usage_from[0], args.usage_from[1], args.usage_model)
     if args.usage:
-        return usage_report(args.tasks, args.story, args.total)
+        return usage_report(args.tasks, args.story, args.total, cwd, args.backlog, args.format)
     if args.change or args.parity:
         result, label = Result(), "change" if args.change else "parity"
         try:

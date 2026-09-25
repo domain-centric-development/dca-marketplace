@@ -18,7 +18,7 @@ once per project. The state of a record is read off the file: no `## Answer` is 
 ## Do
 
 1. **List what is waiting.** Run `bash .agents/factory/factory.sh decisions` (add `--story <id>` for
-   one story; `python3 .agents/factory/story-gate.py --list-decisions` where there is no runner copy). It prints one line per record — id, state, story and
+   one story, `--format md` in a session; `python3 .agents/factory/story-gate.py --list-decisions` where there is no runner copy). It prints one row per record — id, state, story and
    stage, when it was asked, the question — open ones first. Show that, in that order. Where the
    gate is not installed, read the directory yourself and say that you did.
 2. **Explain one from its files, not from memory.** Read the record: the question, the options,

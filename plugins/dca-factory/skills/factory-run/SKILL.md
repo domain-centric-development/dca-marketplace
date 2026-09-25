@@ -109,7 +109,9 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    and name in the report what to look at (the record lists it) and `/factory-decisions` to answer.
    "Accepted" delivers the story at the next document gate; a correction goes into the same story,
    which runs again from plan.
-12. Report: the story, the criteria and their tests, what the gate checked, what it **skipped**,
+12. Report: first the story's own view, as it is — `bash .agents/factory/factory.sh status --story
+   <story> --format md` (passes, stages with their tokens, decisions, and *Next*); do not retell it.
+   Then only what that view does not show: the criteria and their tests, what the gate **skipped**,
    and every open assumption from the story. A run that skipped a check must not read as a
    complete verification. The run commits nothing — and a story waiting for acceptance is not
    ready to commit; say what the story's commit holds — the code
