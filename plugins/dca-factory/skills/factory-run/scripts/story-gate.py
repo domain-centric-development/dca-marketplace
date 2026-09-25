@@ -3604,7 +3604,8 @@ def next_md(model):
     return line
 
 
-def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None, total=False):
+def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None, total=False,
+               first_bold=False):
     """Aligned columns with a rule under the header; `marks[i]` colours row i's first two cells.
     `widths` makes several tables line up — the backlog's, one per epic; `total` sets the last row
     apart with a rule of its own."""
@@ -3618,6 +3619,9 @@ def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False,
         if is_total:
             lines.append(indent + "   ".join("─" * w for w in widths))
         line = bold(fmt(row), colour) if is_total else fmt(row)
+        if first_bold and colour and not is_total:
+            first = str(row[0]).ljust(widths[0])
+            line = bold(first, True) + line[len(first):]
         if marks and colour:
             head = "   ".join(str(c).ljust(widths[i]) for i, c in enumerate(row[:2]))
             line = paint(head, marks[n], True) + line[len(head):]
@@ -3629,8 +3633,11 @@ def column_widths(headers, rows):
     return [max([len(str(h))] + [len(str(r[i])) for r in rows]) for i, h in enumerate(headers)]
 
 
-def table_md(headers, rows, right=()):
-    lines = ["| " + " | ".join(headers) + " |",
+def table_md(headers, rows, right=(), first_bold=False):
+    """A Markdown table with its headers in bold; `first_bold` sets the first column apart too."""
+    strong = lambda c: f"**{c}**" if str(c) and not str(c).startswith("**") else str(c)
+    rows = [[strong(r[0])] + list(r[1:]) for r in rows] if first_bold else rows
+    lines = ["| " + " | ".join(strong(h) for h in headers) + " |",
              "|" + "|".join("--:" if i in right else "---" for i in range(len(headers))) + "|"]
     lines += ["| " + " | ".join(str(c).replace("|", "\\|") for c in row) + " |" for row in rows]
     return lines
@@ -3894,15 +3901,16 @@ def render_story_text(model, colour=False):
         out += table_text(["pass", "started (UTC)", "ended (UTC)", "worked", "tokens"],
                           [[f"{i + 1}  {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
                             took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
-                           for i, p in enumerate(model["passes"])], {3, 4}, colour=colour)
+                           for i, p in enumerate(model["passes"])], {3, 4}, colour=colour, first_bold=True)
     if model["stages"]:
         headers, rows, right = stage_cells(model)
-        out += section(stage_caption(model), colour) + table_text(headers, rows, right, total=True, colour=colour)
+        out += section(stage_caption(model), colour) + table_text(headers, rows, right, total=True, colour=colour,
+                                                                    first_bold=True)
     if model["decisions"]:
         out += section("Decisions", colour)
         out += table_text(["record", "state", "answer or question"],
                           [[d["id"], d["state"], d["text"]] for d in model["decisions"]], colour=colour,
-                          marks=[decision_mark(d) for d in model["decisions"]])
+                          marks=[decision_mark(d) for d in model["decisions"]], first_bold=True)
     out += ["", "─" * 72] + next_text(model, colour) + [""]
     return "\n".join(out)
 
@@ -3919,15 +3927,15 @@ def render_story_md(model):
         out += table_md(["pass", "started (UTC)", "ended (UTC)", "worked", "tokens"],
                         [[f"{i + 1} {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
                           took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
-                         for i, p in enumerate(model["passes"])], {3, 4})
+                         for i, p in enumerate(model["passes"])], {3, 4}, first_bold=True)
     if model["stages"]:
         headers, rows, right = stage_cells(model)
         rows = rows[:-1] + [[f"**{c}**" if str(c) else c for c in rows[-1]]]
-        out += ["", f"**{stage_caption(model)}**", ""] + table_md(headers, rows, right)
+        out += ["", f"**{stage_caption(model)}**", ""] + table_md(headers, rows, right, first_bold=True)
     if model["decisions"]:
         out += ["", "**Decisions**", ""]
         out += table_md(["", "record", "state", "answer or question"],
-                        [[MARKS_MD[decision_mark(d)], d["id"], d["state"], d["text"]] for d in model["decisions"]])
+                        [[MARKS_MD[decision_mark(d)], f"**{d['id']}**", d["state"], d["text"]] for d in model["decisions"]])
     out += ["", next_md(model)]
     return "\n".join(out)
 
