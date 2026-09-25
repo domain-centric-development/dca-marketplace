@@ -3408,33 +3408,48 @@ def story_records(cwd, story_id):
         return []
 
 
+RUNNER = "bash .agents/factory/factory.sh"
+
+
+def make_action(text="", skill="", shell="", look=""):
+    """What to do, both ways: `skill` in an agent session, `shell` in a terminal — empty where a
+    terminal cannot do it (writing a story needs an agent)."""
+    return dict(text=text, skill=skill, shell=shell, look=look)
+
+
 def story_attention(cwd, story_id, story, profile):
-    """(mark, state words, what to do) for one story — the words a person uses."""
+    """(mark, state words, action) for one story — the words a person uses."""
     state, detail = story["state"], story.get("detail", "")
     records = story_records(cwd, story_id)
     open_records = [(front, body) for _p, front, body, st, _a in records if st in ("open", "draft")]
+    record = str(open_records[0][0].get("id", "")).strip() if open_records else ""
+    by_hand = f"write the answer into {DECISIONS_DIR}/{record}.md under `## Answer`" if record else ""
     if state == "waiting" and any(is_acceptance(f) for f, _b in open_records):
-        run = str(profile.get("run", "")).strip()
-        return "look", "waiting for your acceptance", \
-            (f"look at it: {run} → " if run else "look at it → ") + "/factory-decisions"
+        record = next(str(f["id"]).strip() for f, _b in open_records if is_acceptance(f))
+        return "look", "waiting for your acceptance", make_action(
+            skill="/factory-decisions", look=str(profile.get("run", "")).strip() or "start the application",
+            shell=f"write accepted or your correction into {DECISIONS_DIR}/{record}.md under `## Answer`")
     if state == "waiting":
-        return "question", "waiting for your answer", "answer it → /factory-decisions"
+        return "question", "waiting for your answer", make_action(skill="/factory-decisions", shell=by_hand)
     if state == "unreleased":
-        return "question", "draft — waits for your release", "release it → /factory-backlog"
+        return "question", "draft — waits for your release", make_action(
+            text="release it", skill="/factory-backlog", shell=f"set `status: approved` in {story.get('path', 'the story')}")
     if state == "stopped":
-        return "stopped", "stopped", f"{detail} → /factory-status {story_id}" if detail else f"→ /factory-status {story_id}"
+        return "stopped", "stopped", make_action(text=detail, skill=f"/factory-status {story_id}",
+                                            shell=f"{RUNNER} status --story {story_id}")
     if "possibly interrupted" in detail:
-        return "stopped", "interrupted?", f"{detail} → /factory-run {story_id}"
+        return "stopped", "interrupted?", make_action(text=detail, skill=f"/factory-run {story_id}",
+                                                 shell=f"{RUNNER} run --story {story_id}")
     if state == "running":
-        return "running", "running", ""
+        return "running", "running", make_action()
     if state == "delivered":
-        return "done", "delivered", ""
+        return "done", "delivered", make_action()
     if state == "blocked":
-        return "none", "blocked", detail
+        return "none", "blocked", make_action(text=detail)
     if state in ("ready", "in-progress", "resumable"):
         words = {"ready": "ready", "in-progress": "in progress", "resumable": "can continue"}[state]
-        return "none", words, detail
-    return "none", state, detail
+        return "none", words, make_action(text=detail)
+    return "none", state, make_action(text=detail)
 
 
 def status_model(cwd, backlog, tasks, live=False):
@@ -3461,7 +3476,8 @@ def status_model(cwd, backlog, tasks, live=False):
             continue                                  # its story's row already says so
         if error or state in ("open", "draft"):
             waiting.append(dict(mark="question", story=story_id or name, what="an open question",
-                                action=f"{DECISIONS_DIR}/{name}.md → /factory-decisions"))
+                                action=make_action(skill="/factory-decisions",
+                                              shell=f"write the answer into {DECISIONS_DIR}/{name}.md under `## Answer`")))
     running = []
     held = read_claim(claim_path(cwd)) if live else None
     for story_id, stage, started in running_stages(tasks):
@@ -3489,13 +3505,25 @@ def status_model(cwd, backlog, tasks, live=False):
     epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
     nxt = data["next"]
     if nxt:
-        next_line = f"{nxt} can start from {stories[nxt]['start'] or 'plan'} — run it with /factory-run {nxt}."
+        next_line = dict(text=f"{nxt} can start from {stories[nxt]['start'] or 'plan'} — run it.",
+                         action=make_action(skill=f"/factory-run {nxt}", shell=f"{RUNNER} run --story {nxt}"))
     elif not rows:
-        next_line = "The backlog is empty — write the first story with /factory-backlog."
+        next_line = dict(text="The backlog is empty — write the first story.",
+                         action=make_action(skill="/factory-backlog", shell=""))
     elif all(r["state"] in ("delivered", "superseded") for r in rows):
-        next_line = "Every story is delivered — write the next one with /factory-backlog."
+        next_line = dict(text="Every story is delivered — write the next one.",
+                         action=make_action(skill="/factory-backlog", shell=""))
     else:
-        next_line = data["reason"][:1].upper() + data["reason"][1:] + "."
+        holder = next((r for r in rows if r["mark"] in ("look", "question", "stopped")), None)
+        busy = next((r for r in rows if r["mark"] == "running"), None)
+        if holder:
+            until = {"look": "is accepted", "question": "has its answer", "stopped": "is unblocked"}[holder["mark"]]
+            text = f"Nothing else starts until {holder['story']} {until} — see Waiting for you."
+        elif busy:
+            text = f"{busy['story']} is running — one story at a time; nothing to do but wait."
+        else:
+            text = data["reason"] + "."
+        next_line = dict(text=text, action=make_action())
     extra = []
     if live:
         if held:
@@ -3523,6 +3551,55 @@ def bold(text, colour):
 
 def dim(text, colour):
     return f"\x1b[2m{text}\x1b[0m" if colour else text
+
+
+COMMAND = re.compile(r"(/factory-[a-z-]+(?: [A-Za-z0-9][\w.-]*)?)")
+
+
+def commands(text, colour, md=False):
+    """The skills a line names, set apart: cyan on a terminal, `code` in Markdown."""
+    if md:
+        return COMMAND.sub(r"`\1`", text)
+    return COMMAND.sub(lambda m: f"\x1b[36m{m.group(1)}\x1b[0m", text) if colour else text
+
+
+def how_lines(act, colour, indent):
+    """The action as labelled lines: look at it, in an agent session, in a shell."""
+    lines = []
+    if act.get("text"):
+        lines.append(f"{indent}{act['text']}")
+    rows = []
+    if act.get("look"):
+        rows.append(("look at it", act["look"]))
+    if act.get("skill"):
+        rows.append(("agent", commands(act["skill"], colour)))
+        rows.append(("shell", act["shell"] if act.get("shell") else dim("— needs an agent session", colour)))
+    for label, value in rows:
+        lines.append(f"{indent}{dim(label.ljust(10), colour)}   {value}")
+    return lines
+
+
+def how_md(act):
+    parts = []
+    if act.get("look"):
+        parts.append(f"look at it: `{act['look']}`")
+    if act.get("skill"):
+        parts.append(f"agent: `{act['skill']}`")
+        parts.append(f"shell: {act['shell']}" if act.get("shell") else "shell: — needs an agent session")
+    if act.get("text"):
+        parts.insert(0, act["text"])
+    return " · ".join(parts)
+
+
+def next_text(model, colour):
+    nxt = model["next"]
+    return [f"  {bold('Next', colour)}   {nxt['text']}"] + how_lines(nxt["action"], colour, "         ")
+
+
+def next_md(model):
+    nxt = model["next"]
+    how = how_md(nxt["action"])
+    return f"**Next:** {nxt['text']}" + (f" — {how}" if how else "")
 
 
 def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None, total=False):
@@ -3597,9 +3674,10 @@ def render_status_text(model, colour=False):
     if model["waiting"]:
         width = max(len(w["story"]) for w in model["waiting"])
         what = max(len(w["what"]) for w in model["waiting"])
-        for w in model["waiting"]:
-            head = f"{MARKS_TEXT[w['mark']]} {w['story'].ljust(width)}   {w['what'].ljust(what)}"
-            out.append("    " + paint(head, w["mark"], colour) + (f"   {w['action']}" if w["action"] else ""))
+        for n, w in enumerate(model["waiting"]):
+            head = f"{MARKS_TEXT[w['mark']]} {w['story'].ljust(width)}   {w['what']}"
+            out += ([""] if n else []) + ["    " + paint(head, w["mark"], colour)]
+            out += how_lines(w["action"], colour, "        ")
     else:
         out.append("    Nothing waits for you.")
     out += section("Running", colour)
@@ -3626,7 +3704,7 @@ def render_status_text(model, colour=False):
         cells = [backlog_cells(r, model, MARKS_TEXT) for r in epic["rows"]]
         out += table_text(headers, cells, right, indent="      ", marks=[r["mark"] for r in epic["rows"]],
                           colour=colour, widths=widths)
-    out += ["", "─" * 72, f"  {bold('Next', colour)}   {model['next']}"]
+    out += ["", "─" * 72] + next_text(model, colour)
     if model["measured"] and not model["priced"]:
         out.append(dim("  Tokens only: a session log carries no prices.", colour))
     if model["extra"]:
@@ -3639,8 +3717,8 @@ def render_status_text(model, colour=False):
 def render_status_md(model):
     out = [f"### Factory — {model['project']}", "", "**Waiting for you**", ""]
     if model["waiting"]:
-        out += table_md(["", "story", "what", "next"],
-                        [[MARKS_MD[w["mark"]], w["story"], w["what"], w["action"]] for w in model["waiting"]])
+        out += table_md(["", "story", "what", "how"],
+                        [[MARKS_MD[w["mark"]], w["story"], w["what"], how_md(w["action"])] for w in model["waiting"]])
     else:
         out.append("Nothing waits for you.")
     out += ["", "**Running**", ""]
@@ -3660,7 +3738,7 @@ def render_status_md(model):
     for epic in model["epics"]:
         out += ["", f"*{epic['epic'] or '(no epic)'}* — {epic_summary(epic)}", ""]
         out += table_md(headers, [backlog_cells(r, model, MARKS_MD) for r in epic["rows"]], right)
-    out += ["", f"**Next:** {model['next']}"]
+    out += ["", next_md(model)]
     if model["measured"] and not model["priced"]:
         out += ["", "_Tokens only: a session log carries no prices._"]
     if model["extra"]:
@@ -3676,6 +3754,16 @@ def pass_label(index, pass_, records):
                    if is_acceptance(f) and st in ("answered", "applied") and not accepted(a)
                    and parse_time(str(a.get("at", ""))) and parse_time(str(a.get("at", ""))) <= pass_["start"]]
     return f"correction ({corrections[-1]})" if corrections else "again from plan"
+
+
+def decision_mark(decision):
+    """Open or a draft needs you; answered waits for the stage that applies it; applied is done — and
+    an answered acceptance is done too: it was applied by the gate or by the re-plan."""
+    if decision["state"] in ("open", "draft"):
+        return "question"
+    if decision["state"] == "applied" or decision["kind"] == "acceptance":
+        return "done"
+    return "running"
 
 
 def story_model(cwd, backlog, tasks, story_id, live=False):
@@ -3796,8 +3884,8 @@ def render_story_text(model, colour=False):
             value = paint(f"{MARKS_TEXT[row['mark']]} {value}", row["mark"], colour)
         out.append(f"  {bold(label.ljust(width), colour)}   {value}")
     for w in model["waiting"]:
-        out += ["", "  " + paint(f"{MARKS_TEXT[w['mark']]} {w['what']}", w["mark"], colour)
-                + (f"   {w['action']}" if w["action"] else "")]
+        out += ["", "  " + paint(f"{MARKS_TEXT[w['mark']]} {w['what']}", w["mark"], colour)]
+        out += how_lines(w["action"], colour, "      ")
     if model["passes"]:
         out += section("Passes", colour)
         out += table_text(["pass", "started (UTC)", "ended (UTC)", "worked", "tokens"],
@@ -3810,8 +3898,9 @@ def render_story_text(model, colour=False):
     if model["decisions"]:
         out += section("Decisions", colour)
         out += table_text(["record", "state", "answer or question"],
-                          [[d["id"], d["state"], d["text"]] for d in model["decisions"]], colour=colour)
-    out += ["", "─" * 72, f"  {bold('Next', colour)}   {model['next']}", ""]
+                          [[d["id"], d["state"], d["text"]] for d in model["decisions"]], colour=colour,
+                          marks=[decision_mark(d) for d in model["decisions"]])
+    out += ["", "─" * 72] + next_text(model, colour) + [""]
     return "\n".join(out)
 
 
@@ -3821,7 +3910,7 @@ def render_story_md(model):
     out += table_md(["", ""], [[f"**{label}**", (f"{MARKS_MD[model['row']['mark']]} " if label == "State" else "") + value]
                                for label, value in facts])
     for w in model["waiting"]:
-        out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {w['action']}"]
+        out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {how_md(w['action'])}"]
     if model["passes"]:
         out += ["", "**Passes**", ""]
         out += table_md(["pass", "started (UTC)", "ended (UTC)", "worked", "tokens"],
@@ -3833,9 +3922,9 @@ def render_story_md(model):
         out += ["", f"**{stage_caption(model)}**", ""] + table_md(headers, rows, right)
     if model["decisions"]:
         out += ["", "**Decisions**", ""]
-        out += table_md(["record", "state", "answer or question"],
-                        [[d["id"], d["state"], d["text"]] for d in model["decisions"]])
-    out += ["", f"**Next:** {model['next']}"]
+        out += table_md(["", "record", "state", "answer or question"],
+                        [[MARKS_MD[decision_mark(d)], d["id"], d["state"], d["text"]] for d in model["decisions"]])
+    out += ["", next_md(model)]
     return "\n".join(out)
 
 

@@ -3164,7 +3164,7 @@ def main(argv=None):
                                            capture_output=True, text=True, encoding="utf-8").stdout
         out = run()
         part = lambda text, name, until: text.split(name, 1)[1].split(until, 1)[0] if name in text else ""
-        story2 = next((l for l in part(out, "Backlog", "Next:").splitlines() if "STORY-2" in l), "")
+        story2 = next((l for l in part(out, "Backlog", "\n" + "─" * 72).splitlines() if "STORY-2" in l), "")
         expectations = [
             ("status: a stage with a start and no end is shown with when it started (UTC) — as interrupted once it is "
              "older than a stage may take, on top as well",
@@ -3173,11 +3173,12 @@ def main(argv=None):
              and re.search(r"✗ STORY-2\s+interrupted\?\s+test", story2) is not None,
              part(out, "Waiting for you", "Backlog") + story2),
             ("status: what needs a person is listed first, with the story and what to do",
-             re.search(r"\? STORY-1\s+waiting for your answer\s+answer it → /factory-decisions",
-                       part(out, "Waiting for you", "Running")) is not None, part(out, "Waiting for you", "Running")),
+             re.search(r"\? STORY-1\s+waiting for your answer\n\s+agent\s+/factory-decisions\n\s+shell\s+write the answer "
+                       r"into \.agents/factory/decisions/STORY-1-01\.md", part(out, "Waiting for you", "Running")) is not None,
+             part(out, "Waiting for you", "Running")),
             ("status: one row per story, grouped under its epic, with its tokens and cost",
-             "sample" in part(out, "Backlog", "Next:") and "STORY-1" in part(out, "Backlog", "Next:")
-             and re.search(r"100\s+0\.01$", story2) is not None, part(out, "Backlog", "Next:")),
+             "sample" in part(out, "Backlog", "\n" + "─" * 72) and "STORY-1" in part(out, "Backlog", "\n" + "─" * 72)
+             and re.search(r"100\s+0\.01$", story2) is not None, part(out, "Backlog", "\n" + "─" * 72)),
             ("status: the same files give the same text — no clock in the view without --live",
              out == run(), ""),
             ("status: no colour when the output is not a terminal, colour when asked for",
@@ -3186,7 +3187,7 @@ def main(argv=None):
         md = run("--format", "md")
         cells = lambda text: sorted(c.strip() for l in text.splitlines() if l.startswith("|") and "---" not in l
                                     for c in l.strip("|").split("|")[1:])
-        text_rows = [l for l in part(out, "Backlog", "Next:").splitlines() if re.match(r"^\s+[?!✗▶✓·] STORY", l)]
+        text_rows = [l for l in part(out, "Backlog", "\n" + "─" * 72).splitlines() if re.match(r"^\s+[?!✗▶✓·] STORY", l)]
         md_rows = [l for l in md.splitlines() if re.match(r"^\| [👀❓⛔⏳✅➖] STORY", l)]
         expectations += [
             ("status --format md: the same rows as the terminal view, with the session's marks",
@@ -3196,7 +3197,7 @@ def main(argv=None):
              json.loads(run("--format", "json"))["total"] == 2, ""),
         ]
         story_view = run("--story", "STORY-2")
-        stages = part(story_view, "Stages", "Next:")
+        stages = part(story_view, "Stages", "\n" + "─" * 72)
         expectations += [
             ("status of one story: each stage its own row with runs, tokens, the new ones and the cost, and a total",
              re.search(r"^\s+plan\s+1\s+1 min\s+100\s+100\s+0\.01$", stages, re.M)
