@@ -4075,7 +4075,7 @@ def main(argv=None):
                              f"{brief.strip()} | {planned.strip()[-200:]}"))
     with tmpdir() as root:
         # before anything is there: the runner's help explains the factory from the plugin's gate
-        shown = subprocess.run(["bash", args.runner, "help", "--format", "json"], cwd=root, capture_output=True,
+        shown = subprocess.run([BASH, args.runner, "help", "--format", "json"], cwd=root, capture_output=True,
                                text=True, encoding="utf-8")
         try:
             fresh = json.loads(shown.stdout)
