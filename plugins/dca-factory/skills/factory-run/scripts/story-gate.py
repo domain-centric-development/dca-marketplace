@@ -3520,14 +3520,17 @@ def bold(text, colour):
     return f"\x1b[1m{text}\x1b[0m" if colour else text
 
 
-def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None):
+def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None, total=False):
     """Aligned columns with a rule under the header; `marks[i]` colours row i's first two cells.
-    `widths` makes several tables line up — the backlog's, one per epic."""
+    `widths` makes several tables line up — the backlog's, one per epic; `total` sets the last row
+    apart with a rule of its own."""
     widths = widths or column_widths(headers, rows)
     fmt = lambda cells: "   ".join((str(c).rjust(widths[i]) if i in right else str(c).ljust(widths[i]))
                                    for i, c in enumerate(cells)).rstrip()
     lines = [indent + fmt(headers), indent + "   ".join("─" * w for w in widths)]
     for n, row in enumerate(rows):
+        if total and n == len(rows) - 1:
+            lines.append(indent + "   ".join("─" * w for w in widths))
         line = fmt(row)
         if marks and colour:
             head = "   ".join(str(c).ljust(widths[i]) for i, c in enumerate(row[:2]))
@@ -3573,8 +3576,17 @@ def backlog_cells(row, model, marks):
     return cells
 
 
+def heading(text, colour, underline="─"):
+    """A title the eye finds: bold where there is colour, underlined always."""
+    return [bold(text, colour), underline * len(text)]
+
+
+def section(text, colour):
+    return ["", "  " + bold(text, colour), ""]
+
+
 def render_status_text(model, colour=False):
-    out = []
+    out = [""]
     out.append(bold("Waiting for you", colour))
     if model["waiting"]:
         width = max(len(w["story"]) for w in model["waiting"])
@@ -3608,7 +3620,7 @@ def render_status_text(model, colour=False):
         cells = [backlog_cells(r, model, MARKS_TEXT) for r in epic["rows"]]
         out += table_text(headers, cells, right, marks=[r["mark"] for r in epic["rows"]], colour=colour,
                           widths=widths)
-    out += ["", f"Next: {model['next']}"]
+    out += ["", "─" * 72, f"Next: {model['next']}"]
     notes = ["Times in UTC."]
     if model["measured"] and not model["priced"]:
         notes.append("No cost in dollars: a session log carries tokens, not prices.")
@@ -3617,7 +3629,7 @@ def render_status_text(model, colour=False):
         out += [""] + model["extra"]
     if model["hint"]:
         out += ["", f"layout: {model['hint']}"]
-    return "\n".join(out)
+    return "\n".join(out + [""])
 
 
 def render_status_md(model):
@@ -3735,19 +3747,29 @@ def stage_cells(model):
 
 
 def story_header(model):
+    """(title line, [(label, value)]): what the story is, where it stands, how often it ran."""
     row = model["row"]
-    lines = [f"{model['story']} — {model['title']}" if model["title"] else model["story"]]
-    facts = [f"epic {model['epic']}"] + ([f"context {model['context']}"] if model["context"] else []) \
-        + [f"{model['criteria']} criteria"]
-    lines.append(" · ".join(facts))
-    state = [row["state"]]
+    title = f"{model['story']} — {model['title']}" if model["title"] else model["story"]
+    state = row["state"]
     if row["delivered"]:
-        state = [f"delivered {stamp_text(row['delivered'])}"]
+        state = f"delivered {stamp_text(row['delivered'])}"
     if model["accepted_by"]:
-        state.append(f"accepted by a human ({model['accepted_by']})")
-    state.append(f"{len(model['passes'])} pass" + ("" if len(model["passes"]) == 1 else "es"))
-    lines.append(" · ".join(state))
-    return lines
+        state += " · accepted by a human"
+    passes = model["passes"]
+    corrections = sum(1 for p in passes[1:] if p["label"].startswith("correction"))
+    again = len(passes) - 1 - corrections
+    why = []
+    if corrections:
+        why.append("one correction" if corrections == 1 else f"{corrections} corrections")
+    if again:
+        why.append("planned again once" if again == 1 else f"planned again {again} times")
+    pass_text = "not run yet" if not passes else "1 pass — the first delivery" if len(passes) == 1 else \
+        f"{len(passes)} passes — the first delivery, then " + " and ".join(why)
+    facts = [("Epic", model["epic"] or "—")]
+    if model["context"]:
+        facts.append(("Context", model["context"]))
+    facts += [("Criteria", str(model["criteria"])), ("State", state), ("History", pass_text)]
+    return title, facts
 
 
 def stage_caption(model):
@@ -3764,30 +3786,38 @@ def stage_caption(model):
 
 def render_story_text(model, colour=False):
     row = model["row"]
-    out = [bold(story_header(model)[0], colour)] + ["  " + l for l in story_header(model)[1:]]
+    title, facts = story_header(model)
+    width = max(len(label) for label, _v in facts)
+    out = [""] + heading(title, colour, "═") + [""]
+    for label, value in facts:
+        if label == "State":
+            value = paint(f"{MARKS_TEXT[row['mark']]} {value}", row["mark"], colour)
+        out.append(f"  {label.ljust(width)}   {value}")
     for w in model["waiting"]:
-        out.append("  " + paint(f"{MARKS_TEXT[w['mark']]} {w['what']}", w["mark"], colour)
-                   + (f"   {w['action']}" if w["action"] else ""))
+        out += ["", "  " + paint(f"{MARKS_TEXT[w['mark']]} {w['what']}", w["mark"], colour)
+                + (f"   {w['action']}" if w["action"] else "")]
     if model["passes"]:
-        out += ["", "  " + bold("Passes", colour)]
+        out += section("Passes", colour)
         out += table_text(["pass", "started", "ended", "worked", "tokens"],
                           [[f"{i + 1}  {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
                             took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
                            for i, p in enumerate(model["passes"])], {3, 4})
     if model["stages"]:
         headers, rows, right = stage_cells(model)
-        out += ["", "  " + bold(stage_caption(model), colour)] + table_text(headers, rows, right)
+        out += section(stage_caption(model), colour) + table_text(headers, rows, right, total=True)
     if model["decisions"]:
-        out += ["", "  " + bold("Decisions", colour)]
+        out += section("Decisions", colour)
         out += table_text(["record", "state", "answer or question"],
                           [[d["id"], d["state"], d["text"]] for d in model["decisions"]])
-    out += ["", f"Next: {model['next']}", "Times in UTC."]
+    out += ["", "─" * 72, f"Next: {model['next']}", "Times in UTC.", ""]
     return "\n".join(out)
 
 
 def render_story_md(model):
-    header = story_header(model)
-    out = [f"**{header[0]}**", "", " · ".join(header[1:]).replace(" · ", " · ")]
+    title, facts = story_header(model)
+    out = [f"**{title}**", ""]
+    out += table_md(["", ""], [[f"**{label}**", (f"{MARKS_MD[model['row']['mark']]} " if label == "State" else "") + value]
+                               for label, value in facts])
     for w in model["waiting"]:
         out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {w['action']}"]
     if model["passes"]:
