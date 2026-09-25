@@ -3215,10 +3215,10 @@ def main(argv=None):
         help_text, help_md = helper(), helper("--format", "md")
         flow = json.loads(helper("--format", "json"))["flow"]
         expectations += [
-            ("help: the flow in a fixed order, with where this project stands — an open question marked on answer",
-             [f["step"] for f in flow] == ["describe", "skeleton", "set up", "write stories", "run", "answer", "accept"]
-             and {f["step"]: f["mark"] for f in flow}["answer"] == "question"
-             and {f["step"]: f["mark"] for f in flow}["write stories"] == "done", flow),
+            ("help: the flow in a fixed order, one place marked — where this project is now: an open question",
+             [f["step"] for f in flow] == ["describe", "skeleton", "set up", "write stories", "run", "answer or accept"]
+             and [f["mark"] for f in flow if f["mark"] != "none"] == ["question"]
+             and flow[-1]["mark"] == "question", flow),
             ("help: every command in its agent and its shell form, the marks and the files",
              all(c in help_text for c in ("/factory-status", "factory.sh status", "/factory-decisions",
                                           "factory.sh decisions", "factory.sh help", "Marks", "Files", "Next"))
@@ -4079,8 +4079,9 @@ def main(argv=None):
             fresh = json.loads(shown.stdout)
         except ValueError:
             fresh = {}
-        expectations.append(("help: works before the pipeline is installed, every step still to do, describing first",
-                             shown.returncode == 0 and fresh and all(f["mark"] == "none" for f in fresh["flow"])
+        expectations.append(("help: works before the pipeline is installed, the first step marked next",
+                             shown.returncode == 0 and fresh
+                             and [f["mark"] for f in fresh["flow"]] == ["next"] + ["none"] * 5
                              and fresh["next"]["action"]["skill"] == "/factory-setup"
                              and {f["step"]: f["shell"] for f in fresh["flow"]}["set up"] == "setup",
                              f"exit {shown.returncode}; {shown.stdout[:200]} {shown.stderr[:200]}"))

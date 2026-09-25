@@ -28,16 +28,21 @@ has pages: …") and its answer is dropped where the condition turns out false.
 - default: Java `com.example.<name>`, .NET `<Name>` — `<name>` from the directory, lower case without separators; `<Name>` in PascalCase
 - answer goes to: the generator call (`groupId`, `packageName` / the project names) and `DcaLayout.forBasePackage` / `ForRootNamespace`
 
-### NEW-FORMAT
-- look up: a formatter configuration already in the directory (`.editorconfig`, an IDE formatter profile)
-- asked: when none is found
-- question (Java): Which formatting style does Spotless apply?
-- options (Java): `googleJavaFormat()` · `palantirJavaFormat()` · `eclipse()`
-- default (Java): `googleJavaFormat()`
-- question (.NET): `dotnet format` takes its rules from `.editorconfig`. Take the SDK's file (`dotnet new editorconfig`) as it is, or go through its severities first?
-- options (.NET): as it is · go through the severities
-- default (.NET): as it is
-- answer goes to: the build file (the Spotless step) or `.editorconfig`; the commands as `format:` and `formatFix:` in the conventions file
+### NEW-FORMAT-JAVA
+- look up: a formatter configuration already in the directory (an IDE formatter profile, a checkstyle file)
+- asked: when none is found and DESC-STACK names Java, or is itself open in this pass
+- question: Where the stack is Java: which formatting style does Spotless apply?
+- options: `googleJavaFormat()` · `palantirJavaFormat()` · `eclipse()`
+- default: `googleJavaFormat()`
+- answer goes to: the build file (the Spotless step); the commands as `format:` and `formatFix:` in the conventions file
+
+### NEW-FORMAT-DOTNET
+- look up: an `.editorconfig` already in the directory
+- asked: when none is found and DESC-STACK names .NET, or is itself open in this pass
+- question: Where the stack is .NET: `dotnet format` takes its rules from `.editorconfig`. Take the SDK's file (`dotnet new editorconfig`) as it is, or go through its severities first?
+- options: as it is · go through the severities
+- default: as it is
+- answer goes to: `.editorconfig`; the commands as `format:` and `formatFix:` in the conventions file
 
 ### NEW-BROWSER-RUNNER
 - look up: a browser-test dependency or source set (none exists in an empty directory)

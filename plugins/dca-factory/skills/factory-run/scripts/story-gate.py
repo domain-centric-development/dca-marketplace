@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.36.0"
+VERSION = "0.36.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3418,9 +3418,9 @@ HELP_COMMANDS = (
     ("this help", "the flow, the commands, the marks, the files", "/factory-help", "help"),
 )
 
-HELP_MARKS = (("look", "waits for your look — an acceptance"), ("question", "waits for your answer"),
+HELP_MARKS = (("next", "where this project is now — the next step"), ("look", "waits for your look — an acceptance"), ("question", "waits for your answer"),
               ("stopped", "stopped — read why before it runs again"), ("running", "running"),
-              ("done", "done"), ("none", "nothing to do here now"))
+              ("done", "done — a story, an epic, a decision"), ("none", "nothing to do there now"))
 
 
 def help_model(cwd, backlog, tasks):
@@ -3433,25 +3433,50 @@ def help_model(cwd, backlog, tasks):
     marks = {m["mark"] for m in status_view["waiting"]}
     rows = status_view["rows"]
     delivered = bool(rows) and all(r["state"] in ("delivered", "superseded") for r in rows)
+    has_stories = bool(rows) and not delivered
+    waiting_mark = "look" if "look" in marks else ("question" if "question" in marks else "")
+    # what waits for a person comes first: nothing of theirs moves until it is answered
+    if waiting_mark:
+        here = "answer or accept"
+    elif not described:
+        here = "describe"
+    elif not has_build:
+        here = "skeleton"
+    elif not profile_path:
+        here = "set up"
+    elif not has_stories:
+        here = "write stories"
+    else:
+        here = "run"
+    # No step is ever "done" — stories are written, run and accepted again and again. The flow marks one
+    # place: where this project is now, with the mark of what it is there (waiting, running, next).
     flow = [
         dict(step="describe", what="the product, the technical decisions, the designed domain — under project/",
-             skill="/factory-setup", shell="", mark="done" if described else "none"),
+             skill="/factory-setup", shell=""),
         dict(step="skeleton", what="a runnable project from a generator, with the architecture test and a formatter",
-             skill="/dca-new project", shell="", mark="done" if has_build else "none"),
+             skill="/dca-new project", shell=""),
         dict(step="set up", what="the stack profile: build, test, format and browser commands, the carriers",
-             skill="/factory-setup", shell="setup --check" if profile_path else "setup",
-             mark="done" if profile_path else "none"),
+             skill="/factory-setup", shell="setup --check" if profile_path else "setup"),
         dict(step="write stories", what="epics and stories with acceptance criteria; a story runs once released",
-             skill="/factory-backlog", shell="", mark="done" if rows else "none"),
+             skill="/factory-backlog", shell=""),
         dict(step="run", what="plan → test → build → tidy → judge → document, a gate between the stages",
-             skill="/factory-run [<story>]", shell="run [--story <story>]",
-             mark="running" if status_view["running"] else ("done" if delivered else "none")),
-        dict(step="answer", what="a question a stage may not decide alone stops its story until answered",
-             skill="/factory-decisions", shell="decisions", mark="question" if "question" in marks else "none"),
-        dict(step="accept", what="look at the result: accepted delivers it, a correction goes back into the story",
-             skill="/factory-decisions", shell="decisions", mark="look" if "look" in marks else "none"),
+             skill="/factory-run [<story>]", shell="run [--story <story>]"),
+        dict(step="answer or accept", what="a question a stage may not decide alone, or a result to look at: "
+                                           "accepted delivers it, a correction goes back into the story",
+             skill="/factory-decisions", shell="decisions"),
     ]
-    if not described:
+    for f in flow:
+        if f["step"] != here:
+            f["mark"] = "none"
+        elif here == "answer or accept":
+            f["mark"] = waiting_mark
+        elif here == "run" and status_view["running"]:
+            f["mark"] = "running"
+        else:
+            f["mark"] = "next"
+    if waiting_mark:
+        nxt = status_view["next"]
+    elif not described:
         nxt = dict(text="Describe the project first — what is built, for whom, on which stack.",
                    action=make_action(skill="/factory-setup", shell=""))
     elif not has_build:
@@ -3482,8 +3507,9 @@ def shell_form(command):
 
 def render_help_text(model, colour=False):
     out = [""] + heading(f"Factory help — {model['project']}", colour, "═")
-    out += section("The flow — and where this project stands", colour)
-    rows = [[f"{MARKS_TEXT[f['mark']]} {f['step']}", f["skill"], shell_form(f["shell"]) or "— needs an agent session",
+    out += section("The flow — and where this project is now", colour)
+    flow_mark = lambda f, marks: marks[f["mark"]] if f["mark"] != "none" else " "
+    rows = [[f"{flow_mark(f, MARKS_TEXT)} {f['step']}", f["skill"], shell_form(f["shell"]) or "— needs an agent session",
              f["what"]] for f in model["flow"]]
     out += table_text(["step", "agent", "shell", "what it is"], rows, marks=[f["mark"] for f in model["flow"]],
                       colour=colour, painted=1)
@@ -3503,9 +3529,9 @@ def render_help_text(model, colour=False):
 
 
 def render_help_md(model):
-    out = [f"### Factory help — {model['project']}", "", "**The flow — and where this project stands**", ""]
+    out = [f"### Factory help — {model['project']}", "", "**The flow — and where this project is now**", ""]
     out += table_md(["", "step", "agent", "shell", "what it is"],
-                    [[MARKS_MD[f["mark"]], f["step"], f"`{f['skill']}`",
+                    [[MARKS_MD[f["mark"]] if f["mark"] != "none" else "", f["step"], f"`{f['skill']}`",
                       f"`{shell_form(f['shell'])}`" if f["shell"] else "— needs an agent session", f["what"]]
                      for f in model["flow"]])
     out += ["", "**Commands**", ""]
@@ -3527,9 +3553,9 @@ def render_help_md(model):
 # Same rows, same order, same numbers in all three. Everything shown comes from the files, so the
 # same files give the same text; what depends on the clock (how long ago) comes only with --live.
 
-MARKS_TEXT = {"look": "!", "question": "?", "stopped": "✗", "running": "▶", "done": "✓", "none": "·"}
-MARKS_MD = {"look": "👀", "question": "❓", "stopped": "⛔", "running": "⏳", "done": "✅", "none": "➖"}
-COLOURS = {"look": "33", "question": "33", "stopped": "31", "running": "34", "done": "32", "none": "2"}
+MARKS_TEXT = {"look": "!", "question": "?", "stopped": "✗", "running": "▶", "done": "✓", "none": "·", "next": "→"}
+MARKS_MD = {"look": "👀", "question": "❓", "stopped": "⛔", "running": "⏳", "done": "✅", "none": "➖", "next": "👉"}
+COLOURS = {"look": "33", "question": "33", "stopped": "31", "running": "34", "done": "32", "none": "2", "next": "36"}
 
 
 def stamp_text(value):
