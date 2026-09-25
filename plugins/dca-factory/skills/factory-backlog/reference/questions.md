@@ -11,6 +11,13 @@ not asked), **asked** (when the question is put at all), **question** (word for 
 depends on an answer still open in the same pass is asked with its condition in front ("For a new epic:
 …"), and its answer is dropped where the condition turns out false.
 
+**The question pass's findings** come after the entries, one question at most per item of the skill's step 6,
+in that list's order, with the item's id — PASS-CONTEXT, PASS-SURFACE, PASS-TECH, PASS-DEPENDENCY, PASS-INPUTS,
+PASS-DEFAULTS, PASS-FAILURE, PASS-STATE, PASS-CHANGED, PASS-ALREADY-GREEN, PASS-ABUSE, PASS-COVERAGE,
+PASS-OUT-OF-SCOPE — and in the catalogue's language, like the entries. An item that turns up nothing asks
+nothing. What a finding says depends on the code and the description; which ids it may carry, their order and
+their number do not.
+
 ### WISH-EPIC
 - look up: —
 - asked: always
