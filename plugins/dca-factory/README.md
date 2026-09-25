@@ -158,7 +158,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
 | `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
 | `factory.sh run [--story <id>] [--watch]` | `factory-run` | one story through the six stages · without `--story` every story in dependency order, waiting for answers with `--watch` |
-| `factory.sh status [--story <id>] [--usage] [--brief]` | `factory-status` | what runs, what waits for a human, every story, the cost · one story's cost per stage · tokens per story and stage |
+| `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh update [--from <dir>]` | `factory-update` | the newest pipeline found, same tools, links or copies |
 | `factory.sh verify --story <id>` · `--fixtures` | `factory-verify` | observe a delivered story · check the machinery |
@@ -193,7 +193,7 @@ Skills are held one of two ways, and the update keeps whichever the project chos
   folder lists what the pipeline copied; a skill of the project's own — even with a pipeline skill's
   name — is never overwritten, and one the pipeline dropped is removed.
 
-`factory.sh status` says when the project is behind the pipeline it found.
+`factory.sh status --live` says when the project is behind the pipeline it found.
 
 ## A session that starts knowing where things stand
 
@@ -216,9 +216,18 @@ From any session in the project — beside a running `run --watch` too, since it
 bash .agents/factory/factory.sh status          # the same, without a skill
 ```
 
-It shows the stage that runs and since when, the decisions waiting for a human, every story's state
-with what comes next, and the tokens spent. "Running" means started and not ended in the journal —
-a stopped runner looks the same, which is why the start time is shown.
+First what waits for you — a story to accept, a question to answer, a draft to release, a story that
+stopped — each with what to do; then what runs; then the backlog grouped by epic, one row per story
+with its state, stage, passes, when it started and was delivered, how long its stages worked and its
+tokens; then what comes next. The same files give the same text: times are UTC stamps and durations
+from the journal. `--live` adds what the clock says (how long ago, the running stage's last activity,
+the worker, a listening session, a newer pipeline on this machine). `--story <id>` shows one story:
+its passes — a correction after acceptance is a pass of its own — its stages and its decisions.
+
+In a terminal the marks are `!` look at it · `?` answer · `✗` stopped · `▶` running · `✓` delivered ·
+`·` nothing to do, in colour where the output is a terminal (`--color always|never`, `NO_COLOR`).
+`--format md` renders the same rows as Markdown tables with 👀 ❓ ⛔ ⏳ ✅ ➖ — what a session shows —
+and `--format json` for tools.
 
 ## A model per stage
 
@@ -232,8 +241,8 @@ Claude does not break a colleague's Codex run, and the gate refuses an unqualifi
 runner passes the value as the tool's model flag (`--model`, `-m`); a `--model` in
 `FACTORY_<TOOL>_ARGS` overrides it for one person, and the run says so. A custom `FACTORY_TOOL_CMD`
 gets it as `FACTORY_MODEL`. In a session, a subagent can run on it; the session's own context cannot.
-`factory.sh status --story <story>` shows the model each stage actually ran on and marks a request that did not
-reach it. The pipeline names no model: which stages can run cheaper is the project's to measure.
+`factory.sh status --story <story>` names the model the stages ran on — per stage where they differ — and marks a
+request that did not reach a stage. The pipeline names no model: which stages can run cheaper is the project's to measure.
 
 ## Plan to tidy in one context
 

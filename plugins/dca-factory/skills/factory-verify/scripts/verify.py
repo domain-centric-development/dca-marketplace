@@ -1339,9 +1339,9 @@ exit 0
         text = open(stamp, encoding="utf-8").read()
         with open(stamp, "w", encoding="utf-8") as handle:
             handle.write(re.sub(r"version: .*", "version: 0.0.1", text))
-        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status",
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--live",
                                   env={"FACTORY_PLUGIN_DIR": source})
-        check("status: a project behind the pipeline is told so, with the update to run",
+        check("status --live: a project behind the pipeline is told so, with the update to run",
               code == 0 and "installed from pipeline 0.0.1" in output, [l for l in output.splitlines() if "pipeline" in l][:2])
 
     with tmpdir() as root:
@@ -1427,12 +1427,12 @@ exit 0
             if os.path.isfile(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv")) else ""
         status = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--status",
                                  "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8").stdout
-        build_row = next((l for l in status.splitlines() if l.startswith("build ")), "")
+        build_row = next((l for l in status.splitlines() if "Stages" in l), "")
         check("model: a custom command gets FACTORY_MODEL for its stage only, the journal records the request "
               "as not applied by the runner, and the status says so",
               "build=model-q" in seen and "plan=" in seen
               and "model_requested=model-q\tmodel_applied=no (passed as FACTORY_MODEL" in journal
-              and "(requested model-q: not applied)" in build_row,
+              and "requested model-q: not applied" in build_row,
               f"exit {code}; {seen}; {build_row}")
 
     # 1p. a runner does not start while another worker holds the checkout
@@ -1751,7 +1751,7 @@ exit 0
         status_code, status_out = run_runner(project_runner, root, "status") if os.path.isfile(project_runner) \
             else (None, "")
         check("install: the runner is copied beside the gate, and `factory.sh status` works from there",
-              status_code == 0 and "== running" in status_out and "== cost" in status_out,
+              status_code == 0 and "Waiting for you" in status_out and "Backlog" in status_out,
               f"exit {status_code}; {status_out[:120]}")
         usage_code, usage_out = run_runner(project_runner, root, "status", "--usage") if os.path.isfile(project_runner) \
             else (None, "")
@@ -3160,29 +3160,50 @@ def main(argv=None):
              "2026-09-23T10:00:00Z\tstage-start\tplan\ttool=x\n2026-09-23T10:01:00Z\tstage-end\tplan\texit=0\n"
              "2026-09-23T10:01:00Z\tusage\tplan\ttool=x\tmodel=m\tinput=10\tcache_read=0\tcache_write=0\toutput=90\tcost=0.01\n"
              "2026-09-23T10:02:00Z\tstage-start\ttest\ttool=x\n")))
-        out = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
-                             encoding="utf-8").stdout
-        section = lambda name: out.split(f"== {name}")[1].split("\n== ")[0] if f"== {name}" in out else ""
+        run = lambda *more: subprocess.run([sys.executable, args.gate, "--status", *more], cwd=root,
+                                           capture_output=True, text=True, encoding="utf-8").stdout
+        out = run()
+        part = lambda text, name, until: text.split(name, 1)[1].split(until, 1)[0] if name in text else ""
+        story2 = next((l for l in part(out, "Backlog", "Next:").splitlines() if "STORY-2" in l), "")
         expectations = [
-            ("status: a stage with a start and no end is shown as running, with when it started",
-             "STORY-2  stage test  since 2026-09-23T10:02:00Z" in section("running"), section("running")),
-            ("status: an open decision is listed with the story it blocks",
-             "STORY-1-01  open  STORY-1/plan" in section("waiting for a human"), section("waiting for a human")),
-            ("status: every story's state is there, and the cost per story and in total",
-             "STORY-1  waiting" in section("stories")
-             and re.search(r"^STORY-2\s+2\s+1\s+100\s+0\.01$", section("cost"), re.M)
-             and re.search(r"^total\s+2\s+1\s+100\s+0\.01$", section("cost"), re.M)
-             and "1 invocation(s) without a usage report" in section("cost"), section("cost")),
+            ("status: a stage with a start and no end is shown with when it started (UTC) — as interrupted once it is "
+             "older than a stage may take, on top as well",
+             "✗ STORY-2   test   since 2026-09-23 10:02 · never ended — possibly interrupted" in part(out, "Running", "Backlog")
+             and "✗ STORY-2" in part(out, "Waiting for you", "Running")
+             and re.search(r"✗ STORY-2\s+interrupted\?\s+test", story2) is not None,
+             part(out, "Waiting for you", "Backlog") + story2),
+            ("status: what needs a person is listed first, with the story and what to do",
+             re.search(r"\? STORY-1\s+waiting for your answer\s+answer it → /factory-decisions",
+                       part(out, "Waiting for you", "Running")) is not None, part(out, "Waiting for you", "Running")),
+            ("status: one row per story, grouped under its epic, with its tokens and cost",
+             "sample" in part(out, "Backlog", "Next:") and "STORY-1" in part(out, "Backlog", "Next:")
+             and re.search(r"100\s+0\.01$", story2) is not None, part(out, "Backlog", "Next:")),
+            ("status: the same files give the same text — no clock in the view without --live",
+             out == run(), ""),
+            ("status: no colour when the output is not a terminal, colour when asked for",
+             "\x1b[" not in out and "\x1b[" in run("--color", "always"), ""),
         ]
-        out = subprocess.run([sys.executable, args.gate, "--status", "--story", "STORY-2"], cwd=root,
-                             capture_output=True, text=True, encoding="utf-8").stdout
+        md = run("--format", "md")
+        cells = lambda text: sorted(c.strip() for l in text.splitlines() if l.startswith("|") and "---" not in l
+                                    for c in l.strip("|").split("|")[1:])
+        text_rows = [l for l in part(out, "Backlog", "Next:").splitlines() if re.match(r"^\s+[?!✗▶✓·] STORY", l)]
+        md_rows = [l for l in md.splitlines() if re.match(r"^\| [👀❓⛔⏳✅➖] STORY", l)]
         expectations += [
-            ("status of one story: its cost per stage, each stage its own row, and the story's total",
-             re.search(r"^plan\s+1\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01\s+m$", section("cost of STORY-2, per stage"), re.M)
-             and re.search(r"^test\s+1\s+0\s+0\s+0\s+0\s+0\s+0\s+—$", section("cost of STORY-2, per stage"), re.M)
-             and re.search(r"^total\s+2\s+1\s+10\s+0\s+0\s+90\s+100\s+0\.01$",
-                           section("cost of STORY-2, per stage"), re.M)
-             and "== stories" in out, out.split("== cost")[-1]),
+            ("status --format md: the same rows as the terminal view, with the session's marks",
+             len(text_rows) == len(md_rows) == 2 and "⛔ STORY-2" in md and "❓ STORY-1" in md
+             and all(r.split("|")[2].strip() in out for r in md_rows), "\n".join(md_rows)),
+            ("status --format json: the model, readable by a tool",
+             json.loads(run("--format", "json"))["total"] == 2, ""),
+        ]
+        story_view = run("--story", "STORY-2")
+        stages = part(story_view, "Stages", "Next:")
+        expectations += [
+            ("status of one story: each stage its own row with runs, tokens, the new ones and the cost, and a total",
+             re.search(r"^\s+plan\s+1\s+1 min\s+100\s+100\s+0\.01$", stages, re.M)
+             and re.search(r"^\s+test\s+1 \(1 not measured\)\s+—\s+not measured\s+—\s+—$", stages, re.M)
+             and re.search(r"^\s+total\s+2\s+1 min\s+100\s+100\s+0\.01$", stages, re.M), stages),
+            ("status of one story: its passes and what waits", "Passes" in story_view and "1  first delivery" in story_view,
+             story_view),
         ]
     with tmpdir() as root:
         # switched off: the gate records the stage and reads no session log
@@ -3250,8 +3271,8 @@ def main(argv=None):
         expectations.append(("usage after a union merge: one window read on one branch and pending on the other "
                              "counts once", row.split()[1:3] == ["1", "1"] and row.split()[6] == "9", row))
         expectations.append(("status after a union merge: a stage is running only if its start is the latest "
-                             "event by time, not by line", "S-1  stage plan" not in status_out,
-                             status_out.split("== waiting")[0]))
+                             "event by time, not by line", "Nothing is running." in status_out,
+                             status_out[:400]))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         if not ok:
@@ -3283,21 +3304,21 @@ def main(argv=None):
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         environment = dict(os.environ, CLAUDE_CODE_SESSION_ID="listening-session")
-        before = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+        before = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                 encoding="utf-8").stdout
         subprocess.run([sys.executable, args.gate, "--listening"], cwd=root, env=environment, capture_output=True)
-        after = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+        after = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                encoding="utf-8").stdout
-        ended = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+        ended = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                encoding="utf-8", env=dict(os.environ, FACTORY_LISTEN_STALE="60")).stdout
         brief = subprocess.run([sys.executable, args.gate, "--status", "--brief"], cwd=root, capture_output=True,
                                text=True, encoding="utf-8").stdout
         expectations += [
             ("listening: before any look the status says no session has looked",
-             "no session has looked at the backlog" in before, before.split("== waiting")[0]),
+             "no session has looked at the backlog" in before, before[-400:]),
             ("listening: a look is shown with the session and how long ago",
              "listening: claude-session:listening-session, last look 0 min ago" in after
-             and "listening:" in brief, after.split("== waiting")[0]),
+             and "listening:" in brief, after[-400:]),
             ("listening: it lives in the git directory, never committed",
              os.path.isfile(os.path.join(root, ".git", "dca-factory-listener.json")), ""),
         ]
@@ -3305,10 +3326,10 @@ def main(argv=None):
         data = json.load(open(write_old, encoding="utf-8"))
         data["beat"] = "2026-01-01T00:00:00Z"
         json.dump(data, open(write_old, "w", encoding="utf-8"))
-        old = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True, text=True,
+        old = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
                              encoding="utf-8").stdout
         expectations.append(("listening: a long silence reads as a loop that has probably ended",
-                             "probably ended" in old, old.split("== waiting")[0]))
+                             "probably ended" in old, old[-400:]))
     with tmpdir() as root:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         backlog_project(root, ("STORY-2", []), extra_sources=(
@@ -3593,12 +3614,12 @@ def main(argv=None):
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
         subprocess.run([sys.executable, args.gate, "--claim", f"claude-session:{session}"], cwd=root, env=env,
                        capture_output=True)
-        seen = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, env=env, capture_output=True,
+        seen = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, env=env, capture_output=True,
                               text=True, encoding="utf-8", errors="replace").stdout
         expectations.append(("status: a running stage shows its session log's last activity and tool call",
                              re.search(r"activity: \d+ s ago — last tool call Bash: ./gradlew test --rerun", seen)
                              is not None, [l for l in seen.splitlines() if l.startswith(("activity", "worker"))]))
-        off = subprocess.run([sys.executable, args.gate, "--status"], cwd=root,
+        off = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root,
                              env=dict(env, FACTORY_SESSION_USAGE="off"), capture_output=True, text=True,
                              encoding="utf-8", errors="replace").stdout
         expectations.append(("status: with session usage off the log is not read, and that is said",

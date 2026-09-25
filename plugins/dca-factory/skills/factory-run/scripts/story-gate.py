@@ -131,7 +131,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.34.3"
+VERSION = "0.35.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3265,117 +3265,566 @@ def activity_line(cwd, owner, started, now):
     return f"activity: {ago}" + (f" — last tool call {call}" if call else "")
 
 
-def status(cwd, backlog, tasks, story_filter=None):
-    now = datetime.now(timezone.utc)
-    print("== running")
-    running = running_stages(tasks)
-    for story, stage, started in running:
-        since = parse_time(started)
-        minutes = int((now - since).total_seconds() // 60) if since else None
-        print(f"{story}  stage {stage}  since {started}" + (f"  ({minutes} min)" if minutes is not None else ""))
-    if not running:
-        print("nothing — no stage has a start without an end in any journal")
-    held = read_claim(claim_path(cwd))
-    for story, stage, started in running:
-        print(activity_line(cwd, (held or {}).get("owner", ""), started, now))
-    if held:
-        beat = parse_time(held.get("beat"))
-        age = int((now - beat).total_seconds() // 60) if beat else None
-        print(f"worker: {held.get('owner')} since {held.get('since')}, last claim "
-              + (f"{age} min ago" if age is not None else "unknown")
-              + (" — stale, the next worker takes over" if age is not None and age * 60 > stale_after() else ""))
+def status(cwd, backlog, tasks, story_filter=None, fmt="text", colour="auto", live=False):
+    """The person's view: what waits for them, what runs, the backlog by epic with times and tokens —
+    or one story's details. The same files give the same text; `--live` adds what the clock says."""
+    try:
+        if story_filter:
+            model = story_model(cwd, backlog, tasks, story_filter, live)
+            text = render_story_md(model) if fmt == "md" else render_story_text(model, use_colour(colour))
+        else:
+            model = status_model(cwd, backlog, tasks, live)
+            text = render_status_md(model) if fmt == "md" else render_status_text(model, use_colour(colour))
+    except GateError as error:
+        print(f"status: {error}")
+        return 1
+    if fmt == "json":
+        print(json.dumps(json_ready(model), indent=2, ensure_ascii=False))
     else:
-        print("worker: none holds the checkout")
-    listening = listener_line(cwd)
-    print(listening or "listening: no session has looked at the backlog")
-    duplicate = duplicate_pipeline_note(cwd)
-    if duplicate:
-        print(duplicate)
-    print("\n== waiting for a human")
-    waiting = 0
-    for name, front, body, state, error in decision_files(cwd):
-        if error:
-            print(f"{name}  unreadable — {error}")
-            waiting += 1
-        elif state in ("open", "draft"):
-            waiting += 1
-            question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-            print(f"{front.get('id', name)}  {state}  {front.get('story', '?')}/{front.get('stage', '?')}  "
-                  f"{question}")
-    if not waiting:
-        print("nothing — no open decision record")
-    print("\n== stories")
-    schedule(cwd, backlog, tasks)
-    print("\n== cost" + (f" of {story_filter}, per stage" if story_filter else ""))
-    if story_filter:
-        return cost_by_stage(tasks, story_filter)
-    return cost_by_story(tasks)
+        print(text)
+    return 0
 
 
-def model_cell(entry):
-    """The model(s) a stage actually ran on, and a request that did not reach it, said as such."""
-    models = sorted(entry.get("models", ()))
-    requested = sorted(r for r in entry.get("requested", ()) if r and r != "default")
-    cell = ",".join(models) if models else ("—" if "models" in entry or "requested" in entry else "")
-    missing = [r for r in requested if not any(r in m for m in models)]
-    if entry.get("not_applied"):
-        cell += f"  (requested {','.join(requested) or '?'}: not applied)"
-    elif missing and models:
-        cell += f"  (requested {','.join(missing)}: not what ran)"
-    return cell
+# --- status: the person's view ------------------------------------------------------
+# One model, three renderings: aligned text for a terminal, Markdown for a session, JSON for tools.
+# Same rows, same order, same numbers in all three. Everything shown comes from the files, so the
+# same files give the same text; what depends on the clock (how long ago) comes only with --live.
+
+MARKS_TEXT = {"look": "!", "question": "?", "stopped": "✗", "running": "▶", "done": "✓", "none": "·"}
+MARKS_MD = {"look": "👀", "question": "❓", "stopped": "⛔", "running": "⏳", "done": "✅", "none": "➖"}
+COLOURS = {"look": "33", "question": "33", "stopped": "31", "running": "34", "done": "32", "none": "2"}
 
 
-def duration(seconds):
-    return f"{seconds // 60}m{seconds % 60:02d}s" if seconds else "—"
+def stamp_text(value):
+    """`2026-09-25 14:31` in UTC, or `—`."""
+    moment = parse_time(value) if isinstance(value, str) else value
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M") if moment else "—"
 
 
-def cost_by_story(tasks):
-    """One row per story and the total — what the backlog cost so far."""
-    stories = sorted(d for d in os.listdir(tasks) if os.path.isdir(os.path.join(tasks, d))) if os.path.isdir(tasks) else []
-    rows, total = [], {"invocations": 0, "measured": 0, "cost": 0.0, "priced": 0, **{k: 0 for k in USAGE_FIELDS}}
-    for story in stories:
-        stages = journal_usage(tasks, story).values()
-        if not stages:
+def took_text(seconds):
+    if not seconds:
+        return "—"
+    seconds = int(round(seconds))
+    if seconds < 60:
+        return f"{seconds} s"
+    minutes = seconds // 60
+    return f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
+
+
+def tokens_text(tokens, measured=True):
+    return f"{tokens:,}" if measured and tokens else "not measured"
+
+
+def journal_events(tasks, story_id):
+    """[(time, kind, stage, fields)] of a story's journal, by time — a union merge interleaves lines."""
+    journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
+    if not os.path.isfile(journal):
+        return []
+    events = []
+    for line in read_text(journal).splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3 or parse_time(parts[0]) is None:
             continue
-        entry = {k: sum(e[k] for e in stages) for k in total}
-        rows.append((story, entry))
-        for k in total:
-            total[k] += entry[k]
-    if not rows:
-        print("nothing — no stage invocation recorded in any journal")
-        return 0
-    print(f"{'story':<24} {'runs':>4} {'measured':>8} {'tokens':>12} {'cost $':>8}")
-    for name, e in rows + [("total", total)]:
-        print(f"{name:<24} {e['invocations']:>4} {e['measured']:>8} {tokens_of(e):>12,} {money(e):>8}")
-    unknown = total["invocations"] - total["measured"]
-    if unknown > 0:
-        print(f"{unknown} invocation(s) without a usage report — not counted, not zero")
-    print("per stage: status <story>")
-    return 0
+        fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
+        if "unknown" in parts[3:]:
+            fields["unknown"] = "1"
+        events.append((parse_time(parts[0]), parts[1], parts[2], fields))
+    return sorted(events, key=lambda e: e[0])
 
 
-def cost_by_stage(tasks, story):
-    """One row per stage of one story and its total."""
-    stages = journal_usage(tasks, story)
-    if not stages:
-        print(f"nothing — no stage invocation recorded for {story}")
-        return 0
-    order = sorted(stages, key=stage_rank)
-    numeric = [k for k, v in stages[order[0]].items() if isinstance(v, (int, float))]
-    total = {k: sum(stages[s].get(k, 0) for s in order) for k in numeric}
-    timed = total.get("seconds", 0) > 0
-    print(f"{'stage':<24} {'runs':>4} {'measured':>8} {'input':>9} {'cache read':>11} "
-          f"{'cache write':>11} {'output':>8} {'tokens':>12} {'cost $':>8}" + (f" {'time':>8}" if timed else "")
-          + "  model")
-    # (rows are right-stripped, so a stage without a model reading ends at its cost)
-    for name, e in [(s, stages[s]) for s in order] + [("total", total)]:
-        print(f"{name:<24} {e['invocations']:>4} {e['measured']:>8} {e['input']:>9} {e['cache_read']:>11} "
-              f"{e['cache_write']:>11} {e['output']:>8} {tokens_of(e):>12,} {money(e):>8}"
-              + ((f" {duration(e.get('seconds', 0)):>8}" if timed else "") + "  " + model_cell(e)).rstrip())
-    unknown = total["invocations"] - total["measured"]
-    if unknown > 0:
-        print(f"{unknown} invocation(s) without a usage report — not counted, not zero")
-    return 0
+def usage_tokens(fields, resolve=True):
+    """(tokens, new tokens, model) of one usage line, or None where nothing was measured."""
+    if fields.get("unknown"):
+        return None
+    if "window" in fields and ("log" in fields or "session" in fields) and "input" not in fields:
+        read = resolve_window(fields) if resolve else None
+        if read is None:
+            return None
+        fields = dict(fields, **{k: str(v) for k, v in read.items()})
+    counts = {k: int(fields.get(k, 0) or 0) for k in USAGE_FIELDS}
+    return (sum(counts.values()), counts["input"] + counts["cache_write"] + counts["output"],
+            fields.get("model", ""), float(fields["cost"]) if fields.get("cost") else None)
+
+
+def story_facts(cwd, tasks, story_id):
+    """What a story's journal says: when it started and ended, how long its stages took, its passes
+    (a pass begins at every plan start), and its tokens — per stage and per pass."""
+    events = journal_events(tasks, story_id)
+    stages, passes, open_starts = {}, [], {}
+    for moment, kind, stage, fields in events:
+        if kind == "stage-start":
+            if stage == "plan" or not passes:
+                passes.append(dict(start=moment, end=None, seconds=0, tokens=0, measured=0, runs=0))
+            open_starts[stage] = moment
+            entry = stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, new=0, measured=0, models=set(),
+                                                  cost=0.0, priced=0, requested=set(), not_applied=0))
+            entry["runs"] += 1
+            passes[-1]["runs"] += 1
+            if fields.get("model_requested"):
+                entry["requested"].add(fields["model_requested"])
+            if str(fields.get("model_applied", "")).startswith("no"):
+                entry["not_applied"] += 1
+        elif kind == "stage-end" and stage in open_starts:
+            took = (moment - open_starts.pop(stage)).total_seconds()
+            stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, new=0, measured=0, models=set(), cost=0.0,
+                                          priced=0, requested=set(), not_applied=0))["seconds"] += took
+            if passes:
+                passes[-1]["seconds"] += took
+                passes[-1]["end"] = moment
+        elif kind == "usage":
+            read = usage_tokens(fields)
+            entry = stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, new=0, measured=0, models=set(),
+                                                  cost=0.0, priced=0, requested=set(), not_applied=0))
+            if read is None:
+                continue
+            tokens, new, model, cost = read
+            entry["tokens"] += tokens
+            entry["new"] += new
+            entry["measured"] += 1
+            if model and model != "unknown":
+                entry["models"].update(model.split(","))
+            if cost is not None:
+                entry["cost"] += cost
+                entry["priced"] += 1
+            if passes:
+                passes[-1]["tokens"] += tokens
+                passes[-1]["measured"] += 1
+    started = events[0][0] if events else None
+    folder = os.path.join(tasks, story_id)
+    delivered = read_text(os.path.join(folder, DELIVERED)).strip() if os.path.isfile(os.path.join(folder, DELIVERED)) else ""
+    tokens = sum(e["tokens"] for e in stages.values())
+    runs = sum(e["runs"] for e in stages.values())
+    measured = sum(e["measured"] for e in stages.values())
+    return dict(started=started, delivered=parse_time(delivered) if delivered else None, stages=stages,
+                passes=passes, tokens=tokens, runs=runs, measured=measured,
+                seconds=sum(e["seconds"] for e in stages.values()),
+                cost=sum(e["cost"] for e in stages.values()), priced=sum(e["priced"] for e in stages.values()))
+
+
+def story_records(cwd, story_id):
+    try:
+        return read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
+    except GateError:
+        return []
+
+
+def story_attention(cwd, story_id, story, profile):
+    """(mark, state words, what to do) for one story — the words a person uses."""
+    state, detail = story["state"], story.get("detail", "")
+    records = story_records(cwd, story_id)
+    open_records = [(front, body) for _p, front, body, st, _a in records if st in ("open", "draft")]
+    if state == "waiting" and any(is_acceptance(f) for f, _b in open_records):
+        run = str(profile.get("run", "")).strip()
+        return "look", "waiting for your acceptance", \
+            (f"look at it: {run} → " if run else "look at it → ") + "/factory-decisions"
+    if state == "waiting":
+        return "question", "waiting for your answer", "answer it → /factory-decisions"
+    if state == "unreleased":
+        return "question", "draft — waits for your release", "release it → /factory-backlog"
+    if state == "stopped":
+        return "stopped", "stopped", f"{detail} → /factory-status {story_id}" if detail else f"→ /factory-status {story_id}"
+    if "possibly interrupted" in detail:
+        return "stopped", "interrupted?", f"{detail} → /factory-run {story_id}"
+    if state == "running":
+        return "running", "running", ""
+    if state == "delivered":
+        return "done", "delivered", ""
+    if state == "blocked":
+        return "none", "blocked", detail
+    if state in ("ready", "in-progress", "resumable"):
+        words = {"ready": "ready", "in-progress": "in progress", "resumable": "can continue"}[state]
+        return "none", words, detail
+    return "none", state, detail
+
+
+def status_model(cwd, backlog, tasks, live=False):
+    profile = read_profile(resolve_profile(None, cwd))
+    data = schedule_data(cwd, backlog, tasks)
+    stories, order = data["stories"], data["order"]
+    now = datetime.now(timezone.utc)
+    rows, waiting = [], []
+    for story_id in order:
+        story = stories[story_id]
+        facts = story_facts(cwd, tasks, story_id)
+        mark, words, action = story_attention(cwd, story_id, story, profile)
+        stage = next((st for sid, st, _t in running_stages(tasks) if sid == story_id), story.get("start") or "")
+        rows.append(dict(epic=story.get("epic", ""), story=story_id, title=story.get("title", ""), mark=mark,
+                         state=words, stage=stage or "—", passes=len(facts["passes"]) or 0,
+                         started=facts["started"], delivered=facts["delivered"], seconds=facts["seconds"],
+                         tokens=facts["tokens"], measured=facts["measured"], runs=facts["runs"],
+                         cost=facts["cost"], priced=facts["priced"]))
+        if mark in ("look", "question", "stopped"):
+            waiting.append(dict(mark=mark, story=story_id, what=words, action=action))
+    for name, front, body, state, error in decision_files(cwd):
+        story_id = str(front.get("story", "")).strip() if not error else ""
+        if story_id in stories:
+            continue                                  # its story's row already says so
+        if error or state in ("open", "draft"):
+            waiting.append(dict(mark="question", story=story_id or name, what="an open question",
+                                action=f"{DECISIONS_DIR}/{name}.md → /factory-decisions"))
+    running = []
+    held = read_claim(claim_path(cwd)) if live else None
+    for story_id, stage, started in running_stages(tasks):
+        interrupted = story_id in stories and stories[story_id]["state"] != "running"
+        entry = dict(story=story_id, stage=stage, since=parse_time(started), interrupted=interrupted)
+        if live:
+            since = parse_time(started)
+            entry["ago"] = took_text((now - since).total_seconds()) + " ago" if since else ""
+            entry["activity"] = activity_line(cwd, (held or {}).get("owner", ""), started, now).split(": ", 1)[-1]
+        running.append(entry)
+    epics = []
+    for row in rows:
+        if not epics or epics[-1]["epic"] != row["epic"]:
+            found = next((e for e in epics if e["epic"] == row["epic"]), None)
+            if found is None:
+                epics.append(dict(epic=row["epic"], rows=[]))
+            else:
+                epics.append(epics.pop(epics.index(found)))
+        epics[-1]["rows"].append(row)
+    for epic in epics:
+        epic["rows"].sort(key=lambda r: order.index(r["story"]))
+        epic.update(delivered=sum(r["state"] == "delivered" for r in epic["rows"]), total=len(epic["rows"]),
+                    tokens=sum(r["tokens"] for r in epic["rows"]), measured=sum(r["measured"] for r in epic["rows"]),
+                    seconds=sum(r["seconds"] for r in epic["rows"]))
+    epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
+    nxt = data["next"]
+    if nxt:
+        next_line = f"{nxt} can start from {stories[nxt]['start'] or 'plan'} → /factory-run {nxt}"
+    elif not rows:
+        next_line = "the backlog is empty → /factory-backlog writes the first story"
+    elif all(r["state"] in ("delivered", "superseded") for r in rows):
+        next_line = "every story is delivered → /factory-backlog writes the next one"
+    else:
+        next_line = data["reason"]
+    extra = []
+    if live:
+        if held:
+            extra.append(f"worker: {held.get('owner')} since {stamp_text(held.get('since'))}")
+        listening = listener_line(cwd)
+        extra.append(listening or "listening: no session has looked at the backlog")
+        note = duplicate_pipeline_note(cwd)
+        if note:
+            extra.append(note)
+    return dict(waiting=waiting, running=running, epics=epics, rows=rows, next=next_line,
+                priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
+                delivered=sum(r["state"] == "delivered" for r in rows), total=len(rows),
+                tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
+                seconds=sum(r["seconds"] for r in rows))
+
+
+def paint(text, mark, colour):
+    return f"\x1b[{COLOURS[mark]}m{text}\x1b[0m" if colour and mark in COLOURS else text
+
+
+def bold(text, colour):
+    return f"\x1b[1m{text}\x1b[0m" if colour else text
+
+
+def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None):
+    """Aligned columns with a rule under the header; `marks[i]` colours row i's first two cells.
+    `widths` makes several tables line up — the backlog's, one per epic."""
+    widths = widths or column_widths(headers, rows)
+    fmt = lambda cells: "   ".join((str(c).rjust(widths[i]) if i in right else str(c).ljust(widths[i]))
+                                   for i, c in enumerate(cells)).rstrip()
+    lines = [indent + fmt(headers), indent + "   ".join("─" * w for w in widths)]
+    for n, row in enumerate(rows):
+        line = fmt(row)
+        if marks and colour:
+            head = "   ".join(str(c).ljust(widths[i]) for i, c in enumerate(row[:2]))
+            line = paint(head, marks[n], True) + line[len(head):]
+        lines.append(indent + line)
+    return lines
+
+
+def column_widths(headers, rows):
+    return [max([len(str(h))] + [len(str(r[i])) for r in rows]) for i, h in enumerate(headers)]
+
+
+def table_md(headers, rows, right=()):
+    lines = ["| " + " | ".join(headers) + " |",
+             "|" + "|".join("--:" if i in right else "---" for i in range(len(headers))) + "|"]
+    lines += ["| " + " | ".join(str(c).replace("|", "\\|") for c in row) + " |" for row in rows]
+    return lines
+
+
+def epic_summary(item):
+    parts = [f"{item['delivered']} of {item['total']} delivered",
+             tokens_text(item["tokens"], item["measured"]) + (" tokens" if item["measured"] else "")]
+    if item["seconds"]:
+        parts.append(took_text(item["seconds"]))
+    return " · ".join(parts)
+
+
+def backlog_columns(model):
+    headers = ["story", "state", "stage", "passes", "started", "delivered", "worked", "tokens"]
+    right = {3, 6, 7}
+    if model["priced"]:
+        headers.append("cost $")
+        right = right | {8}
+    return headers, right
+
+
+def backlog_cells(row, model, marks):
+    cells = [f"{marks[row['mark']]} {row['story']}", row["state"], row["stage"], row["passes"] or "—",
+             stamp_text(row["started"]), stamp_text(row["delivered"]), took_text(row["seconds"]),
+             tokens_text(row["tokens"], row["measured"])]
+    if model["priced"]:
+        cells.append(f"{row['cost']:.2f}" if row["priced"] else "—")
+    return cells
+
+
+def render_status_text(model, colour=False):
+    out = []
+    out.append(bold("Waiting for you", colour))
+    if model["waiting"]:
+        width = max(len(w["story"]) for w in model["waiting"])
+        what = max(len(w["what"]) for w in model["waiting"])
+        for w in model["waiting"]:
+            head = f"{MARKS_TEXT[w['mark']]} {w['story'].ljust(width)}   {w['what'].ljust(what)}"
+            out.append("  " + paint(head, w["mark"], colour) + (f"   {w['action']}" if w["action"] else ""))
+    else:
+        out.append("  Nothing waits for you.")
+    out += ["", bold("Running", colour)]
+    if model["running"]:
+        for r in model["running"]:
+            mark = "stopped" if r.get("interrupted") else "running"
+            line = f"{MARKS_TEXT[mark]} {r['story']}   {r['stage']}   since {stamp_text(r['since'])}"
+            if r.get("interrupted"):
+                line += " · never ended — possibly interrupted"
+            if r.get("ago"):
+                line += f" · {r['ago']}"
+            out.append("  " + paint(line, mark, colour))
+            if r.get("activity"):
+                out.append(f"      activity: {r['activity']}")
+    else:
+        out.append("  Nothing is running.")
+    out += ["", bold("Backlog", colour) + (f"   {epic_summary(model)}" if model["rows"] else "")]
+    if not model["rows"]:
+        out.append("  No story yet.")
+    headers, right = backlog_columns(model)
+    widths = column_widths(headers, [backlog_cells(r, model, MARKS_TEXT) for r in model["rows"]])
+    for epic in model["epics"]:
+        out += ["", "  " + bold(epic["epic"] or "(no epic)", colour) + f"   {epic_summary(epic)}"]
+        cells = [backlog_cells(r, model, MARKS_TEXT) for r in epic["rows"]]
+        out += table_text(headers, cells, right, marks=[r["mark"] for r in epic["rows"]], colour=colour,
+                          widths=widths)
+    out += ["", f"Next: {model['next']}"]
+    notes = ["Times in UTC."]
+    if model["measured"] and not model["priced"]:
+        notes.append("No cost in dollars: a session log carries tokens, not prices.")
+    out.append(" ".join(notes))
+    if model["extra"]:
+        out += [""] + model["extra"]
+    if model["hint"]:
+        out += ["", f"layout: {model['hint']}"]
+    return "\n".join(out)
+
+
+def render_status_md(model):
+    out = ["**Waiting for you**", ""]
+    if model["waiting"]:
+        out += table_md(["", "story", "what", "next"],
+                        [[MARKS_MD[w["mark"]], w["story"], w["what"], w["action"]] for w in model["waiting"]])
+    else:
+        out.append("Nothing waits for you.")
+    out += ["", "**Running**", ""]
+    if model["running"]:
+        out += table_md(["", "story", "stage", "since"] + (["activity"] if any(r.get("activity") for r in model["running"]) else []),
+                        [[MARKS_MD["stopped" if r.get("interrupted") else "running"], r["story"], r["stage"],
+                          stamp_text(r["since"]) + (" · never ended — possibly interrupted" if r.get("interrupted") else "")
+                          + (f" · {r['ago']}" if r.get("ago") else "")]
+                         + ([r.get("activity", "")] if any(x.get("activity") for x in model["running"]) else [])
+                         for r in model["running"]])
+    else:
+        out.append("Nothing is running.")
+    out += ["", "**Backlog**" + (f" — {epic_summary(model)}" if model["rows"] else "")]
+    if not model["rows"]:
+        out += ["", "No story yet."]
+    headers, right = backlog_columns(model)
+    for epic in model["epics"]:
+        out += ["", f"*{epic['epic'] or '(no epic)'}* — {epic_summary(epic)}", ""]
+        out += table_md(headers, [backlog_cells(r, model, MARKS_MD) for r in epic["rows"]], right)
+    out += ["", f"**Next:** {model['next']}", ""]
+    notes = ["Times in UTC."]
+    if model["measured"] and not model["priced"]:
+        notes.append("No cost in dollars: a session log carries tokens, not prices.")
+    out.append(" ".join(notes))
+    if model["extra"]:
+        out += [""] + [f"- {line}" for line in model["extra"]]
+    return "\n".join(out)
+
+
+def pass_label(index, pass_, records):
+    """First delivery, then what started each later pass: a human's correction, or a re-plan."""
+    if index == 0:
+        return "first delivery"
+    corrections = [str(f["id"]).strip() for _p, f, _b, st, a in records
+                   if is_acceptance(f) and st in ("answered", "applied") and not accepted(a)
+                   and parse_time(str(a.get("at", ""))) and parse_time(str(a.get("at", ""))) <= pass_["start"]]
+    return f"correction ({corrections[-1]})" if corrections else "again from plan"
+
+
+def story_model(cwd, backlog, tasks, story_id, live=False):
+    overview = status_model(cwd, backlog, tasks, live)
+    row = next((r for r in overview["rows"] if r["story"] == story_id), None)
+    if row is None:
+        raise GateError(f"no story {story_id} under {backlog}/")
+    data = schedule_data(cwd, backlog, tasks)["stories"][story_id]
+    facts = story_facts(cwd, tasks, story_id)
+    records = story_records(cwd, story_id)
+    try:
+        criteria = len(criteria_of(data["path"], data["body"]))
+    except GateError:
+        criteria = 0
+    accepted_by = next((str(f["id"]).strip() for _p, f, _b, st, a in reversed(records)
+                        if is_acceptance(f) and st in ("answered", "applied") and accepted(a)), None)
+    passes = [dict(p, label=pass_label(i, p, records)) for i, p in enumerate(facts["passes"])]
+    decisions = []
+    for _p, front, body, state, answer in records:
+        question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
+        given = str(answer.get("answer", "")).strip() if state in ("answered", "applied") else ""
+        text = (f"{given}" if is_acceptance(front) and given else
+                f"{given} — {question}" if given else f"open — {question}")
+        decisions.append(dict(id=str(front["id"]).strip(), state=state,
+                              kind="acceptance" if is_acceptance(front) else "question",
+                              text=text if len(text) <= 100 else text[:99].rstrip() + "…"))
+    models = sorted({m for e in facts["stages"].values() for m in e["models"]})
+    not_applied = sorted({r for e in facts["stages"].values() if e["not_applied"] for r in e["requested"]})
+    return dict(row=row, story=story_id, title=data.get("title", ""), epic=data.get("epic", ""),
+                context=str(data["front"].get("context", "")).strip(), criteria=criteria, accepted_by=accepted_by,
+                passes=passes, stages=facts["stages"], decisions=decisions, models=models, not_applied=not_applied,
+                priced=facts["priced"] > 0, waiting=[w for w in overview["waiting"] if w["story"] == story_id],
+                next=overview["next"])
+
+
+def stage_cells(model):
+    """One row per stage and a total. A model column only where the stages ran on different models or a
+    requested one did not reach a stage — otherwise the one model is named in the caption."""
+    per_stage = len(model["models"]) > 1 or bool(model["not_applied"])
+    rows = []
+    for stage in sorted(model["stages"], key=stage_rank):
+        e = model["stages"][stage]
+        cells = [stage, e["runs"], took_text(e["seconds"]), tokens_text(e["tokens"], e["measured"]),
+                 f"{e['new']:,}" if e["measured"] else "—"]
+        if e["measured"] < e["runs"]:
+            cells[1] = f"{e['runs']} ({e['runs'] - e['measured']} not measured)"
+        if model["priced"]:
+            cells.append(f"{e['cost']:.2f}" if e["priced"] else "—")
+        if per_stage:
+            ran = ", ".join(sorted(e["models"])) or "—"
+            if e["not_applied"]:
+                ran += f" (requested {', '.join(sorted(e['requested']))}: not applied)"
+            cells.append(ran)
+        rows.append(cells)
+    total = dict(runs=sum(e["runs"] for e in model["stages"].values()),
+                 seconds=sum(e["seconds"] for e in model["stages"].values()),
+                 tokens=sum(e["tokens"] for e in model["stages"].values()),
+                 new=sum(e["new"] for e in model["stages"].values()),
+                 measured=sum(e["measured"] for e in model["stages"].values()),
+                 cost=sum(e["cost"] for e in model["stages"].values()))
+    cells = ["total", total["runs"], took_text(total["seconds"]), tokens_text(total["tokens"], total["measured"]),
+             f"{total['new']:,}" if total["measured"] else "—"]
+    if model["priced"]:
+        cells.append(f"{total['cost']:.2f}")
+    if per_stage:
+        cells.append("")
+    rows.append(cells)
+    headers = ["stage", "runs", "worked", "tokens", "of which new"] + (["cost $"] if model["priced"] else []) \
+        + (["model"] if per_stage else [])
+    return headers, rows, {1, 2, 3, 4, 5}
+
+
+def story_header(model):
+    row = model["row"]
+    lines = [f"{model['story']} — {model['title']}" if model["title"] else model["story"]]
+    facts = [f"epic {model['epic']}"] + ([f"context {model['context']}"] if model["context"] else []) \
+        + [f"{model['criteria']} criteria"]
+    lines.append(" · ".join(facts))
+    state = [row["state"]]
+    if row["delivered"]:
+        state = [f"delivered {stamp_text(row['delivered'])}"]
+    if model["accepted_by"]:
+        state.append(f"accepted by a human ({model['accepted_by']})")
+    state.append(f"{len(model['passes'])} pass" + ("" if len(model["passes"]) == 1 else "es"))
+    lines.append(" · ".join(state))
+    return lines
+
+
+def stage_caption(model):
+    caption = "Stages"
+    parts = []
+    if len(model["models"]) == 1 and not model["not_applied"]:
+        parts.append(model["models"][0])
+    if model["not_applied"]:
+        parts.append(f"requested {', '.join(model['not_applied'])}: not applied")
+    if not model["priced"] and any(e["measured"] for e in model["stages"].values()):
+        parts.append("no price in a session log")
+    return caption + (" — " + " · ".join(parts) if parts else "")
+
+
+def render_story_text(model, colour=False):
+    row = model["row"]
+    out = [bold(story_header(model)[0], colour)] + ["  " + l for l in story_header(model)[1:]]
+    for w in model["waiting"]:
+        out.append("  " + paint(f"{MARKS_TEXT[w['mark']]} {w['what']}", w["mark"], colour)
+                   + (f"   {w['action']}" if w["action"] else ""))
+    if model["passes"]:
+        out += ["", "  " + bold("Passes", colour)]
+        out += table_text(["pass", "started", "ended", "worked", "tokens"],
+                          [[f"{i + 1}  {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
+                            took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
+                           for i, p in enumerate(model["passes"])], {4})
+    if model["stages"]:
+        headers, rows, right = stage_cells(model)
+        out += ["", "  " + bold(stage_caption(model), colour)] + table_text(headers, rows, right)
+    if model["decisions"]:
+        out += ["", "  " + bold("Decisions", colour)]
+        out += table_text(["record", "state", "answer or question"],
+                          [[d["id"], d["state"], d["text"]] for d in model["decisions"]])
+    out += ["", f"Next: {model['next']}", "Times in UTC."]
+    return "\n".join(out)
+
+
+def render_story_md(model):
+    header = story_header(model)
+    out = [f"**{header[0]}**", "", " · ".join(header[1:]).replace(" · ", " · ")]
+    for w in model["waiting"]:
+        out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {w['action']}"]
+    if model["passes"]:
+        out += ["", "**Passes**", ""]
+        out += table_md(["pass", "started", "ended", "worked", "tokens"],
+                        [[f"{i + 1} {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
+                          took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
+                         for i, p in enumerate(model["passes"])], {4})
+    if model["stages"]:
+        headers, rows, right = stage_cells(model)
+        out += ["", f"**{stage_caption(model)}**", ""] + table_md(headers, rows, right)
+    if model["decisions"]:
+        out += ["", "**Decisions**", ""]
+        out += table_md(["record", "state", "answer or question"],
+                        [[d["id"], d["state"], d["text"]] for d in model["decisions"]])
+    out += ["", f"**Next:** {model['next']}", "", "Times in UTC."]
+    return "\n".join(out)
+
+
+def json_ready(value):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if isinstance(value, set):
+        return sorted(value)
+    if isinstance(value, dict):
+        return {k: json_ready(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [json_ready(v) for v in value]
+    return value
+
+
+def use_colour(choice):
+    if choice == "always":
+        return True
+    if choice == "never" or os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty()
 
 
 # --- schedule -----------------------------------------------------------------
@@ -3668,8 +4117,19 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     return "in-progress", missing, f"{STAGE_FILES[missing]} not written yet"
 
 
-def schedule(cwd, backlog, tasks):
-    """Print every story's state and the next one to run; return 0.
+def story_title(front, body):
+    """The story's own name: `title:` in its front matter, else its first heading."""
+    if str(front.get("title", "")).strip():
+        return str(front["title"]).strip()
+    for line in body.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return ""
+
+
+def schedule_data(cwd, backlog, tasks):
+    """Every story's state, the order and the next one to run — read off the files, printed by
+    `schedule` for the runner and by `status` for a person.
 
     One story with unfinished code at a time: a story past its plan stage that is not delivered
     holds the checkout, because its tests and code are in the working tree and a second story
@@ -3677,8 +4137,6 @@ def schedule(cwd, backlog, tasks):
     cannot. A story that stopped at its plan stage wrote no code, so independent work runs past it."""
     stories, order = {}, []
     hint = layout_hint(cwd, read_profile(resolve_profile(None, cwd)))
-    if hint:
-        print(f"layout: {hint}")
     for root, _dirs, files in os.walk(backlog):
         # A story is `backlog/<epic>/<story>.md`; a file beside the epics — a README — is not one.
         if os.path.normpath(root) == os.path.normpath(backlog):
@@ -3687,16 +4145,20 @@ def schedule(cwd, backlog, tasks):
             if not name.endswith(".md") or name == "epic.md":
                 continue
             path = os.path.join(root, name)
+            epic = os.path.basename(root)
             try:
-                front, _body = read_front_matter(path)
+                front, story_body = read_front_matter(path)
             except GateError as error:
-                stories[name[:-3]] = dict(state="stopped", start=None, detail=str(error), deps=[])
+                stories[name[:-3]] = dict(state="stopped", start=None, detail=str(error), deps=[], path=path,
+                                          epic=epic, title="", front={}, body="")
                 continue
             story_id = str(front.get("id") or name[:-3]).strip()
             state, start, detail = story_state(cwd, tasks, story_id, front, path)
             stories[story_id] = dict(state=state, start=start, detail=detail, deps=depends_on(front),
                                      holds=state not in ("delivered", "superseded") and os.path.isfile(
-                                         os.path.join(tasks, story_id, STAGE_FILES["test"])))
+                                         os.path.join(tasks, story_id, STAGE_FILES["test"])),
+                                     path=path, epic=str(front.get("epic") or epic).strip(), front=front,
+                                     body=story_body, title=story_title(front, story_body))
 
     # dependency order, ties by id; whatever is left after that sits on a cycle
     placed, remaining = set(), sorted(stories)
@@ -3755,7 +4217,19 @@ def schedule(cwd, backlog, tasks):
             reason = f"{busy[0]} is running ({stories[busy[0]]['detail']}) — one story at a time per checkout"
         elif nxt is None:
             reason = "nothing can run"
+    counts = {}
+    for story in stories.values():
+        counts[story["state"]] = counts.get(story["state"], 0) + 1
+    return dict(stories=stories, order=order, next=nxt, reason=reason, wait=wait, counts=counts, hint=hint)
 
+
+def schedule(cwd, backlog, tasks):
+    """Print every story's state and the next one to run; return 0. The runner and the tests read
+    these lines (`schedule:`, `wait:`, `next:`): they are a contract, not the person's view."""
+    data = schedule_data(cwd, backlog, tasks)
+    stories, order, nxt, reason, wait = data["stories"], data["order"], data["next"], data["reason"], data["wait"]
+    if data["hint"]:
+        print(f"layout: {data['hint']}")
     for story_id in order:
         story = stories[story_id]
         start = f"from {story['start']}" if story["start"] else ""
@@ -3769,9 +4243,7 @@ def schedule(cwd, backlog, tasks):
             tokens = sum(tokens_of(e) for e in used.values())
             spent = (f" · {count} stage invocation(s)" + (f", {tokens:,} tokens" if tokens else "")) if count else ""
         print(f"{story_id}  {story['state']:<11} {start:<13} {story['detail']}{spent}".rstrip())
-    counts = {}
-    for story in stories.values():
-        counts[story["state"]] = counts.get(story["state"], 0) + 1
+    counts = data["counts"]
     print("schedule: " + (", ".join(f"{n} {state}" for state, n in sorted(counts.items()))
                           or "no story under " + backlog + "/"))
     print(f"wait: {'yes' if wait else 'no'}")
@@ -3885,6 +4357,12 @@ def main(argv):
     parser.add_argument("--status", action="store_true",
                         help="print what runs, what waits for a human, every story's state and the cost")
     parser.add_argument("--brief", action="store_true", help="with --status: two lines, for a session's start")
+    parser.add_argument("--format", choices=("text", "md", "json"), default="text",
+                        help="with --status: aligned text for a terminal, Markdown for a session, JSON for tools")
+    parser.add_argument("--color", choices=("auto", "always", "never"), default="auto",
+                        help="with --status: colour on a terminal (auto), always (a screenshot) or never")
+    parser.add_argument("--live", action="store_true",
+                        help="with --status: add what depends on the clock — how long ago, the activity, the worker")
     parser.add_argument("--session-start", action="store_true",
                         help="with --status --brief: add what a session should do with them (the SessionStart hook)")
     parser.add_argument("--usage", action="store_true",
@@ -3971,7 +4449,7 @@ def main(argv):
             print(f"factory: status unavailable ({error.__class__.__name__})")
             return 0
     if args.status:
-        return status(cwd, args.backlog, args.tasks, args.story)
+        return status(cwd, args.backlog, args.tasks, args.story, args.format, args.color, args.live)
     if args.stage_start or args.stage_end:
         if not args.story:
             parser.error("--stage-start/--stage-end need --story")
