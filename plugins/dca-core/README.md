@@ -14,7 +14,7 @@ The verbs follow one another — describe → new → init → add:
 | nothing written yet | `/dca-describe` — the project description under `project/`, with you |
 | an empty directory | `/dca-new` — a running skeleton from the stack's generator, then git, the DCA part, a formatter, and a browser runner where there are pages |
 | an existing project | `/dca-init` — the DCA part only |
-| one capability later | `/dca-add rules <module>` · `freeze` · `formatter` · `browser` |
+| one capability later | `/dca-add rules <module>` · `freeze` · `formatter` · `browser` · `http-stub` |
 
 `/dca-init` adds the published packages and generates **one** architecture test that runs the whole
 rule catalog against your layout — nothing else to wire — and writes the method's section into
