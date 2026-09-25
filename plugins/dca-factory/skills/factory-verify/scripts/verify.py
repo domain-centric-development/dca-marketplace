@@ -2462,6 +2462,25 @@ def main(argv=None):
                    '\'</testsuite>\\n\' > build/test-results/run/TEST-WidgetUnitTest.xml\n'
                    'echo "2 tests ran"\nexit 1\n'),
               ))),
+        (Case("test: a display name with an escaped quote matches the report's unescaped name", "test", 0,
+              must_pass=("tests-red",), text=("display name declared in the code",)),
+         dict(story=STORY.replace("- shows-the-thing: The reader sees the thing.\n", ""),
+              tests="# Tests\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n"
+                    "| shows-nothing-when-empty | com.example.WidgetUnitTest#showsNothingWhenEmpty |\n",
+              profile="compile: true\ntest: sh quoted-runner.sh\ncovers.test: **\n"
+                      'filterFlag: --select\nfilterFormat: "{class}#{method}"\narchitecture: true\n',
+              extra_sources=(
+                  ("src/test/java/com/example/WidgetUnitTest.java",
+                   "class WidgetUnitTest {\n"
+                   '  @DisplayName("shows a \\"Discover\\" row")\n'
+                   "  void showsNothingWhenEmpty() {}\n}\n"),
+                  ("quoted-runner.sh",
+                   '#!/bin/sh\nmkdir -p build/test-results/run\n'
+                   'printf \'<testsuite><testcase classname="com.example.WidgetUnitTest" \''
+                   '\'name="shows a &quot;Discover&quot; row"><failure>not yet</failure></testcase>\''
+                   '\'</testsuite>\\n\' > build/test-results/run/TEST-WidgetUnitTest.xml\n'
+                   'echo "1 test ran"\nexit 1\n'),
+              ))),
         # --- the version contract -----------------------------------------
         # Two numbers, two jobs: the *contract* says whether this gate can read the project's
         # files at all, so a mismatch is a refusal. The script's *version* is provenance and an

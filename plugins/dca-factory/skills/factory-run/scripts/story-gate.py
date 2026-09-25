@@ -131,7 +131,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 7
-VERSION = "0.33.3"
+VERSION = "0.33.4"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1244,6 +1244,12 @@ DISPLAY_NAME = (
 )
 
 
+def unescape_literal(text):
+    """A Java or C# string literal's content as the runtime sees it: `\\"` is `"`, `\\\\` is `\\`.
+    A report carries the name unescaped, so a title with a quote in it would otherwise never match."""
+    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), text)
+
+
 def display_name_of(test_path, method):
     """The name this method is reported under, read from the code that declares it.
 
@@ -1261,7 +1267,7 @@ def display_name_of(test_path, method):
                 for pattern in DISPLAY_NAME:
                     match = pattern.search(candidate)
                     if match:
-                        return match.group(1)
+                        return unescape_literal(match.group(1))
                 if candidate.strip().endswith("}") and candidate is not lines[index]:
                     break                     # left this method's declaration
     return None
