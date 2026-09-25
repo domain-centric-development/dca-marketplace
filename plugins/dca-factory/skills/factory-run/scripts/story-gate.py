@@ -131,7 +131,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 7
-VERSION = "0.33.1"
+VERSION = "0.33.2"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2510,7 +2510,7 @@ def mark_stage(cwd, tasks, story_id, stage, edge, session_log=None):
     owner = session_owner()
     if owner and claim(cwd, owner) == 3:
         return 3                               # another worker holds the checkout: this stage does not start
-    freeze_windows(journal)                    # the earlier stages' logs have caught up by now
+    freeze_all(tasks)                          # the earlier stages' logs have caught up by now
     if session_log:
         kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
     allowed = session_usage_allowed(cwd)
@@ -2805,6 +2805,16 @@ def freeze_windows(journal):
         with open(temporary, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines) + "\n" + tail)
         os.replace(temporary, journal)
+
+
+def freeze_all(tasks):
+    """`freeze_windows` over every story's journal. A story's last stages end its run, so no stage
+    start of its own ever comes back to freeze them; the next command that writes anyway — a stage
+    of another story, a claim, a release, a listening loop's look — does it for them. Never fails
+    the command it rides on."""
+    for journal in glob.glob(os.path.join(tasks, "*", ".verify", "journal.tsv")):
+        with contextlib.suppress(OSError, GateError, ValueError):
+            freeze_windows(journal)
 
 
 def resolve_window(fields):
@@ -3750,6 +3760,8 @@ def main(argv):
         for state, check, message in result.entries:
             print(f"gate:{state} {check} — {message}")
         return 1 if result.failed else (3 if any(e[0] == "note" for e in result.entries) else 0)
+    if args.listening or args.claim or args.release is not None:
+        freeze_all(args.tasks)
     if args.listening:
         return mark_listening(cwd)
     if args.claim:

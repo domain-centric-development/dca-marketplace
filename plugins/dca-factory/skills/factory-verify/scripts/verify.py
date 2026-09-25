@@ -3488,6 +3488,31 @@ def main(argv=None):
                              and "the story changed after it was planned" in output,
                              f"before the edit {unchanged}, after {rows.get('STORY-1')}"))
     with tmpdir() as root, tmpdir() as home:
+        # a story's last stages end its run, so no later stage of its own freezes their windows — the
+        # next writing command does, for every story, once a window has settled
+        backlog_project(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        session = "0e0e0e0e-aaaa-bbbb-cccc-343434343434"
+        stamp = lambda ago: time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - ago))
+        write_file(root, "tasks/STORY-1/.verify/journal.tsv",
+                   f"{stamp(900)}\tusage\tdocument\ttool=claude-session\twindow={stamp(1200)}/{stamp(900)}"
+                   f"\tsession=claude:{session}\n"
+                   f"{stamp(60)}\tusage\tjudge\ttool=claude-session\twindow={stamp(120)}/{stamp(60)}"
+                   f"\tsession=claude:{session}\n")
+        write_file(home, f"projects/-any-project/{session}.jsonl", "".join(json.dumps({
+            "timestamp": stamp(ago), "message": {"id": f"m{ago}", "model": "model-x", "usage": {
+                "input_tokens": 7, "cache_read_input_tokens": 100, "cache_creation_input_tokens": 10,
+                "output_tokens": 5}}}) + "\n" for ago in (1000, 90)))
+        env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
+        subprocess.run([sys.executable, args.gate, "--release", "nobody"], cwd=root, env=env, capture_output=True)
+        journal = open(os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv"), encoding="utf-8").read()
+        document_line = next((l for l in journal.splitlines() if "\tdocument\t" in l), "")
+        judge_line = next((l for l in journal.splitlines() if "\tjudge\t" in l), "")
+        expectations.append(("usage: a release freezes a story's settled last window into its journal, and "
+                             "leaves a young one open",
+                             "input=7" in document_line and "session=" not in document_line
+                             and "session=" in judge_line and "input=" not in judge_line, journal))
+    with tmpdir() as root, tmpdir() as home:
         # inside a stage the journal is silent; the stage's session log is where its sign of life is
         backlog_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)

@@ -318,6 +318,9 @@ that crosses the line still finishes, because usage is known only after it ran. 
 nothing — OpenCode today, a custom `FACTORY_TOOL_CMD` without `FACTORY_USAGE_FORMAT` — is shown as
 invocations without a report, never as zero. An in-session run is measured through the stage marks
 (above, *Execution tier*); a session log carries tokens but no price, so its cost reads `—`, not 0.
+Its numbers are copied into the journal once a window is five minutes old, by the next command that
+writes — a stage start, a claim, a release, a listening look — for every story; until then the journal
+holds only the session's id, and a story's last stages are frozen by whatever runs next.
 An old session log can be read whole: `story-gate.py --usage-from claude-session|codex-session <log>`. The watch lives as long as its process: a closed session or terminal ends it, and a
 file wakes nobody. In-session, do the same loop yourself — ask the schedule, run the story it
 names, ask again — and stop instead of waiting.
