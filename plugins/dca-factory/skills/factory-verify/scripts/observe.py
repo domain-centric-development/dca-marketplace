@@ -368,7 +368,8 @@ def observe(project, tasks, backlog, story_id):
             # is a command whose last segment merely looks like one, and reading it as a file
             # produces a finding about nothing.
             extension = os.path.splitext(candidate)[1]
-            if (" " not in candidate and "/" in candidate
+            # A leading `/` is a citation (a knowledge-catalog node), not a file of the project.
+            if (" " not in candidate and "/" in candidate and not candidate.startswith("/")
                     and re.fullmatch(r"\.[A-Za-z0-9]{1,6}", extension)):
                 claimed.add(candidate)
         code_changes = {f for f in actual
