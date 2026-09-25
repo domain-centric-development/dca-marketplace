@@ -95,6 +95,9 @@ if [ -z "$PY" ]; then
   done
   PY=${PY:-python3}                            # named in the error the first call then produces
 fi
+# Every Python this runner starts writes UTF-8 — the gate's and the setup's lines carry `—` and `→`,
+# and a Windows console's code page (cp1252) cannot encode them: the print raises and the step dies.
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
 
 # Whether `ln -s` in this shell makes a symlink. On Windows (Git Bash, MSYS2) it needs developer
 # mode or an administrator *and* `MSYS=winsymlinks:nativestrict`; without those it silently makes

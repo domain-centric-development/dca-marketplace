@@ -131,7 +131,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.34.1"
+VERSION = "0.34.2"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -4090,4 +4090,8 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # The lines carry `—` and `→`; a Windows console's code page cannot encode `→`, and the print raises.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(main(sys.argv[1:]))

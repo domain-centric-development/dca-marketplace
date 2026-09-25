@@ -521,4 +521,8 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # The lines carry `—` and `→`; a Windows console's code page cannot encode `→`, and the print raises.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(main())
