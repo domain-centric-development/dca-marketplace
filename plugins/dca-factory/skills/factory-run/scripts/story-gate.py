@@ -131,7 +131,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 7
-VERSION = "0.33.0"
+VERSION = "0.33.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -626,11 +626,13 @@ def check_proposals_landed(result, tasks, story_id, cwd, profile):
         result.ok("glossary", f"{len(proposals)} proposed term(s) accounted for")
 
 
-def check_backlog(cwd, backlog, tasks, profile):
-    """The plan gate's backlog checks over every story that is not done, without a story id: front
+def check_backlog(cwd, backlog, tasks, profile, only=None):
+    """The plan gate's backlog checks over every story that is not done, or over `only`: front
     matter, the epic's completeness, the criteria, the status and the context on the map. Nothing of
     its own — the same functions the plan gate calls, so a story that passes here passes there on
-    these points. A draft is a story still being written, named and not refused."""
+    these points. A draft is a story still being written, named and not refused. It writes nothing:
+    the plan gate's marks (the story digest, the tests baseline) belong to the run that plans the
+    story, and a baseline taken while the story is still being written would be the wrong one."""
     checked, refused = 0, []
     if layout_hint(cwd, profile):
         print(f"gate:note layout — {layout_hint(cwd, profile)}")
@@ -645,6 +647,8 @@ def check_backlog(cwd, backlog, tasks, profile):
             try:
                 front, body = read_front_matter(path)
                 label = str(front.get("id") or label).strip()
+                if only and only not in (label, name[:-3]):
+                    continue
                 status = str(front.get("status", "")).strip().lower()
                 if status == "superseded" or os.path.isfile(os.path.join(tasks, label, DELIVERED)):
                     continue
@@ -670,6 +674,9 @@ def check_backlog(cwd, backlog, tasks, profile):
             if result.failed:
                 refused.append(label)
     if not checked:
+        if only:
+            print(f"backlog: no story {only} to check under {backlog}/ (not there, delivered or superseded)")
+            return 1
         print(f"backlog: no story to check under {backlog}/")
         return 0
     print(f"backlog: {checked} story(ies) checked" + (f", refused: {', '.join(refused)}" if refused
@@ -3174,6 +3181,65 @@ def duplicate_pipeline_note(cwd):
     return None
 
 
+def activity_logs(cwd, owner, since):
+    """The session logs a running stage writes into while it works: the worker's own session and its
+    subagents where the claim names a session, else the tool's logs for this project directory that
+    changed since the stage started (a runner's stage process has a session of its own)."""
+    kind, _, session_id = (owner or "").partition(":")
+    if kind == "claude-session":
+        return claude_session_logs(session_id)
+    if kind == "codex-session":
+        found = codex_session_log(session_id)
+        return [found] if found else []
+    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    folder = os.path.join(home, "projects", re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(cwd)))
+    floor = since.timestamp() if since else 0
+    return [path for path in glob.glob(os.path.join(folder, "**", "*.jsonl"), recursive=True)
+            if os.path.getmtime(path) >= floor]
+
+
+def last_tool_call(path):
+    """`Name: first words of its input` of the newest tool call in a Claude or Codex session log."""
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(max(0, os.path.getsize(path) - 262144))
+            lines = handle.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        content = (entry.get("message") or {}).get("content") if isinstance(entry.get("message"), dict) else None
+        for block in reversed(content if isinstance(content, list) else []):
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                given = block.get("input") or {}
+                detail = next((str(given[k]) for k in ("command", "description", "skill", "file_path", "pattern")
+                               if isinstance(given, dict) and given.get(k)), "")
+                detail = " ".join(detail.split())
+                return f"{block.get('name')}" + (f": {detail[:70]}" + ("…" if len(detail) > 70 else "") if detail else "")
+        payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
+        if payload.get("type") in ("function_call", "local_shell_call"):
+            return str(payload.get("name") or payload.get("type"))
+    return ""
+
+
+def activity_line(cwd, owner, started, now):
+    """The sign of life inside a stage: a stage writes to the journal only at its start and its end,
+    while its session log grows with every tool call. Read only where session logs may be read."""
+    if not session_usage_allowed(cwd):
+        return "activity: not read — session logs are switched off (sessionUsage)"
+    logs = [path for path in activity_logs(cwd, owner, parse_time(started)) if os.path.isfile(path)]
+    if not logs:
+        return "activity: unknown — no session log of this stage found on this machine"
+    newest = max(logs, key=os.path.getmtime)
+    age = int(now.timestamp() - os.path.getmtime(newest))
+    ago = f"{age} s ago" if age < 120 else f"{age // 60} min ago"
+    call = last_tool_call(newest)
+    return f"activity: {ago}" + (f" — last tool call {call}" if call else "")
+
+
 def status(cwd, backlog, tasks, story_filter=None):
     now = datetime.now(timezone.utc)
     print("== running")
@@ -3185,10 +3251,12 @@ def status(cwd, backlog, tasks, story_filter=None):
     if not running:
         print("nothing — no stage has a start without an end in any journal")
     held = read_claim(claim_path(cwd))
+    for story, stage, started in running:
+        print(activity_line(cwd, (held or {}).get("owner", ""), started, now))
     if held:
         beat = parse_time(held.get("beat"))
         age = int((now - beat).total_seconds() // 60) if beat else None
-        print(f"worker: {held.get('owner')} since {held.get('since')}, last sign of life "
+        print(f"worker: {held.get('owner')} since {held.get('since')}, last claim "
               + (f"{age} min ago" if age is not None else "unknown")
               + (" — stale, the next worker takes over" if age is not None and age * 60 > stale_after() else ""))
     else:
@@ -3631,7 +3699,8 @@ def main(argv):
     parser.add_argument("--schedule", action="store_true",
                         help="print every story's state and the next one to run, and exit")
     parser.add_argument("--check-backlog", action="store_true",
-                        help="the plan gate's backlog checks over every story that is not done, and exit")
+                        help="the plan gate's backlog checks over every story that is not done (or --story), "
+                             "writing nothing, and exit")
     parser.add_argument("--backlog", help="backlog root (default: the profile's `backlog:`, else project/backlog)")
     parser.add_argument("--tasks", default="tasks")
     parser.add_argument("--profile")
@@ -3650,7 +3719,8 @@ def main(argv):
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
     if args.check_backlog:
-        return check_backlog(cwd, args.backlog, args.tasks, read_profile(resolve_profile(args.profile, cwd)))
+        return check_backlog(cwd, args.backlog, args.tasks, read_profile(resolve_profile(args.profile, cwd)),
+                             args.story)
     if args.check_contract:
         result = Result()
         profile = read_profile(resolve_profile(args.profile, cwd))

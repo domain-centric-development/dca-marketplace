@@ -32,6 +32,25 @@ CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)\s*:\s*\S")
 MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
 SELECTOR = re.compile(r"([\w.]+)#(\w+)")
 BACKTICKED = re.compile(r"`([^`\n]{2,120})`")
+
+
+def table_paths(text):
+    """The paths the build's `## Changed` table (or a `## Files` list) names without backticks — a
+    table row's first column, a list item's first word — read the way the gate's files check reads
+    them, so a hand-over the gate accepts is not a finding here."""
+    found, inside = [], False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip().lower() in ("files", "changed")
+            continue
+        if not inside:
+            continue
+        item = re.match(r"^\s*[-*]\s+([^\s`|]+)", line)
+        row = re.match(r"^\|\s*([^|`\s]+)\s*\|", line)
+        for match in (item, row):
+            if match and not set(match.group(1)) <= set("-:"):
+                found.append(match.group(1))
+    return found
 PROFILE_KEYS = ("compile", "test", "e2eTest", "architecture", "format")
 
 
@@ -239,7 +258,9 @@ def observe(project, tasks, backlog, story_id):
 
     # --- 3. red before, green after — from the gate, not from a claim ----
     ledger = read(os.path.join(run_dir, ".tests-red"))
-    recorded = {line.strip() for line in (ledger or "").splitlines() if line.strip()}
+    # One line per selector, `selector<TAB>sha256 of its test file` — the gate binds a red proof to
+    # the version of the test that failed; an older ledger has the selector alone.
+    recorded = {line.split("\t", 1)[0].strip() for line in (ledger or "").splitlines() if line.strip()}
     selectors = [s for group in mapping.values() for s in group]
     if not selectors:
         report.blind("red-green", "no mapped tests, so nothing to check")
@@ -339,7 +360,8 @@ def observe(project, tasks, backlog, story_id):
     if actual is None and not os.path.isdir(os.path.join(project, ".git")):
         report.blind("claims", "not a git repository — a stage's claim about changed files cannot be checked")
     if actual is not None and present.get("build.md"):
-        claimed = set()
+        # A table row or list item under `## Changed` is a path by position, as the gate reads it.
+        claimed = {path for path in table_paths(present["build.md"]) if "/" in path}
         for token in BACKTICKED.findall(present["build.md"]):
             candidate = re.sub(r"[:#][0-9,\-]+$", "", token).strip()
             # A path has no spaces in it, and its extension is short: `dotnet test tests/Foo.Bar`

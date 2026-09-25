@@ -983,7 +983,7 @@ def verify_runner(runner, verbose=False):
         profile_text = open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), encoding="utf-8").read() \
             if os.path.isfile(os.path.join(root, ".agents", "factory", "factory.profile.yaml")) else ""
         check("install: a Playwright setup it finds becomes the end-user command and `browser: playwright`",
-              "e2eTest: ./gradlew test-e2e" in profile_text and "\nbrowser: playwright" in profile_text,
+              "e2eTest: ./gradlew test-e2e --rerun" in profile_text and "\nbrowser: playwright" in profile_text,
               [l for l in profile_text.splitlines() if l.startswith(("e2eTest", "browser"))])
     # 1d'. the carriers a profile names reach Claude's own skill directory, and only those
     carrier = next((name for name in ("dca-modelling", "review-clean-code", "e2e-testing")
@@ -1754,8 +1754,8 @@ exit 0
 # --- setup: the presets, the check and the write ------------------------------------------------
 # What a build tool looks like is data (templates/presets/). These cases hold the profile the
 # presets write to what the installer wrote before they existed — byte for byte in every active
-# line — and the one change made on purpose: Gradle's `test:` carries `--rerun` (WP-62 item 5),
-# because an up-to-date task writes no new report and a required suite would prove nothing.
+# line — and the one change made on purpose: Gradle's test commands (`test:`, `e2eTest:`) carry
+# `--rerun`, because an up-to-date task writes no new report and a required suite would prove nothing.
 
 PRESET_FIXTURES = {
     "gradle": {"gradlew": "#!/bin/sh\n", "build.gradle": "plugins { id 'java' }\n"},
@@ -1778,7 +1778,7 @@ PRESET_FIXTURES = {
     "npm-playwright": {"package.json": '{"devDependencies": {"@playwright/test": "1.62.0"}}\n'},
     "empty": {},
 }
-_GRADLE = ['compile: ./gradlew testClasses', 'test: ./gradlew test --rerun', 'e2eTest: ./gradlew test',
+_GRADLE = ['compile: ./gradlew testClasses', 'test: ./gradlew test --rerun', 'e2eTest: ./gradlew test --rerun',
            'filterFlag: --tests', 'filterFormat: "{class}.{method}"', 'architecture: ./gradlew test-architecture']
 _MAVEN = ['compile: ./mvnw test-compile', 'test: ./mvnw test', 'e2eTest: ./mvnw test', 'filterFlag: -Dtest',
           'filterFormat: "{class}#{method}"', 'architecture: ./mvnw -Dtest=*ArchitectureTest test']
@@ -1791,7 +1791,7 @@ _PYTEST = ['test: {py} -m pytest -q --junitxml=test-results/pytest.xml',
 PRESET_GOLDEN = {
     "gradle": _GRADLE,
     "gradle-playwright": _GRADLE + ["browser: playwright"],
-    "gradle-playwright-e2e": [_GRADLE[0] + " testE2eClasses", _GRADLE[1], "e2eTest: ./gradlew test-e2e"]
+    "gradle-playwright-e2e": [_GRADLE[0] + " testE2eClasses", _GRADLE[1], "e2eTest: ./gradlew test-e2e --rerun"]
                              + _GRADLE[3:] + ["browser: playwright"],
     "gradle-conventions": _GRADLE[:5] + ["architecture: ./gradlew archTest"],
     "maven": _MAVEN,
@@ -1905,7 +1905,7 @@ def verify_setup(runner, verbose=False):
         profile = profile_of(root)
         text = open(profile, encoding="utf-8").read()
         with open(profile, "w", encoding="utf-8") as handle:
-            handle.write(text.replace("browser: playwright\n", "").replace("test: ./gradlew test --rerun", "test: ./gradlew test"))
+            handle.write(text.replace("browser: playwright\n", "").replace("\ntest: ./gradlew test --rerun", "\ntest: ./gradlew test"))
         code, output = run_runner(runner, root, "setup", "--check")
         check("setup --check: a missing detected key exits 1 and names the check it switches on",
               code == 1 and "add   browser: playwright" in output and "the plan takes browser tests" in output,
@@ -1925,7 +1925,7 @@ def verify_setup(runner, verbose=False):
               and "nothing written" in output, output.strip())
         code, output = run_runner(runner, root, "setup", "--write", "--replace", "test")
         check("setup --write --replace: takes the detected value for that one key",
-              code == 0 and "test: ./gradlew test --rerun" in open(profile, encoding="utf-8").read(), output.strip())
+              code == 0 and "\ntest: ./gradlew test --rerun" in open(profile, encoding="utf-8").read(), output.strip())
         code, output = run_runner(runner, root, "setup", "--check")
         check("setup --check: the conflict resolved, exit 0", code == 0, output.strip().splitlines()[-1:])
 
@@ -3487,6 +3487,68 @@ def main(argv=None):
                              unchanged == ("in-progress", "test") and rows.get("STORY-1") == ("in-progress", "plan")
                              and "the story changed after it was planned" in output,
                              f"before the edit {unchanged}, after {rows.get('STORY-1')}"))
+    with tmpdir() as root, tmpdir() as home:
+        # inside a stage the journal is silent; the stage's session log is where its sign of life is
+        backlog_project(root)
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        session = "0f0f0f0f-aaaa-bbbb-cccc-121212121212"
+        started = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - 120))
+        write_file(root, "tasks/STORY-1/.verify/journal.tsv", f"{started}\tstage-start\tbuild\ttool=claude-session\n")
+        write_file(home, f"projects/-any-project/{session}.jsonl", json.dumps({"type": "assistant", "message": {
+            "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "./gradlew test --rerun"}}]}}) + "\n")
+        env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
+        subprocess.run([sys.executable, args.gate, "--claim", f"claude-session:{session}"], cwd=root, env=env,
+                       capture_output=True)
+        seen = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, env=env, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace").stdout
+        expectations.append(("status: a running stage shows its session log's last activity and tool call",
+                             re.search(r"activity: \d+ s ago — last tool call Bash: ./gradlew test --rerun", seen)
+                             is not None, [l for l in seen.splitlines() if l.startswith(("activity", "worker"))]))
+        off = subprocess.run([sys.executable, args.gate, "--status"], cwd=root,
+                             env=dict(env, FACTORY_SESSION_USAGE="off"), capture_output=True, text=True,
+                             encoding="utf-8", errors="replace").stdout
+        expectations.append(("status: with session usage off the log is not read, and that is said",
+                             "activity: not read" in off and "gradlew" not in off,
+                             [l for l in off.splitlines() if l.startswith("activity")]))
+    with tmpdir() as root:
+        # the observer reads the gate's own records the way the gate writes them: the red ledger as
+        # `selector<TAB>digest`, the build's `## Changed` table with its paths in plain cells
+        backlog_project(root, extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_APPLIED), ("tasks/STORY-1/tests.md", TESTS),
+            ("tasks/STORY-1/.tests-red", "".join(f"{sel}\t{'a' * 64}\n" for sel in both_green))))
+        observed = subprocess.run([sys.executable, os.path.join(HERE, "observe.py"), "--story", "STORY-1",
+                                   "--json"], cwd=root, capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace")
+        try:
+            held = [item["kind"] for item in json.loads(observed.stdout)["held"]]
+        except (ValueError, KeyError):
+            held = []
+        expectations.append(("observe: a red ledger with digests counts every mapped test as recorded red",
+                             "red-green" in held, observed.stdout.strip()[-300:]))
+        spec = importlib.util.spec_from_file_location("factory_observe_tables", os.path.join(HERE, "observe.py"))
+        observer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(observer)
+        rows = observer.table_paths("## Changed\n| File | Why |\n| --- | --- |\n| src/main/App.java | why |\n"
+                                    "| src/main/resources/app.properties | why |\n\n## Criteria\n| not/this.java | x |\n")
+        expectations.append(("observe: the build table's plain paths are claims, any extension, only under `## Changed`",
+                             "src/main/App.java" in rows and "src/main/resources/app.properties" in rows
+                             and "not/this.java" not in rows, rows))
+    with tmpdir() as root:
+        # the backlog skill checks one story while it is still being written: the plan gate's checks,
+        # none of its marks — a baseline taken then would be the wrong one, and the files it leaves
+        # under tasks/ make the commit hook refuse the backlog commit
+        backlog_project(root, ("STORY-2", []))
+        one = subprocess.run([sys.executable, args.gate, "--check-backlog", "--story", "STORY-1"], cwd=root,
+                             capture_output=True, text=True, encoding="utf-8", errors="replace")
+        missing = subprocess.run([sys.executable, args.gate, "--check-backlog", "--story", "STORY-9"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace")
+        expectations.append(("backlog check: one story is checked, and nothing is written under tasks/",
+                             one.returncode == 0 and "1 story(ies) checked" in one.stdout
+                             and not os.path.exists(os.path.join(root, "tasks", "STORY-1")),
+                             one.stdout.strip()[-200:]))
+        expectations.append(("backlog check: a story that is not there is refused, not passed as empty",
+                             missing.returncode == 1 and "no story STORY-9" in missing.stdout,
+                             missing.stdout.strip()[-200:]))
     with tmpdir() as root:
         # a judge's story conflict: waits, resumes where the answer lands, then runs the rest again
         backlog_project(root, extra_sources=(

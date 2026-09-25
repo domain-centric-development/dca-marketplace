@@ -72,6 +72,19 @@ invents an answer. Take from them:
 A decision the description leaves open is a question to the person, and the answer goes into the description
 through `dca-describe`, not into this run alone.
 
+**Ask the later steps' questions now, in one pass.** Steps 5 and 6 each need a decision the description does
+not carry, and asking them there stops the run halfway, with a skeleton on disk. Put them to the person here,
+together with anything the description leaves open, before the generator runs:
+
+- **the formatter style** (step 5) — for Java `googleJavaFormat()`, `palantirJavaFormat()` or `eclipse()` in
+  Spotless; for .NET the SDK's `.editorconfig` rules and which severities `dotnet format` reports;
+- **the browser-test defaults** (step 6, only where the product has pages) — the runner (Playwright in the
+  project's language unless they name another), the stable-selector attribute (`data-test` by default), and
+  whether the application starts inside the test on a free port or the suite points at a running one.
+
+Hand the answers to `dca-add formatter` and `dca-add browser`; they are recorded where those steps put them —
+the build file and the conventions file — not in the description.
+
 ### 2. The skeleton comes from a generator
 
 Versions, dependency ids and project layout come from the generator, never from memory — training data is

@@ -3,7 +3,7 @@ order: 10
 detect.exists: gradlew build.gradle build.gradle.kts
 compile: ./gradlew testClasses
 test: ./gradlew test --rerun
-e2eTest: ./gradlew test
+e2eTest: ./gradlew test --rerun
 architecture: ./gradlew test-architecture
 filterFlag: --tests
 filterFormat: "{class}.{method}"

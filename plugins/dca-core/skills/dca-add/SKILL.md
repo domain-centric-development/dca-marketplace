@@ -107,7 +107,8 @@ the formatter only touches what is unformatted — which is exactly what the las
 a delivery stage, which may touch only its own files, run the fix command without changing anyone else's.
 
 1. **Pick the formatter with the user.** An existing configuration (`.editorconfig`, an IDE formatter profile,
-   a checkstyle file) decides the style where there is one.
+   a checkstyle file) decides the style where there is one; a style the caller hands over, agreed with the
+   person (`dca-new` asks it before the skeleton exists), is that answer — do not ask again.
    - **Gradle — Spotless** (`com.diffplug.spotless`, the version from the Gradle Plugin Portal, looked up — never
      from memory): `spotless { java { <style>(); removeUnusedImports(); trimTrailingWhitespace(); endWithNewline() } }`
      with the style the user picks (`googleJavaFormat()`, `palantirJavaFormat()`, `eclipse()`). `spotlessCheck`

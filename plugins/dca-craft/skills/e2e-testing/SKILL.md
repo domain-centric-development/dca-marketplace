@@ -36,7 +36,8 @@ knowledge is in `reference/setup.md`; this is the order.
 2. **Agree the defaults with the person**: Playwright in the project's language, Page Objects, one
    stable-selector attribute (`data-test` unless the markup already uses another), the project's
    unit-test framework, and whether the application starts inside the test or the suite points at a
-   running one (`reference/setup.md` names the trade-off). Ask before writing anything.
+   running one (`reference/setup.md` names the trade-off). Ask before writing anything — unless the
+   caller hands these defaults over, already agreed with the person; then they are the answer.
 3. **Wire the build** as `reference/setup.md` shows for the build tool — its own source set or test
    project, the browser installed by the build, one command that runs the suite and writes a report.
 4. **Write the base test**: the application started on a free port (or the base URL read from a

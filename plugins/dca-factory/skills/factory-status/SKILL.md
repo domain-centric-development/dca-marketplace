@@ -39,8 +39,10 @@ start nothing and answer nothing on anyone's behalf.
    Claude Code `/loop /factory-run`) is waiting for work; a long silence
    means it has probably ended — then the backlog is worked by nobody until someone starts one.
 5. **Read "running" for what it is.** It means a stage started and its end is not in the journal. The
-   journal cannot tell a running stage from one whose runner was stopped: say how long ago it
-   started, and, when that is far longer than a stage takes, that it may have been interrupted.
+   journal cannot tell a running stage from one whose runner was stopped; the `activity:` line under
+   it can — how long ago the stage's session log last grew, and its last tool call. Report that as
+   the sign of life. Where it says `unknown` or `not read`, say how long ago the stage started, and,
+   when that is far longer than a stage takes, that it may have been interrupted.
 6. **Explain a state from its files when asked.** "Why is STORY-3 blocked?" — the dependency it names;
    "why does STORY-1 run from document?" — its document gate has not passed yet. Read the file the
    state comes from before you repeat the reason.

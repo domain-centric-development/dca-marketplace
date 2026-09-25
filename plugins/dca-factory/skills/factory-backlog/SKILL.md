@@ -118,8 +118,11 @@ that smuggles the decision in.
    which is the one check no script can replace. Say plainly that the story is waiting for their
    release, and set `approved` only when they say so.
 10. **Check it with the gate, not with your own judgement:**
-   `python3 .agents/factory/story-gate.py --story <id> --stage plan`. Every finding it reports is
-   yours to fix before you hand the item over. Report what it said.
+   `python3 .agents/factory/story-gate.py --check-backlog --story <id>` — the plan gate's checks on
+   the story, writing nothing. Not `--stage plan`: that one records the story and the tests as the run
+   found them, and a record taken while the story is still being written leaves files under `tasks/`
+   that the commit hook then refuses. Every finding it reports is yours to fix before you hand the
+   item over. Report what it said.
 
 ## A story pasted from a tracker
 
