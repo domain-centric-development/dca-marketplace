@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.35.5"
+VERSION = "0.35.6"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1581,6 +1581,8 @@ def tail(output, limit=1200):
 # `## Answer` with `answer:`, `by:` and `at:` is answered; a gate-written `## Applied` is applied.
 # A draft that lacks the actor or the time is not an answer — an unconfirmed draft unblocks nothing.
 DECISIONS_DIR = os.path.join(".agents", "factory", "decisions")
+#: The same folder as a person reads it — with `/` on every platform, as git and the docs write it.
+DECISIONS_SHOWN = ".agents/factory/decisions"
 STAGE_FILES = {"plan": "plan.md", "test": "tests.md", "build": "build.md", "tidy": "tidy.md",
                "judge": "judge.md", "document": "document.md"}
 ANSWER_FIELDS = ("answer", "by", "at")
@@ -1719,7 +1721,7 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     records.sort(key=lambda r: (r["rank"], r["id"]))
     waiting = [r for r in records if r["state"] in ("open", "draft", "unreadable")]
     model = dict(project=os.path.basename(os.path.abspath(cwd)), story=story_id, records=records,
-                 waiting=len(waiting), store=DECISIONS_DIR)
+                 waiting=len(waiting), store=DECISIONS_SHOWN)
     mark = lambda r: "look" if r["kind"] == "acceptance" and r["state"] in ("open", "draft") else \
         "stopped" if r["state"] == "unreadable" else decision_mark(r)
     headers = ["record", "state", "story / stage", "asked (UTC)", "question → answer"]
@@ -1732,7 +1734,7 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
         return 0
     first = next((r for r in records if r in waiting), None)
     how = make_action(skill="/factory-decisions",
-                      shell=f"write the answer into {DECISIONS_DIR}/{first['id']}.md under `## Answer`") if first else None
+                      shell=f"write the answer into {DECISIONS_SHOWN}/{first['id']}.md under `## Answer`") if first else None
     if fmt == "md":
         lead = "look" if first and first["kind"] == "acceptance" else "question" if waiting else "done"
         out = [f"### Decisions — {model['project']}" + (f" · {story_id}" if story_id else ""), "",
@@ -1761,7 +1763,7 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
             out.append("")
         out = out[:-1]
     else:
-        out.append(f"    No decision record under {DECISIONS_DIR}/.")
+        out.append(f"    No decision record under {DECISIONS_SHOWN}/.")
     out += ["", "─" * 72]
     if how:
         out += [f"  {bold('Next', use)}   answer {first['id']}."] + how_lines(how, use, "         ")
@@ -1800,7 +1802,7 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
             result.fail(
                 "decisions",
                 f"{path}: `## needs-human` names no `decision: <id>` — the question has to be a "
-                f"record under {DECISIONS_DIR}/ so an answer has a place to land; without one, "
+                f"record under {DECISIONS_SHOWN}/ so an answer has a place to land; without one, "
                 f"nobody was asked.",
             )
         for wanted in ids:
@@ -1808,7 +1810,7 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
                 result.fail(
                     "decisions",
                     f"{path}: `## needs-human` names decision {wanted!r}, but "
-                    f"{DECISIONS_DIR}/{wanted}.md does not exist or names another story.",
+                    f"{DECISIONS_SHOWN}/{wanted}.md does not exist or names another story.",
                 )
 
     # 2. every record: open blocks, a draft is still open, answered must be applied by its stage.
@@ -3534,17 +3536,18 @@ def story_attention(cwd, story_id, story, profile):
     records = story_records(cwd, story_id)
     open_records = [(front, body) for _p, front, body, st, _a in records if st in ("open", "draft")]
     record = str(open_records[0][0].get("id", "")).strip() if open_records else ""
-    by_hand = f"write the answer into {DECISIONS_DIR}/{record}.md under `## Answer`" if record else ""
+    by_hand = f"write the answer into {DECISIONS_SHOWN}/{record}.md under `## Answer`" if record else ""
     if state == "waiting" and any(is_acceptance(f) for f, _b in open_records):
         record = next(str(f["id"]).strip() for f, _b in open_records if is_acceptance(f))
         return "look", "waiting for your acceptance", make_action(
             skill="/factory-decisions", look=str(profile.get("run", "")).strip() or "start the application",
-            shell=f"write accepted or your correction into {DECISIONS_DIR}/{record}.md under `## Answer`")
+            shell=f"write accepted or your correction into {DECISIONS_SHOWN}/{record}.md under `## Answer`")
     if state == "waiting":
         return "question", "waiting for your answer", make_action(skill="/factory-decisions", shell=by_hand)
     if state == "unreleased":
         return "question", "draft — waits for your release", make_action(
-            text="release it", skill="/factory-backlog", shell=f"set `status: approved` in {story.get('path', 'the story')}")
+            text="release it", skill="/factory-backlog",
+            shell=f"set `status: approved` in {str(story.get('path', 'the story')).replace(os.sep, '/')}")
     if state == "stopped":
         return "stopped", "stopped", make_action(text=detail, skill=f"/factory-status {story_id}",
                                             shell=f"{RUNNER} status --story {story_id}")
@@ -3590,7 +3593,7 @@ def status_model(cwd, backlog, tasks, live=False):
         if error or state in ("open", "draft"):
             waiting.append(dict(mark="question", story=story_id or name, what="an open question",
                                 action=make_action(skill="/factory-decisions",
-                                              shell=f"write the answer into {DECISIONS_DIR}/{name}.md under `## Answer`")))
+                                              shell=f"write the answer into {DECISIONS_SHOWN}/{name}.md under `## Answer`")))
     running = []
     held = read_claim(claim_path(cwd)) if live else None
     for story_id, stage, started in running_stages(tasks):
@@ -4935,7 +4938,7 @@ def main(argv):
                     deliver = False
                     asked = ask_acceptance(cwd, args.tasks, story_id, story_path, profile, criteria)
                     result.wait("acceptance", f"{asked} asks a human to accept the story before it is "
-                                              f"delivered — {DECISIONS_DIR}/{asked}.md, answered through "
+                                              f"delivered — {DECISIONS_SHOWN}/{asked}.md, answered through "
                                               f"/factory-decisions")
         except GateError as error:
             result.fail("acceptance", str(error))
