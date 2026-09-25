@@ -3489,23 +3489,24 @@ def status_model(cwd, backlog, tasks, live=False):
     epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
     nxt = data["next"]
     if nxt:
-        next_line = f"{nxt} can start from {stories[nxt]['start'] or 'plan'} → /factory-run {nxt}"
+        next_line = f"{nxt} can start from {stories[nxt]['start'] or 'plan'} — run it with /factory-run {nxt}."
     elif not rows:
-        next_line = "the backlog is empty → /factory-backlog writes the first story"
+        next_line = "The backlog is empty — write the first story with /factory-backlog."
     elif all(r["state"] in ("delivered", "superseded") for r in rows):
-        next_line = "every story is delivered → /factory-backlog writes the next one"
+        next_line = "Every story is delivered — write the next one with /factory-backlog."
     else:
-        next_line = data["reason"]
+        next_line = data["reason"][:1].upper() + data["reason"][1:] + "."
     extra = []
     if live:
         if held:
-            extra.append(f"worker: {held.get('owner')} since {stamp_text(held.get('since'))}")
+            extra.append(f"worker: {held.get('owner')} since {stamp_text(held.get('since'))} UTC")
         listening = listener_line(cwd)
         extra.append(listening or "listening: no session has looked at the backlog")
         note = duplicate_pipeline_note(cwd)
         if note:
             extra.append(note)
-    return dict(waiting=waiting, running=running, epics=epics, rows=rows, next=next_line,
+    return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
+                rows=rows, next=next_line,
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
                 delivered=sum(r["state"] == "delivered" for r in rows), total=len(rows),
                 tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
@@ -3518,6 +3519,10 @@ def paint(text, mark, colour):
 
 def bold(text, colour):
     return f"\x1b[1m{text}\x1b[0m" if colour else text
+
+
+def dim(text, colour):
+    return f"\x1b[2m{text}\x1b[0m" if colour else text
 
 
 def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None, total=False):
@@ -3560,7 +3565,7 @@ def epic_summary(item):
 
 
 def backlog_columns(model):
-    headers = ["story", "state", "stage", "passes", "started", "delivered", "worked", "tokens"]
+    headers = ["story", "state", "stage", "passes", "started (UTC)", "delivered (UTC)", "worked", "tokens"]
     right = {3, 6, 7}
     if model["priced"]:
         headers.append("cost $")
@@ -3587,54 +3592,52 @@ def section(text, colour):
 
 
 def render_status_text(model, colour=False):
-    out = [""]
-    out.append(bold("Waiting for you", colour))
+    out = [""] + heading(f"Factory — {model['project']}", colour, "═")
+    out += section("Waiting for you", colour)
     if model["waiting"]:
         width = max(len(w["story"]) for w in model["waiting"])
         what = max(len(w["what"]) for w in model["waiting"])
         for w in model["waiting"]:
             head = f"{MARKS_TEXT[w['mark']]} {w['story'].ljust(width)}   {w['what'].ljust(what)}"
-            out.append("  " + paint(head, w["mark"], colour) + (f"   {w['action']}" if w["action"] else ""))
+            out.append("    " + paint(head, w["mark"], colour) + (f"   {w['action']}" if w["action"] else ""))
     else:
-        out.append("  Nothing waits for you.")
-    out += ["", bold("Running", colour)]
+        out.append("    Nothing waits for you.")
+    out += section("Running", colour)
     if model["running"]:
         for r in model["running"]:
             mark = "stopped" if r.get("interrupted") else "running"
-            line = f"{MARKS_TEXT[mark]} {r['story']}   {r['stage']}   since {stamp_text(r['since'])}"
+            line = f"{MARKS_TEXT[mark]} {r['story']}   {r['stage']}   since {stamp_text(r['since'])} UTC"
             if r.get("interrupted"):
                 line += " · never ended — possibly interrupted"
             if r.get("ago"):
                 line += f" · {r['ago']}"
-            out.append("  " + paint(line, mark, colour))
+            out.append("    " + paint(line, mark, colour))
             if r.get("activity"):
-                out.append(f"      activity: {r['activity']}")
+                out.append(f"        activity: {r['activity']}")
     else:
-        out.append("  Nothing is running.")
-    out += ["", bold("Backlog", colour) + (f"   {epic_summary(model)}" if model["rows"] else "")]
+        out.append("    Nothing is running.")
+    out += section("Backlog" + (f" — {epic_summary(model)}" if model["rows"] else ""), colour)
     if not model["rows"]:
-        out.append("  No story yet.")
+        out.append("    No story yet.")
     headers, right = backlog_columns(model)
     widths = column_widths(headers, [backlog_cells(r, model, MARKS_TEXT) for r in model["rows"]])
-    for epic in model["epics"]:
-        out += ["", "  " + bold(epic["epic"] or "(no epic)", colour) + f"   {epic_summary(epic)}"]
+    for n, epic in enumerate(model["epics"]):
+        out += ([""] if n else []) + ["    " + bold(epic["epic"] or "(no epic)", colour) + f"   {dim(epic_summary(epic), colour)}"]
         cells = [backlog_cells(r, model, MARKS_TEXT) for r in epic["rows"]]
-        out += table_text(headers, cells, right, marks=[r["mark"] for r in epic["rows"]], colour=colour,
-                          widths=widths)
-    out += ["", "─" * 72, f"Next: {model['next']}"]
-    notes = ["Times in UTC."]
+        out += table_text(headers, cells, right, indent="      ", marks=[r["mark"] for r in epic["rows"]],
+                          colour=colour, widths=widths)
+    out += ["", "─" * 72, f"  {bold('Next', colour)}   {model['next']}"]
     if model["measured"] and not model["priced"]:
-        notes.append("No cost in dollars: a session log carries tokens, not prices.")
-    out.append(" ".join(notes))
+        out.append(dim("  Tokens only: a session log carries no prices.", colour))
     if model["extra"]:
-        out += [""] + model["extra"]
+        out += [""] + ["  " + line for line in model["extra"]]
     if model["hint"]:
-        out += ["", f"layout: {model['hint']}"]
+        out += ["", f"  layout: {model['hint']}"]
     return "\n".join(out + [""])
 
 
 def render_status_md(model):
-    out = ["**Waiting for you**", ""]
+    out = [f"### Factory — {model['project']}", "", "**Waiting for you**", ""]
     if model["waiting"]:
         out += table_md(["", "story", "what", "next"],
                         [[MARKS_MD[w["mark"]], w["story"], w["what"], w["action"]] for w in model["waiting"]])
@@ -3644,7 +3647,7 @@ def render_status_md(model):
     if model["running"]:
         out += table_md(["", "story", "stage", "since"] + (["activity"] if any(r.get("activity") for r in model["running"]) else []),
                         [[MARKS_MD["stopped" if r.get("interrupted") else "running"], r["story"], r["stage"],
-                          stamp_text(r["since"]) + (" · never ended — possibly interrupted" if r.get("interrupted") else "")
+                          stamp_text(r["since"]) + " UTC" + (" · never ended — possibly interrupted" if r.get("interrupted") else "")
                           + (f" · {r['ago']}" if r.get("ago") else "")]
                          + ([r.get("activity", "")] if any(x.get("activity") for x in model["running"]) else [])
                          for r in model["running"]])
@@ -3657,11 +3660,9 @@ def render_status_md(model):
     for epic in model["epics"]:
         out += ["", f"*{epic['epic'] or '(no epic)'}* — {epic_summary(epic)}", ""]
         out += table_md(headers, [backlog_cells(r, model, MARKS_MD) for r in epic["rows"]], right)
-    out += ["", f"**Next:** {model['next']}", ""]
-    notes = ["Times in UTC."]
+    out += ["", f"**Next:** {model['next']}"]
     if model["measured"] and not model["priced"]:
-        notes.append("No cost in dollars: a session log carries tokens, not prices.")
-    out.append(" ".join(notes))
+        out += ["", "_Tokens only: a session log carries no prices._"]
     if model["extra"]:
         out += [""] + [f"- {line}" for line in model["extra"]]
     return "\n".join(out)
@@ -3753,7 +3754,7 @@ def story_header(model):
     title = f"{model['story']} — {model['title']}" if model["title"] else model["story"]
     state = row["state"]
     if row["delivered"]:
-        state = f"delivered {stamp_text(row['delivered'])}"
+        state = f"delivered {stamp_text(row['delivered'])} UTC"
     if model["accepted_by"]:
         state += " · accepted by a human"
     passes = model["passes"]
@@ -3799,7 +3800,7 @@ def render_story_text(model, colour=False):
                 + (f"   {w['action']}" if w["action"] else "")]
     if model["passes"]:
         out += section("Passes", colour)
-        out += table_text(["pass", "started", "ended", "worked", "tokens"],
+        out += table_text(["pass", "started (UTC)", "ended (UTC)", "worked", "tokens"],
                           [[f"{i + 1}  {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
                             took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
                            for i, p in enumerate(model["passes"])], {3, 4}, colour=colour)
@@ -3810,7 +3811,7 @@ def render_story_text(model, colour=False):
         out += section("Decisions", colour)
         out += table_text(["record", "state", "answer or question"],
                           [[d["id"], d["state"], d["text"]] for d in model["decisions"]], colour=colour)
-    out += ["", "─" * 72, f"Next: {model['next']}", "Times in UTC.", ""]
+    out += ["", "─" * 72, f"  {bold('Next', colour)}   {model['next']}", ""]
     return "\n".join(out)
 
 
@@ -3823,7 +3824,7 @@ def render_story_md(model):
         out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {w['action']}"]
     if model["passes"]:
         out += ["", "**Passes**", ""]
-        out += table_md(["pass", "started", "ended", "worked", "tokens"],
+        out += table_md(["pass", "started (UTC)", "ended (UTC)", "worked", "tokens"],
                         [[f"{i + 1} {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
                           took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
                          for i, p in enumerate(model["passes"])], {3, 4})
@@ -3834,7 +3835,7 @@ def render_story_md(model):
         out += ["", "**Decisions**", ""]
         out += table_md(["record", "state", "answer or question"],
                         [[d["id"], d["state"], d["text"]] for d in model["decisions"]])
-    out += ["", f"**Next:** {model['next']}", "", "Times in UTC."]
+    out += ["", f"**Next:** {model['next']}"]
     return "\n".join(out)
 
 

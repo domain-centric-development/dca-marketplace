@@ -3168,7 +3168,7 @@ def main(argv=None):
         expectations = [
             ("status: a stage with a start and no end is shown with when it started (UTC) — as interrupted once it is "
              "older than a stage may take, on top as well",
-             "✗ STORY-2   test   since 2026-09-23 10:02 · never ended — possibly interrupted" in part(out, "Running", "Backlog")
+             "✗ STORY-2   test   since 2026-09-23 10:02 UTC · never ended — possibly interrupted" in part(out, "Running", "Backlog")
              and "✗ STORY-2" in part(out, "Waiting for you", "Running")
              and re.search(r"✗ STORY-2\s+interrupted\?\s+test", story2) is not None,
              part(out, "Waiting for you", "Backlog") + story2),
