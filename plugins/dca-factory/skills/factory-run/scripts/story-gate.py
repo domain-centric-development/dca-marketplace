@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.35.2"
+VERSION = "0.35.3"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1734,7 +1734,9 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     how = make_action(skill="/factory-decisions",
                       shell=f"write the answer into {DECISIONS_DIR}/{first['id']}.md under `## Answer`") if first else None
     if fmt == "md":
-        out = [f"### Decisions — {model['project']}" + (f" · {story_id}" if story_id else ""), "", summary, ""]
+        lead = "look" if first and first["kind"] == "acceptance" else "question" if waiting else "done"
+        out = [f"### Decisions — {model['project']}" + (f" · {story_id}" if story_id else ""), "",
+               f"{MARKS_MD[lead]} {summary}", ""]
         if records:
             out += table_md(headers, cells(MARKS_MD))
         if how:
@@ -1743,7 +1745,10 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
         return 0
     use = use_colour(colour)
     out = [""] + heading(f"Decisions — {model['project']}" + (f" · {story_id}" if story_id else ""), use, "═")
-    out += ["", f"  {summary}", ""]
+    lead = "question" if waiting else "done"
+    if first and first["kind"] == "acceptance":
+        lead = "look"
+    out += ["", "  " + paint(f"{MARKS_TEXT[lead]} {summary}", lead, use), ""]
     if records:
         # the question and its answer under each record, over the full width — a column would crush it
         lines = table_text(headers[:-1], [c[:-1] for c in cells(MARKS_TEXT)], colour=use,

@@ -22,7 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # The reports use `—` and `→`. A Windows console decodes stdout as cp1252 and a Python that
 # inherits that raises on the first arrow; the files this writes are UTF-8 in every other respect,
@@ -3645,7 +3645,8 @@ def main(argv=None):
         gate("--window-start", "backlog", "--story", "STORY-1")
         rows_during, _nxt, _wait, _ = schedule_of(args.gate, root)
         time.sleep(1.1)
-        stamp = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - 0.5))
+        moment = datetime.now(timezone.utc) - timedelta(seconds=0.5)       # inside the window, to the millisecond
+        stamp = moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
         write_file(home, f"projects/-any/{session}.jsonl", json.dumps({"timestamp": stamp, "message": {
             "id": "w1", "model": "model-x", "usage": {"input_tokens": 5, "cache_read_input_tokens": 40,
                                                         "cache_creation_input_tokens": 50, "output_tokens": 5}}}) + "\n")
