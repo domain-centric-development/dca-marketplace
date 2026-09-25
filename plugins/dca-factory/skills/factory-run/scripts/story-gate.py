@@ -131,7 +131,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.34.0"
+VERSION = "0.34.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3511,6 +3511,29 @@ def ask_acceptance(cwd, tasks, story_id, story_path, profile, criteria):
     return rid
 
 
+def checkout_holders(cwd, backlog, tasks, exclude=None):
+    """The stories with unfinished code in the checkout — past their test stage, not delivered — as
+    the schedule counts them."""
+    holders = []
+    for root, _dirs, files in os.walk(backlog):
+        if os.path.normpath(root) == os.path.normpath(backlog):
+            continue
+        for name in sorted(files):
+            if not name.endswith(".md") or name == "epic.md":
+                continue
+            path = os.path.join(root, name)
+            try:
+                front, _body = read_front_matter(path)
+            except GateError:
+                continue
+            story_id = str(front.get("id") or name[:-3]).strip()
+            if story_id == exclude or not os.path.isfile(os.path.join(tasks, story_id, STAGE_FILES["test"])):
+                continue
+            if story_state(cwd, tasks, story_id, front, path)[0] not in ("delivered", "superseded"):
+                holders.append(story_id)
+    return sorted(holders)
+
+
 def reopen(cwd, tasks, backlog, story_id):
     """Take a delivered story back for a correction a human gave on looking at it.
 
@@ -3530,6 +3553,11 @@ def reopen(cwd, tasks, backlog, story_id):
               f"correction as an acceptance record first")
         return 1
     rid = records[-1][0]
+    holders = checkout_holders(cwd, backlog, tasks, exclude=story_id)
+    if holders:
+        print(f"reopen: {', '.join(holders)} holds the checkout with unfinished code — one story at a time; "
+              f"reopen {story_id} once it is delivered")
+        return 1
     text = read_text(story_path)
     if rid not in text:
         print(f"reopen: the story does not cite {rid} — write the correction into it first (criteria and "

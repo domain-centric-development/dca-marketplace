@@ -3715,6 +3715,21 @@ def main(argv=None):
                              f"{refused.returncode}/{uncited.returncode}/{taken.returncode}; {rows.get('STORY-1')}"))
 
     with tmpdir() as root:
+        accept_fixture(root, "", ("STORY-2", []), extra=(("tasks/STORY-2/plan.md", PLAN_APPLIED),
+                                                         ("tasks/STORY-2/tests.md", TESTS)))
+        gate_run(root, "--story", "STORY-1", "--stage", "document")
+        write_file(root, ".agents/factory/decisions/STORY-1-accept-1.md",
+                   "---\nid: STORY-1-accept-1\nstory: STORY-1\nstage: document\nkind: acceptance\n"
+                   "asked: 2026-09-25T15:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n")
+        answer(root, "STORY-1-accept-1", "correction: eight products")
+        with open(story_file(root), "a", encoding="utf-8") as h:
+            h.write("- answered: eight products (a-human, STORY-1-accept-1).\n")
+        held = gate_run(root, "--reopen", "STORY-1")
+        expectations.append(("reopen: refused while another story holds the checkout with unfinished code",
+                             held.returncode == 1 and "STORY-2 holds the checkout" in held.stdout and delivered(root),
+                             held.stdout.strip()[-200:]))
+
+    with tmpdir() as root:
         accept_fixture(root, "acceptance: all\n")
         gate_run(root, "--story", "STORY-1", "--stage", "plan")
         gate_run(root, "--story", "STORY-1", "--stage", "document")

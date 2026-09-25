@@ -146,8 +146,9 @@ rationale: <optional>
   into the same story (criteria, an `answered:` line citing the id), which then runs again from
   plan and is asked again in a record of its own. The gate exits 3 while one is open — a question,
   not a refusal; the runner stops and counts no round. `story-gate.py --reopen <story>` takes a
-  delivered story back for a correction the story cites; after an accepted record it refuses a
-  correction that changes a criterion (a new wish is a new story).
+  delivered story back for a correction the story cites — not while another story holds the checkout
+  with unfinished code; after an accepted record it refuses a correction that changes a criterion
+  (a new wish is a new story).
 - Only a human writes `## Answer`, or a skill writing the human's exact words on their explicit
   confirmation. A recommendation, a timeout, a preselected option or an unconfirmed draft is not
   an answer.
