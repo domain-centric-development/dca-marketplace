@@ -3773,7 +3773,7 @@ def render_story_text(model, colour=False):
         out += table_text(["pass", "started", "ended", "worked", "tokens"],
                           [[f"{i + 1}  {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
                             took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
-                           for i, p in enumerate(model["passes"])], {4})
+                           for i, p in enumerate(model["passes"])], {3, 4})
     if model["stages"]:
         headers, rows, right = stage_cells(model)
         out += ["", "  " + bold(stage_caption(model), colour)] + table_text(headers, rows, right)
@@ -3795,7 +3795,7 @@ def render_story_md(model):
         out += table_md(["pass", "started", "ended", "worked", "tokens"],
                         [[f"{i + 1} {p['label']}", stamp_text(p["start"]), stamp_text(p["end"]),
                           took_text(p["seconds"]), tokens_text(p["tokens"], p["measured"])]
-                         for i, p in enumerate(model["passes"])], {4})
+                         for i, p in enumerate(model["passes"])], {3, 4})
     if model["stages"]:
         headers, rows, right = stage_cells(model)
         out += ["", f"**{stage_caption(model)}**", ""] + table_md(headers, rows, right)
