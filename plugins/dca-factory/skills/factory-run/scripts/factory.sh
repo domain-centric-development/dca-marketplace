@@ -1387,7 +1387,9 @@ asks_human() {                              # asks_human <file>
 stopped_for_human() {                       # stopped_for_human <artefact> <stage> <story>
   local artefact=$1 stage=$2 story=$3 ids id applies
   echo "factory: stage '$stage' ends with a needs-human section — the run stops here." >&2
-  ids=$(sed -n '/^## needs-human/,/^## /p' "$artefact" | sed -n 's/^[[:space:]-]*decision:[[:space:]]*//p')
+  # the id alone: a stage may go on writing after it on the same line ("decision: s-01. The browser …")
+  ids=$(sed -n '/^## needs-human/,/^## /p' "$artefact" \
+    | sed -n 's/^[[:space:]-]*decision:[[:space:]]*`\{0,1\}\([A-Za-z0-9][A-Za-z0-9_-]*\).*/\1/p')
   if [ -z "$ids" ]; then
     echo "factory:   the section names no 'decision: <id>' — the stage has to write the question as" >&2
     echo "factory:   $DECISIONS/<story>-<nn>.md; the next gate refuses a question nobody was asked." >&2

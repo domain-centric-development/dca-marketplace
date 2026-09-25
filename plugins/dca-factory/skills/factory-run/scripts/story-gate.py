@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.38.1"
+VERSION = "0.38.2"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1871,7 +1871,13 @@ def needs_human_ids(text):
     section = section_of(text, "needs-human")
     if section is None or all(nothing_line(line) for line in section):
         return None
-    return [value for key, value in fields_of(section).items() if key == "decision" and value]
+    # the id alone: a stage may go on writing after it on the same line ("decision: s-01. The browser …")
+    ids = []
+    for key, value in fields_of(section).items():
+        match = re.match(r"`?([A-Za-z0-9][\w-]*)", value) if key == "decision" and value else None
+        if match:
+            ids.append(match.group(1))
+    return ids
 
 
 def stamp_applied(path, stage):
