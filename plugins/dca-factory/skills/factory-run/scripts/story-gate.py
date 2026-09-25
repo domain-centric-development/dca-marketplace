@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.35.1"
+VERSION = "0.35.2"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3772,6 +3772,16 @@ def table_md(headers, rows, right=(), first_bold=False):
     return lines
 
 
+def epic_mark(epic):
+    """The epic's own mark, from its stories: what needs you wins, then what stopped, what runs; ✓ when all
+    are delivered."""
+    marks = [r["mark"] for r in epic["rows"]]
+    for wanted in ("look", "question", "stopped", "running"):
+        if wanted in marks:
+            return wanted
+    return "done" if marks and all(m == "done" for m in marks) else "none"
+
+
 def epic_summary(item):
     parts = [f"{item['delivered']} of {item['total']} delivered",
              tokens_text(item["tokens"], item["measured"]) + (" tokens" if item["measured"] else "")]
@@ -3865,14 +3875,18 @@ def waiting_running_text(model, colour):
 
 
 def backlog_text(model, colour, heading_line=True):
+    whole = epic_mark({"rows": model["rows"]})
+    summary = paint(f"{MARKS_TEXT[whole]} {epic_summary(model)}", whole, colour) if model["rows"] else ""
     out = section("Backlog" + (f" — {epic_summary(model)}" if model["rows"] else ""), colour) if heading_line \
-        else ["", "  " + (epic_summary(model) if model["rows"] else ""), ""]
+        else ["", "  " + summary, ""]
     if not model["rows"]:
         out.append("    No story yet.")
     headers, right = backlog_columns(model)
     widths = column_widths(headers, [backlog_cells(r, model, MARKS_TEXT) for r in model["rows"]])
     for n, epic in enumerate(model["epics"]):
-        out += ([""] if n else []) + ["    " + bold(epic["epic"] or "(no epic)", colour) + f"   {dim(epic_summary(epic), colour)}"]
+        mark = epic_mark(epic)
+        out += ([""] if n else []) + ["    " + paint(bold(f"{MARKS_TEXT[mark]} {epic['epic'] or '(no epic)'}", colour), mark, colour)
+                                      + f"   {dim(epic_summary(epic), colour)}"]
         cells = [backlog_cells(r, model, MARKS_TEXT) for r in epic["rows"]]
         out += table_text(headers, cells, right, indent="      ", marks=[r["mark"] for r in epic["rows"]],
                           colour=colour, widths=widths)
@@ -3927,7 +3941,7 @@ def backlog_md_lines(model):
         out += ["", "No story yet."]
     headers, right = backlog_columns(model)
     for epic in model["epics"]:
-        out += ["", f"*{epic['epic'] or '(no epic)'}* — {epic_summary(epic)}", ""]
+        out += ["", f"{MARKS_MD[epic_mark(epic)]} *{epic['epic'] or '(no epic)'}* — {epic_summary(epic)}", ""]
         out += table_md(headers, [backlog_cells(r, model, MARKS_MD) for r in epic["rows"]], right)
     if model["rows"]:
         headers, rows, kinds, right = token_rows(model)
