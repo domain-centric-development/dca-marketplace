@@ -76,10 +76,10 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 
 The pipeline needs two things from your project: a **stack profile**
 (`.agents/factory/factory.profile.yaml` — your build and test commands) and the gate script next to
-it. `factory-run` sets both up on first use, or run the installer directly:
+it. `factory-run` sets both up on first use, or run the setup directly:
 
 ```
-bash <plugin>/skills/factory-run/scripts/factory.sh install --tool claude
+bash <plugin>/skills/factory-run/scripts/factory.sh setup --tool claude
 ```
 
 Details, including the backlog contract and every gate check:
@@ -116,10 +116,10 @@ your domain, and nothing in the method knows your build.
 
 The pipeline's carriers are deliberately portable: `SKILL.md` folders and one dependency-free
 script — no stage needs a plugin manifest, a tool's hooks or agent frontmatter. Codex and OpenCode discover skills
-from a project-local directory, so the installer writes them there:
+from a project-local directory, so the setup writes them there:
 
 ```
-bash <plugin>/skills/factory-run/scripts/factory.sh install --tool codex      # or opencode, or all
+bash <plugin>/skills/factory-run/scripts/factory.sh setup --tool codex      # or opencode, or all
 ```
 
 For those tools it links the craft skills as well, because they have no plugin mechanism to find

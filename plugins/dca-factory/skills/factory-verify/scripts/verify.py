@@ -12,6 +12,7 @@ fixture's "test runner" is a marker file, so red and green cost milliseconds ins
 """
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -37,7 +38,7 @@ def can_symlink():
     """Whether `ln -s` in the runner's shell makes a symlink — asked the way the installer asks it,
     not through `os.symlink`: on Windows an administrator's Python can link while MSYS's `ln -s`
     still copies, and the two answers would send the install and these cases different ways.
-    Where the shell cannot link, `install` copies, and the link cases here have no subject."""
+    Where the shell cannot link, `setup` copies, and the link cases here have no subject."""
     with tempfile.TemporaryDirectory() as probe:
         with open(os.path.join(probe, "a"), "w", encoding="utf-8") as handle:
             handle.write("")
@@ -579,7 +580,7 @@ def checks_by_verdict(output):
 
 # --- the runner's shape ------------------------------------------------------
 # The runner is bash, so these cases call it rather than importing anything: the stage order, the
-# artefact names, the verdict handling and the two shapes `install` may leave behind.
+# artefact names, the verdict handling and the two shapes `setup` may leave behind.
 
 
 _OBSERVE = None
@@ -622,6 +623,17 @@ def run_runner(runner, root, *args, env=None):
         encoding="utf-8", errors="replace",
     )
     return result.returncode, result.stdout + result.stderr
+
+
+def in_git(root):
+    """`setup` needs a repository (the commit hook and the worker lock live in .git); a fixture gets one."""
+    if subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=root, capture_output=True).returncode:
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+
+
+def run_setup(runner, root, *args, env=None):
+    in_git(root)
+    return run_runner(runner, root, "setup", *args, env=env)
 
 
 def verify_runner(runner, verbose=False):
@@ -941,7 +953,7 @@ def verify_runner(runner, verbose=False):
             os.makedirs(os.path.dirname(os.path.join(root, path)) or root, exist_ok=True)
             with open(os.path.join(root, path), "w", encoding="utf-8") as handle:
                 handle.write(text)
-        run_runner(runner, root, "install", "--tool", "claude", "--from", source, "--copy")
+        run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
         profile_text = open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), encoding="utf-8").read() \
             if os.path.isfile(os.path.join(root, ".agents", "factory", "factory.profile.yaml")) else ""
         check("install: a Playwright setup it finds becomes the end-user command and `browser: playwright`",
@@ -955,7 +967,7 @@ def verify_runner(runner, verbose=False):
     if carrier:
         with tmpdir() as root:
             build_project(root, profile=PROFILE + f"carrier.build: {carrier}\n")
-            code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", source)
+            code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
             skills_dir = os.path.join(root, ".claude", "skills")
             # skill folders only: a copying install (no symlinks, as on Windows) keeps its list beside them
             entries = sorted(e for e in os.listdir(skills_dir) if not e.startswith(".")) if os.path.isdir(skills_dir) else []
@@ -976,7 +988,7 @@ def verify_runner(runner, verbose=False):
         stale = os.path.join(root, ".codex", "skills", "gone-from-the-source")
         if SYMLINKS:
             os.symlink(os.path.join(source, "no-longer-here"), stale)
-        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        run_setup(runner, root, "--tool", "codex", "--from", source)
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
         check("install: a skill the project owns survives the install",
               "our-own-skill" in entries and
@@ -995,7 +1007,7 @@ def verify_runner(runner, verbose=False):
             with open(os.path.join(elsewhere, "SKILL.md"), "w", encoding="utf-8") as handle:
                 handle.write("---\nname: stage-plan\ndescription: the project's own plan stage\n---\n")
             os.symlink(elsewhere, os.path.join(skills, "stage-plan"))
-            run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+            run_setup(runner, root, "--tool", "codex", "--from", source)
             check("install: a link the *project* made is not replaced either",
                   os.path.realpath(os.path.join(skills, "stage-plan")) == os.path.realpath(elsewhere),
                   f"stage-plan now points at {os.path.realpath(os.path.join(skills, 'stage-plan'))}")
@@ -1051,7 +1063,7 @@ exit 0
     six = ["plan", "test", "build", "tidy", "judge", "document"]
     with tmpdir() as root:
         env = backlog_fixture(root)
-        code, output = run_runner(runner, root, "backlog", env=env)
+        code, output = run_runner(runner, root, "run", env=env)
         ran = invocations(root)
         check("backlog: a story that asks at its plan stage does not stop the stories that do not need it",
               code == 0 and ran == ["STORY-1 plan"] + [f"STORY-2 {s}" for s in six],
@@ -1059,7 +1071,7 @@ exit 0
         check("backlog: the story that depends on the waiting one stays blocked",
               "STORY-3  blocked" in output, [l for l in output.splitlines() if "STORY-3" in l])
         answer(root)
-        code, output = run_runner(runner, root, "backlog", env=env)
+        code, output = run_runner(runner, root, "run", env=env)
         ran = invocations(root)[7:]
         check("backlog: after the answer the story resumes at the stage that asked, then its dependant runs",
               code == 0 and ran == [f"STORY-1 {s}" for s in six] + [f"STORY-3 {s}" for s in six],
@@ -1067,7 +1079,7 @@ exit 0
         record = open(os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md"),
                       encoding="utf-8").read()
         check("backlog: the resumed stage's answer is stamped applied", "## Applied" in record)
-        code, output = run_runner(runner, root, "backlog", env=env)
+        code, output = run_runner(runner, root, "run", env=env)
         check("backlog: with everything delivered a run invokes nothing",
               code == 0 and len(invocations(root)) == 19 and "nothing more can run" in output,
               f"exit {code}, {len(invocations(root))} invocations")
@@ -1079,7 +1091,7 @@ exit 0
         environment.update(env)
         log_path = os.path.join(root, "watch.log")
         with open(log_path, "w", encoding="utf-8") as log:
-            process = subprocess.Popen([BASH, runner, "backlog", "--watch", "--interval", "1"],
+            process = subprocess.Popen([BASH, runner, "run", "--watch", "--interval", "1"],
                                        cwd=root, stdout=log, stderr=subprocess.STDOUT, env=environment)
             deadline = time.time() + 60
             while time.time() < deadline and "waiting for an answer" not in open(
@@ -1105,7 +1117,7 @@ exit 0
     # 1i. the limits: --max-stages stops dispatch and keeps the work, the stop file ends a run
     with tmpdir() as root:
         env = backlog_fixture(root)
-        code, output = run_runner(runner, root, "backlog", "--max-stages", "2", env=env)
+        code, output = run_runner(runner, root, "run", "--max-stages", "2", env=env)
         check("backlog: --max-stages stops before the next invocation and keeps what ran",
               code == 4 and invocations(root) == ["STORY-1 plan", "STORY-2 plan"]
               and os.path.isfile(os.path.join(root, "tasks", "STORY-2", "plan.md")),
@@ -1113,7 +1125,7 @@ exit 0
     with tmpdir() as root:
         env = backlog_fixture(root)
         open(os.path.join(root, ".agents", "factory", "stop"), "w").close()
-        code, output = run_runner(runner, root, "backlog", env=env)
+        code, output = run_runner(runner, root, "run", env=env)
         check("backlog: the stop file ends the run before any story starts",
               code == 0 and invocations(root) == [] and "stops here" in output,
               f"exit {code}, invocations {invocations(root)}")
@@ -1236,7 +1248,7 @@ exit 0
     # 1o. update: the newest pipeline, the same tools, links stay links and copies stay copies
     with tmpdir() as root:
         build_project(root)
-        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        run_setup(runner, root, "--tool", "codex", "--from", source)
         stamp = os.path.join(root, ".agents", "factory", "gate.installed")
         text = open(stamp, encoding="utf-8").read()
         with open(stamp, "w", encoding="utf-8") as handle:
@@ -1262,7 +1274,7 @@ exit 0
               [l for l in output.splitlines() if "contract" in l][:2])
     with tmpdir() as root:
         build_project(root)
-        run_runner(runner, root, "install", "--tool", "claude", "--from", source, "--copy")
+        run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
         copied = os.path.join(root, ".claude", "skills", "factory-run", "SKILL.md")
         with open(copied, "a", encoding="utf-8") as handle:
             handle.write("\nSTALE COPY\n")
@@ -1275,7 +1287,7 @@ exit 0
               output.strip().splitlines()[-4:])
     with tmpdir() as root:
         build_project(root)
-        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        run_setup(runner, root, "--tool", "codex", "--from", source)
         stamp = os.path.join(root, ".agents", "factory", "gate.installed")
         text = open(stamp, encoding="utf-8").read()
         with open(stamp, "w", encoding="utf-8") as handle:
@@ -1294,13 +1306,13 @@ exit 0
             handle.write("---\nname: factory-brand-new\ndescription: a skill added in a later release\n---\n")
         newer_runner = os.path.join(newer, "factory-run", "scripts", "factory.sh")
         body = open(newer_runner, encoding="utf-8").read().replace(
-            '  check_dca_setup\n', '  check_dca_setup\n  : > .agents/factory/added-by-the-newer-install\n', 1)
+            '  check_dca_setup "$from"\n', '  check_dca_setup "$from"\n  : > .agents/factory/added-by-the-newer-install\n', 1)
         with open(newer_runner, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(body)
         project = os.path.join(root, "project")
         os.makedirs(project)
         build_project(project)
-        run_runner(runner, project, "install", "--tool", "claude", "--from", source, "--copy")
+        run_setup(runner, project, "--tool", "claude", "--from", source, "--copy")
         code, output = run_runner(os.path.join(project, ".agents", "factory", "factory.sh"), project, "update",
                                   "--from", shell_path(newer))
         check("update: a newer pipeline's new skill arrives, and its own install step runs, not the old copy's",
@@ -1317,7 +1329,7 @@ exit 0
             os.makedirs(os.path.join(skills_dir, own))
             with open(os.path.join(skills_dir, own, "SKILL.md"), "w", encoding="utf-8") as handle:
                 handle.write(f"---\nname: {own}\ndescription: the project's own\n---\nOURS\n")
-        code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", source, "--copy")
+        code, output = run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
         manifest = open(os.path.join(skills_dir, ".dca-factory-skills"), encoding="utf-8").read().split()
         check("copies: the project's own skills stay, a same-named one is not overwritten, and the list names only "
               "what the pipeline copied",
@@ -1327,11 +1339,11 @@ exit 0
               and "kept the project's own .claude/skills/stage-plan" in output, output.strip().splitlines()[-3:])
         dropped = os.path.join(root, "trimmed-plugin")
         shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), dropped, symlinks=True)
-        shutil.rmtree(os.path.join(dropped, "factory-scope"))
+        shutil.rmtree(os.path.join(dropped, "factory-decisions"))
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "update",
                                   "--from", shell_path(dropped))
         check("copies: a skill the pipeline dropped is removed on update; the project's own stay",
-              code == 0 and not os.path.exists(os.path.join(skills_dir, "factory-scope"))
+              code == 0 and not os.path.exists(os.path.join(skills_dir, "factory-decisions"))
               and os.path.isdir(os.path.join(skills_dir, "our-own-skill"))
               and "OURS" in open(os.path.join(skills_dir, "stage-plan", "SKILL.md"), encoding="utf-8").read(),
               [l for l in output.splitlines() if "removed" in l or "kept" in l][:3])
@@ -1400,8 +1412,8 @@ exit 0
         os.makedirs(os.path.join(root, ".claude"), exist_ok=True)
         with open(os.path.join(root, ".claude", "settings.json"), "w", encoding="utf-8") as handle:
             json.dump({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}}, handle)
-        run_runner(runner, root, "install", "--tool", "claude", "--from", source)
-        run_runner(runner, root, "install", "--tool", "claude", "--from", source)
+        run_setup(runner, root, "--tool", "claude", "--from", source)
+        run_runner(runner, root, "update", "--from", source)
         agents = open(os.path.join(root, "AGENTS.md"), encoding="utf-8").read()
         settings = json.load(open(os.path.join(root, ".claude", "settings.json"), encoding="utf-8"))
         commands = [h["command"] for e in settings["hooks"]["SessionStart"] for h in e["hooks"]]
@@ -1468,7 +1480,7 @@ exit 0
         shutil.rmtree(os.path.join(root, ".agents"))
         with open(os.path.join(root, ".agents"), "w", encoding="utf-8") as handle:
             handle.write("not a directory\n")
-        code, output = run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        code, output = run_setup(runner, root, "--tool", "codex", "--from", source)
         check("install: a write that fails aborts the install instead of reporting success",
               code != 0 and "install aborted" in output
               and not os.path.isfile(os.path.join(root, ".agents", "factory", "story-gate.py")),
@@ -1480,7 +1492,7 @@ exit 0
         build_project(root, extra_sources=(
             ("src/test-architecture/java/com/example/ArchitectureTest.java",
              "class ArchitectureTest {}\n"),))
-        code, output = run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        code, output = run_setup(runner, root, "--tool", "codex", "--from", source)
         check("install: an architecture test nested in a source set is found",
               "architecture governance found" in output,
               [l for l in output.splitlines() if "governance" in l])
@@ -1489,7 +1501,7 @@ exit 0
     # behind the pipeline. The gate itself cannot tell: a copied script has nothing to compare to.
     with tmpdir() as root:
         build_project(root)
-        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        run_setup(runner, root, "--tool", "codex", "--from", source)
         stamp = os.path.join(root, ".agents", "factory", "gate.installed")
         stamped = open(stamp, encoding="utf-8").read() if os.path.isfile(stamp) else ""
         check("install: the pipeline's identity and contract are recorded in the project",
@@ -1584,7 +1596,7 @@ exit 0
         with tmpdir() as root, tmpdir() as home:
             build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\n")
             cached = cache_fixture(home)
-            run_runner(runner, root, "install", "--tool", "codex", "--from", shell_path(cached), env={"HOME": home})
+            run_setup(runner, root, "--tool", "codex", "--from", shell_path(cached), env={"HOME": home})
             skills = os.path.join(root, ".codex", "skills")
             targets = {e: os.path.realpath(os.path.join(skills, e)) for e in os.listdir(skills)} \
                 if os.path.isdir(skills) else {}
@@ -1596,21 +1608,22 @@ exit 0
     with tmpdir() as root, tmpdir() as home:
         build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\n")
         cached = cache_fixture(home)
-        run_runner(runner, root, "install", "--tool", "claude", "--from", shell_path(cached), "--copy", env={"HOME": home})
+        run_setup(runner, root, "--tool", "claude", "--from", shell_path(cached), "--copy", env={"HOME": home})
         shutil.rmtree(os.path.join(home, ".claude", "plugins", "cache", "m", "dca-core"))
-        code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", shell_path(cached), "--copy",
-                                  env={"HOME": home})
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "update",
+                                  "--from", shell_path(cached), env={"HOME": home})
         carrier_copy = os.path.join(root, ".claude", "skills", "ddd-modelling", "SKILL.md")
         manifest = os.path.join(root, ".claude", "skills", ".dca-factory-skills")
-        check("copies: a copied carrier survives a re-install, also when no neighbour has it any more",
+        check("copies: a copied carrier survives an update, also when no neighbour has it any more",
               code == 0 and os.path.isfile(carrier_copy)
               and "ddd-modelling" in open(manifest, encoding="utf-8").read().split(), output.strip().splitlines()[-4:])
     with tmpdir() as root:
         build_project(root)
         shells = [b for b in ("/bin/bash",) if os.path.isfile(b)] or [BASH]
-        completed = subprocess.run([shells[0], runner, "install", "--tool", "none"], cwd=root, capture_output=True,
+        in_git(root)
+        completed = subprocess.run([shells[0], runner, "setup", "--tool", "none"], cwd=root, capture_output=True,
                                    text=True, encoding="utf-8", errors="replace")
-        check("install: `--tool none` writes gate, runner and hook — also under the system bash",
+        check("setup: `--tool none` writes gate, runner and hook — also under the system bash",
               completed.returncode == 0 and os.path.isfile(os.path.join(root, ".agents", "factory", "story-gate.py")),
               f"{shells[0]}: exit {completed.returncode}; {(completed.stderr or completed.stdout).strip()[-200:]}")
     with tmpdir() as root:
@@ -1619,7 +1632,7 @@ exit 0
         subprocess.run(["git", "config", "core.hooksPath", ".husky"], cwd=root, capture_output=True)
         with open(os.path.join(root, ".gitattributes"), "w", encoding="utf-8", newline="\n") as handle:
             handle.write("*.png binary")                          # no newline at the end
-        code, output = run_runner(runner, root, "install", "--tool", "claude")
+        code, output = run_setup(runner, root, "--tool", "claude")
         hooks = subprocess.run(["git", "config", "--get", "core.hooksPath"], cwd=root, capture_output=True,
                                text=True).stdout.strip()
         attributes = open(os.path.join(root, ".gitattributes"), encoding="utf-8").read().splitlines()
@@ -1663,7 +1676,7 @@ exit 0
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
     with tmpdir() as root:
         build_project(root)
-        code, output = run_runner(runner, root, "install", "--tool", "claude", "--from", source)
+        code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
         target = os.path.join(root, ".claude", "skills")
         if SYMLINKS:
             check("install: the pipeline's skills are one live link for Claude Code",
@@ -1684,15 +1697,15 @@ exit 0
         check("install: the runner is copied beside the gate, and `factory.sh status` works from there",
               status_code == 0 and "== running" in status_out and "== cost" in status_out,
               f"exit {status_code}; {status_out[:120]}")
-        usage_code, usage_out = run_runner(project_runner, root, "usage") if os.path.isfile(project_runner) \
+        usage_code, usage_out = run_runner(project_runner, root, "status", "--usage") if os.path.isfile(project_runner) \
             else (None, "")
-        check("install: `factory.sh usage` passes on to the gate", usage_code == 0 and "usage:" in usage_out,
+        check("install: `factory.sh status --usage` passes on to the gate", usage_code == 0 and "usage:" in usage_out,
               f"exit {usage_code}; {usage_out[:120]}")
         check("install: a stack profile is written when the project has none",
               os.path.isfile(os.path.join(root, ".agents", "factory", "factory.profile.yaml")))
     with tmpdir() as root:
         build_project(root)
-        run_runner(runner, root, "install", "--tool", "codex", "--from", source)
+        run_setup(runner, root, "--tool", "codex", "--from", source)
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
         pipeline = {"factory-run", "stage-plan", "stage-test", "stage-build", "stage-tidy",
                     "stage-judge", "stage-document", "factory-backlog", "factory-scope",
@@ -1702,7 +1715,7 @@ exit 0
               f"{len(entries)} skills: {sorted(entries)[:6]}…")
     with tmpdir() as root:
         build_project(root)
-        run_runner(runner, root, "install", "--tool", "claude", "--from", source, "--copy")
+        run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
         target = os.path.join(root, ".claude", "skills", "factory-run")
         check("install --copy: a real copy for a project with no source to point at",
               os.path.isdir(target) and not os.path.islink(target))
@@ -1710,6 +1723,310 @@ exit 0
     failed = [name for name, ok, _ in results if not ok]
     print(f"\nverify: {len(results) - len(failed)}/{len(results)} runner cases behaved as specified")
     return failed
+
+# --- setup: the presets, the check and the write ------------------------------------------------
+# What a build tool looks like is data (templates/presets/). These cases hold the profile the
+# presets write to what the installer wrote before they existed — byte for byte in every active
+# line — and the one change made on purpose: Gradle's `test:` carries `--rerun` (WP-62 item 5),
+# because an up-to-date task writes no new report and a required suite would prove nothing.
+
+PRESET_FIXTURES = {
+    "gradle": {"gradlew": "#!/bin/sh\n", "build.gradle": "plugins { id 'java' }\n"},
+    "gradle-playwright": {"build.gradle.kts":
+                          'dependencies { testImplementation("com.microsoft.playwright:playwright:1.62.0") }\n'},
+    "gradle-playwright-e2e": {"build.gradle": "plugins { id 'java' }\napply from: \"gradle/plugins/test-e2e.gradle\"\n",
+                              "gradle/plugins/test-e2e.gradle":
+                                  "tasks.register('test-e2e', Test)\n"
+                                  "dependencies { testE2eImplementation 'com.microsoft.playwright:playwright:1.62.0' }\n"},
+    "gradle-conventions": {"gradlew": "#!/bin/sh\n",
+                           ".agents/dca/conventions.md": "Run `./gradlew archTest` for the architecture rules.\n"},
+    "maven": {"pom.xml": "<project/>\n"},
+    "maven-playwright": {"pom.xml": "<project><dependency>com.microsoft.playwright</dependency></project>\n"},
+    "dotnet": {"App.sln": "\n"},
+    "dotnet-playwright": {"App.sln": "\n", "tests/App.E2E/App.E2E.csproj":
+                          '<Project><PackageReference Include="Microsoft.Playwright" /></Project>\n'},
+    "pytest-ini": {"pytest.ini": "[pytest]\n"},
+    "pytest-pyproject": {"pyproject.toml": "[tool.pytest.ini_options]\n"},
+    "pytest-setupcfg": {"setup.cfg": "[pytest]\n"},
+    "npm-playwright": {"package.json": '{"devDependencies": {"@playwright/test": "1.62.0"}}\n'},
+    "empty": {},
+}
+_GRADLE = ['compile: ./gradlew testClasses', 'test: ./gradlew test --rerun', 'e2eTest: ./gradlew test',
+           'filterFlag: --tests', 'filterFormat: "{class}.{method}"', 'architecture: ./gradlew test-architecture']
+_MAVEN = ['compile: ./mvnw test-compile', 'test: ./mvnw test', 'e2eTest: ./mvnw test', 'filterFlag: -Dtest',
+          'filterFormat: "{class}#{method}"', 'architecture: ./mvnw -Dtest=*ArchitectureTest test']
+_DOTNET = ['compile: dotnet build', 'test: dotnet test --logger trx', 'e2eTest: dotnet test --logger trx',
+           'filterFlag: --filter', 'filterFormat: "FullyQualifiedName~{class}.{method}"',
+           'architecture: dotnet test --filter FullyQualifiedName~Architecture', 'covers.test: **']
+_PYTEST = ['test: {py} -m pytest -q --junitxml=test-results/pytest.xml',
+           'e2eTest: {py} -m pytest -q --junitxml=test-results/pytest.xml', 'filterFormat: "{file}::{method}"',
+           'covers.test: **']
+PRESET_GOLDEN = {
+    "gradle": _GRADLE,
+    "gradle-playwright": _GRADLE + ["browser: playwright"],
+    "gradle-playwright-e2e": [_GRADLE[0] + " testE2eClasses", _GRADLE[1], "e2eTest: ./gradlew test-e2e"]
+                             + _GRADLE[3:] + ["browser: playwright"],
+    "gradle-conventions": _GRADLE[:5] + ["architecture: ./gradlew archTest"],
+    "maven": _MAVEN,
+    "maven-playwright": _MAVEN + ["browser: playwright"],
+    "dotnet": _DOTNET,
+    "dotnet-playwright": _DOTNET[:2] + ["e2eTest: dotnet test tests/App.E2E/App.E2E.csproj --logger trx"]
+                         + _DOTNET[3:] + ["browser: playwright"],
+    "pytest-ini": _PYTEST, "pytest-pyproject": _PYTEST, "pytest-setupcfg": _PYTEST,
+    "npm-playwright": ["browser: playwright"],
+    "empty": [],
+}
+
+
+def active_lines(path):
+    if not os.path.isfile(path):
+        return None
+    return [l for l in open(path, encoding="utf-8").read().splitlines() if l.strip() and not l.startswith("#")]
+
+
+def tree_digest(root):
+    """Every file's content under root, for "changed no file" — the tool folders' links included."""
+    seen = {}
+    for folder, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if d != ".git"]
+        for name in names:
+            path = os.path.join(folder, name)
+            try:
+                seen[os.path.relpath(path, root)] = hashlib.sha256(open(path, "rb").read()).hexdigest() \
+                    if not os.path.islink(path) else "link:" + os.readlink(path)
+            except OSError:
+                seen[os.path.relpath(path, root)] = "?"
+    return seen
+
+
+def verify_setup(runner, verbose=False):
+    results = []
+
+    def check(name, ok, detail=""):
+        results.append((name, ok, detail))
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        if not ok and detail:
+            print(f"          {detail}")
+
+    source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
+    profile_of = lambda root: os.path.join(root, ".agents", "factory", "factory.profile.yaml")
+    project_runner = lambda root: os.path.join(root, ".agents", "factory", "factory.sh")
+
+    def fixture(root, files):
+        for path, text in files.items():
+            write_file(root, path, text)
+
+    # item 2: the golden profiles, before and after the presets
+    python = None
+    for name, files in PRESET_FIXTURES.items():
+        with tmpdir() as root:
+            fixture(root, files)
+            code, output = run_setup(runner, root, "--tool", "none", "--from", source)
+            lines = active_lines(profile_of(root)) or []
+            if python is None:
+                python = next((l.split()[1] for l in lines if l.startswith("test:") and "pytest" in l), None)
+            wanted = ["contract: " + re.search(r"^contract: (\d+)", open(os.path.join(
+                source, "factory-run", "templates", "factory.profile.yaml.tmpl"), encoding="utf-8").read(), re.M).group(1)]
+            wanted += [l.replace("{py}", python or "python3") for l in PRESET_GOLDEN[name]]
+            check(f"presets: the {name} fixture gets the profile the installer wrote before the presets",
+                  code == 0 and lines == wanted, f"exit {code}; got {lines}; want {wanted}")
+
+    # item 4: a new stack is one file — a made-up one in FACTORY_STACKS_DIR, no change to the script
+    with tmpdir() as root, tmpdir() as stacks:
+        write_file(stacks, "cargo.preset", "kind: stack\norder: 10\ndetect.exists: Cargo.toml\n"
+                                            "compile: cargo test --no-run\ntest: cargo nextest run\n")
+        write_file(root, "Cargo.toml", "[package]\n")
+        code, output = run_setup(runner, root, "--tool", "none", "--from", source, env={"FACTORY_STACKS_DIR": stacks})
+        lines = active_lines(profile_of(root)) or []
+        check("presets: a preset file in FACTORY_STACKS_DIR makes a profile for a stack the script never names",
+              code == 0 and "compile: cargo test --no-run" in lines and "test: cargo nextest run" in lines, lines)
+    body = open(runner, encoding="utf-8").read().splitlines()
+    knowledge = [f"{n}: {l.strip()}" for n, l in enumerate(body, 1)
+                 if re.search(r"gradlew|mvnw|dotnet|pytest|playwright", l, re.I) and not l.strip().startswith("#")]
+    check("presets: the runner carries no stack knowledge outside comments", not knowledge, knowledge[:3])
+
+    # item 9: no repository, no setup — and nothing written
+    with tmpdir() as root:
+        write_file(root, "build.gradle", "plugins { id 'java' }\n")
+        code, output = run_runner(runner, root, "setup", "--tool", "none", "--from", source)
+        check("setup: outside a git repository it stops with one line and writes nothing",
+              code == 1 and "not a git repository" in output and not os.path.exists(os.path.join(root, ".agents")),
+              f"exit {code}; {output.strip()}")
+
+    # item 10: the check and the write, on an empty, a complete and a conflicting profile
+    with tmpdir() as root:
+        fixture(root, PRESET_FIXTURES["gradle-playwright-e2e"])
+        in_git(root)
+        code, output = run_runner(runner, root, "setup", "--check")
+        check("setup --check: without a runner it writes nothing and exits 1",
+              code == 1 and "no runner — factory.sh setup" in output and not os.path.exists(os.path.join(root, ".agents")),
+              f"exit {code}; {output.strip()}")
+        run_setup(runner, root, "--tool", "none", "--from", source)
+        code, output = run_runner(runner, root, "setup", "--check")
+        check("setup --check: right after setup the profile declares everything detection finds",
+              code == 0 and "declares everything" in output, output.strip().splitlines()[-2:])
+        before = tree_digest(root)
+        code, output = run_runner(runner, root, "setup")
+        check("setup: a second bare setup on an installed project reports and changes no file",
+              code == 0 and "installs nothing" in output and tree_digest(root) == before,
+              f"exit {code}; {output.strip().splitlines()[:1]}")
+        profile = profile_of(root)
+        text = open(profile, encoding="utf-8").read()
+        with open(profile, "w", encoding="utf-8") as handle:
+            handle.write(text.replace("browser: playwright\n", "").replace("test: ./gradlew test --rerun", "test: ./gradlew test"))
+        code, output = run_runner(runner, root, "setup", "--check")
+        check("setup --check: a missing detected key exits 1 and names the check it switches on",
+              code == 1 and "add   browser: playwright" in output and "the plan takes browser tests" in output,
+              output.strip().splitlines())
+        check("setup --check: a value that differs is a note — kept, with the key --replace takes",
+              "note  test:" in output and "--replace test" in output, [l for l in output.splitlines() if "note" in l])
+        before = tree_digest(root)
+        run_runner(runner, root, "setup", "--check")
+        check("setup --check: read-only", tree_digest(root) == before)
+        code, output = run_runner(runner, root, "setup", "--write")
+        after = open(profile, encoding="utf-8").read()
+        check("setup --write: adds the missing key and keeps the person's value",
+              code == 0 and "\nbrowser: playwright" in after and "test: ./gradlew test\n" in after, output.strip())
+        once = tree_digest(root)
+        code, output = run_runner(runner, root, "setup", "--write")
+        check("setup --write: a second write changes nothing", code == 0 and tree_digest(root) == once
+              and "nothing written" in output, output.strip())
+        code, output = run_runner(runner, root, "setup", "--write", "--replace", "test")
+        check("setup --write --replace: takes the detected value for that one key",
+              code == 0 and "test: ./gradlew test --rerun" in open(profile, encoding="utf-8").read(), output.strip())
+        code, output = run_runner(runner, root, "setup", "--check")
+        check("setup --check: the conflict resolved, exit 0", code == 0, output.strip().splitlines()[-1:])
+
+    # formatFix beside every detected format; covers.* only while its command is the detected one
+    with tmpdir() as root:
+        fixture(root, {"build.gradle": "plugins { id 'com.diffplug.spotless' version '8.2.1' }\n"})
+        run_setup(runner, root, "--tool", "none", "--from", source)
+        lines = active_lines(profile_of(root)) or []
+        check("presets: a detected formatter writes its check and its fix together",
+              "format: ./gradlew spotlessCheck" in lines and "formatFix: ./gradlew spotlessApply" in lines, lines)
+    with tmpdir() as root:
+        fixture(root, {"App.sln": "\n", ".editorconfig": "root = true\n"})
+        run_setup(runner, root, "--tool", "none", "--from", source)
+        lines = active_lines(profile_of(root)) or []
+        check("presets: dotnet format is detected by .editorconfig beside a solution, with its fix",
+              "format: dotnet format --verify-no-changes" in lines and "formatFix: dotnet format" in lines, lines)
+        text = open(profile_of(root), encoding="utf-8").read()
+        with open(profile_of(root), "w", encoding="utf-8") as handle:
+            handle.write(text.replace("test: dotnet test --logger trx", "test: dotnet test tests/Unit --logger trx")
+                         .replace("covers.test: **\n", ""))
+        code, output = run_runner(runner, root, "setup", "--check")
+        check("setup --check: `covers.test` is not proposed to a `test:` the person narrowed",
+              code == 0 and "covers.test" not in output and "note  test:" in output, output.strip().splitlines())
+    with tmpdir() as root:
+        write_file(root, ".editorconfig", "root = true\n")
+        write_file(root, "build.gradle", "plugins { id 'java' }\n")
+        run_setup(runner, root, "--tool", "none", "--from", source)
+        check("presets: .editorconfig alone makes no .NET formatter of a Gradle project",
+              not any(l.startswith("format") for l in active_lines(profile_of(root)) or []))
+
+    # item 7: the profile is written before the skills, so a carrier it names is linked in the same run
+    carrier = next((name for name in ("ddd-modelling", "dca-modelling", "e2e-testing")
+                    if any(os.path.isdir(os.path.join(os.path.dirname(os.path.dirname(source)), plugin, "skills", name))
+                           for plugin in os.listdir(os.path.dirname(os.path.dirname(source))))), None)
+    if carrier and SYMLINKS:
+        with tmpdir() as root, tmpdir() as plugins:
+            # the pipeline copied beside the real method plugins, its template naming the carrier
+            real = os.path.dirname(os.path.dirname(source))
+            for plugin in os.listdir(real):
+                if plugin != "dca-factory" and os.path.isdir(os.path.join(real, plugin, "skills")):
+                    os.makedirs(os.path.join(plugins, plugin))
+                    os.symlink(os.path.join(real, plugin, "skills"), os.path.join(plugins, plugin, "skills"))
+            copy = os.path.join(plugins, "dca-factory", "skills")
+            shutil.copytree(source, copy, symlinks=True)
+            with open(os.path.join(copy, "factory-run", "templates", "factory.profile.yaml.tmpl"), "a",
+                      encoding="utf-8") as handle:
+                handle.write(f"carrier.build: {carrier}\n")
+            build_project(root)
+            os.remove(profile_of(root))
+            code, output = run_setup(runner, root, "--tool", "claude", "--from", shell_path(copy))
+            code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+            check("setup: a carrier the new profile names is linked in the same run, and the first run passes "
+                  "the carrier check", os.path.isfile(os.path.join(root, ".claude", "skills", carrier, "SKILL.md"))
+                  and code == 0, output.strip().splitlines()[-2:])
+
+    # item 7: update replaces the files in-process and leaves the profile alone
+    with tmpdir() as root:
+        build_project(root)
+        run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
+        with open(profile_of(root), "a", encoding="utf-8") as handle:
+            handle.write("# the person's own line\n")
+        profile_before = open(profile_of(root), encoding="utf-8").read()
+        gate = os.path.join(root, ".agents", "factory", "story-gate.py")
+        with open(gate, "a", encoding="utf-8") as handle:
+            handle.write("# an older copy\n")
+        observer = os.path.join(root, ".agents", "factory", "observe.py")
+        os.remove(observer)
+        code, output = run_runner(project_runner(root), root, "update", "--from", source)
+        check("update: gate and observer replaced, the profile left alone, and `setup --check` named at the end",
+              code == 0 and "# an older copy" not in open(gate, encoding="utf-8").read() and os.path.isfile(observer)
+              and open(profile_of(root), encoding="utf-8").read() == profile_before and "setup --check" in output,
+              output.strip().splitlines()[-3:])
+
+    # item 11: the verbs mirror the skills; the old ones are gone
+    with tmpdir() as root:
+        env = dict(os.environ)
+        build_project(root)
+        run_setup(runner, root, "--tool", "claude", "--from", source)
+        for verb in ("install", "schedule", "usage", "change", "parity"):
+            code, output = run_runner(project_runner(root), root, verb)
+            check(f"verbs: `{verb}` is gone", code == 2, f"exit {code}")
+        code, output = run_runner(project_runner(root), root, "status", "STORY-1")
+        check("verbs: `status <story>` is gone — `status --story X`", code == 2, f"exit {code}")
+        code, output = run_runner(project_runner(root), root, "backlog")
+        check("verbs: `backlog` prints the schedule and works nothing off",
+              code == 0 and "next: STORY-1" in output
+              and not os.path.exists(os.path.join(root, "tasks", "STORY-1", "plan.md")),
+              output.strip().splitlines()[-2:])
+        code, output = run_runner(project_runner(root), root, "backlog", "--check")
+        check("verbs: `backlog --check` runs the plan gate's backlog checks over every story",
+              code == 0 and "1 story(ies) checked" in output, output.strip().splitlines()[-2:])
+        code, output = run_runner(project_runner(root), root, "status", "--story", "STORY-1")
+        check("verbs: `status --story` is the story's view", code == 0, output.strip().splitlines()[:1])
+        code, output = run_runner(project_runner(root), root, "check", "--checks", "compile")
+        check("verbs: `check` is the profile's checks outside a story", "gate:" in output and code in (0, 1),
+              output.strip().splitlines()[-1:])
+        code, output = run_runner(project_runner(root), root, "verify", "--story", "STORY-1")
+        check("verbs: `verify --story` runs the observer the setup copied beside the gate",
+              os.path.isfile(os.path.join(root, ".agents", "factory", "observe.py")) and "observe" in output.lower(),
+              output.strip().splitlines()[:2])
+        with tmpdir() as fake:
+            write_file(fake, "factory-run/scripts/story-gate.py", 'VERSION = "99.0.0"\nCONTRACT = 99\n')
+            write_file(fake, "factory-verify/scripts/verify.py", "print('verify: the stand-in machinery ran')\n")
+            code, output = run_runner(project_runner(root), root, "verify", "--fixtures",
+                                      env={"FACTORY_PLUGIN_DIR": shell_path(fake)})
+            check("verbs: `verify --fixtures` runs the newest pipeline's own suite",
+                  code == 0 and "stand-in machinery ran" in output, output.strip())
+        settings = os.path.join(root, ".claude", "settings.json")
+        data = json.load(open(settings, encoding="utf-8"))
+        data["permissions"]["allow"] += ["Bash(bash .agents/factory/factory.sh usage:*)",
+                                         "Bash(bash .agents/factory/factory.sh schedule:*)"]
+        json.dump(data, open(settings, "w", encoding="utf-8"))
+        run_runner(project_runner(root), root, "update", "--from", source)
+        allow = json.load(open(settings, encoding="utf-8"))["permissions"]["allow"]
+        check("permissions: update removes the retired verbs and allows the reading ones",
+              not any(" usage:" in a or " schedule:" in a for a in allow)
+              and all(f"factory.sh {v}:*)" in " ".join(allow) for v in ("status", "decisions", "backlog", "setup --check", "verify")),
+              allow)
+        hook = open(os.path.join(root, ".githooks", "pre-commit"), encoding="utf-8").read()
+        check("hook: the commit hook runs `factory.sh check --staged`", "check --staged" in hook and "--change" not in hook)
+        # status --brief names what detection finds and the profile lacks — not the session-start hook
+        write_file(root, "build.gradle", "dependencies { testImplementation 'com.microsoft.playwright:playwright:1' }\n")
+        code, output = run_runner(project_runner(root), root, "status", "--brief", env={"FACTORY_PLUGIN_DIR": source})
+        check("status --brief: a line when detection finds a key the profile does not declare",
+              code == 0 and "detection finds" in output and "browser" in output, output.strip().splitlines()[:1])
+        gate_brief = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
+                                     "--status", "--brief", "--session-start"], cwd=root, capture_output=True,
+                                    text=True, encoding="utf-8").stdout
+        check("status --brief: the gate's session-start lines carry no detection", "detection" not in gate_brief)
+    failures = [name for name, ok, _ in results if not ok]
+    print(f"\nverify: {len(results) - len(failures)}/{len(results)} setup cases behaved as specified")
+    return failures
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="verify the factory")
@@ -1972,7 +2289,7 @@ def main(argv=None):
         # files at all, so a mismatch is a refusal. The script's *version* is provenance and an
         # update hint, which only the installer can see — the runner checks that, not the gate.
         (Case("contract: a profile written for a newer gate is refused", "plan", 1,
-              must_fail=("contract",), text=("re-run `factory.sh install`",)),
+              must_fail=("contract",), text=("run `factory.sh update`",)),
          dict(profile="contract: 99\n" + PROFILE)),
         (Case("contract: a profile written for an older gate is still read", "plan", 0,
               text=("worth bringing up to date",)),
@@ -2330,6 +2647,7 @@ def main(argv=None):
                     os.path.join(root, ".githooks", "pre-commit"))
         os.chmod(os.path.join(root, ".githooks", "pre-commit"), 0o755)
         shutil.copy(args.gate, os.path.join(root, ".agents", "factory", "story-gate.py"))
+        shutil.copy(args.runner, os.path.join(root, ".agents", "factory", "factory.sh"))   # the hook calls `check`
         subprocess.run(["git", "config", "core.hooksPath", ".githooks"], cwd=root, capture_output=True)
         subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)      # a project commits both
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "gate",
@@ -3221,6 +3539,8 @@ def main(argv=None):
     if os.path.isfile(args.runner):
         print()
         runner_failures = verify_runner(args.runner, args.verbose)
+        print()
+        runner_failures += verify_setup(args.runner, args.verbose)
     else:
         print(f"verify: no runner at {args.runner} — its cases were skipped")
 

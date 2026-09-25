@@ -1,0 +1,4 @@
+kind: browser
+order: 40
+detect.contains: package.json :: "@playwright/test"
+browser: playwright

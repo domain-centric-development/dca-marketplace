@@ -7,6 +7,8 @@ what a stage may not decide for itself. Exit code 0 means the stage may proceed.
     story-gate.py --story <id> --stage <plan|test|build|tidy|document> [options]
     story-gate.py --list-decisions [--story <id>]      the decision inbox, one line per record
     story-gate.py --schedule                           every story's state and the next one to run
+    story-gate.py --check-backlog                      the plan gate's backlog checks over every story
+                                                       that is not done; exit 1 when one is refused
     story-gate.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
     story-gate.py --product                            the product description alone; exit 3 while
                                                        there is none, 1 when it is incomplete
@@ -109,7 +111,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 6
-VERSION = "0.30.3"
+VERSION = "0.31.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -339,7 +341,7 @@ def check_contract(result, profile):
         result.fail(
             "contract",
             f"the profile is written for gate contract {declared} and this gate implements "
-            f"{CONTRACT} (gate {VERSION}) — re-run `factory.sh install` before trusting a run, "
+            f"{CONTRACT} (gate {VERSION}) — run `factory.sh update` before trusting a run, "
             f"because this script would ignore whatever the newer contract added",
         )
     elif int(declared) < CONTRACT:
@@ -572,6 +574,55 @@ def check_proposals_landed(result, tasks, story_id, cwd, profile):
         )
     else:
         result.ok("glossary", f"{len(proposals)} proposed term(s) accounted for")
+
+
+def check_backlog(cwd, backlog, tasks, profile):
+    """The plan gate's backlog checks over every story that is not done, without a story id: front
+    matter, the epic's completeness, the criteria, the status and the context on the map. Nothing of
+    its own — the same functions the plan gate calls, so a story that passes here passes there on
+    these points. A draft is a story still being written, named and not refused."""
+    checked, refused = 0, []
+    for root, _dirs, files in sorted(os.walk(backlog)):
+        if os.path.normpath(root) == os.path.normpath(backlog):
+            continue
+        for name in sorted(files):
+            if not name.endswith(".md") or name == "epic.md":
+                continue
+            path = os.path.join(root, name)
+            result, label = Result(), name[:-3]
+            try:
+                front, body = read_front_matter(path)
+                label = str(front.get("id") or label).strip()
+                status = str(front.get("status", "")).strip().lower()
+                if status == "superseded" or os.path.isfile(os.path.join(tasks, label, DELIVERED)):
+                    continue
+                if status == "draft":
+                    result.note("approved", f"{path}: a draft — released with `status: approved` once it is written")
+                elif status and status != "approved":
+                    result.fail("approved", f"{path}: status {status!r} is none of draft, approved, superseded")
+                context = str(front.get("context", "")).strip()
+                if not context:
+                    result.fail("story", f"{path}: front matter has no `context:` — a story names the bounded "
+                                         f"context it changes")
+                criteria = criteria_of(path, body)
+                if context:
+                    result.ok("story", f"{label} in context {context} with {len(criteria)} criterion(s)")
+                    check_context_map(result, cwd, profile, context)
+                check_epic(result, path, front, backlog)
+            except GateError as error:
+                result.fail("story", str(error))
+            checked += 1
+            for state, check, message in result.entries:
+                if state != "pass":
+                    print(f"gate:{state} {label} {check} — {message}")
+            if result.failed:
+                refused.append(label)
+    if not checked:
+        print(f"backlog: no story to check under {backlog}/")
+        return 0
+    print(f"backlog: {checked} story(ies) checked" + (f", refused: {', '.join(refused)}" if refused
+                                                     else " — every one holds for the plan gate"))
+    return 1 if refused else 0
 
 
 def check_epic(result, story_path, front, backlog):
@@ -3036,9 +3087,9 @@ def status_brief(cwd, backlog, tasks, session_start=False):
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
               "release a story (/factory-backlog), answer a waiting question (/factory-decisions), start working "
               "the backlog (/factory-run, which keeps asking the schedule; in Claude Code also /loop /factory-run), "
-              "or look closer (/factory-status). A "
-              "managing session writes backlog and decision files only; the worker is the one writer in the "
-              "checkout.")
+              "or look closer (/factory-status). A session never runs `factory.sh run` — it starts a tool "
+              "process per stage. A managing session writes backlog and decision files only; the worker is the "
+              "one writer in the checkout.")
     return 0
 
 
@@ -3515,6 +3566,8 @@ def main(argv):
     parser.add_argument("--session-log", help="with --stage-end: the session log to read, where it is not found")
     parser.add_argument("--schedule", action="store_true",
                         help="print every story's state and the next one to run, and exit")
+    parser.add_argument("--check-backlog", action="store_true",
+                        help="the plan gate's backlog checks over every story that is not done, and exit")
     parser.add_argument("--backlog", default="backlog")
     parser.add_argument("--tasks", default="tasks")
     parser.add_argument("--profile")
@@ -3528,6 +3581,8 @@ def main(argv):
         return list_decisions(cwd, args.story)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.check_backlog:
+        return check_backlog(cwd, args.backlog, args.tasks, read_profile(resolve_profile(args.profile, cwd)))
     if args.check_contract:
         result = Result()
         profile = read_profile(resolve_profile(args.profile, cwd))

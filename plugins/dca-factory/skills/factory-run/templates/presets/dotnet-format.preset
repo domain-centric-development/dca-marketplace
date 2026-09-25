@@ -1,0 +1,6 @@
+kind: format
+order: 30
+detect.exists: *.sln *.slnx *.csproj
+detect.exists: .editorconfig
+format: dotnet format --verify-no-changes
+formatFix: dotnet format

@@ -56,10 +56,10 @@ once per project. The state of a record is read off the file: no `## Answer` is 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
 `/factory-backlog`) — never a shell command to type, unless the person asks how to do something
-without a session. You may run `factory.sh` for everything that starts no tool — `install`,
-`update`, `status`, `usage`, `decisions`, `schedule`, `change`, `parity` — but never `run` or
-`backlog`: they start a tool process per stage (`claude -p` and the like) on top of this session,
-and the runner refuses them inside one anyway.
+without a session. You may run `factory.sh` for everything that starts no tool — `setup`,
+`backlog`, `status`, `decisions`, `update`, `verify`, `check` — but never `run`: it starts a tool
+process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
+inside one anyway.
 
 ## Do not
 

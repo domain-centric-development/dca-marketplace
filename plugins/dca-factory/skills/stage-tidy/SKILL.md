@@ -41,6 +41,8 @@ freedom is that it may not change what the code *does*.
    finding and leave the code alone.
 7. Run what the stack profile declares — compile, the tests, the architecture suite, the formatter.
    The gate runs them again afterwards, so a stage that skips them only delays its own failure.
+8. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
+   formatting of what you moved. The gate and the commit hook only check `format:`.
 
 ## Who carries this stage
 

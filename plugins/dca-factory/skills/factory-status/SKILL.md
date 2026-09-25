@@ -21,7 +21,7 @@ start nothing and answer nothing on anyone's behalf.
 
    It prints four sections — *running*, *waiting for a human*, *stories*, *cost*; the cost is a
    table with one row per story and the total. Asked about one story, run
-   `bash .agents/factory/factory.sh status <story>` instead: the same look, with that story's cost
+   `bash .agents/factory/factory.sh status --story <story>` instead: the same look, with that story's cost
    per stage. Show it as it is; where the gate is not installed, say so and stop rather than
    reconstructing it by hand.
 2. **Lead with what needs someone.** An open decision blocks its story and everything that depends
@@ -49,15 +49,15 @@ start nothing and answer nothing on anyone's behalf.
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
 `/factory-backlog`) — never a shell command to type, unless the person asks how to do something
-without a session. You may run `factory.sh` for everything that starts no tool — `install`,
-`update`, `status`, `usage`, `decisions`, `schedule`, `change`, `parity` — but never `run` or
-`backlog`: they start a tool process per stage (`claude -p` and the like) on top of this session,
-and the runner refuses them inside one anyway.
+without a session. You may run `factory.sh` for everything that starts no tool — `setup`,
+`backlog`, `status`, `decisions`, `update`, `verify`, `check` — but never `run`: it starts a tool
+process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
+inside one anyway.
 
 ## Do not
 
-- Do not run `factory.sh run` or `backlog`, a stage, a gate for a stage, or `--stage-start`/
-  `--stage-end`. `status`, `usage`, `decisions` and `schedule` only read; nothing else here does.
+- Do not run `factory.sh run`, a stage, a gate for a stage, or `--stage-start`/`--stage-end`.
+  `status`, `decisions`, `backlog` and `setup --check` only read; nothing else here does.
   Looking is not taking over a story.
 - Do not answer or edit a decision record — that is `/factory-decisions`, on the human's confirmation.
 - Do not report a state from memory or from an earlier look; run the command again.

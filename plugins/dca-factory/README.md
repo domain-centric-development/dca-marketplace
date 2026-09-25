@@ -15,13 +15,16 @@ Then, once per project — this writes the gate, the stack profile and the commi
 repository, because that is where a process has to live to survive a change of tool:
 
 ```
-bash <plugin>/skills/factory-run/scripts/factory.sh install --tool claude
+bash <plugin>/skills/factory-run/scripts/factory.sh setup --tool claude
 ```
 
-`--tool codex`, `--tool opencode` or `--tool all` instead, for a project used with those. The
-installer reads what the project already states — build tool, verification command — and leaves
-a command it could not detect *out* rather than writing a placeholder the gate would try to run.
-Check the file it wrote before the first run:
+`--tool codex`, `--tool opencode` or `--tool all` instead, for a project used with those. Setup
+needs a git repository and stops without one. It detects the build from the **presets**
+(`skills/factory-run/templates/presets/`: one flat file per build tool, browser runner, formatter
+or rule package it recognises — the files that give it away and the profile lines it writes) and
+leaves a command no preset detects *out* rather than writing a placeholder the gate would try to
+run. A new stack is one more preset file, no change to the script. Check the file it wrote before
+the first run:
 
 ```
 .agents/factory/factory.profile.yaml     your build and test commands, one per test source set
@@ -72,16 +75,16 @@ for a decision, and with `--watch` picks that story up again at the stage that a
 answer is written (`--max-stages` caps the agent invocations, `.agents/factory/stop` ends it):
 
 ```
-bash .agents/factory/factory.sh backlog --tool claude --watch
+bash .agents/factory/factory.sh run --tool claude --watch
 ```
 
 What each story and stage cost — tokens per invocation from the tool's own report, summed across
 rounds and restarts, for runner stages and for in-session stages alike (those through
 `--stage-start`/`--stage-end` marks, read from the session's own log); `--story-budget <tokens>` on
-`run` or `backlog` stops dispatch at a limit:
+`run` stops dispatch at a limit:
 
 ```
-bash .agents/factory/factory.sh usage
+bash .agents/factory/factory.sh status --usage
 ```
 
 ```
@@ -96,23 +99,24 @@ that was not observed is not a check that passed.
 
 ## One entry point
 
-`factory.sh install` puts the runner next to the gate, so everything a person does with the pipeline
-in a project goes through one script:
+`factory.sh setup` puts the runner next to the gate, so everything a person does with the pipeline
+in a project goes through one script. Its verbs mirror the skills — `/factory-x` in an agent and
+`factory.sh x` in a terminal or CI do the same thing; the skill adds the conversation:
 
-| Command | Does |
-|---|---|
-| `bash .agents/factory/factory.sh run --story <id>` | one story through the six stages |
-| `bash .agents/factory/factory.sh backlog [--watch]` | every story in dependency order, waiting for answers with `--watch` |
-| `bash .agents/factory/factory.sh status` | what runs, what waits for a human, every story, the cost per story and in total |
-| `bash .agents/factory/factory.sh status <story>` | the same, with that story's cost per stage |
-| `bash .agents/factory/factory.sh usage [--story <id>]` | tokens per story and stage |
-| `bash .agents/factory/factory.sh decisions [--story <id>]` | the decision inbox |
-| `bash .agents/factory/factory.sh schedule` | every story's state and the next one |
-| `bash .agents/factory/factory.sh change [--staged]` | the profile's checks outside a story, as the commit hook runs them |
-| `bash .agents/factory/factory.sh parity <config>` | several implementations against one scenario contract |
+| Command | Skill | Does |
+|---|---|---|
+| `factory.sh setup [--tool <t>] [--copy]` | `factory-setup` | installs the pipeline where it is not; on an installed project it only reports |
+| `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
+| `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
+| `factory.sh run [--story <id>] [--watch]` | `factory-run` | one story through the six stages · without `--story` every story in dependency order, waiting for answers with `--watch` |
+| `factory.sh status [--story <id>] [--usage] [--brief]` | `factory-status` | what runs, what waits for a human, every story, the cost · one story's cost per stage · tokens per story and stage |
+| `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
+| `factory.sh update [--from <dir>]` | `factory-update` | the newest pipeline found, same tools, links or copies |
+| `factory.sh verify --story <id>` · `--fixtures` | `factory-verify` | observe a delivered story · check the machinery |
+| `factory.sh check [--staged] [--checks "<c> …"]` · `--parity <config>` | *(hook, CI)* | the profile's checks outside a story, as the commit hook runs them · several implementations against one scenario contract |
 
-The gate stays a Python script underneath: the commit hook, CI and the stage skills call it
-directly.
+All of them run as `bash .agents/factory/factory.sh …` from the project root. The gate stays a
+Python script underneath: the stage skills and the session-start hook call it directly.
 
 ## How to update a project
 
@@ -126,14 +130,16 @@ bash .agents/factory/factory.sh update [--from <plugin>/skills]     # the same, 
 ```
 
 It finds the newest pipeline on the machine (`--from`, `FACTORY_PLUGIN_DIR`, the project's skill links,
-Claude Code's plugin cache), runs *that* pipeline's install — so a release that adds a file the
-project needs puts it there — for the tools the project already uses, and reports the versions and
-whether the profile's `contract:` line has to be raised. It commits nothing and leaves the profile.
+Claude Code's plugin cache), hands over to *that* pipeline's runner — so a release that adds a file
+the project needs puts it there — for the tools the project already uses, and reports the versions
+and whether the profile's `contract:` line has to be raised. It commits nothing and leaves the
+profile; at its end it names `factory.sh setup --check`, which lists what the project gained since
+(a browser runner, a formatter) as profile lines to confirm.
 
 Skills are held one of two ways, and the update keeps whichever the project chose:
 
 - **Links** (the default) point into the plugin or a checkout: always current, not committed.
-- **Copies** (`install --copy`) are the project's own, committed with it: every clone delivers
+- **Copies** (`setup --copy`) are the project's own, committed with it: every clone delivers
   stories without the marketplace, with exactly this pipeline. `.dca-factory-skills` in each skill
   folder lists what the pipeline copied; a skill of the project's own — even with a pipeline skill's
   name — is never overwritten, and one the pipeline dropped is removed.
@@ -142,18 +148,19 @@ Skills are held one of two ways, and the update keeps whichever the project chos
 
 ## A session that starts knowing where things stand
 
-`install` writes a section into `AGENTS.md` (between `<!-- dca-factory: start -->` and `end`; only
+`setup` writes a section into `AGENTS.md` (between `<!-- dca-factory: start -->` and `end`; only
 that block is replaced on an update) telling any tool to begin a session with the gate's
 `--status --brief` and to ask what to do. For Claude Code it also adds a `SessionStart` hook to
 `.claude/settings.json` that puts those lines into the session's context, and allows the reading
-commands (`status`, `usage`, `decisions`, `schedule`) without a prompt. Skills use `factory.sh` for
-everything that starts no tool; `run` and `backlog` start a tool process per stage, so no skill
-runs them and the runner refuses them inside an agent session (`FACTORY_ALLOW_NESTED=1` to force).
+commands (`status`, `decisions`, `backlog`, `setup --check`, `verify`) without a prompt, removing
+what an older install allowed under verbs that are gone. Skills use `factory.sh` for everything that
+starts no tool; `run` starts a tool process per stage, so no skill runs it and the runner refuses it
+inside an agent session (`FACTORY_ALLOW_NESTED=1` to force).
 The first message — even "hi" — then gets the state and the choices.
 
 ## How to see where it stands
 
-From any session in the project — beside a running `backlog --watch` too, since it only reads:
+From any session in the project — beside a running `run --watch` too, since it only reads:
 
 ```
 /factory-status
@@ -176,7 +183,7 @@ Claude does not break a colleague's Codex run, and the gate refuses an unqualifi
 runner passes the value as the tool's model flag (`--model`, `-m`); a `--model` in
 `FACTORY_<TOOL>_ARGS` overrides it for one person, and the run says so. A custom `FACTORY_TOOL_CMD`
 gets it as `FACTORY_MODEL`. In a session, a subagent can run on it; the session's own context cannot.
-`factory.sh status <story>` shows the model each stage actually ran on and marks a request that did not
+`factory.sh status --story <story>` shows the model each stage actually ran on and marks a request that did not
 reach it. The pipeline names no model: which stages can run cheaper is the project's to measure.
 
 ## Plan to tidy in one context
@@ -198,8 +205,8 @@ run did not have. Per-stage model keys do not apply to the shared process; `mode
 The runner records every stage's tokens; nothing else is needed.
 
 ```
-bash .agents/factory/factory.sh run --story STORY-1 --tool claude       # or: backlog, --watch
-bash .agents/factory/factory.sh usage --story STORY-1
+bash .agents/factory/factory.sh run --story STORY-1 --tool claude       # or without --story, --watch
+bash .agents/factory/factory.sh status --usage --story STORY-1
 ```
 
 ```
@@ -218,7 +225,7 @@ starts fresh and reads the skill, the story and its predecessor's file again.
 
 - `runs` counts invocations, repeat rounds included; `measured` those the tool reported on. The
   difference is shown as "without a usage report" — unknown, not zero.
-- Leave out `--story` for every story. `factory.sh schedule` shows each story's total in one line.
+- Leave out `--story` for every story. `factory.sh backlog` shows each story's total in one line.
 - `--story-budget <tokens>` on `run` or `backlog` stops before the next stage once the story has
   used that many. The count comes from the journal, so a restart does not reset it.
 - In a session (`/factory-run` without the runner) the orchestrator marks each stage with
@@ -230,7 +237,7 @@ starts fresh and reads the skill, the story and its predecessor's file again.
 
 **History.** Every number lives in the project: `tasks/<story>/.verify/journal.tsv`, next to the gate
 reports and each invocation's raw output (`*.out`). Commit `tasks/` and the history travels with the
-repository — `factory.sh usage` without `--story` shows every story ever run. The journal is append-only, so
+repository — `factory.sh status --usage` without `--story` shows every story ever run. The journal is append-only, so
 the install marks it `merge=union` in `.gitattributes`: two branches that ran the same story merge
 without a conflict, a window read on one side and pending on the other counts once, and "running" is
 judged by time, not by line order. An in-session stage first
@@ -275,7 +282,7 @@ what must be true before the next one starts.
 
 | Skill | Does |
 |---|---|
-| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `story-gate.py --schedule` reads every story's state off the files, and `factory.sh backlog` runs them in that order |
+| `factory-run` | runs one story: gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `story-gate.py --schedule` reads every story's state off the files, and `factory.sh run` without `--story` runs them in that order |
 | `stage-plan` | story → `tasks/<story>/plan.md`: elements that change, criteria, test shape per criterion |
 | `stage-test` | plan → tests plus `tasks/<story>/tests.md` with the criterion-to-test table |
 | `stage-build` | red tests → production code plus `tasks/<story>/build.md` |
@@ -381,7 +388,7 @@ all — the file contracts and the gate are what make a run honest, not the runn
 | Codex | `--ignore-user-config` (no `~/.codex/config.toml`: its MCP servers, profiles and model stay out; the login stays) — a model then comes from `FACTORY_CODEX_ARGS` | user skills under `~/.codex/skills` |
 
 Carriers the profile names (`carrier.<stage>`, `review.<perspective>`, `knowledge`) are therefore installed into
-the project: `install --tool claude` links them into `.claude/skills/` (one link per skill, beside the pipeline's
+the project: `setup --tool claude` links them into `.claude/skills/` (one link per skill, beside the pipeline's
 own), and the runner stops before the first stage when one is missing. `FACTORY_ISOLATION=off` runs the stages
 with the tool's full setup instead, and says so. Measured in a small project (claude 2.1.281): the first turn of a
 stage starts at 16.2k tokens instead of 25.9k. For a local model through OpenCode and LM Studio, the runner reads
@@ -493,7 +500,7 @@ before the code existed. Run `--stage test` first, or say why this criterion's t
 
 **A skill I added to the source does not show up.** For Claude Code the pipeline's folder is linked
 as a whole, so it appears at once. For Codex and OpenCode the skills come from several sources and
-are linked individually — a *new* one needs another `install`; an edited one is live either way.
+are linked individually — a *new* one needs `factory.sh update`; an edited one is live either way.
 
 **The gate says a command was "skipped and named".** The profile does not declare it. Deliberate: a
 gate that fails on something nobody configured gets switched off, and then nothing is checked at

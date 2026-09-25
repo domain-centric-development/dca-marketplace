@@ -1,0 +1,5 @@
+kind: browser
+order: 30
+detect.contains: **/*.csproj :: Microsoft\.Playwright
+e2eTest: dotnet test {match} --logger trx
+browser: playwright

@@ -1,0 +1,7 @@
+kind: stack
+order: 42
+detect.contains: setup.cfg tox.ini :: ^\[pytest\]
+test: {python} -m pytest -q --junitxml=test-results/pytest.xml
+e2eTest: {python} -m pytest -q --junitxml=test-results/pytest.xml
+filterFormat: "{file}::{method}"
+covers.test: **

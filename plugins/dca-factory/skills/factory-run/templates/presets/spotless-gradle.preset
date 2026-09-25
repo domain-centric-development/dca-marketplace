@@ -1,0 +1,5 @@
+kind: format
+order: 10
+detect.contains: **/*.gradle **/*.gradle.kts :: com\.diffplug\.spotless
+format: ./gradlew spotlessCheck
+formatFix: ./gradlew spotlessApply

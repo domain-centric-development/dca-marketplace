@@ -1,0 +1,3 @@
+kind: governance
+order: 20
+detect.contains: **/*.csproj **/*.props :: DomainCentric\.ArchRules

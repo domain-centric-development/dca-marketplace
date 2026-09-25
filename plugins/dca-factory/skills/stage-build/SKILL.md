@@ -31,6 +31,10 @@ Output: the production code, plus `tasks/<story>/build.md`.
    own failure.
 6. In a repeat round, work only on what the gate or the judge confirmed. Do not take the
    opportunity to refactor elsewhere.
+7. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
+   formatting of what you wrote. The gate and the commit hook only check `format:` and change no
+   file. A file it reformats that this story never touched is not yours to keep quiet about — the
+   pipeline's record of what changed names it, and the judge reads it as the finding it is.
 
 ## Ask, do not recall — but only a source the project named
 

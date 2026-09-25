@@ -2,7 +2,7 @@
 # The enforcement boundary. Tool hooks and deny rules do not port between agent tools —
 # but every tool commits through git, so this is where the guard belongs. A tool-specific
 # hook stays a fast feedback loop; it is never the boundary. A hook can be bypassed
-# (--no-verify), so CI runs the same command on its checkout: `story-gate.py --change`.
+# (--no-verify), so CI runs the same command on its checkout: `factory.sh check`.
 #
 # Install once per clone:  git config core.hooksPath .githooks
 #
@@ -14,32 +14,23 @@
 
 set -uo pipefail
 
-GATE=".agents/factory/story-gate.py"
+RUNNER=".agents/factory/factory.sh"
 # Which checks run before a commit. Keep it to what a developer will wait for: a hook that takes
 # minutes gets bypassed with --no-verify, and then it guards nothing. On a slow stack, narrow it
 # (FACTORY_PRECOMMIT_CHECKS="compile architecture"); a required check left out is reported as not
 # run in this scope, never as passed, and CI has to run it.
 CHECKS="${FACTORY_PRECOMMIT_CHECKS:-}"
 
-if [ ! -f "$GATE" ]; then
-  echo "pre-commit: no gate at $GATE — nothing to check (run 'factory.sh install')." >&2
+if [ ! -f "$RUNNER" ] || [ ! -f .agents/factory/story-gate.py ]; then
+  echo "pre-commit: no pipeline in .agents/factory — nothing to check (run 'factory.sh setup')." >&2
   exit 0
 fi
 
-# Asked to run, not only looked up: on Windows `python3` is often the WindowsApps alias.
-PY="${FACTORY_PYTHON:-}"
-if [ -z "$PY" ]; then
-  for candidate in python3 python py; do
-    "$candidate" -c 'import sys; sys.exit(sys.version_info[0] != 3)' >/dev/null 2>&1 && { PY=$candidate; break; }
-  done
-  PY=${PY:-python3}
-fi
-
-args=(--change --staged)
+args=(check --staged)
 [ -n "$CHECKS" ] && args+=(--checks "$CHECKS")
 [ -n "${FACTORY_PROFILE:-}" ] && args+=(--profile "$FACTORY_PROFILE")
 
-"$PY" "$GATE" "${args[@]}" >&2
+bash "$RUNNER" "${args[@]}" >&2
 code=$?
 if [ "$code" -ne 0 ]; then
   echo "pre-commit: commit refused. Fix the above, or commit with --no-verify and say why." >&2

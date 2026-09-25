@@ -18,8 +18,10 @@ a report of what changed. You commit nothing; the human reviews and commits.
    bash <this skill's folder>/../factory-run/scripts/factory.sh update --from <this skill's folder>/..
    ```
 
-   It starts no tool. Where the project has no pipeline yet, `install --tool <claude|codex|opencode>`
-   instead.
+   It starts no tool. It hands over to the newest pipeline's runner, which replaces the gate, the
+   runner, the observer, the commit hook, the permissions and the `AGENTS.md` section, and leaves the
+   stack profile alone. Where the project has no pipeline yet, that is `/factory-setup`'s, not this
+   skill's.
 2. **Report what it says, in this order:** the versions (`updated A → B`), the file contract, and
    whether the stack profile's `contract:` line has to be raised. Raising that line is the human's
    edit — the profile belongs to the project — so show the line and do not change it.
@@ -28,13 +30,15 @@ a report of what changed. You commit nothing; the human reviews and commits.
    and the update listed which it copied, which of the project's own it kept and which it removed.
 4. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, the
    `AGENTS.md` section, and the skill copies where the project keeps copies.
+5. **End with what the project gained since.** Run `bash .agents/factory/factory.sh setup --check`
+   and show its lines: detected keys the profile lacks, and values that differ from detection. You
+   write nothing into the profile — the human adds a line, or confirms `setup --write`.
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
-skill that does it. You may run `factory.sh` for everything that starts no tool, never `run` or
-`backlog`.
+skill that does it. You may run `factory.sh` for everything that starts no tool, never `run`.
 
 ## Do not
 
-- Do not run `factory.sh run` or `backlog`.
-- Do not commit, push or change the stack profile.
+- Do not run `factory.sh run`.
+- Do not commit, push or change the stack profile — `setup --write` is the human's to confirm.
 - Do not update from a folder the human did not name or this skill does not belong to.

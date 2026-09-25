@@ -3,23 +3,25 @@
 # context and reads only its story and its predecessor's file. Same stages, same gate, same
 # files as running the skills inside a session — this only changes who holds the context.
 #
-#   factory.sh install [--tool claude|codex|opencode|all] [--from <skill folder>] [--copy]
+#   factory.sh setup [--tool claude|codex|opencode|all|none] [--copy] [--from <skill folder>]
+#                    installs the pipeline where it is not; on an installed project it reports only
+#   factory.sh setup --check                 what detection finds against the profile (read-only)
+#   factory.sh setup --write [--replace <key>]   adds the detected keys the profile lacks
+#   factory.sh backlog [--check]             every story's state and the next one; --check the backlog
+#   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch] [--interval <s>]
+#                  [--max-stages <n>] [--story-budget <tokens>] [--shared-builder] [--dry-run]
+#                    one story, or without --story the whole backlog in the schedule's order
+#   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
+#   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh update [--from <skill folder>]   the newest pipeline found, same tools, links or copies
-#   factory.sh run --story <id> [--tool <tool>] [--from <stage>] [--story-budget <tokens>] [--shared-builder] [--dry-run]
-#   factory.sh backlog [--tool <tool>] [--watch] [--interval <s>] [--max-stages <n>] [--shared-builder]
-#                      [--story-budget <tokens>] [--dry-run]
-#   factory.sh status [--brief]           what runs, what waits for a human, every story, its cost
-#   factory.sh status <story>             the same, with that story's cost per stage
-#   factory.sh usage [--story <id>]       tokens per story and stage
-#   factory.sh decisions [--story <id>]   the decision inbox
-#   factory.sh schedule                   every story's state and the next one
-#   factory.sh change [--staged] [--checks "<c> …"]   the profile's checks outside a story
-#   factory.sh parity <config>            every implementation proves the scenario contract
+#   factory.sh verify --story <id> | --fixtures   observe a delivered story | check the machinery
+#   factory.sh check [--staged] [--checks "<c> …"] | --parity <config>   for the commit hook and CI
 #
 # `run` exits 0 when the story ran through, 3 when it stopped for a decision, 4 at --max-stages,
 # 5 when another worker holds the checkout, 6 when started inside an agent session with a real
-# tool (FACTORY_ALLOW_NESTED=1 overrides), anything else on a failure. `backlog` runs story after story in the order `story-gate.py
-# --schedule` names, past stories that wait for a decision; --watch keeps it waiting for answers.
+# tool (FACTORY_ALLOW_NESTED=1 overrides), anything else on a failure. Without --story it runs story
+# after story in the order `backlog` names, past stories that wait for a decision; --watch keeps it
+# waiting for answers.
 #
 # FACTORY_TOOL_CMD replaces the tool invocation entirely ($FACTORY_STAGE and $FACTORY_PROMPT are
 # exported to it) — for a tool none of the adapters covers, and so the loop itself is testable.
@@ -117,7 +119,7 @@ stage_file() {
   esac
 }
 
-usage() { sed -n '2,25p' "$0" >&2; exit 2; }
+usage() { sed -n '2,/^# FACTORY_TOOL_CMD/p' "$0" | sed '$d' >&2; exit 2; }
 
 # An install step that had to work and did not. `set -e` is deliberately *not* used: the run loop
 # expects non-zero exits in several places — a gate that refuses, a tool that stops, a verdict that
@@ -186,38 +188,44 @@ skills_mode() {                             # skills_mode <target dir>
 
 # Bring the project up to the newest pipeline found, for exactly the tools it already has, keeping
 # links as links and copies as copies. The profile is the project's and is never rewritten; a file
-# contract that moved is said out loud, with the profile line to raise.
+# contract that moved is said out loud, with the profile line to raise. The replacing is the *newest*
+# runner's, not this copy's: a release that adds a file the project needs must be able to put it
+# there, even when the project's runner predates it — so a project's copy hands over to it (`exec`).
 update_project() {                          # update_project <explicit skill folder or "">
   local src=${1:-} before before_contract after after_contract tool target mode declared updated=0
   [ -n "$src" ] || src=$(plugin_skills) || {
     echo "factory: no pipeline found to update from — pass --from <the plugin's skills folder>" >&2; return 2; }
   [ -f "$src/factory-run/scripts/story-gate.py" ] || {
     echo "factory: $src is not the pipeline's skills folder (no factory-run/scripts/story-gate.py)" >&2; return 2; }
+  src=$(cd "$src" && pwd -P)
+  local newest="$src/factory-run/scripts/factory.sh" self
+  self=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")
+  if [ -z "${FACTORY_UPDATE_HANDED:-}" ] && [ -f "$newest" ] && [ "$self" != "$newest" ]; then
+    FACTORY_UPDATE_HANDED=1 exec bash "$newest" update --from "$src"
+  fi
   before=$(sed -n 's/^version:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
   before_contract=$(sed -n 's/^contract:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
-  # The install is the *new* pipeline's, not this copy's: a release that adds a file the project
-  # needs must be able to put it there, even when the project's runner predates it.
-  local installer="$src/factory-run/scripts/factory.sh"
   for tool in claude codex opencode; do
     target=".$tool/skills"
     mode=$(skills_mode "$target")
     [ -n "$mode" ] || continue
     if [ "$mode" = copy ]; then
-      bash "$installer" install --tool "$tool" --from "$src" --copy || return $?
+      install_project "$tool" "$src" 1
     else
-      bash "$installer" install --tool "$tool" --from "$src" || return $?
+      install_project "$tool" "$src" ""
     fi
     updated=1
   done
-  [ "$updated" = 1 ] || bash "$installer" install --tool none --from "$src" || return $?
+  [ "$updated" = 1 ] || install_project none "$src" ""
   after=$(gate_field "$GATE" VERSION); after_contract=$(gate_field "$GATE" CONTRACT)
   echo "factory: updated ${before:-an unstamped install} → $after (file contract ${before_contract:-?} → $after_contract) from $src"
-  declared=$(sed -n 's/^contract:[[:space:]]*//p' .agents/factory/factory.profile.yaml 2>/dev/null | head -1)
+  declared=$(sed -n 's/^contract:[[:space:]]*//p' "$PROFILE" 2>/dev/null | head -1)
   if [ -n "$declared" ] && [ "$declared" != "$after_contract" ]; then
     echo "factory: the stack profile declares contract $declared — raise it to 'contract: $after_contract' once" >&2
     echo "factory:   the profile uses what that contract describes; the gate reads it as older until then." >&2
   fi
-  echo "factory: review and commit the changed files — the update commits nothing."
+  echo "factory: review and commit the changed files — the update commits nothing. 'factory.sh setup --check'"
+  echo "factory:   names what the project gained since, as profile lines to confirm; the update writes none."
 }
 
 # Whether the gate in this project is still the one the pipeline ships. The gate itself cannot tell:
@@ -234,11 +242,11 @@ check_gate_freshness() {
   source_contract=$(gate_field "$source" CONTRACT)
   if [ "$installed_contract" != "$source_contract" ]; then
     echo "factory: this project was installed against file contract $installed_contract and the" >&2
-    echo "factory:   pipeline here implements $source_contract — run 'factory.sh install' and check" >&2
+    echo "factory:   pipeline here implements $source_contract — run 'factory.sh update' and check" >&2
     echo "factory:   the stack profile's 'contract:' line before trusting a run." >&2
   elif [ "$installed_version" != "$source_version" ]; then
     echo "factory: this project was installed from pipeline $installed_version, the one here is" >&2
-    echo "factory:   $source_version — same file contract, so the run is valid; 'factory.sh install'" >&2
+    echo "factory:   $source_version — same file contract, so the run is valid; 'factory.sh update'" >&2
     echo "factory:   brings the project up to date." >&2
   fi
 }
@@ -260,7 +268,7 @@ allowed_commands() {
   local list="Bash($PY $GATE:*)"
   if [ -f "$profile" ]; then
     local head
-    for key in compile test e2eTest architecture format; do
+    for key in compile test e2eTest architecture format formatFix; do
       head=$(sed -n "s/^$key:[[:space:]]*//p" "$profile" | head -1 | tr -d '"'"'"'"' | awk '{print $1}')
       [ -n "$head" ] && case "$list" in *"Bash($head:*)"*) ;; *) list="$list,Bash($head:*)" ;; esac
     done
@@ -322,8 +330,9 @@ check_carriers() {                          # check_carriers <tool>
   done
   [ -z "$missing" ] && return 0
   echo "factory: the profile names carrier(s) the project does not hold in $dir:$missing" >&2
-  echo "factory:   a stage process sees only the project — run 'factory.sh install --tool $1' (or update)" >&2
-  echo "factory:   so they are linked there, or FACTORY_ISOLATION=off to use the tool's own setup." >&2
+  echo "factory:   a stage process sees only the project — 'factory.sh update' links them there (a tool the" >&2
+  echo "factory:   project has no skills for yet: 'factory.sh setup --tool $1'), or FACTORY_ISOLATION=off" >&2
+  echo "factory:   uses the tool's own setup." >&2
   return 2
 }
 
@@ -557,10 +566,14 @@ install_named_carriers() {                  # install_named_carriers <target> <s
   done
 }
 
-install_skills() {
+# The pipeline's files in the project, for the tools named: what a first `setup` installs and what
+# `update` replaces. Internal — the verbs are `setup` and `update`.
+install_project() {                         # install_project <tool> <skill folder> <copy_mode>
   local tool=${1:-all} from=${2:-} copy_mode=${3:-}
   if [ -z "$from" ]; then
-    from="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # the skill folder
+    from="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # the skill folder, run from the plugin
+    [ -f "$from/factory-run/scripts/story-gate.py" ] || from=$(plugin_skills) || {
+      echo "factory: no pipeline found to install from — pass --from <the plugin's skills folder>" >&2; exit 2; }
   fi
   local targets=()
   case "$tool" in
@@ -573,6 +586,10 @@ install_skills() {
   esac
   local source_abs; source_abs=$(cd "$from" && pwd)
   local copy_reason=""
+  # The profile first: the carriers it names are linked by this same run, so the first `run` does not
+  # stop in the carrier check, and the per-skill branch for Claude's directory below sees them.
+  must "create .agents/factory and .githooks" mkdir -p .agents/factory .githooks
+  [ -f "$PROFILE" ] || write_profile "$from"
   if [ -z "$copy_mode" ] && ! can_symlink; then
     copy_mode=1; copy_reason=" — this shell cannot make symlinks (Windows without developer mode or MSYS=winsymlinks:nativestrict), so the install copies"
   fi
@@ -671,7 +688,7 @@ install_skills() {
       [ "$kept" -gt 0 ] && echo "factory: left $kept entry/entries in $target that are the project's own" >&2
       [ "$pruned" -gt 0 ] && echo "factory: pruned $pruned link(s) whose skill is gone from the source" >&2
       echo "factory: skills → $target ($linked linked: the pipeline plus the craft it names as carriers)"
-      echo "factory:   per skill, because they come from several sources — re-run install after a skill is added" >&2
+      echo "factory:   per skill, because they come from several sources — 'factory.sh update' after a skill is added" >&2
     elif [ "$target" = ".claude/skills" ] && [ -n "$(named_carriers)" ] \
          && { [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; }; then
       # The profile names carriers, and an isolated Claude stage sees only this directory — so it
@@ -686,7 +703,7 @@ install_skills() {
         linked=$((linked + 1))
       done
       echo "factory: skills → $target ($linked linked one by one, beside the carriers the profile names)"
-      echo "factory:   re-run install after a skill is added to the pipeline" >&2
+      echo "factory:   'factory.sh update' after a skill is added to the pipeline" >&2
     elif [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; then
       must "replace $target" rm -rf "$target"
       must "create $(dirname "$target")" mkdir -p "$(dirname "$target")"
@@ -700,7 +717,7 @@ install_skills() {
         ln -s "$skill" "$target/$(basename "$skill")"
       done
       echo "factory: skills → $target (per skill: the directory holds skills of its own)" >&2
-      echo "factory:   re-run install after a skill is added to the source" >&2
+      echo "factory:   'factory.sh update' after a skill is added to the source" >&2
     fi
   done
   for target in ${targets[@]+"${targets[@]}"}; do
@@ -712,12 +729,14 @@ install_skills() {
       install_named_carriers "$target" "$source_abs" "$copy_mode"
     fi
   done
-  check_dca_setup
-  must "create .agents/factory and .githooks" mkdir -p .agents/factory .githooks
+  check_dca_setup "$from"
   must "copy the gate to $GATE" cp "$from/factory-run/scripts/story-gate.py" "$GATE"
+  # The observer beside it, for `factory.sh verify --story`: a delivered story is checked in the project.
+  must "copy the observer to .agents/factory/observe.py" \
+    cp "$from/factory-verify/scripts/observe.py" .agents/factory/observe.py
   # The runner goes beside the gate, so the project has one entry point for everything it does with
-  # the pipeline: `bash .agents/factory/factory.sh run|backlog|status|usage|…`. Installing again is
-  # done from the plugin's copy, which knows where the skills are.
+  # the pipeline: `bash .agents/factory/factory.sh setup|backlog|run|status|…`. An update is handed to
+  # the newest pipeline's runner, which knows where the skills are.
   # Replaced, never written over: `update` runs from this very file, and bash reads a script as it
   # goes — a copy onto the same inode would change the lines it has not read yet.
   must "copy the runner to .agents/factory/factory.sh" cp "$from/factory-run/scripts/factory.sh" .agents/factory/.factory.sh.new
@@ -748,7 +767,6 @@ install_skills() {
   else
     echo "factory: no git repository here — .githooks/pre-commit is installed but nothing runs it." >&2
   fi
-  [ -f .agents/factory/factory.profile.yaml ] || write_profile "$from"
   case "$tool" in
     claude|all) write_claude_permissions ;;
   esac
@@ -765,21 +783,16 @@ install_skills() {
     echo "factory:   every clone delivers stories with this pipeline, without the marketplace."
   elif [ -n "${targets[*]+x}" ] && [ "${#targets[@]}" -gt 0 ]; then
     echo "factory: the skill links point into $source_abs — they belong in .gitignore; a clone"
-    echo "factory:   installs them again, or use --copy to commit the skills with the project."
+    echo "factory:   gets them with 'factory.sh update', or use --copy to commit the skills with the project."
   fi
 }
 
-check_dca_setup() {
+check_dca_setup() {                        # check_dca_setup <skill folder>
   # The factory delivers stories; it does not install an architecture. That is the bootstrap
-  # skill's job, and it runs once. Say so instead of quietly starting without one.
-  # `find`, not a glob: `**` without `shopt -s globstar` is one `*`, so an architecture test one
-  # directory further down — which is where every real source layout puts it — went unseen and the
-  # install told the project it had no governance.
-  if find . -name "ArchitectureTest*" -not -path "*/build/*" -not -path "*/bin/*" \
-        -not -path "*/obj/*" -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null \
-        | head -1 | grep -q . \
-     || grep -rqs "dca-archunit\|DomainCentric.ArchRules" --include="*.gradle" --include="*.kts" \
-        --include="pom.xml" --include="*.csproj" --include="*.props" . 2>/dev/null; then
+  # skill's job, and it runs once. Say so instead of quietly starting without one. What counts as
+  # governance is the `governance` presets' — a rule package or an architecture test.
+  local dir; dir=$(presets_dir "${1:-}") || dir=""
+  if presets "$dir" detect | grep -q '^#governance'; then
     echo "factory: architecture governance found — the pipeline has something to gate on."
   else
     echo "factory: no architecture governance found in this project." >&2
@@ -796,101 +809,281 @@ conventions_file() {
   echo ""
 }
 
-write_profile() {
-  # Prefill from what the project already states, so the profile is not a second truth.
-  local from=$1 conventions
-  conventions=$(conventions_file)
-  must "copy the stack-profile template" \
-    cp "$from/factory-run/templates/factory.profile.yaml.tmpl" .agents/factory/factory.profile.yaml
-  local compile="" test="" architecture="" filter_flag="" filter_format="" covers=""
-  # The selector syntax belongs to the runner, not to the language: writing a Gradle selector into
-  # a .NET profile makes every single-test invocation of the gate select nothing, and a test that
-  # runs nothing looks exactly like a red one.
-  if [ -f gradlew ] || [ -f build.gradle ] || [ -f build.gradle.kts ]; then
-    compile="./gradlew testClasses"; test="./gradlew test"; architecture="./gradlew test-architecture"
-    filter_flag="--tests"; filter_format='"{class}.{method}"'
-  elif [ -f pom.xml ]; then
-    compile="./mvnw test-compile"; test="./mvnw test"; architecture="./mvnw -Dtest=*ArchitectureTest test"
-    filter_flag="-Dtest"; filter_format='"{class}#{method}"'
-  elif compgen -G "./*.sln" >/dev/null || compgen -G "./*.slnx" >/dev/null || compgen -G "./*.csproj" >/dev/null; then
-    # `dotnet test` takes one project per invocation; several paths in one call is an MSBuild error.
-    # `--logger trx`: the gate reads what actually ran from the runner's report, and the .NET test
-    # platform writes one only when asked. Without it every verdict would rest on an exit code.
-    compile="dotnet build"; test="dotnet test --logger trx"
-    architecture="dotnet test --filter FullyQualifiedName~Architecture"
-    filter_flag="--filter"; filter_format='"FullyQualifiedName~{class}.{method}"'
-    # Without a project argument `dotnet test` runs every test project of the solution, so this
-    # command's scope is the whole project. A Gradle or Maven task is *not* that — `./gradlew test`
-    # runs one source set — which is why this is declared here rather than guessed by the gate.
-    covers="**"
-  elif [ -f pytest.ini ] || [ -f conftest.py ] || grep -qs "^\[tool\.pytest" pyproject.toml || grep -qs "^\[pytest\]" setup.cfg tox.ini; then
-    # pytest selects by path — `tests/test_x.py::test_y` — so the filter names the file the gate
-    # located, not a dotted class. `--junitxml` puts the report where the gate looks by convention.
-    # No `compile:`: Python has none worth the name, and a skipped check is named, not faked.
-    test="$PY -m pytest -q --junitxml=test-results/pytest.xml"
-    filter_format='"{file}::{method}"'
-    covers="**"
-  fi
-  # A browser runner the project already has: the end-user command drives it, and the profile says so,
-  # so the plan stage takes browser tests as the shape instead of falling back to reading page text.
-  local e2e="" browser=""
-  # Gradle: Playwright on any build script. The command is named only where the build declares the
-  # `test-e2e` task the e2e-testing skill's setup writes; any other layout gets `browser:` and leaves
-  # the command to the person, rather than a guessed task name that fails on the first run.
-  local gradle_scripts; gradle_scripts=$(find . -maxdepth 3 \( -name build -o -name .gradle -o -name node_modules \) -prune \
-    -o \( -name '*.gradle' -o -name '*.gradle.kts' \) -print 2>/dev/null)
-  if [ -n "$gradle_scripts" ] && printf '%s\n' "$gradle_scripts" | xargs grep -qs "com.microsoft.playwright"; then
-    browser="playwright"
-    if printf '%s\n' "$gradle_scripts" | xargs grep -qsE "test-e2e|testE2e"; then
-      e2e="./gradlew test-e2e"
-      [ -n "$compile" ] && compile="$compile testE2eClasses"     # the browser tests compile with the rest
-    fi
-  elif grep -qs "com.microsoft.playwright" pom.xml; then
-    browser="playwright"
-  elif grep -rqs --include="*.csproj" "Microsoft.Playwright" . 2>/dev/null; then
-    local project; project=$(grep -rls --include="*.csproj" "Microsoft.Playwright" . | head -1)
-    e2e="dotnet test ${project#./} --logger trx"; browser="playwright"
-  elif grep -qs '"@playwright/test"' package.json; then
-    browser="playwright"
-  fi
-  if [ -n "$conventions" ]; then
-    local stated
-    stated=$(grep -oE '`[^`]*(gradlew|mvnw|dotnet)[^`]*`' "$conventions" | tr -d '`' | grep -iE "arch" | head -1)
-    [ -n "$stated" ] && architecture="$stated"
-    echo "factory: read build facts from $conventions"
-  fi
-  "$PY" - "$compile" "$test" "$architecture" "$filter_flag" "$filter_format" "$covers" "$e2e" "$browser" <<'PYEOF'
-import sys
-compile_, test, architecture, filter_flag, filter_format, covers, e2e, browser = sys.argv[1:9]
-path = ".agents/factory/factory.profile.yaml"
-lines = open(path).read().splitlines()
-values = {
-    "compile": compile_,
-    "test": test,
-    "e2eTest": e2e or test,
-    "architecture": architecture,
-    "filterFlag": filter_flag,
-    "filterFormat": filter_format,
+# --- detection: the presets ----------------------------------------------------
+# What a build tool looks like, and which commands it gets, is data: one flat `key: value` file per
+# detection case in templates/presets/, applied at setup and compared by `setup --check`. This script
+# knows no build tool. A preset is never read at run time — the profile is the only contract there.
+PROFILE=".agents/factory/factory.profile.yaml"
+
+presets_dir() {                             # presets_dir [<skill folder>] — where the presets are
+  if [ -n "${FACTORY_STACKS_DIR:-}" ]; then echo "$FACTORY_STACKS_DIR"; return 0; fi
+  local skills=${1:-} own
+  own="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)"
+  # the pipeline this script belongs to when it runs from the plugin; the newest one found otherwise
+  [ -n "$skills" ] || { [ -d "$own/factory-run/templates/presets" ] && skills=$own; }
+  [ -n "$skills" ] || skills=$(plugin_skills) || return 1
+  [ -d "$skills/factory-run/templates/presets" ] && echo "$skills/factory-run/templates/presets"
 }
-out = []
-for line in lines:
-    key = line.split(":", 1)[0].strip()
-    if key in values and values[key] and "{{" in line:
-        out.append(f"{key}: {values[key]}")
-    elif "{{" in line:
-        # An undetected command is left out, not left as a placeholder: the gate skips and names
-        # what the profile does not declare, but it would try to run a placeholder.
-        continue
-    else:
+
+# One program for every use of the presets, so detection, the first profile, the check and the write
+# cannot disagree about what was found:
+#   detect                         the detected keys, one `key<TAB>value` per line; `#governance` when found
+#   new <template> <profile>       write a first profile from the template and what was detected
+#   check <profile> [brief]        what detection proposes against the profile; exit 1 on a missing key
+#   write <profile> [<key>]        add the missing keys; with <key>, take the detected value for that one
+presets() {                                 # presets <dir> <mode> [args…]
+  local dir=$1; shift
+  "$PY" - "$dir" "$PY" "$(conventions_file)" "$@" <<'PRESETEOF'
+import os, re, sys
+
+directory, python, conventions, mode, rest = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
+KINDS = ("stack", "browser", "format", "governance")
+#: Folders no detection looks into: build output, dependencies, tool state. Bounded in depth as well,
+#: so a detection never walks a whole disk from a mistaken directory.
+PRUNED = {".git", ".gradle", ".idea", ".vs", "build", "bin", "obj", "target", "dist", "out",
+          "node_modules", ".venv", "venv", "__pycache__", ".agents", ".claude", ".codex", ".opencode", "tasks"}
+DEPTH = 4
+#: Which check or stage a profile key switches on — what `--check` says beside a proposed line.
+SWITCHES = {
+    "compile": "the test, build and tidy gates compile the tests",
+    "test": "single tests and the required suites run with it",
+    "e2eTest": "the criteria's end-user tests run with it",
+    "filterFlag": "single tests are selected by it",
+    "filterFormat": "single tests are selected by it",
+    "architecture": "the build, tidy and document gates run it",
+    "format": "the build and tidy gates run it",
+    "formatFix": "the test, build and tidy stages correct formatting with it",
+    "browser": "the plan takes browser tests for a page",
+}
+
+
+def files():
+    found = []
+    for root, dirs, names in os.walk("."):
+        depth = 0 if root == "." else root.count(os.sep)
+        dirs[:] = sorted(d for d in dirs if d not in PRUNED and depth < DEPTH)
+        rel = "" if root == "." else root[2:].replace(os.sep, "/") + "/"
+        found += [rel + name for name in sorted(names)]
+    return found
+
+
+def glob_re(pattern):
+    out, i = "", 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out, i = out + "(?:.*/)?", i + 3
+        elif pattern[i] == "*":
+            out, i = out + "[^/]*", i + 1
+        elif pattern[i] == "?":
+            out, i = out + "[^/]", i + 1
+        else:
+            out, i = out + re.escape(pattern[i]), i + 1
+    return re.compile(out + r"\Z")
+
+
+def read_preset(path):
+    entries = []
+    for raw in open(path, encoding="utf-8"):
+        line = raw.strip()
+        if line and not line.startswith("#") and ":" in line:
+            key, value = line.split(":", 1)
+            entries.append((key.strip(), value.strip()))
+    return entries
+
+
+TREE = None
+
+
+def matches(globs):
+    global TREE
+    TREE = files() if TREE is None else TREE
+    patterns = [glob_re(g) for g in globs.split()]
+    return [f for f in TREE if any(p.match(f) for p in patterns)]
+
+
+def holds(key, value):
+    """The files one detection line matched — empty when it does not hold."""
+    if key == "detect.exists":
+        return matches(value)
+    if key == "detect.contains":
+        globs, _, pattern = value.partition(" :: ")
+        wanted = re.compile(pattern, re.M)
+        hits = []
+        for path in matches(globs):
+            try:
+                if os.path.getsize(path) < 2_000_000 and wanted.search(open(path, encoding="utf-8", errors="ignore").read()):
+                    hits.append(path)
+            except OSError:
+                pass
+        return hits
+    raise SystemExit(f"factory: unknown detection `{key}` — a preset has detect.exists and detect.contains only")
+
+
+def detect():
+    presets = []
+    for name in sorted(os.listdir(directory)) if os.path.isdir(directory) else []:
+        if name.endswith(".preset"):
+            entries = read_preset(os.path.join(directory, name))
+            fields = dict(entries)
+            if fields.get("kind") not in KINDS:
+                raise SystemExit(f"factory: {name} has no `kind:` of {', '.join(KINDS)}")
+            presets.append((KINDS.index(fields["kind"]), int(fields.get("order", 50)), name[:-7], entries))
+    presets.sort()
+    values, applied, governance, stack, derived = {}, [], False, None, {}
+    for kind, _order, name, entries in presets:
+        if kind == 0 and stack is not None:
+            continue                                   # the first stack that holds wins
+        match = None
+        for key, value in entries:
+            if key.startswith("detect."):
+                hit = holds(key, value)
+                if not hit:
+                    break
+                match = hit[0]
+        else:
+            applied.append(name)
+            if kind == 0:
+                stack = name
+            if kind == 3:
+                governance = True
+            for key, value in entries:
+                if key in ("kind", "order") or key.startswith("detect."):
+                    continue
+                if key.startswith("conventions."):
+                    derived[key[len("conventions."):]] = value
+                    continue
+                values[key] = value.replace("{match}", match or "").replace("{python}", python)
+    # A command the project's conventions file states wins over the preset's, so the profile is not a
+    # second truth: the first backticked command there that the preset's pattern matches.
+    if conventions and os.path.isfile(conventions) and derived:
+        stated = re.findall(r"`([^`\n]+)`", open(conventions, encoding="utf-8").read())
+        for key, pattern in derived.items():
+            hit = next((s for s in stated if re.search(pattern, s, re.I)), None)
+            if hit:
+                values[key] = hit
+    return values, applied, governance
+
+
+def norm(value):
+    return value.strip().strip('"').strip("'").strip()
+
+
+def active(path):
+    keys = {}
+    for raw in open(path, encoding="utf-8"):
+        line = raw.strip()
+        if line and not line.startswith("#") and ":" in line:
+            key, value = line.split(":", 1)
+            keys.setdefault(key.strip(), value.strip())
+    return keys
+
+
+def proposals(values, profile):
+    """(missing, differing): what detection finds that the profile lacks, and where it says otherwise.
+    A key that qualifies another (`covers.test` for `test`) is proposed only while the qualified key
+    holds the detected value — it describes that command, not the person's."""
+    missing, differing = [], []
+    for key, value in values.items():
+        if key.startswith("covers."):
+            base = key[len("covers."):]
+            if base in profile and norm(profile[base]) != norm(values.get(base, "")):
+                continue
+        if key not in profile:
+            missing.append((key, value))
+        elif norm(profile[key]) != norm(value):
+            differing.append((key, profile[key], value))
+    return missing, differing
+
+
+def switch(key):
+    if key.startswith("test."):
+        key = "test"
+    if key.startswith("covers."):
+        return f"says which tests `{key[len('covers.'):]}:` runs"
+    return SWITCHES.get(key, "")
+
+
+values, applied, governance = detect()
+if mode == "detect":
+    for key, value in values.items():
+        print(f"{key}\t{value}")
+    print("#applied\t" + " ".join(applied))
+    if governance:
+        print("#governance\tfound")
+elif mode == "new":
+    template, target = rest
+    out = []
+    for line in open(template, encoding="utf-8").read().splitlines():
+        key = line.split(":", 1)[0].strip()
+        if "{{" in line:
+            # An undetected command is left out, not left as a placeholder: the gate skips and names
+            # what the profile does not declare, but it would try to run a placeholder.
+            if values.get(key):
+                out.append(f"{key}: {values[key]}")
+            continue
         out.append(line)
-if covers:
-    out.append(f"covers.test: {covers}")
-if browser:
-    out.append(f"browser: {browser}")
-open(path, "w").write("\n".join(out) + "\n")
-PYEOF
-  echo "factory: wrote .agents/factory/factory.profile.yaml — check the commands, then add"
-  echo "factory:   knowledge:, carrier.<stage>: and review.<perspective>: where the project has them"
+    written = {l.split(":", 1)[0].strip() for l in out if l and not l.startswith("#") and ":" in l}
+    out += [f"{key}: {value}" for key, value in values.items() if key not in written]
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(out) + "\n")
+    print(f"factory: wrote {target} from {', '.join(applied) or 'no preset (nothing detected)'} — check the")
+    print("factory:   commands, then add knowledge:, carrier.<role>: and review.<perspective>: where the project has them")
+elif mode == "check":
+    profile = active(rest[0])
+    missing, differing = proposals(values, profile)
+    if rest[1:] == ["brief"]:
+        if missing:
+            print(f"factory: profile — detection finds {', '.join(k for k, _ in missing)} the profile does not declare "
+                  "(factory.sh setup --check)")
+        raise SystemExit(0)
+    print(f"factory: detected {', '.join(applied) or 'nothing a preset knows'}")
+    for key, value in missing:
+        print(f"factory:   add   {key}: {value}" + (f"   → {switch(key)}" if switch(key) else ""))
+    for key, have, value in differing:
+        print(f"factory:   note  {key}: the profile says `{norm(have)}`, detection `{norm(value)}` — kept, a person's "
+              f"decision (setup --write --replace {key} takes the detected one)")
+    if missing:
+        print(f"factory: {len(missing)} detected key(s) missing — `factory.sh setup --write` adds them")
+        raise SystemExit(1)
+    print("factory: the profile declares everything detection finds")
+elif mode == "write":
+    path, replace = rest[0], (rest[1] if len(rest) > 1 else "")
+    if replace and replace not in values:
+        raise SystemExit(f"factory: detection finds no `{replace}:` — nothing to replace")
+    profile = active(path)
+    missing, _ = proposals(values, profile)
+    lines = open(path, encoding="utf-8").read().splitlines()
+    changed = []
+    if replace and replace in profile:
+        for i, line in enumerate(lines):
+            if not line.lstrip().startswith("#") and line.split(":", 1)[0].strip() == replace:
+                lines[i] = f"{replace}: {values[replace]}"
+                changed.append(f"{replace} (replaced)")
+                break
+    for key, value in missing:
+        slot = next((i for i, line in enumerate(lines)
+                     if re.match(rf"#\s*{re.escape(key)}\s*:", line)), None)
+        if slot is None:
+            lines.append(f"{key}: {value}")
+        else:
+            lines[slot] = f"{key}: {value}"
+        changed.append(key)
+    if changed:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+        print(f"factory: {path} — wrote {', '.join(changed)}; every other line is as it was")
+    else:
+        print(f"factory: {path} already declares everything detection finds — nothing written")
+else:
+    raise SystemExit(f"factory: unknown presets mode {mode}")
+PRESETEOF
+}
+
+write_profile() {                           # write_profile <skill folder>
+  # Prefill from what the project already states, so the profile is not a second truth.
+  local from=$1 dir
+  dir=$(presets_dir "$from") || dir=""
+  must "write the stack profile" presets "$dir" new "$from/factory-run/templates/factory.profile.yaml.tmpl" "$PROFILE"
 }
 
 # The instruction every tool reads: a block in AGENTS.md between two markers. Only the block is the
@@ -906,9 +1099,11 @@ This project delivers stories through the dca-factory pipeline. At the start of 
 person names a task right away, run `python3 .agents/factory/story-gate.py --status --brief`, show
 its lines, and ask what they want to do: write or release a story (`/factory-backlog`), answer a
 waiting question (`/factory-decisions`), work the backlog (`/factory-run`; to keep listening, a tool
-that repeats a prompt runs it again — in Claude Code `/loop /factory-run`), or look closer (`/factory-status`). A session never runs `factory.sh run` or
-`backlog` — they start a tool process per stage. One worker per checkout: a managing session writes
-backlog and decision files only.
+that repeats a prompt runs it again — in Claude Code `/loop /factory-run`), or look closer (`/factory-status`).
+A session never runs `factory.sh run` — it starts a tool process per stage. One worker per checkout: a
+managing session writes backlog and decision files only. Every change — by a stage or by hand in a
+session — passes `bash .agents/factory/factory.sh check` before it is committed; the commit hook runs it
+on what is staged.
 """ + end
 text = open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
 if start in text and end in text:
@@ -945,15 +1140,19 @@ wanted = [f"Bash({python} .agents/factory/story-gate.py:*)"]
 profile = ".agents/factory/factory.profile.yaml"
 if os.path.isfile(profile):
     for line in open(profile):
-        if line.startswith(("compile:", "test:", "e2eTest:", "architecture:", "format:")):
+        if line.startswith(("compile:", "test:", "test.", "e2eTest:", "architecture:", "format:", "formatFix:")):
             command = line.split(":", 1)[1].strip().strip("\"'")
             head = command.split()[0] if command else ""
             if head and not head.startswith("{{"):
                 wanted.append(f"Bash({head}:*)")
-# the reading commands, so a session looks without being asked; `run` and `backlog` are not in it —
-# they start a tool process per stage, and the runner refuses them inside a session anyway
-for verb in ("status", "usage", "decisions", "schedule"):
+# the reading commands, so a session looks without being asked; `run` is not in it — it starts a
+# tool process per stage, and the runner refuses it inside a session anyway
+for verb in ("status", "decisions", "backlog", "setup --check", "verify"):
     wanted.append(f"Bash(bash .agents/factory/factory.sh {verb}:*)")
+# what an earlier install allowed under verbs that are gone
+retired = {f"Bash(bash .agents/factory/factory.sh {verb}:*)" for verb in ("usage", "schedule")}
+removed = [entry for entry in allow if entry in retired]
+allow[:] = [entry for entry in allow if entry not in retired]
 added = [entry for entry in dict.fromkeys(wanted) if entry not in allow]
 allow.extend(added)
 # The session starts knowing where the pipeline stands: the hook's output lands in its context. It
@@ -971,6 +1170,8 @@ with open(path, "w") as handle:
     handle.write("\n")
 print("factory: .claude/settings.json allows " + ", ".join(added) if added else
       "factory: .claude/settings.json already allowed the gate")
+if removed:
+    print("factory: .claude/settings.json no longer allows " + ", ".join(removed) + " — verbs the runner does not have")
 PYEOF
 }
 
@@ -1109,7 +1310,7 @@ $TASKS/$story/. Do the stage yourself in this session; do not delegate it. Do no
 }
 
 gate() {                                    # gate <stage> <story>
-  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh install'" >&2; return 2; }
+  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
   local report="$TASKS/$2/.gate-$1.txt" journal="$TASKS/$2/.verify"
   mkdir -p "$TASKS/$2" "$journal"
   "$PY" "$GATE" --story "$2" --stage "$1" 2>&1 | tee "$report"
@@ -1364,7 +1565,7 @@ run_story() {
 run_backlog() {                             # run_backlog <tool> <watch> <interval> <dry>
   local tool=$1 watch=$2 interval=$3 dry=$4
   local out previous="" next story from last="" code
-  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh install'" >&2; return 2; }
+  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
   while :; do
     # waiting is working too: the claim is renewed on every look, so a watch that waits for an answer
     # for hours is not mistaken for a crashed one
@@ -1418,38 +1619,124 @@ run_backlog() {                             # run_backlog <tool> <watch> <interv
   done
 }
 
+# --- setup -------------------------------------------------------------------
+
+# The commit hook and the worker lock live in .git, so the pipeline needs a repository. Asked with
+# `rev-parse`, not "has a commit": a repository without one is a fine place to start.
+require_git() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 && return 0
+  echo "factory: not a git repository — 'git init' first; the commit hook and the worker lock live in .git." >&2
+  return 1
+}
+
+installed() { [ -f "$GATE" ] && [ -f .agents/factory/factory.sh ]; }
+
+# What detection finds against the profile — read-only in every state. Exit 1 when the runner is
+# missing or a detected key is absent; a value that differs from detection is a person's decision
+# and only a note, because a check that goes red on a decision gets switched off.
+setup_check() {                             # setup_check [brief]
+  local brief=${1:-} dir
+  if ! installed; then
+    [ -n "$brief" ] && return 0
+    echo "factory: no runner — factory.sh setup"
+    return 1
+  fi
+  dir=$(presets_dir) || dir=""
+  if [ -z "$dir" ]; then
+    [ -n "$brief" ] && return 0
+    echo "factory: no presets found — no pipeline beside this project to detect with (FACTORY_PLUGIN_DIR names one)"
+    return 0
+  fi
+  if [ ! -f "$PROFILE" ]; then
+    [ -n "$brief" ] && return 0
+    echo "factory: no stack profile at $PROFILE — 'factory.sh update' writes one from detection"
+    return 1
+  fi
+  presets "$dir" check "$PROFILE" ${brief:+brief}
+}
+
+# Adds what detection finds and the profile lacks; never overwrites a value a person wrote, except the
+# one key --replace names. The Claude allow list is derived from the profile's commands, so it follows.
+setup_write() {                             # setup_write [<key>]
+  local dir
+  installed || { echo "factory: no runner — factory.sh setup"; return 1; }
+  [ -f "$PROFILE" ] || { echo "factory: no stack profile at $PROFILE — 'factory.sh update' writes one"; return 1; }
+  dir=$(presets_dir) || dir=""
+  [ -n "$dir" ] || { echo "factory: no presets found — nothing to write from (FACTORY_PLUGIN_DIR names a pipeline)" >&2; return 2; }
+  presets "$dir" write "$PROFILE" ${1:+"$1"} || return $?
+  [ -d .claude ] && write_claude_permissions
+  return 0
+}
+
 # --- main --------------------------------------------------------------------
 
 [ $# -ge 1 ] || usage
 command=$1; shift
 story=""; tool=""; from="plan"; dry=""; source_dir=""; copy_mode=""; watch=""; interval=60
+setup_mode=""; replace_key=""; want_usage=""; want_brief=""; session_start=""
 
 # The reading commands are the gate's; the runner passes them on, so a project calls one script.
 read_command() {                            # read_command <gate flags…>
-  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh install' from the plugin" >&2; exit 2; }
+  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup' from the plugin" >&2; exit 2; }
   exec "$PY" "$GATE" "$@"
 }
 case "$command" in
-  status)    case "${1:-}" in
-               --brief) shift; [ -f "$GATE" ] || exit 0; read_command --status --brief "$@" ;;
-               "") check_gate_freshness; read_command --status ;;
-               --story) [ $# -eq 2 ] || usage; check_gate_freshness; read_command --status --story "$2" ;;
-               -*) usage ;;
-               *) [ $# -eq 1 ] || usage; check_gate_freshness; read_command --status --story "$1" ;;
-             esac ;;
-  schedule)  [ $# -eq 0 ] || usage; read_command --schedule ;;
-  usage)     read_command --usage "$@" ;;
+  status)
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --story) [ $# -ge 2 ] || usage; story=$2; shift 2 ;;
+        --usage) want_usage=1; shift ;;
+        --brief) want_brief=1; shift ;;
+        --session-start) session_start=1; shift ;;
+        *) usage ;;
+      esac
+    done
+    if [ -n "$want_brief" ]; then
+      [ -f "$GATE" ] || exit 0
+      setup_check brief
+      read_command --status --brief ${session_start:+--session-start}
+    fi
+    [ -n "$want_usage" ] && read_command --usage ${story:+--story "$story"}
+    check_gate_freshness
+    read_command --status ${story:+--story "$story"} ;;
+  backlog)
+    case "$*" in
+      "") read_command --schedule ;;
+      --check) read_command --check-backlog ;;
+      *) usage ;;
+    esac ;;
   decisions) read_command --list-decisions "$@" ;;
-  change)    read_command --change "$@" ;;
-  parity)    [ $# -eq 1 ] || usage; read_command --parity "$1" ;;
+  check)
+    case "${1:-}" in
+      --parity) [ $# -eq 2 ] || usage; read_command --parity "$2" ;;
+      *) read_command --change "$@" ;;
+    esac ;;
+  verify)
+    case "${1:-}" in
+      --story)
+        [ $# -eq 2 ] || usage
+        [ -f .agents/factory/observe.py ] || {
+          echo "factory: no observer at .agents/factory/observe.py — 'factory.sh update' copies it there" >&2; exit 2; }
+        exec "$PY" .agents/factory/observe.py --story "$2" ;;
+      --fixtures)
+        [ $# -eq 1 ] || usage
+        skills=$(plugin_skills) && [ -f "$skills/factory-verify/scripts/verify.py" ] || {
+          echo "factory: no pipeline found whose fixtures could run — FACTORY_PLUGIN_DIR names one" >&2; exit 2; }
+        echo "factory: the machinery of $skills"
+        exec "$PY" "$skills/factory-verify/scripts/verify.py" ;;
+      *) usage ;;
+    esac ;;
 esac
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --story) story=$2; shift 2 ;;
     --tool) tool=$2; shift 2 ;;
-    --from) case "$command" in install|update) source_dir=$2 ;; *) from=$2 ;; esac; shift 2 ;;
+    --from) case "$command" in setup|update) source_dir=$2 ;; *) from=$2 ;; esac; shift 2 ;;
     --copy) copy_mode=1; shift ;;
+    --check) [ "$command" = setup ] || usage; setup_mode=check; shift ;;
+    --write) [ "$command" = setup ] || usage; setup_mode=write; shift ;;
+    --replace) [ "$command" = setup ] && [ $# -ge 2 ] || usage; replace_key=$2; shift 2 ;;
     --dry-run) dry=1; shift ;;
     --watch) watch=1; shift ;;
     --interval) interval=$2; shift 2 ;;
@@ -1461,30 +1748,46 @@ while [ $# -gt 0 ]; do
 done
 
 case "$command" in
-  install) install_skills "${tool:-all}" "$source_dir" "$copy_mode" ;;
+  setup)
+    [ -z "$replace_key" ] || [ "$setup_mode" = write ] || usage
+    require_git || exit 1
+    case "$setup_mode" in
+      check) setup_check; exit $? ;;
+      write) setup_write "$replace_key"; exit $? ;;
+    esac
+    if installed; then
+      # Idempotent: an installed pipeline is `update`'s to replace. Only a tool named explicitly that
+      # has no skills here yet is missing, and that is what setup adds.
+      if [ -n "$tool" ] && [ -n "$(skill_dir_of "$tool")" ] && [ -z "$(skills_mode "$(skill_dir_of "$tool")")" ]; then
+        install_project "$tool" "$source_dir" "$copy_mode"
+        exit $?
+      fi
+      echo "factory: the pipeline is installed here — setup installs nothing ('factory.sh update' replaces its files)"
+      setup_check
+      exit 0
+    fi
+    install_project "${tool:-all}" "$source_dir" "$copy_mode" ;;
   update)  update_project "$source_dir" ;;
   run)
-    [ -n "$story" ] || usage
     [ -n "$tool" ] || tool=$(detect_tool)
     [ -n "$tool" ] || [ -n "${FACTORY_TOOL_CMD:-}" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
-    tool=${tool:-stand-in}
     case "$MAX_STAGES" in *[!0-9]*) echo "factory: --max-stages takes a number" >&2; exit 2 ;; esac
     case "$STORY_BUDGET" in *[!0-9]*) echo "factory: --story-budget takes a number of tokens" >&2; exit 2 ;; esac
-    check_gate_freshness                    # once per invocation; run_story recurses on a verdict
-    [ -n "$dry" ] || refuse_nested || exit $?
-    check_carriers "$tool" || exit $?
-    check_contract_first || exit $?
-    check_local_context "$tool"
-    isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
-    [ -n "$dry" ] || take_checkout || exit $?
-    run_story "$story" "$tool" "$from" "$dry"
-    ;;
-  backlog)
-    [ -n "$tool" ] || tool=$(detect_tool)
-    [ -n "$tool" ] || [ -n "${FACTORY_TOOL_CMD:-}" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
+    if [ -n "$story" ]; then
+      [ -z "$watch" ] || { echo "factory: --watch works the backlog off — it takes no --story" >&2; exit 2; }
+      tool=${tool:-stand-in}
+      check_gate_freshness                  # once per invocation; run_story recurses on a verdict
+      [ -n "$dry" ] || refuse_nested || exit $?
+      check_carriers "$tool" || exit $?
+      check_contract_first || exit $?
+      check_local_context "$tool"
+      isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
+      [ -n "$dry" ] || take_checkout || exit $?
+      run_story "$story" "$tool" "$from" "$dry"
+      exit $?
+    fi
+    # Without --story: the backlog, story after story in the order the schedule names.
     case "$interval" in ''|*[!0-9]*) echo "factory: --interval takes whole seconds" >&2; exit 2 ;; esac
-    case "$MAX_STAGES" in *[!0-9]*) echo "factory: --max-stages takes a number" >&2; exit 2 ;; esac
-    case "$STORY_BUDGET" in *[!0-9]*) echo "factory: --story-budget takes a number of tokens" >&2; exit 2 ;; esac
     # Bounded both ways: below a second the watch is a busy loop, above an hour an answer waits
     # longer than anyone expects to.
     [ "$interval" -lt 1 ] && interval=1
