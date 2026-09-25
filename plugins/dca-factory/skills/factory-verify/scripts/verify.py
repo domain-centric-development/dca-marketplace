@@ -1010,7 +1010,8 @@ def verify_runner(runner, verbose=False):
             check("install: a carrier the profile names is placed in .claude/skills beside the pipeline, "
                   "no other craft skill", os.path.isdir(skills_dir) and not os.path.islink(skills_dir)
                   and os.path.isfile(os.path.join(skills_dir, carrier, "SKILL.md"))
-                  and "factory-run" in entries and len(entries) == 14,
+                  and "factory-run" in entries
+                  and len(entries) == 1 + sum(os.path.isfile(os.path.join(source, d, "SKILL.md")) for d in os.listdir(source)),
                   f"exit {code}; {entries}")
             code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
             check("install: after it, the runner's carrier check passes", code == 0 and "── stage plan" in output,
@@ -1776,7 +1777,7 @@ exit 0
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
         pipeline = {"factory-run", "stage-plan", "stage-test", "stage-build", "stage-tidy",
                     "stage-judge", "stage-document", "factory-backlog", "factory-setup",
-                    "factory-decisions", "factory-status", "factory-update"}
+                    "factory-decisions", "factory-status", "factory-update", "factory-help"}
         check("install: a tool without plugins also gets the craft the profile may name",
               pipeline.issubset(set(entries)) and len(entries) > len(pipeline),
               f"{len(entries)} skills: {sorted(entries)[:6]}…")
@@ -3209,6 +3210,22 @@ def main(argv=None):
             ("status --format json: the model, readable by a tool",
              json.loads(run("--format", "json"))["total"] == 2, ""),
         ]
+        helper = lambda *more: subprocess.run([sys.executable, args.gate, "--help-view", *more], cwd=root,
+                                              capture_output=True, text=True, encoding="utf-8").stdout
+        help_text, help_md = helper(), helper("--format", "md")
+        flow = json.loads(helper("--format", "json"))["flow"]
+        expectations += [
+            ("help: the flow in a fixed order, with where this project stands — an open question marked on answer",
+             [f["step"] for f in flow] == ["describe", "skeleton", "set up", "write stories", "run", "answer", "accept"]
+             and {f["step"]: f["mark"] for f in flow}["answer"] == "question"
+             and {f["step"]: f["mark"] for f in flow}["write stories"] == "done", flow),
+            ("help: every command in its agent and its shell form, the marks and the files",
+             all(c in help_text for c in ("/factory-status", "factory.sh status", "/factory-decisions",
+                                          "factory.sh decisions", "factory.sh help", "Marks", "Files", "Next"))
+             and "`factory.sh backlog --check`" in help_md and "| 👀 | `!` |" in help_md, help_text[-400:]),
+            ("help: the same files give the same text, in the terminal and in the session",
+             help_text == helper() and help_md == helper("--format", "md") and "\x1b[" not in help_text, ""),
+        ]
         story_view = run("--story", "STORY-2")
         stages = part(story_view, "Stages", "\n" + "─" * 72)
         expectations += [
@@ -4055,6 +4072,19 @@ def main(argv=None):
                              and "git mv backlog project/backlog" in planned and "no story 'STORY-1' under project/backlog" in planned,
                              f"{brief.strip()} | {planned.strip()[-200:]}"))
     with tmpdir() as root:
+        # before anything is there: the runner's help explains the factory from the plugin's gate
+        shown = subprocess.run(["bash", args.runner, "help", "--format", "json"], cwd=root, capture_output=True,
+                               text=True, encoding="utf-8")
+        try:
+            fresh = json.loads(shown.stdout)
+        except ValueError:
+            fresh = {}
+        expectations.append(("help: works before the pipeline is installed, every step still to do, describing first",
+                             shown.returncode == 0 and fresh and all(f["mark"] == "none" for f in fresh["flow"])
+                             and fresh["next"]["action"]["skill"] == "/factory-setup"
+                             and {f["step"]: f["shell"] for f in fresh["flow"]}["set up"] == "setup",
+                             f"exit {shown.returncode}; {shown.stdout[:200]} {shown.stderr[:200]}"))
+    with tmpdir() as root:
         build_project(root)
         brief = subprocess.run([sys.executable, args.gate, "--status", "--brief"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
@@ -4082,7 +4112,7 @@ def main(argv=None):
     expectations.append(("vocabulary: no skill, reference or template names a sample's domain",
                          not hits, ", ".join(hits[:5])))
     # the skills call only the runner's verbs, which mirror them (WP-62 item 11)
-    verbs = {"setup", "backlog", "run", "status", "decisions", "update", "verify", "check"}
+    verbs = {"setup", "backlog", "run", "status", "decisions", "help", "update", "verify", "check"}
     called = []
     for folder, _, names in os.walk(skills_root):
         for name in names:

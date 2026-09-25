@@ -136,10 +136,14 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
 
 ### Phase 2 — Decisions (ask the user)
 
-Ask the user, bundling related questions into one exchange — through a structured question tool where the
-harness has one, in prose otherwise.
+`reference/questions.md` is the catalogue of every question this skill may ask, each with where its answer is
+looked up first and when it is asked at all. After the summary, look every answer up and ask **only the open
+ones — all at once, in catalogue order, word for word**, with the options and the default the catalogue gives;
+through a structured question tool where the harness has one, in prose otherwise. Ask nothing the catalogue
+does not list. Called by `dca-new`, take the answers it hands over; they were asked in its one pass. What the
+decisions below mean — the knowledge behind each question — follows; the catalogue holds the wording.
 
-A. **Marker policy** — per existing marker-like type:
+A. **Marker policy** (INIT-MARKERS) — per existing marker-like type:
    - `Migrate` — replace it with the package marker (`extends BaseAggregateRoot<T, ID>`, `implements Value`,
      …); mechanical, the old type is deleted.
    - `Alias` — keep the type, make it extend or implement the package marker
@@ -147,7 +151,7 @@ A. **Marker policy** — per existing marker-like type:
      rules see every implementor. Recommend this for large code bases; note that the rules still report the
      class by *its* markers, so an alias must carry the same generics.
 
-B. **Layout** — every deviation from the DCA defaults becomes a `DcaLayout` builder call (Java / .NET):
+B. **Layout** (INIT-LAYOUT where folders cannot be mapped) — every deviation from the DCA defaults becomes a `DcaLayout` builder call (Java / .NET):
    - `adapter/in`, `adapter/out` → `withIncomingSubpackage("in")`, `withOutgoingSubpackage("out")` /
      `WithIncomingSegment("In")`, `WithOutgoingSegment("Out")`
    - published contract package other than `api` / `events` → `withApiSubpackage`, `withEventsSubpackage` /
@@ -167,7 +171,7 @@ B. **Layout** — every deviation from the DCA defaults becomes a `DcaLayout` bu
    `controller/`–`service/`–`repository/`) are a migration, not a configuration: offer `Adopt DCA naming` (the
    user moves code later; expect violations until then) or leaving the affected sets out for now.
 
-C. **Rule sets** — multi-select; the answer is the `dca.rules.sets` line:
+C. **Rule sets** (INIT-RULES) — multi-select; the answer is the `dca.rules.sets` line:
    - **Always:** `cycles`
    - **Recommended:** `layered`, `onion`, `hexagonal`, `naming`
    - **DDD-specific:** `tactical`, `strategic`, `contextmap`, `advanced`
@@ -183,28 +187,27 @@ C. **Rule sets** — multi-select; the answer is the `dca.rules.sets` line:
    visible in the report — prefer that over a silent gap. Existing violations the team accepts as a baseline
    are `dca-add freeze`, after this skill.
 
-D. **Suffix conventions** — DCA's defaults are `*UseCase` for the use-case class, `*InputPort` for its
+D. **Suffix conventions** (INIT-SUFFIX where the code uses two) — DCA's defaults are `*UseCase` for the use-case class, `*InputPort` for its
    interface, `*Controller` for MVC (server-rendered) controllers and `*Resource` for REST adapters (.NET
    default `Controller` for both). `*ApplicationService` / `*Service` → `withUseCaseSuffix(...)`; `*Page` /
    `*Handler` for MVC controllers → `withControllerSuffix(...)`; `*Controller` / `*Endpoint` for REST →
    `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention.
 
-E. **Spring Modulith** (Java, only when detected) — add `dev.domaincentric:dca-archunit-spring-modulith` and a
+E. **Spring Modulith** (INIT-MODULITH; Java, only when detected) — add `dev.domaincentric:dca-archunit-spring-modulith` and a
    second thin test, `class ModulithTest extends DcaSpringModulithTest` with the same layout? It runs
    Modulith's own analyzer (not an ArchUnit rule) and excludes the architecture tests in the base package from
    Modulith's root module. Requires `spring-modulith-starter-test` on the class path.
 
-F. **Context map** — install `ContextMapDocumentationTest`, which renders `docs/architecture/context-map.md`
-   from the `@BoundedContext` / `@Upstream` / `@Partnership` declarations and fails when the committed file is
-   stale? Recommend yes for more than one context. Java and .NET alike. That file is the map *as built*; the
+F. **Context map** (INIT-CONTEXT-MAP, never asked) — `ContextMapDocumentationTest` renders
+   `docs/architecture/context-map.md` from the `@BoundedContext` / `@Upstream` / `@Partnership` declarations and
+   fails when the committed file is stale. Installed when more than one context is declared. Java and .NET alike. That file is the map *as built*; the
    designed map is the project description's (`dca-describe`, through `context-map`), and a difference
    between the two is a finding.
 
-G. **Project instructions (`AGENTS.md`)** — the method's section, read by every tool. Always written; the
-   question is only the catalog:
-   - `Vendored catalog` (default) — `dca-knowledge` resolves the catalog vendored with this plugin.
-   - `Live catalog` — additionally set `catalog_path:` in the conventions file, pointing at a locally
-     regenerable `dca-knowledge-catalog/bundle` (verify it holds `index.md` and `log.md`).
+G. **Project instructions (`AGENTS.md`)** (INIT-CATALOG, never asked) — the method's section, read by every
+   tool, always written. `dca-knowledge` resolves the catalog vendored with this plugin; a live catalog is
+   `catalog_path:` in the conventions file, set by hand, pointing at a locally regenerable
+   `dca-knowledge-catalog/bundle` (verify it holds `index.md` and `log.md`).
 
 ### Phase 3 — Generation
 
@@ -342,23 +345,25 @@ the start.
 
 ## After init — for the user
 
-```
-✓ DCA added
-  - Packages: dev.domaincentric:dca-building-blocks + dca-spring, dca-archunit (+ dca-archunit-spring-modulith) {versions}   (or DomainCentric.*)
-  - Architecture test: {path}; rule sets: {dca.rules.sets or "all"}
-  - Contexts declared: {N} (@BoundedContext), shared kernel: {yes|no}
-  - Markers: {migrated|aliased|none found}
-  - Extras: {ContextMapDocumentationTest | ModulithTest (DcaSpringModulithTest) | —}
-  - Transactions: {data starter present | in-memory: spring-boot-transaction + PlatformTransactionManager bean added, replace with a real manager when persistence arrives}
-  - AGENTS.md: DCA section {added|replaced}; conventions file {path}; skills by role: {roles named}
-  - Git: {repository present | none — this skill creates none}
+The report is read from the disk, so it has the same sections and fields every time — Stack · Generator ·
+DCA part · Formatter · Browser runner · Proof · Git · Open. Run from the project root, with the result of the
+Phase 4 run:
 
-Next steps:
-  - Run {verifyCommand} for the baseline; tune dca-archunit.properties, never delete a rule silently.
-  - /dca-new context | usecase | aggregate | store | domainservice for new code; /dca-review triages existing violations.
+```bash
+python3 <this skill folder>/scripts/dca-report.py --mode init --proof architecture=passed
 ```
 
-Then only hint, never do:
+(`failed` where the run failed, left out where it did not run.) Show the output as it is. Called by `dca-new`,
+skip it — `dca-new` shows the one report at its end. Otherwise add nothing after it but this line:
+
+```
+Next: run the architecture test for the baseline and tune dca-archunit.properties, never delete a rule silently — /dca-new for new code, /dca-review to triage existing violations.
+```
+
+The Transactions choice (Phase 3, Java step 1) is the one decision the report cannot read back from a file
+name alone: say it in one sentence before the report where the in-memory placeholder was added.
+
+The report's Open section already names what is missing; the skills that close it — hint, never do:
 
 - a web surface (templates, static pages, a frontend) and no browser runner → `dca-add browser`;
 - no formatter in the build → `dca-add formatter`;
@@ -380,6 +385,10 @@ conventions file the `AGENTS.md` section names — `.agents/dca/conventions.md` 
   `dca-add rules`
 - `reference/resolved-configuration.md` — the resolved-configuration section of the conventions file, shared
   with `dca-new`
+- `reference/questions.md` — every question this skill may ask, word for word, with where its answer is looked
+  up first; `dca-new` asks the entries that apply to an empty directory in its one pass
+- `scripts/dca-report.py` — the report of this skill and of `dca-new project`, read from the disk
+  (`--self-test` checks it)
 
 ## Anti-patterns to avoid
 

@@ -24,6 +24,13 @@ has what a pipeline stage has. After that the daily work: `/dca-modelling` build
 cannot (aggregate design, use-case granularity, port semantics, naming drift), and `/dca-knowledge`
 answers a question about DCA from the vendored catalog and cites the node it read.
 
+The same start gives the same questions and the same report. `/dca-describe`, `/dca-new project` and
+`/dca-init` each ask from a question catalogue (`reference/questions.md`): every answer is looked up first,
+and only the open ones are asked — all at once, in the catalogue's order, word for word. `/dca-new project`
+asks the description's, its own and `/dca-init`'s open questions in one pass before the generator runs.
+Both end with a report read from the disk (`dca-init/scripts/dca-report.py`) — Stack, Generator, DCA part,
+Formatter, Browser runner, Proof, Git, Open — with every field present and `—` where there is nothing.
+
 ## What's inside
 
 ### Skills (8)

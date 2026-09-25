@@ -60,8 +60,8 @@ existing project: point to `dca-init` instead.
 
 Read `AGENTS.md`: the section between `<!-- dca-describe: start -->` and `<!-- dca-describe: end -->` names the
 technical and the product description (`- tech:`, `- product:`; `project/tech.md` and `project/product.md` by
-default). Where there is no description, run `dca-describe` first — it writes them with the person and never
-invents an answer. Take from them:
+default). Where there is none, its entries are all open and asked in the one pass below; `dca-describe` then
+writes the description from those answers and never invents one. Take from it:
 
 - **the stack** — Spring Boot (Gradle or Maven, the Java line) or .NET (the SDK line);
 - **the frontend approach** — server-rendered pages, a client application, or none;
@@ -69,21 +69,18 @@ invents an answer. Take from them:
   browser runner (step 6);
 - **the persistence** — a data starter or package now, or in-memory until a later story.
 
-A decision the description leaves open is a question to the person, and the answer goes into the description
-through `dca-describe`, not into this run alone.
+**Every question in one pass, from the catalogue.** `reference/questions.md` lists every decision this mode
+needs — the description's open entries (`dca-describe`'s catalogue), this mode's own (base package, formatter
+style, browser runner, selector attribute, how the suite reaches the application) and `dca-init`'s entries
+that apply to an empty directory — each with where its answer is looked up first. Look every answer up, then
+ask **only the open ones — all at once, before the generator runs, in catalogue order, word for word**, with
+the options and the default the catalogue gives; through a structured question tool where the harness has
+one, in prose otherwise. Ask nothing the catalogue does not list, and nothing later in the run: a question
+halfway stops the run with a skeleton on disk.
 
-**Ask the later steps' questions now, in one pass.** Steps 5 and 6 each need a decision the description does
-not carry, and asking them there stops the run halfway, with a skeleton on disk. Put them to the person here,
-together with anything the description leaves open, before the generator runs:
-
-- **the formatter style** (step 5) — for Java `googleJavaFormat()`, `palantirJavaFormat()` or `eclipse()` in
-  Spotless; for .NET the SDK's `.editorconfig` rules and which severities `dotnet format` reports;
-- **the browser-test defaults** (step 6, only where the product has pages) — the runner (Playwright in the
-  project's language unless they name another), the stable-selector attribute (`data-test` by default), and
-  whether the application starts inside the test on a free port or the suite points at a running one.
-
-Hand the answers to `dca-add formatter` and `dca-add browser`; they are recorded where those steps put them —
-the build file and the conventions file — not in the description.
+An answer goes where the catalogue says: a description entry into the description through `dca-describe`;
+the formatter and browser answers to `dca-add formatter` and `dca-add browser`, which record them in the build
+file and the conventions file; the rule sets to `dca-init`.
 
 ### 2. The skeleton comes from a generator
 
@@ -161,18 +158,20 @@ The project is done when all three hold — show each:
 
 ### Report
 
-```
-✓ New DCA project
-  - Stack: {Spring Boot x.y (Gradle|Maven), Java n | .NET n}; generator: {start.spring.io | dotnet new | offline reference}
-  - Description: {read from project/… | written by dca-describe}
-  - DCA: dca-init — {packages, rule sets, contexts declared}
-  - Formatter: {tool}; browser runner: {tool | none — no pages}
-  - Proof: starts ✓ · suites green ✓ · smoke test red with an empty title ✓
-  - Git: initialised, nothing committed
+The report is read from the disk, so it has the same sections and fields every time — Stack · Generator ·
+DCA part · Formatter · Browser runner · Proof · Git · Open. Run `dca-init`'s report script from the project
+root, with the generator you used and the result of each proof step:
 
-Next:
-  - The first commit is yours.
-  - A delivery pipeline: /factory-setup, then /factory-backlog. By hand: /dca-new context | usecase | aggregate.
+```bash
+python3 <dca-init skill folder>/scripts/dca-report.py --mode new --generator "start.spring.io" \
+  --proof start=passed --proof suites=passed --proof smoke=passed
+```
+
+(`--generator "dotnet new"` or `"offline reference"`; a proof step that failed is `failed`, one not run is left
+out and shows as open.) Show the output as it is and add nothing after it but this one line:
+
+```
+Next: the first commit is yours — then /factory-setup and /factory-backlog for a delivery pipeline, or /dca-new context | usecase | aggregate by hand.
 ```
 
 ---

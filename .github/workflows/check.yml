@@ -46,6 +46,7 @@ jobs:
             plugins/dca-factory/skills/factory-run/scripts/story-gate.py \
             plugins/dca-factory/skills/factory-verify/scripts/verify.py \
             plugins/dca-factory/skills/factory-verify/scripts/observe.py \
+            plugins/dca-core/skills/dca-init/scripts/dca-report.py \
             scripts/render-rule-catalog.py
       - name: Manifests are valid JSON
         run: |
@@ -53,6 +54,8 @@ jobs:
             ['.claude-plugin/marketplace.json'] + glob.glob('plugins/*/.claude-plugin/plugin.json')]"
       - name: Every skill has a name and a description
         run: python scripts/check-skills.py --self-test && python scripts/check-skills.py
+      - name: the report of dca-new and dca-init
+        run: python plugins/dca-core/skills/dca-init/scripts/dca-report.py --self-test
       - name: factory-verify
         run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py
 

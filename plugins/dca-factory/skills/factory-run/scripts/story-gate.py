@@ -132,7 +132,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 8
-VERSION = "0.35.6"
+VERSION = "0.36.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3278,7 +3278,7 @@ def status_brief(cwd, backlog, tasks, session_start=False):
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
               "release a story (/factory-backlog), answer a waiting question (/factory-decisions), start working "
               "the backlog (/factory-run, which keeps asking the schedule; in Claude Code also /loop /factory-run), "
-              "or look closer (/factory-status). A session never runs `factory.sh run` — it starts a tool "
+              "look closer (/factory-status), or learn how the factory works (/factory-help). A session never runs `factory.sh run` — it starts a tool "
               "process per stage. A managing session writes backlog and decision files only; the worker is the "
               "one writer in the checkout.")
     return 0
@@ -3382,6 +3382,144 @@ def status(cwd, backlog, tasks, story_filter=None, fmt="text", colour="auto", li
     else:
         print(text)
     return 0
+
+
+def factory_help(cwd, backlog, tasks, fmt="text", colour="auto"):
+    """The factory explained in one fixed view: the flow with where this project stands in it, every
+    command in its agent and its shell form, the marks, the files. The text is the same everywhere;
+    only the marks in the flow and the Next line come from the project's files."""
+    try:
+        model = help_model(cwd, backlog, tasks)
+    except GateError as error:
+        print(f"help: {error}")
+        return 1
+    if fmt == "json":
+        print(json.dumps(json_ready(model), indent=2, ensure_ascii=False))
+    else:
+        print(render_help_md(model) if fmt == "md" else render_help_text(model, use_colour(colour)))
+    return 0
+
+
+BUILD_FILES = ("build.gradle", "build.gradle.kts", "pom.xml", "package.json", "pyproject.toml", "go.mod", "Cargo.toml")
+SHELL_NAME = "factory.sh"          # the help's tables name the runner short; the view says its full path once
+
+HELP_COMMANDS = (
+    ("where it stands", "what runs, what waits for you, every story with its times and tokens",
+     "/factory-status", "status"),
+    ("one story", "its stages, passes and tokens", "/factory-status <story>", "status --story <story>"),
+    ("the backlog", "the epics and stories, their state, the next one", "/factory-backlog", "backlog"),
+    ("check the backlog", "the plan gate's checks over every open story, writing nothing", "/factory-backlog",
+     "backlog --check"),
+    ("the inbox", "the open questions and acceptances, and how to answer them", "/factory-decisions", "decisions"),
+    ("the profile", "what detection finds against the stack profile", "/factory-setup", "setup --check"),
+    ("observe a story", "what a delivered story changed, measured from its files", "/factory-verify <story>",
+     "verify --story <story>"),
+    ("update the pipeline", "the newest pipeline found, same tools", "/factory-update", "update"),
+    ("this help", "the flow, the commands, the marks, the files", "/factory-help", "help"),
+)
+
+HELP_MARKS = (("look", "waits for your look — an acceptance"), ("question", "waits for your answer"),
+              ("stopped", "stopped — read why before it runs again"), ("running", "running"),
+              ("done", "done"), ("none", "nothing to do here now"))
+
+
+def help_model(cwd, backlog, tasks):
+    profile_path = resolve_profile(None, cwd)
+    profile = read_profile(profile_path)
+    status_view = status_model(cwd, backlog, tasks)
+    described = all(os.path.isfile(os.path.join(cwd, location(profile, k))) for k in ("product", "tech"))
+    has_build = any(os.path.isfile(os.path.join(cwd, name)) for name in BUILD_FILES) \
+        or any(name.endswith((".sln", ".slnx", ".csproj")) for name in os.listdir(cwd))
+    marks = {m["mark"] for m in status_view["waiting"]}
+    rows = status_view["rows"]
+    delivered = bool(rows) and all(r["state"] in ("delivered", "superseded") for r in rows)
+    flow = [
+        dict(step="describe", what="the product, the technical decisions, the designed domain — under project/",
+             skill="/factory-setup", shell="", mark="done" if described else "none"),
+        dict(step="skeleton", what="a runnable project from a generator, with the architecture test and a formatter",
+             skill="/dca-new project", shell="", mark="done" if has_build else "none"),
+        dict(step="set up", what="the stack profile: build, test, format and browser commands, the carriers",
+             skill="/factory-setup", shell="setup --check" if profile_path else "setup",
+             mark="done" if profile_path else "none"),
+        dict(step="write stories", what="epics and stories with acceptance criteria; a story runs once released",
+             skill="/factory-backlog", shell="", mark="done" if rows else "none"),
+        dict(step="run", what="plan → test → build → tidy → judge → document, a gate between the stages",
+             skill="/factory-run [<story>]", shell="run [--story <story>]",
+             mark="running" if status_view["running"] else ("done" if delivered else "none")),
+        dict(step="answer", what="a question a stage may not decide alone stops its story until answered",
+             skill="/factory-decisions", shell="decisions", mark="question" if "question" in marks else "none"),
+        dict(step="accept", what="look at the result: accepted delivers it, a correction goes back into the story",
+             skill="/factory-decisions", shell="decisions", mark="look" if "look" in marks else "none"),
+    ]
+    if not described:
+        nxt = dict(text="Describe the project first — what is built, for whom, on which stack.",
+                   action=make_action(skill="/factory-setup", shell=""))
+    elif not has_build:
+        nxt = dict(text="Create the project — a skeleton from a generator, with DCA and its checks.",
+                   action=make_action(skill="/dca-new project", shell=""))
+    elif not profile_path:
+        nxt = dict(text="Set the factory up — the stack profile is missing.",
+                   action=make_action(skill="/factory-setup", shell=f"{RUNNER} setup"))
+    else:
+        nxt = status_view["next"]
+    files = [("description", ", ".join(location(profile, k) for k in ("product", "tech", "domain")),
+              "what is built, on which stack, in which contexts"),
+             ("backlog", backlog.replace(os.sep, "/") + "/", "one file per epic and per story"),
+             ("stack profile", (profile_path or ".agents/factory/factory.profile.yaml").replace(os.sep, "/"),
+              "the project's commands and the skills each stage uses"),
+             ("a story's work", f"{tasks}/<story>/", "one hand-over file per stage, the journal"),
+             ("decisions", DECISIONS_SHOWN + "/", "one record per question or acceptance")]
+    return dict(project=status_view["project"], flow=flow, commands=[dict(zip(("name", "what", "skill", "shell"), c))
+                                                                    for c in HELP_COMMANDS],
+                marks=[dict(mark=m, meaning=t) for m, t in HELP_MARKS],
+                files=[dict(name=n, where=w, holds=h) for n, w, h in files],
+                runner=RUNNER, next=nxt)
+
+
+def shell_form(command):
+    return f"{SHELL_NAME} {command}" if command else ""
+
+
+def render_help_text(model, colour=False):
+    out = [""] + heading(f"Factory help — {model['project']}", colour, "═")
+    out += section("The flow — and where this project stands", colour)
+    rows = [[f"{MARKS_TEXT[f['mark']]} {f['step']}", f["skill"], shell_form(f["shell"]) or "— needs an agent session",
+             f["what"]] for f in model["flow"]]
+    out += table_text(["step", "agent", "shell", "what it is"], rows, marks=[f["mark"] for f in model["flow"]],
+                      colour=colour, painted=1)
+    out += section("Commands", colour)
+    out += table_text(["to see", "agent", "shell", "what it shows"],
+                      [[c["name"], c["skill"], shell_form(c["shell"]), c["what"]] for c in model["commands"]],
+                      colour=colour, first_bold=True)
+    note = f"{SHELL_NAME} is {model['runner']}, in a terminal of its own; a session uses the agent form."
+    out += ["", "    " + dim(note, colour)]
+    out += section("Marks", colour)
+    out += table_text(["mark", "means"], [[MARKS_TEXT[m["mark"]], m["meaning"]] for m in model["marks"]],
+                      marks=[m["mark"] for m in model["marks"]], colour=colour, painted=1)
+    out += section("Files", colour)
+    out += table_text(["what", "where", "holds"], [[f["name"], f["where"], f["holds"]] for f in model["files"]],
+                      colour=colour, first_bold=True)
+    return "\n".join(out + ["", "─" * 72] + next_text(model, colour) + [""])
+
+
+def render_help_md(model):
+    out = [f"### Factory help — {model['project']}", "", "**The flow — and where this project stands**", ""]
+    out += table_md(["", "step", "agent", "shell", "what it is"],
+                    [[MARKS_MD[f["mark"]], f["step"], f"`{f['skill']}`",
+                      f"`{shell_form(f['shell'])}`" if f["shell"] else "— needs an agent session", f["what"]]
+                     for f in model["flow"]])
+    out += ["", "**Commands**", ""]
+    out += table_md(["to see", "agent", "shell", "what it shows"],
+                    [[c["name"], f"`{c['skill']}`", f"`{shell_form(c['shell'])}`", c["what"]] for c in model["commands"]],
+                    first_bold=True)
+    out += ["", f"`{SHELL_NAME}` is `{model['runner']}`, in a terminal of its own; a session uses the agent form.",
+            "", "**Marks**", ""]
+    out += table_md(["session", "terminal", "means"], [[MARKS_MD[m["mark"]], f"`{MARKS_TEXT[m['mark']]}`", m["meaning"]]
+                                                      for m in model["marks"]])
+    out += ["", "**Files**", ""]
+    out += table_md(["what", "where", "holds"], [[f["name"], f"`{f['where']}`", f["holds"]] for f in model["files"]],
+                    first_bold=True)
+    return "\n".join(out + ["", next_md(model)])
 
 
 # --- status: the person's view ------------------------------------------------------
@@ -3669,7 +3807,7 @@ def dim(text, colour):
     return f"\x1b[2m{text}\x1b[0m" if colour else text
 
 
-COMMAND = re.compile(r"(/factory-[a-z-]+(?: [A-Za-z0-9][\w.-]*)?)")
+COMMAND = re.compile(r"(/(?:factory|dca)-[a-z-]+(?: [A-Za-z0-9][\w.-]*)?)")
 
 
 def commands(text, colour, md=False):
@@ -3721,8 +3859,8 @@ def next_md(model):
 
 
 def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False, widths=None, total=False,
-               first_bold=False):
-    """Aligned columns with a rule under the header; `marks[i]` colours row i's first two cells.
+               first_bold=False, painted=2):
+    """Aligned columns with a rule under the header; `marks[i]` colours row i's first `painted` cells.
     `widths` makes several tables line up — the backlog's, one per epic; `total` sets the last row
     apart with a rule of its own."""
     widths = list(widths or column_widths(headers, rows))
@@ -3757,7 +3895,7 @@ def table_text(headers, rows, right=(), indent="    ", marks=None, colour=False,
             first = str(row[0]).ljust(widths[0])
             line = bold(first, True) + line[len(first):]
         if marks and colour and marks[n]:
-            head = "   ".join(str(c).ljust(widths[i]) for i, c in enumerate(row[:2]))
+            head = "   ".join(str(c).ljust(widths[i]) for i, c in enumerate(row[:painted]))
             line = paint(head, marks[n], True) + line[len(head):]
         lines.append(indent + line)
     return lines
@@ -4738,6 +4876,9 @@ def main(argv):
                         help="with --status: add what depends on the clock — how long ago, the activity, the worker")
     parser.add_argument("--session-start", action="store_true",
                         help="with --status --brief: add what a session should do with them (the SessionStart hook)")
+    parser.add_argument("--help-view", action="store_true",
+                        help="print the factory explained: the flow and where the project stands, the commands, "
+                             "the marks, the files (with --format, --color)")
     parser.add_argument("--usage", action="store_true",
                         help="print the tokens each story and stage used, from the runner's journals")
     parser.add_argument("--total", action="store_true", help="with --usage: print only the token total")
@@ -4824,6 +4965,8 @@ def main(argv):
         except Exception as error:                      # a hook must never break a session's start
             print(f"factory: status unavailable ({error.__class__.__name__})")
             return 0
+    if args.help_view:
+        return factory_help(cwd, args.backlog, args.tasks, args.format, args.color)
     if args.status:
         return status(cwd, args.backlog, args.tasks, args.story, args.format, args.color, args.live, args.part)
     if args.window_start or args.window_end:
