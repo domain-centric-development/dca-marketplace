@@ -986,7 +986,7 @@ def verify_runner(runner, verbose=False):
               "e2eTest: ./gradlew test-e2e" in profile_text and "\nbrowser: playwright" in profile_text,
               [l for l in profile_text.splitlines() if l.startswith(("e2eTest", "browser"))])
     # 1d'. the carriers a profile names reach Claude's own skill directory, and only those
-    carrier = next((name for name in ("ddd-modelling", "review-craft", "e2e-testing")
+    carrier = next((name for name in ("dca-modelling", "review-clean-code", "e2e-testing")
                     if any(os.path.isdir(os.path.join(plugins_dir, plugin, "skills", name))
                            for plugin in os.listdir(plugins_dir))), None) \
         if os.path.isdir(plugins_dir := os.path.dirname(os.path.dirname(source))) else None
@@ -1615,13 +1615,13 @@ exit 0
             if plugin == "dca-factory" and version == "0.2.0":
                 shutil.copytree(pipeline, os.path.join(folder, "skills"), symlinks=True)
             else:
-                name = "ddd-modelling" if plugin == "dca-core" else "stage-plan"
+                name = "dca-modelling" if plugin == "dca-core" else "stage-plan"
                 write_file(folder, f"skills/{name}/SKILL.md",
                            f"---\nname: {name}\ndescription: {plugin} {version}\n---\n")
         return os.path.join(cache, "dca-factory", "0.2.0", "skills")
     if SYMLINKS:
         with tmpdir() as root, tmpdir() as home:
-            build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\n")
+            build_project(root, profile=PROFILE + "carrier.build: dca-modelling\n")
             cached = cache_fixture(home)
             run_setup(runner, root, "--tool", "codex", "--from", shell_path(cached), env={"HOME": home})
             skills = os.path.join(root, ".codex", "skills")
@@ -1629,21 +1629,21 @@ exit 0
                 if os.path.isdir(skills) else {}
             check("install: from a plugin cache the neighbours' newest versions are linked, never an older "
                   "version of the pipeline itself",
-                  targets.get("ddd-modelling", "").endswith(os.path.join("dca-core", "0.2.0", "skills", "ddd-modelling"))
+                  targets.get("dca-modelling", "").endswith(os.path.join("dca-core", "0.2.0", "skills", "dca-modelling"))
                   and not any(os.sep + "0.1.0" + os.sep in t for t in targets.values()),
-                  {k: v[-40:] for k, v in targets.items() if "0.1.0" in v or k == "ddd-modelling"})
+                  {k: v[-40:] for k, v in targets.items() if "0.1.0" in v or k == "dca-modelling"})
     with tmpdir() as root, tmpdir() as home:
-        build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\n")
+        build_project(root, profile=PROFILE + "carrier.build: dca-modelling\n")
         cached = cache_fixture(home)
         run_setup(runner, root, "--tool", "claude", "--from", shell_path(cached), "--copy", env={"HOME": home})
         shutil.rmtree(os.path.join(home, ".claude", "plugins", "cache", "m", "dca-core"))
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "update",
                                   "--from", shell_path(cached), env={"HOME": home})
-        carrier_copy = os.path.join(root, ".claude", "skills", "ddd-modelling", "SKILL.md")
+        carrier_copy = os.path.join(root, ".claude", "skills", "dca-modelling", "SKILL.md")
         manifest = os.path.join(root, ".claude", "skills", ".dca-factory-skills")
         check("copies: a copied carrier survives an update, also when no neighbour has it any more",
               code == 0 and os.path.isfile(carrier_copy)
-              and "ddd-modelling" in open(manifest, encoding="utf-8").read().split(), output.strip().splitlines()[-4:])
+              and "dca-modelling" in open(manifest, encoding="utf-8").read().split(), output.strip().splitlines()[-4:])
     with tmpdir() as root:
         build_project(root)
         shells = [b for b in ("/bin/bash",) if os.path.isfile(b)] or [BASH]
@@ -1957,7 +1957,7 @@ def verify_setup(runner, verbose=False):
               not any(l.startswith("format") for l in active_lines(profile_of(root)) or []))
 
     # item 7: the profile is written before the skills, so a carrier it names is linked in the same run
-    carrier = next((name for name in ("ddd-modelling", "dca-modelling", "e2e-testing")
+    carrier = next((name for name in ("dca-modelling", "e2e-testing")
                     if any(os.path.isdir(os.path.join(os.path.dirname(os.path.dirname(source)), plugin, "skills", name))
                            for plugin in os.listdir(os.path.dirname(os.path.dirname(source))))), None)
     if carrier and SYMLINKS:
@@ -2097,6 +2097,69 @@ def verify_setup(runner, verbose=False):
         agents = open(os.path.join(root, "AGENTS.md"), encoding="utf-8").read()
         check("places: the pipeline's AGENTS.md block carries no location line of its own",
               "project/product.md" not in agents.split("<!-- dca-factory: start -->")[1], agents[-400:])
+    # WP-63 7a: renamed skills — the run stops on an old name, update removes an unedited old copy
+    with tmpdir() as root:
+        build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\nreview.domain: review-domain\n")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        check("renames: a profile naming a renamed skill stops the run, with the new line for each",
+              code == 2 and "carrier.build: ddd-modelling → carrier.build: dca-modelling" in output
+              and "review.domain: review-domain → review.ddd: review-ddd" in output and "── stage" not in output,
+              output.strip().splitlines()[-5:])
+    with tmpdir() as root, tmpdir() as home:
+        cache = os.path.join(home, ".claude", "plugins", "cache", "m")
+        for plugin, version, skill, body in (("software-craftsmanship", "0.5.0", "review-craft", "old v0.5.0\n"),
+                                             ("software-craftsmanship", "0.5.1", "review-craft", "old v0.5.1\n"),
+                                             ("software-craftsmanship", "0.5.1", "e2e-testing", "old e2e\n"),
+                                             ("dca-core", "0.6.1", "ddd-modelling", "old modelling\n"),
+                                             ("dca-craft", "0.6.0", "e2e-testing", "new e2e\n")):
+            write_file(os.path.join(cache, plugin, version), f"skills/{skill}/SKILL.md",
+                       f"---\nname: {skill}\ndescription: {body.strip()}\n---\n{body}")
+            write_file(os.path.join(cache, plugin, version), ".claude-plugin/plugin.json",
+                       json.dumps({"name": plugin, "version": version}))
+        build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\n")
+        run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
+        skills_dir = os.path.join(root, ".claude", "skills")
+        for skill, body in (("review-craft", "old v0.5.1\n"), ("ddd-modelling", "edited by the project\n")):
+            write_file(skills_dir, f"{skill}/SKILL.md", f"---\nname: {skill}\ndescription: x\n---\n{body}")
+        with open(os.path.join(skills_dir, "review-craft", "SKILL.md"), "w", encoding="utf-8") as handle:
+            handle.write(open(os.path.join(cache, "software-craftsmanship", "0.5.1", "skills", "review-craft", "SKILL.md"),
+                              encoding="utf-8").read())
+        code, output = run_runner(project_runner(root), root, "update", "--from", source, env={"HOME": home})
+        check("renames: update removes a copy byte for byte the old plugin's newest, and keeps and names an edited one",
+              not os.path.exists(os.path.join(skills_dir, "review-craft"))
+              and os.path.isfile(os.path.join(skills_dir, "ddd-modelling", "SKILL.md"))
+              and "removed .claude/skills/review-craft" in output and "kept .claude/skills/ddd-modelling" in output,
+              [l for l in output.splitlines() if "review-craft" in l or "ddd-modelling" in l])
+        check("renames: update names the old profile key with its new form and writes nothing into the profile",
+              "carrier.build: ddd-modelling → carrier.build: dca-modelling" in output
+              and "carrier.build: ddd-modelling" in open(profile_of(root), encoding="utf-8").read(), output.strip()[-300:])
+    with tmpdir() as home:
+        cache = os.path.join(home, ".claude", "plugins", "cache", "m")
+        write_file(os.path.join(cache, "dca-factory", "9.0.0"), ".claude-plugin/plugin.json", "{}")
+        shutil.copytree(source, os.path.join(cache, "dca-factory", "9.0.0", "skills"), symlinks=True)
+        for plugin, version in (("software-craftsmanship", "0.5.1"), ("dca-craft", "0.6.0")):
+            write_file(os.path.join(cache, plugin, version), "skills/e2e-testing/SKILL.md",
+                       f"---\nname: e2e-testing\ndescription: {plugin}\n---\n")
+        with tmpdir() as root:
+            build_project(root)
+            run_setup(runner, root, "--tool", "codex", "--from",
+                      shell_path(os.path.join(cache, "dca-factory", "9.0.0", "skills")), env={"HOME": home})
+            link = os.path.join(root, ".codex", "skills", "e2e-testing")
+            check("renames: a plugin left in the cache under its old name is no source — e2e-testing comes from dca-craft",
+                  os.path.isdir(link) and "dca-craft" in open(os.path.join(link, "SKILL.md"), encoding="utf-8").read(),
+                  os.path.realpath(link) if os.path.exists(link) else "missing")
+    with tmpdir() as root:
+        build_project(root, profile=PROFILE + "carrier.guard: some-guard\n")
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                                  env={"FACTORY_ISOLATION": "off"})
+        prompts = {l.split()[2]: next((m for m in output.splitlines()[i + 1:i + 2]), "")
+                   for i, l in enumerate(output.splitlines()) if l.startswith("── stage ")}
+        check("guard: the build and tidy prompts carry the declared carrier.guard, the other stages not",
+              "some-guard" in prompts.get("build", "") and "some-guard" in prompts.get("tidy", "")
+              and not any("some-guard" in prompts.get(s, "") for s in ("plan", "test", "judge", "document")),
+              {k: v[-90:] for k, v in prompts.items()})
     shutil.rmtree(lone_home, ignore_errors=True)
 
     failures = [name for name, ok, _ in results if not ok]

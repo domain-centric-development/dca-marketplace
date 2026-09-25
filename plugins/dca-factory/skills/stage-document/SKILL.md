@@ -18,7 +18,9 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 1. Read the plan's glossary proposals and the diff's new names. Every **domain** identifier the
    story introduced — an aggregate, a value object, an event, a use case, a domain term in a result
    — needs an entry in the bounded context's glossary. Add the missing ones in the project's own
-   words, taking the definition from the plan's proposal where there is one. A term nobody can
+   words, taking the definition from the plan's proposal where there is one — through the skill the
+   profile names as `carrier.glossary:` (the glossary skill, where installed), so the glossary's format
+   is described in one place; by hand in the glossary's existing format otherwise. A term nobody can
    define is a term the model should not carry: say so rather than inventing a definition.
 2. Update the context maps when the story changed how contexts relate — a new upstream, a new
    translation site, a relationship that changed kind. The designed map (`domain:` in the profile,

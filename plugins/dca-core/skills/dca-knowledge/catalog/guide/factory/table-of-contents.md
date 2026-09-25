@@ -6,7 +6,8 @@ source: guide
 tags: [guide, section]
 ---
 
-- [The product scope](#the-product-scope)
+- [Three parts](#three-parts)
+- [The project description](#the-project-description)
 - [The backlog contract](#the-backlog-contract)
 - [Outcome events](#outcome-events)
 - [The stages and their hand-over files](#the-stages-and-their-hand-over-files)

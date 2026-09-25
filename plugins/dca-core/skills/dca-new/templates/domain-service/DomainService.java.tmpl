@@ -1,0 +1,21 @@
+package {{basePackage}}.{{context}}.domain.service;
+
+import {{domainServiceMarkerFqn}};
+{{domainImports}}
+
+/**
+ * {{Name}} — domain service: {{serviceDescription}}
+ *
+ * <p>Part of the domain: stateless, framework-free, named in the ubiquitous language. The application calls it
+ * with the aggregates the rule spans; no aggregate constructs or calls it. Facts the domain does not own are
+ * passed alongside the aggregates, never instead of them.
+ */
+public final class {{Name}} implements DomainService {
+
+    public {{ResultType}} {{operation}}({{operationParameters}}) {
+        // TODO: the rule across {{aggregateList}} — built with the project's modelling craft.
+        //  A refused rule raises a named DomainException subtype beside the model; a null or range check
+        //  stays IllegalArgumentException.
+        throw new UnsupportedOperationException("Not yet implemented");
+    }
+}

@@ -37,7 +37,7 @@ text themselves, so a citation needs no path outside the catalog. It is the read
 
 Resolve the catalog path in this order; stop at the first that exists:
 
-1. `catalog_path` in the conventions overlay — `.agents/dca/conventions.md` (or `.claude/dca/conventions.md`) — (explicit override wins)
+1. `catalog_path` in the conventions file — the one the `AGENTS.md` line ``- conventions: `<path>` `` names, `.agents/dca/conventions.md` by default (`.claude/dca/conventions.md` in older projects) — (explicit override wins)
 2. `dca-knowledge-catalog/bundle/` relative to repo root (working in this repo)
 3. `${CLAUDE_PLUGIN_ROOT}/skills/dca-knowledge/catalog/` — the **vendored copy that
    ships with the plugin**; always present once the plugin is installed, so
@@ -210,8 +210,9 @@ are documented in its `AGENTS.md`.
 | Skill | How it pairs |
 |---|---|
 | `/dca-discipline`, `/dca-review` | They *apply* the rules while editing/reviewing; this skill *explains and cites* the rule + its rationale on demand. |
-| `/dca-bootstrap` | Bootstrap installs the markers/ArchUnit suite; this skill answers "what does each installed rule mean and why". |
-| `/dca-scaffold` | Scaffold generates structure; ask this skill which marker/pattern a new use case should follow, with citation. |
+| `/dca-init` | Init installs the markers/ArchUnit suite; this skill answers "what does each installed rule mean and why". |
+| `/dca-new` | New lays out structure; ask this skill which marker/pattern a new use case should follow, with citation. |
+| `/dca-modelling` | Builds the domain types; this skill supplies the recipe, template and rules it builds from. |
 | `/adr` | Records a new decision in the consuming project. The catalog does not ingest ADRs — it carries `process/creating-an-adr.md`, the how-to. |
 | `/context-map`, `/ubiquitous-language` | Strategic/naming views of the live code; this skill is the canonical-knowledge view of the documented patterns. |
 

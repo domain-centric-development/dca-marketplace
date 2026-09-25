@@ -309,11 +309,12 @@ final messages — leave `tasks/**/.verify/` out of the repository where that is
 
 ## What it carries, and what it does not
 
-It carries no architecture method of its own. Markers, rules, the knowledge catalog, glossary
-and context map belong to `dca-core`; build commands and templates belong to the project's stack
-profile. The dependency runs one way: the factory calls `dca-core`'s skills — the bootstrap that
-installs the architecture once, the scaffolding, the review perspectives, the knowledge catalog —
-and none of them knows about the factory. This plugin owns only the process: which stage runs when, which file it hands over, and
+It carries no architecture method of its own. Markers, rules, the knowledge catalog and the
+project description belong to `dca-core`, the glossary, the context map and the general review
+perspectives to `dca-craft`; build commands belong to the project's stack profile. The dependency
+runs one way: the factory uses those skills where they are installed — as carriers named in the
+profile, the description skill in `/factory-setup` — calls none that writes code, and none of them
+knows about the factory. This plugin owns only the process: which stage runs when, which file it hands over, and
 what must be true before the next one starts.
 
 ## Skills
@@ -325,7 +326,7 @@ what must be true before the next one starts.
 | `stage-test` | plan → tests plus `tasks/<story>/tests.md` with the criterion-to-test table |
 | `stage-build` | red tests → production code plus `tasks/<story>/build.md` |
 | `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `tasks/<story>/tidy.md`; changes no test and no behaviour |
-| `stage-judge` | the change → `tasks/<story>/judge.md`: domain, boundaries and craft in one verdict, plus any perspective the profile adds |
+| `stage-judge` | the change → `tasks/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-review` in a DCA project) |
 | `stage-document` | the change → `tasks/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
 | `factory-backlog` | writes and checks the backlog a run reads: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |

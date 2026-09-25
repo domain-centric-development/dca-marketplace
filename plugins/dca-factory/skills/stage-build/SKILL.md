@@ -64,6 +64,12 @@ only where the tool has agents. Use the named carrier when this tool offers it; 
 stage as described here and say in your file which it was ("in-session; `<carrier>` not available
 here"). A missing carrier is a missing preference, never a reason to skip the stage.
 
+**The guard beside the carrier.** The profile may also name `carrier.guard: <name>` — the skill that
+holds the architecture's invariants while code is edited (in a DCA project `dca-discipline`). Apply
+it for every file you write, the same way you use the carrier: where this tool offers it; otherwise
+keep the invariants as described here and say so in your file. An absent key is skipped and named
+like any other.
+
 ## The build file
 
 ```markdown

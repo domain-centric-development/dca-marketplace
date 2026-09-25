@@ -217,6 +217,12 @@ update_project() {                          # update_project <explicit skill fol
     updated=1
   done
   [ "$updated" = 1 ] || install_project none "$src" ""
+  prune_renamed_copies "$src"
+  local renames; renames=$(profile_renames)
+  if [ -n "$renames" ]; then
+    echo "factory: the profile names skills by their old names — the update writes nothing into it; change:" >&2
+    printf 'factory:   %s\n' "$renames" >&2
+  fi
   after=$(gate_field "$GATE" VERSION); after_contract=$(gate_field "$GATE" CONTRACT)
   echo "factory: updated ${before:-an unstamped install} → $after (file contract ${before_contract:-?} → $after_contract) from $src"
   declared=$(sed -n 's/^contract:[[:space:]]*//p' "$PROFILE" 2>/dev/null | head -1)
@@ -228,6 +234,37 @@ update_project() {                          # update_project <explicit skill fol
   "$PY" "$GATE" --schedule 2>/dev/null | sed -n 's/^layout: /factory: /p' >&2
   echo "factory: review and commit the changed files — the update commits nothing. 'factory.sh setup --check'"
   echo "factory:   names what the project gained since, as profile lines to confirm; the update writes none."
+}
+
+# A copied skill under a name the method plugins renamed: removed when it is byte for byte the newest
+# version of its old plugin still on this machine (the plugin cache, or a checkout beside the pipeline)
+# — nobody edited it — and kept and named otherwise, because then the project made it its own.
+prune_renamed_copies() {                    # prune_renamed_copies <pipeline skill folder>
+  local src=$1 target old new plugin copy candidate reference version best_version
+  for target in .claude/skills .codex/skills .opencode/skills; do
+    [ -d "$target" ] && [ ! -L "$target" ] || continue
+    while read -r old new plugin; do
+      copy="$target/$old"
+      [ -d "$copy" ] && [ ! -L "$copy" ] || continue
+      reference=""; best_version=""
+      for candidate in "$HOME"/.claude/plugins/cache/*/"$plugin"/*/skills/"$old" "$src/../../$plugin/skills/$old"; do
+        [ -d "$candidate" ] || continue
+        version=$(basename "$(dirname "$(dirname "$candidate")")")
+        if [ -z "$reference" ] || [ "$(printf '%s\n%s\n' "$best_version" "$version" | sort -V | tail -1)" = "$version" ]; then
+          reference=$candidate; best_version=$version
+        fi
+      done
+      if [ -z "$reference" ]; then
+        echo "factory: kept $copy — renamed to $new, and no $plugin copy of it is left to compare with" >&2
+      elif diff -rq -x .dca-factory-skills "$copy" "$reference" >/dev/null 2>&1; then
+        rm -rf "${copy:?}"
+        [ -f "$target/.dca-factory-skills" ] && { grep -vx "$old" "$target/.dca-factory-skills" > "$target/.dca-factory-skills.new"; mv -f "$target/.dca-factory-skills.new" "$target/.dca-factory-skills"; }
+        echo "factory: removed $copy — renamed to $new, and the copy was $plugin's own, unedited"
+      else
+        echo "factory: kept $copy — renamed to $new, but the copy differs from $plugin's: the project edited it" >&2
+      fi
+    done <<< "$RENAMED_SKILLS"
+  done
 }
 
 # Whether the gate in this project is still the one the pipeline ships. The gate itself cannot tell:
@@ -322,7 +359,44 @@ named_carriers() {
   sed -n -E 's/^(carrier\.[a-z]+|review\.[a-z-]+|knowledge):[[:space:]]*//p' "$profile" \
     | tr -d '"'"'"'"' | awk '{print $1}' | sed 's/.*://' | sort -u
 }
+# Skills the method plugins renamed: <old> <new> <the plugin that shipped the old one>. A profile that
+# still names an old one would run yesterday's copy without a word, so the run stops on it, and
+# `update` removes a copy under the old name that nobody edited.
+RENAMED_SKILLS="review-domain review-ddd dca-core
+review-boundaries review-hexagonal dca-core
+review-craft review-clean-code software-craftsmanship
+ddd-modelling dca-modelling dca-core
+dca-bootstrap dca-init dca-core
+dca-scaffold dca-new dca-core"
+RENAMED_KEYS="review.domain review.ddd
+review.boundaries review.hexagonal
+review.craft review.clean-code"
+RETIRED_PLUGINS="software-craftsmanship"     # left in a plugin cache after a rename; never a source
+
+renamed_skill() { printf '%s\n' "$RENAMED_SKILLS" | awk -v n="$1" '$1 == n {print $2}'; }
+
+# The profile lines that name a renamed skill or key, as "<old line> → <new line>".
+profile_renames() {
+  local profile="${FACTORY_PROFILE:-.agents/factory/factory.profile.yaml}" key value new_key new_value
+  [ -f "$profile" ] || profile=factory.profile.yaml
+  [ -f "$profile" ] || return 0
+  sed -n -E 's/^(carrier\.[a-z]+|review\.[a-z-]+|knowledge):[[:space:]]*/\1 /p' "$profile" | tr -d '"'"'"'"' \
+    | while read -r key value _; do
+      new_key=$(printf '%s\n' "$RENAMED_KEYS" | awk -v k="$key" '$1 == k {print $2}'); new_key=${new_key:-$key}
+      new_value=$(renamed_skill "$value"); new_value=${new_value:-$value}
+      [ "$key: $value" = "$new_key: $new_value" ] || echo "$key: $value → $new_key: $new_value"
+    done
+}
+
 check_carriers() {                          # check_carriers <tool>
+  local renames; renames=$(profile_renames)
+  if [ -n "$renames" ]; then
+    echo "factory: the profile names skills by names they no longer have — nothing was started:" >&2
+    printf 'factory:   %s\n' "$renames" >&2
+    echo "factory:   change those lines; a copy under the old name would run yesterday's skill. 'factory.sh" >&2
+    echo "factory:   update' removes such a copy where the project did not edit it." >&2
+    return 2
+  fi
   [ -n "${FACTORY_TOOL_CMD:-}" ] && return 0
   isolated || return 0
   local dir missing="" name; dir=$(skill_dir_of "$1")
@@ -505,6 +579,7 @@ method_skill_dirs() {
     plugins=$(cd "$plugin/../.." && pwd)                            # the cache: <plugin>/<version>/
     for dir in "$plugins"/*; do
       [ -d "$dir" ] && [ "$(basename "$dir")" != dca-factory ] || continue
+      case " $RETIRED_PLUGINS " in *" $(basename "$dir") "*) continue ;; esac
       newest=$(for version in "$dir"/*/skills; do [ -d "$version" ] && basename "$(dirname "$version")"; done \
         | sort -V | tail -1)
       [ -n "$newest" ] && found="$found $(cd "$dir/$newest/skills" && pwd)"
@@ -516,6 +591,7 @@ method_skill_dirs() {
   for dir in "$plugins"/*/skills; do
     [ -d "$dir" ] || continue
     [ "$(cd "$dir" && pwd)" = "$source_abs" ] && continue
+    case " $RETIRED_PLUGINS " in *" $(basename "$(dirname "$dir")") "*) continue ;; esac
     found="$found $(cd "$dir" && pwd)"
   done
   echo "$found"
@@ -790,15 +866,15 @@ install_project() {                         # install_project <tool> <skill fold
 }
 
 check_dca_setup() {                        # check_dca_setup <skill folder>
-  # The factory delivers stories; it does not install an architecture. That is the bootstrap
-  # skill's job, and it runs once. Say so instead of quietly starting without one. What counts as
+  # The factory delivers stories; it does not install an architecture. That is the method's
+  # setup skill's job, and it runs once. Say so instead of quietly starting without one. What counts as
   # governance is the `governance` presets' — a rule package or an architecture test.
   local dir; dir=$(presets_dir "${1:-}") || dir=""
   if presets "$dir" detect | grep -q '^#governance'; then
     echo "factory: architecture governance found — the pipeline has something to gate on."
   else
     echo "factory: no architecture governance found in this project." >&2
-    echo "factory: run the DCA bootstrap skill (/dca-bootstrap) first — it adds the building" >&2
+    echo "factory: run the method's setup skill first (in a DCA project /dca-init) — it adds the building" >&2
     echo "factory:   blocks and the rule catalog, and it is what the build gate checks against." >&2
     echo "factory: installing the pipeline anyway; its architecture check will be skipped and named." >&2
   fi
@@ -1303,6 +1379,8 @@ $TASKS/$story/. After the test, build and tidy stages run that stage's gate, \
 \`$PY $GATE --story $story --stage <stage>\`, and fix exactly what it names before the next stage, at most \
 three attempts per stage. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
 document stage."
+  local guard; guard=$(sed -n 's/^carrier\.guard:[[:space:]]*//p' "${FACTORY_PROFILE:-.agents/factory/factory.profile.yaml}" 2>/dev/null | head -1 | tr -d '"'"'"'"')
+  [ -n "$guard" ] && prompt="$prompt In the build and tidy stages apply the $guard skill (the profile's carrier.guard) to every file you write."
   echo "── stage $list  (tool: $tool, one shared context)"
   if [ -n "$dry" ]; then
     echo "   would run: $prompt"
@@ -1367,9 +1445,16 @@ report is $TASKS/$story/.gate-$stage.txt — read it and fix exactly what it nam
   [ "$stage" = judge ] && [ -f "$TASKS/$story/.judge-previous.md" ] && repeat=" This is a repeat round: \
 the previous verdict is $TASKS/$story/.judge-previous.md. Account for each defect it confirmed under \
 '## Previous round' — fixed (with the evidence) or withdrawn (with the reason) — before judging anew."
+  # The guard the profile names holds the invariants while code is edited: said in the prompt of the two
+  # stages that write production code, so no build or tidy stage starts without it in view.
+  local guard="" profile="${FACTORY_PROFILE:-.agents/factory/factory.profile.yaml}"
+  case "$stage" in build|tidy)
+    guard=$(sed -n 's/^carrier\.guard:[[:space:]]*//p' "$profile" 2>/dev/null | head -1 | tr -d '"'"'"'"')
+    [ -n "$guard" ] && guard=" Apply the $guard skill (the profile's carrier.guard) to every file you write." ;;
+  esac
   printf '%s' "Apply the stage-$stage skill for backlog story $story. \
 Read only the story and the files the skill names as its input, and write its output file under \
-$TASKS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages.$repeat"
+$TASKS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages.$guard$repeat"
 }
 
 gate() {                                    # gate <stage> <story>

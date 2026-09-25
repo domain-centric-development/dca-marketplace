@@ -18,7 +18,7 @@ them apart is what makes a run reproducible.
 | the story | `project/backlog/<epic>/<story>.md`, or under the profile's `backlog:` | offer to write one (`/factory-backlog`) and stop |
 | the epic | `project/backlog/<epic>/epic.md` | same |
 | the stack profile | `.agents/factory/factory.profile.yaml` | create it from the template by detecting the build (see below) |
-| an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with its DCA bootstrap skill, and the factory calls that skill rather than owning it. Without one, the build gate skips the architecture check and names it |
+| an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with the method's setup skill (in a DCA project `/dca-init`), and the factory never calls a skill that writes code. Without one, the build gate skips the architecture check and names it |
 | the gate | `.agents/factory/story-gate.py` | the installer writes it (step 1 below) |
 | the commit guard | `.githooks/pre-commit` | the installer writes it and sets `core.hooksPath` (step 1 below) |
 

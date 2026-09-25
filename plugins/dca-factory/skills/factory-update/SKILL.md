@@ -31,7 +31,13 @@ a report of what changed. You commit nothing; the human reviews and commits.
    and the update listed which it copied, which of the project's own it kept and which it removed.
 4. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, the
    `AGENTS.md` section, and the skill copies where the project keeps copies.
-5. **End with what the project gained since.** Run `bash .agents/factory/factory.sh setup --check`
+5. **Name what was renamed.** The method plugins renamed skills (`review-domain` → `review-ddd`,
+   `review-boundaries` → `review-hexagonal`, `review-craft` → `review-clean-code`, `ddd-modelling` →
+   `dca-modelling`, `dca-bootstrap` → `dca-init`, `dca-scaffold` → `dca-new`). The update removes a
+   copy under an old name that is byte for byte the old plugin's own and keeps one the project
+   edited; it names each profile line that still uses an old name with its new form. Show those
+   lines — the profile is the human's to change, and a run stops on an old name until it is.
+6. **End with what the project gained since.** Run `bash .agents/factory/factory.sh setup --check`
    and show its lines: detected keys the profile lacks, and values that differ from detection. You
    write nothing into the profile — the human adds a line, or confirms `setup --write`.
 

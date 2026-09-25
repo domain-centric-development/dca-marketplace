@@ -1,0 +1,23 @@
+{
+  "name": "dca-craft",
+  "description": "Craft skills and agents independent of the architecture style: Test-Driven Development, Clean Code while writing, Architecture Decision Records, end-user browser tests (Page Objects, stable selectors, setting up a browser runner), the Ubiquitous Language glossary and the strategic context map, and three review perspectives with the familiar names — review-ddd, review-hexagonal, review-clean-code — plus thin reviewer and E2E agents around them. An outside view: it reads what any project has — code, glossary, context map, AGENTS.md — and names no DCA artifact. Pairs with dca-core, which adds the DCA method.",
+  "version": "0.6.0",
+  "author": {
+    "name": "Christoph Bloemer"
+  },
+  "homepage": "https://github.com/domain-centric-development/dca-marketplace",
+  "keywords": [
+    "adr",
+    "architecture-decision-records",
+    "clean-code",
+    "context-map",
+    "ddd",
+    "e2e",
+    "hexagonal-architecture",
+    "page-object",
+    "pragmatic-programmer",
+    "refactoring",
+    "tdd",
+    "ubiquitous-language"
+  ]
+}

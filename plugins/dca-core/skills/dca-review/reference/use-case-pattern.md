@@ -271,14 +271,14 @@ per aggregate**, not per use case. Consolidate into one `OrderRepository` in `ap
 - The use-case implementation depends **on interfaces only** (input and output ports), never on concrete
   adapter classes.
 
-See also [DTO Mapping Strategy](../../dca-scaffold/SKILL.md#dto-mapping-at-the-adapter-boundary) for how
+See also [DTO Mapping Strategy](../../dca-new/SKILL.md#dto-mapping-at-the-adapter-boundary) for how
 request and response are mapped at the adapter edge.
 
 ---
 
 ## 5. Static rules
 
-The rule suite (`dca-archunit` / `DomainCentric.ArchRules`, the same id in both languages; `/dca-bootstrap` wires
+The rule suite (`dca-archunit` / `DomainCentric.ArchRules`, the same id in both languages; `/dca-init` wires
 the test) checks the use-case pattern at these points. The review does not repeat them; it checks what they
 cannot see.
 
@@ -298,7 +298,7 @@ cannot see.
 | `DCA-HEX-012` | No `DomainService` in `adapter/incoming/` |
 | `DCA-NAM-002` | Diagnostic only: a use case without an injectable stereotype |
 
-Full list with selection and check: `dca-bootstrap/reference/archunit-rule-catalog.md`.
+Full list with selection and check: `dca-init/reference/archunit-rule-catalog.md`.
 
 ---
 
@@ -375,6 +375,6 @@ public sealed class PlaceOrderUseCase : IPlaceOrderInputPort
 
 - [checklist.md](checklist.md) — per-layer audit checks (Application — Use Cases, Application — Output Ports)
 - [naming-conventions.md](naming-conventions.md) — complete naming tables
-- [archunit-rule-catalog.md](../../dca-bootstrap/reference/archunit-rule-catalog.md) — the static rules that enforce the pattern
-- [DTO Mapping Strategy](../../dca-scaffold/SKILL.md#dto-mapping-at-the-adapter-boundary) — how adapters map to commands and results
-- [Module Selection Guide](../../dca-bootstrap/reference/module-selection-guide.md) — which rule modules enforce the use-case pattern
+- [archunit-rule-catalog.md](../../dca-init/reference/archunit-rule-catalog.md) — the static rules that enforce the pattern
+- [DTO Mapping Strategy](../../dca-new/SKILL.md#dto-mapping-at-the-adapter-boundary) — how adapters map to commands and results
+- [Module Selection Guide](../../dca-init/reference/module-selection-guide.md) — which rule modules enforce the use-case pattern
