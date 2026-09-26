@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.39.2"
+VERSION = "0.39.3"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -478,19 +478,46 @@ def check_adopt(result, profile, cwd, tasks, story_id, front, criteria):
                                     f"mapped test asserts its scenario before the story counts as adopted")
     else:
         result.ok("adopt-judged", "the judge confirmed that the tests prove the scenarios")
-    written = characterization_tests(tasks, story_id)
     everything = str(profile.get("adopt.breakProof", "")).strip().lower() == "all"
-    wanted = sorted({sel for sels in mapping.values() for sel in sels}) if everything else written
     by_selector = {sel: key for key, sels in mapping.items() for sel in sels}
+    written = [qualify_selector(sel, by_selector, cwd) for sel in characterization_tests(tasks, story_id)]
+    wanted = sorted(by_selector) if everything else written
+    extra = {sel for sel in wanted if sel not in located}
+    if extra:
+        located = dict(located, **check_exists(Result(), cwd, {"outside the table": sorted(extra)}))
     for selector in wanted:
-        check_break(result, profile, cwd, tasks, story_id, selector, by_selector.get(selector, "?"), located)
+        check_break(result, profile, cwd, tasks, story_id, selector, by_selector.get(selector, "outside the table"),
+                    located)
     if not wanted:
         result.skip("break-proof", "the adoption wrote no test of its own — every scenario maps to an existing "
                                    "test, which the judge read")
 
 
+def qualify_selector(selector, by_selector, cwd):
+    """A test named by its simple class (`WidgetTest#shows`) as the table names it, or with the package its file
+    declares: the report the gate reads names the class in full."""
+    cls, _, method = selector.partition("#")
+    if "." in cls:
+        return selector
+    for known in by_selector:
+        known_cls, _, known_method = known.partition("#")
+        if known_method == method and known_cls.rsplit(".", 1)[-1] == cls:
+            return known
+    for root, dirs, files in os.walk(cwd):
+        dirs[:] = [d for d in dirs if d not in BREAK_IGNORE]
+        for name in files:
+            if os.path.splitext(name)[0] == cls:
+                package = re.search(r"^\s*(?:package|namespace)\s+([\w.]+)", read_text(os.path.join(root, name)), re.M)
+                if package:
+                    return f"{package.group(1)}.{cls}#{method}"
+    return selector
+
+
 def check_break(result, profile, cwd, tasks, story_id, selector, key, located):
     patch = break_path(tasks, story_id, selector)
+    if not os.path.isfile(patch):
+        short = selector.split("#")[0].rsplit(".", 1)[-1] + "#" + selector.split("#", 1)[-1]
+        patch = break_path(tasks, story_id, short) if os.path.isfile(break_path(tasks, story_id, short)) else patch
     if not os.path.isfile(patch):
         result.fail("break-proof", f"{selector} ({key}): no break at {os.path.relpath(patch, cwd)} — a test the "
                                    f"adoption wrote is shown to work by one change that turns it red")
@@ -507,11 +534,15 @@ def check_break(result, profile, cwd, tasks, story_id, selector, key, located):
             return
         probe = Result()
         check_test_state(probe, profile, copy, {key: [selector]}, "red", {selector: located.get(selector)} if located.get(selector) else {})
-        if probe.failed or not any(st == "pass" for st, _c, _m in probe.entries):
+        runs = [(st, m) for st, c, m in probe.entries if c == "tests-red"]
+        if runs and all(st == "pass" for st, _m in runs):
+            result.ok("break-proof", f"{selector} ({key}): red under its break, on a scratch copy")
+        elif any(st == "fail" and ("passes" in m or "is green" in m or "green before" in m) for st, m in runs):
             result.fail("break-proof", f"{selector} ({key}): stays green under its break — the test does not "
                                        f"notice the behaviour it claims to prove")
         else:
-            result.ok("break-proof", f"{selector} ({key}): red under its break, on a scratch copy")
+            said = "; ".join(m for _st, m in runs)[:300] or "no run of it was recorded"
+            result.fail("break-proof", f"{selector} ({key}): its break could not be checked — {said}")
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
