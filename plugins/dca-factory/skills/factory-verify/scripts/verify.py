@@ -3563,6 +3563,21 @@ def main(argv=None):
                              "gate:skip tests-kept" in output and "pruned" in output,
                              "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
     with tmpdir() as root:
+        # a test changed and committed after the baseline — by someone else: a run commits nothing mid-story
+        build_project(root, extra_sources=((unit, old_test),))
+        for command in (["init", "-q"], ["add", "-A"],
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+        with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
+            handle.write(changed_line(old_test))
+        for command in (["add", unit], ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "elsewhere"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        verdict, output = kept_verdict(root)
+        expectations.append(("tests-kept: a test committed since the baseline changed outside the story and is not its",
+                             verdict == "pass", "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    with tmpdir() as root:
         build_project(root)
         verdict, output = kept_verdict(root)
         expectations.append(("tests-kept: outside a git repository the check is skipped and named",
