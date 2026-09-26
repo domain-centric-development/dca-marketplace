@@ -88,7 +88,10 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    `stage-build`. Every repeat round — this one, a refused gate after any stage, a judge's
    `changes-requested` — increments `tasks/<story>/.rounds`; at **three** the run
    stops and escalates. The counter is a file, not something you remember — an in-session run has
-   no other honest way to count, and a resumed run must see the same number.
+   no other honest way to count, and a resumed run must see the same number. Two refusals count no
+   round: `gate:fail environment` — a profile command whose program the gate's shell did not find, which
+   no stage can fix; stop and name it — and none at all when a person restarts the story with
+   `--from`, which starts a new count (the runner keeps the old one under `tasks/<story>/.verify/`).
 7. **`stage-tidy`** → `tasks/<story>/tidy.md`: the refactor half of red–green–refactor, inside
    this story's footprint, with every test green and no test changed. A stage that changes nothing
    and says why is finished, not skipped.
@@ -347,6 +350,15 @@ schedule every `--interval` seconds (default 60, 1–3600), invokes no agent whi
 and resumes the answered story at the stage that asked. `--max-stages <n>` caps the agent
 invocations of the run (exit 4, the work so far stays); `.agents/factory/stop` ends it before the
 next story.
+
+`factory.sh run --story <id>` without `--from` starts where that story's files say, as the schedule
+would: `python3 .agents/factory/story-gate.py --story <id> --start` prints its `state:`, `start:` and
+`detail:`. A delivered story runs nothing; one that waits, is blocked by a dependency or another
+story's unfinished code, or stopped, runs nothing and says why — `--from <stage>` is the person's way
+to run it anyway, and starts a new count of rounds. An accepted story starts at the document gate
+and is delivered without a stage invocation. Resumed at a gated stage whose file exists, the runner
+lets the gate decide first on today's tree: a file that holds costs no invocation, and a stage that
+does run reads a report of now.
 
 **What a story cost.** The runner asks Claude Code and Codex for their machine-readable output and
 records each invocation's tokens — input, cache read, cache write, output, and Claude's cost — as a

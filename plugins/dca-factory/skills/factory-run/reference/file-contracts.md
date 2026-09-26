@@ -49,7 +49,10 @@ but not the version, so the comparison is skipped and named.
 
 `tasks/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
 the orchestrator remembers, because an in-session run has no other honest way to count and a
-resumed run must see the same number. At three the run stops.
+resumed run must see the same number. At three the run stops. A refusal on `gate:fail environment` (a
+profile command's program missing on the gate's PATH) counts no round. A person's `factory.sh run
+--story <id> --from <stage>` starts a new count: the runner moves the file to
+`tasks/<story>/.verify/rounds.<UTC time>` and writes a `rounds-reset` line into the journal.
 
 A mapped test is run with the profile command that **covers the file it was found in** — the
 end-user tests and the unit tests usually live in different projects or source sets, and a selector

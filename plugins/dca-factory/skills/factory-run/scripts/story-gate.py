@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.39.9"
+VERSION = "0.40.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1162,6 +1162,22 @@ def posix_shell():
     return None
 
 
+# Commands whose shell could not find their program, in the order they were met. A missing tool is the
+# environment's fault, not the story's: the report names it as `environment`, and the runner stops once
+# on it instead of sending a stage into rounds it cannot win.
+MISSING_TOOLS = []
+MISSING_TOOL = re.compile(r"(?:^|\n)(?:[^\n:]*: )?(?:line \d+: |\d+: )?([^\s:]+): (?:command )?not found"
+                          r"|'([^']+)' is not recognized as an internal or external command")
+
+
+def missing_tool(code, output):
+    """The program a shell could not find (exit 127, or cmd.exe's 9009), else None."""
+    if code not in (127, 9009):
+        return None
+    found = MISSING_TOOL.search(output or "")
+    return (found.group(1) or found.group(2)) if found else "a program"
+
+
 def run(command, cwd):
     """Run one profile command through a shell.
 
@@ -1175,11 +1191,15 @@ def run(command, cwd):
         completed = subprocess.run(
             [bash, "-c", command], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
         )
-        return completed.returncode, completed.stdout + completed.stderr
-    completed = subprocess.run(
-        command, cwd=cwd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace"
-    )
-    return completed.returncode, (completed.stdout + completed.stderr)
+    else:
+        completed = subprocess.run(
+            command, cwd=cwd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+    output = completed.stdout + completed.stderr
+    tool = missing_tool(completed.returncode, output)
+    if tool and (tool, command) not in MISSING_TOOLS:
+        MISSING_TOOLS.append((tool, command))
+    return completed.returncode, output
 
 
 def check_compiles(result, profile, cwd):
@@ -4052,9 +4072,12 @@ def status_model(cwd, backlog, tasks, live=False):
         story = stories[story_id]
         facts = story_facts(cwd, tasks, story_id)
         mark, words, action = story_attention(cwd, story_id, story, profile)
-        stage = next((st for sid, st, _t in running_stages(tasks) if sid == story_id), story.get("start") or "")
+        done = story["state"] == "delivered"
+        stage = "" if done else next((st for sid, st, _t in running_stages(tasks) if sid == story_id),
+                                     story.get("start") or "")
         journal = os.path.isfile(os.path.join(tasks, story_id, ".verify", "journal.tsv"))
-        rows.append(dict(journal=journal, epic=story.get("epic", ""), story=story_id, title=story.get("title", ""), mark=mark,
+        rows.append(dict(journal=journal, done=done, epic=story.get("epic", ""), story=story_id,
+                         title=story.get("title", ""), mark=mark,
                          state=words, stage=stage or "—", passes=len(facts["passes"]) or 0,
                          started=facts["started"], delivered=facts["delivered"], seconds=facts["seconds"],
                          tokens=facts["tokens"], measured=facts["measured"], runs=facts["runs"],
@@ -4073,6 +4096,8 @@ def status_model(cwd, backlog, tasks, live=False):
     running = []
     held = read_claim(claim_path(cwd)) if live else None
     for story_id, stage, started in running_stages(tasks):
+        if story_id in stories and stories[story_id]["state"] in ("delivered", "superseded"):
+            continue
         interrupted = story_id in stories and stories[story_id]["state"] != "running"
         entry = dict(story=story_id, stage=stage, since=parse_time(started), interrupted=interrupted)
         if live:
@@ -4091,7 +4116,7 @@ def status_model(cwd, backlog, tasks, live=False):
         epics[-1]["rows"].append(row)
     for epic in epics:
         epic["rows"].sort(key=lambda r: order.index(r["story"]))
-        epic.update(delivered=sum(r["state"] == "delivered" for r in epic["rows"]), total=len(epic["rows"]),
+        epic.update(delivered=sum(r["done"] for r in epic["rows"]), total=len(epic["rows"]),
                     tokens=sum(r["tokens"] for r in epic["rows"]), measured=sum(r["measured"] for r in epic["rows"]),
                     seconds=sum(r["seconds"] for r in epic["rows"]))
     epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
@@ -4129,7 +4154,7 @@ def status_model(cwd, backlog, tasks, live=False):
     return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
                 rows=rows, next=next_line, journeys=journeys,
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
-                delivered=sum(r["state"] == "delivered" for r in rows), total=len(rows),
+                delivered=sum(r["done"] for r in rows), total=len(rows),
                 tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
                 seconds=sum(r["seconds"] for r in rows))
 
@@ -5085,8 +5110,8 @@ def schedule_data(cwd, backlog, tasks):
     # than a stage may take, then it was interrupted and the story may be picked up again.
     now = datetime.now(timezone.utc)
     for story_id, stage, started in running_stages(tasks):
-        if story_id not in stories:
-            continue
+        if story_id not in stories or stories[story_id]["state"] in ("delivered", "superseded"):
+            continue                              # done is done: a killed runner's open stage changes nothing
         since = parse_time(started)
         if since and (now - since).total_seconds() <= stale_after():
             stories[story_id].update(state="running", start=None, detail=f"stage {stage} since {started}")
@@ -5145,6 +5170,28 @@ def schedule(cwd, backlog, tasks):
     return 0
 
 
+def start(cwd, backlog, tasks, story_id):
+    """Where `run --story <id>` begins when no stage is named: the schedule's view of that one story.
+
+    Prints `state:`, `start:` (a stage, or `none`) and `detail:` — a contract the runner reads. A story
+    that is delivered, waits, is blocked or stopped gets `start: none`; another story's unfinished
+    code in the checkout blocks it the way it blocks the backlog run. Exit 2 for an unknown story."""
+    data = schedule_data(cwd, backlog, tasks)
+    story = data["stories"].get(story_id)
+    if story is None:
+        print(f"factory: no story {story_id} under {backlog}/", file=sys.stderr)
+        return 2
+    state, stage, detail = story["state"], story["start"], story["detail"]
+    holder = next((s for s in data["order"] if data["stories"][s].get("holds")), None)
+    if stage and holder and holder != story_id:
+        state, stage, detail = "blocked", None, (f"{holder} holds unfinished code in the checkout "
+                                                 f"({data['stories'][holder]['state']}) — it is delivered first")
+    print(f"state: {state}")
+    print(f"start: {stage or 'none'}")
+    print(f"detail: {detail}")
+    return 0
+
+
 class Result:
     def __init__(self):
         self.entries = []
@@ -5175,6 +5222,11 @@ class Result:
         return any(state == "fail" for state, _, _ in self.entries)
 
     def report(self, story_id, stage, as_json):
+        if MISSING_TOOLS and not any(check == "environment" for _s, check, _m in self.entries):
+            tools = sorted({tool for tool, _c in MISSING_TOOLS})
+            self.fail("environment", f"the shell running the gate found no {', '.join(f'`{t}`' for t in tools)} "
+                                     f"(`{MISSING_TOOLS[0][1]}`) — the process that runs the gate lacks a tool on "
+                                     f"its PATH. No stage can fix that: put it on the PATH, then run the story again")
         for state, check, message in self.entries:
             print(f"gate:{state} {check} — {message}")
         skipped = [check for state, check, _ in self.entries if state == "skip"]
@@ -5285,6 +5337,8 @@ def main(argv):
     parser.add_argument("--resolve", metavar="ARGUMENT",
                         help="what /factory-run <argument> means: `story <id>`, `wish`, `backlog`, or `unknown <word>` "
                              "(exit 2), and exit")
+    parser.add_argument("--start", action="store_true",
+                        help="with --story: the story's state and the stage a run without --from begins at, and exit")
     parser.add_argument("--schedule", action="store_true",
                         help="print every story's state and the next one to run, and exit")
     parser.add_argument("--check-backlog", action="store_true",
@@ -5314,6 +5368,10 @@ def main(argv):
         return resolve(args.backlog, args.resolve)
     if args.schedule:
         return schedule(cwd, args.backlog, args.tasks)
+    if args.start:
+        if not args.story:
+            parser.error("--start needs --story")
+        return start(cwd, args.backlog, args.tasks, args.story)
     if args.reopen:
         return reopen(cwd, args.tasks, args.backlog, args.reopen)
     if args.check_backlog:

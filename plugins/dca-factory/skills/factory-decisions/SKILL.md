@@ -103,8 +103,9 @@ passed and the profile's `acceptance:` asks a human to look before the story cou
 The record lists the criteria with their tests and how to start the application (`run:`). A human
 accepts — no role is checked; the answer is theirs, on their confirmation, as always.
 
-- **Accepted** — write `answer: accepted`, then run the document gate
-  (`python3 .agents/factory/story-gate.py --story <story> --stage document`): it delivers the story.
+- **Accepted** — write `answer: accepted`, then run the document gate: `bash .agents/factory/factory.sh run
+  --story <story>` starts there by itself, or in a session `python3 .agents/factory/story-gate.py --story
+  <story> --stage document`. It delivers the story; no stage runs again.
   The story's commit follows — the code, the tests and `tasks/<story>/`.
 - **A correction** — what the human wants different, in their words: write `answer: correction:
   <their words>`, then bring it into **the same story** through the backlog skill's rules: changed or

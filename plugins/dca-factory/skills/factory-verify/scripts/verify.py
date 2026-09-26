@@ -12,6 +12,7 @@ fixture's "test runner" is a marker file, so red and green cost milliseconds ins
 """
 
 import argparse
+import glob
 import hashlib
 import importlib.util
 import json
@@ -735,7 +736,9 @@ def verify_runner(runner, verbose=False):
                       .replace("depends_on: []", "depends_on: [STORY-0]"))
         shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
                     os.path.join(root, ".agents", "factory", "story-gate.py"))
-        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        # STORY-0 is not in this backlog, so the story is blocked; a named stage runs it anyway.
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "claude",
+                                  "--dry-run")
         order = [line.strip()[3:].split("  (")[0].strip()
                  for line in output.splitlines() if line.startswith("── ") and "skipped" not in line]
         check("runner: a journey runs plan, test, judge and document — build and tidy are skipped and said so",
@@ -988,12 +991,69 @@ def verify_runner(runner, verbose=False):
               stages[:2] == ["plan", "test"] and "ends with a needs-human section" not in output,
               f"stages that ran: {stages}")
         bare = bare.replace("(none)", "None.")
-        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
                                   env={"FACTORY_TOOL_CMD": bare})
         stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
         check("runner: a needs-human heading that says `None.` does not stop the run",
               stages[:2] == ["plan", "test"] and "ends with a needs-human section" not in output,
               f"stages that ran: {stages}")
+
+    # 1d3. `run --story` without --from starts where the story's files say, never at plan by default
+    def gated(root):
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        return root
+
+    with tmpdir() as root:
+        gated(build_project(root, extra_sources=(("tasks/STORY-1/plan.md", "# Plan\n"),)))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        order = [line.strip()[3:].split("  (")[0].strip() for line in output.splitlines() if line.startswith("── ")]
+        check("runner: without --from a story with plan and tests written resumes at build, not at plan",
+              code == 0 and order[:1] == ["stage build"] and "starts at build" in output, f"got {order}")
+    with tmpdir() as root:
+        gated(build_project(root, document="# Document\n", extra_sources=(("tasks/STORY-1/.delivered", "2026-09-26T07:40:00Z"),)))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": "false"})
+        check("runner: a delivered story runs nothing without --from, and says so",
+              code == 0 and "is delivered" in output and "── " not in output, output[-300:])
+    with tmpdir() as root:
+        gated(build_project(root, story=STORY.replace("depends_on: []", "depends_on: [STORY-0]")))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": "false"})
+        check("runner: a story whose dependency is not delivered does not run without --from, and names --from",
+              code == 1 and "blocked" in output and "--from" in output and "── " not in output, output[-300:])
+    # 1d4. three rounds stop a story; a person's --from starts a new count, keeps the old one, and the gate
+    #      checks the existing file before the stage is invoked
+    with tmpdir() as root:
+        gated(build_project(root, rounds=3, extra_sources=(("tasks/STORY-1/plan.md", "# Plan\n"),
+                                                          ("tasks/STORY-1/.gate-test.txt", "gate:fail rounds — stale\n"))))
+        stopped_code, stopped = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                           env={"FACTORY_TOOL_CMD": "false"})
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "test", "--tool", "stand-in",
+                                  "--max-stages", "0", env={"FACTORY_TOOL_CMD": "false"})
+        kept = glob.glob(os.path.join(root, "tasks", "STORY-1", ".verify", "rounds.*"))
+        journal_path = os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv")
+        journal = open(journal_path, encoding="utf-8").read() if os.path.isfile(journal_path) else ""
+        check("runner: a story stopped after three rounds does not run without --from",
+              stopped_code == 1 and "stopped" in stopped and "── " not in stopped, stopped[-300:])
+        check("runner: --from starts a new count of rounds and keeps the old one in the journal folder",
+              not os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".rounds")) and len(kept) == 1
+              and "\trounds-reset\t" in journal, output[-400:])
+        check("runner: resumed at a gated stage whose file exists, the gate decides before the stage is invoked",
+              "── gate test  (the file exists" in output
+              and output.index("── gate test  (the file exists") < (output.find("── stage test") % (len(output) + 1)),
+              output[-400:])
+    # 1d5. a program missing on the PATH stops the story once, without a round
+    with tmpdir() as root:
+        gated(build_project(root, tests=None, profile=PROFILE.replace("compile: true", "compile: dca-no-such-tool"),
+                            extra_sources=(("tasks/STORY-1/plan.md", "# Plan\n"), ("tests.fixture", TESTS))))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "test", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": "mkdir -p tasks/STORY-1; cp tests.fixture tasks/STORY-1/tests.md"})
+        stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
+        check("runner: a gate refused on the environment stops once, counts no round and runs no stage again",
+              code == 1 and stages == ["test"] and "refused on the environment" in output
+              and not os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".rounds")),
+              f"stages {stages}, exit {code}: {output[-400:]}")
 
     # 1d2. a stage that asks writes the record; the run names it and how to resume
     with tmpdir() as root:
@@ -4268,6 +4328,42 @@ def main(argv=None):
                              judged.get("STORY-1", ("", ""))[1] == "adopt", judged))
         expectations.append(("adopt: once adopted it reads 'delivered (adopted)'", "delivered (adopted)" in after,
                              after[-500:]))
+        expectations.append(("status: an adopted story counts as delivered in its epic's header",
+                             "1 of 2 delivered" in after, after[-500:]))
+    with tmpdir() as root:
+        # a killed runner leaves a stage-start without an end; a delivered story stays delivered, not running
+        started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        backlog_project(root, extra_sources=(("tasks/STORY-1/document.md", "# Document\n"),
+                                             ("tasks/STORY-1/.delivered", "2026-09-26T07:40:00Z"),
+                                             ("tasks/STORY-1/.verify/journal.tsv",
+                                              f"{started}\tstage-start\ttidy\ttool=claude\n")))
+        rows, nxt, _w, listing = schedule_of(args.gate, root)
+        shown = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
+                               text=True, encoding="utf-8").stdout
+        expectations.append(("schedule: a delivered story with an open stage in its journal is delivered, not running",
+                             rows.get("STORY-1", ("", ""))[0] == "delivered" and "Nothing is running." in shown
+                             and "1 of 1 delivered" in shown, listing + shown[-400:]))
+    with tmpdir() as root:
+        # `--start`: where `run --story` begins without --from — the story's state, never plan by default
+        backlog_project(root, ("STORY-2", ["STORY-1"]), extra_sources=(
+            ("tasks/STORY-1/plan.md", "# Plan\n"), ("tasks/STORY-1/tests.md", TESTS)))
+        start_of = lambda sid: subprocess.run([sys.executable, args.gate, "--story", sid, "--start"], cwd=root,
+                                              capture_output=True, text=True, encoding="utf-8")
+        one, two, unknown = start_of("STORY-1"), start_of("STORY-2"), start_of("STORY-9")
+        expectations.append(("start: a story with plan and tests written starts at build",
+                             "state: in-progress" in one.stdout and "start: build" in one.stdout, one.stdout))
+        expectations.append(("start: a story whose dependency is not delivered starts nowhere, and says why",
+                             "state: blocked" in two.stdout and "start: none" in two.stdout
+                             and "STORY-1" in two.stdout, two.stdout))
+        expectations.append(("start: an unknown story is refused (exit 2)", unknown.returncode == 2,
+                             unknown.stdout + unknown.stderr))
+    with tmpdir() as root:
+        # a program missing on the PATH is the environment, not the story
+        build_project(root, profile=PROFILE.replace("compile: true", "compile: dca-no-such-tool --version"))
+        code, output = run_gate(args.gate, root, "test")
+        expectations.append(("environment: a command whose program is not on the PATH fails as `environment`, named",
+                             code != 0 and "environment" in checks_by_verdict(output)["fail"]
+                             and "dca-no-such-tool" in output, output[-600:]))
     with tmpdir() as root:
         # a refusal left from an earlier round does not undo a delivery
         backlog_project(root, extra_sources=(("tasks/STORY-1/document.md", "# Document\n"),

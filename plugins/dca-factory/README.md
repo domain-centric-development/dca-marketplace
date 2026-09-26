@@ -157,7 +157,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh setup [--tool <t>] [--copy]` | `factory-setup` | installs the pipeline where it is not; on an installed project it only reports |
 | `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
 | `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
-| `factory.sh run [--story <id>] [--watch]` | `factory-run` | one story through the six stages · without `--story` every story in dependency order, waiting for answers with `--watch` |
+| `factory.sh run [--story <id> [--from <stage>]] [--watch]` | `factory-run` | one story through the six stages, from where its files say · `--from` names the stage and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch` |
 | `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |

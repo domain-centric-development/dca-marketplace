@@ -10,7 +10,8 @@
 #   factory.sh backlog [--check]             every story's state and the next one; --check the backlog
 #   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch] [--interval <s>]
 #                  [--max-stages <n>] [--story-budget <tokens>] [--shared-builder] [--dry-run]
-#                    one story, or without --story the whole backlog in the schedule's order
+#                    one story from where its files say (--from names the stage and starts a new
+#                    count of rounds), or without --story the whole backlog in the schedule's order
 #   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh help [--format text|md|json]  the factory explained: the flow and where this project stands,
@@ -49,6 +50,7 @@ TASKS="tasks"
 DECISIONS=".agents/factory/decisions"
 STOP_FILE=".agents/factory/stop"             # exists → a backlog run stops before its next story
 INVOCATIONS=0                                # agent invocations in this process
+GATE_FIRST=""                                # set for the first stage of an explicit story run: its gate decides first
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
 SHARED_BUILDER="${FACTORY_SHARED_BUILDER:-}"  # --shared-builder: plan to tidy in one process (off by default)
@@ -1486,6 +1488,28 @@ bump_rounds() {                             # bump_rounds <story> -> current cou
   echo "$count"
 }
 
+# A refusal whose cause is the machine, not the story: the gate found no program a profile command
+# needs. No stage can put a tool on the PATH, so no round is counted and nothing runs again.
+environment_refused() {                     # environment_refused <stage> <story>
+  local report="$TASKS/$2/.gate-$1.txt"
+  [ -f "$report" ] && grep -q '^gate:fail environment' "$report" || return 1
+  echo "factory: gate '$1' refused on the environment, not on the story — $(sed -n 's/^gate:fail environment — //p' "$report" | head -n 1)" >&2
+  echo "factory:   no round is counted. Fix it, then: factory.sh run --story $2" >&2
+  return 0
+}
+
+# A person's --from restarts the story's count: the rounds so far were theirs to judge, and they chose
+# to go on. The old count is kept in the journal folder, never deleted.
+reset_rounds() {                            # reset_rounds <story>
+  local file="$TASKS/$1/.rounds"
+  [ -f "$file" ] || return 0
+  mkdir -p "$TASKS/$1/.verify"
+  mv "$file" "$TASKS/$1/.verify/rounds.$(date -u +%Y%m%dT%H%M%SZ)"
+  printf '%s	rounds-reset	-	by=--from
+' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$TASKS/$1/.verify/journal.tsv"
+  echo "factory: --from $from starts a new count of rounds for $1 (the old one is under $TASKS/$1/.verify/)."
+}
+
 prompt_for() {                              # prompt_for <stage> <story>
   local stage=$1 story=$2 repeat=""
   # A repeat round that cannot see why the gate refused works blind, and every stage skill says to
@@ -1610,6 +1634,7 @@ adopt_gate() {                              # adopt_gate <story> <tool> <dry>
     echo "factory: story $1 is adopted."
     return 0
   fi
+  environment_refused adopt "$1" && return 1
   local rounds; rounds=$(bump_rounds "$1")
   if [ "$rounds" -ge 3 ]; then
     echo "factory: gate 'adopt' refused in round $rounds — three rounds did not converge. needs-human." >&2
@@ -1663,6 +1688,23 @@ run_story() {
       continue
     fi
 
+    # Resumed at a gated stage whose file exists: the gate decides first, on today's tree. A file that
+    # holds costs no invocation, and a stage that does run reads a report of now, not of a round the
+    # machine lost (a tool missing on the PATH, a count reset by --from).
+    if [ -n "$GATE_FIRST" ] && [ "$stage" = "$from" ] && [ -z "$dry" ] && [ "$stage" != document ] \
+       && [[ " ${POST_GATED[*]} " == *" $stage "* ]] && [ -f "$TASKS/$story/$(stage_file "$stage")" ]; then
+      GATE_FIRST=""
+      echo "── gate $stage  (the file exists — checked before the stage is invoked)"
+      local first_code=0
+      gate "$stage" "$story" >/dev/null 2>&1 || first_code=$?
+      if [ "$first_code" = 0 ]; then
+        echo "factory: $TASKS/$story/$(stage_file "$stage") already holds — stage '$stage' is not invoked again."
+        ran="${ran:+$ran,}$stage"
+        continue
+      fi
+      environment_refused "$stage" "$story" && return 1
+    fi
+    GATE_FIRST=""
     # A resumed story whose document file exists and was never refused: its gate decides first, and a
     # file that already holds costs no invocation.
     if [ "$stage" = document ] && [ -z "$dry" ] && [ -f "$TASKS/$story/document.md" ] \
@@ -1748,6 +1790,7 @@ run_story() {
         return 3
       fi
       if [ "$gate_code" != 0 ]; then
+        environment_refused "$stage" "$story" && return 1
         # The same way back a judge's `changes-requested` takes: the stage runs again with the gate's
         # report as its input, one round counted, and three rounds stop the story.
         local refused_rounds; refused_rounds=$(bump_rounds "$story")
@@ -1919,7 +1962,7 @@ setup_write() {                             # setup_write [<key>]
 
 [ $# -ge 1 ] || usage
 command=$1; shift
-story=""; tool=""; from="plan"; dry=""; source_dir=""; copy_mode=""; watch=""; interval=60
+story=""; tool=""; from=""; dry=""; source_dir=""; copy_mode=""; watch=""; interval=60
 setup_mode=""; replace_key=""; want_usage=""; want_brief=""; session_start=""; live=""; view=()
 
 # The reading commands are the gate's; the runner passes them on, so a project calls one script.
@@ -2038,6 +2081,27 @@ case "$command" in
       check_contract_first || exit $?
       check_local_context "$tool"
       isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
+      if [ -z "$from" ]; then
+        # No stage named: the story starts where its files say, as the backlog run would start it.
+        local_start=$("$PY" "$GATE" --story "$story" --start) || exit $?
+        local_state=$(printf '%s\n' "$local_start" | sed -n 's/^state: //p')
+        from=$(printf '%s\n' "$local_start" | sed -n 's/^start: //p')
+        local_detail=$(printf '%s\n' "$local_start" | sed -n 's/^detail: //p')
+        if [ "$from" = none ] || [ -z "$from" ]; then
+          case "$local_state" in
+            delivered) echo "factory: story $story is delivered${local_detail:+ ($local_detail)} — nothing runs."; exit 0 ;;
+            waiting)   echo "factory: story $story waits for $local_detail — answer it with /factory-decisions." >&2; exit 3 ;;
+            running)   echo "factory: story $story is running ($local_detail) — one run at a time." >&2; exit 5 ;;
+            *)         echo "factory: story $story is $local_state${local_detail:+ — $local_detail}." >&2
+                       echo "factory:   nothing runs; name the stage to run it anyway: factory.sh run --story $story --from <stage>" >&2
+                       exit 1 ;;
+          esac
+        fi
+        echo "factory: story $story starts at $from${local_detail:+ — $local_detail}"
+      else
+        [ -n "$dry" ] || reset_rounds "$story"
+      fi
+      GATE_FIRST=1
       [ -n "$dry" ] || take_checkout || exit $?
       run_story "$story" "$tool" "$from" "$dry"
       exit $?
