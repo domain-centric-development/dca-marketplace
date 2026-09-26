@@ -135,7 +135,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.38.2"
+VERSION = "0.38.3"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------

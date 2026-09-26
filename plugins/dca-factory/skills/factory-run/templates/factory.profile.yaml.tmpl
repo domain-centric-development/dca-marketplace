@@ -9,7 +9,9 @@
 #
 # compile      makes the test sources compile without running them
 # test         runs the unit tests
-# e2eTest      runs the end-user tests (falls back to `test` when absent)
+# e2eTest      runs the end-user tests (falls back to `test` when absent). The suite starts the application
+#              itself, in the test process and on a free port: a suite that drives an application started
+#              beforehand makes the gate's red and green checks depend on whatever answers on that address
 # filterFlag   the flag that selects a single test
 # filterFormat how a selector `<Class>#<method>` is written for this runner. `{class}` and
 #              `{method}` are the selector's halves; `{file}` is the source file the gate located
