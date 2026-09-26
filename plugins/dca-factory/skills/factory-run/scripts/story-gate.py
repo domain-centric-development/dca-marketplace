@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.39.8"
+VERSION = "0.39.9"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -573,6 +573,15 @@ def check_break(result, profile, cwd, tasks, story_id, selector, key, located):
         shutil.copytree(cwd, copy, symlinks=True, ignore=shutil.ignore_patterns(*BREAK_IGNORE))
         applied = subprocess.run(["git", "apply", "--whitespace=nowarn", os.path.abspath(patch)], cwd=copy,
                                  capture_output=True, text=True)
+        with open(patch, "rb") as handle:
+            raw = handle.read()
+        if applied.returncode != 0 and b"\r\n" in raw:
+            # An editor on Windows writes the patch with CRLF, which git reads as part of each line.
+            unix = os.path.join(scratch, "break.patch")
+            with open(unix, "wb") as handle:
+                handle.write(re.sub(rb"\r+\n", b"\n", raw))
+            applied = subprocess.run(["git", "apply", "--whitespace=nowarn", unix], cwd=copy,
+                                     capture_output=True, text=True)
         if applied.returncode != 0:
             result.fail("break-proof", f"{selector} ({key}): its break does not apply — "
                                        f"{(applied.stderr or applied.stdout).strip()[:200]}")
