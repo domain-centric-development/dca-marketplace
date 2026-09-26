@@ -45,6 +45,11 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    human confirms **that block**. An instruction explicit enough to leave nothing open ("write
    answer b, by me, rationale: archived is history") is the confirmation; do not ask again once it
    is given. Ordinary discussion — "b sounds right" in the middle of weighing — is not.
+5a. **An answer that changes a test goes back to the test stage.** Where the chosen option changes what
+   a test expects or drops an assertion — whichever stage asked — add `applies: test` to the block. The
+   story then resumes at the test stage, whose red check accepts an expectation changed on a decision;
+   resumed at the stage that asked, the changed test no longer matches its red proof and the build gate
+   refuses it round after round. An answer that changes only production code needs no `applies:` line.
 6. **`by:` is the person, `at:` is now.** Ask whose decision it is if it is not obvious from the
    session; the git `user.name` is a suggestion to confirm, not an answer. `at:` is the current
    time in UTC, ISO 8601. You are not the decider and your name goes nowhere in the record.
@@ -52,7 +57,8 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    answered; say so, show it, and stop. A change of mind is a new question — say that the stage would have to ask again,
    and why the old answer stays as history. A draft (an `## Answer` without `by:` or `at:`) may be
    completed with the missing lines once the human confirms it is theirs.
-8. **Say what happens next, and do not do it.** After writing: name the stage that asked and how the
+8. **Say what happens next, and do not do it.** After writing: name the stage that applies the answer
+   (`applies:`, else the stage that asked) and how the
    story continues — a worker that is running (a listening session, or the person's runner) picks
    it up by itself; otherwise `/factory-run <story>` resumes it at that stage. Answering a question is not taking over the story; the worker that asked
    applies the answer, and the gate stamps the record applied when it has. If the human wants to

@@ -72,7 +72,9 @@ that smuggles the decision in.
    demonstrate it: `#### <key> (happy path)` (line form `- <key> (happy path): …`). Exactly one per
    story; the plan gate refuses none and two. It gets the story's end-to-end test; every other
    scenario is tested integrated. Ask for it where it is not obvious: "Which scenario shows what this
-   story is for?"
+   story is for?" Give it a `Title:` line where the key in words is not what its end-user test should be
+   called — and always where the project binds its end-user tests to a shared list of scenario titles:
+   then the title is that list's, added there first.
    An assumption that fixes an observable result — a format, an order, a wording the user sees —
    is a criterion waiting for its answer, not a footnote: the plan stage builds the next best shape
    around an open assumption, and that shape then reaches delivery unconfirmed. Ask for it before
@@ -90,9 +92,11 @@ that smuggles the decision in.
      a client framework where pages are server-rendered — or what the stack cannot do? That is a
      question about the technical description, not a detail of the story;
    - **external dependency:** a system neither the designed map nor `## Integrations` carries is a
-     question about the description, not a story. Its contract (endpoints, status codes, what
-     counts as unavailable) goes into the description and the configuration once, never into the
-     story;
+     question about the description, not a story. Its contract (endpoints, the request and answer
+     bodies with each field's type — a money amount as a decimal string, never a JSON number — status
+     codes, what counts as unavailable) goes into the description and the configuration once, never
+     into the story. A shape the description leaves open is a question now: two implementations fill
+     it differently;
    - **inputs:** format, allowed range, boundaries, and what happens at them — a scenario per boundary
      that matters;
    - **defaults:** one stated value, and where the user sees it;
@@ -100,6 +104,11 @@ that smuggles the decision in.
    - **state and lifecycle:** every transition a rule names, including the conflict case where two
      sources of the same value meet;
    - **changed behaviour:** what looks different afterwards → `## Changed expectations`;
+   - **already the system's behaviour:** a whole story whose scenarios the system already shows is not
+     a story to build but one to **adopt** — `status: adopted` (the backlog contract's "Adopted story"):
+     the factory maps it to green tests, writes the missing ones with a break each, and records it as
+     delivered with evidence. Offer it; on a brownfield project, offer once per new story to adopt the
+     existing behaviour the new story depends on — never as a stop;
    - **already green:** check every scenario whose outcome is an absence or a non-change — "no …
      is shown", "nothing changes", "… still works" — against the code as it is today. If it already
      holds (the element does not exist yet, so it is not shown), it is a guarantee, not a

@@ -118,7 +118,7 @@ paths are the defaults; the `dca-describe` section of `AGENTS.md` names the plac
 ### DESC-INTEGRATIONS
 - look up: `## Integrations`
 - asked: when open
-- question: Which external systems does the product talk to, in which direction, and what counts as unavailable?
+- question: Which external systems does the product talk to, in which direction, what is sent and received — each field with its type — and what counts as unavailable?
 - options: none
 - default: —
 - answer goes to: `project/tech.md → ## Integrations`

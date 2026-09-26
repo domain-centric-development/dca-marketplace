@@ -151,6 +151,24 @@ STORY_SCENARIOS = STORY.replace("""- shows-the-thing: The reader sees the thing.
 - Sharing things with others.
 """)
 
+#: A story describing behaviour the project already has: adopted, never built.
+ADOPTED = STORY.replace("status: approved", "status: adopted").replace(" (happy path):", ":")
+#: The tests the adoption wrote itself, each shown to work by a break.
+CHARACTERIZED = "\n## Characterization\n- com.example.WidgetPageTest#showsTheThing\n"
+#: A break the fixture's runner notices: the test's green marker is gone, so the test is red.
+BREAK_THE_THING = """diff --git a/green/comexampleWidgetPageTestshowsTheThing b/green/comexampleWidgetPageTestshowsTheThing
+deleted file mode 100644
+index e69de29..0000000
+"""
+#: A break that changes something no test reads.
+BREAK_NOTHING = """diff --git a/unrelated.txt b/unrelated.txt
+--- a/unrelated.txt
++++ b/unrelated.txt
+@@ -1 +1 @@
+-a
++b
+"""
+
 TESTS = """# Tests — STORY-1
 
 <!-- gate:tests -->
@@ -575,7 +593,7 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
     write("src/test/java/com/example/WidgetUnitTest.java",
           "class WidgetUnitTest { void showsNothingWhenEmpty() {} }\n")
     write("src/test-pages/java/com/example/WidgetPageTest.java",
-          "class WidgetPageTest { void showsTheThing() {} }\n")
+          "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n")
     for path, content in extra_sources:
         write(path, content)
     if tests is not None:
@@ -698,6 +716,18 @@ def verify_runner(runner, verbose=False):
         check("runner: the plan gate runs before its stage, every other gate after it",
               order == expected, f"got {order}")
         check("runner: a dry run changes nothing", code == 0 and not os.path.isdir(os.path.join(root, "tasks", "STORY-1", "plan.md")))
+
+    # 1c. an adoption builds nothing: plan, test, judge, then the adopt gate
+    with tmpdir() as root:
+        build_project(root, story=STORY.replace("status: approved", "status: adopted"))
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        order = [line.strip()[3:].split("  (")[0].strip()
+                 for line in output.splitlines() if line.startswith("── ") and "skipped" not in line]
+        check("runner: an adopted story runs plan, test and judge — build, tidy and document are skipped",
+              order == ["gate plan", "stage plan", "stage test", "gate test", "stage judge"]
+              and "stage document  (skipped: an adopted story is not built)" in output, f"got {order}")
 
     # 1b. a journey walks what is delivered: no build, no tidy
     with tmpdir() as root:
@@ -2372,6 +2402,19 @@ def main(argv=None):
         (Case("test: an end-user test for a scenario that is not the happy path is refused", "test", 1,
               must_fail=("levels",), text=("shows-the-thing (com.example.WidgetPageTest#showsTheThing)",)),
          dict(profile=PROFILE.replace("test.pages:", "e2eTest:"))),
+        (Case("test: an end-user test without its scenario's title as display name is refused", "test", 1,
+              must_fail=("test-titles",), text=('"Shows the thing"',)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+              story=STORY.replace(" (happy path):", ":").replace("- shows-the-thing:", "- shows-the-thing (happy path):"),
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                              "class WidgetPageTest { void showsTheThing() {} }\n"),))),
+        (Case("test: a scenario's `Title:` line is the title its end-user test carries", "test", 0,
+              must_pass=("test-titles",)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+              story=STORY_SCENARIOS.replace("#### shows-the-thing\n", "#### shows-the-thing (happy path)\nTitle: The list shows what is recorded\n")
+              .replace("#### shows-nothing-when-empty (happy path)", "#### shows-nothing-when-empty"),
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                              "class WidgetPageTest { @DisplayName(\"The list shows what is recorded\") void showsTheThing() {} }\n"),))),
         (Case("test: an end-user test the plan gave browser-only passes the level check", "test", 0,
               must_pass=("levels",)),
          dict(profile=PROFILE.replace("test.pages:", "e2eTest:"), extra_sources=(
@@ -2380,6 +2423,38 @@ def main(argv=None):
         (Case("test: the happy path's end-user test passes the level check", "test", 0, must_pass=("levels",)),
          dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
               story=STORY.replace(" (happy path):", ":").replace("- shows-the-thing:", "- shows-the-thing (happy path):"))),
+        # --- adoption: existing behaviour into the backlog, with evidence -----
+        (Case("plan: an adopted story passes the plan gate, held to no happy path", "plan", 0,
+              must_pass=("approved",), must_skip=("happy-path",)),
+         dict(story=ADOPTED)),
+        (Case("test: an adopted story's tests are green at the test gate", "test", 0, must_pass=("tests-green",)),
+         dict(story=ADOPTED, green=both_green)),
+        (Case("adopt: every scenario on a green existing test and a judge's pass adopts the story", "adopt", 0,
+              must_pass=("tests-green", "adopt-judged"), must_skip=("break-proof",)),
+         dict(story=ADOPTED, green=both_green, extra_sources=(("tasks/STORY-1/judge.md", "# Judge\n\nverdict: pass\n"),))),
+        (Case("adopt: without a judge's pass nothing is adopted", "adopt", 1, must_fail=("adopt-judged",)),
+         dict(story=ADOPTED, green=both_green)),
+        (Case("adopt: a red test is not adopted", "adopt", 1, must_fail=("tests-green",)),
+         dict(story=ADOPTED, green=both_green[:1], extra_sources=(("tasks/STORY-1/judge.md", "verdict: pass\n"),))),
+        (Case("adopt: a characterization test without its break is refused", "adopt", 1, must_fail=("break-proof",),
+              text=("no break at",)),
+         dict(story=ADOPTED, green=both_green, tests=TESTS + CHARACTERIZED,
+              extra_sources=(("tasks/STORY-1/judge.md", "verdict: pass\n"),))),
+        (Case("adopt: a characterization test red under its break passes, on a scratch copy", "adopt", 0,
+              must_pass=("break-proof",), text=("red under its break",)),
+         dict(story=ADOPTED, green=both_green, tests=TESTS + CHARACTERIZED,
+              extra_sources=(("tasks/STORY-1/judge.md", "verdict: pass\n"),
+                             ("tasks/STORY-1/breaks/com.example.WidgetPageTest--showsTheThing.patch", BREAK_THE_THING)))),
+        (Case("adopt: a characterization test named by its simple class is found and broken as the table's", "adopt", 0,
+              must_pass=("break-proof",), text=("com.example.WidgetPageTest#showsTheThing (shows-the-thing): red",)),
+         dict(story=ADOPTED, green=both_green, tests=TESTS + "\n## Characterization\n- WidgetPageTest#showsTheThing\n",
+              extra_sources=(("tasks/STORY-1/judge.md", "verdict: pass\n"),
+                             ("tasks/STORY-1/breaks/WidgetPageTest--showsTheThing.patch", BREAK_THE_THING)))),
+        (Case("adopt: a break that leaves the test green is refused and names it", "adopt", 1,
+              must_fail=("break-proof",), text=("stays green under its break",)),
+         dict(story=ADOPTED, green=both_green, tests=TESTS + CHARACTERIZED,
+              extra_sources=(("tasks/STORY-1/judge.md", "verdict: pass\n"), ("unrelated.txt", "a\n"),
+                             ("tasks/STORY-1/breaks/com.example.WidgetPageTest--showsTheThing.patch", BREAK_NOTHING)))),
         (Case("test: a journey's test is green at its gate, the inverse of a story", "test", 0,
               must_pass=("tests-green",)),
          dict(story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
@@ -2683,6 +2758,11 @@ def main(argv=None):
               "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
          dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,
               **with_decisions(("STORY-1-01", CONFLICT + ANSWER), plan=PLAN_APPLIED))),
+        (Case("test: an answer a later stage asked for that changes a test (`applies: test`) is the test stage's",
+              "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
+         dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,
+              **with_decisions(("STORY-1-01", CONFLICT.replace("stage: test", "stage: build")
+                                + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n")), plan=PLAN_APPLIED))),
         (Case("test: without that decision, green before the build is still refused", "test", 1,
               must_fail=("tests-red",), text=("passes before the build stage",)),
          dict(green=both_green, ledger=both_green)),
@@ -4164,6 +4244,34 @@ def main(argv=None):
         expectations.append(("check-backlog: a story without a happy path is named, as the plan gate would",
                              "happy-path" in checked and "STORY-2" in checked and "0 scenarios marked" in checked,
                              checked[-500:]))
+    with tmpdir() as root:
+        # an adopted story: to adopt, then delivered (adopted); a story depending on it waits for the adoption
+        backlog_project(root, ("STORY-2", ["STORY-1"]),
+                        story=STORY.replace("status: approved", "status: adopted"))
+        first = subprocess.run([sys.executable, args.gate, "--status", "--part", "backlog"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8").stdout
+        rows, _n, _w, listing = schedule_of(args.gate, root)
+        write_file(root, "tasks/STORY-1/judge.md", "verdict: pass\n")
+        judged = schedule_of(args.gate, root)[0]
+        write_file(root, "tasks/STORY-1/.delivered", "adopted")
+        after = subprocess.run([sys.executable, args.gate, "--status", "--part", "backlog"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8").stdout
+        expectations.append(("adopt: an adopted story reads 'to adopt', and a story depending on it waits for the adoption",
+                             "to adopt" in first and rows.get("STORY-2", ("", ""))[0] == "blocked", listing))
+        expectations.append(("adopt: after the judge's pass only the adopt gate is left",
+                             judged.get("STORY-1", ("", ""))[1] == "adopt", judged))
+        expectations.append(("adopt: once adopted it reads 'delivered (adopted)'", "delivered (adopted)" in after,
+                             after[-500:]))
+    with tmpdir() as root:
+        # an answer that changes a test resumes at the test stage, whichever stage asked
+        backlog_project(root, extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_APPLIED), ("tasks/STORY-1/tests.md", TESTS),
+            ("tasks/STORY-1/build.md", "# Build\n\n## needs-human\ndecision: STORY-1-01\n"),
+            (".agents/factory/decisions/STORY-1-01.md", CONFLICT.replace("stage: test", "stage: build")
+             + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n"))))
+        rows = schedule_of(args.gate, root)[0]
+        expectations.append(("decisions: an answer that says `applies: test` resumes the story at the test stage",
+                             rows.get("STORY-1", ("", ""))[1] == "test", rows))
     with tmpdir() as root:
         # a journey: after its test it goes to the judge, and an epic delivered with an open journey is named
         journey = (story("JOURNEY-1", ("STORY-1",)).replace("status: approved\n", "status: approved\nkind: journey\n")

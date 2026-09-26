@@ -1,6 +1,6 @@
 {
   "name": "dca-factory",
-  "version": "0.38.4",
+  "version": "0.39.7",
   "description": "Delivery pipeline for DCA projects, in three parts: a project description under project/ (product, technical decisions, designed domain — written through the method's description skill), a markdown backlog contract (epics with intent, goal, outcome-event metric and domain contact; stories with keyed acceptance criteria), and a runner — the stage skills plan/test/build/tidy/judge/document with one hand-over file each and a dependency-free story gate between them that checks epic completeness, one red-then-green end-user test per criterion, the architecture suite and the documentation claims. factory-setup sets it up idempotently (stack detection from presets, carrier lines only for installed skills), factory-backlog writes the backlog, factory-decisions answers what a run may not decide itself, factory-status and factory-verify look at it, factory-help explains it. Portable by construction: plain skill folders and one dependency-free script, with no harness-specific tool in the contract. Carries no architecture method and no project knowledge — those stay in dca-core and in the project's stack profile.",
   "author": {
     "name": "Christoph Bloemer"

@@ -166,6 +166,14 @@ the previous round cited (a glossary line, a criterion) is a `story-conflict`, n
 finding to look thorough costs a build round and teaches the pipeline nothing. Every finding
 names the file and line it stands on — a finding without that is a suspicion and is marked as one.
 
+## Adopt mode
+
+For a story with `status: adopted`, the change is not code but a claim: each mapped test proves its
+scenario. Read every test against its scenario — does it arrange the `Given`, perform the `When` and
+assert every `Then` and `And` with the scenario's values? A test that passes without asserting the outcome,
+or asserts another one, is **major**. A break that changes something the test does not depend on is major
+too. The verdict is `pass` only when every scenario is proved; nothing else is reviewed — nothing was built.
+
 ## Do not
 
 - Do not edit code or tests.

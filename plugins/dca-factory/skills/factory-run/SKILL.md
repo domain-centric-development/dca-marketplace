@@ -259,6 +259,17 @@ is that command, and CI runs `--change` on its checkout. Recommend it when someo
 change is ready to commit — do not invent a story for it. `--parity <config>` checks that several
 implementations each prove a scenario contract from their reports (`reference/file-contracts.md`).
 
+## An adopted story
+
+A story with `status: adopted` describes behaviour the project already has (`--kind` prints `adopt`). It
+runs **plan, test, judge**, then the **adopt gate** (`story-gate.py --story <id> --stage adopt`) — skip
+build, tidy and document, nothing is built. The stages work in adopt mode: the plan names where each
+scenario's behaviour lives and which existing test covers it; the test stage maps those tests, writes a
+characterization test with its break for a scenario without one, and changes no production code and no
+existing test; its gate expects every mapped test **green**. The judge confirms each test asserts its
+scenario. The adopt gate checks it all again, applies every break to a scratch copy, and delivers the
+story. A judge's `changes-requested` or a refused adopt gate sends it back to the test stage.
+
 ## A journey item
 
 A backlog item with `kind: journey` (`story-gate.py --story <id> --kind` prints it) is a guard over

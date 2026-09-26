@@ -66,6 +66,7 @@ import glob
 import hashlib
 import shutil
 import subprocess
+import tempfile
 import sys
 import textwrap
 import time
@@ -135,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.38.4"
+VERSION = "0.39.7"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -375,9 +376,14 @@ def happy_paths(body):
 
 
 def story_kind(front):
-    """`story` (the default) or `journey` — a guard over an epic's delivered stories, run as plan, test,
-    judge and document, green at its test gate."""
-    return "journey" if str(front.get("kind", "")).strip().lower() == "journey" else "story"
+    """`story` (the default), `journey` — a guard over an epic's delivered stories, run as plan, test,
+    judge and document, green at its test gate — or `adopt`: a story with `status: adopted` describes
+    behaviour the project already has; plan, test and judge map it to green tests, the adopt gate delivers it."""
+    if str(front.get("kind", "")).strip().lower() == "journey":
+        return "journey"
+    if str(front.get("status", "")).strip().lower() == "adopted":
+        return "adopt"
+    return "story"
 
 
 def contract_of(profile):
@@ -398,6 +404,9 @@ def check_happy_path(result, story_path, front, body, profile):
         else:
             result.ok("journey", f"journey over {', '.join(needs) if isinstance(needs, list) else needs}")
         return
+    if story_kind(front) == "adopt":
+        result.skip("happy-path", "an adopted story tests nothing new — the levels are the existing tests'")
+        return
     if contract_of(profile) < 9:
         result.skip("happy-path", f"the profile declares contract {contract_of(profile)} — the happy-path mark "
                                   f"is contract 9's")
@@ -411,6 +420,51 @@ def check_happy_path(result, story_path, front, body, profile):
                                   f"(`#### <key> (happy path)`)" + (f": {', '.join(marked)}" if marked else ""))
 
 
+TITLE_LINE = re.compile(r"^Title:\s*(\S.*?)\s*$")
+
+
+def scenario_titles(body):
+    """{key: title} for every criterion: the `Title:` line under a scenario's heading, else the key in words
+    (`shows-empty-state` → "Shows empty state"). An end-user test carries it verbatim as its display name, so two
+    implementations of one story name the test alike and a report names the scenario it proves."""
+    section = body.split("## Acceptance criteria", 1)[-1].split("\n## ", 1)[0] if "## Acceptance criteria" in body else ""
+    titles, current = {}, None
+    for line in section.splitlines():
+        stripped = line.strip()
+        heading = re.match(r"^####\s+([a-z0-9][a-z0-9-]*)", stripped)
+        criterion = CRITERION.match(stripped)
+        if heading:
+            current = heading.group(1)
+            titles[current] = current.replace("-", " ").capitalize()
+        elif criterion:
+            current = None
+            titles[criterion.group(1)] = criterion.group(1).replace("-", " ").capitalize()
+        elif current and TITLE_LINE.match(stripped) and "{{" not in stripped:   # a template placeholder names nothing
+            titles[current] = TITLE_LINE.match(stripped).group(1)
+    return titles
+
+
+def check_titles(result, profile, cwd, front, body, mapping, located):
+    """Contract 9: an end-user test carries its scenario's title verbatim, as its display name."""
+    if story_kind(front) == "adopt" or contract_of(profile) < 9 or not mapping or not profile.get("e2eTest"):
+        return
+    titles = scenario_titles(body)
+    wrong = []
+    for key, selectors in sorted(mapping.items()):
+        for selector in selectors:
+            path = located.get(selector)
+            if not path or command_for(profile, path)[0] not in ("e2eTest", "test.journey") or key not in titles:
+                continue
+            if titles[key] not in read_text(os.path.join(cwd, path)):
+                wrong.append(f"{selector} ({key}) — \"{titles[key]}\"")
+    if wrong:
+        result.fail("test-titles", "end-user tests without their scenario's title as display name — write it "
+                                   "verbatim (the scenario's `Title:` line, else its key in words): " + "; ".join(wrong))
+    elif any(command_for(profile, located.get(sel) or "")[0] == "e2eTest"
+             for sels in mapping.values() for sel in sels if located.get(sel)):
+        result.ok("test-titles", "every end-user test carries its scenario's title")
+
+
 def plan_levels(tasks, story_id):
     """The keys the plan gave `browser-only` — a `Then` only a browser can observe, with its reason."""
     text = read_text(os.path.join(tasks, story_id, "plan.md")) if os.path.isfile(os.path.join(tasks, story_id, "plan.md")) else ""
@@ -421,7 +475,7 @@ def check_levels(result, profile, tasks, story_id, front, body, mapping, located
     """Contract 9: a scenario's test runs at the lowest level that observes its `Then`. A test the
     end-user command runs belongs to the happy path or to a scenario the plan gave `browser-only`;
     every other end-user test is a browser test where an integrated one would do."""
-    if story_kind(front) == "journey" or contract_of(profile) < 9 or not mapping or not profile.get("e2eTest"):
+    if story_kind(front) != "story" or contract_of(profile) < 9 or not mapping or not profile.get("e2eTest"):
         return
     allowed = set(happy_paths(body)) | plan_levels(tasks, story_id)
     wrong = []
@@ -436,6 +490,106 @@ def check_levels(result, profile, tasks, story_id, front, body, mapping, located
                               "`level: browser-only (<why>)`: " + "; ".join(wrong))
     else:
         result.ok("levels", "every end-user test belongs to the happy path or a browser-only scenario")
+
+
+BREAK_IGNORE = (".git", "build", "bin", "obj", "target", "node_modules", ".gradle", "TestResults", "out", "tasks")
+
+
+def break_path(tasks, story_id, selector):
+    return os.path.join(tasks, story_id, "breaks", selector.replace("#", "--").replace("/", "_") + ".patch")
+
+
+def characterization_tests(tasks, story_id):
+    """The selectors under `## Characterization` in tests.md — the tests the adoption wrote itself."""
+    text = read_text(os.path.join(tasks, story_id, "tests.md")) if os.path.isfile(os.path.join(tasks, story_id, "tests.md")) else ""
+    section = text.split("## Characterization", 1)[1].split("\n## ", 1)[0] if "## Characterization" in text else ""
+    return [m.group(1) for m in re.finditer(r"^\s*-\s+`?([\w.$]+#[\w$]+)`?", section, re.M)]
+
+
+def check_adopt(result, profile, cwd, tasks, story_id, front, criteria):
+    """The adopt gate: an adopted story is delivered when every scenario maps to a test that exists and
+    is green, a fresh judge passed it, and every test the adoption wrote itself turns red under its
+    break — a minimal change to the production code, applied to a scratch copy, never to the tree."""
+    if story_kind(front) != "adopt":
+        result.fail("adopt", "the adopt gate is for a story with `status: adopted`")
+        return
+    mapping = check_mapping(result, tasks, story_id, criteria)
+    located = check_exists(result, cwd, mapping)
+    check_compiles(result, profile, cwd)
+    check_test_state(result, profile, cwd, mapping, "green", located, tasks, story_id, guard=True)
+    judge = read_text(os.path.join(tasks, story_id, "judge.md")) if os.path.isfile(os.path.join(tasks, story_id, "judge.md")) else ""
+    if verdict_in(judge) != "pass":
+        result.fail("adopt-judged", f"judge.md carries no `verdict: pass` — a fresh judge confirms that each "
+                                    f"mapped test asserts its scenario before the story counts as adopted")
+    else:
+        result.ok("adopt-judged", "the judge confirmed that the tests prove the scenarios")
+    everything = str(profile.get("adopt.breakProof", "")).strip().lower() == "all"
+    by_selector = {sel: key for key, sels in mapping.items() for sel in sels}
+    written = [qualify_selector(sel, by_selector, cwd) for sel in characterization_tests(tasks, story_id)]
+    wanted = sorted(by_selector) if everything else written
+    extra = {sel for sel in wanted if sel not in located}
+    if extra:
+        located = dict(located, **check_exists(Result(), cwd, {"outside the table": sorted(extra)}))
+    for selector in wanted:
+        check_break(result, profile, cwd, tasks, story_id, selector, by_selector.get(selector, "outside the table"),
+                    located)
+    if not wanted:
+        result.skip("break-proof", "the adoption wrote no test of its own — every scenario maps to an existing "
+                                   "test, which the judge read")
+
+
+def qualify_selector(selector, by_selector, cwd):
+    """A test named by its simple class (`WidgetTest#shows`) as the table names it, or with the package its file
+    declares: the report the gate reads names the class in full."""
+    cls, _, method = selector.partition("#")
+    if "." in cls:
+        return selector
+    for known in by_selector:
+        known_cls, _, known_method = known.partition("#")
+        if known_method == method and known_cls.rsplit(".", 1)[-1] == cls:
+            return known
+    for root, dirs, files in os.walk(cwd):
+        dirs[:] = [d for d in dirs if d not in BREAK_IGNORE]
+        for name in files:
+            if os.path.splitext(name)[0] == cls:
+                package = re.search(r"^\s*(?:package|namespace)\s+([\w.]+)", read_text(os.path.join(root, name)), re.M)
+                if package:
+                    return f"{package.group(1)}.{cls}#{method}"
+    return selector
+
+
+def check_break(result, profile, cwd, tasks, story_id, selector, key, located):
+    patch = break_path(tasks, story_id, selector)
+    if not os.path.isfile(patch):
+        short = selector.split("#")[0].rsplit(".", 1)[-1] + "#" + selector.split("#", 1)[-1]
+        patch = break_path(tasks, story_id, short) if os.path.isfile(break_path(tasks, story_id, short)) else patch
+    if not os.path.isfile(patch):
+        result.fail("break-proof", f"{selector} ({key}): no break at {os.path.relpath(patch, cwd)} — a test the "
+                                   f"adoption wrote is shown to work by one change that turns it red")
+        return
+    scratch = tempfile.mkdtemp(prefix="dca-break-")
+    try:
+        copy = os.path.join(scratch, "tree")
+        shutil.copytree(cwd, copy, symlinks=True, ignore=shutil.ignore_patterns(*BREAK_IGNORE))
+        applied = subprocess.run(["git", "apply", "--whitespace=nowarn", os.path.abspath(patch)], cwd=copy,
+                                 capture_output=True, text=True)
+        if applied.returncode != 0:
+            result.fail("break-proof", f"{selector} ({key}): its break does not apply — "
+                                       f"{(applied.stderr or applied.stdout).strip()[:200]}")
+            return
+        probe = Result()
+        check_test_state(probe, profile, copy, {key: [selector]}, "red", {selector: located.get(selector)} if located.get(selector) else {})
+        runs = [(st, m) for st, c, m in probe.entries if c == "tests-red"]
+        if runs and all(st == "pass" for st, _m in runs):
+            result.ok("break-proof", f"{selector} ({key}): red under its break, on a scratch copy")
+        elif any(st == "fail" and ("passes" in m or "is green" in m or "green before" in m) for st, m in runs):
+            result.fail("break-proof", f"{selector} ({key}): stays green under its break — the test does not "
+                                       f"notice the behaviour it claims to prove")
+        else:
+            said = "; ".join(m for _st, m in runs)[:300] or "no run of it was recorded"
+            result.fail("break-proof", f"{selector} ({key}): its break could not be checked — {said}")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def epic_of(story_path, front, backlog):
@@ -496,6 +650,8 @@ def check_status(result, story_path, front):
         result.skip("approved", f"{story_path}: no `status:` field — nothing to release")
     elif status == "approved":
         result.ok("approved", "story is approved")
+    elif status == "adopted":
+        result.ok("approved", "story is adopted — it describes behaviour the project already has; adopted, never built")
     else:
         result.fail(
             "approved",
@@ -768,8 +924,8 @@ def check_backlog(cwd, backlog, tasks, profile, only=None):
                     continue
                 if status == "draft":
                     result.note("approved", f"{path}: a draft — released with `status: approved` once it is written")
-                elif status and status != "approved":
-                    result.fail("approved", f"{path}: status {status!r} is none of draft, approved, superseded")
+                elif status and status not in ("approved", "adopted"):
+                    result.fail("approved", f"{path}: status {status!r} is none of draft, approved, adopted, superseded")
                 context = str(front.get("context", "")).strip()
                 if not context:
                     result.fail("story", f"{path}: front matter has no `context:` — a story names the bounded "
@@ -1767,14 +1923,21 @@ def read_decisions(store, story_id):
     return records
 
 
+def applying_stage(front, answer):
+    """The stage that applies an answer: the one the answer names (`applies: test` — an answer that changes a
+    test goes back to the test stage, whoever asked), else the record's `stage:`, the stage that asked."""
+    named = str((answer or {}).get("applies", "")).strip().lower()
+    return named if named in STAGE_ORDER else str(front.get("stage", "")).strip()
+
+
 def answered_decisions(cwd, story_id, stage):
-    """Ids of this story's answered or applied records whose `stage:` is the given stage."""
+    """Ids of this story's answered or applied records the given stage applies."""
     try:
         records = read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
     except GateError:
         return []
-    return [str(front["id"]).strip() for _p, front, _b, state, _a in records
-            if state in ("answered", "applied") and str(front.get("stage", "")).strip() == stage]
+    return [str(front["id"]).strip() for _p, front, _b, state, answer in records
+            if state in ("answered", "applied") and applying_stage(front, answer) == stage]
 
 
 def nothing_line(line):
@@ -1943,7 +2106,7 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
         if is_acceptance(front):
             continue
         rid = str(front["id"]).strip()
-        stage = str(front.get("stage", "")).strip()
+        stage = str(front.get("stage", "")).strip() if state in ("open", "draft") else applying_stage(front, answer)
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
         rel = os.path.relpath(path, cwd).replace(os.sep, "/")     # one spelling on every platform
         if state == "open":
@@ -3859,7 +4022,9 @@ def story_attention(cwd, story_id, story, profile):
     if state == "running":
         return "running", "running", make_action()
     if state == "delivered":
-        return "done", "delivered", make_action()
+        return "done", "delivered (adopted)" if detail == "adopted" else "delivered", make_action()
+    if str(story.get("kind", "")) == "adopt" and state in ("ready", "in-progress", "resumable"):
+        return "none", "to adopt", make_action(text=detail)
     if state == "blocked":
         return "none", "blocked", make_action(text=detail)
     if state in ("ready", "in-progress", "resumable"):
@@ -4539,6 +4704,7 @@ def use_colour(choice):
 # refusal reports, the round counter, the verdict, the decision records — and never stored.
 STAGE_ORDER = ("plan", "test", "build", "tidy", "judge", "document")
 JOURNEY_ORDER = ("plan", "test", "judge", "document")       # nothing to build: the steps are delivered
+ADOPT_ORDER = ("plan", "test", "judge")                     # nothing built: the adopt gate delivers it
 RUNNABLE = ("ready", "in-progress", "resumable")
 
 
@@ -4740,7 +4906,7 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     status = str(front.get("status", "")).strip().lower()
     if status == "superseded":
         return "superseded", None, "replaced by another story"
-    if status and status != "approved":
+    if status and status not in ("approved", "adopted"):
         return "unreleased", None, f"status {status} — a human releases it first"
     folder = os.path.join(tasks, story_id)
     texts = {stage: read_text(os.path.join(folder, name)) for stage, name in STAGE_FILES.items()
@@ -4754,8 +4920,8 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     if waiting:
         return "waiting", None, "decision " + ", ".join(waiting)
     answered, resolved = {}, {}
-    for _path, front_, _body, state, _answer in records:
-        rid, asked_by = str(front_["id"]).strip(), str(front_.get("stage", "")).strip()
+    for _path, front_, _body, state, answer_ in records:
+        rid, asked_by = str(front_["id"]).strip(), applying_stage(front_, answer_)
         if is_acceptance(front_):
             resolved[rid] = asked_by
             continue                             # answered through the document gate, not a stage
@@ -4806,6 +4972,12 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
                if os.path.isfile(os.path.join(folder, f".gate-{stage}.txt"))]
     if refused:
         return "in-progress", refused[0], f"the {refused[0]} gate refused — the stage runs again"
+    adopt = story_kind(front) == "adopt"
+    if adopt:
+        if os.path.isfile(os.path.join(folder, DELIVERED)):
+            return "delivered", None, "adopted"
+        if verdict_in(texts.get("judge", "")) == "pass":
+            return "in-progress", "adopt", "the judge confirmed the tests — the adopt gate delivers it"
     if "document" in texts:
         if os.path.isfile(os.path.join(folder, DELIVERED)):
             return "delivered", None, ""
@@ -4819,8 +4991,9 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
         return "ready", "plan", ""
     journey = story_kind(front) == "journey"
     if verdict_in(texts.get("judge", "")) == "changes-requested":
-        return "in-progress", "test" if journey else "build", "the judge requested changes"
-    missing = next(stage for stage in (JOURNEY_ORDER if journey else STAGE_ORDER) if stage not in texts)
+        return "in-progress", "test" if journey or adopt else "build", "the judge requested changes"
+    order = ADOPT_ORDER if adopt else JOURNEY_ORDER if journey else STAGE_ORDER
+    missing = next(stage for stage in order if stage not in texts)
     return "in-progress", missing, f"{STAGE_FILES[missing]} not written yet"
 
 
@@ -4862,6 +5035,7 @@ def schedule_data(cwd, backlog, tasks):
             story_id = str(front.get("id") or name[:-3]).strip()
             state, start, detail = story_state(cwd, tasks, story_id, front, path)
             stories[story_id] = dict(state=state, start=start, detail=detail, deps=depends_on(front),
+                                     kind=story_kind(front),
                                      holds=state not in ("delivered", "superseded") and os.path.isfile(
                                          os.path.join(tasks, story_id, STAGE_FILES["test"])),
                                      path=path, epic=str(front.get("epic") or epic).strip(), front=front,
@@ -5037,7 +5211,7 @@ def main(argv):
     parser.add_argument("--story")
     parser.add_argument(
         "--stage",
-        choices=("plan", "test", "build", "tidy", "document"),
+        choices=("plan", "test", "build", "tidy", "document", "adopt"),
     )
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
@@ -5246,6 +5420,8 @@ def main(argv):
             check_documented(result, args.tasks, story_id, cwd)
             check_proposals_landed(result, args.tasks, story_id, cwd, profile)
             check_stage_commands(result, profile, cwd, args.stage)
+        if args.stage == "adopt":
+            check_adopt(result, profile, cwd, args.tasks, story_id, front, criteria)
         if args.stage in ("test", "build", "tidy"):
             mapping = check_mapping(result, args.tasks, story_id, criteria)
             located = check_exists(result, cwd, mapping)
@@ -5260,10 +5436,11 @@ def main(argv):
                 located,
                 args.tasks,
                 story_id,
-                guard=story_kind(front) == "journey",
+                guard=story_kind(front) in ("journey", "adopt"),
             )
             if args.stage == "test":
                 check_levels(result, profile, args.tasks, story_id, front, body, mapping, located)
+                check_titles(result, profile, cwd, front, body, mapping, located)
             if args.stage in ("build", "tidy"):
                 check_required_suites(result, profile, cwd)
             check_files_listed(result, args.tasks, story_id, args.stage)
@@ -5303,6 +5480,8 @@ def main(argv):
             deliver = False
         if deliver and not result.failed:
             write_mark(args.tasks, story_id, DELIVERED, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    if not result.failed and args.stage == "adopt":
+        write_mark(args.tasks, story_id, DELIVERED, "adopted")
     return result.report(story_id, args.stage, args.json)
 
 

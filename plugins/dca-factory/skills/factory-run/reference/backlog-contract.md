@@ -96,7 +96,7 @@ Front matter:
 | `epic` | the epic's `id`; its `epic.md` must exist |
 | `context` | the bounded context the story changes. It must exist on the designed map (`domain.md`), or on the one generated from the code where there is no designed map — a story that would need a new context or a new context relationship is not a story, it is a question about the project description |
 | `title` | short name |
-| `status` | `draft` while it is still being written, `approved` once a human released it for building, `superseded` when another story replaced it. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
+| `status` | `draft` while it is still being written, `approved` once a human released it for building, `adopted` when it describes behaviour the project already has — adopted, never built (below) — `superseded` when another story replaced it. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
 | `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by id; an unknown id or a cycle blocks the story and is named |
 
 Body sections:
@@ -131,6 +131,11 @@ Body sections:
   story is for. It gets the end-to-end test; every other scenario is tested integrated, below the
   page, unless the plan gives it `browser-only` with a reason. The plan gate refuses a story with no
   mark or two; the test gate refuses an end-user test for any other scenario.
+  **The title** (contract 9): a scenario may carry `Title: <text>` on the line under its heading; without
+  it the title is the key in words (`shows-empty-state` → "Shows empty state"). An end-user test carries
+  the title verbatim as its display name — the test gate checks it — so two implementations of one story
+  name the test alike, and a report names the scenario it proves. Where a project keeps a shared list of
+  scenario titles its end-user tests are bound to, the `Title:` is that list's title.
   Each criterion is behaviour the system does not show yet — its test is red until the build
   stage, and the gate refuses one that is green before it. Behaviour that must keep working is
   what the existing tests guard; it is not a criterion.
@@ -157,6 +162,18 @@ that build the steps (required — it becomes ready when they are delivered), no
 plan, test, judge and document — nothing to build — and its test must be **green** at the test gate,
 where a story's must be red. Its tests live where `test.journey:` runs them; a later story that changes
 a step lists the journey test under `## Changed tests`, as any other.
+
+## Adopted story
+
+`status: adopted` describes behaviour the project already has. The factory never builds it; it adopts it:
+plan, test and judge map every scenario to a test that exists and is **green**, a test the adoption writes
+itself (a *characterization* test, listed under `## Characterization` in `tests.md`) comes with a break —
+`tasks/<story>/breaks/<Class>--<method>.patch`, a minimal change to the production code that turns exactly
+this test red — and the adopt gate applies each break to a scratch copy, requires red, and delivers the
+story (`.delivered` holds `adopted`). The working tree is never touched. `adopt.breakProof: all` in the
+profile asks for a break for every mapped test, not only the written ones. A story is adopted whole or not
+at all: the adoption writes the tests that are missing. A `depends_on` on an adopted story is met once it
+is adopted, not by its status alone; afterwards its tests are guarded like any delivered story's.
 
 ## Brownfield
 

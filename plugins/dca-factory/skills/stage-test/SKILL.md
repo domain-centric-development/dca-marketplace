@@ -47,6 +47,9 @@ files written. You write **no** production behaviour.
    epic's `## Journey` to its outcome event, in the source set `test.journey:` declares. It is
    **green** when you finish — every step exists already — and it asserts the outcome event, not
    only a page. It gets no stub for the production code and writes no production code.
+2c. **An end-user test's display name is its scenario's title, verbatim** — the `Title:` line under the
+   scenario's heading, else its key in words ("Shows empty state"). Two implementations of one story then
+   name the test alike; the test gate refuses an end-user test without it.
 3. Add unit tests for the invariants the plan names: the rules an aggregate or value object must
    never break. These belong to the domain's own vocabulary and are the part of the suite that
    survives a rewrite of the adapters.
@@ -123,6 +126,16 @@ nothing else from the file:
 One row per criterion, at least. A criterion you could not turn into a test is named explicitly
 under `uncovered` — never left silently missing, because the build gate can only fail on what a
 test covers.
+
+## Adopt mode
+
+For a story with `status: adopted`: map every scenario in the `gate:tests` table to the existing test the
+plan names, green as it is. For a scenario without one, write a **characterization test** — green on
+today's code, asserting the scenario's `Then` with its values — list it under `## Characterization` in
+`tests.md` (`- <Class>#<method>`), and write its **break**: `tasks/<story>/breaks/<Class>--<method>.patch`,
+a unified diff against the working tree that changes the production code minimally so that exactly this
+test turns red (`git diff` of the change, then revert it). Change no production code and no existing test;
+the gate applies the break to a scratch copy and expects red there.
 
 ## Do not
 

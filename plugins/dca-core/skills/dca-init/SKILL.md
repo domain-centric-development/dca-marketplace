@@ -366,6 +366,8 @@ name alone: say it in one sentence before the report where the in-memory placeho
 The report's Open section already names what is missing; the skills that close it — hint, never do:
 
 - a web surface (templates, static pages, a frontend) and no browser runner → `dca-add browser`;
+- a browser suite that only runs against an application started beforehand → `dca-add browser`, which
+  changes its base test to start the application itself;
 - no formatter in the build → `dca-add formatter`;
 - no project description (`AGENTS.md` has no `dca-describe` section, or the files it names are missing) →
   `dca-describe`.

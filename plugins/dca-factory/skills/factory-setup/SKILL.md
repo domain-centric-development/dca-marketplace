@@ -48,7 +48,14 @@ docs/                      what exists and why — written after the code, some 
    and the command that takes it; do not retell it. On the person's confirmation run `setup --write`; it adds the missing keys
    and never overwrites a value a person wrote. A differing value is theirs to keep or to replace
    (`setup --write --replace <key>`, on their word).
-4a. **Acceptance.** Where the product description's `## Surfaces` names web pages and the profile
+4a. **The end-user suite brings its application.** Where the profile has an `e2eTest:` command, run
+   it once with nothing started beforehand. Green, and it ran tests (not zero, not all skipped) → the
+   gate can trust it. Red because nothing answered, or skipped for a missing base URL → the suite
+   drives an application someone has to start first; say so and hand it to the method's browser
+   capability (in a DCA project `dca-add browser`), which makes the suite start the application itself
+   on a free port. Until then every end-user check of every story depends on what happens to run on
+   that address.
+4b. **Acceptance.** Where the product description's `## Surfaces` names web pages and the profile
    has no `acceptance:`, propose `acceptance: pages` — a story with something to see then waits for a
    human's look before it is delivered — and a `run:` line with how a person starts the application.
    Write both on the person's confirmation; `none` is their answer too.

@@ -31,17 +31,23 @@ A project that shows a page and has no browser runner gets one before its first 
 knowledge is in `reference/setup.md`; this is the order.
 
 1. **Confirm there is none.** Look for a browser-test source set, a Playwright, Cypress, Selenium or
-   WebDriverIO dependency, a `playwright.config`, a browser-test project. Where one exists, stop:
-   write tests in its idiom instead of adding a second runner.
+   WebDriverIO dependency, a `playwright.config`, a browser-test project. Where one exists, add no
+   second runner: write tests in its idiom. Where that suite drives an application someone has to
+   start first, change its base test so it starts the application itself (`reference/setup.md`,
+   "A suite that needs a running application") — the rest of the suite stays as it is.
 2. **Agree the defaults with the person**: Playwright in the project's language, Page Objects, one
    stable-selector attribute (`data-test` unless the markup already uses another), the project's
-   unit-test framework, and whether the application starts inside the test or the suite points at a
-   running one (`reference/setup.md` names the trade-off). Ask before writing anything — unless the
-   caller hands these defaults over, already agreed with the person; then they are the answer.
+   unit-test framework. The application always starts inside the test, on a free port: that is what
+   makes the suite run the same on a laptop, in CI and in an automated check. Ask before writing
+   anything — unless the caller hands these defaults over, already agreed with the person; then they
+   are the answer.
 3. **Wire the build** as `reference/setup.md` shows for the build tool — its own source set or test
    project, the browser installed by the build, one command that runs the suite and writes a report.
-4. **Write the base test**: the application started on a free port (or the base URL read from a
-   property), a fresh browser context per test, the fake clock installed and paused at a fixed start.
+4. **Write the base test**: the application started on a free port, a fresh browser context per test,
+   the fake clock installed and paused at a fixed start. An external system the application calls is a
+   stub the suite starts before the application, its address handed in through configuration
+   (`reference/setup.md`, "External systems"). A base-URL property may point the same tests at a
+   deployment; without it the suite starts its own application.
 5. **Give the start page a title** where it has none, as a static page if no feature serves `/` yet.
 6. **Write the smoke test** — the start page loads and its title is not empty — and run the suite:
    green.
