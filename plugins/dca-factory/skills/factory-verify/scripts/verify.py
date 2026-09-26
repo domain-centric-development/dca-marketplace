@@ -2475,6 +2475,13 @@ def main(argv=None):
               .replace("#### shows-nothing-when-empty (happy path)", "#### shows-nothing-when-empty"),
               extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
                               "class WidgetPageTest { @DisplayName(\"The list shows what is recorded\") void showsTheThing() {} }\n"),))),
+        (Case("test: a `Title:` with a quote matches the escaped literal its end-user test carries", "test", 0,
+              must_pass=("test-titles",)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+              story=STORY_SCENARIOS.replace("#### shows-the-thing\n", "#### shows-the-thing (happy path)\nTitle: The list shows a \"Recorded\" heading\n")
+              .replace("#### shows-nothing-when-empty (happy path)", "#### shows-nothing-when-empty"),
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                              "class WidgetPageTest { @DisplayName(\"The list shows a \\\"Recorded\\\" heading\") void showsTheThing() {} }\n"),))),
         (Case("test: an end-user test the plan gave browser-only passes the level check", "test", 0,
               must_pass=("levels",)),
          dict(profile=PROFILE.replace("test.pages:", "e2eTest:"), extra_sources=(

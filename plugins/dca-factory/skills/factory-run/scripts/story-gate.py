@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.40.0"
+VERSION = "0.40.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -455,7 +455,7 @@ def check_titles(result, profile, cwd, front, body, mapping, located):
             path = located.get(selector)
             if not path or command_for(profile, path)[0] not in ("e2eTest", "test.journey") or key not in titles:
                 continue
-            if titles[key] not in read_text(os.path.join(cwd, path)):
+            if titles[key] not in unescape_literal(read_text(os.path.join(cwd, path))):   # `\"` in the literal is a quote of the title
                 wrong.append(f"{selector} ({key}) — \"{titles[key]}\"")
     if wrong:
         result.fail("test-titles", "end-user tests without their scenario's title as display name — write it "
