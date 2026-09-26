@@ -4263,6 +4263,14 @@ def main(argv=None):
         expectations.append(("adopt: once adopted it reads 'delivered (adopted)'", "delivered (adopted)" in after,
                              after[-500:]))
     with tmpdir() as root:
+        # a refusal left from an earlier round does not undo a delivery
+        backlog_project(root, extra_sources=(("tasks/STORY-1/document.md", "# Document\n"),
+                                             ("tasks/STORY-1/.delivered", "2026-09-26T07:40:00Z"),
+                                             ("tasks/STORY-1/.gate-plan.txt", "gate:fail decisions — stale\n")))
+        rows = schedule_of(args.gate, root)[0]
+        expectations.append(("schedule: a delivered story stays delivered when an earlier round left a refusal behind",
+                             rows.get("STORY-1", ("", ""))[0] == "delivered", rows))
+    with tmpdir() as root:
         # an answer that changes a test resumes at the test stage, whichever stage asked
         backlog_project(root, extra_sources=(
             ("tasks/STORY-1/plan.md", PLAN_APPLIED), ("tasks/STORY-1/tests.md", TESTS),

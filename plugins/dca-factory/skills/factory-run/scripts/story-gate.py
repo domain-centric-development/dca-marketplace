@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.39.7"
+VERSION = "0.39.8"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -4935,6 +4935,10 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     if answered:
         stage = min(answered, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 0)
         return "resumable", stage, f"decision {answered[stage]} answered — its stage applies it"
+    # Delivered is delivered: a refusal left from an earlier round (the plan gate refused, the story then ran on
+    # from a later stage) says nothing about a story the document or adopt gate has since delivered.
+    if os.path.isfile(os.path.join(folder, DELIVERED)) and not answered:
+        return "delivered", None, "adopted" if read_text(os.path.join(folder, DELIVERED)).strip() == "adopted" else ""
     rounds_file = os.path.join(folder, ".rounds")
     if os.path.isfile(rounds_file) and (read_text(rounds_file).strip() or "0").isdigit() \
             and int(read_text(rounds_file).strip() or "0") >= MAX_ROUNDS:
