@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.39.3"
+VERSION = "0.39.4"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -2300,6 +2300,12 @@ def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
         if not os.path.isfile(full):
             changed.append(f"{rel} (removed)")
             continue
+        # A run commits nothing while a story is open: a test committed since the baseline changed outside
+        # this story. The story is held to its own changes — against what is committed now.
+        head_code, head_blob = git(cwd, "rev-parse", f"HEAD:{rel}")
+        if not head_code and head_blob.strip() and head_blob.strip() != blob \
+                and not git(cwd, "cat-file", "-e", blob)[0]:
+            blob = head_blob.strip()
         code, before = git(cwd, "cat-file", "blob", blob)
         if code:
             lost.append(rel)
