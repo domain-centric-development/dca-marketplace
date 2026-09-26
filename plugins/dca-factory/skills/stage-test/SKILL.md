@@ -47,6 +47,9 @@ files written. You write **no** production behaviour.
    epic's `## Journey` to its outcome event, in the source set `test.journey:` declares. It is
    **green** when you finish — every step exists already — and it asserts the outcome event, not
    only a page. It gets no stub for the production code and writes no production code.
+2c. **An end-user test's display name is its scenario's title, verbatim** — the `Title:` line under the
+   scenario's heading, else its key in words ("Shows empty state"). Two implementations of one story then
+   name the test alike; the test gate refuses an end-user test without it.
 3. Add unit tests for the invariants the plan names: the rules an aggregate or value object must
    never break. These belong to the domain's own vocabulary and are the part of the suite that
    survives a rewrite of the adapters.

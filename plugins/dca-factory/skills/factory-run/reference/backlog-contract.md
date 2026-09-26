@@ -131,6 +131,11 @@ Body sections:
   story is for. It gets the end-to-end test; every other scenario is tested integrated, below the
   page, unless the plan gives it `browser-only` with a reason. The plan gate refuses a story with no
   mark or two; the test gate refuses an end-user test for any other scenario.
+  **The title** (contract 9): a scenario may carry `Title: <text>` on the line under its heading; without
+  it the title is the key in words (`shows-empty-state` → "Shows empty state"). An end-user test carries
+  the title verbatim as its display name — the test gate checks it — so two implementations of one story
+  name the test alike, and a report names the scenario it proves. Where a project keeps a shared list of
+  scenario titles its end-user tests are bound to, the `Title:` is that list's title.
   Each criterion is behaviour the system does not show yet — its test is red until the build
   stage, and the gate refuses one that is green before it. Behaviour that must keep working is
   what the existing tests guard; it is not a criterion.

@@ -72,7 +72,9 @@ that smuggles the decision in.
    demonstrate it: `#### <key> (happy path)` (line form `- <key> (happy path): …`). Exactly one per
    story; the plan gate refuses none and two. It gets the story's end-to-end test; every other
    scenario is tested integrated. Ask for it where it is not obvious: "Which scenario shows what this
-   story is for?"
+   story is for?" Give it a `Title:` line where the key in words is not what its end-user test should be
+   called — and always where the project binds its end-user tests to a shared list of scenario titles:
+   then the title is that list's, added there first.
    An assumption that fixes an observable result — a format, an order, a wording the user sees —
    is a criterion waiting for its answer, not a footnote: the plan stage builds the next best shape
    around an open assumption, and that shape then reaches delivery unconfirmed. Ask for it before

@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.39.5"
+VERSION = "0.39.6"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -418,6 +418,51 @@ def check_happy_path(result, story_path, front, body, profile):
         result.fail("happy-path", f"{story_path}: {len(marked)} scenarios marked `(happy path)` — exactly one per "
                                   f"story shows its value and gets the end-to-end test; mark it in the backlog "
                                   f"(`#### <key> (happy path)`)" + (f": {', '.join(marked)}" if marked else ""))
+
+
+TITLE_LINE = re.compile(r"^Title:\s*(\S.*?)\s*$")
+
+
+def scenario_titles(body):
+    """{key: title} for every criterion: the `Title:` line under a scenario's heading, else the key in words
+    (`shows-empty-state` → "Shows empty state"). An end-user test carries it verbatim as its display name, so two
+    implementations of one story name the test alike and a report names the scenario it proves."""
+    section = body.split("## Acceptance criteria", 1)[-1].split("\n## ", 1)[0] if "## Acceptance criteria" in body else ""
+    titles, current = {}, None
+    for line in section.splitlines():
+        stripped = line.strip()
+        heading = re.match(r"^####\s+([a-z0-9][a-z0-9-]*)", stripped)
+        criterion = CRITERION.match(stripped)
+        if heading:
+            current = heading.group(1)
+            titles[current] = current.replace("-", " ").capitalize()
+        elif criterion:
+            current = None
+            titles[criterion.group(1)] = criterion.group(1).replace("-", " ").capitalize()
+        elif current and TITLE_LINE.match(stripped) and "{{" not in stripped:   # a template placeholder names nothing
+            titles[current] = TITLE_LINE.match(stripped).group(1)
+    return titles
+
+
+def check_titles(result, profile, cwd, front, body, mapping, located):
+    """Contract 9: an end-user test carries its scenario's title verbatim, as its display name."""
+    if story_kind(front) == "adopt" or contract_of(profile) < 9 or not mapping or not profile.get("e2eTest"):
+        return
+    titles = scenario_titles(body)
+    wrong = []
+    for key, selectors in sorted(mapping.items()):
+        for selector in selectors:
+            path = located.get(selector)
+            if not path or command_for(profile, path)[0] not in ("e2eTest", "test.journey") or key not in titles:
+                continue
+            if titles[key] not in read_text(os.path.join(cwd, path)):
+                wrong.append(f"{selector} ({key}) — \"{titles[key]}\"")
+    if wrong:
+        result.fail("test-titles", "end-user tests without their scenario's title as display name — write it "
+                                   "verbatim (the scenario's `Title:` line, else its key in words): " + "; ".join(wrong))
+    elif any(command_for(profile, located.get(sel) or "")[0] == "e2eTest"
+             for sels in mapping.values() for sel in sels if located.get(sel)):
+        result.ok("test-titles", "every end-user test carries its scenario's title")
 
 
 def plan_levels(tasks, story_id):
@@ -5395,6 +5440,7 @@ def main(argv):
             )
             if args.stage == "test":
                 check_levels(result, profile, args.tasks, story_id, front, body, mapping, located)
+                check_titles(result, profile, cwd, front, body, mapping, located)
             if args.stage in ("build", "tidy"):
                 check_required_suites(result, profile, cwd)
             check_files_listed(result, args.tasks, story_id, args.stage)

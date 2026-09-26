@@ -593,7 +593,7 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
     write("src/test/java/com/example/WidgetUnitTest.java",
           "class WidgetUnitTest { void showsNothingWhenEmpty() {} }\n")
     write("src/test-pages/java/com/example/WidgetPageTest.java",
-          "class WidgetPageTest { void showsTheThing() {} }\n")
+          "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n")
     for path, content in extra_sources:
         write(path, content)
     if tests is not None:
@@ -2402,6 +2402,19 @@ def main(argv=None):
         (Case("test: an end-user test for a scenario that is not the happy path is refused", "test", 1,
               must_fail=("levels",), text=("shows-the-thing (com.example.WidgetPageTest#showsTheThing)",)),
          dict(profile=PROFILE.replace("test.pages:", "e2eTest:"))),
+        (Case("test: an end-user test without its scenario's title as display name is refused", "test", 1,
+              must_fail=("test-titles",), text=('"Shows the thing"',)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+              story=STORY.replace(" (happy path):", ":").replace("- shows-the-thing:", "- shows-the-thing (happy path):"),
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                              "class WidgetPageTest { void showsTheThing() {} }\n"),))),
+        (Case("test: a scenario's `Title:` line is the title its end-user test carries", "test", 0,
+              must_pass=("test-titles",)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+              story=STORY_SCENARIOS.replace("#### shows-the-thing\n", "#### shows-the-thing (happy path)\nTitle: The list shows what is recorded\n")
+              .replace("#### shows-nothing-when-empty (happy path)", "#### shows-nothing-when-empty"),
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                              "class WidgetPageTest { @DisplayName(\"The list shows what is recorded\") void showsTheThing() {} }\n"),))),
         (Case("test: an end-user test the plan gave browser-only passes the level check", "test", 0,
               must_pass=("levels",)),
          dict(profile=PROFILE.replace("test.pages:", "e2eTest:"), extra_sources=(
