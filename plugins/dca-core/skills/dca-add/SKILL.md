@@ -145,13 +145,19 @@ run `e2e-testing` in its setup mode — it holds the setup for Gradle, Maven and
 by the build, a fake clock and permission stand-ins, a static start page instead of a controller). Where
 `e2e-testing` is not installed, say so and stop; do not improvise a setup.
 
+A project that already has a browser suite gets no second one. Where its suite drives an application
+someone has to start first, `e2e-testing`'s setup mode changes the suite's base test so it starts the
+application itself on a free port — the one change that makes the suite usable by an automated check.
+
 What this skill checks afterwards, because a runner that cannot fail is worse than none:
+
+- the whole suite runs green with nothing started beforehand;
 
 - the smoke test is green;
 - it fails when the start page's `<title>` is emptied — try it once, then restore the title;
 - the conventions file records the three answers, one line each, where the report and the general skills
-  read them: `browser:` (the runner), `selector:` (the stable-selector attribute) and `appStart:` (`started by
-  the suite on a free port`, or the base URL of a running application);
+  read them: `browser:` (the runner), `selector:` (the stable-selector attribute) and `appStart: started by
+  the suite on a free port`;
 - the `AGENTS.md` section of `dca-init` names `e2e-testing` for browser tests; where it does not, run
   `dca-init` again to refresh the section (or add the line in its form: ``- browser tests: `e2e-testing` ``).
 

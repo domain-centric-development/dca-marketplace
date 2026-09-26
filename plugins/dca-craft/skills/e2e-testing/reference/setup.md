@@ -9,10 +9,10 @@ build, writing a test report a CI job or a gate can read.
 Four things make a browser suite usable from the first day:
 
 1. **The application starts inside the test**, on a free port. Nothing has to be running first, so the
-   suite runs the same on a laptop, in CI and in an agent's shell. (The other variant — the suite points at
-   an application someone started, its base URL in a property or an environment variable — suits a system
-   that needs a database or other services up first. Pick one per project and say which; a suite that does
-   both by accident starts one application and tests another.)
+   suite runs the same on a laptop, in CI and in an agent's shell, and a red test means the page, never
+   "nothing answered". What the application needs comes with it: an external system as a stub the suite
+   starts first (below), a database as the test instance the application's tests already use. A base-URL
+   property may point the same tests at a deployment; without it, the suite starts its own.
 2. **The browser is installed by the build**, once per machine, before the first test.
 3. **Time is controlled.** A page that counts, polls or expires is tested with a fake clock that moves
    only when the test moves it — five minutes of waiting become one call.
@@ -171,6 +171,51 @@ public abstract class BrowserTest : IAsyncLifetime
 `@playwright/test` as a dev dependency, `npx playwright install chromium`, and the `junit` reporter in
 `playwright.config` so a report exists (`reporter: [['junit', { outputFile: 'test-results/e2e.xml' }]]`). The
 application is started by the config's `webServer` entry. Not verified in this form.
+
+## External systems: a stub the suite owns
+
+The application the suite starts calls an external system — a payment provider, a mail service — through
+an adapter whose base URL is configuration. The suite starts an HTTP stub on a free port **before** the
+application and hands the stub's URL to it; each test arranges the stub's answer. The stub is the suite's,
+started once with the application, so every test in the run sees the same address.
+
+Java, Spring Boot (the stub on a free port, its URL a property of the application under test):
+
+```java
+@SpringBootTest(classes = Application.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+abstract class BrowserTest {
+  static final WireMockServer provider = new WireMockServer(wireMockConfig().dynamicPort());
+  static { provider.start(); }
+
+  @DynamicPropertySource
+  static void provider(DynamicPropertyRegistry registry) {
+    registry.add("<the adapter's base-url property>", provider::baseUrl);
+  }
+  @BeforeEach void resetProvider() { provider.resetAll(); }   // each test arranges its own answer
+}
+```
+
+.NET (the stub started before the factory, its URL a setting of the host):
+
+```csharp
+provider = WireMockServer.Start();
+factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+    builder.UseSetting("<the adapter's base-url key>", provider.Url));
+factory.UseKestrel(0);
+factory.StartServer();
+```
+
+A test that needs the real system does not belong in this suite; a test against a deployment points the
+base-URL property at it and arranges nothing.
+
+## A suite that needs a running application
+
+An existing suite reads its base URL from a property or an environment variable and fails, or skips, when
+nothing answers there. It is converted in its base test alone: without the property, the base starts the
+application itself on a free port — once per run, shared by every test class — and returns that address;
+with the property, it keeps pointing at the application named. Skip conditions that only asked "is the base
+URL set?" are removed, since the suite now always has an application. The tests themselves do not change.
+Run the whole suite afterwards with nothing started beforehand: green, the same count of tests as before.
 
 ## Time: the fake clock
 

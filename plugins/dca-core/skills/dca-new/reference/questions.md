@@ -61,9 +61,6 @@ has pages: …") and its answer is dropped where the condition turns out false.
 - answer goes to: `selector:` in the conventions file
 
 ### NEW-APP-START
-- look up: the conventions file (`appStart:`)
-- asked: when DESC-SURFACES names pages, or is itself open in this pass
-- question: Where the product has pages: does the browser suite start the application itself on a free port, or point at one that is already running?
-- options: started by the suite on a free port · an application already running (name its base URL)
-- default: started by the suite on a free port
-- answer goes to: `appStart:` in the conventions file
+- *never asked* — rule: the browser suite starts the application itself, in the test and on a free port,
+  so it runs with nothing started beforehand — in CI and in a delivery pipeline's gate as on a laptop
+- answer goes to: `appStart: started by the suite on a free port` in the conventions file

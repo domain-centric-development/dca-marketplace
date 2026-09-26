@@ -71,7 +71,7 @@ writes the description from those answers and never invents one. Take from it:
 
 **Every question in one pass, from the catalogue.** `reference/questions.md` lists every decision this mode
 needs — the description's open entries (`dca-describe`'s catalogue), this mode's own (base package, formatter
-style, browser runner, selector attribute, how the suite reaches the application) and `dca-init`'s entries
+style, browser runner, selector attribute) and `dca-init`'s entries
 that apply to an empty directory — each with where its answer is looked up first. Look every answer up, then
 ask **only the open ones — all at once, before the generator runs, in catalogue order, word for word**, with
 the options and the default the catalogue gives; through a structured question tool where the harness has
