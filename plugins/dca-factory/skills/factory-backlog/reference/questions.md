@@ -74,6 +74,14 @@ their number do not.
 - default: the draft
 - answer goes to: the story's `## Acceptance criteria`
 
+### WISH-HAPPY-PATH
+- look up: —
+- asked: always
+- question: Which scenario shows what this story is for — its happy path, tested end to end?
+- options: the drafted scenarios by key, the one the draft marks first
+- default: the one the draft marks
+- answer goes to: `(happy path)` on that scenario's heading; the others are tested integrated
+
 ### WISH-RELEASE
 - look up: —
 - asked: always

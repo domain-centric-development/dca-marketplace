@@ -6,7 +6,7 @@ fresh context, in a subagent or in a separate process without changing the resul
 
 | Stage | Reads | Writes |
 |---|---|---|
-| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `tasks/<story>/plan.md` |
+| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `tasks/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration \| browser-only (<why>)`; the test gate reads `browser-only` |
 | `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `tasks/<story>/tests.md` (with the `gate:tests` table) |
 | `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `tasks/<story>/build.md` |
 | `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `tasks/<story>/tidy.md` |

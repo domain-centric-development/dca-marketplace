@@ -82,6 +82,10 @@ Front matter, every field non-empty; the gate refuses an epic without `intent`, 
 An epic missing one of `intent`, `goal`, `metric`, `domain_contact` is refused by the gate at
 the plan stage. The reason is not bureaucracy: a stage that cannot read the intent invents one.
 
+Body section `## Journey` — optional: the flow through the epic that must never break, the steps as a
+user takes them to the outcome event, and why a break would hurt; `open:` while it cannot be said. Its
+test is a backlog item of its own (below).
+
 ## Story
 
 Front matter:
@@ -121,7 +125,12 @@ Body sections:
 
   Criteria are observable end-user behaviour, small enough that one agent run delivers the whole
   story. They are specification, not executable feature files: the test stage turns each into one
-  end-user test in the project's own runner.
+  test in the project's own runner, at the level the plan gives it.
+  **The happy path** (contract 9): exactly one scenario per story is marked `(happy path)` —
+  `#### <key> (happy path)`, or `- <key> (happy path): <criterion>` — the one that shows what the
+  story is for. It gets the end-to-end test; every other scenario is tested integrated, below the
+  page, unless the plan gives it `browser-only` with a reason. The plan gate refuses a story with no
+  mark or two; the test gate refuses an end-user test for any other scenario.
   Each criterion is behaviour the system does not show yet — its test is red until the build
   stage, and the gate refuses one that is green before it. Behaviour that must keep working is
   what the existing tests guard; it is not a criterion.
@@ -139,6 +148,15 @@ Body sections:
   acceptance lands here too, in the same story, when it takes back something the story delivered.
 - `## Assumptions` — the asynchronous channel to the domain contact: one line per assumption,
   `open:` or `answered:`. An assumption is a question, never a decision the team took itself.
+
+## Journey item
+
+`kind: journey` in a story's front matter makes it a guard over delivered stories instead of new
+behaviour: one scenario walking the epic's `## Journey` to its outcome event, `depends_on:` the stories
+that build the steps (required — it becomes ready when they are delivered), no happy-path mark. It runs
+plan, test, judge and document — nothing to build — and its test must be **green** at the test gate,
+where a story's must be red. Its tests live where `test.journey:` runs them; a later story that changes
+a step lists the journey test under `## Changed tests`, as any other.
 
 ## Brownfield
 

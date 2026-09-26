@@ -1,0 +1,5 @@
+# WireMock in a Gradle build — the stub an integration test puts in place of an external system, at the protocol.
+kind: stub
+order: 10
+detect.contains: **/*.gradle **/*.gradle.kts :: org\.wiremock:|com\.github\.tomakehurst:wiremock
+http.stub: wiremock

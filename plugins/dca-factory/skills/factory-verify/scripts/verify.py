@@ -121,7 +121,7 @@ depends_on: []
 ## Acceptance criteria
 
 - shows-the-thing: The reader sees the thing.
-- shows-nothing-when-empty: With nothing recorded, the reader sees an empty list, not an error.
+- shows-nothing-when-empty (happy path): With nothing recorded, the reader sees an empty list, not an error.
 
 ## Assumptions
 
@@ -130,7 +130,7 @@ depends_on: []
 
 #: The same two criteria in the scenario form: keyed Given/When/Then scenarios under Gherkin rules.
 STORY_SCENARIOS = STORY.replace("""- shows-the-thing: The reader sees the thing.
-- shows-nothing-when-empty: With nothing recorded, the reader sees an empty list, not an error.
+- shows-nothing-when-empty (happy path): With nothing recorded, the reader sees an empty list, not an error.
 """, """### Rule: What is recorded is shown
 
 #### shows-the-thing
@@ -140,7 +140,7 @@ STORY_SCENARIOS = STORY.replace("""- shows-the-thing: The reader sees the thing.
 
 ### Rule: An empty record is not an error
 
-#### shows-nothing-when-empty
+#### shows-nothing-when-empty (happy path)
 - Given nothing is recorded
 - When the reader opens the list
 - Then the list is empty
@@ -698,6 +698,19 @@ def verify_runner(runner, verbose=False):
         check("runner: the plan gate runs before its stage, every other gate after it",
               order == expected, f"got {order}")
         check("runner: a dry run changes nothing", code == 0 and not os.path.isdir(os.path.join(root, "tasks", "STORY-1", "plan.md")))
+
+    # 1b. a journey walks what is delivered: no build, no tidy
+    with tmpdir() as root:
+        build_project(root, story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
+                      .replace("depends_on: []", "depends_on: [STORY-0]"))
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
+                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        order = [line.strip()[3:].split("  (")[0].strip()
+                 for line in output.splitlines() if line.startswith("── ") and "skipped" not in line]
+        check("runner: a journey runs plan, test, judge and document — build and tidy are skipped and said so",
+              order == ["gate plan", "stage plan", "stage test", "gate test", "stage judge", "stage document",
+                        "gate document"] and "stage build  (skipped: a journey builds nothing)" in output, f"got {order}")
 
     # 1a. the stage process sees only the project: the isolation flags, one prefix for every stage
     with tmpdir() as root:
@@ -2338,6 +2351,39 @@ def main(argv=None):
          dict(story=STORY_SCENARIOS.replace("- Then the list is empty", "- Expect the list is empty"))),
         (Case("plan: a key used twice is refused", "plan", 1, must_fail=("gate",), text=("appears twice",)),
          dict(story=STORY_SCENARIOS.replace("#### shows-nothing-when-empty", "#### shows-the-thing"))),
+        # --- contract 9: the happy path, the levels, the journey ---------------
+        (Case("plan: a story with no happy path is refused", "plan", 1, must_fail=("happy-path",),
+              text=("0 scenarios marked `(happy path)`",)),
+         dict(story=STORY.replace(" (happy path):", ":"))),
+        (Case("plan: a story with two happy paths is refused", "plan", 1, must_fail=("happy-path",),
+              text=("2 scenarios marked",)),
+         dict(story=STORY.replace("- shows-the-thing:", "- shows-the-thing (happy path):"))),
+        (Case("plan: a scenario marked happy path passes and keeps its key", "plan", 0,
+              must_pass=("happy-path", "story"), text=("happy path: shows-nothing-when-empty",)),
+         dict(story=STORY_SCENARIOS)),
+        (Case("plan: a contract-8 profile is not held to the happy path", "plan", 0, must_skip=("happy-path",)),
+         dict(story=STORY.replace(" (happy path):", ":"), profile=PROFILE + "contract: 8\n")),
+        (Case("plan: a journey without depends_on is refused", "plan", 1, must_fail=("journey",)),
+         dict(story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
+              .replace(" (happy path):", ":"))),
+        (Case("plan: a journey over delivered stories needs no happy path", "plan", 0, must_pass=("journey",)),
+         dict(story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
+              .replace(" (happy path):", ":").replace("depends_on: []", "depends_on: [STORY-0]"))),
+        (Case("test: an end-user test for a scenario that is not the happy path is refused", "test", 1,
+              must_fail=("levels",), text=("shows-the-thing (com.example.WidgetPageTest#showsTheThing)",)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"))),
+        (Case("test: an end-user test the plan gave browser-only passes the level check", "test", 0,
+              must_pass=("levels",)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"), extra_sources=(
+             ("tasks/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n- shows-the-thing: The reader sees the "
+                                       "thing. → level: browser-only (a script draws it after load)\n"),))),
+        (Case("test: the happy path's end-user test passes the level check", "test", 0, must_pass=("levels",)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+              story=STORY.replace(" (happy path):", ":").replace("- shows-the-thing:", "- shows-the-thing (happy path):"))),
+        (Case("test: a journey's test is green at its gate, the inverse of a story", "test", 0,
+              must_pass=("tests-green",)),
+         dict(story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
+              .replace("depends_on: []", "depends_on: [STORY-0]"), green=both_green)),
         # --- the test gate ------------------------------------------------
         (Case("test: every criterion mapped and red passes", "test", 0,
               must_pass=("tests-mapped", "tests-exist", "compiles", "tests-red")),
@@ -2566,6 +2612,10 @@ def main(argv=None):
               must_fail=("decisions",),
               text=("STORY-1-01 is open", ".agents/factory/decisions/STORY-1-01.md", "`by:` and `at:`")),
          with_decisions(("STORY-1-01", DECISION), plan=PLAN_ASKING)),
+        (Case("decisions: a stage that writes on after the id on its decision line still names that record", "test", 1,
+              must_fail=("decisions",), text=("STORY-1-01 is open",)),
+         with_decisions(("STORY-1-01", DECISION),
+                        plan=PLAN_ASKING.replace("decision: STORY-1-01\n", "decision: STORY-1-01. The archive is open.\n"))),
         (Case("decisions: an answer without a name and a time is a draft, and a draft unblocks nothing",
               "test", 1, must_fail=("decisions",), text=("not confirmed", "`by:`")),
          with_decisions(("STORY-1-01", DECISION + "\n## Answer\nanswer: b\n"), plan=PLAN_ASKING)),
@@ -3513,6 +3563,21 @@ def main(argv=None):
                              "gate:skip tests-kept" in output and "pruned" in output,
                              "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
     with tmpdir() as root:
+        # a test changed and committed after the baseline — by someone else: a run commits nothing mid-story
+        build_project(root, extra_sources=((unit, old_test),))
+        for command in (["init", "-q"], ["add", "-A"],
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+        with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
+            handle.write(changed_line(old_test))
+        for command in (["add", unit], ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "elsewhere"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        verdict, output = kept_verdict(root)
+        expectations.append(("tests-kept: a test committed since the baseline changed outside the story and is not its",
+                             verdict == "pass", "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    with tmpdir() as root:
         build_project(root)
         verdict, output = kept_verdict(root)
         expectations.append(("tests-kept: outside a git repository the check is skipped and named",
@@ -4091,6 +4156,33 @@ def main(argv=None):
                              "git mv backlog project/backlog" in brief and "git mv backlog/product.md" in brief
                              and "git mv backlog project/backlog" in planned and "no story 'STORY-1' under project/backlog" in planned,
                              f"{brief.strip()} | {planned.strip()[-200:]}"))
+    with tmpdir() as root:
+        backlog_project(root, extra_sources=(("project/backlog/sample/STORY-2.md",
+                                               story("STORY-2").replace(" (happy path):", ":")),))
+        checked = subprocess.run([sys.executable, args.gate, "--check-backlog"], cwd=root, capture_output=True,
+                                 text=True, encoding="utf-8").stdout
+        expectations.append(("check-backlog: a story without a happy path is named, as the plan gate would",
+                             "happy-path" in checked and "STORY-2" in checked and "0 scenarios marked" in checked,
+                             checked[-500:]))
+    with tmpdir() as root:
+        # a journey: after its test it goes to the judge, and an epic delivered with an open journey is named
+        journey = (story("JOURNEY-1", ("STORY-1",)).replace("status: approved\n", "status: approved\nkind: journey\n")
+                   .replace(" (happy path):", ":"))
+        backlog_project(root, epic=EPIC + "\n## Journey\n\n- open: which flow must never break\n", extra_sources=(
+            ("project/backlog/sample/JOURNEY-1.md", journey),
+            ("tasks/STORY-1/document.md", "# Document\n"), ("tasks/STORY-1/.delivered", "x\n"),
+            ("tasks/JOURNEY-1/plan.md", "# Plan\n"), ("tasks/JOURNEY-1/tests.md", "# Tests\n")))
+        rows, _nxt, _wait, listing = schedule_of(args.gate, root)
+        expectations.append(("schedule: a journey whose test is written goes to the judge — no build, no tidy",
+                             rows.get("JOURNEY-1", ("", ""))[1] == "judge", listing))
+    with tmpdir() as root:
+        backlog_project(root, epic=EPIC + "\n## Journey\n\n- open: which flow must never break\n",
+                        extra_sources=(("tasks/STORY-1/document.md", "# Document\n"), ("tasks/STORY-1/.delivered", "x\n")))
+        view = subprocess.run([sys.executable, args.gate, "--status", "--part", "backlog"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8").stdout
+        expectations.append(("status: an epic delivered with its journey still open is named, with the skill",
+                             "journey   sample: every story is delivered and its journey is still open — /factory-backlog"
+                             in view, view[-600:]))
     with tmpdir() as root:
         # before anything is there: the runner's help explains the factory from the plugin's gate
         shown = subprocess.run([BASH, args.runner, "help", "--format", "json"], cwd=root, capture_output=True,

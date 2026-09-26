@@ -68,6 +68,11 @@ that smuggles the decision in.
    A story that changes behaviour the system **already has** says so under `## Changed
    expectations`: what is seen now, what is seen after, in the project's words. The human writing
    it needs to know the behaviour, not the stories or the tests behind it.
+   **Mark the happy path** — the one scenario that shows the story's value, as the person would
+   demonstrate it: `#### <key> (happy path)` (line form `- <key> (happy path): …`). Exactly one per
+   story; the plan gate refuses none and two. It gets the story's end-to-end test; every other
+   scenario is tested integrated. Ask for it where it is not obvious: "Which scenario shows what this
+   story is for?"
    An assumption that fixes an observable result — a format, an order, a wording the user sees —
    is a criterion waiting for its answer, not a footnote: the plan stage builds the next best shape
    around an open assumption, and that shape then reaches delivery unconfirmed. Ask for it before
@@ -137,6 +142,21 @@ that smuggles the decision in.
    `bash .agents/factory/factory.sh backlog --format md` and show it as it is — the tables by epic,
    the tokens and *Next* — without retelling it, reformatting it or adding after its *Next*. Say more
    only when asked, read from the file the answer comes from.
+
+## A journey
+
+An epic may name its **journey** — `## Journey` in `epic.md`: the steps as a user takes them, across the
+epic's stories and contexts, to the epic's outcome event, and why a break would hurt. Ask for it when an
+epic is created ("Which flow through this epic must never break, and why?"); leave it `open:` when the
+person cannot say yet — a journey emerges from delivered stories — and add it at any later time. An epic
+without one has no journey test, which is a decision, not a gap. The product description's
+`## Qualities` may name flows that must never break; offer them as an epic's journey.
+
+The journey test is its own backlog item in the epic's folder: `kind: journey`, `depends_on:` the stories
+that build its steps, one scenario walking the steps to the outcome event (no happy-path mark — it is a
+guard, not acceptance). It becomes ready when those stories are delivered, runs plan, test, judge and
+document — nothing to build — and its test is green at its test gate. Template:
+`factory-run/templates/backlog/journey.md.tmpl`.
 
 ## A story from a wish
 

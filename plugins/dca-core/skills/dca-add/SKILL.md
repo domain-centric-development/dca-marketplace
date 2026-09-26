@@ -5,8 +5,10 @@ description: |
   needed: `rules <set>` (one more rule set of the DCA catalog), `freeze` (accept today's violations as a
   baseline so only new ones fail), `formatter` (Spotless for Gradle or Maven, or `dotnet format`, with one
   formatting run over the whole code base) and `browser` (a browser runner and a smoke test, through
-  `e2e-testing`). Use when the user asks to "add the tactical rules", "freeze the existing violations", "set
-  up a formatter", "add Playwright", "add browser tests", or "/dca-add <capability>". Java (Gradle, Maven)
+  `e2e-testing`) and `http-stub` (WireMock or WireMock.Net, for integration tests against an external
+  system stubbed at the protocol). Use when the user asks to "add the tactical rules", "freeze the existing
+  violations", "set up a formatter", "add Playwright", "add browser tests", "add WireMock", "stub the
+  payment provider in tests", or "/dca-add <capability>". Java (Gradle, Maven)
   and .NET. Changes only what the capability needs and never overwrites a file.
 ---
 
@@ -18,7 +20,7 @@ run.
 
 **What belongs on this list:** a capability carries knowledge beyond the tool's own documentation, or a
 delivery pipeline needs it. Everything else is ordinary work without a skill — do it, but do not add it here.
-Today the list is four entries:
+Today the list is five entries:
 
 | Capability | Does | The knowledge lives in |
 |---|---|---|
@@ -26,6 +28,7 @@ Today the list is four entries:
 | `freeze` | today's violations become the baseline; only new ones fail | this skill |
 | `formatter` | a formatter in the build, one run over the whole code base, the check and fix commands | this skill |
 | `browser` | a browser runner and one smoke test on the start page | `e2e-testing`'s setup mode |
+| `http-stub` | an HTTP stub for integration tests, on a free port, and one smoke test shown to fail | `reference/http-stub.md` |
 
 ## Before any capability
 
@@ -152,6 +155,29 @@ What this skill checks afterwards, because a runner that cannot fail is worse th
 - the `AGENTS.md` section of `dca-init` names `e2e-testing` for browser tests; where it does not, run
   `dca-init` again to refresh the section (or add the line in its form: ``- browser tests: `e2e-testing` ``).
 
+## `http-stub`
+
+An integration test runs a use case through the wired application; an external system it calls is
+stubbed **at the protocol** — a real HTTP server on a free port that answers what the test arranges —
+never by a mock of the port whose adapter is under test, and never against a shared or real instance.
+The setup per stack is in `reference/http-stub.md`: WireMock for Java (Gradle, Maven), WireMock.Net for
+.NET.
+
+1. **Where the integration tests live.** An integration source set or test project (`src/test-integration`,
+   `*.IntegrationTests`) takes the dependency; where there is none, the unit-test source set does, and the
+   report says so — a separate integration level is a decision of its own.
+2. **The version is looked up** (Maven Central, NuGet), never recalled; take the latest stable release, not
+   a beta.
+3. **One smoke test** in that source set: the stub started on a free port, one answer arranged, one call,
+   the answer asserted. Run it green, then change the arranged answer, see it red, restore it, see it green.
+   A stub test that stays green against a wrong answer proves nothing.
+4. **The adapter's base URL comes from configuration**, so an integration test points the application at
+   the stub: a property set from the stub's URL (`@DynamicPropertySource` in Spring, the
+   `WebApplicationFactory` configuration in ASP.NET Core). The reference shows both; no adapter is written
+   here.
+5. **Record it**: `http.stub: wiremock` / `wiremock-net` in the conventions file, where the general skills
+   and a delivery pipeline's profile read it.
+
 ## After each capability
 
 Report what was added, the commands to run it, and what the user commits:
@@ -164,7 +190,7 @@ Report what was added, the commands to run it, and what the user commits:
 ```
 
 Where the project has a delivery pipeline (`.agents/factory/`), hint that `factory.sh setup --check` proposes
-the profile lines the new capability needs (`format:` / `formatFix:`, `browser:` / `e2eTest:`). This skill does not write the
+the profile lines the new capability needs (`format:` / `formatFix:`, `browser:` / `e2eTest:`, `http.stub:`). This skill does not write the
 profile and does not depend on the pipeline.
 
 ## Anti-patterns
