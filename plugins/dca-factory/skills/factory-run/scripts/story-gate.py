@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.39.4"
+VERSION = "0.39.5"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -1878,14 +1878,21 @@ def read_decisions(store, story_id):
     return records
 
 
+def applying_stage(front, answer):
+    """The stage that applies an answer: the one the answer names (`applies: test` — an answer that changes a
+    test goes back to the test stage, whoever asked), else the record's `stage:`, the stage that asked."""
+    named = str((answer or {}).get("applies", "")).strip().lower()
+    return named if named in STAGE_ORDER else str(front.get("stage", "")).strip()
+
+
 def answered_decisions(cwd, story_id, stage):
-    """Ids of this story's answered or applied records whose `stage:` is the given stage."""
+    """Ids of this story's answered or applied records the given stage applies."""
     try:
         records = read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
     except GateError:
         return []
-    return [str(front["id"]).strip() for _p, front, _b, state, _a in records
-            if state in ("answered", "applied") and str(front.get("stage", "")).strip() == stage]
+    return [str(front["id"]).strip() for _p, front, _b, state, answer in records
+            if state in ("answered", "applied") and applying_stage(front, answer) == stage]
 
 
 def nothing_line(line):
@@ -2054,7 +2061,7 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
         if is_acceptance(front):
             continue
         rid = str(front["id"]).strip()
-        stage = str(front.get("stage", "")).strip()
+        stage = str(front.get("stage", "")).strip() if state in ("open", "draft") else applying_stage(front, answer)
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
         rel = os.path.relpath(path, cwd).replace(os.sep, "/")     # one spelling on every platform
         if state == "open":
@@ -4868,8 +4875,8 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     if waiting:
         return "waiting", None, "decision " + ", ".join(waiting)
     answered, resolved = {}, {}
-    for _path, front_, _body, state, _answer in records:
-        rid, asked_by = str(front_["id"]).strip(), str(front_.get("stage", "")).strip()
+    for _path, front_, _body, state, answer_ in records:
+        rid, asked_by = str(front_["id"]).strip(), applying_stage(front_, answer_)
         if is_acceptance(front_):
             resolved[rid] = asked_by
             continue                             # answered through the document gate, not a stage

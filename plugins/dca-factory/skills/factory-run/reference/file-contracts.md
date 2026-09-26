@@ -135,6 +135,10 @@ rationale: <optional>
   except for a judge's story conflict, where it is the stage the answer lands in (`plan` or `test`).
   A test whose expectation changes on such a decision may be green at the test gate when it was
   recorded red before; without the decision, green before the build is refused.
+- `applies: <stage>` in the `## Answer` — optional — names the stage that applies this answer when it is not
+  the one that asked: an answer that changes a test is `applies: test`, whichever stage asked, so the story
+  resumes at the test stage and the changed test gets its red proof there. The gate, the schedule and the
+  test stage's "expectation changed on a decision" read `applies:` before `stage:`.
 - The state is **read off the file, never stored in it**: no `## Answer` is *open*; an
   `## Answer` with `answer:`, `by:` and `at:` is *answered*; a gate-written `## Applied` is
   *applied*. An `## Answer` missing the name or the time is a draft, and a draft unblocks nothing.
@@ -152,7 +156,7 @@ rationale: <optional>
 - Only a human writes `## Answer`, or a skill writing the human's exact words on their explicit
   confirmation. A recommendation, a timeout, a preselected option or an unconfirmed draft is not
   an answer.
-- The stage that asked **applies** the answer when it runs again: its new file no longer ends in
+- The stage that applies it (`applies:`, else the stage that asked) **applies** the answer when it runs again: its new file no longer ends in
   `## needs-human` and cites the id where the answer landed (`Decision US-3-01 answered b: …`).
   The gate then stamps `## Applied` into the record. Applied means the plan carries the answer,
   not that the story is delivered.

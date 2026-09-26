@@ -2745,6 +2745,11 @@ def main(argv=None):
               "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
          dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,
               **with_decisions(("STORY-1-01", CONFLICT + ANSWER), plan=PLAN_APPLIED))),
+        (Case("test: an answer a later stage asked for that changes a test (`applies: test`) is the test stage's",
+              "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
+         dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,
+              **with_decisions(("STORY-1-01", CONFLICT.replace("stage: test", "stage: build")
+                                + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n")), plan=PLAN_APPLIED))),
         (Case("test: without that decision, green before the build is still refused", "test", 1,
               must_fail=("tests-red",), text=("passes before the build stage",)),
          dict(green=both_green, ledger=both_green)),
@@ -4244,6 +4249,16 @@ def main(argv=None):
                              judged.get("STORY-1", ("", ""))[1] == "adopt", judged))
         expectations.append(("adopt: once adopted it reads 'delivered (adopted)'", "delivered (adopted)" in after,
                              after[-500:]))
+    with tmpdir() as root:
+        # an answer that changes a test resumes at the test stage, whichever stage asked
+        backlog_project(root, extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_APPLIED), ("tasks/STORY-1/tests.md", TESTS),
+            ("tasks/STORY-1/build.md", "# Build\n\n## needs-human\ndecision: STORY-1-01\n"),
+            (".agents/factory/decisions/STORY-1-01.md", CONFLICT.replace("stage: test", "stage: build")
+             + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n"))))
+        rows = schedule_of(args.gate, root)[0]
+        expectations.append(("decisions: an answer that says `applies: test` resumes the story at the test stage",
+                             rows.get("STORY-1", ("", ""))[1] == "test", rows))
     with tmpdir() as root:
         # a journey: after its test it goes to the judge, and an epic delivered with an open journey is named
         journey = (story("JOURNEY-1", ("STORY-1",)).replace("status: approved\n", "status: approved\nkind: journey\n")
