@@ -74,6 +74,15 @@ class ProviderAdapterIntegrationTest {
 A refusal is an arranged status (`aResponse().withStatus(402)`), a timeout an arranged delay longer than the
 adapter's (`withFixedDelay(...)`).
 
+Arrange the answer for the request the contract describes, not for any request: match the body's shape,
+field types included, so an adapter that sends the wrong type gets no answer instead of a green test.
+`equalToJson` with placeholders checks a type that a JSON-path regex cannot see (the regex reads a number as
+text):
+
+```json
+"bodyPatterns": [{ "equalToJson": { "amount": "${json-unit.regex}^[0-9]+\\.[0-9]{2}$" }, "enablePlaceholders": true }]
+```
+
 ## .NET — WireMock.Net
 
 The package, in the integration test project (or the unit-test one where there is none):

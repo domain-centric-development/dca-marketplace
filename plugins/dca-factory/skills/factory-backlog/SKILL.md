@@ -92,9 +92,11 @@ that smuggles the decision in.
      a client framework where pages are server-rendered — or what the stack cannot do? That is a
      question about the technical description, not a detail of the story;
    - **external dependency:** a system neither the designed map nor `## Integrations` carries is a
-     question about the description, not a story. Its contract (endpoints, status codes, what
-     counts as unavailable) goes into the description and the configuration once, never into the
-     story;
+     question about the description, not a story. Its contract (endpoints, the request and answer
+     bodies with each field's type — a money amount as a decimal string, never a JSON number — status
+     codes, what counts as unavailable) goes into the description and the configuration once, never
+     into the story. A shape the description leaves open is a question now: two implementations fill
+     it differently;
    - **inputs:** format, allowed range, boundaries, and what happens at them — a scenario per boundary
      that matters;
    - **defaults:** one stated value, and where the user sees it;
