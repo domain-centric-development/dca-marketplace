@@ -2921,6 +2921,22 @@ def main(argv=None):
              ("tasks/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Other.java\n"),
              ("tasks/STORY-1/.verify/journal.tsv",
               "2026-09-26T13:55:20.100Z\tstage-start\tbuild\ttool=claude-session\n")))),
+        (Case("build: after a shared builder its record is the one checked — a file it changed that no hand-over "
+              "lists is refused", "build", 1, must_fail=("files-listed",), text=("src/main/Page.java",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("tasks/STORY-1/.verify/changed-builder.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
+             ("tasks/STORY-1/.verify/journal.tsv", "2026-09-27T10:00:00.000Z\tstage-start\tbuilder\ttool=claude\n2026-09-27T10:30:00.000Z\tstage-end\tbuilder\texit=0\n"),
+             ("tasks/STORY-1/build.md", "## Files\n\n- `src/main/Thing.java` — new\n")))),
+        (Case("build: after a shared builder a file listed by any of its hand-overs passes, and an older per-stage "
+              "record is not read", "build", 0, must_pass=("files-listed",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("tasks/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Stale.java\n"),
+             ("tasks/STORY-1/.verify/changed-builder.txt", "added\tsrc/test/ThingTest.java\nadded\tsrc/main/Thing.java\n"),
+             ("tasks/STORY-1/.verify/journal.tsv",
+              "2026-09-26T09:00:00.000Z\tstage-start\tbuild\ttool=claude\n2026-09-26T09:10:00.000Z\tstage-end\tbuild\texit=0\n"
+              + "2026-09-27T10:00:00.000Z\tstage-start\tbuilder\ttool=claude\n2026-09-27T10:30:00.000Z\tstage-end\tbuilder\texit=0\n"),
+             ("tasks/STORY-1/tidy.md", "## Files\n\n- `src/test/ThingTest.java` — renamed a helper\n"),
+             ("tasks/STORY-1/build.md", "## Files\n\n- `src/main/Thing.java` — new\n")))),
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
               text=("via `test.pages:`", "via `test:`")),

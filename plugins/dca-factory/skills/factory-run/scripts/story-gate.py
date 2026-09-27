@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.41.0"
+VERSION = "0.41.1"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3167,6 +3167,18 @@ def listed_files(handover):
     return names if found else None
 
 
+def last_ended(tasks, story_id, names):
+    """Which of the named windows ended last in the story's journal, or None."""
+    journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
+    last = None
+    if os.path.isfile(journal):
+        for line in read_text(journal).splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3 and parts[1] == "stage-end" and parts[2] in names:
+                last = parts[2]
+    return last
+
+
 def stage_open(tasks, story_id, stage):
     """True while the journal's last mark for the stage is its start: the stage is running (plan to tidy
     also while a shared builder, which marks itself `builder`, runs them)."""
@@ -3186,6 +3198,13 @@ def check_files_listed(result, tasks, story_id, stage):
     """The test, build and tidy hand-overs name every file the stage changed, so the next stage can read
     those instead of searching. Checked against the changed-files record, never against the claim."""
     record = os.path.join(tasks, story_id, ".verify", f"changed-{stage}.txt")
+    handovers = [STAGE_FILES[stage]]
+    if last_ended(tasks, story_id, (stage, "builder")) == "builder":
+        # A shared builder ran plan to tidy in one window: its record is the one that holds, and a file it
+        # changed is listed by whichever of its hand-overs belongs to the stage that changed it.
+        record = os.path.join(tasks, story_id, ".verify", "changed-builder.txt")
+        handovers = [STAGE_FILES[name] for name in ("test", "build", "tidy")
+                     if os.path.isfile(os.path.join(tasks, story_id, STAGE_FILES[name]))]
     if not os.path.isfile(record) or stage_open(tasks, story_id, stage):
         if stage_open(tasks, story_id, stage):
             # A stage that runs its own gate does so inside its window: its record is written at the
@@ -3196,22 +3215,23 @@ def check_files_listed(result, tasks, story_id, stage):
             result.skip("files-listed", f"no changed-files record for {stage} — the stage was not snapshotted")
         return
     changed = [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
-    handover = os.path.join(tasks, story_id, STAGE_FILES[stage])
-    listed = listed_files(handover)
+    found = [listed_files(os.path.join(tasks, story_id, name)) for name in handovers]
+    listed = set().union(*[names for names in found if names is not None]) if any(n is not None for n in found) \
+        else None
     if listed is None:
         result.fail("files-listed", f"{STAGE_FILES[stage]} has no `## Files` section (nor a `## Changed` or "
                                     f"`## Moves` table) — list every file the stage changed, one line each")
         return
     missing = [path for path in changed if path not in listed and not any(path.endswith("/" + n) for n in listed)]
     if missing:
-        result.fail("files-listed", f"{STAGE_FILES[stage]} does not list what the stage changed: "
+        result.fail("files-listed", f"{' / '.join(handovers)} does not list what the stage changed: "
                                     f"{', '.join(missing[:8])}" + (" …" if len(missing) > 8 else ""))
         return
     unchanged = sorted(n for n in listed if "/" in n and n not in changed
                        and not any(p.endswith("/" + n) or p == n for p in changed))
     if unchanged:
         result.note("files-listed", f"listed but not changed by this stage: {', '.join(unchanged[:5])}")
-    result.ok("files-listed", f"{STAGE_FILES[stage]} lists the {len(changed)} file(s) the stage changed")
+    result.ok("files-listed", f"{' / '.join(handovers)} list(s) the {len(changed)} file(s) the stage changed")
 
 
 #: Seconds after a window's end before its numbers are written into the journal: a session log is
