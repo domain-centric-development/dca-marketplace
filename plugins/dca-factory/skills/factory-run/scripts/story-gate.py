@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.40.1"
+VERSION = "0.41.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3167,12 +3167,33 @@ def listed_files(handover):
     return names if found else None
 
 
+def stage_open(tasks, story_id, stage):
+    """True while the journal's last mark for the stage is its start: the stage is running (plan to tidy
+    also while a shared builder, which marks itself `builder`, runs them)."""
+    journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
+    if not os.path.isfile(journal):
+        return False
+    last = None
+    for line in read_text(journal).splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[1] in ("stage-start", "stage-end") and (
+                parts[2] == stage or parts[2] == "builder" and stage in ("plan", "test", "build", "tidy")):
+            last = parts[1]
+    return last == "stage-start"
+
+
 def check_files_listed(result, tasks, story_id, stage):
     """The test, build and tidy hand-overs name every file the stage changed, so the next stage can read
     those instead of searching. Checked against the changed-files record, never against the claim."""
     record = os.path.join(tasks, story_id, ".verify", f"changed-{stage}.txt")
-    if not os.path.isfile(record):
-        result.skip("files-listed", f"no changed-files record for {stage} — the stage was not snapshotted")
+    if not os.path.isfile(record) or stage_open(tasks, story_id, stage):
+        if stage_open(tasks, story_id, stage):
+            # A stage that runs its own gate does so inside its window: its record is written at the
+            # stage's end, and the gate after `--stage-end` (the orchestrator's, the runner's) checks it.
+            result.skip("files-listed", f"the {stage} stage is still open — its changed-files record is written "
+                                        f"at its end, and the gate after the stage checks it")
+        else:
+            result.skip("files-listed", f"no changed-files record for {stage} — the stage was not snapshotted")
         return
     changed = [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
     handover = os.path.join(tasks, story_id, STAGE_FILES[stage])

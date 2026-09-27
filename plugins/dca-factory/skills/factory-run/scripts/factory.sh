@@ -175,7 +175,9 @@ plugin_skills() {
       .claude/skills .codex/skills .opencode/skills \
       "$HOME"/.claude/plugins/cache/*/dca-factory/*/skills; do
     [ -n "$candidate" ] && [ -f "$candidate/factory-run/scripts/story-gate.py" ] || continue
-    dir=$(cd "$candidate" && pwd -P)
+    # through the skill, not the folder: a project's skill folder holds one link per skill, so the
+    # folder resolves to the project itself while its `factory-run` resolves to where the pipeline is
+    dir=$(dirname "$(cd "$candidate/factory-run" && pwd -P)")
     version=$(gate_field "$dir/factory-run/scripts/story-gate.py" VERSION)
     if [ -z "$best" ] || [ "$(printf '%s\n%s\n' "$best_version" "$version" | sort -V | tail -1)" != "$best_version" ]; then
       best=$dir; best_version=$version
@@ -210,6 +212,15 @@ update_project() {                          # update_project <explicit skill fol
   [ -f "$src/factory-run/scripts/story-gate.py" ] || {
     echo "factory: $src is not the pipeline's skills folder (no factory-run/scripts/story-gate.py)" >&2; return 2; }
   src=$(cd "$src" && pwd -P)
+  # The project's own skills are what an update replaces, never where it comes from: linked onto
+  # themselves they become loops, and a copy updated from itself stays what it was. A folder of links
+  # (what an older runner hands over) names the pipeline through its factory-run link.
+  local root; root=$(pwd -P)
+  case "$src/" in "$root"/*) src=$(dirname "$(cd "$src/factory-run" && pwd -P)") ;; esac
+  case "$src/" in
+    "$root"/*) echo "factory: $src lies inside this project — update from the plugin's skills folder" \
+                    "(--from <plugin>/skills, or FACTORY_PLUGIN_DIR); nothing was changed" >&2; return 2 ;;
+  esac
   local newest="$src/factory-run/scripts/factory.sh" self
   self=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")
   if [ -z "${FACTORY_UPDATE_HANDED:-}" ] && [ -f "$newest" ] && [ "$self" != "$newest" ]; then
@@ -938,6 +949,9 @@ presets_dir() {                             # presets_dir [<skill folder>] — w
 # that is missing stops a run — and stays commented out otherwise, so resolution by description applies.
 CARRIERS="carrier.build dca-modelling governance
 carrier.guard dca-discipline governance
+review.ddd review-ddd -
+review.hexagonal review-hexagonal -
+review.clean-code review-clean-code -
 review.dca dca-review governance
 carrier.glossary ubiquitous-language -
 carrier.domain context-map -
@@ -1096,7 +1110,8 @@ def detect():
         key, skill, needs = row.split()
         if skill in installed and (needs == "-" or governance):
             values[key] = skill
-            if key.startswith("review."):
+            # the three built-in perspectives always run; `reviews:` lists only those added to them
+            if key.startswith("review.") and key not in ("review.ddd", "review.hexagonal", "review.clean-code"):
                 values["reviews"] = ", ".join(filter(None, [values.get("reviews", ""), key[len("review."):]]))
     # Where the project description is, from the method's line in AGENTS.md — the line is the source,
     # the profile the factory's view of it. A default location needs no key.

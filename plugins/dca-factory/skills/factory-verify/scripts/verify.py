@@ -1499,7 +1499,7 @@ exit 0
               and os.path.isdir(os.path.join(skills_dir, "our-own-skill")) and "factory-run" in manifest
               and "stage-plan" not in manifest and "our-own-skill" not in manifest
               and "kept the project's own .claude/skills/stage-plan" in output, output.strip().splitlines()[-3:])
-        dropped = os.path.join(root, "trimmed-plugin")
+        dropped = os.path.join(tempfile.mkdtemp(), "trimmed-plugin")   # outside the project: an update's source never lies inside it
         shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), dropped, symlinks=True)
         shutil.rmtree(os.path.join(dropped, "factory-decisions"))
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "update",
@@ -2160,6 +2160,42 @@ def verify_setup(runner, verbose=False):
                   code == 0 and (os.path.islink(skills) or os.path.islink(os.path.join(skills, "factory-run"))),
                   output.strip().splitlines()[-3:])
 
+    # an update started from the project's own runner, with no --from: the skill links name the pipeline,
+    # the project's skill folder does not — linked onto themselves they would become loops
+    if can_symlink():
+        with tmpdir() as root, tmpdir() as home:
+            build_project(root)
+            run_setup(runner, root, "--tool", "claude", "--from", source)
+            # one link per skill, as a project holds them beside skills of its own
+            skills = os.path.join(root, ".claude", "skills")
+            target = os.path.realpath(skills)
+            os.remove(skills)
+            os.makedirs(skills)
+            for name in os.listdir(target):
+                os.symlink(os.path.join(target, name), os.path.join(skills, name))
+            link = os.path.join(skills, "factory-run")
+            before = os.path.realpath(link)
+            env = {"HOME": home, "FACTORY_PLUGIN_DIR": ""}
+            code, output = run_runner(project_runner(root), root, "update", "--from",
+                                      os.path.join(root, ".claude", "skills"), env=env)
+            check("update: a folder of the project's own links as the source (what an older runner hands over) "
+                  "updates from the pipeline they lead to",
+                  code == 0 and os.path.realpath(link) == before, output.strip().splitlines()[-3:])
+            copy = os.path.join(root, "own-copy")
+            shutil.copytree(target, copy, symlinks=True)
+            code, output = run_runner(project_runner(root), root, "update", "--from", copy, env=env)
+            check("update: a source inside the project is refused, and the links are left as they were",
+                  code == 2 and "inside this project" in output and os.path.realpath(link) == before, output.strip())
+            shutil.rmtree(copy)
+            os.remove(skills) if os.path.islink(skills) else shutil.rmtree(skills)
+            os.makedirs(skills)
+            for name in os.listdir(target):
+                os.symlink(os.path.join(target, name), os.path.join(skills, name))
+            code, output = run_runner(project_runner(root), root, "update", env=env)
+            check("update: from the project's own runner without --from, the links still lead to the pipeline",
+                  code == 0 and os.path.realpath(link) == before and not before.startswith(os.path.realpath(root)),
+                  output.strip().splitlines()[-3:])
+
     # item 11: the verbs mirror the skills; the old ones are gone
     with tmpdir() as root:
         env = dict(os.environ)
@@ -2241,12 +2277,23 @@ def verify_setup(runner, verbose=False):
         wanted = [f"{key}: {skill}" for key, skill in (("carrier.guard", "dca-discipline"), ("review.dca", "dca-review"),
                                                          ("carrier.build", "dca-modelling"),
                                                          ("carrier.glossary", "ubiquitous-language"),
-                                                         ("carrier.domain", "context-map"), ("carrier.test", "e2e-testing"))
+                                                         ("carrier.domain", "context-map"), ("carrier.test", "e2e-testing"),
+                                                         ("review.ddd", "review-ddd"),
+                                                         ("review.hexagonal", "review-hexagonal"),
+                                                         ("review.clean-code", "review-clean-code"))
                   if skill in installed]
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         check("carriers: with the method plugins beside it, a line for every installed carrier, and the first run "
               "passes the carrier check", wanted and all(w in lines for w in wanted) and code == 0,
               f"want {wanted}; got {[l for l in lines if 'carrier' in l or 'review' in l]}; exit {code}")
+        check("carriers: the built-in perspectives get their reviewer and a link, and stay out of `reviews:` — "
+              "every judge runs the same one",
+              "review-ddd" not in installed or (
+                  all(f"{k}: {k.replace('.', '-')}" in lines for k in ("review.ddd", "review.hexagonal", "review.clean-code"))
+                  and all(os.path.isfile(os.path.join(root, ".claude", "skills", n, "SKILL.md"))
+                          for n in ("review-ddd", "review-hexagonal", "review-clean-code"))
+                  and not any(l.startswith("reviews:") and ("ddd" in l or "hexagonal" in l) for l in lines)),
+              [l for l in lines if l.startswith(("review", "reviews"))])
     with tmpdir() as root:
         write_file(root, "AGENTS.md", "# A project\n\n<!-- dca-describe: start -->\n## Project description\n\n"
                    "- product: `docs/what.md` — the product\n- tech: `project/tech.md` — the stack\n"
@@ -2867,6 +2914,13 @@ def main(argv=None):
         (Case("build: without a changed-files record the files check is skipped and named", "build", 0,
               must_skip=("files-listed",)),
          dict(green=both_green, ledger=both_green)),
+        (Case("build: a stage running its own gate inside its window is told the gate after its end checks the "
+              "files, even with an earlier round's record there", "build", 0,
+              must_skip=("files-listed",), text=("still open",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("tasks/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Other.java\n"),
+             ("tasks/STORY-1/.verify/journal.tsv",
+              "2026-09-26T13:55:20.100Z\tstage-start\tbuild\ttool=claude-session\n")))),
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
               text=("via `test.pages:`", "via `test:`")),

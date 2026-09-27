@@ -199,7 +199,9 @@ the story's journal and reads the tool's own session log for it later — Claude
 session, subagents included, or Codex's — so `--usage`, the schedule and a budget see in-session
 stages the way they see the runner's. A mark without a log it can read records the stage as
 unknown. Do not work on anything else between the two marks: the window counts everything the
-session did in it.
+session did in it. The marks also record what the stage changed — the start its tree, the end the
+changed-files record — so call the stage's gate **after** `--stage-end`: a gate inside the window
+(a stage checking its own work) skips the files check and says the stage is still open.
 
 A single stage the human asked for (`/stage-build` on a story that already has a plan) is always
 done here — the runner delivers whole stories.
