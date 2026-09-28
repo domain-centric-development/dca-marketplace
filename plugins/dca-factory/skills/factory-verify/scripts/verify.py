@@ -1730,6 +1730,30 @@ exit 0
         check("priming: with --session-start it adds what the session should do with them",
               code == 0 and "At the person's first message" in output and "/factory-backlog" in output,
               output.strip().splitlines()[-1:])
+        # The same hook runs in a stage the runner started; there it must say the claim is the stage's own.
+        subprocess.run([sys.executable, cli_in(root), "--claim", "runner:host:1"], cwd=root, capture_output=True)
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief",
+                                  "--session-start", env={"FACTORY_WORKER": "runner:host:1", "FACTORY_STAGE": "plan",
+                                                          "FACTORY_STORY": "STORY-1"})
+        check("priming: a stage the runner started is told at session start that the claim is its own, not a second writer's",
+              code == 0 and "stage plan of story STORY-1" in output and "runner:host:1" in output
+              and "claim is this session's own" in output and "At the person's first message" not in output,
+              output.strip().splitlines()[-2:])
+        subprocess.run([sys.executable, cli_in(root), "--release"], cwd=root, capture_output=True)
+
+    # 1e2. a stage the runner starts is told which worker started it, for the hook and the prompt alike
+    with tmpdir() as root:
+        build_project(root)
+        copy_scripts(runner, root)
+        in_git(root)
+        seen_path = os.path.join(root, "worker.txt")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": 'printf "%s|%s|%s" "$FACTORY_WORKER" "$FACTORY_STAGE" '
+                                                           '"$FACTORY_STORY" > worker.txt; exit 1'})
+        seen = open(seen_path, encoding="utf-8").read().strip() if os.path.isfile(seen_path) else ""
+        check("runner: a stage starts with the worker that started it, its stage and its story in the environment "
+              "(FACTORY_WORKER, FACTORY_STAGE, FACTORY_STORY)",
+              seen.startswith("runner:") and seen.endswith("|plan|STORY-1"), seen or output[-400:])
 
     # 1f. the snapshot sees files in a directory this run added
     with tmpdir() as root:

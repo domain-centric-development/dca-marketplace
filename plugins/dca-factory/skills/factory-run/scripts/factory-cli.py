@@ -917,7 +917,15 @@ def status_brief(cwd, epics, runs, session_start=False):
     drift = conventions_drift(cwd, profile)
     if drift:
         print(f"factory: {drift}")
-    if session_start:
+    if session_start and os.environ.get("FACTORY_WORKER"):
+        # A stage the runner started: the hook runs in its session too, and the claim it names is the
+        # runner's — this session's own. Said plainly, or a careful model takes itself for a second writer.
+        print(f"dca-factory: this session is stage {os.environ.get('FACTORY_STAGE') or '?'} of story "
+              f"{os.environ.get('FACTORY_STORY') or '?'}, started by the worker {os.environ['FACTORY_WORKER']} "
+              "that holds the checkout — the claim is this session's own, not a second writer's. Carry out the "
+              "stage as the prompt says, write its file under the run folder, and ask nothing: the runner reads "
+              "the file when this session ends.")
+    elif session_start:
         print("dca-factory: this project delivers stories through the factory. At the person's first message, "
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
               "release a story (/factory-backlog), answer a waiting question (/factory-decisions), start working "

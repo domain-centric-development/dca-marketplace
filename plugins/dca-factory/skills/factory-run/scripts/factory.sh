@@ -582,11 +582,16 @@ invoke() {                                  # invoke <tool> <prompt>
   local choice model_args; choice=$(model_choice "$tool" "${stage_in_flight:-}"); model_args=${choice%%|*}
   if [ -n "${FACTORY_TOOL_CMD:-}" ]; then
     FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}" FACTORY_PROMPT="$prompt" \
+      FACTORY_WORKER="$WORKER" \
       FACTORY_RUNS="$RUNS" FACTORY_MODEL="$(model_key "$tool" "${stage_in_flight:-}")" sh -c "$FACTORY_TOOL_CMD" > "$raw"
     local code=$?
     [ "$raw" = /dev/null ] || { [ -n "${FACTORY_USAGE_FORMAT:-}" ] || cat "$raw"; }
     return $code
   fi
+  # The stage's own session reads the project's session-start hook like any session, and that hook names
+  # the worker holding the checkout. Told which worker started it, the stage knows the claim is its own
+  # and not a second writer's — without this a careful model refuses to write beside "the one writer".
+  export FACTORY_WORKER="$WORKER" FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}"
   case "$tool" in
     claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format json \
                 --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
@@ -599,6 +604,9 @@ invoke() {                                  # invoke <tool> <prompt>
                 ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" < /dev/null > "$raw" ;;
     *)        echo "factory: unknown tool '$tool'" >&2; return 2 ;;
   esac
+  local code=$?
+  unset FACTORY_WORKER FACTORY_STAGE FACTORY_STORY
+  return $code
 }
 
 # Which format a tool's raw output is in, for the usage reading.
@@ -1490,7 +1498,8 @@ For the factory, run `/factory-run` with the person's words: it writes the story
 question is done directly.
 
 A session never runs `factory.sh run` — it starts a tool process per stage. One worker per checkout: a
-managing session writes backlog and decision files only. Every change — by a stage or by hand in a
+managing session writes backlog and decision files only; a stage the runner started is that worker's own
+session and writes its stage file. Every change — by a stage or by hand in a
 session — passes `bash .agents/factory/factory.sh check` before it is committed; the commit hook runs it
 on what is staged.
 """ + end
@@ -1632,7 +1641,8 @@ reading only the story and the files that stage's skill names as its input, and 
 $RUNS/$story/. After the test, build and tidy stages run that stage's gate, \
 \`$PY $GATE --story $story --stage <stage>\`, and fix exactly what it names before the next stage, at most \
 three attempts per stage. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
-document stage."
+document stage. This session was started by the pipeline's runner, which holds the checkout for it: the worker \
+named at session start is the one that started you, not a second writer."
   local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
   [ -n "$guard" ] && prompt="$prompt In the build and tidy stages apply the $guard skill (the profile's carrier.guard) to every file you write."
   echo "── stage $list  (tool: $tool, one shared context)"
@@ -1735,7 +1745,9 @@ the previous verdict is $RUNS/$story/.judge-previous.md. Account for each defect
   esac
   printf '%s' "Apply the stage-$stage skill for backlog story $story. \
 Read only the story and the files the skill names as its input, and write its output file under \
-$RUNS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages.$guard$repeat"
+$RUNS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages. \
+This session was started by the pipeline's runner, which holds the checkout for it: the worker named at \
+session start is the one that started you, not a second writer.$guard$repeat"
 }
 
 gate() {                                    # gate <stage> <story>
