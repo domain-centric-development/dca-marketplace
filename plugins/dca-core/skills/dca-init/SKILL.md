@@ -191,7 +191,9 @@ D. **Suffix conventions** (INIT-SUFFIX where the code uses two) — DCA's defaul
    interface, `*Controller` for MVC (server-rendered) controllers and `*Resource` for REST adapters (.NET
    default `Controller` for both). `*ApplicationService` / `*Service` → `withUseCaseSuffix(...)`; `*Page` /
    `*Handler` for MVC controllers → `withControllerSuffix(...)`; `*Controller` / `*Endpoint` for REST →
-   `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention.
+   `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention, and the
+   conventions file records the resolved suffixes (`use_case_suffix:` and the others) so that whoever names a
+   new element reads them there, before the suite runs.
 
 E. **Spring Modulith** (INIT-MODULITH; Java, only when detected) — add `dev.domaincentric:dca-archunit-spring-modulith` and a
    second thin test, `class ModulithTest extends DcaSpringModulithTest` with the same layout? It runs
@@ -289,8 +291,11 @@ file outside the DCA part: dependencies, the architecture source set or project,
 **Conventions file and `AGENTS.md` section (both languages)**
 
 - `templates/agents/conventions.md.tmpl` → `.agents/dca/conventions.md` (`{{conventionsPath}}`), with the
-  resolved-configuration section; `catalog_path` only with decision G's live catalog. A project that already
-  has `.claude/dca/conventions.md` keeps that file and writes to it; the section then names that path.
+  resolved-configuration section — the suffix lines from decision D, or from the `DcaLayout` the project
+  already has (`reference/resolved-configuration.md`); `catalog_path` only with decision G's live catalog. A
+  project that already has `.claude/dca/conventions.md` keeps that file and writes to it; the section then
+  names that path. A project whose conventions file predates the suffix lines gets them on the next `dca-init`
+  run, read from its `DcaLayout`.
 - `templates/agents/AGENTS-dca-section.md.tmpl` → the block between `<!-- dca-core: start -->` and
   `<!-- dca-core: end -->` in `AGENTS.md`: added where there is none, replaced where there is one, never
   duplicated. Only this block is the skill's; the rest of `AGENTS.md` — the `dca-describe` section, a delivery

@@ -35,7 +35,10 @@ Before writing any code, gather context:
    - Marker FQNs — from `dev.domaincentric.dca.buildingblocks.…` or
      `DomainCentric.BuildingBlocks.…` unless the project keeps its own
    - Layer folder names (`incoming`/`outgoing` vs `in`/`out`)
-   - Suffix conventions (e.g. `*UseCase` vs `*ApplicationService`)
+   - Suffix conventions (e.g. `*UseCase` vs `*ApplicationService`) — from the conventions file's
+     `use_case_suffix:`, `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`,
+     `rest_controller_suffix:` lines first; then the `DcaLayout` builder in the architecture test;
+     the existing code last
    - Whether the project uses Lombok or pure Java records; in C#, `sealed record`
      for values and events, `readonly record struct` for ids
    - Allowed domain imports (some projects allow JSpecify, Apache Commons, etc.)

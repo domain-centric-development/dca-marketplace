@@ -9,8 +9,16 @@ this section from the actual resolved preset report; never infer Spring from Jav
 
 Record: language, base package/root namespace, actual framework preset and detection/explicit origin, exact
 injectable and transactional annotation FQNs (or empty), transaction mode (declarative/explicit/none), configured
-operation containers, and verification command. Role overrides in DcaLayout take precedence over preset defaults.
-Use the installed preset's literal role lists, including third-party providers; do not guess an annotation.
+operation containers, the naming suffixes, and verification command. Role overrides in DcaLayout take precedence
+over preset defaults. Use the installed preset's literal role lists, including third-party providers; do not
+guess an annotation.
+
+The suffixes are the ones the architecture test holds the project to — `use_case_suffix`, `input_port_suffix`,
+`repository_suffix`, `controller_suffix`, `rest_controller_suffix` — taken from decision D on a fresh install and
+from the existing `DcaLayout`'s `with*Suffix(...)` / `With*Suffix(...)` calls on a retrofit; without a call, the
+library's default (`UseCase`, `InputPort`, `Repository`, `Controller`, `Resource`; .NET `Controller` for both
+controller kinds). They are written here so that a plan, a modelling skill or a delivery stage names a new element
+correctly before the architecture suite runs — the suite is the check, this section is what the writer reads.
 
 For Java use-case templates:
 

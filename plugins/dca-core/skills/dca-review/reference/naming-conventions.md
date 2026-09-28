@@ -131,7 +131,9 @@ The conventions are one set; the two languages spell them differently. Review ei
 
 Only `Helper`, `Util`, `Impl` and `Implementation` are forbidden domain suffixes (`DCA-NAM-010`); a term of the
 ubiquitous language such as `PortfolioManager` passes. Operation implementations are discovered by InputPort
-assignability or the configured use-case suffix. Optional organisational segments
+assignability or the configured use-case suffix — the one the conventions file records as `use_case_suffix:`
+(with `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`, `rest_controller_suffix:` beside it),
+the same values the `DcaLayout` holds. Optional organisational segments
 are configured with `withOperationContainers(...)` / `WithOperationContainers(...)`
 and removed before measuring flat/grouped operation depth. Supporting subfolders do
 not define operations. One context must still use one depth. A Repository or Store
