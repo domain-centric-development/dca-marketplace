@@ -284,6 +284,10 @@ if [ -f "green/$(echo "$selector" | tr -d './#')" ]; then
 fi
 printf '<testsuite name="%s"><testcase classname="%s" name="%s"><failure>no</failure></testcase></testsuite>\\n' \\
   "$cls" "$cls" "$simple_method" > "$report"
+if [ -f "timeout/$(echo "$selector" | tr -d './#')" ]; then
+  echo "TimeoutError: locator.click: Timeout 30000ms exceeded."
+  echo "Call log: waiting for getByRole('button', { name: 'Add' })"
+fi
 echo "1 test ran, 1 failed: $selector"
 exit 1
 """
@@ -607,7 +611,7 @@ DOCUMENT = """# Document — STORY-1
 class Case:
     """One expectation about the gate: which checks must pass, fail or be skipped."""
 
-    def __init__(self, name, stage, expect_exit, must_pass=(), must_fail=(), must_skip=(), text=()):
+    def __init__(self, name, stage, expect_exit, must_pass=(), must_fail=(), must_skip=(), text=(), absent=()):
         self.name = name
         self.stage = stage
         self.expect_exit = expect_exit
@@ -615,11 +619,12 @@ class Case:
         self.must_fail = must_fail
         self.must_skip = must_skip
         self.text = text
+        self.absent = absent
 
 
 def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
                   context_map="# Context map\n\n| Context |\n|---|\n| Widgets |\n",
-                  document=None, green=(), rounds=None, ledger=None, extra_sources=()):
+                  document=None, green=(), rounds=None, ledger=None, extra_sources=(), timeouts=()):
     """A project just large enough for the gate to have something to check."""
     def write(path, content):
         full = os.path.join(root, path)
@@ -662,7 +667,20 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
     os.chmod(os.path.join(root, "gradlew-stub"), 0o755)
     for selector in green:
         write("green/" + re.sub(r"[./#]", "", selector), "")
+    for selector in timeouts:
+        write("timeout/" + re.sub(r"[./#]", "", selector), "")
     return root
+
+
+def marked_build_outside_git(root, args):
+    """A build stage marked by the CLI in a project that is no git repository, with one file changed in
+    its window — the in-session tier on a project before its `git init`."""
+    env = dict(os.environ, FACTORY_SESSION_USAGE="off")
+    subprocess.run([sys.executable, args.cli, "--stage-start", "build", "--story", "STORY-1"], cwd=root,
+                   capture_output=True, env=env)
+    write_file(root, "src/main/Thing.java", "class Thing {}\n")
+    subprocess.run([sys.executable, args.cli, "--stage-end", "build", "--story", "STORY-1"], cwd=root,
+                   capture_output=True, env=env)
 
 
 def run_gate(gate, root, stage):
@@ -2231,6 +2249,23 @@ def verify_setup(runner, verbose=False):
               and open(profile_of(root), encoding="utf-8").read() == profile_before and "setup --check" in output,
               output.strip().splitlines()[-3:])
 
+    # copies installed from a cache, at the cache's own version: `update` without --from finds the cache,
+    # never the project's copies — on a version tie the copies would win by order and be refused as the source
+    with tmpdir() as root, tmpdir() as home:
+        cache = os.path.join(home, ".claude", "plugins", "cache", "m", "dca-factory", "1.2.3")
+        write_file(cache, ".claude-plugin/plugin.json", "{}")
+        shutil.copytree(source, os.path.join(cache, "skills"), symlinks=True)
+        env = {"HOME": home, "FACTORY_PLUGIN_DIR": ""}
+        build_project(root)
+        run_setup(runner, root, "--tool", "claude", "--from", shell_path(os.path.join(cache, "skills")), env=env)
+        gate = os.path.join(root, ".agents", "factory", "story-gate.py")
+        with open(gate, "a", encoding="utf-8") as handle:
+            handle.write("# an older copy\n")
+        code, output = run_runner(project_runner(root), root, "update", env=env)
+        check("update: copies at the cache's version are updated from the cache without --from, never from themselves",
+              code == 0 and "# an older copy" not in open(gate, encoding="utf-8").read(),
+              f"exit {code}; " + " / ".join(output.strip().splitlines()[-2:]))
+
     # a clone of a project that keeps its skill links out of git has no links: update brings them back
     if can_symlink():
         with tmpdir() as root:
@@ -3305,6 +3340,37 @@ def run_groups(args):
               + "2026-09-27T10:00:00.000Z\tstage-start\tbuilder\ttool=claude\n2026-09-27T10:30:00.000Z\tstage-end\tbuilder\texit=0\n"),
              ("tasks/STORY-1/tidy.md", "## Files\n\n- `src/test/ThingTest.java` — renamed a helper\n"),
              ("tasks/STORY-1/build.md", "## Files\n\n- `src/main/Thing.java` — new\n")))),
+        (Case("build: outside git the stage's changes are not observed — the files check is skipped and says why, "
+              "never passed as `0 files changed`", "build", 0,
+              must_skip=("files-listed",), text=("not a git repository",), absent=("list(s) the 0 file(s)",)),
+         dict(green=both_green, ledger=both_green, prepare=marked_build_outside_git,
+              extra_sources=(("tasks/STORY-1/build.md", "## Files\n\n- nothing listed\n"),))),
+        (Case("tidy: a stage that changed no file needs no `## Files` section", "tidy", 0,
+              must_pass=("files-listed",), text=("changed no file",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("tasks/STORY-1/.verify/changed-tidy.txt", ""),
+             ("tasks/STORY-1/tidy.md", "# Tidy\n\nNothing to tidy: the build left no duplication.\n")))),
+        (Case("build: a backticked route or `/` in a table's *Why* cell is prose, not a listed path", "build", 0,
+              must_pass=("files-listed",), absent=("listed but not changed",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("tasks/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\n"),
+             ("tasks/STORY-1/build.md", "## Files\n\n| File | Why |\n|---|---|\n"
+                                        "| `src/main/Thing.java` | handles `GET /`, redirects to `/` |\n")))),
+        (Case("plan: a gate run over a delivered story checks it and leaves its marks as they are", "plan", 0,
+              text=("is delivered — checked",)),
+         dict(extra_sources=(("tasks/STORY-1/.delivered", "2026-09-27T10:00:00Z\n"),
+                             ("tasks/STORY-1/.story-digest", "the-digest-of-the-delivery\n"),
+                             ("tasks/STORY-1/.story-planned", "the story as it was planned\n")),
+              after=lambda root: [f"{name} was rewritten" for name, kept in
+                                  ((".story-digest", "the-digest-of-the-delivery"),
+                                   (".story-planned", "the story as it was planned"))
+                                  if open(os.path.join(root, "tasks/STORY-1", name), encoding="utf-8").read().strip() != kept])),
+        (Case("document: a gate run over a delivered story checks it and leaves the delivery mark as it is",
+              "document", 0, text=("is delivered — checked",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=(("tasks/STORY-1/.delivered", "2026-09-27T10:00:00Z\n"),),
+              after=lambda root: [] if open(os.path.join(root, "tasks/STORY-1/.delivered"), encoding="utf-8").read().strip()
+              == "2026-09-27T10:00:00Z" else [".delivered was rewritten"])),
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
               text=("via `test.pages:`", "via `test:`")),
@@ -3325,6 +3391,20 @@ def run_groups(args):
         (Case("document: a path with its line number resolves", "document", 0,
               must_pass=("documented",)),
          dict(green=both_green, ledger=both_green, document=DOCUMENT)),
+        (Case("document: a bare file name with a line is a citation — it resolves from the project root or is refused",
+              "document", 1, must_fail=("documented",), text=("WidgetUnitTest.java:1",)),
+         dict(green=both_green, ledger=both_green,
+              document=DOCUMENT.replace("read `README.md:1`", "read `WidgetUnitTest.java:1`"))),
+        (Case("document: the same citation written from the project root resolves", "document", 0,
+              must_pass=("documented",)),
+         dict(green=both_green, ledger=both_green,
+              document=DOCUMENT.replace("read `README.md:1`", "read `src/test/java/com/example/WidgetUnitTest.java:1`"))),
+        (Case("test: a test red on an action's timeout, with no expectation, is red and noted as such", "test", 0,
+              must_pass=("tests-red",), text=("red on a timeout, not on an assertion",)),
+         dict(timeouts=("com.example.WidgetPageTest#showsTheThing",))),
+        (Case("test: a test red on its assertion gets no timeout note", "test", 0,
+              must_pass=("tests-red",), absent=("red on a timeout",)),
+         dict()),
         (Case("document: an invented path is refused", "document", 1, must_fail=("documented",)),
          dict(green=both_green, ledger=both_green,
               document=DOCUMENT.replace("`README.md`", "`docs/invented.md`"))),
@@ -3375,7 +3455,13 @@ def run_groups(args):
     failures = []
     for case, fixture in cases:
         with tmpdir() as root:
+            # `prepare` runs the CLI's marks or a git command over the fixture before the gate; `after`
+            # looks at what the gate left behind and returns the problems it finds.
+            fixture = dict(fixture)
+            prepare, after = fixture.pop("prepare", None), fixture.pop("after", None)
             build_project(root, **fixture)
+            if prepare:
+                prepare(root, args)
             code, output = run_gate(args.gate, root, case.stage)
             found = checks_by_verdict(output)
             problems = []
@@ -3393,6 +3479,11 @@ def run_groups(args):
             for needle in case.text:
                 if needle not in output:
                     problems.append(f"the report never says {needle!r}")
+            for needle in case.absent:
+                if needle in output:
+                    problems.append(f"the report says {needle!r}")
+            if after:
+                problems.extend(after(root))
             note_result(case.name, not problems, "; ".join(problems))
             if problems:
                 failures.append((case.name, problems, output))
@@ -4387,6 +4478,22 @@ def run_groups(args):
                                            backlog_row) is not None, backlog_row or detail[-400:]))
         expectations.append(("window: a name that is not backlog or decisions is refused",
                              gate("--window-start", "judge", "--story", "STORY-1").returncode == 2, ""))
+    with tmpdir() as root:
+        # a shared builder that stopped on the plan's question, then ran again: the second window is the
+        # question's, not a repeat a gate refused — the record names `stage: plan`, the window is `builder`
+        build_project(root, **with_decisions(("STORY-1-01", DECISION + ANSWER)))
+        write_file(root, "tasks/STORY-1/.verify/journal.tsv",
+                   "2026-09-28T10:00:00.000Z\tstage-start\tbuilder\ttool=claude-session\n"
+                   "2026-09-28T10:05:00.000Z\tstage-end\tbuilder\texit=0\n"
+                   "2026-09-28T10:20:00.000Z\tstage-start\tbuilder\ttool=claude-session\n"
+                   "2026-09-28T10:36:00.000Z\tstage-end\tbuilder\texit=0\n")
+        detail = subprocess.run([sys.executable, args.cli, "--status", "--story", "STORY-1"], cwd=root,
+                                capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        builder_row = next((l for l in detail.splitlines() if l.strip().startswith("builder")), "")
+        expectations.append(("status: a shared builder that stopped on a stage's question shows the question, "
+                             "not `a gate refused`",
+                             "1 question (STORY-1-01)" in builder_row and "a gate refused" not in builder_row,
+                             builder_row or detail[-400:]))
     with tmpdir() as root:
         # a story delivered before the pipeline kept a journal says so once; a long answer wraps, whole
         long_question = "Does " + " ".join(["an archived entry"] * 12) + " count as the thing the reader sees?"

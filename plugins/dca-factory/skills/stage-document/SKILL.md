@@ -17,7 +17,9 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 
 1. Read the plan's glossary proposals and the diff's new names. Every **domain** identifier the
    story introduced — an aggregate, a value object, an event, a use case, a domain term in a result
-   — needs an entry in the bounded context's glossary. Add the missing ones in the project's own
+   — needs an entry in the bounded context's glossary; a use case is no glossary type of its own —
+   it is an `Operations` line on the term it acts on, or a `Concept` where it names a term nobody
+   had. Add the missing ones in the project's own
    words, taking the definition from the plan's proposal where there is one — through the skill the
    profile names as `carrier.glossary:` (the glossary skill, where installed), so the glossary's format
    is described in one place; by hand in the glossary's existing format otherwise. A term nobody can
@@ -91,7 +93,10 @@ here fails for the absence of a knowledge skill.
 ```
 
 `Verified by` names how you checked a statement — the file you read, the command you ran. A row
-without it is a claim, and the gate treats it as one.
+without it is a claim, and the gate treats it as one. A file you cite is a path from the project root
+with its line — `src/main/java/com/example/billing/domain/model/BookId.java:8`, never `BookId.java:8`:
+the gate resolves every cited path, and a bare name resolves to nothing. `document.md` itself is the
+hand-over, not a document the project keeps: it is never listed under `## Documents updated`.
 
 When a table has nothing to list — no term added, no document changed — write one row with `—` in
 the first column and, under `Verified by`, what you read to know that nothing had to change. The

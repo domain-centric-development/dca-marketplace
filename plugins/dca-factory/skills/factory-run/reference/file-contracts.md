@@ -27,12 +27,16 @@ against a tree object recorded at the story's first stage — written once, with
 repository without a commit gets a diff as well and a stage run again does not move the story's
 starting point. Paths are the project's, also where the project is a directory inside a larger
 repository. Run artefacts (`tasks/`, `.agents/factory/`) and gitignored files are left out. Without
-git there is no diff, and `story.diff` says so.
+git the tree cannot be compared: the snapshots and the records then carry one line, `# not observed:`
+and the reason, `story.diff` says there is no diff, and the gate skips the files check and names the
+reason — never "0 files changed".
 
 Each hand-over names files: the plan's `## Files` (what changes, and what a later stage should
 read), the tests' `## Files` (the test files written), the build's `## Changed` and the tidy's
 `## Moves` tables. The build and tidy gates check those tables against `changed-<stage>.txt`: a
 changed file the table does not list fails the gate, a listed file that did not change is a note.
+In a table only the first cell names a file; the other cells say why, and a backticked route or `/`
+there is prose. A stage that changed no file (a tidy with nothing to tidy) needs no such section.
 The next stages open these files first and search the tree only for what they do not answer.
 
 `tasks/<story>/.tests-red` records which selectors the test stage actually saw fail. The build gate

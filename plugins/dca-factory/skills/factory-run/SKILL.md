@@ -97,7 +97,10 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    and says why is finished, not skipped.
 8. **gate `tidy`** — the same checks as the build gate, run again: the stage's whole claim is that
    nothing it touched changed what the code does.
-9. **`stage-judge`** → `tasks/<story>/judge.md`, which carries one of three verdicts:
+9. **`stage-judge`** → `tasks/<story>/judge.md`. Hand it what its skill names as input — the story,
+   the plan, `tests.md`, `build.md` and `tasks/<story>/.verify/story.diff`, which the end mark of the
+   stage before wrote — never "the tree against HEAD": the diff is the story's, HEAD may hold more.
+   The file carries one of three verdicts:
    - `pass` — done, go to the report.
    - `changes-requested` — back to `stage-build` with the confirmed defects, then gate `build`
      again; the round counter applies.
@@ -123,6 +126,9 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    and tests the stages changed **and `tasks/<story>/`** with its hidden files (the red ledger,
    the story digest, the journal under `.verify/`), which are the story's record. The commit hook
    checks the index against the working tree, so a commit without them is refused.
+   Then give the checkout back — `python3 .agents/factory/factory-cli.py --release` — delivered or
+   stopped alike: a claim nobody releases keeps every other worker out until it goes stale
+   (`FACTORY_STALE_AFTER`, two hours).
 
 ## Where a run stands
 
@@ -181,7 +187,12 @@ a context ("shared builder", `factory.sh run --shared-builder`, `FACTORY_SHARED_
 otherwise, every run. In the runner, one process then carries plan, test, build and tidy and runs each
 stage's gate itself; the runner checks that the red proof exists and runs the build and tidy gates
 again. In a session, the same variant is one subagent for plan to tidy, running the gate after each
-stage and stopping on a refusal it cannot fix in three attempts. In both, the judge and the document
+stage and stopping on a refusal it cannot fix in three attempts; its window is marked as one stage,
+`builder` — `--stage-start builder` before it, `--stage-end builder` after its last file — and the gate
+reads that window as plan to tidy. After the end mark do what the runner does: check that
+`tasks/<story>/.tests-red` exists (a builder that never ran its test gate left no red proof; a
+journey's or an adoption's test gate runs again instead), then run the build and tidy gates yourself —
+they now check the hand-overs against `changed-builder.txt`. In both, the judge and the document
 stage keep a fresh context of their own, and every stage still writes its own file, so the story can
 be resumed stage by stage. It costs less — the stages build on what the one before read — and it gives
 up one thing: build knows how the tests were written. Say in the report which variant ran.

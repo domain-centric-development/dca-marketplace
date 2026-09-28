@@ -192,7 +192,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 9
 
 
-VERSION = "0.46.1"
+VERSION = "0.47.0"
 
 
 def read_front_matter(path):
@@ -1324,7 +1324,7 @@ def check_compiles(result, profile, cwd):
 
 #: A markdown table row, split into its cells. The first cell names the thing, the **last**
 #: names how it was checked — the tables differ in width, so counting from the left is wrong.
-PATHLIKE = re.compile(r"`([\w./-]+\.[A-Za-z0-9]{1,6})`")
+PATHLIKE = re.compile(r"`([\w./-]+\.[A-Za-z0-9]{1,6}(?::L?\d+(?:[-–:]\d+)?|#[\w.-]+)?)`")
 
 
 #: A cited path usually carries where in the file it was read: `README.md:149`, `Book.cs:28-31`,
@@ -1423,7 +1423,9 @@ def check_documented(result, tasks, story_id, cwd):
 
     for name in PATHLIKE.findall(text):
         target = bare_path(name)
-        if "/" in target and not os.path.exists(os.path.join(cwd, target)):
+        # A path, or a bare file name with a line (`BookId.java:8`) — that is a citation, and a
+        # citation resolves from the project root or sends the reader nowhere.
+        if ("/" in target or target != name) and not os.path.exists(os.path.join(cwd, target)):
             missing.append(name)
 
     if missing:
@@ -1948,10 +1950,26 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                     f"{selector} is {'green' if passed else 'red'} ({key}, via `{command_key}:`"
                     f"{', ' + evidence if evidence else ''})",
                 )
+                if expected == "red" and red_on_timeout(output):
+                    result.note("tests-red", f"{selector} is red on a timeout, not on an assertion — an action "
+                                             f"waited for something that is not there. Red is red, but it says "
+                                             f"nothing about what is missing: the first step that can be missing "
+                                             f"should be an expectation (`expect(locator).toBeVisible()` before "
+                                             f"the click or fill), so the failure names it.")
     if expected == "red":
         write_red_ledger(tasks, story, now_red, located, cwd)
     elif have_ledger:
         check_red_proof(result, cwd, located, read_red_digests(tasks, story), story)
+
+
+#: What a browser runner prints when an action, not an expectation, ran out of time.
+TIMEOUT_RED = re.compile(r"TimeoutError|Timeout \d+ms exceeded|TimeoutException")
+ASSERTION_RED = re.compile(r"expect\(|AssertionError|AssertionFailedError|Expected\b|assert", re.IGNORECASE)
+
+
+def red_on_timeout(output):
+    """A red that came from an action's timeout with no expectation in sight."""
+    return bool(TIMEOUT_RED.search(output or "")) and not ASSERTION_RED.search(output or "")
 
 
 def check_red_proof(result, cwd, located, digests, story):
@@ -2836,13 +2854,19 @@ CHANGE_EXCLUDED = (".agents/factory/",)
 DELETED = "deleted"
 
 
+#: The first line of a snapshot or a changed-files record that carries no observation, and says why.
+NOT_OBSERVED = "# not observed: "
+
+
 def tree_snapshot(cwd):
-    """{path: sha256 or `deleted`} of every file under `cwd` that git reports as differing from HEAD."""
+    """{path: sha256 or `deleted`} of every file under `cwd` that git reports as differing from HEAD —
+    or None outside a repository: an empty snapshot would read as "nothing changed", the strongest
+    claim a record can make, from no evidence at all."""
     listing = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain", "-z", "-uall", "--", "."],
                              cwd=cwd, capture_output=True)
     files = {}
     if listing.returncode != 0:
-        return files
+        return None
     prefix = subprocess.run(["git", "rev-parse", "--show-prefix"], cwd=cwd, capture_output=True,
                             text=True).stdout.strip()
     local = lambda path: path[len(prefix):] if prefix and path.startswith(prefix) else path
@@ -2867,8 +2891,12 @@ def tree_snapshot(cwd):
 def write_snapshot(cwd, tasks, story_id, label):
     folder = os.path.join(tasks, story_id, ".verify")
     os.makedirs(folder, exist_ok=True)
+    snapshot = tree_snapshot(cwd)
     with open(os.path.join(folder, f"tree-{label}.txt"), "w", encoding="utf-8") as handle:
-        for path, digest in sorted(tree_snapshot(cwd).items()):
+        if snapshot is None:
+            handle.write(NOT_OBSERVED + "not a git repository, so the tree cannot be compared\n")
+            return
+        for path, digest in sorted(snapshot.items()):
             handle.write(f"{digest}  {path}\n")
 
 
@@ -2884,6 +2912,19 @@ def load_snapshot(path):
         if name:
             files[name] = digest
     return files
+
+
+def snapshot_reason(path):
+    """Why a snapshot (or a changed-files record) carries no observation, from its first line; None
+    when it is a real one or there is none."""
+    if not os.path.isfile(path):
+        return None
+    first = (read_text(path).splitlines() or [""])[0]
+    if first.startswith(NOT_OBSERVED):
+        return first[len(NOT_OBSERVED):].strip()
+    if first.startswith("#"):
+        return first.lstrip("# ").strip()
+    return None
 
 
 def tracked_files(cwd):
@@ -2948,6 +2989,17 @@ def record_changes(cwd, tasks, story_id, stage):
     after = load_snapshot(os.path.join(folder, f"tree-after-{stage}.txt"))
     before = load_snapshot(os.path.join(folder, f"tree-before-{stage}.txt"))
     if after is None or before is None:
+        # A snapshot that carries no observation (outside git, or without a digest command) says why
+        # in its first line; the record repeats it, so the gate skips the files check and names the reason
+        # instead of passing an empty record as "nothing changed".
+        reason = snapshot_reason(os.path.join(folder, f"tree-after-{stage}.txt")) \
+            or snapshot_reason(os.path.join(folder, f"tree-before-{stage}.txt"))
+        if reason:
+            for name in (f"changed-{stage}.txt", "changed.txt"):
+                with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
+                    handle.write(NOT_OBSERVED + reason + "\n")
+            with open(os.path.join(folder, "story.diff"), "w", encoding="utf-8") as handle:
+                handle.write(f"# no diff: {reason}\n")
         return
     tracked = tracked_files(cwd)
     with open(os.path.join(folder, f"changed-{stage}.txt"), "w", encoding="utf-8") as handle:
@@ -2957,8 +3009,8 @@ def record_changes(cwd, tasks, story_id, stage):
     now = git_tree(cwd) if base != "none" else None
     story_rows = tree_changes(cwd, base, now, tasks) if now else None
     if story_rows is None:
-        first = next((load_snapshot(os.path.join(folder, f"tree-before-{name}.txt")) for name in STAGE_ORDER
-                      if os.path.isfile(os.path.join(folder, f"tree-before-{name}.txt"))), before)
+        first = next((snap for snap in (load_snapshot(os.path.join(folder, f"tree-before-{name}.txt"))
+                                        for name in STAGE_ORDER) if snap is not None), before)
         story_rows = changes_between(first, after, tasks, tracked)
     with open(os.path.join(folder, "changed.txt"), "w", encoding="utf-8") as handle:
         handle.writelines(f"{kind}\t{path}\n" for kind, path in story_rows)
@@ -2977,7 +3029,8 @@ def record_changes(cwd, tasks, story_id, stage):
 
 def listed_files(handover):
     """The paths a hand-over names under `## Files`, or in the build's `## Changed` / tidy's `## Moves`
-    table: in backticks, as a list item's first word, or in a table's first column."""
+    table: in backticks, as a list item's first word, or in a table's first cell. A table's other cells
+    say why, and a backticked route or a lone `/` there is prose, not a path."""
     if not os.path.isfile(handover):
         return None
     names, inside, found = set(), False, False
@@ -2986,15 +3039,20 @@ def listed_files(handover):
             inside = line[3:].strip().lower() in ("files", "changed", "moves")
             found = found or inside
             continue
-        if inside:
-            names.update(re.findall(r"`([^`\s]+)`", line))
-            item = re.match(r"^\s*[-*]\s+([^\s`|]+)", line)
-            if item:
-                names.add(item.group(1))
-            row = re.match(r"^\|\s*([^|`\s]+)\s*\|", line)
-            if row and not set(row.group(1)) <= set("-:"):
-                names.add(row.group(1))
-    return names if found else None
+        if not inside:
+            continue
+        if line.lstrip().startswith("|"):
+            cell = line.lstrip()[1:].split("|", 1)[0].strip()
+            if cell.startswith("`") and cell.endswith("`") and len(cell) > 2:
+                cell = cell[1:-1].strip()
+            if cell and " " not in cell and not set(cell) <= set("-:"):
+                names.add(cell)
+            continue
+        names.update(re.findall(r"`([^`\s]+)`", line))
+        item = re.match(r"^\s*[-*]\s+([^\s`|]+)", line)
+        if item:
+            names.add(item.group(1))
+    return {name for name in names if re.search(r"[A-Za-z0-9]", name)} if found else None
 
 
 def last_ended(tasks, story_id, names):
@@ -3044,11 +3102,19 @@ def check_files_listed(result, tasks, story_id, stage):
         else:
             result.skip("files-listed", f"no changed-files record for {stage} — the stage was not snapshotted")
         return
+    reason = snapshot_reason(record)
+    if reason:
+        result.skip("files-listed", f"the {stage} stage's changes were not observed — {reason}")
+        return
     changed = [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
     found = [listed_files(os.path.join(tasks, story_id, name)) for name in handovers]
     listed = set().union(*[names for names in found if names is not None]) if any(n is not None for n in found) \
         else None
     if listed is None:
+        if not changed:
+            # A tidy that found nothing to tidy has nothing to list; the record says so, not the hand-over.
+            result.ok("files-listed", f"the {stage} stage changed no file, so {STAGE_FILES[stage]} has nothing to list")
+            return
         result.fail("files-listed", f"{STAGE_FILES[stage]} has no `## Files` section (nor a `## Changed` or "
                                     f"`## Moves` table) — list every file the stage changed, one line each")
         return
@@ -3597,10 +3663,20 @@ def main(argv):
         result.fail("gate", str(error))
         return result.report(args.story, args.stage, args.json)
     if not result.failed and args.stage == "plan":
-        write_mark(args.tasks, story_id, STORY_DIGEST, file_digest(story_path))
-        write_mark(args.tasks, story_id, STORY_PLANNED, read_text(story_path).rstrip("\n"))
-        record_tests_baseline(cwd, args.tasks, story_id)
-    if not result.failed and args.stage == "document":
+        if story_state(cwd, args.tasks, story_id, front, story_path)[0] == "delivered":
+            # Delivered is delivered: a plan gate run over a delivered story (a check, a re-verification)
+            # leaves the marks the delivery rests on as they are.
+            result.note("story", f"{story_id} is delivered — checked, its marks are left as they are")
+        else:
+            write_mark(args.tasks, story_id, STORY_DIGEST, file_digest(story_path))
+            write_mark(args.tasks, story_id, STORY_PLANNED, read_text(story_path).rstrip("\n"))
+            record_tests_baseline(cwd, args.tasks, story_id)
+    if not result.failed and args.stage == "document" \
+            and story_state(cwd, args.tasks, story_id, front, story_path)[0] == "delivered":
+        # Delivered is delivered: a document gate run over a delivered story checks it and leaves the
+        # delivery mark, its date, as it is.
+        result.note("story", f"{story_id} is delivered — checked, its marks are left as they are")
+    elif not result.failed and args.stage == "document":
         deliver = True
         try:
             if acceptance_applies(cwd, args.tasks, story_id, profile):

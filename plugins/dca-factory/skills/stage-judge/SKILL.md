@@ -118,6 +118,10 @@ Which value you choose decides where the run goes back to, and that is the point
 
 Only `blocker` and `major` findings prevent `pass`. A review that finds something everywhere is
 ignored and therefore worthless: rank, and let `minor` findings be recorded without blocking.
+The perspectives rank in their own words — `must-fix`, `should-fix`, `nit` — and you translate, from
+what you confirmed in the code, never by copying: a `must-fix` is `major`, and `blocker` where it
+breaks a criterion, the architecture suite or the product description; a `should-fix` is `minor`,
+and `major` where you confirm it deviates from the plan; a `nit` is `minor`.
 A `story-conflict` is a question to a human, so it is a **decision record** like any other: write
 `## needs-human` in the judge file naming it (`decision: <story>-<nn>`), and the record at
 `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id:`, `story:`, `asked:` (UTC) and

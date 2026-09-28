@@ -71,7 +71,11 @@ files written. You write **no** production behaviour.
    proves nothing. The gate refuses it, and rightly: the criterion would ship uncovered.
 7. Run the project's compile and test commands from the stack profile. Confirm two things: the
    test sources compile, and every new test fails **on its assertion**, not on a missing class or
-   a wiring error. A test red for the wrong reason proves nothing.
+   a wiring error. A test red for the wrong reason proves nothing. In a browser test the first step
+   that can be missing is an expectation, not an action: `expect(locator).toBeVisible()` before the
+   click or the fill, so a form that does not exist yet fails on the expectation and names what is
+   missing. A raw `TimeoutError` from an action is red on the harness — the gate accepts the red and
+   notes it, and the build stage learns nothing from it.
 8. Delete every spike, scratch or exploration test before you finish. A passing spike trips no
    gate, so nothing else will catch it.
 9. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the

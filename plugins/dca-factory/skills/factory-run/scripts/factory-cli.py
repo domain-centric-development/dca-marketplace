@@ -1869,7 +1869,9 @@ def story_model(cwd, backlog, tasks, story_id, live=False):
                 + (f" · {entry['runs']} sessions" if entry["runs"] > 1 else "")
             continue
         extra = entry["runs"] - sum(1 for p in facts["passes"] if stage in p["stages"])
-        asked = questions.get(stage, [])[:max(extra, 0)]
+        # a shared builder's window carries plan to tidy: a question any of those stages asked is its
+        covered = ("plan", "test", "build", "tidy") if stage == "builder" else (stage,)
+        asked = [rid for name in covered for rid in questions.get(name, [])][:max(extra, 0)]
         repeats = max(extra, 0) - len(asked)
         why = [f"{len(asked)} question" + ("s" if len(asked) > 1 else "") + f" ({', '.join(asked)})"] if asked else []
         if repeats:
