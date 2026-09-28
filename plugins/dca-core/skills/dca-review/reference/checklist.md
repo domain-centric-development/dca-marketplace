@@ -291,6 +291,8 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 - [ ] Exactly one translation site per context, in its own `adapter/incoming/` package: a
       `@RestControllerAdvice` scoped by `basePackages`, or an `IExceptionHandler` scoped to the context's routes
 - [ ] The answer is a problem document (`ProblemDetail` / `ProblemDetails`, RFC 9457), not a home-grown error DTO
+- [ ] A server-rendered surface has the same one site: the context's controller advice (or exception handler)
+      renders the form again with the failure — no `try`/`catch` per handler method, no failure branch in a template
 - [ ] **The status follows the failure, not the base type** — a position missing from a cart is a rule of the
       model and still answers `404`. Mapping every `DomainException` to one status is the common mistake
 - [ ] No `catch (Exception)` / `catch (RuntimeException)` around a use-case call; a blanket catch answers a
