@@ -2332,6 +2332,7 @@ def verify_setup(runner, verbose=False):
         run_setup(runner, root, "--tool", "claude", "--from", source)
         lines = active_lines(profile_of(root)) or []
         wanted = [f"{key}: {skill}" for key, skill in (("carrier.guard", "dca-discipline"), ("review.dca", "dca-review"),
+                                                         ("knowledge", "dca-knowledge"), ("carrier.plan", "dca-modelling"),
                                                          ("carrier.build", "dca-modelling"),
                                                          ("carrier.glossary", "ubiquitous-language"),
                                                          ("carrier.domain", "context-map"), ("carrier.test", "e2e-testing"),

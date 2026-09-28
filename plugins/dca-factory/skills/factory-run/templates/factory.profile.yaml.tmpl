@@ -59,10 +59,12 @@
 #              skill works in every tool; an agent only where a tool has them. `factory.sh setup`
 #              writes a line only for a skill installed beside the pipeline — a named carrier that is
 #              missing stops a run — and leaves the rest commented out, found by description
-# knowledge    the ONE skill a stage may treat as an authority, with citations. Name it only when
-#              the project vouches for it being current: a vendored catalog from an older release
-#              names rules and markers that no longer exist, and a citation makes that look verified.
-#              Unnamed means the stages work from the project's own rules, markers and documents
+# knowledge    the ONE skill a stage may treat as an authority, with citations. `factory.sh setup` names
+#              the method's catalog where the method is installed beside the pipeline and the project runs
+#              its rules — it ships with that release, so it describes the rules the method installs. Name
+#              any other source only when the project vouches for it being current: a vendored catalog from
+#              an older release names rules and markers that no longer exist, and a citation makes that
+#              look verified. Unnamed means the stages work from the project's own rules, markers and documents
 # model.<tool>.<stage>  the model <tool> (claude, codex, opencode) runs <stage> on (plan, test,
 #              build, tidy, judge, document); model.<tool> is that tool's default for every stage
 #              without a key of its own. Values are the tool's own model names or aliases. Always
@@ -123,6 +125,8 @@ formatFix: {{FORMAT_FIX_COMMAND}}
 #required: compile test architecture
 #acceptance: pages
 #run: <how a person starts the application>
+#knowledge: <the catalog skill a stage cites>
+#carrier.plan: <the skill that knows where this project's types go and what they are called>
 #carrier.test: <the skill that carries this project's end-user testing craft>
 #carrier.build: <the skill that carries this project's implementation craft>
 #carrier.guard: <the skill that holds the invariants while build and tidy edit>

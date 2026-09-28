@@ -955,7 +955,9 @@ presets_dir() {                             # presets_dir [<skill folder>] — w
 # The roles a method skill fills, and whether the role needs the architecture governance a preset
 # detects. A line is written only where the skill is installed beside the pipeline — a named carrier
 # that is missing stops a run — and stays commented out otherwise, so resolution by description applies.
-CARRIERS="carrier.build dca-modelling governance
+CARRIERS="knowledge dca-knowledge governance
+carrier.plan dca-modelling governance
+carrier.build dca-modelling governance
 carrier.guard dca-discipline governance
 review.ddd review-ddd -
 review.hexagonal review-hexagonal -
@@ -996,6 +998,7 @@ DEPTH = 4
 LOCATIONS = {"product": "project/product.md", "tech": "project/tech.md", "domain": "project/domain.md"}
 #: Which check or stage a profile key switches on — what `--check` says beside a proposed line.
 SWITCHES = {
+    "knowledge": "every stage cites that catalog instead of recalling",
     "compile": "the test, build and tidy gates compile the tests",
     "test": "single tests and the required suites run with it",
     "e2eTest": "the criteria's end-user tests run with it",
