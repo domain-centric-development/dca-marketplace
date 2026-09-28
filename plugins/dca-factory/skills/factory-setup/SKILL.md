@@ -42,7 +42,9 @@ docs/                      what exists and why — written after the code, some 
    skills (copies from a plugin cache, links from a checkout; `.dca-factory-skills` beside them says
    which, and the install keeps links out of git itself), copies the gate, the runner and the observer,
    installs the commit hook and the pipeline's section in `AGENTS.md`. Say which mode it chose and
-   why, in its words.
+   why, in its words. Say once, for Claude Code: the permissions it wrote into `.claude/settings.json`
+   count only after the workspace is trusted (the trust dialog of the first interactive session); until
+   then the session-start hook and the gate ask.
 4. **What the profile does not know yet.** The runner is there → run
    `bash .agents/factory/factory.sh setup --check`. It lists the detected keys the profile lacks
    (a browser runner, a formatter, a carrier skill installed since) and the values that differ from

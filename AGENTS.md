@@ -149,6 +149,10 @@ row "Marketplace bootstrap branch".
 - No links into sibling repositories; cite the guide by name, not by path or URL.
 - Skills never invent DCA conventions — they point to `/dca-knowledge` (the vendored catalog) when unsure.
 - Tool-agnostic knowledge lives in the catalog; anything about Claude Code, slash commands or plugins lives here.
+- Names: the skill prefix `dca-` says *this skill carries the method* and is `dca-core`'s alone; `dca-craft` and
+  `dca-factory` skills carry none (`factory-*`, `stage-*`, `tdd`, …) — `scripts/check-skills.py` fails on a
+  `dca-` skill outside `dca-core`. The plugin prefix `dca-` is the marketplace's mark of origin, not a claim
+  about the method: `dca-factory` carries no architecture knowledge and says so.
 
 ## Versioning
 

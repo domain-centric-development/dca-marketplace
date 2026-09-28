@@ -1,6 +1,6 @@
 ---
 name: stage-build
-description: Build stage of a factory run — writes the production code that turns the story's red tests green, with the smallest change that works. Use after the test stage of a story, when the orchestrator hands over the failing tests or a gate report, or on "/stage-build". Keeps the domain framework-free and the architecture suite green.
+description: Build stage of a factory run — writes the production code that turns the story's red tests green, with the smallest change that works. Use after the test stage of a story, when the orchestrator hands over the failing tests or a gate report, or on "/stage-build". Keeps the domain framework-free and the architecture suite green. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
 ---
 
 # Build one story

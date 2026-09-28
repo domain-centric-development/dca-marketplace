@@ -1,6 +1,6 @@
 ---
 name: factory-decisions
-description: The decision inbox of a delivery run — lists the questions stages could not answer, explains one from its record and the story it blocks, and writes the human's answer into the record on their explicit confirmation; for a structural question (a new bounded context, a new relationship, a surface an actor lacks) it also brings the designed context map and the product description in line. Use when a run stopped with needs-human, when someone asks what is waiting on them, to answer a question from a second session, or on "/factory-decisions". Answers nothing itself and implements nothing.
+description: The decision inbox of a delivery run, questions and acceptances alike — lists the questions stages could not answer and the delivered stories that wait for a human's look, explains one from its record and the story it blocks, and writes the human's answer into the record on their explicit confirmation (an acceptance delivers the story, a correction goes back into it); for a structural question (a new bounded context, a new relationship, a surface an actor lacks) it also brings the designed context map and the product description in line. Use when a run stopped with needs-human, when someone asks what is waiting on them, to answer a question from a second session, or on "/factory-decisions". Answers nothing itself and implements nothing.
 ---
 
 # Read, explain and record a decision

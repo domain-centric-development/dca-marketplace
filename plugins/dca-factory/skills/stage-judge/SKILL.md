@@ -1,6 +1,6 @@
 ---
 name: stage-judge
-description: Judge stage of a factory run — reviews the story's change from three perspectives (ddd, hexagonal, clean-code) plus any the profile adds, keeps only defects it can confirm in the code, and returns one verdict. Use after the tidy stage of a story, when the orchestrator asks for the review, or on "/stage-judge". Reports defects; it does not fix them.
+description: Judge stage of a factory run — reviews the story's change from three perspectives (ddd, hexagonal, clean-code) plus any the profile adds, keeps only defects it can confirm in the code, and returns one verdict. Use after the tidy stage of a story, when the orchestrator asks for the review, or on "/stage-judge". Reports defects; it does not fix them. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
 ---
 
 # Judge one story's change

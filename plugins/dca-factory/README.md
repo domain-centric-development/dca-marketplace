@@ -26,7 +26,7 @@ duplicate.
 ```
 /plugin marketplace add domain-centric-development/dca-marketplace
 /plugin install dca-factory@dca-marketplace
-/plugin install dca-core@dca-marketplace          # the method: the description skill, the carriers
+/plugin install dca-core@dca-marketplace          # the method: the description skill, the skills the stages take their craft from
 ```
 
 Then, once per project:
@@ -58,8 +58,9 @@ needs a git repository and stops without one. It detects the build from the **pr
 (`skills/factory-run/templates/presets/`: one flat file per build tool, browser runner, formatter
 or rule package it recognises — the files that give it away and the profile lines it writes) and
 leaves a command no preset detects *out* rather than writing a placeholder the gate would try to
-run. A new stack is one more preset file, no change to the script. It names a carrier skill only
-where that skill is installed beside the pipeline (`dca-modelling`, `dca-discipline`, `dca-review`
+run. A new stack is one more preset file, no change to the script. It names a **carrier** — the skill a
+stage takes its craft from, `carrier.<stage>:` in the profile — only where that skill is installed beside
+the pipeline (`dca-modelling`, `dca-discipline`, `dca-review`
 where the project has the DCA rule packages; `ubiquitous-language`, `context-map`, `e2e-testing`
 wherever they are installed) and installs it in the same run. The skills go into the tool's skill
 folder as **copies** when the source is a plugin cache (the marketplace install: a cache folder is
@@ -146,7 +147,7 @@ bash .agents/factory/factory.sh status --usage
 ```
 
 Two modes: **observe** the run that just happened — the stages' claims against the repository, the
-gate reports and the run journal — or **check the machinery** itself against throwaway fixtures
+gate reports and the run journal — or — for whoever changes the pipeline — **check the machinery** itself against throwaway fixtures
 (every gate check, the runner's loop and the install shapes). Either way it reports three things: what
 did not hold, what held, and what it could not observe. The last one is not decoration: a check
 that was not observed is not a check that passed.

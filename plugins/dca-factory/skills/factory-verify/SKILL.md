@@ -1,6 +1,6 @@
 ---
 name: factory-verify
-description: Checks that the delivery pipeline works. Two modes — observe one real story that was just delivered and report the facts about whatever did not hold (the stages' claims against the repository, the gate and the run journal), or check the pipeline's own machinery against throwaway fixtures. Use after a run to see whether it really did what it says, before trusting the pipeline in a new project, after changing a stage, a gate check or the runner, or on "/factory-verify".
+description: Observes one real story that was just delivered and reports the facts about whatever did not hold — the stages' claims against the repository, the gate and the run journal. Use after a run to see whether it really did what it says, before trusting the pipeline in a new project, or on "/factory-verify <story>". Its second mode, the pipeline's own machinery against throwaway fixtures ("/factory-verify --fixtures"), is for whoever changes a stage, a gate check or the runner.
 ---
 
 # Verify the factory

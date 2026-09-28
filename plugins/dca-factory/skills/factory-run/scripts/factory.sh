@@ -1494,8 +1494,9 @@ with open(path, "w", encoding="utf-8") as handle:
 print("factory: AGENTS.md carries the pipeline's section (between its dca-factory markers)")
 AGENTSEOF
   if [ -f CLAUDE.md ] && ! grep -q "AGENTS.md" CLAUDE.md; then
-    echo "factory: CLAUDE.md does not import AGENTS.md — Claude Code gets the section through the" >&2
-    echo "factory:   SessionStart hook; add '@AGENTS.md' to CLAUDE.md if it should read the rest too." >&2
+    echo "factory: CLAUDE.md does not import AGENTS.md — a Claude Code before 2.1.277 (it reads AGENTS.md" >&2
+    echo "factory:   natively since) gets the section through the SessionStart hook only; add '@AGENTS.md'" >&2
+    echo "factory:   to CLAUDE.md if such a version should read the rest too." >&2
   fi
 }
 

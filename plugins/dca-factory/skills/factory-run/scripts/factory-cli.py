@@ -1058,6 +1058,10 @@ HELP_COMMANDS = (
     ("the profile", "what detection finds against the stack profile", "/factory-setup", "setup --check"),
     ("observe a story", "what a delivered story changed, measured from its files", "/factory-verify <story>",
      "verify --story <story>"),
+    ("the machinery", "the pipeline's own suite against fixtures — for whoever changes the pipeline",
+     "/factory-verify --fixtures", "verify --fixtures"),
+    ("one stage by hand", "stage-plan … stage-document are the six stages the run calls; by hand only to redo one "
+                          "stage of a story that has the ones before", "/stage-<stage> <story>", ""),
     ("update the pipeline", "the newest pipeline found, same tools", "/factory-update", "update"),
     ("this help", "the flow, the commands, the marks, the files", "/factory-help", "help"),
 )

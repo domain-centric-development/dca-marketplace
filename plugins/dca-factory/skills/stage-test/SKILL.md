@@ -1,6 +1,6 @@
 ---
 name: stage-test
-description: Test stage of a factory run — writes one end-user test per acceptance criterion plus unit tests for the invariants, and records the criterion-to-test table the story gate reads. Use after the plan stage of a story, when the orchestrator hands over a plan, or on "/stage-test". The tests must compile and be red before any production code is written.
+description: Test stage of a factory run — writes one end-user test per acceptance criterion plus unit tests for the invariants, and records the criterion-to-test table the story gate reads. Use after the plan stage of a story, when the orchestrator hands over a plan, or on "/stage-test". The tests must compile and be red before any production code is written. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
 ---
 
 # Write the tests for one story

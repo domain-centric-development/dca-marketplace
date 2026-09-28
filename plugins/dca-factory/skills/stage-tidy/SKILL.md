@@ -1,6 +1,6 @@
 ---
 name: stage-tidy
-description: Tidy stage of a factory run — the refactor step the build stage deliberately skips, taken with every test green and without changing behaviour. Use after the build gate passed for a story, when the orchestrator hands over a green build, or on "/stage-tidy". Touches only what this story touched.
+description: Tidy stage of a factory run — the refactor step the build stage deliberately skips, taken with every test green and without changing behaviour. Use after the build gate passed for a story, when the orchestrator hands over a green build, or on "/stage-tidy". Touches only what this story touched. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
 ---
 
 # Tidy one story's code

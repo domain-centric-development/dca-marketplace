@@ -1,6 +1,6 @@
 ---
 name: stage-document
-description: Documentation stage of a factory run — brings the project's own documents in line with what the story changed: the glossary, the context map, and whatever the project keeps as reader documentation. Use after the judge stage of a story, when the orchestrator hands over the verdict, or on "/stage-document". Writes only statements that can be checked against the code.
+description: Documentation stage of a factory run — brings the project's own documents in line with what the story changed: the glossary, the context map, and whatever the project keeps as reader documentation. Use after the judge stage of a story, when the orchestrator hands over the verdict, or on "/stage-document". Writes only statements that can be checked against the code. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
 ---
 
 # Document what the story changed

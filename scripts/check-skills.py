@@ -27,6 +27,11 @@ BOUNDARY_FOLDERS = ("skills", "agents")
 # The `dca-` names a general skill may use: the plugin's own name and the marketplace's.
 ALLOWED_DCA_NAMES = {"dca-craft", "dca-marketplace"}
 
+# The skill prefix `dca-` says "this skill carries the method" and is this plugin's alone; every other
+# plugin's skills carry none. The plugin prefix is the marketplace's mark of origin, not a claim about the
+# method — so a plugin may be called `dca-factory` and its skills may not be called `dca-*`.
+METHOD_PLUGIN = "dca-core"
+
 # Type names the building blocks and rules give that DDD has no word for — the list used where no
 # `dca-java` checkout sits beside this one, and always merged with what that checkout declares.
 FIXED_DCA_TYPES = {
@@ -197,6 +202,8 @@ def main():
                 problems.append(f"{where}: no SKILL.md")
                 continue
             counted += 1
+            if name.startswith("dca-") and plugin != METHOD_PLUGIN:
+                problems.append(f"{where}: the `dca-` prefix names the method and is {METHOD_PLUGIN}'s alone")
             front = front_matter(path)
             if not front.get("name"):
                 problems.append(f"{where}: front matter has no `name`")
