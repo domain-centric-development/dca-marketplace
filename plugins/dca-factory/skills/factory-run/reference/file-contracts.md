@@ -153,7 +153,7 @@ rationale: <optional>
   as it still is delivers it at the next document gate; any other answer is a correction, written
   into the same story (criteria, an `answered:` line citing the id), which then runs again from
   plan and is asked again in a record of its own. The gate exits 3 while one is open — a question,
-  not a refusal; the runner stops and counts no round. `story-gate.py --reopen <story>` takes a
+  not a refusal; the runner stops and counts no round. `factory-cli.py --reopen <story>` takes a
   delivered story back for a correction the story cites — not while another story holds the checkout
   with unfinished code; after an accepted record it refuses a correction that changes a criterion
   (a new wish is a new story).
@@ -166,7 +166,7 @@ rationale: <optional>
   not that the story is delivered.
 - The gate checks the store on **every** stage: an open record blocks the story wherever it
   stands, and the runner does not start a stage while one is open.
-- `python3 .agents/factory/story-gate.py --list-decisions [--story <id>]` prints the inbox — one
+- `python3 .agents/factory/factory-cli.py --list-decisions [--story <id>]` prints the inbox — one
   line per record, open first — which is what the `factory-decisions` skill shows and works from.
 
 What this does not do, on purpose: no leases, no revision numbers, no stale-answer detection when

@@ -28,10 +28,21 @@ CONTRACT = {
     "judge.md": ("Verdict",),
     "document.md": ("Glossary",),
 }
-CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)\s*:\s*\S")
-MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
-SELECTOR = re.compile(r"([\w.]+)#(\w+)")
 BACKTICKED = re.compile(r"`([^`\n]{2,120})`")
+
+# The gate beside this file (both are copied into .agents/factory/) is the one reader of a story, a
+# criterion, a mapping row and a selector; this observer reads them the way the gate does or not at all.
+import importlib.util as _importlib
+_GATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "story-gate.py")
+if not os.path.isfile(_GATE):
+    _GATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "factory-run", "scripts", "story-gate.py")
+_spec = _importlib.spec_from_file_location("story_gate", _GATE)
+_gate = _importlib.module_from_spec(_spec)
+sys.modules["story_gate"] = _gate
+_spec.loader.exec_module(_gate)
+CRITERION, MAPPING_ROW, SELECTOR = _gate.CRITERION, _gate.MAPPING_ROW, _gate.SELECTOR
+GateError = _gate.GateError
+
 
 
 def table_paths(text):
@@ -84,16 +95,12 @@ def read(path):
         return None
 
 
-def front_matter(text):
-    if not text or not text.startswith("---"):
+def front_of(path):
+    """The front matter of a file, read by the gate; {} where the gate cannot read it."""
+    try:
+        return _gate.read_front_matter(path)[0]
+    except GateError:
         return {}
-    parts = text.split("---", 2)
-    data = {}
-    for line in parts[1].splitlines():
-        if ":" in line and not line.startswith((" ", "\t", "-")):
-            key, value = line.split(":", 1)
-            data[key.strip()] = value.strip()
-    return data
 
 
 def story_file(backlog, story_id):
@@ -104,7 +111,7 @@ def story_file(backlog, story_id):
             path = os.path.join(root, name)
             if os.path.splitext(name)[0].lower() == story_id.lower():
                 return path
-            if front_matter(read(path)).get("id", "").lower() == story_id.lower():
+            if str(front_of(path).get("id", "")).lower() == story_id.lower():
                 return path
     return None
 

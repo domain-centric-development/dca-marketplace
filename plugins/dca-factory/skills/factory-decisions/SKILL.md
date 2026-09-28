@@ -18,7 +18,7 @@ once per project. The state of a record is read off the file: no `## Answer` is 
 ## Do
 
 1. **List what is waiting.** Run `bash .agents/factory/factory.sh decisions` (add `--story <id>` for
-   one story, `--format md` in a session; `python3 .agents/factory/story-gate.py --list-decisions` where there is no runner copy). It prints one row per record — id, state, story and
+   one story, `--format md` in a session; `python3 .agents/factory/factory-cli.py --list-decisions` where there is no runner copy). It prints one row per record — id, state, story and
    stage, when it was asked, the question — open ones first. Show it as it is — do not retell it as a
    table of your own, do not drop its lines, do not add after its *Next*. Where the
    gate is not installed, read the directory yourself and say that you did.
@@ -37,7 +37,7 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    archived ones older than a year" is an answer *and* a constraint the story must carry — say
    what you would write and where the rest goes (the story, via the backlog skill).
 4a. **Measure the answering.** Explaining and answering a story's questions is part of what the story
-   cost. When you start on a record, run `python3 .agents/factory/story-gate.py --window-start decisions
+   cost. When you start on a record, run `python3 .agents/factory/factory-cli.py --window-start decisions
    --story <its story>`; once its answer is written (or the human defers), `--window-end decisions
    --story <its story>`. The window claims nothing and starts nothing.
 5. **Show the exact wording before it is written.** Present the `## Answer` block you are about to
@@ -121,7 +121,7 @@ accepts — no role is checked; the answer is theirs, on their confirmation, as 
 - **A story already delivered** — the human looked after delivery: write a record for it yourself
   (`<story>-accept-<n>`, `kind: acceptance`, `stage: document`, `digest:` of the story now) with their
   correction as the answer, write the correction into the story as above, then take it back with
-  `python3 .agents/factory/story-gate.py --reopen <story>`. It refuses without an answered
+  `python3 .agents/factory/factory-cli.py --reopen <story>`. It refuses without an answered
   correction the story cites.
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
@@ -149,7 +149,7 @@ inside one anyway.
 ## Example
 
 ```
-$ python3 .agents/factory/story-gate.py --list-decisions
+$ python3 .agents/factory/factory-cli.py --list-decisions
 US-3-01  open      US-3/plan  asked 2026-09-22T20:40:00Z  Does an archived entry count?
 US-2-01  applied   US-2/plan  asked 2026-09-21T09:12:00Z  Which currency does the total carry?  → b by the-expert
 decisions: 2 record(s), 1 waiting for an answer — store .agents/factory/decisions/

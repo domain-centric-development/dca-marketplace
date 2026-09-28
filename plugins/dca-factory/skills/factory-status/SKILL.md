@@ -17,7 +17,7 @@ start nothing and answer nothing on anyone's behalf.
    bash .agents/factory/factory.sh status --format md --live
    ```
 
-   (`python3 .agents/factory/story-gate.py --status --format md --live` where the project has no runner
+   (`python3 .agents/factory/factory-cli.py --status --format md --live` where the project has no runner
    copy.) `--format md` gives Markdown tables, which a session shows as tables; the terminal form
    (without it) is for a person at a shell. `--live` adds what the clock says: how long ago a stage
    started, its last activity, the worker, whether a session listens, a newer pipeline on this machine.

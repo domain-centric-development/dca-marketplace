@@ -47,7 +47,7 @@ dca-marketplace/
 │   ├── skills/dca-knowledge/catalog/      # GENERATED mirror of dca-knowledge-catalog/bundle — never hand-edit
 │   └── skills/{dca-modelling,dca-discipline,dca-review}/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
-│   ├── skills/factory-run/                # orchestrator + scripts/story-gate.py + templates (profile, backlog, decision record, hook) + reference
+│   ├── skills/factory-run/                # orchestrator + scripts/{story-gate.py (decides), factory-cli.py (shows, coordinates), factory.sh} + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
 │   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-help,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; the factory explained; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
@@ -77,7 +77,9 @@ dca-marketplace/
   answers a run may not give itself — a new bounded context, a new relationship between contexts, a
   surface an actor lacks; `skills/factory-run/scripts/story-gate.py`
   is the deterministic check between the stages, copied into a consuming project as
-  `.agents/factory/story-gate.py`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
+  `.agents/factory/story-gate.py`, with `factory-cli.py` beside it for everything that shows or coordinates
+  (status, help, usage, the checkout, the schedule) — the cli imports the gate, and the runner reads every
+  project file through the cli, never with `sed`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
   discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`) is optional, the git
   pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile
@@ -135,7 +137,7 @@ interfaces are aliased to the library ones or kept and declared through `DcaLayo
 | Delivery process: backlog fields, stage order, gate checks, file hand-overs | `dca-factory/skills/factory-run/SKILL.md`, its `reference/{backlog-contract,file-contracts}.md`, `scripts/story-gate.py`, and the affected `stage-*/SKILL.md`. A gate check is a script change, never a hook or a stage self-assessment |
 | A stage needs project knowledge (build command, test runner, source set) | it goes into the project's stack profile, never into a skill |
 | What the gate **reads or writes** changes incompatibly (profile keys, the `gate:tests` table, the red ledger, a document claim's shape) | raise `CONTRACT` in `story-gate.py` *and* in `templates/factory.profile.yaml.tmpl`, and refresh the gate copy in every consuming project — an older copy then refuses the newer profile instead of ignoring a key |
-| Anything else in `dca-factory` ships | keep `VERSION` in `story-gate.py` in step with `plugin.json`; that number is provenance, so the runner can tell a project it is behind the pipeline |
+| Anything else in `dca-factory` ships | keep `VERSION` in `story-gate.py` in step with `plugin.json` (`factory-cli.py` takes it from the gate); that number is provenance, so the runner can tell a project it is behind the pipeline |
 
 Sync targets in the other direction: root `AGENTS.md` § 5 (plugin contents, installation), `planning/porting-status.md`
 row "Marketplace bootstrap branch".

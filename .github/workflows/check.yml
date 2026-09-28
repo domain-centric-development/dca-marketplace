@@ -28,6 +28,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -44,6 +45,7 @@ jobs:
           bash -n plugins/dca-factory/skills/factory-run/templates/githooks/pre-commit
           python -m py_compile \
             plugins/dca-factory/skills/factory-run/scripts/story-gate.py \
+            plugins/dca-factory/skills/factory-run/scripts/factory-cli.py \
             plugins/dca-factory/skills/factory-verify/scripts/verify.py \
             plugins/dca-factory/skills/factory-verify/scripts/observe.py \
             plugins/dca-core/skills/dca-init/scripts/dca-report.py \
@@ -57,7 +59,12 @@ jobs:
       - name: the report of dca-new and dca-init
         run: python plugins/dca-core/skills/dca-init/scripts/dca-report.py --self-test
       - name: factory-verify
-        run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py
+        run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py --junit verify-report.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-report-${{ matrix.os }}
+          path: verify-report.xml
 
   derived:
     name: generated artifacts are current

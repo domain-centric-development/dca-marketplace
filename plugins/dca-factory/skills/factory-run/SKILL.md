@@ -19,7 +19,7 @@ them apart is what makes a run reproducible.
 | the epic | `project/backlog/<epic>/epic.md` | same |
 | the stack profile | `.agents/factory/factory.profile.yaml` | create it from the template by detecting the build (see below) |
 | an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with the method's setup skill (in a DCA project `/dca-init`), and the factory never calls a skill that writes code. Without one, the build gate skips the architecture check and names it |
-| the gate | `.agents/factory/story-gate.py` | the installer writes it (step 1 below) |
+| the gate | `.agents/factory/story-gate.py` — it decides; `factory-cli.py` beside it shows and coordinates (status, schedule, marks, the checkout) | the installer writes both (step 1 below) |
 | the commit guard | `.githooks/pre-commit` | the installer writes it and sets `core.hooksPath` (step 1 below) |
 
 Read `reference/backlog-contract.md` for the backlog format and `reference/file-contracts.md`
@@ -195,7 +195,7 @@ either way, and the status shows a stage whose model is not the one requested �
 had no effect is visible, not assumed.
 
 In the subagent and in-session tiers, mark every stage so its cost is known: run
-`python3 .agents/factory/story-gate.py --stage-start <stage> --story <id>` right before it and
+`python3 .agents/factory/factory-cli.py --stage-start <stage> --story <id>` right before it and
 `--stage-end <stage> --story <id>` right after its file is written. The gate records the window in
 the story's journal and reads the tool's own session log for it later — Claude Code's log of this
 session, subagents included, or Codex's — so `--usage`, the schedule and a budget see in-session
@@ -253,7 +253,7 @@ it, in this session or another (see `reference/file-contracts.md`, *Decision rec
 resume a story whose record is answered, run the stage it resumes at — the earlier of `stage:` in the
 record and `applies:` in the answer — with the answer in front of it; the gate checks that its new file cites the id, and stamps the record
 applied. The human answers through `factory-decisions` — in this session or another — which lists
-the records (`story-gate.py --list-decisions`), explains one and writes `## Answer` only on their
+the records (`factory-cli.py --list-decisions`), explains one and writes `## Answer` only on their
 confirmation.
 
 ## Outside a story
@@ -279,7 +279,7 @@ story. A judge's `changes-requested` or a refused adopt gate sends it back to th
 
 ## A journey item
 
-A backlog item with `kind: journey` (`story-gate.py --story <id> --kind` prints it) is a guard over
+A backlog item with `kind: journey` (`factory-cli.py --story <id> --kind` prints it) is a guard over
 delivered stories. It runs **plan, test, judge, document** — skip build and tidy, there is nothing to
 build — and its test gate expects the journey test **green**, the inverse of a story. A judge's
 `changes-requested` sends it back to the test stage, not the build stage. Everything else — the gates,
@@ -288,7 +288,7 @@ the rounds, the decisions — is a story's.
 ## A wish instead of a story
 
 What `/factory-run <argument>` means is the gate's to say, not yours: run
-`python3 .agents/factory/story-gate.py --resolve "<argument>"` and follow its one line.
+`python3 .agents/factory/factory-cli.py --resolve "<argument>"` and follow its one line.
 
 | It prints | Then |
 |---|---|
@@ -301,7 +301,7 @@ What `/factory-run <argument>` means is the gate's to say, not yours: run
 
 `/factory-run` with no story named works the backlog instead of one story:
 
-1. Run `python3 .agents/factory/story-gate.py --listening` — the sign of life a second session sees
+1. Run `python3 .agents/factory/factory-cli.py --listening` — the sign of life a second session sees
    in `/factory-status` while this one waits — then `python3 .agents/factory/story-gate.py
    --schedule`. Its last line is `next: <story> <stage>` or `next: none — <why>`.
 2. For `next: <story> <stage>`: deliver that story from that stage, exactly as a named story —
@@ -310,7 +310,7 @@ What `/factory-run <argument>` means is the gate's to say, not yours: run
    with unfinished code at a time.
 3. For `next: none`: say why in one or two lines — which decision waits (and that it is answered
    through `/factory-decisions`), which story is stopped or running elsewhere, or that the backlog is
-   done — give the checkout back (`python3 .agents/factory/story-gate.py --release`) and end the
+   done — give the checkout back (`python3 .agents/factory/factory-cli.py --release`) and end the
    turn. Do not wait inside the turn and do not poll: files do not change while you wait.
 
 **One worker per checkout.** `--stage-start` takes the checkout for this session and exits 3 when
@@ -331,7 +331,7 @@ One story per run; several stories are a loop over it, never agents working in p
 code base. What comes next is read off the files, like everything else:
 
 ```
-python3 .agents/factory/story-gate.py --schedule
+python3 .agents/factory/factory-cli.py --schedule
 ```
 
 prints each story with its state — `delivered` (its document gate passed), `waiting` (an open decision record), `resumable`
@@ -356,7 +356,7 @@ invocations of the run (exit 4, the work so far stays); `.agents/factory/stop` e
 next story.
 
 `factory.sh run --story <id>` without `--from` starts where that story's files say, as the schedule
-would: `python3 .agents/factory/story-gate.py --story <id> --start` prints its `state:`, `start:` and
+would: `python3 .agents/factory/factory-cli.py --story <id> --start` prints its `state:`, `start:` and
 `detail:`. A delivered story runs nothing; one that waits, is blocked by a dependency or another
 story's unfinished code, or stopped, runs nothing and says why — `--from <stage>` is the person's way
 to run it anyway, and starts a new count of rounds. An accepted story starts at the document gate
@@ -366,7 +366,7 @@ does run reads a report of now.
 
 **What a story cost.** The runner asks Claude Code and Codex for their machine-readable output and
 records each invocation's tokens — input, cache read, cache write, output, and Claude's cost — as a
-`usage` line in the story's journal. `python3 .agents/factory/story-gate.py --usage [--story <id>]`
+`usage` line in the story's journal. `python3 .agents/factory/factory-cli.py --usage [--story <id>]`
 sums them per story and stage, repeat rounds included; the schedule shows each story's total.
 `--story-budget <tokens>` (on `run`, with or without `--story`) stops dispatch once a story has used that many,
 counted from the journal, so a restart or a second session continues the same count; the stage
@@ -377,6 +377,6 @@ invocations without a report, never as zero. An in-session run is measured throu
 Its numbers are copied into the journal once a window is five minutes old, by the next command that
 writes — a stage start, a claim, a release, a listening look — for every story; until then the journal
 holds only the session's id, and a story's last stages are frozen by whatever runs next.
-An old session log can be read whole: `story-gate.py --usage-from claude-session|codex-session <log>`. The watch lives as long as its process: a closed session or terminal ends it, and a
+An old session log can be read whole: `factory-cli.py --usage-from claude-session|codex-session <log>`. The watch lives as long as its process: a closed session or terminal ends it, and a
 file wakes nobody. In-session, do the same loop yourself — ask the schedule, run the story it
 names, ask again — and stop instead of waiting.

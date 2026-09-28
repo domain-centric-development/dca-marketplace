@@ -94,6 +94,32 @@ SYMLINKS = can_symlink()
 if os.name == "nt":
     print(f"verify: bash → {BASH}; symlinks {'available' if SYMLINKS else 'unavailable, install copies'}")
 DEFAULT_GATE = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "story-gate.py"))
+DEFAULT_CLI = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "factory-cli.py"))
+
+# Every case's verdict, in the order it ran, for the JUnit report `--junit` writes: (group, name, ok, detail).
+RESULTS = []
+CURRENT_GROUP = ["checks"]
+
+
+def note_result(name, ok, detail=""):
+    RESULTS.append((CURRENT_GROUP[0], name, ok, detail))
+
+
+def cli_of(gate):
+    """The CLI beside a gate — the file that shows and coordinates; the gate only decides."""
+    return os.path.join(os.path.dirname(gate), "factory-cli.py")
+
+
+def cli_in(root):
+    return os.path.join(root, ".agents", "factory", "factory-cli.py")
+
+
+def copy_scripts(beside, root):
+    """The gate and the CLI, into a fixture's .agents/factory — as the install puts them there."""
+    folder = os.path.dirname(beside)
+    os.makedirs(os.path.join(root, ".agents", "factory"), exist_ok=True)
+    for name in ("story-gate.py", "factory-cli.py"):
+        shutil.copy(os.path.join(folder, name), os.path.join(root, ".agents", "factory", name))
 DEFAULT_RUNNER = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "factory.sh"))
 
 EPIC = """---
@@ -538,7 +564,7 @@ def backlog_project(root, *stories, **more):
 
 def usage_json(gate, root, story, env=None):
     """{stage: figures} of one story's journal, as the status computes them."""
-    done = subprocess.run([sys.executable, gate, "--usage", "--story", story, "--format", "json"], cwd=root,
+    done = subprocess.run([sys.executable, cli_of(gate), "--usage", "--story", story, "--format", "json"], cwd=root,
                           env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
     try:
         return json.loads(done.stdout or "{}")
@@ -548,7 +574,7 @@ def usage_json(gate, root, story, env=None):
 
 def schedule_of(gate, root):
     """{story: (state, from)} and the `next:` / `wait:` lines of `story-gate.py --schedule`."""
-    listing = subprocess.run([sys.executable, gate, "--schedule"], cwd=root, capture_output=True,
+    listing = subprocess.run([sys.executable, cli_of(gate), "--schedule"], cwd=root, capture_output=True,
                              text=True, encoding="utf-8", errors="replace")
     rows, nxt, wait = {}, "", ""
     for line in listing.stdout.splitlines():
@@ -725,14 +751,14 @@ def verify_runner(runner, verbose=False):
     def check(name, ok, detail=""):
         results.append((name, ok, detail))
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok and detail:
             print(f"          {detail}")
 
     # 1. the stage order, and which gate runs before its stage and which after
     with tmpdir() as root:
         build_project(root)
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         order = [line.strip()[3:].split("  (")[0].strip()
                  for line in output.splitlines() if line.startswith("── ")]
@@ -746,8 +772,7 @@ def verify_runner(runner, verbose=False):
     # 1c. an adoption builds nothing: plan, test, judge, then the adopt gate
     with tmpdir() as root:
         build_project(root, story=STORY.replace("status: approved", "status: adopted"))
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         order = [line.strip()[3:].split("  (")[0].strip()
                  for line in output.splitlines() if line.startswith("── ") and "skipped" not in line]
@@ -759,8 +784,7 @@ def verify_runner(runner, verbose=False):
     with tmpdir() as root:
         build_project(root, story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
                       .replace("depends_on: []", "depends_on: [STORY-0]"))
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         # STORY-0 is not in this backlog, so the story is blocked; a named stage runs it anyway.
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "claude",
                                   "--dry-run")
@@ -773,8 +797,7 @@ def verify_runner(runner, verbose=False):
     # 1a. the stage process sees only the project: the isolation flags, one prefix for every stage
     with tmpdir() as root:
         build_project(root)
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         flags = [line.split("tool flags:", 1)[1].strip() for line in output.splitlines() if "tool flags:" in line]
         wanted = ("--setting-sources project", "--strict-mcp-config", "--tools Read,Write,Edit,Glob,Grep,Bash,Skill",
@@ -791,8 +814,7 @@ def verify_runner(runner, verbose=False):
               flags[:1])
     with tmpdir() as root:
         build_project(root, profile=PROFILE + "carrier.build: no-such-craft\n")
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         check("isolation: a carrier the project does not hold stops the run before the first stage, named",
               code == 2 and "no-such-craft" in output and "── stage" not in output, output[-300:])
@@ -807,8 +829,7 @@ def verify_runner(runner, verbose=False):
         return rows
     with tmpdir() as root:
         build_project(root, profile=PROFILE + "model.claude.tidy: model-a\nmodel.codex.tidy: model-c\n")
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         rows = models_of(output)
         check("model: `model.claude.tidy` becomes exactly one --model on the tidy stage, and no other stage gets one",
@@ -827,16 +848,14 @@ def verify_runner(runner, verbose=False):
               "overridden by FACTORY_CLAUDE_ARGS (model-z)" in models_of(output).get("tidy", ""), models_of(output))
     with tmpdir() as root:
         build_project(root, profile=PROFILE + "model.claude: model-b\n")
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         check("model: `model.<tool>` is the default for every stage without a key of its own",
               set(models_of(output).values()) == {"--model model-b"} and len(models_of(output)) == 6,
               models_of(output))
     with tmpdir() as root:
         build_project(root, profile=PROFILE.replace("contract: 6", "") + "contract: 99\n")
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "build", "--tool", "claude",
                                   "--dry-run")
         check("contract: a profile newer than the gate stops the run before the first stage, also --from a later one",
@@ -864,7 +883,7 @@ def verify_runner(runner, verbose=False):
                 {"type": "step_finish", "part": {"type": "step-finish", "cost": 0, "tokens": {
                     "input": 200, "output": 50, "reasoning": 0, "cache": {"write": 0, "read": 11700}}}}]) + "\n")
         gate = os.path.join(os.path.dirname(runner), "story-gate.py")
-        read = subprocess.run([sys.executable, gate, "--usage-from", "opencode-json", raw, "--usage-model",
+        read = subprocess.run([sys.executable, cli_of(gate), "--usage-from", "opencode-json", raw, "--usage-model",
                                "lmstudio-local/some-model"], capture_output=True, text=True, encoding="utf-8").stdout
         check("opencode: usage is read from the step_finish events, a local model has no price, the answer is shown",
               read.splitlines()[:1] == ["model=lmstudio-local/some-model\tinput=11973\tcache_read=11700\tcache_write=0\toutput=400"]
@@ -894,8 +913,7 @@ def verify_runner(runner, verbose=False):
     )
     with tmpdir() as root:
         build_project(root)
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         # the stand-in turns the mapped tests green from the build stage onwards
         with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
             handle.write("")
@@ -937,8 +955,7 @@ def verify_runner(runner, verbose=False):
     def shared_run(skip_test_gate=False, dry=False, **project):
         with tmpdir() as root:
             build_project(root, **project)
-            shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                        os.path.join(root, ".agents", "factory", "story-gate.py"))
+            copy_scripts(runner, root)
             tests_path = os.path.join(root, "fixture-tests.md")
             with open(tests_path, "w", encoding="utf-8") as handle:
                 handle.write(TESTS)
@@ -995,8 +1012,7 @@ def verify_runner(runner, verbose=False):
     # 1c. a stage that writes no file stops the run, and says which file was missing
     with tmpdir() as root:
         build_project(root)
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
                                   env={"FACTORY_TOOL_CMD": "true"})
         check("runner: a stage that produced no file stops the run",
@@ -1006,8 +1022,7 @@ def verify_runner(runner, verbose=False):
     # 1d. a stage that escalates stops the run
     with tmpdir() as root:
         build_project(root)
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         escalating = ('mkdir -p tasks/STORY-1; printf "## Context\\n## Changes\\n'
                       '## Acceptance criteria\\n## needs-human\\nSomeone must decide.\\n" '
                       '> tasks/STORY-1/plan.md')
@@ -1021,8 +1036,7 @@ def verify_runner(runner, verbose=False):
     # 1d1. a bare needs-human heading from the template is not an escalation
     with tmpdir() as root:
         build_project(root)
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         bare = ('mkdir -p tasks/STORY-1; printf "## Context\\n## Changes\\n'
                 '## Acceptance criteria\\n## needs-human\\n(none)\\n" > tasks/STORY-1/plan.md')
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
@@ -1041,8 +1055,7 @@ def verify_runner(runner, verbose=False):
 
     # 1d3. `run --story` without --from starts where the story's files say, never at plan by default
     def gated(root):
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         return root
 
     with tmpdir() as root:
@@ -1108,8 +1121,7 @@ def verify_runner(runner, verbose=False):
     # 1d2. a stage that asks writes the record; the run names it and how to resume
     with tmpdir() as root:
         build_project(root)
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         asking = ('mkdir -p tasks/STORY-1 .agents/factory/decisions; '
                   'cat "$FIXTURE_DECISION" > .agents/factory/decisions/STORY-1-01.md; '
                   'cat "$FIXTURE_PLAN" > tasks/STORY-1/plan.md')
@@ -1237,8 +1249,7 @@ exit 0
         # LF on every platform: a shell script with CRLF endings is not the script it looks like
         with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
             handle.write(stand_in_backlog)
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         return {"FACTORY_TOOL_CMD": "sh stand-in.sh"}
 
     def invocations(root):
@@ -1590,7 +1601,7 @@ exit 0
             if os.path.isfile(os.path.join(root, "models.log")) else []
         journal = open(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv"), encoding="utf-8").read() \
             if os.path.isfile(os.path.join(root, "tasks", "STORY-2", ".verify", "journal.tsv")) else ""
-        status = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--status",
+        status = subprocess.run([sys.executable, cli_in(root), "--status",
                                  "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8").stdout
         build_row = next((l for l in status.splitlines() if "Stages" in l), "")
         check("model: a custom command gets FACTORY_MODEL for its stage only, the journal records the request "
@@ -1604,7 +1615,7 @@ exit 0
     with tmpdir() as root:
         env = backlog_fixture(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
-        subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--claim",
+        subprocess.run([sys.executable, cli_in(root), "--claim",
                         "claude-session:other"], cwd=root, capture_output=True)
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         check("runner: another worker's claim stops it before any stage, and it says who holds the checkout",
@@ -1631,12 +1642,14 @@ exit 0
         commands = [h["command"] for e in settings["hooks"]["SessionStart"] for h in e["hooks"]]
         check("priming: AGENTS.md carries the pipeline's section once, and keeps the project's own lines",
               agents.count("<!-- dca-factory: start -->") == 1 and "The project's own line." in agents
-              and "story-gate.py --status --brief" in agents and "factory.sh status" not in agents, agents[-300:])
+              and "factory-cli.py --status --brief" in agents and "story-gate.py --status" not in agents
+              and "factory.sh status" not in agents, agents[-300:])
         check("priming: the section asks once, in fixed words, whether a user story goes through the factory",
               '"As a story through the factory — to an existing epic, a new epic — or directly by hand?"' in agents
               and "`/factory-run` with the person's words" in agents, agents[-900:])
         check("priming: Claude's SessionStart hook is added once, beside the project's own hooks",
-              sum(1 for c in commands if c.endswith(".agents/factory/story-gate.py --status --brief --session-start")) == 1
+              sum(1 for c in commands if c.endswith(".agents/factory/factory-cli.py --status --brief --session-start")) == 1
+              and not any("story-gate.py --status" in c for c in commands)
               and "echo mine" in commands and not any("factory.sh" in c for c in commands), commands)
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief")
         lines = [l for l in output.splitlines() if l.startswith("factory: ") and "detection finds" not in l]
@@ -1730,6 +1743,7 @@ exit 0
         # a newer pipeline beside the project: the record says this version, the plugin copy says otherwise
         plugin = os.path.join(root, "newer-plugin", "factory-run", "scripts")
         os.makedirs(plugin)
+        shutil.copy(os.path.join(os.path.dirname(runner), "factory-cli.py"), os.path.join(plugin, "factory-cli.py"))
         body = open(os.path.join(os.path.dirname(runner), "story-gate.py"), encoding="utf-8").read()
         with open(os.path.join(plugin, "story-gate.py"), "w", encoding="utf-8") as handle:
             handle.write(body.replace('VERSION = "', 'VERSION = "9.9.9-', 1))
@@ -1770,8 +1784,10 @@ exit 0
                 runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                 env={"FACTORY_VERIFY_VERDICT": "1"})
             # the dry run does not reach the judge, so read the parser directly
+            # the function asks the cli beside the runner, so the sourced snippet gets what the runner defines
             parsed = subprocess.run(
                 [BASH, "-c",
+                 f'PY="{shell_path(sys.executable)}"; CLI="{shell_path(cli_of(runner))}"; cli() {{ "$PY" "$CLI" "$@"; }}; '
                  f'TASKS=tasks; sed -n "/^verdict_of/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
                  f'. ./fn.sh; verdict_of STORY-1'],
                 cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
@@ -2038,6 +2054,7 @@ def verify_setup(runner, verbose=False):
     def check(name, ok, detail=""):
         results.append((name, ok, detail))
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok and detail:
             print(f"          {detail}")
 
@@ -2312,8 +2329,7 @@ def verify_setup(runner, verbose=False):
         code, output = run_runner(project_runner(root), root, "status", "--brief", env={"FACTORY_PLUGIN_DIR": source})
         check("status --brief: a line when detection finds a key the profile does not declare",
               code == 0 and "detection finds" in output and "browser" in output, output.strip().splitlines()[:1])
-        gate_brief = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
-                                     "--status", "--brief", "--session-start"], cwd=root, capture_output=True,
+        gate_brief = subprocess.run([sys.executable, cli_in(root), "--status", "--brief", "--session-start"], cwd=root, capture_output=True,
                                     text=True, encoding="utf-8").stdout
         check("status --brief: the gate's session-start lines carry no detection", "detection" not in gate_brief)
     # WP-64 1a: a carrier line only for a skill installed beside the pipeline; the places from AGENTS.md
@@ -2423,8 +2439,7 @@ def verify_setup(runner, verbose=False):
                   os.path.realpath(link) if os.path.exists(link) else "missing")
     with tmpdir() as root:
         build_project(root, profile=PROFILE + "carrier.guard: some-guard\n")
-        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
-                    os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   env={"FACTORY_ISOLATION": "off"})
         prompts = {l.split()[2]: next((m for m in output.splitlines()[i + 1:i + 2]), "")
@@ -2592,27 +2607,138 @@ def verify_setup(runner, verbose=False):
         code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
         check("install: for Claude Code the report names the second listing under the plugin's namespace",
               "dca-factory:<skill>" in output, output.strip()[-300:])
+    # one parser: the runner asks the cli, which reads with the gate's readers — and the gate only decides
+    def cli(root, *argv):
+        done = subprocess.run([sys.executable, cli_in(root), *argv], cwd=root, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+        return done.returncode, done.stdout.strip()
+
+    with tmpdir() as root:
+        build_project(root, profile=PROFILE + 'model.claude.tidy: "haiku"\nmodel.claude: sonnet\n'
+                                             "carrier.build: dca-core:dca-modelling\nreview.ddd: review-ddd\n")
+        run_setup(runner, root, "--tool", "none", "--from", source)
+        heads = cli(root, "--command-heads")[1].split()
+        check("cli: --get, --command-heads, --carriers, --carrier-lines and --model read the profile as the gate does",
+              cli(root, "--get", "carrier.build")[1] == "dca-core:dca-modelling"
+              and cli(root, "--get", "nothing-here")[1] == ""
+              and heads and len(heads) == len(set(heads)) and all(not h.startswith("{{") for h in heads)
+              and cli(root, "--carriers")[1].split("\n") == ["dca-modelling", "review-ddd"]
+              and "carrier.build dca-core:dca-modelling" in cli(root, "--carrier-lines")[1].split("\n")
+              and cli(root, "--model", "claude", "tidy")[1] == "haiku" and cli(root, "--model", "claude", "build")[1] == "sonnet"
+              and cli(root, "--model", "codex", "build")[1] == "",
+              f"{heads}; {cli(root, '--carriers')[1]!r}; {cli(root, '--model', 'claude', 'tidy')[1]!r}")
+        write_file(root, "tasks/STORY-1/judge.md", "## Verdict\nverdict: `changes-requested`\n")
+        write_file(root, "tasks/STORY-1/build.md", "# Build\n\n## needs-human\n- decision: S-01. The browser…\n")
+        write_file(root, "tasks/STORY-1/tidy.md", "# Tidy\n\n## needs-human\n(none)\n")
+        write_file(root, ".agents/factory/decisions/S-01.md", "---\nid: S-01\nstory: STORY-1\nstage: build\n---\n\n# Q?\n")
+        write_file(root, ".agents/factory/decisions/S-02.md",
+                   "---\nid: S-02\nstory: STORY-1\nstage: plan\n---\n\n# Q?\n\n## Answer\nanswer: yes\nby: x\nat: y\n")
+        asks = cli(root, "--needs-human", "tasks/STORY-1/build.md")
+        check("cli: --verdict, --needs-human and --open-decisions read the stage files and the records as the gate does",
+              cli(root, "--verdict", "STORY-1")[1] == "changes-requested" and cli(root, "--verdict", "STORY-9")[1] == ""
+              and asks == (0, "S-01\tbuild") and cli(root, "--needs-human", "tasks/STORY-1/tidy.md")[0] == 1
+              and cli(root, "--open-decisions", "STORY-1")[1].split("\n") == [".agents/factory/decisions/S-01.md"],
+              f"{asks}; {cli(root, '--open-decisions', 'STORY-1')}")
+        # a pair of one release, or no run: the runner refuses a cli of another version and a missing one
+        project_cli = cli_in(root)
+        text = open(project_cli, encoding="utf-8").read()
+        with open(project_cli, "w", encoding="utf-8") as handle:
+            handle.write(text.replace("VERSION = _gate.VERSION", 'VERSION = "0.0.1"', 1))
+        code, output = run_runner(project_runner(root), root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                                  env={"FACTORY_ISOLATION": "off"})
+        check("runner: a cli of another version than the gate stops a run before its first stage",
+              code == 2 and "one release, two files" in output, f"exit {code}; {output.strip()[-200:]}")
+        os.remove(project_cli)
+        code, output = run_runner(project_runner(root), root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                                  env={"FACTORY_ISOLATION": "off"})
+        check("runner: without the cli beside the gate nothing is started, and the update is named",
+              code == 2 and "no factory-cli.py beside the gate" in output, f"exit {code}; {output.strip()[-200:]}")
+        code, output = run_runner(project_runner(root), root, "update", "--from", source)
+        stamp = open(os.path.join(root, ".agents", "factory", "gate.installed"), encoding="utf-8").read()
+        check("update: puts the cli beside the gate, and the record names the files of the release",
+              code == 0 and os.path.isfile(project_cli) and "files: story-gate.py factory-cli.py" in stamp,
+              f"exit {code}; {stamp.strip()}")
+        handed = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
+                                 "--status", "--brief"], cwd=root, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
+        check("gate: a flag that moved to the cli is handed over, so an older caller still gets its answer",
+              handed.returncode == 0 and handed.stdout.startswith("factory:"), handed.stdout.strip()[:200])
+    gate_text = open(os.path.join(os.path.dirname(runner), "story-gate.py"), encoding="utf-8").read()
+    cli_text = open(os.path.join(os.path.dirname(runner), "factory-cli.py"), encoding="utf-8").read()
+    runner_text = open(runner, encoding="utf-8").read()
+    observe_text = open(os.path.join(os.path.dirname(runner), "..", "..", "factory-verify", "scripts", "observe.py"),
+                        encoding="utf-8").read()
+    check("gate: carries no colour code, no price and no session-log path — those are the cli's",
+          "\\x1b[" not in gate_text and "def money(" not in gate_text and ".claude/projects" not in gate_text
+          and "def money(" in cli_text and "\\x1b[" in cli_text)
+    parsed = [l.strip()[:80] for l in runner_text.splitlines()
+              if "sed -n" in l and not l.strip().startswith("#")
+              and re.search(r"profile|judge\.md|needs-human|\$DECISIONS|carrier\.|model\\\.", l)]
+    check("runner: parses no profile, stage file or record itself — every read goes through the cli", not parsed, parsed[:3])
+    duplicated = [n for n in ("CRITERION", "MAPPING_ROW", "SELECTOR") if re.search(rf"^{n} = re\.compile", observe_text, re.M)]
+    check("observe: defines no reader the gate has — it imports the gate's",
+          not duplicated and "def front_matter(" not in observe_text and "story_gate" in observe_text, duplicated)
     shutil.rmtree(lone_home, ignore_errors=True)
 
     failures = [name for name, ok, _ in results if not ok]
     print(f"\nverify: {len(results) - len(failures)}/{len(results)} setup cases behaved as specified")
+
     return failures
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="verify the factory")
     parser.add_argument("--gate", default=DEFAULT_GATE)
+    parser.add_argument("--cli", default=DEFAULT_CLI, help="the CLI beside the gate (default: beside --gate)")
     parser.add_argument("--runner", default=DEFAULT_RUNNER)
+    parser.add_argument("--group", choices=("all", "checks", "runner", "setup"), default="all",
+                        help="run one group only: the gate's and the schedule's checks, the runner, the install")
+    parser.add_argument("--junit", metavar="FILE", help="write every case as a JUnit XML report")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     # Every case runs in a throwaway directory, so a path given relative to the caller's directory
     # would resolve to nothing there — and the whole suite would fail with the gate merely missing.
     args.gate = os.path.abspath(args.gate)
+    args.cli = os.path.abspath(args.cli) if args.cli != DEFAULT_CLI else cli_of(args.gate)
     args.runner = os.path.abspath(args.runner)
 
     if not os.path.isfile(args.gate):
         print(f"verify: no gate at {args.gate}")
         return 2
+    if not os.path.isfile(args.cli):
+        print(f"verify: no cli at {args.cli} — the gate and the cli are one release, in one folder")
+        return 2
+    try:
+        return run_groups(args)
+    finally:
+        if args.junit:
+            write_junit(args.junit)
+
+
+def write_junit(path):
+    """One testsuite per group, one testcase per case; a failure carries the detail."""
+    from xml.sax.saxutils import quoteattr
+    groups = {}
+    for group, name, ok, detail in RESULTS:
+        groups.setdefault(group, []).append((name, ok, detail))
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<testsuites>"]
+    for group, cases in groups.items():
+        failed = sum(1 for _, ok, _ in cases if not ok)
+        lines.append(f'  <testsuite name={quoteattr(group)} tests="{len(cases)}" failures="{failed}">')
+        for name, ok, detail in cases:
+            lines.append(f'    <testcase classname={quoteattr(group)} name={quoteattr(name)}>')
+            if not ok:
+                lines.append(f'      <failure message={quoteattr(str(detail)[:400])}/>')
+            lines.append("    </testcase>")
+        lines.append("  </testsuite>")
+    lines.append("</testsuites>")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+def run_groups(args):
+    if args.group in ("runner", "setup"):
+        return run_runner_groups(args, [], args.group)
 
     both_green = ["com.example.WidgetPageTest#showsTheThing",
                   "com.example.WidgetUnitTest#showsNothingWhenEmpty"]
@@ -3267,6 +3393,7 @@ def main(argv=None):
             for needle in case.text:
                 if needle not in output:
                     problems.append(f"the report never says {needle!r}")
+            note_result(case.name, not problems, "; ".join(problems))
             if problems:
                 failures.append((case.name, problems, output))
                 print(f"  FAIL  {case.name}")
@@ -3294,9 +3421,9 @@ def main(argv=None):
             ("STORY-1-04", DECISION.replace("STORY-1-01", "STORY-1-04") + ANSWER
              + "\n## Applied\nat: 2026-09-22T21:30:00Z\nstage: plan\n"),
             ("STORY-9-01", DECISION.replace("STORY-1", "STORY-9"))))
-        listing = subprocess.run([sys.executable, args.gate, "--list-decisions"], cwd=root,
+        listing = subprocess.run([sys.executable, args.cli, "--list-decisions"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
-        inbox = json.loads(subprocess.run([sys.executable, args.gate, "--list-decisions", "--format", "json"], cwd=root,
+        inbox = json.loads(subprocess.run([sys.executable, args.cli, "--list-decisions", "--format", "json"], cwd=root,
                                           capture_output=True, text=True, encoding="utf-8").stdout or "{}")
         states = [r["state"] for r in inbox.get("records", [])]
         expectations = [
@@ -3308,7 +3435,7 @@ def main(argv=None):
              "5 records · 3 wait for you" in listing.stdout and "/factory-decisions" in listing.stdout
              and "under `## Answer`" in listing.stdout, listing.stdout[-600:]),
         ]
-        one_story = subprocess.run([sys.executable, args.gate, "--list-decisions", "--story", "STORY-9"],
+        one_story = subprocess.run([sys.executable, args.cli, "--list-decisions", "--story", "STORY-9"],
                                    cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
         expectations.append(("inbox: --story narrows the listing to one story",
                              "STORY-9-01" in one_story.stdout and "STORY-1-01" not in one_story.stdout
@@ -3316,6 +3443,7 @@ def main(argv=None):
                              one_story.stdout.strip().splitlines()[-1:]))
         for name, ok, detail in expectations:
             print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+            note_result(name, ok, detail)
             if not ok:
                 print(f"          {detail}")
                 inbox_failures.append(name)
@@ -3409,7 +3537,7 @@ def main(argv=None):
         shutil.copy(os.path.join(os.path.dirname(args.gate), "..", "templates", "githooks", "pre-commit"),
                     os.path.join(root, ".githooks", "pre-commit"))
         os.chmod(os.path.join(root, ".githooks", "pre-commit"), 0o755)
-        shutil.copy(args.gate, os.path.join(root, ".agents", "factory", "story-gate.py"))
+        copy_scripts(args.gate, root)
         shutil.copy(args.runner, os.path.join(root, ".agents", "factory", "factory.sh"))   # the hook calls `check`
         subprocess.run(["git", "config", "core.hooksPath", ".githooks"], cwd=root, capture_output=True)
         subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)      # a project commits both
@@ -3432,6 +3560,7 @@ def main(argv=None):
                              f"log {log}; {(accepted.stdout + accepted.stderr).strip().splitlines()[-3:]}"))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             change_failures.append(name)
@@ -3503,6 +3632,7 @@ def main(argv=None):
                              and "scenario.thing.untitled" in completed.stdout, completed.stdout.strip()[-300:]))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             parity_failures.append(name)
@@ -3555,6 +3685,7 @@ def main(argv=None):
                              "2 stage invocation(s)" in output, [l for l in output.splitlines() if "STORY-1" in l]))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             proof_failures.append(name)
@@ -3573,7 +3704,7 @@ def main(argv=None):
                          '{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n'
                          '{"type":"turn.completed","usage":{"input_tokens":12850,"cached_input_tokens":9984,'
                          '"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}\n')
-        read = lambda *a: subprocess.run([sys.executable, args.gate, "--usage-from", *a], capture_output=True,
+        read = lambda *a: subprocess.run([sys.executable, args.cli, "--usage-from", *a], capture_output=True,
                                          text=True, encoding="utf-8").stdout
         c, x, n = read("claude-json", claude_out), read("codex-jsonl", codex_out, "--usage-model", "gpt-x"), \
             read("none", codex_out)
@@ -3586,6 +3717,7 @@ def main(argv=None):
         ]
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             failures.append((name, [], ""))
@@ -3618,7 +3750,7 @@ def main(argv=None):
             handle.write("2026-09-23T10:00:30.000Z\tstage-start\tplan\ttool=claude-session\n")
         environment = dict(os.environ, CLAUDE_CODE_SESSION_ID=session, CLAUDE_CONFIG_DIR=home)
         # the mark runs "now"; the log is from the past, so the window is closed by hand as the mark would
-        subprocess.run([sys.executable, args.gate, "--stage-end", "plan", "--story", "S-1"], cwd=root,
+        subprocess.run([sys.executable, args.cli, "--stage-end", "plan", "--story", "S-1"], cwd=root,
                        env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace")
         lines = open(journal, encoding="utf-8").read().splitlines()
         recorded = [l for l in lines if "\tusage\t" in l]
@@ -3643,7 +3775,7 @@ def main(argv=None):
                 totals("2026-09-23T10:00:00.000Z", 1000, 800, 10),                 # before the stage
                 totals("2026-09-23T10:02:00.000Z", 3000, 2000, 40),
                 totals("2026-09-23T10:02:00.000Z", 3000, 2000, 40)]) + "\n")      # repeated: totals, not sums
-        whole = subprocess.run([sys.executable, args.gate, "--usage-from", "codex-session", rollout],
+        whole = subprocess.run([sys.executable, args.cli, "--usage-from", "codex-session", rollout],
                                capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         with open(journal, "a", encoding="utf-8") as handle:
             handle.write("2026-09-23T10:01:00.000Z\tstage-start\ttest\ttool=codex-session\n"
@@ -3651,7 +3783,7 @@ def main(argv=None):
                          f"window=2026-09-23T10:01:00.000Z/2026-09-23T10:03:00.000Z\tlog={rollout}\n")
         test_stage = usage_json(args.gate, root, "S-1").get("test", {})
         # the next stage mark writes what can be read into the journal; `--usage` itself only reads
-        subprocess.run([sys.executable, args.gate, "--stage-start", "document", "--story", "S-1"], cwd=root,
+        subprocess.run([sys.executable, args.cli, "--stage-start", "document", "--story", "S-1"], cwd=root,
                        env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace")
         expectations = [
             ("usage in a session: the mark records the window and the session's id — no path, which would name "
@@ -3676,6 +3808,7 @@ def main(argv=None):
         ]
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             failures.append((name, [], ""))
@@ -3689,7 +3822,7 @@ def main(argv=None):
              "2026-09-23T10:00:00Z\tstage-start\tplan\ttool=x\n2026-09-23T10:01:00Z\tstage-end\tplan\texit=0\n"
              "2026-09-23T10:01:00Z\tusage\tplan\ttool=x\tmodel=m\tinput=10\tcache_read=0\tcache_write=0\toutput=90\tcost=0.01\n"
              "2026-09-23T10:02:00Z\tstage-start\ttest\ttool=x\n")))
-        run = lambda *more: subprocess.run([sys.executable, args.gate, "--status", *more], cwd=root,
+        run = lambda *more: subprocess.run([sys.executable, args.cli, "--status", *more], cwd=root,
                                            capture_output=True, text=True, encoding="utf-8").stdout
         out = run()
         part = lambda text, name, until: text.split(name, 1)[1].split(until, 1)[0] if name in text else ""
@@ -3728,11 +3861,11 @@ def main(argv=None):
             ("status --format json: the model, readable by a tool",
              json.loads(run("--format", "json"))["total"] == 2, ""),
         ]
-        helper = lambda *more: subprocess.run([sys.executable, args.gate, "--help-view", *more], cwd=root,
+        helper = lambda *more: subprocess.run([sys.executable, args.cli, "--help-view", *more], cwd=root,
                                               capture_output=True, text=True, encoding="utf-8").stdout
         help_text, help_md = helper(), helper("--format", "md")
         flow = json.loads(helper("--format", "json"))["flow"]
-        resolved = lambda argument: subprocess.run([sys.executable, args.gate, "--resolve", argument], cwd=root,
+        resolved = lambda argument: subprocess.run([sys.executable, args.cli, "--resolve", argument], cwd=root,
                                                    capture_output=True, text=True, encoding="utf-8")
         by_name, typo, wish, nothing = (resolved(a) for a in ("story-2", "STROY-2", "show the newest items first", ""))
         expectations += [
@@ -3778,7 +3911,7 @@ def main(argv=None):
         with open(journal, "w", encoding="utf-8") as handle:
             handle.write("2026-09-23T10:00:30.000Z\tstage-start\tplan\ttool=claude-session\n")
         environment = dict(os.environ, CLAUDE_CODE_SESSION_ID="0000-session", FACTORY_SESSION_USAGE="off")
-        out = subprocess.run([sys.executable, args.gate, "--stage-end", "plan", "--story", "S-1"], cwd=root,
+        out = subprocess.run([sys.executable, args.cli, "--stage-end", "plan", "--story", "S-1"], cwd=root,
                              env=environment, capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("usage in a session: FACTORY_SESSION_USAGE=off records the stage as unknown and "
                              "no session", "switched off" in out and "session=" not in open(journal, encoding="utf-8").read(),
@@ -3789,7 +3922,7 @@ def main(argv=None):
             handle.write("sessionUsage: off\n")
         with open(journal, "a", encoding="utf-8") as handle:
             handle.write("2026-09-23T10:06:00.000Z\tstage-start\ttest\ttool=claude-session\n")
-        out = subprocess.run([sys.executable, args.gate, "--stage-end", "test", "--story", "S-1"], cwd=root,
+        out = subprocess.run([sys.executable, args.cli, "--stage-end", "test", "--story", "S-1"], cwd=root,
                              env=dict(os.environ, CLAUDE_CODE_SESSION_ID="0000-session"), capture_output=True,
                              text=True, encoding="utf-8").stdout
         expectations.append(("usage in a session: `sessionUsage: off` in the profile does the same for the project",
@@ -3827,7 +3960,7 @@ def main(argv=None):
                          f"2026-09-23T10:05:00.000Z\tusage\tplan\ttool=claude-session\t{window}\tlog=/gone.jsonl\n"
                          "2026-09-23T10:00:00.000Z\tstage-start\tplan\ttool=claude-session\n")
         plan = usage_json(args.gate, root, "S-1").get("plan", {})
-        status_out = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
+        status_out = subprocess.run([sys.executable, args.cli, "--status"], cwd=root, capture_output=True,
                                     text=True, encoding="utf-8", errors="replace").stdout
         expectations.append(("usage after a union merge: one window read on one branch and pending on the other "
                              "counts once", plan.get("runs") == 1 and plan.get("measured") == 1
@@ -3837,6 +3970,7 @@ def main(argv=None):
                              status_out[:400]))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             failures.append((name, [], ""))
@@ -3845,13 +3979,13 @@ def main(argv=None):
     with tmpdir() as root:
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
-        claim = lambda owner, *more: subprocess.run([sys.executable, args.gate, "--claim", owner], cwd=root,
+        claim = lambda owner, *more: subprocess.run([sys.executable, args.cli, "--claim", owner], cwd=root,
                                                     env=dict(os.environ, **dict(more)), capture_output=True,
                                                     text=True, encoding="utf-8")
         first, second, again = claim("worker-a"), claim("worker-b"), claim("worker-a")
         taken = claim("worker-b", ("FACTORY_STALE_AFTER", "0"))
         lock_in_git = os.path.isfile(os.path.join(root, ".git", "dca-factory-worker.lock"))
-        subprocess.run([sys.executable, args.gate, "--release", "worker-b"], cwd=root, capture_output=True)
+        subprocess.run([sys.executable, args.cli, "--release", "worker-b"], cwd=root, capture_output=True)
         expectations = [
             ("claim: the first worker takes the checkout, the second is refused and told who holds it",
              first.returncode == 0 and second.returncode == 3 and "held by worker-a" in second.stdout, second.stdout),
@@ -3866,14 +4000,14 @@ def main(argv=None):
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         environment = dict(os.environ, CLAUDE_CODE_SESSION_ID="listening-session")
-        before = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
+        before = subprocess.run([sys.executable, args.cli, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                 encoding="utf-8").stdout
-        subprocess.run([sys.executable, args.gate, "--listening"], cwd=root, env=environment, capture_output=True)
-        after = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
+        subprocess.run([sys.executable, args.cli, "--listening"], cwd=root, env=environment, capture_output=True)
+        after = subprocess.run([sys.executable, args.cli, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                encoding="utf-8").stdout
-        ended = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
+        ended = subprocess.run([sys.executable, args.cli, "--status", "--live"], cwd=root, capture_output=True, text=True,
                                encoding="utf-8", env=dict(os.environ, FACTORY_LISTEN_STALE="60")).stdout
-        brief = subprocess.run([sys.executable, args.gate, "--status", "--brief"], cwd=root, capture_output=True,
+        brief = subprocess.run([sys.executable, args.cli, "--status", "--brief"], cwd=root, capture_output=True,
                                text=True, encoding="utf-8").stdout
         expectations += [
             ("listening: before any look the status says no session has looked",
@@ -3888,7 +4022,7 @@ def main(argv=None):
         data = json.load(open(write_old, encoding="utf-8"))
         data["beat"] = "2026-01-01T00:00:00Z"
         json.dump(data, open(write_old, "w", encoding="utf-8"))
-        old = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, capture_output=True, text=True,
+        old = subprocess.run([sys.executable, args.cli, "--status", "--live"], cwd=root, capture_output=True, text=True,
                              encoding="utf-8").stdout
         expectations.append(("listening: a long silence reads as a loop that has probably ended",
                              "probably ended" in old, old[-400:]))
@@ -3901,7 +4035,7 @@ def main(argv=None):
         expectations.append(("schedule: a stage that started and has not ended is running, and nothing else starts",
                              rows.get("STORY-1", ("",))[0] == "running" and nxt.startswith("none")
                              and "STORY-1 is running" in nxt, f"{rows.get('STORY-1')}, next: {nxt}"))
-        completed = subprocess.run([sys.executable, args.gate, "--schedule"], cwd=root, capture_output=True,
+        completed = subprocess.run([sys.executable, args.cli, "--schedule"], cwd=root, capture_output=True,
                                    text=True, encoding="utf-8", env=dict(os.environ, FACTORY_STALE_AFTER="0"))
         expectations.append(("schedule: a start with no sign of life is taken as interrupted, and the story is "
                              "named again", "possibly interrupted" in completed.stdout
@@ -3909,8 +4043,8 @@ def main(argv=None):
     with tmpdir() as root:
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
-        subprocess.run([sys.executable, args.gate, "--claim", "someone-else"], cwd=root, capture_output=True)
-        out = subprocess.run([sys.executable, args.gate, "--stage-start", "plan", "--story", "STORY-1"], cwd=root,
+        subprocess.run([sys.executable, args.cli, "--claim", "someone-else"], cwd=root, capture_output=True)
+        out = subprocess.run([sys.executable, args.cli, "--stage-start", "plan", "--story", "STORY-1"], cwd=root,
                              env=dict(os.environ, CLAUDE_CODE_SESSION_ID="this-session"), capture_output=True,
                              text=True, encoding="utf-8")
         expectations.append(("claim: a session's stage mark is refused while another worker holds the checkout",
@@ -3918,6 +4052,7 @@ def main(argv=None):
                                  os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv")), out.stdout))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             failures.append((name, [], ""))
@@ -4054,7 +4189,7 @@ def main(argv=None):
             subprocess.run(["git", *command], cwd=root, capture_output=True)
         subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
-        subprocess.run([sys.executable, args.gate, "--stage-start", "build", "--story", "STORY-1"], cwd=root,
+        subprocess.run([sys.executable, args.cli, "--stage-start", "build", "--story", "STORY-1"], cwd=root,
                        capture_output=True, env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
         with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
             handle.write(changed_line(old_test))
@@ -4070,6 +4205,7 @@ def main(argv=None):
                              verdict == "skip", verdict))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             kept_failures.append(name)
@@ -4195,7 +4331,7 @@ def main(argv=None):
                 "input_tokens": 7, "cache_read_input_tokens": 100, "cache_creation_input_tokens": 10,
                 "output_tokens": 5}}}) + "\n" for ago in (1000, 90)))
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
-        subprocess.run([sys.executable, args.gate, "--release", "nobody"], cwd=root, env=env, capture_output=True)
+        subprocess.run([sys.executable, args.cli, "--release", "nobody"], cwd=root, env=env, capture_output=True)
         journal = open(os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv"), encoding="utf-8").read()
         document_line = next((l for l in journal.splitlines() if "\tdocument\t" in l), "")
         judge_line = next((l for l in journal.splitlines() if "\tjudge\t" in l), "")
@@ -4213,14 +4349,14 @@ def main(argv=None):
         write_file(home, f"projects/-any-project/{session}.jsonl", json.dumps({"type": "assistant", "message": {
             "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "./gradlew test --rerun"}}]}}) + "\n")
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
-        subprocess.run([sys.executable, args.gate, "--claim", f"claude-session:{session}"], cwd=root, env=env,
+        subprocess.run([sys.executable, args.cli, "--claim", f"claude-session:{session}"], cwd=root, env=env,
                        capture_output=True)
-        seen = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root, env=env, capture_output=True,
+        seen = subprocess.run([sys.executable, args.cli, "--status", "--live"], cwd=root, env=env, capture_output=True,
                               text=True, encoding="utf-8", errors="replace").stdout
         expectations.append(("status: a running stage shows its session log's last activity and tool call",
                              re.search(r"activity: \d+ s ago — last tool call Bash: ./gradlew test --rerun", seen)
                              is not None, [l for l in seen.splitlines() if l.startswith(("activity", "worker"))]))
-        off = subprocess.run([sys.executable, args.gate, "--status", "--live"], cwd=root,
+        off = subprocess.run([sys.executable, args.cli, "--status", "--live"], cwd=root,
                              env=dict(env, FACTORY_SESSION_USAGE="off"), capture_output=True, text=True,
                              encoding="utf-8", errors="replace").stdout
         expectations.append(("status: with session usage off the log is not read, and that is said",
@@ -4231,7 +4367,7 @@ def main(argv=None):
         backlog_project(root)
         session = "0d0d0d0d-aaaa-bbbb-cccc-565656565656"
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDE_CODE_SESSION_ID=session)
-        gate = lambda *more: subprocess.run([sys.executable, args.gate, *more], cwd=root, env=env,
+        gate = lambda *more: subprocess.run([sys.executable, args.cli, *more], cwd=root, env=env,
                                             capture_output=True, text=True, encoding="utf-8")
         gate("--window-start", "backlog", "--story", "STORY-1")
         rows_during, _nxt, _wait, _ = schedule_of(args.gate, root)
@@ -4259,9 +4395,9 @@ def main(argv=None):
             ("tasks/STORY-1/document.md", DOCUMENT), ("tasks/STORY-1/.delivered", "2026-09-20T10:00:00Z\n"),
             (".agents/factory/decisions/STORY-1-01.md", DECISION.replace(
                 "# Does an archived thing count?", "# " + long_question) + ANSWER)))
-        overview = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
+        overview = subprocess.run([sys.executable, args.cli, "--status"], cwd=root, capture_output=True,
                                   text=True, encoding="utf-8").stdout
-        detail = subprocess.run([sys.executable, args.gate, "--status", "--story", "STORY-1"], cwd=root,
+        detail = subprocess.run([sys.executable, args.cli, "--status", "--story", "STORY-1"], cwd=root,
                                 capture_output=True, text=True, encoding="utf-8").stdout
         row1 = next((l for l in overview.splitlines() if "STORY-1" in l and "delivered" in l), "")
         row2 = next((l for l in overview.splitlines() if "STORY-2" in l and "ready" in l), "")
@@ -4307,6 +4443,10 @@ def main(argv=None):
 
     def gate_run(root, *argv):
         return subprocess.run([sys.executable, args.gate] + list(argv), cwd=root, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace")
+
+    def cli_run(root, *argv):
+        return subprocess.run([sys.executable, args.cli] + list(argv), cwd=root, capture_output=True,
                               text=True, encoding="utf-8", errors="replace")
 
     def answer(root, rid, text):
@@ -4376,15 +4516,15 @@ def main(argv=None):
         accept_fixture(root, "")
         gate_run(root, "--story", "STORY-1", "--stage", "plan")
         gate_run(root, "--story", "STORY-1", "--stage", "document")
-        refused = gate_run(root, "--reopen", "STORY-1")
+        refused = cli_run(root, "--reopen", "STORY-1")
         write_file(root, ".agents/factory/decisions/STORY-1-accept-1.md",
                    "---\nid: STORY-1-accept-1\nstory: STORY-1\nstage: document\nkind: acceptance\n"
                    "asked: 2026-09-25T15:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n")
         answer(root, "STORY-1-accept-1", "correction: eight products")
-        uncited = gate_run(root, "--reopen", "STORY-1")
+        uncited = cli_run(root, "--reopen", "STORY-1")
         with open(story_file(root), "a", encoding="utf-8") as h:
             h.write("- answered: eight products (a-human, STORY-1-accept-1).\n")
-        taken = gate_run(root, "--reopen", "STORY-1")
+        taken = cli_run(root, "--reopen", "STORY-1")
         rows, _n, _w, _ = schedule_of(args.gate, root)
         kept = [f for f in os.listdir(os.path.join(root, "tasks", "STORY-1", ".verify")) if f.startswith("delivered-")]
         expectations.append(("reopen: only with an answered correction the story cites; then the mark moves aside "
@@ -4403,7 +4543,7 @@ def main(argv=None):
         answer(root, "STORY-1-accept-1", "correction: eight products")
         with open(story_file(root), "a", encoding="utf-8") as h:
             h.write("- answered: eight products (a-human, STORY-1-accept-1).\n")
-        held = gate_run(root, "--reopen", "STORY-1")
+        held = cli_run(root, "--reopen", "STORY-1")
         expectations.append(("reopen: refused while another story holds the checkout with unfinished code",
                              held.returncode == 1 and "STORY-2 holds the checkout" in held.stdout and delivered(root),
                              held.stdout.strip()[-200:]))
@@ -4422,7 +4562,7 @@ def main(argv=None):
                    "---\nid: STORY-1-accept-2\nstory: STORY-1\nstage: document\nkind: acceptance\n"
                    "asked: 2026-09-25T16:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n")
         answer(root, "STORY-1-accept-2", "correction: two things")
-        wish = gate_run(root, "--reopen", "STORY-1")
+        wish = cli_run(root, "--reopen", "STORY-1")
         expectations.append(("reopen: after an acceptance, a changed criterion is a new wish, not a reopened story",
                              wish.returncode == 1 and "new wish" in wish.stdout and delivered(root),
                              wish.stdout.strip()[-200:]))
@@ -4501,14 +4641,14 @@ def main(argv=None):
         home = os.path.join(root, "home")
         write_file(home, "projects/p/abc.jsonl", json.dumps({"timestamp": "2026-01-01T00:00:30Z", "type": "assistant",
                    "message": {"id": "m1", "model": "x", "usage": {"input_tokens": 5, "output_tokens": 7}}}) + "\n")
-        subprocess.run([sys.executable, args.gate, "--usage"], cwd=root, capture_output=True, text=True,
+        subprocess.run([sys.executable, args.cli, "--usage"], cwd=root, capture_output=True, text=True,
                        encoding="utf-8", env=dict(os.environ, CLAUDE_CONFIG_DIR=home))
         expectations.append(("usage: `--usage` only reads — the journal is not rewritten",
                              open(journal, encoding="utf-8").read() == before, ""))
     with tmpdir() as root:
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         write_file(root, ".git/dca-factory-worker.lock", "")
-        taken = subprocess.run([sys.executable, args.gate, "--claim", "someone"], cwd=root, capture_output=True,
+        taken = subprocess.run([sys.executable, args.cli, "--claim", "someone"], cwd=root, capture_output=True,
                                text=True, encoding="utf-8")
         expectations.append(("claim: a claim file that cannot be read yet is aged by its file, not taken over on sight",
                              taken.returncode == 3, taken.stdout.strip()))
@@ -4611,7 +4751,7 @@ def main(argv=None):
 
     with tmpdir() as root:
         write_file(root, "tasks/S-1/judge.md", "## Verdict\nverdict: changes-requested\n")
-        started = subprocess.run([sys.executable, args.gate, "--stage-start", "judge", "--story", "S-1"], cwd=root,
+        started = subprocess.run([sys.executable, args.cli, "--stage-start", "judge", "--story", "S-1"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8",
                                  env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
         expectations.append(("judge: in a session, the repeat round's stage mark moves the verdict before it aside",
@@ -4641,7 +4781,7 @@ def main(argv=None):
         write_file(root, "backlog/sample/epic.md", EPIC)
         write_file(root, "backlog/sample/STORY-1.md", STORY)
         write_file(root, ".agents/factory/factory.profile.yaml", PROFILE)
-        brief = subprocess.run([sys.executable, args.gate, "--status", "--brief"], cwd=root,
+        brief = subprocess.run([sys.executable, args.cli, "--status", "--brief"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
         planned = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8").stdout
@@ -4661,13 +4801,13 @@ def main(argv=None):
         # an adopted story: to adopt, then delivered (adopted); a story depending on it waits for the adoption
         backlog_project(root, ("STORY-2", ["STORY-1"]),
                         story=STORY.replace("status: approved", "status: adopted"))
-        first = subprocess.run([sys.executable, args.gate, "--status", "--part", "backlog"], cwd=root,
+        first = subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
         rows, _n, _w, listing = schedule_of(args.gate, root)
         write_file(root, "tasks/STORY-1/judge.md", "verdict: pass\n")
         judged = schedule_of(args.gate, root)[0]
         write_file(root, "tasks/STORY-1/.delivered", "adopted")
-        after = subprocess.run([sys.executable, args.gate, "--status", "--part", "backlog"], cwd=root,
+        after = subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("adopt: an adopted story reads 'to adopt', and a story depending on it waits for the adoption",
                              "to adopt" in first and rows.get("STORY-2", ("", ""))[0] == "blocked", listing))
@@ -4685,7 +4825,7 @@ def main(argv=None):
                                              ("tasks/STORY-1/.verify/journal.tsv",
                                               f"{started}\tstage-start\ttidy\ttool=claude\n")))
         rows, nxt, _w, listing = schedule_of(args.gate, root)
-        shown = subprocess.run([sys.executable, args.gate, "--status"], cwd=root, capture_output=True,
+        shown = subprocess.run([sys.executable, args.cli, "--status"], cwd=root, capture_output=True,
                                text=True, encoding="utf-8").stdout
         expectations.append(("schedule: a delivered story with an open stage in its journal is delivered, not running",
                              rows.get("STORY-1", ("", ""))[0] == "delivered" and "Nothing is running." in shown
@@ -4694,7 +4834,7 @@ def main(argv=None):
         # `--start`: where `run --story` begins without --from — the story's state, never plan by default
         backlog_project(root, ("STORY-2", ["STORY-1"]), extra_sources=(
             ("tasks/STORY-1/plan.md", "# Plan\n"), ("tasks/STORY-1/tests.md", TESTS)))
-        start_of = lambda sid: subprocess.run([sys.executable, args.gate, "--story", sid, "--start"], cwd=root,
+        start_of = lambda sid: subprocess.run([sys.executable, args.cli, "--story", sid, "--start"], cwd=root,
                                               capture_output=True, text=True, encoding="utf-8")
         one, two, unknown = start_of("STORY-1"), start_of("STORY-2"), start_of("STORY-9")
         expectations.append(("start: a story with plan and tests written starts at build",
@@ -4720,7 +4860,7 @@ def main(argv=None):
             backlog_project(root, extra_sources=tuple((f"tasks/STORY-1/{n}", files[n]) for n in older + newer))
             for number, name in enumerate(older):
                 os.utime(os.path.join(root, "tasks", "STORY-1", name), (1000 + number, 1000 + number))
-            start = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--start"], cwd=root,
+            start = subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
                                    capture_output=True, text=True, encoding="utf-8").stdout
             expectations.append((f"start: {label}", f"start: {want}" in start, start))
     with tmpdir() as root:
@@ -4782,7 +4922,7 @@ def main(argv=None):
     with tmpdir() as root:
         backlog_project(root, epic=EPIC + "\n## Journey\n\n- open: which flow must never break\n",
                         extra_sources=(("tasks/STORY-1/document.md", "# Document\n"), ("tasks/STORY-1/.delivered", "x\n")))
-        view = subprocess.run([sys.executable, args.gate, "--status", "--part", "backlog"], cwd=root,
+        view = subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog"], cwd=root,
                               capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("status: an epic delivered with its journey still open is named, with the skill",
                              "journey   sample: every story is delivered and its journey is still open — /factory-backlog"
@@ -4804,14 +4944,14 @@ def main(argv=None):
                              f"exit {shown.returncode}; {shown.stdout[:200]} {shown.stderr[:200]}"))
     with tmpdir() as root:
         build_project(root)
-        brief = subprocess.run([sys.executable, args.gate, "--status", "--brief"], cwd=root,
+        brief = subprocess.run([sys.executable, args.cli, "--status", "--brief"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("status: the brief names a missing project description with /factory-setup",
                              "no project description" in brief and "/factory-setup" in brief, brief.strip()))
         write_file(root, "project/product.md", PRODUCT)
         write_file(root, "project/tech.md", TECH)
         shutil.rmtree(os.path.join(root, "project", "backlog"))
-        brief = subprocess.run([sys.executable, args.gate, "--status", "--brief"], cwd=root,
+        brief = subprocess.run([sys.executable, args.cli, "--status", "--brief"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("status: the brief names an empty backlog with /factory-backlog",
                              "backlog is empty" in brief and "/factory-backlog" in brief, brief.strip()))
@@ -4849,17 +4989,28 @@ def main(argv=None):
                                                           "designed map", "/factory-setup")), ""))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
         if not ok:
             print(f"          {detail}")
             schedule_failures.append(name)
     failures += [(name, [], "") for name in schedule_failures]
 
+    return run_runner_groups(args, failures, "all" if args.group == "all" else "checks")
+
+
+def run_runner_groups(args, failures, group):
     runner_failures = []
-    if os.path.isfile(args.runner):
-        print()
-        runner_failures = verify_runner(args.runner, args.verbose)
-        print()
-        runner_failures += verify_setup(args.runner, args.verbose)
+    if group == "checks":
+        pass
+    elif os.path.isfile(args.runner):
+        if group in ("all", "runner"):
+            print()
+            CURRENT_GROUP[0] = "runner"
+            runner_failures = verify_runner(args.runner, args.verbose)
+        if group in ("all", "setup"):
+            print()
+            CURRENT_GROUP[0] = "setup"
+            runner_failures += verify_setup(args.runner, args.verbose)
     else:
         print(f"verify: no runner at {args.runner} — its cases were skipped")
 

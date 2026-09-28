@@ -62,9 +62,10 @@ plainly that this part is a reading and not a measurement.
 ```bash
 bash .agents/factory/factory.sh verify --fixtures   # the newest pipeline's suite on this machine
 python3 <this skill>/scripts/verify.py            # the same, this skill's; add -v for the gate output of a failing case
+python3 <this skill>/scripts/verify.py --group setup --junit report.xml   # one group (checks, runner, setup); a JUnit report
 ```
 
-It builds a throwaway project per case and calls the project's own `story-gate.py` and
+It builds a throwaway project per case and calls the project's own `story-gate.py`, the `factory-cli.py` beside it and
 `factory.sh`, so it checks the code a run would actually use, not a description of it. It never
 starts an agent tool: every runner case uses a stand-in or a dry run. Three groups:
 

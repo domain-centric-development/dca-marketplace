@@ -70,6 +70,7 @@ when it is a checkout (a clone of the marketplace, or `FACTORY_PLUGIN_DIR`: an e
 ```
 .agents/factory/factory.profile.yaml     your build and test commands, one per test source set
 .agents/factory/story-gate.py            the gate, callable from a terminal and from CI
+.agents/factory/factory-cli.py           what shows and coordinates — status, help, usage, the checkout — beside it
 .githooks/pre-commit                     the change check on what every commit contains (core.hooksPath)
 .claude/skills/.dca-factory-skills       what the install placed there, in which mode, from which kind of source
 ```
@@ -170,7 +171,9 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh check [--staged] [--checks "<c> …"]` · `--parity <config>` | *(hook, CI)* | the profile's checks outside a story, as the commit hook runs them · several implementations against one scenario contract |
 
 All of them run as `bash .agents/factory/factory.sh …` from the project root. The gate stays a
-Python script underneath: the stage skills and the session-start hook call it directly.
+Python script underneath; what shows and coordinates is `factory-cli.py` beside it, and the stage
+skills, the session-start hook and the runner call the one that answers — the gate for a check, the
+cli for a view, a mark or a claim.
 
 ## How to update a project
 
@@ -306,7 +309,7 @@ starts fresh and reads the skill, the story and its predecessor's file again.
 - In a session (`/factory-run` without the runner) the orchestrator marks each stage with
   `--stage-start`/`--stage-end`; the numbers come from the session's own log, without a price, so
   `cost` reads `—`.
-- An old session log is read whole: `python3 .agents/factory/story-gate.py --usage-from claude-session
+- An old session log is read whole: `python3 .agents/factory/factory-cli.py --usage-from claude-session
   <log>` or `codex-session <log>`
   (`~/.claude/projects/<project>/<session>.jsonl`, `~/.codex/sessions/<date>/rollout-*.jsonl`).
 
@@ -377,7 +380,14 @@ what must be true before the next one starts.
 ## The gate
 
 `skills/factory-run/scripts/story-gate.py` — one dependency-free Python script, copied into the
-project as `.agents/factory/story-gate.py` so every tool and every CI run execute the same check:
+project as `.agents/factory/story-gate.py` so every tool and every CI run execute the same check. It
+*decides*: the readers, the backlog, the checks per stage, the decision records, `--change`, `--parity`
+and the file contract. Everything that *shows or coordinates* — status, help, usage and cost, the
+session logs, the checkout claim, the schedule, `--resolve` — is `factory-cli.py` beside it, which
+imports the gate and reads every project file through its readers; the runner asks the cli for a
+profile value, a verdict, a needs-human section or an open record instead of parsing the file
+itself, so one file has one reader. A flag that moved is handed over by the gate, so an older hook or
+instruction file still gets its answer:
 
 ```
 python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy|document>
@@ -513,13 +523,13 @@ one asks for it, never in the abstract.
 ## Versions, and what a version answers
 
 The gate is **copied** into a project, so two questions come apart that a single version number
-would run together. Both are stated in `story-gate.py` and readable with
-`python3 .agents/factory/story-gate.py --version`:
+would run together. Both are stated in `story-gate.py` (the cli beside it carries the same `VERSION`,
+and the runner refuses a pair that differs) and readable with `python3 .agents/factory/story-gate.py --version`:
 
 | | What it answers | Who checks it, and how it ends |
 |---|---|---|
 | **file contract** (`CONTRACT`, and `contract:` in the stack profile) | can this gate read this project's files at all | the **gate**, on every run. A profile written for a higher contract is **refused**: this script would ignore whatever the newer contract added, and a key ignored in silence is a check that has quietly gone |
-| **script version** (`VERSION`) | which release governs this project | the **runner**, comparing `.agents/factory/gate.installed` — three machine-neutral lines written at install time and **committed with the project** — against the pipeline it finds beside it. A project on an older release of the same contract is valid and says so: an update to run, never a reason to refuse a story |
+| **script version** (`VERSION`) | which release governs this project | the **runner**, comparing `.agents/factory/gate.installed` — four machine-neutral lines (plugin, version, contract, the files of the release) written at install time and **committed with the project** — against the pipeline it finds beside it. A project on an older release of the same contract is valid and says so: an update to run, never a reason to refuse a story |
 
 The current file contract is 8: the project description and backlog under `project/`, and the
 `acceptance:` key with its record. `factory.sh update` says when a profile's `contract:` line is to
