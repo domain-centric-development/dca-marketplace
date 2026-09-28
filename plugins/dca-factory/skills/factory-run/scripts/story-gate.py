@@ -58,6 +58,7 @@ A command the profile does not declare is skipped and named, never failed.
 """
 
 import argparse
+import calendar
 import contextlib
 import json
 import os
@@ -136,7 +137,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.43.0"
+VERSION = "0.44.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -444,6 +445,17 @@ def scenario_titles(body):
     return titles
 
 
+def carries_title(path, method, title):
+    """The test is reported under the title: its display name where the declaration gives one, else a string
+    literal that is the title — never the words somewhere in a comment or another test."""
+    display = display_name_of(path, method)
+    if display is not None:
+        return display == title
+    text = read_text(path) if os.path.isfile(path) else ""
+    return any(unescape_literal(m.group(2)) == title
+               for m in re.finditer(r"""(["'`])((?:\\.|(?!\1).)*)\1""", text))
+
+
 def check_titles(result, profile, cwd, front, body, mapping, located):
     """Contract 9: an end-user test carries its scenario's title verbatim, as its display name."""
     if story_kind(front) == "adopt" or contract_of(profile) < 9 or not mapping or not profile.get("e2eTest"):
@@ -455,7 +467,7 @@ def check_titles(result, profile, cwd, front, body, mapping, located):
             path = located.get(selector)
             if not path or command_for(profile, path)[0] not in ("e2eTest", "test.journey") or key not in titles:
                 continue
-            if titles[key] not in unescape_literal(read_text(os.path.join(cwd, path))):   # `\"` in the literal is a quote of the title
+            if not carries_title(os.path.join(cwd, path), selector.split("#", 1)[-1], titles[key]):
                 wrong.append(f"{selector} ({key}) — \"{titles[key]}\"")
     if wrong:
         result.fail("test-titles", "end-user tests without their scenario's title as display name — write it "
@@ -721,6 +733,35 @@ def find_first(cwd, candidates):
     return None
 
 
+def normal_name(name):
+    name = name.strip().strip("`*_\"' ").lower()
+    return re.sub(r"\s+(bounded\s+)?context$", "", name).strip()
+
+
+def map_names(text):
+    """The names a context map gives: whole table cells, headings, bold names, list items and the nodes of a
+    Mermaid diagram. A context is on the map when it is one of them — not when its name is part of another's
+    (`order` inside `order-fulfilment`) or of a sentence."""
+    names, in_diagram = set(), False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_diagram = stripped.lower().startswith("```mermaid") and not in_diagram
+            continue
+        if in_diagram:
+            names |= {normal_name(t) for t in re.findall(r"[\w-]+", stripped)}
+            names |= {normal_name(t) for t in re.findall(r"[\[(\"]([^\])\"]+)[\])\"]", stripped)}
+            continue
+        if stripped.startswith("|"):
+            names |= {normal_name(cell) for cell in stripped.strip("|").split("|")}
+        elif stripped.startswith("#"):
+            names.add(normal_name(stripped.lstrip("#")))
+        elif re.match(r"[-*+]\s", stripped):
+            names.add(normal_name(re.split(r"\s[—–:-]\s|:", stripped[2:], maxsplit=1)[0]))
+        names |= {normal_name(m) for m in re.findall(r"\*\*([^*]+)\*\*", stripped)}
+    return names - {""}
+
+
 def check_context_map(result, cwd, profile, context):
     """A story names the context it changes; that context must be on the map. The designed map
     (`domain:`) is read first, so a story for a context that is designed but not built yet passes;
@@ -738,8 +779,7 @@ def check_context_map(result, cwd, profile, context):
     if not path:
         result.skip("context-map", "the project keeps no context map")
         return
-    text = read_text(os.path.join(cwd, path)).lower()
-    if context.lower() in text:
+    if normal_name(context) in map_names(read_text(os.path.join(cwd, path))):
         result.ok("context-map", f"context {context!r} is on {path}")
     else:
         result.fail(
@@ -1063,6 +1103,22 @@ def check_mapping(result, tasks, story_id, criteria):
     return mapping
 
 
+def in_package(paths, cls):
+    """The files that hold `cls` itself: where the selector names a package or namespace, a file of that
+    simple name declaring another one is a different class — `a.WidgetTest` is not `b.WidgetTest`."""
+    if "." not in cls:
+        return paths
+    wanted = cls.rsplit(".", 1)[0]
+    declared = {}
+    for path in paths:
+        match = re.search(r"^\s*(?:package|namespace)\s+([\w.]+)", read_text(path) if os.path.isfile(path) else "", re.M)
+        declared[path] = match.group(1) if match else None
+    if not any(declared.values()):
+        return paths                          # nothing declares a package: a module path, or a stack without one
+    return [path for path in paths if declared[path] == wanted
+            or (declared[path] is None and wanted.replace(".", "/") in path.replace(os.sep, "/"))]
+
+
 def check_exists(result, cwd, mapping):
     """A selector must point at a test that is actually there. Without this check a
     missing test looks exactly like a red one, and the run would certify nothing.
@@ -1100,7 +1156,7 @@ def check_exists(result, cwd, mapping):
         for selector in selectors:
             cls, method = SELECTOR.match(selector).groups()
             simple = cls.rsplit(".", 1)[-1]
-            candidates = sources.get(simple, [])
+            candidates = in_package(sources.get(simple, []), cls)
             found = [path for path in candidates if contains(path, method)]
             shape = "a file named after the class"
             if not found and not candidates:
@@ -1639,6 +1695,10 @@ def outcome_for(ran, cls, method, display=None):
     simple = cls.rsplit(".", 1)[-1]
 
     def same_class(report_class):
+        # both qualified, and the report's class is another package's class of the same simple name
+        if "." in cls and "." in (report_class or "") and report_class.rsplit(".", 1)[-1] == simple \
+                and report_class.rsplit(".", 1)[0] != cls.rsplit(".", 1)[0]:
+            return False
         return (not report_class or report_class == cls
                 or report_class.rsplit(".", 1)[-1] == simple
                 or report_class.endswith("." + simple)
@@ -2021,6 +2081,15 @@ def applying_stage(front, answer):
     return named if named in STAGE_ORDER else str(front.get("stage", "")).strip()
 
 
+def resume_stage(front, answer):
+    """Where the story resumes for an answer: the earlier of the stage that asked and the one the answer
+    names. A plan's question answered `applies: test` still re-plans — the plan lists the tests that change —
+    and the test stage after it takes the changed expectation."""
+    asked, named = str(front.get("stage", "")).strip(), applying_stage(front, answer)
+    order = lambda st: STAGE_ORDER.index(st) if st in STAGE_ORDER else len(STAGE_ORDER)
+    return min((asked, named), key=order) if asked in STAGE_ORDER else named
+
+
 def answered_decisions(cwd, story_id, stage):
     """Ids of this story's answered or applied records the given stage applies."""
     try:
@@ -2197,7 +2266,7 @@ def check_decisions(result, tasks, story_id, cwd, gating=None):
         if is_acceptance(front):
             continue
         rid = str(front["id"]).strip()
-        stage = str(front.get("stage", "")).strip() if state in ("open", "draft") else applying_stage(front, answer)
+        stage = str(front.get("stage", "")).strip() if state in ("open", "draft") else resume_stage(front, answer)
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
         rel = os.path.relpath(path, cwd).replace(os.sep, "/")     # one spelling on every platform
         if state == "open":
@@ -2428,6 +2497,55 @@ def switched_off(before, now):
     return count(now) > count(before)
 
 
+def stage_windows(tasks, story_id):
+    """(start, end) of every stage window in the story's journal, as epoch seconds; an open one ends now."""
+    journal = os.path.join(tasks, story_id, ".verify", "journal.tsv")
+    windows, open_ = [], {}
+    if not os.path.isfile(journal):
+        return windows
+    stamp = lambda text: calendar.timegm(time.strptime(text[:19], "%Y-%m-%dT%H:%M:%S"))
+    for line in read_text(journal).splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3 or parts[1] not in ("stage-start", "stage-end"):
+            continue
+        with contextlib.suppress(ValueError):
+            if parts[1] == "stage-start":
+                open_[parts[2]] = stamp(parts[0])
+            elif parts[2] in open_:
+                windows.append((open_.pop(parts[2]), stamp(parts[0])))
+    windows += [(start, time.time()) for start in open_.values()]
+    return windows
+
+
+def committed_by_a_stage(cwd, tasks, story_id, rel):
+    """Whether a commit that changed `rel` was made inside one of the story's stage windows. A stage commits
+    nothing; a commit in its window is the stage's change, and the story is held to it like any other."""
+    windows = stage_windows(tasks, story_id)
+    if not windows:
+        return False
+    code, out = git(cwd, "log", "--format=%ct", "-n", "50", "--", rel)
+    if code:
+        return False
+    return any(start - 1 <= int(t) <= end + 1 for t in out.split() if t.isdigit() for start, end in windows)
+
+
+def decision_covers(cwd, story_id, ids):
+    """A test `rel` a decision among `ids` may change: asked by the test or build stage, naming the file, or
+    listed by the plan that ran again for it."""
+    try:
+        records = [(front, body) for _p, front, body, _s, _a in read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
+                   if str(front["id"]).strip() in ids]
+    except GateError:
+        records = []
+
+    def covers(rel, planned):
+        if rel in planned:
+            return True
+        return any(str(front.get("stage", "")).strip() in ("test", "build") or os.path.basename(rel) in body
+                   for front, body in records)
+    return covers
+
+
 def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
     path = os.path.join(tasks, story_id, TESTS_BASELINE)
     if not os.path.isfile(path):
@@ -2447,7 +2565,7 @@ def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
         # this story. The story is held to its own changes — against what is committed now.
         head_code, head_blob = git(cwd, "rev-parse", f"HEAD:{rel}")
         if not head_code and head_blob.strip() and head_blob.strip() != blob \
-                and not git(cwd, "cat-file", "-e", blob)[0]:
+                and not git(cwd, "cat-file", "-e", blob)[0] and not committed_by_a_stage(cwd, tasks, story_id, rel):
             blob = head_blob.strip()
         code, before = git(cwd, "cat-file", "blob", blob)
         if code:
@@ -2469,8 +2587,12 @@ def check_existing_tests(result, cwd, tasks, story_id, story_body=""):
     if not changed:
         result.ok("tests-kept", "no test that existed before this story changed what it expects")
         return
+    # A decision changes the tests it is about, not any test: one the test or the build stage asked about a
+    # test, one whose record names the file, or — for a plan's question — the tests the re-plan lists.
     decided = answered_decisions(cwd, story_id, "test")
-    if decided:
+    planned = changed_tests_in_plan(tasks, story_id)
+    covering = decision_covers(cwd, story_id, decided)
+    if decided and all(covering(e.replace(" (removed)", "").replace(" (switched off)", ""), planned) for e in changed):
         result.ok("tests-kept", f"{', '.join(changed)} changed on decision {', '.join(decided)}")
         return
     # The story may say itself that behaviour changes (`## Changed expectations`); the plan names the
@@ -5081,7 +5203,7 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
         return "waiting", None, "decision " + ", ".join(waiting)
     answered, resolved = {}, {}
     for _path, front_, _body, state, answer_ in records:
-        rid, asked_by = str(front_["id"]).strip(), applying_stage(front_, answer_)
+        rid, asked_by = str(front_["id"]).strip(), resume_stage(front_, answer_)
         if is_acceptance(front_):
             resolved[rid] = asked_by
             continue                             # answered through the document gate, not a stage

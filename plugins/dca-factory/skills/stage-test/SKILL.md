@@ -28,6 +28,10 @@ files written. You write **no** production behaviour.
    `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
    `story:`, `stage: test`, `asked:` (UTC) and the sections `## Question`, `## Options`,
    `## Recommendation` — never an answer (full shape: `factory-run/templates/decision.md.tmpl`).
+   When you run again on a story whose record is answered — asked here, or answered `applies: test`
+   — read the answer, apply it, and cite the id in your file where it landed (`Decision <id>
+   answered <option>: …`): the gate stamps the record applied only then, and refuses a file that
+   does not cite it.
    Where the profile names a browser runner (`browser:` other than `none`), an end-user test of a page drives the browser: use
    the end-user testing craft (the `e2e-testing` skill, or the profile's `carrier.test`) — the
    application started by the test, the fake clock for anything that counts or expires, a stand-in for

@@ -99,7 +99,8 @@ recorded as changed, and the next stages read these files first)
   `id: <story>-<nn>`, `story:`, `stage: build`, `asked:` (UTC) and `## Question`, `## Options`,
   `## Recommendation`) that names the test, the line and why it cannot hold, and stop. Once a human
   has answered — and repaired the test where the answer says so — the build runs again and cites
-  the id.
+  the id in `build.md` where it landed (`Decision <id> answered <option>: …`); the gate refuses a
+  build file that does not cite it.
 - Do not write a criterion key into code, documentation or a comment.
 - Do not leave commented-out code, a `TODO` for the criterion you were asked to deliver, or a
   disabled test behind.

@@ -58,7 +58,7 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    and why the old answer stays as history. A draft (an `## Answer` without `by:` or `at:`) may be
    completed with the missing lines once the human confirms it is theirs.
 8. **Say what happens next, and do not do it.** After writing: name the stage that applies the answer
-   (`applies:`, else the stage that asked) and how the
+   (the earlier of the stage that asked and `applies:`) and how the
    story continues — a worker that is running (a listening session, or the person's runner) picks
    it up by itself; otherwise `/factory-run <story>` resumes it at that stage. Answering a question is not taking over the story; the worker that asked
    applies the answer, and the gate stamps the record applied when it has. If the human wants to

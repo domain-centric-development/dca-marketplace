@@ -32,6 +32,10 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
    `story:`, `stage: document`, `asked:` (UTC) and the sections `## Question`, `## Options`,
    `## Recommendation` (full shape: `factory-run/templates/decision.md.tmpl`).
+   When you run again on a story whose record is answered — asked here, or answered `applies:
+   document` — read the answer, apply it, and cite the id in your file where it landed (`Decision
+   <id> answered <option>: …`): the gate stamps the record applied only then, and refuses a file
+   that does not cite it.
 3. Update the documents the project keeps for readers, and only where the story made them wrong:
    the package or namespace layout when it changed, a described flow that now works differently, a
    list of contexts or capabilities that is now incomplete. Where the project declares its

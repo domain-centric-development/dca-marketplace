@@ -832,12 +832,20 @@ install_project() {                         # install_project <tool> <skill fold
       echo "factory: skills → $target (linked to $from — a skill added there appears at once)"
     else
       mkdir -p "$target"
+      local own_kept=0
       for skill in "$source_abs"/*; do
         [ -d "$skill" ] || continue
-        rm -rf "$target/$(basename "$skill")"
+        # a link of ours is replaced; a folder or a link of the project's own with that name is its skill
+        if { [ -e "$target/$(basename "$skill")" ] || [ -L "$target/$(basename "$skill")" ]; } \
+           && ! { [ -L "$target/$(basename "$skill")" ] && ours "$(readlink "$target/$(basename "$skill")")" "$source_abs" "$method_dirs"; }; then
+          echo "factory: kept the project's own $target/$(basename "$skill") — the pipeline's $(basename "$skill") was not linked" >&2
+          own_kept=$((own_kept + 1))
+          continue
+        fi
+        rm -f "$target/$(basename "$skill")"
         ln -s "$skill" "$target/$(basename "$skill")"
       done
-      echo "factory: skills → $target (per skill: the directory holds skills of its own)" >&2
+      echo "factory: skills → $target (per skill: the directory holds skills of its own$([ "$own_kept" -gt 0 ] && echo "; $own_kept kept"))" >&2
       echo "factory:   'factory.sh update' after a skill is added to the source" >&2
     fi
   done
@@ -1446,7 +1454,7 @@ stopped_for_human() {                       # stopped_for_human <artefact> <stag
       applies=$(sed -n 's/^stage:[[:space:]]*//p' "$DECISIONS/$id.md" | head -1)
       echo "factory:   decision $id → $DECISIONS/$id.md — answer it there under '## Answer'" >&2
       echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story — it resumes at" \
-           "${applies:-$stage}, or where the answer's applies: says" >&2
+           "${applies:-$stage}, or earlier where the answer's applies: names an earlier stage" >&2
     else
       echo "factory:   decision $id is named but $DECISIONS/$id.md does not exist." >&2
     fi
@@ -2113,6 +2121,17 @@ case "$command" in
       # Idempotent: an installed pipeline is `update`'s to replace. Only a tool named explicitly that
       # has no skills here yet is missing, and that is what setup adds.
       if [ -n "$tool" ] && [ -n "$(skill_dir_of "$tool")" ] && [ -z "$(skills_mode "$(skill_dir_of "$tool")")" ]; then
+        # Adding a tool installs the gate, runner and hook as well: from another version that is an update
+        # nobody asked for, so it is refused and named.
+        local_src=${source_dir:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
+        [ -f "$local_src/factory-run/scripts/story-gate.py" ] || local_src=$(plugin_skills) || local_src=""
+        local_have=$(gate_field "$GATE" VERSION) local_new=""
+        [ -n "$local_src" ] && local_new=$(gate_field "$local_src/factory-run/scripts/story-gate.py" VERSION)
+        if [ -n "$local_new" ] && [ "$local_new" != "$local_have" ]; then
+          echo "factory: adding $tool would also replace the installed pipeline $local_have with $local_new —" >&2
+          echo "factory:   update first ('factory.sh update', or /factory-update), then add the tool; nothing was changed" >&2
+          exit 2
+        fi
         install_project "$tool" "$source_dir" "$copy_mode"
         exit $?
       fi
@@ -2154,6 +2173,11 @@ case "$command" in
         fi
         echo "factory: story $story starts at $from${local_detail:+ — $local_detail}"
       else
+        case " ${STAGES[*]} adopt " in
+          *" $from "*) ;;
+          *) echo "factory: --from $from names no stage (${STAGES[*]} adopt) — nothing ran, the rounds are as they were" >&2
+             exit 2 ;;
+        esac
         [ -n "$dry" ] || reset_rounds "$story"
       fi
       GATE_FIRST=1

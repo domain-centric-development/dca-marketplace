@@ -1063,6 +1063,15 @@ def verify_runner(runner, verbose=False):
                                   env={"FACTORY_TOOL_CMD": "false"})
         check("runner: a story whose dependency is not delivered does not run without --from, and names --from",
               code == 1 and "blocked" in output and "--from" in output and "── " not in output, output[-300:])
+    # 1d3'. a --from that names no stage runs nothing and keeps the count
+    with tmpdir() as root:
+        gated(build_project(root, rounds=2))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "Build", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": "echo INVOKED"})
+        rounds = open(os.path.join(root, "tasks", "STORY-1", ".rounds"), encoding="utf-8").read().strip() \
+            if os.path.isfile(os.path.join(root, "tasks", "STORY-1", ".rounds")) else "gone"
+        check("runner: an unknown --from stage is refused (exit 2), invokes nothing and keeps the rounds",
+              code == 2 and "INVOKED" not in output and rounds == "2", f"exit {code}; rounds {rounds}")
     # 1d4. three rounds stop a story; a person's --from starts a new count, keeps the old one, and the gate
     #      checks the existing file before the stage is invoked
     with tmpdir() as root:
@@ -2437,6 +2446,30 @@ def verify_setup(runner, verbose=False):
             check("renames: a link into a folder that no longer exists is pruned and the skill linked afresh",
                   os.path.isfile(os.path.join(link, "SKILL.md")) and "no longer exists" in output,
                   os.readlink(link) if os.path.islink(link) else "no link")
+    with tmpdir() as root:
+        # adding a tool to an installed project from another pipeline version is an update nobody asked for
+        build_project(root)
+        run_setup(runner, root, "--tool", "none", "--from", source)
+        gate_copy = os.path.join(root, ".agents", "factory", "story-gate.py")
+        text = open(gate_copy, encoding="utf-8").read()
+        older = re.sub(r'^VERSION = "[^"]+"', 'VERSION = "0.0.1"', text, count=1, flags=re.M)
+        with open(gate_copy, "w", encoding="utf-8") as handle:
+            handle.write(older)
+        code, output = run_setup(runner, root, "--tool", "codex", "--from", source)
+        check("setup: --tool for a new tool refuses to replace an installed pipeline of another version",
+              code == 2 and "update first" in output and open(gate_copy, encoding="utf-8").read() == older
+              and not os.path.exists(os.path.join(root, ".codex", "skills")), f"exit {code}; {output.strip()[-200:]}")
+    if SYMLINKS:
+        with tmpdir() as root:
+            # a folder of the project's own that carries a pipeline skill's name, beside skills of its own
+            build_project(root)
+            write_file(root, ".claude/skills/stage-plan/SKILL.md", "---\nname: stage-plan\ndescription: ours\n---\n")
+            write_file(root, ".claude/skills/our-skill/SKILL.md", "---\nname: our-skill\ndescription: ours\n---\n")
+            code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
+            own = os.path.join(root, ".claude", "skills", "stage-plan")
+            check("setup: a project's own skill folder with a pipeline skill's name is kept and named",
+                  os.path.isdir(own) and not os.path.islink(own) and "ours" in open(os.path.join(own, "SKILL.md")).read()
+                  and "kept the project's own .claude/skills/stage-plan" in output, output.strip()[-300:])
     if SYMLINKS:
         # an update from a newer version in the plugin cache: the links into the older one are the install's own
         for tool, extra in (("codex", ""), ("claude", "carrier.build: e2e-testing\n")):
@@ -2518,6 +2551,9 @@ def main(argv=None):
         (Case("plan: a context that is not on the map is refused", "plan", 1,
               must_fail=("context-map",)),
          dict(context_map="# Context map\n\n| Context |\n|---|\n| Something else |\n")),
+        (Case("plan: a context whose name is only part of another's or of a sentence is not on the map", "plan", 1,
+              must_fail=("context-map",)),
+         dict(context_map="# Context map\n\nWidgets are handled elsewhere.\n\n| Context |\n|---|\n| Widgets Admin |\n")),
         (Case("plan: no context map at all is skipped and named", "plan", 0,
               must_skip=("context-map",)),
          dict(context_map=None)),
@@ -2633,6 +2669,17 @@ def main(argv=None):
          dict(profile=PROFILE.replace("test.pages:", "e2eTest:"), extra_sources=(
              ("tasks/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n- shows-the-thing: The reader sees the "
                                        "thing. → level: browser-only (a script draws it after load)\n"),))),
+        (Case("test: a title only in a comment is not the end-user test's display name", "test", 1,
+              must_fail=("test-titles",)),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+              story=STORY.replace(" (happy path):", ":").replace("- shows-the-thing:", "- shows-the-thing (happy path):"),
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                              "class WidgetPageTest {\n  // Shows the thing is covered elsewhere\n  void showsTheThing() {}\n}\n"),))),
+        (Case("test: a test of the same simple name in another package does not stand in for the mapped one",
+              "test", 1, must_fail=("tests-exist",)),
+         dict(extra_sources=(("src/test/java/com/example/WidgetUnitTest.java", "class WidgetUnitTest { }\n"),
+                             ("src/test/java/com/other/WidgetUnitTest.java",
+                              "package com.other;\nclass WidgetUnitTest { void showsNothingWhenEmpty() {} }\n")))),
         (Case("test: the happy path's end-user test passes the level check", "test", 0, must_pass=("levels",)),
          dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
               story=STORY.replace(" (happy path):", ":").replace("- shows-the-thing:", "- shows-the-thing (happy path):"))),
@@ -3858,7 +3905,11 @@ def main(argv=None):
              lambda t: t.replace("}\n}", "}\n  /** One thing. */\n  void showsOne() { assert list.size() == 1; }\n}"),
              False, "pass"),
             ("the same changed assertion passes on an answered decision of the test stage",
-             lambda t: t.replace("isEmpty()", "size() == 0 || true"), True, "pass")):
+             lambda t: t.replace("isEmpty()", "size() == 0 || true"), True, "pass"),
+            ("a plan's question answered `applies: test` changes no test the plan does not list",
+             lambda t: t.replace("isEmpty()", "size() == 0 || true"),
+             CONFLICT.replace("stage: test", "stage: plan") + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n"),
+             "fail")):
         with tmpdir() as root:
             build_project(root, extra_sources=((unit, old_test),))
             for command in (["init", "-q"], ["add", "-A"],
@@ -3876,7 +3927,7 @@ def main(argv=None):
                 os.makedirs(os.path.join(root, ".agents", "factory", "decisions"), exist_ok=True)
                 with open(os.path.join(root, ".agents", "factory", "decisions", "STORY-1-01.md"), "w",
                           encoding="utf-8") as handle:
-                    handle.write(CONFLICT + ANSWER)
+                    handle.write(CONFLICT + ANSWER if decided is True else decided)
                 with open(os.path.join(root, "tasks", "STORY-1", "tests.md"), "w", encoding="utf-8") as handle:
                     handle.write(TESTS_ON_DECISION)
             verdict, output = kept_verdict(root)
@@ -3914,6 +3965,23 @@ def main(argv=None):
         verdict, output = kept_verdict(root)
         expectations.append(("tests-kept: a test committed since the baseline changed outside the story and is not its",
                              verdict == "pass", "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    with tmpdir() as root:
+        # the same commit made inside a stage's window is the stage's: held to the baseline
+        build_project(root, extra_sources=((unit, old_test),))
+        for command in (["init", "-q"], ["add", "-A"],
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+        subprocess.run([sys.executable, args.gate, "--stage-start", "build", "--story", "STORY-1"], cwd=root,
+                       capture_output=True, env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
+        with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
+            handle.write(changed_line(old_test))
+        for command in (["add", unit], ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "by the stage"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        verdict, output = kept_verdict(root)
+        expectations.append(("tests-kept: a test a stage changed and committed inside its window is still refused",
+                             verdict == "fail", "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
     with tmpdir() as root:
         build_project(root)
         verdict, output = kept_verdict(root)
@@ -4610,6 +4678,15 @@ def main(argv=None):
         rows = schedule_of(args.gate, root)[0]
         expectations.append(("decisions: an answer that says `applies: test` resumes the story at the test stage",
                              rows.get("STORY-1", ("", ""))[1] == "test", rows))
+    with tmpdir() as root:
+        # the plan asked, the answer changes a test: the plan runs again first and lists the tests that change
+        backlog_project(root, extra_sources=(
+            ("tasks/STORY-1/plan.md", PLAN_ASKING),
+            (".agents/factory/decisions/STORY-1-01.md", CONFLICT.replace("stage: test", "stage: plan")
+             + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n"))))
+        rows = schedule_of(args.gate, root)[0]
+        expectations.append(("decisions: a plan's question answered `applies: test` re-plans before the test stage",
+                             rows.get("STORY-1", ("", ""))[1] == "plan", rows))
     with tmpdir() as root:
         # a journey: after its test it goes to the judge, and an epic delivered with an open journey is named
         journey = (story("JOURNEY-1", ("STORY-1",)).replace("status: approved\n", "status: approved\nkind: journey\n")
