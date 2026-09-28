@@ -2275,8 +2275,11 @@ def unclaimed_changes(cwd, runs, stories):
             return []
     snapshot = tree_snapshot(cwd) or {}
     fixed = (PROFILE_FILE, "AGENTS.md", "CLAUDE.md", ".gitignore", ".gitattributes")
-    return sorted(path for path in snapshot
-                  if not run_owned(path, runs) and not path.startswith(PEOPLE_OWNED) and path not in fixed)
+    # A file that is gone is no code to build on — and a move (the migration's, a person's) reads as a
+    # deletion at its origin and an addition where it now is, which the places above already judge.
+    return sorted(path for path, digest in snapshot.items()
+                  if digest != DELETED and not run_owned(path, runs) and not path.startswith(PEOPLE_OWNED)
+                  and path not in fixed)
 
 
 def schedule(cwd, epics, runs):
@@ -2453,21 +2456,29 @@ def migrate_layout(cwd):
 
     old_profile = os.path.join(".agents", "factory", "factory.profile.yaml")
     profile_path = resolve_profile(None, cwd)
+    moved_profile = False
     if not profile_path and os.path.isfile(old_profile):
         say(f"{old_profile.replace(os.sep, '/')} → {PROFILE_FILE} ({move_path(cwd, old_profile, PROFILE_FILE)})")
-        profile_path = PROFILE_FILE
+        profile_path, moved_profile = PROFILE_FILE, True
     profile = read_profile(profile_path)
-    if profile_path and "backlog" in profile and "epics" not in profile:
+    renaming = profile_path and "backlog" in profile and "epics" not in profile
+    declared = profile.get("contract", "")
+    # The profile is rewritten only where the layout is its subject: the key that named the epics, and the
+    # contract line — this layout is what contract 10 describes, so a moved profile says so.
+    if renaming or (moved_profile and declared.isdigit() and int(declared) < CONTRACT):
         text = read_text(profile_path)
-        value = profile["backlog"]
-        renamed = "project/epics" if value.replace("\\", "/").strip("/") == "project/backlog" else value
-        text = re.sub(r"^backlog:.*$", f"epics: {renamed}", text, count=1, flags=re.M)
-        declared = profile.get("contract", "")
+        changed = []
+        if renaming:
+            value = profile["backlog"]
+            renamed = "project/epics" if value.replace("\\", "/").strip("/") == "project/backlog" else value
+            text = re.sub(r"^backlog:.*$", f"epics: {renamed}", text, count=1, flags=re.M)
+            changed.append(f"`backlog: {value}` is `epics: {renamed}`")
         if declared.isdigit() and int(declared) < CONTRACT:
             text = re.sub(r"^contract:.*$", f"contract: {CONTRACT}", text, count=1, flags=re.M)
+            changed.append(f"contract {declared} → {CONTRACT}")
         with open(profile_path, "w", encoding="utf-8") as handle:
             handle.write(text)
-        say(f"{profile_path}: `backlog: {value}` is `epics: {renamed}`" + (f", contract {CONTRACT}" if declared.isdigit() and int(declared) < CONTRACT else ""))
+        say(f"{profile_path}: " + ", ".join(changed))
         profile = read_profile(profile_path)
     set_places(profile)
     epics, runs = place("epics"), place("runs")

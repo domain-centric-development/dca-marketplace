@@ -2877,16 +2877,19 @@ def verify_places(args):
                         ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
             subprocess.run(["git", *command], cwd=root, capture_output=True)
         clean = schedule_of(args.gate, root)
+        os.remove(os.path.join(root, "src", "test", "java", "com", "example", "WidgetUnitTest.java"))
+        gone = schedule_of(args.gate, root)
         write_file(root, "src/main/java/com/example/Thing.java", "class Thing {}\n")
         stray = schedule_of(args.gate, root)
         mark_delivered(root, "STORY-1", (datetime.now(timezone.utc) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"))
         delivered_since = schedule_of(args.gate, root)
-        expectations.append(("runs: a changed source file that no story's run folder claims stops the schedule and is named; "
-                             "a story delivered since the last commit explains it, and the next story runs",
-                             clean[1].startswith("STORY-1") and stray[1].startswith("none")
+        expectations.append(("runs: a changed source file that no story's run folder claims stops the schedule and is named — "
+                             "a file that is gone does not; a story delivered since the last commit explains it, and the "
+                             "next story runs",
+                             clean[1].startswith("STORY-1") and gone[1].startswith("STORY-1") and stray[1].startswith("none")
                              and "no story's run folder claims" in stray[1]
                              and "src/main/java/com/example/Thing.java" in stray[1] and delivered_since[1] == "STORY-2 plan",
-                             f"clean {clean[1]!r}; stray {stray[1]!r}; since {delivered_since[1]!r}"))
+                             f"clean {clean[1]!r}; gone {gone[1]!r}; stray {stray[1]!r}; since {delivered_since[1]!r}"))
 
     # the gate's one write into a story keeps everything else byte for byte, line endings included
     with tmpdir() as root:
