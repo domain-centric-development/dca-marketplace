@@ -12,7 +12,9 @@ Central, NuGet), never recalled.
 
 ## Java — Gradle
 
-A source set beside `src/test`, and a task of its own. In `build.gradle`:
+A source set beside `src/test`, and a task of its own — in `build.gradle`, or where the project keeps its other
+test levels (a `gradle/plugins/test-e2e.gradle` applied from `build.gradle`: then a `test-integration.gradle`
+beside it, in the same style):
 
 ```groovy
 sourceSets {
@@ -40,7 +42,8 @@ tasks.register('test-integration', Test) {
 tasks.named('check') { dependsOn 'test-integration' }
 ```
 
-The test slice the application needs goes into `testIntegrationImplementation` — with Spring Boot 4 the
+`extendsFrom(testImplementation)` gives the source set the unit tests' dependencies, test slices included.
+A slice only the integration level needs goes into `testIntegrationImplementation` — with Spring Boot 4 the
 starter per slice (`spring-boot-starter-webmvc-test` for a web application), not the old catch-all
 `spring-boot-starter-test`; take the ids from the generator's metadata or the build `dca-new` wrote.
 
@@ -88,9 +91,13 @@ class ApplicationIntegrationTest {
 }
 ```
 
-Shown to fail once: add `spring.main.sources: does.not.Exist` to
-`src/test-integration/resources/application.yml` (create the file for it), run the command, see it red
-because the context cannot start, remove the line, see it green.
+Shown to fail once: create `src/test-integration/resources/application.yml` with the line
+`spring.main.sources: does.not.Exist`, run the command, see it red because the context cannot start, delete
+the file, see it green. Use `.yml` even where the application keeps `application.properties`: a test
+`application.properties` would replace the main one, a `.yml` is read beside it.
+
+The generator's `@SpringBootTest` context test in the unit source set stays where it is: on a fresh
+skeleton it is the unit suite's only test, and a unit command that runs none fails a check that requires it.
 
 ## .NET
 
@@ -124,6 +131,8 @@ at `/` asks for an endpoint it has instead.
 
 ## Recorded
 
-`integration: src/test-integration` (Gradle, Maven) or `integration: <Name>.IntegrationTests` (.NET) in the
-conventions file. A delivery pipeline's setup detects the task, the added test source or the project
+An `## Integration tests` section in the conventions file, with the source set and the command:
+`integration: src/test-integration` and `integrationTest: ./gradlew test-integration` (Maven: `./mvnw
+test`; .NET: `integration: tests/<Name>.IntegrationTests`, `integrationTest: dotnet test
+tests/<Name>.IntegrationTests`). A delivery pipeline's setup detects the task, the added test source or the project
 and proposes its `test.integration:` line.

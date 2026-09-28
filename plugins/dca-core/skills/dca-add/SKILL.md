@@ -171,13 +171,14 @@ here, so a project without it stops at its first story's plan. The setup per sta
 `reference/integration-tests.md`.
 
 1. **Already there?** A `src/test-integration` source set or a `*.IntegrationTests` project: report it and
-   stop.
+   stop. A context test in the unit source set is not one, and it stays where it is.
 2. **Its own source set or project, its own command** — `./gradlew test-integration`, `./mvnw test` over the
    added test source, `dotnet test tests/<Name>.IntegrationTests` — so a unit-test run stays fast and a check
    can tell from a test's path which command runs it.
-3. **One smoke test** that starts the wired application. Run it green, break it the way the reference says,
-   see it red, restore it, see it green.
-4. **Record it**: `integration: <the source set or project>` in the conventions file.
+3. **One smoke test** that starts the wired application. Run it green, break it the way the reference says, see it red (the context does not start),
+   restore it, see it green.
+4. **Record it** in the conventions file's `## Integration tests` section: the source set or project and
+   its command.
 
 ## `http-stub`
 
