@@ -1,12 +1,14 @@
 ---
 name: stage-plan
-description: Plan stage of a factory run — turns one backlog story into an implementation plan with numbered acceptance criteria and names the architecture elements that change. Use when a story is to be planned before any test or code is written, when the orchestrator hands over a story, or on "/stage-plan". Reads the story, the project description (product, technical decisions, designed domain), the stack profile, the project's glossary and generated context map and its existing tests — nothing else. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
+description: Plan stage of a factory run — turns one backlog story into an implementation plan with numbered acceptance criteria and names the architecture elements that change. Use when a story is to be planned before any test or code is written, when the orchestrator hands over a story, or on "/stage-plan". Reads the story, the project description (product, technical decisions, designed domain), the stack profile, the conventions file the project's instructions name, the project's glossary and generated context map and its existing tests — nothing else. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
 ---
 
 # Plan one story
 
 Input: the story file, the project description — `project/product.md`, `project/tech.md` and
-`project/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — and the
+`project/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — the conventions
+file the project's instruction file names (its ``- conventions: `<path>` `` line; the layout, the
+naming suffixes and the resolved configuration the architecture suite holds the code to), and the
 glossary and the context map generated from the code (`contextMap:`) where the project has them.
 Nothing else — not the chat history, not an earlier run.
 Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no production code.
@@ -44,7 +46,9 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
 5. Name the elements that change, in the project's own vocabulary: aggregates, value objects,
    domain events, use cases with their ports, adapters, read models. Say for each whether it is
    new or changed, and where it belongs — layer and package/namespace as this project lays them
-   out, not as any sample does.
+   out, not as any sample does. A name carries the suffix the conventions file declares for its
+   kind (a use case, its input port, a repository, a controller): the architecture suite refuses
+   any other, and a plan the build has to rename is a plan that was not read.
 6. Respect the architecture the project has adopted: the domain free of framework types, ports
    declared inward and implemented in adapters, no raw cross-context imports, one aggregate
    changed per transaction. Ask the project's knowledge skill where one is
