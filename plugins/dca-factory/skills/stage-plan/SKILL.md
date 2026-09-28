@@ -72,8 +72,9 @@ Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no prod
      stop once with a `## needs-human` naming the stack decision (set up a browser runner, or
      record `browser: none`).
    - **No integration source set** — no `test.<name>:` key and no `integration: none` — is a stack
-     decision too: stop once with a `## needs-human` (set one up, or record `integration: none`); a
-     fallback taken story by story is a decision nobody took. With `integration: none` the other
+     decision too: stop once with a `## needs-human` (set one up — in a DCA project `dca-add
+     integration-tests` — or record `integration: none`); a fallback taken story by story is a decision
+     nobody took. With `integration: none` the other
      scenarios take the next level the project has, and the plan says so.
    The gate holds the plan to it: at the test gate, a test the end-user command runs must belong to
    the happy path or to a `browser-only` scenario. Never pick a level that would need a test

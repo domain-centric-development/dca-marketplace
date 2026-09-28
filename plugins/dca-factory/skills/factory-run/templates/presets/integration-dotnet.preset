@@ -1,0 +1,5 @@
+# A test project whose name ends in `.IntegrationTests`, as `dca-add integration-tests` creates it.
+kind: integration
+order: 30
+detect.exists: **/*.IntegrationTests.csproj
+test.integration: dotnet test {match_dir} --logger trx

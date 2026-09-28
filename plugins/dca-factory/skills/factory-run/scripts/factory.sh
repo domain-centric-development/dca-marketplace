@@ -191,6 +191,8 @@ plugin_skills() {
 skills_mode() {                             # skills_mode <target dir>
   local target=$1
   [ -L "$target" ] && { echo link; return; }
+  # a link whose target is gone is still a link: the update is what repairs it
+  [ -L "$target/factory-run" ] && { echo link; return; }
   if [ ! -d "$target/factory-run" ]; then
     # Links are machine-local and kept out of git, so a fresh clone has none — the ignore rule is what
     # says the project used them, and `update` is how a clone gets them back.
@@ -584,9 +586,14 @@ record_usage() {                            # record_usage <story> <stage> <tool
 # Whether a link points into one of the directories we install from — the only links this install
 # may replace or prune. Anything else in that directory is the project's and is left alone.
 ours() {                                    # ours <target> <source> <method dirs>
-  local target=$1 dir
+  local target=$1 dir plugin
   for dir in $2 $3; do
     case "$target" in "$dir"/*) return 0 ;; esac
+    # Another version of the same plugin in a plugin cache (<cache>/<marketplace>/<plugin>/<version>/skills)
+    # is the install's too: an update from a newer version replaces it, it is not the project's own.
+    plugin=$(basename "$(dirname "$dir")")
+    case "$dir" in */plugins/cache/*/*/*/skills) plugin=$(basename "$(dirname "$(dirname "$dir")")") ;; esac
+    case "$target" in */plugins/cache/*/"$plugin"/*/skills/*) return 0 ;; esac
   done
   return 1
 }
@@ -620,13 +627,13 @@ method_skill_dirs() {
   echo "$found"
 }
 
-only_links_into() {
-  local dir=$1 source_abs=$2 entry
+only_links_into() {                         # only_links_into <dir> <source> [<method dirs>]
+  local dir=$1 source_abs=$2 method_dirs=${3:-} entry
   [ -d "$dir" ] || return 1
   for entry in "$dir"/* "$dir"/.[!.]*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
     [ -L "$entry" ] || return 1
-    case "$(readlink "$entry")" in "$source_abs"/*) ;; *) return 1 ;; esac
+    ours "$(readlink "$entry")" "$source_abs" "$method_dirs" || return 1
   done
   return 0
 }
@@ -643,8 +650,9 @@ install_named_carriers() {                  # install_named_carriers <target> <s
     # A copy this install made (in its list) is refreshed; any other skill of that name is the project's.
     ours_copy=""
     [ -n "$copy_mode" ] && grep -qsx "$name" "$manifest" && ours_copy=1
+    # A link into this pipeline or a method plugin — any version of it — is the install's to refresh.
     if [ -f "$target/$name/SKILL.md" ] && ! { [ -L "$target/$name" ] && ! [ -e "$target/$name" ]; } \
-       && [ -z "$ours_copy" ]; then
+       && [ -z "$ours_copy" ] && ! { [ -L "$target/$name" ] && ours "$(readlink "$target/$name")" "$source_abs" "$method_dirs"; }; then
       continue
     fi
     found=""
@@ -803,7 +811,7 @@ install_project() {                         # install_project <tool> <skill fold
       echo "factory: skills → $target ($linked linked: the pipeline plus the craft it names as carriers)"
       echo "factory:   per skill, because they come from several sources — 'factory.sh update' after a skill is added" >&2
     elif [ "$target" = ".claude/skills" ] && [ -n "$(named_carriers)" ] \
-         && { [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; }; then
+         && { [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs" "$method_dirs"; }; then
       # The profile names carriers, and an isolated Claude stage sees only this directory — so it
       # holds the pipeline's skills one link each, with the named carriers beside them. Per skill
       # freezes the set: a skill added to the pipeline later needs another install (or update).
@@ -817,7 +825,7 @@ install_project() {                         # install_project <tool> <skill fold
       done
       echo "factory: skills → $target ($linked linked one by one, beside the carriers the profile names)"
       echo "factory:   'factory.sh update' after a skill is added to the pipeline" >&2
-    elif [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs"; then
+    elif [ -L "$target" ] || [ ! -e "$target" ] || only_links_into "$target" "$source_abs" "$method_dirs"; then
       must "replace $target" rm -rf "$target"
       must "create $(dirname "$target")" mkdir -p "$(dirname "$target")"
       must "link $target to the pipeline" ln -s "$source_abs" "$target"
@@ -978,7 +986,7 @@ presets() {                                 # presets <dir> <mode> [args…]
 import os, re, sys
 
 directory, python, conventions, mode, rest = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
-KINDS = ("stack", "browser", "format", "governance", "stub")
+KINDS = ("stack", "browser", "format", "governance", "stub", "integration")
 #: Folders no detection looks into: build output, dependencies, tool state. Bounded in depth as well,
 #: so a detection never walks a whole disk from a mistaken directory.
 PRUNED = {".git", ".gradle", ".idea", ".vs", "build", "bin", "obj", "target", "dist", "out",
@@ -1095,7 +1103,8 @@ def detect():
                 if key.startswith("conventions."):
                     derived[key[len("conventions."):]] = value
                     continue
-                values[key] = value.replace("{match}", match or "").replace("{python}", python)
+                values[key] = value.replace("{match_dir}", os.path.dirname(match or "") or ".") \
+                    .replace("{match}", match or "").replace("{python}", python)
     # A command the project's conventions file states wins over the preset's, so the profile is not a
     # second truth: the first backticked command there that the preset's pattern matches.
     if conventions and os.path.isfile(conventions) and derived:
@@ -1209,10 +1218,16 @@ elif mode == "new":
 elif mode == "check":
     profile = active(rest[0])
     missing, differing = proposals(values, profile)
+    # Every scenario but a story's happy path runs at the integration level (contract 9), so a profile
+    # without one stops the first plan. Nothing detects a decision, so it is named until it is taken.
+    no_level = not any(k.startswith("test.") for k in list(profile) + list(values)) and "integration" not in profile
     if rest[1:] == ["brief"]:
         if missing:
             print(f"factory: profile — detection finds {', '.join(k for k, _ in missing)} the profile does not declare "
                   "(factory.sh setup --check)")
+        if no_level:
+            print("factory: profile — no integration level (`test.<name>:`, or `integration: none`); the first "
+                  "story's plan stops on it (/factory-setup)")
         raise SystemExit(0)
     # The same view as the status: a table, marks, and what to do in an agent and in a shell.
     import os, shutil, textwrap
@@ -1231,6 +1246,11 @@ elif mode == "check":
         print(f"        {label('the profile')}   {norm(have)}")
         print(f"        {label('detected')}   {norm(value)}")
         print(f"        {label('to take it')}   bash .agents/factory/factory.sh setup --write --replace {key}\n")
+    if no_level:
+        print("    " + paint("? integration level", "33") + "   none — every scenario but a story's happy path runs there")
+        print(f"        {label('set one up')}   the method's integration-test capability (in a DCA project "
+              f"`dca-add integration-tests`), then setup --write")
+        print(f"        {label('or decide')}   `integration: none` in the profile — the scenarios then take the next level the project has\n")
     if not missing and not differing:
         print("    The profile declares everything detection finds.\n")
     print("─" * 72)
@@ -1240,6 +1260,11 @@ elif mode == "check":
         print(f"         {paint('shell'.ljust(10), '2')}   bash .agents/factory/factory.sh setup --write")
         print()
         raise SystemExit(1)
+    if no_level:
+        print(f"  {paint('Next', '1')}   decide the integration level.")
+        print(f"         {paint('agent'.ljust(10), '2')}   {paint('/factory-setup', '36')}")
+        print()
+        raise SystemExit(0)
     print(f"  {paint('Next', '1')}   Nothing to add." + (" The notes are yours to keep." if differing else ""))
     print()
 elif mode == "write":
@@ -1413,11 +1438,12 @@ stopped_for_human() {                       # stopped_for_human <artefact> <stag
   fi
   for id in $ids; do
     if [ -f "$DECISIONS/$id.md" ]; then
-      # The record names the stage that applies the answer — for a judge's story conflict that is
-      # not the judge. That is where the story resumes.
+      # The record names the stage that applies the answer — for a judge's story conflict that is not the
+      # judge — unless the answer names another (`applies:`). The run without --from reads which off the files.
       applies=$(sed -n 's/^stage:[[:space:]]*//p' "$DECISIONS/$id.md" | head -1)
       echo "factory:   decision $id → $DECISIONS/$id.md — answer it there under '## Answer'" >&2
-      echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story --from ${applies:-$stage}" >&2
+      echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story — it resumes at" \
+           "${applies:-$stage}, or where the answer's applies: says" >&2
     else
       echo "factory:   decision $id is named but $DECISIONS/$id.md does not exist." >&2
     fi
@@ -1435,9 +1461,15 @@ stopped_for_human() {                       # stopped_for_human <artefact> <stag
 # processes with a fresh context — the judge's independence is the point of it. Only `model.<tool>`
 # applies to the shared process; per-stage model keys need a process per stage.
 BUILDER_STAGES=(plan test build tidy)
-run_shared_builder() {                      # run_shared_builder <story> <tool> <from> <dry>
-  local story=$1 tool=$2 from=$3 dry=$4 range=() on=0 st
-  for st in "${BUILDER_STAGES[@]}"; do [ "$st" = "$from" ] && on=1; [ "$on" = 1 ] && range+=("$st"); done
+run_shared_builder() {                      # run_shared_builder <story> <tool> <from> <dry> [<kind>]
+  local story=$1 tool=$2 from=$3 dry=$4 kind=${5:-story} range=() on=0 st
+  for st in "${BUILDER_STAGES[@]}"; do
+    [ "$st" = "$from" ] && on=1
+    # a journey and an adoption build nothing: their shared stages are plan and test
+    [ "$kind" != story ] && { [ "$st" = build ] || [ "$st" = tidy ]; } && continue
+    [ "$on" = 1 ] && range+=("$st")
+  done
+  [ "${#range[@]}" -gt 0 ] || return 0
   local list; list=$(IFS=+; echo "${range[*]}")
   local prompt="Carry out these stages of the delivery pipeline for backlog story $story, one after another, \
 in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//') — apply each stage's skill in turn, \
@@ -1482,8 +1514,13 @@ document stage."
     [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage '$st' is not finished." >&2; return 1; }
     if asks_human "$artefact"; then stopped_for_human "$artefact" "$st" "$story"; return $?; fi
   done
-  # Checked, not believed: the process says it ran the gates; the runner looks.
-  if [[ " ${range[*]} " == *" test "* ]] && [ ! -s "$TASKS/$story/.tests-red" ]; then
+  # Checked, not believed: the process says it ran the gates; the runner looks. A story's tests were seen
+  # red; a journey's and an adoption's are green at their test gate, so that gate runs again here.
+  if [ "$kind" != story ] && [[ " ${range[*]} " == *" test "* ]]; then
+    echo "── gate test  (re-checked by the runner)"
+    gate test "$story" || { echo "factory: the runner's re-check of gate 'test' refused the shared stages' work." >&2; return 1; }
+  fi
+  if [ "$kind" = story ] && [[ " ${range[*]} " == *" test "* ]] && [ ! -s "$TASKS/$story/.tests-red" ]; then
     echo "factory: the shared stages left no red proof ($TASKS/$story/.tests-red) — the test gate never saw the tests fail." >&2
     return 1
   fi
@@ -1696,7 +1733,7 @@ run_story() {
 
     if [ -n "$SHARED_BUILDER" ] && [[ " ${BUILDER_STAGES[*]} " == *" $stage "* ]]; then
       if [ -z "$built" ]; then
-        run_shared_builder "$story" "$tool" "$stage" "$dry" || return $?
+        run_shared_builder "$story" "$tool" "$stage" "$dry" "$kind" || return $?
         built=1
       fi
       ran="${ran:+$ran,}$stage"

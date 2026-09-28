@@ -1,0 +1,7 @@
+# `src/test-integration` as a test source (build-helper), as `dca-add integration-tests` writes it: Surefire
+# runs it with the unit tests, so the command names no path and says what it covers.
+kind: integration
+order: 20
+detect.contains: pom.xml :: src/test-integration
+test.integration: ./mvnw test
+covers.test.integration: src/test-integration/

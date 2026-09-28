@@ -136,7 +136,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.41.1"
+VERSION = "0.42.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -495,6 +495,29 @@ def check_levels(result, profile, tasks, story_id, front, body, mapping, located
 BREAK_IGNORE = (".git", "build", "bin", "obj", "target", "node_modules", ".gradle", "TestResults", "out", "tasks")
 
 
+def copy_for_break(cwd, copy):
+    """The project as a scratch copy for a break: in git the files git sees — tracked, and new ones it does not
+    ignore — so a package that happens to be called `build` or `tasks` comes along; outside git, everything but
+    the build outputs at the project's top level."""
+    listed = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=cwd,
+                            capture_output=True)
+    if listed.returncode != 0:
+        top = os.path.abspath(cwd)
+        shutil.copytree(cwd, copy, symlinks=True,
+                        ignore=lambda folder, names: [n for n in names if n in BREAK_IGNORE
+                                                      and (os.path.abspath(folder) == top or n in (".git", "node_modules"))])
+        return
+    for name in sorted({n for n in listed.stdout.decode("utf-8", "replace").split("\0") if n}):
+        source, target = os.path.join(cwd, name), os.path.join(copy, name)
+        if not os.path.lexists(source):
+            continue                          # deleted in the tree, still in the index
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        if os.path.islink(source):
+            os.symlink(os.readlink(source), target)
+        elif os.path.isfile(source):
+            shutil.copy2(source, target)
+
+
 def break_path(tasks, story_id, selector):
     return os.path.join(tasks, story_id, "breaks", selector.replace("#", "--").replace("/", "_") + ".patch")
 
@@ -570,7 +593,7 @@ def check_break(result, profile, cwd, tasks, story_id, selector, key, located):
     scratch = tempfile.mkdtemp(prefix="dca-break-")
     try:
         copy = os.path.join(scratch, "tree")
-        shutil.copytree(cwd, copy, symlinks=True, ignore=shutil.ignore_patterns(*BREAK_IGNORE))
+        copy_for_break(cwd, copy)
         applied = subprocess.run(["git", "apply", "--whitespace=nowarn", os.path.abspath(patch)], cwd=copy,
                                  capture_output=True, text=True)
         with open(patch, "rb") as handle:
@@ -1239,6 +1262,37 @@ def row_cells(line):
 NOTHING = {"", "—", "–", "-", "none", "n/a", "nothing"}
 
 
+def check_story_pass(result, tasks, story_id, story_path, front):
+    """The document gate delivers a story, so it asks what delivery rests on: every stage of this pass
+    wrote its file after the one before it, the judge passed it, and the story is the one that was planned.
+    A document written for an earlier pass, or over a judge who asked for changes, delivers nothing."""
+    order = JOURNEY_ORDER if story_kind(front) == "journey" else STAGE_ORDER
+    folder = os.path.join(tasks, story_id)
+    texts = current_stage_files(folder, order)
+    gaps = [f"{STAGE_FILES[s]} ({'written for an earlier pass' if os.path.isfile(os.path.join(folder, STAGE_FILES[s])) else 'missing'})"
+            for s in order if s not in texts]
+    if gaps:
+        result.fail("story-pass", f"{', '.join(gaps)} — the document gate delivers a story whose stages all ran, "
+                                  f"in order, in this pass; the story runs on from the first of them")
+        return
+    verdict = verdict_in(texts["judge"])
+    if verdict != "pass":
+        result.fail("story-pass", f"{STAGE_FILES['judge']} says `verdict: {verdict or 'none'}` — only a judge's "
+                                  f"`pass` lets a story be delivered")
+        return
+    planned = os.path.join(folder, STORY_DIGEST)
+    if not os.path.isfile(planned):
+        result.skip("story-pass", f"no {STORY_DIGEST} from the plan gate — whether the story changed since it was "
+                                  f"planned is not checked")
+        return
+    if read_text(planned).strip() != file_digest(story_path):
+        result.fail("story-pass", f"{story_path} changed after it was planned — a criterion no stage planned, "
+                                  f"tested or built cannot be delivered; the story runs again from plan")
+        return
+    result.ok("story-pass", f"every stage of this pass ran in order, the judge passed it, and the story is the "
+                            f"one that was planned")
+
+
 def check_documented(result, tasks, story_id, cwd):
     """The document stage may only write statements that can be checked. Two of them can be
     checked here: a file it says it updated exists, and every glossary row names where its
@@ -1653,6 +1707,9 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
         with contextlib.suppress(GateError):
             changed_on += [rid for rid, _f, state, answer in acceptance_records(cwd, story)
                            if state in ("answered", "applied") and not accepted(answer)]
+    # A story planned again — its text changed, a story conflict was answered — keeps the criteria its
+    # earlier pass already built: their tests were seen red for this story, and a build made them green.
+    built_before = bool(tasks and story) and os.path.isfile(os.path.join(tasks, story, STAGE_FILES["build"]))
     control = {}                              # one control run per command, not per selector
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
@@ -1770,6 +1827,11 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, task
                 now_red.add(selector)
                 result.ok("tests-red", f"{selector} is green now and was recorded red before; its "
                                        f"expectation changed on decision {', '.join(changed_on)} ({key})")
+                continue
+            if expected == "red" and passed and selector in was_red and built_before:
+                now_red.add(selector)
+                result.ok("tests-red", f"{selector} is green now and was recorded red in an earlier pass of this "
+                                       f"story, whose build met it ({key})")
                 continue
             if expected == "red" and passed:
                 result.fail(
@@ -4976,6 +5038,28 @@ def reopen(cwd, tasks, backlog, story_id):
     return 0
 
 
+#: How much older than the file before it a stage file may be and still count as the same pass: a checkout
+#: writes a story's files within moments of each other, in no particular order.
+STALE_AFTER_SECONDS = 2.0
+
+
+def current_stage_files(folder, order):
+    """{stage: text} for the stage files of the story's current pass. A stage that ran again — a re-plan, a
+    build after `changes-requested`, a test stage applying an answer — makes every later file an earlier
+    pass's: it stays on disk as history, but it no longer says where the story stands."""
+    texts, newest = {}, None
+    for stage in order:
+        path = os.path.join(folder, STAGE_FILES[stage])
+        if not os.path.isfile(path):
+            continue
+        written = os.path.getmtime(path)
+        if newest is not None and written < newest - STALE_AFTER_SECONDS:
+            break
+        texts[stage] = read_text(path)
+        newest = max(written, newest or written)
+    return texts
+
+
 def story_state(cwd, tasks, story_id, front, story_path=None):
     """(state, stage to run from or None, detail) for one story, from its files alone."""
     status = str(front.get("status", "")).strip().lower()
@@ -4984,8 +5068,9 @@ def story_state(cwd, tasks, story_id, front, story_path=None):
     if status and status not in ("approved", "adopted"):
         return "unreleased", None, f"status {status} — a human releases it first"
     folder = os.path.join(tasks, story_id)
-    texts = {stage: read_text(os.path.join(folder, name)) for stage, name in STAGE_FILES.items()
-             if os.path.isfile(os.path.join(folder, name))}
+    kind = story_kind(front)
+    texts = current_stage_files(folder, ADOPT_ORDER if kind == "adopt" else JOURNEY_ORDER if kind == "journey"
+                                else STAGE_ORDER)
     try:
         records = read_decisions(os.path.join(cwd, DECISIONS_DIR), story_id)
     except GateError as error:
@@ -5529,6 +5614,7 @@ def main(argv):
             check_project(result, cwd, profile)
             check_models(result, profile)
         if args.stage == "document":
+            check_story_pass(result, args.tasks, story_id, story_path, front)
             check_documented(result, args.tasks, story_id, cwd)
             check_proposals_landed(result, args.tasks, story_id, cwd, profile)
             check_stage_commands(result, profile, cwd, args.stage)

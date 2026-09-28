@@ -55,6 +55,12 @@ docs/                      what exists and why — written after the code, some 
    capability (in a DCA project `dca-add browser`), which makes the suite start the application itself
    on a free port. Until then every end-user check of every story depends on what happens to run on
    that address.
+4a'. **The integration level.** Every scenario but a story's happy path runs at the integration level, so
+   a profile with no `test.<name>:` line and no `integration: none` stops the first story's plan — `setup
+   --check` names it as *no integration level*. Ask once: set one up through the method's capability (in a
+   DCA project `dca-add integration-tests`), then `setup --write` takes the detected `test.integration:`
+   line; or `integration: none`, written on the person's word, and the scenarios take the next level the
+   project has.
 4b. **Acceptance.** Where the product description's `## Surfaces` names web pages and the profile
    has no `acceptance:`, propose `acceptance: pages` — a story with something to see then waits for a
    human's look before it is delivered — and a `run:` line with how a person starts the application.

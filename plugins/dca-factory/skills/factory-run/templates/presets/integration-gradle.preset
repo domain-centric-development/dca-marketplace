@@ -1,0 +1,5 @@
+# The `test-integration` task and `src/test-integration` source set `dca-add integration-tests` writes.
+kind: integration
+order: 10
+detect.contains: **/*.gradle **/*.gradle.kts :: test-integration
+test.integration: ./gradlew test-integration --rerun

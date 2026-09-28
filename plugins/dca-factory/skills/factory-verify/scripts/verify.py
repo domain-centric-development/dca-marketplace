@@ -170,6 +170,23 @@ BREAK_NOTHING = """diff --git a/unrelated.txt b/unrelated.txt
 +b
 """
 
+# A test runner whose verdict hangs on production code in a package named like a build output (`tasks`).
+PACKAGED_RUN = """#!/bin/sh
+set=$1; shift; [ "$1" = "--select" ] && shift; sel=$1
+cls=${sel%%#*}; m=${sel##*#}; simple=${cls##*.}
+mkdir -p build/test-results/run
+if grep -q shown src/main/java/com/example/tasks/Widget.java 2>/dev/null; then
+  printf '<testsuite><testcase classname="%s" name="%s"/></testsuite>' "$cls" "$m" > build/test-results/run/TEST-$simple.xml; exit 0
+fi
+printf '<testsuite><testcase classname="%s" name="%s"><failure>x</failure></testcase></testsuite>' "$cls" "$m" > build/test-results/run/TEST-$simple.xml; exit 1
+"""
+PACKAGED_PROFILE = ("compile: true\ntest: sh my.sh src/test/java\ntest.pages: sh my.sh src/test-pages/java\n"
+                    "filterFlag: --select\nfilterFormat: \"{class}#{method}\"\n")
+PACKAGED_SOURCES = (("my.sh", PACKAGED_RUN), ("unrelated.txt", "a\n"), ("tasks/STORY-1/judge.md", "verdict: pass\n"),
+                    ("src/main/java/com/example/tasks/Widget.java", "class Widget { String s = \"shown\"; }\n"),
+                    ("tasks/STORY-1/breaks/com.example.WidgetPageTest--showsTheThing.patch", BREAK_NOTHING))
+
+
 TESTS = """# Tests — STORY-1
 
 <!-- gate:tests -->
@@ -600,6 +617,14 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
     if tests is not None:
         write("tasks/STORY-1/tests.md", tests)
     if document is not None:
+        # a document stage comes after a whole pass: every stage's file, a judge's pass, the story as planned
+        for name, content in (("plan.md", "# Plan\n"), ("build.md", "# Build\n"), ("tidy.md", "# Tidy\n"),
+                              ("judge.md", "## Verdict\nverdict: pass\n"), ("tests.md", TESTS)):
+            if not os.path.isfile(os.path.join(root, "tasks/STORY-1", name)):
+                write("tasks/STORY-1/" + name, content)
+        if not os.path.isfile(os.path.join(root, "tasks/STORY-1/.story-digest")):
+            write("tasks/STORY-1/.story-digest",
+                  hashlib.sha256(open(os.path.join(root, "project/backlog/sample/STORY-1.md"), "rb").read()).hexdigest())
         write("tasks/STORY-1/document.md", document)
     if rounds is not None:
         write("tasks/STORY-1/.rounds", str(rounds))
@@ -909,9 +934,9 @@ def verify_runner(runner, verbose=False):
                    'if [ "$s" = test ] && [ -z "${FIXTURE_SKIP_TEST_GATE:-}" ]; then '
                    '"$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; done; '
                    'else sh -c "$FIXTURE_STAND_IN"; fi')
-    def shared_run(skip_test_gate=False, dry=False):
+    def shared_run(skip_test_gate=False, dry=False, **project):
         with tmpdir() as root:
-            build_project(root)
+            build_project(root, **project)
             shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"),
                         os.path.join(root, ".agents", "factory", "story-gate.py"))
             tests_path = os.path.join(root, "fixture-tests.md")
@@ -925,7 +950,8 @@ def verify_runner(runner, verbose=False):
                    "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
             if skip_test_gate:
                 env["FIXTURE_SKIP_TEST_GATE"] = "1"
-            args = ["run", "--story", "STORY-1", "--tool", "stand-in", "--shared-builder"] + (["--dry-run"] if dry else [])
+            args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in", "--shared-builder"] \
+                + (["--dry-run"] if dry else [])
             code, output = run_runner(runner, root, *args, env=env)
             journal = os.path.join(root, "tasks", "STORY-1", ".verify", "journal.tsv")
             starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
@@ -946,6 +972,21 @@ def verify_runner(runner, verbose=False):
     check("shared builder: a process that never ran the test gate is caught — no red proof, no judge",
           code == 1 and "no red proof" in output and "judge" not in starts and not delivered,
           f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
+    code, output, starts, delivered = shared_run(
+        story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
+        .replace("depends_on: []", "depends_on: [STORY-0]"), green=both_green)
+    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
+                   if l.startswith("── stage ") and "(skipped" not in l]
+    check("shared builder: a journey shares plan and test, its test gate re-checked, and is delivered",
+          code == 0 and stage_lines == ["stage plan+test", "stage judge", "stage document"] and delivered
+          and "── gate test  (re-checked by the runner)" in output,
+          f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+    code, output, starts, delivered = shared_run(story=ADOPTED, green=both_green)
+    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
+                   if l.startswith("── stage ") and "(skipped" not in l]
+    check("shared builder: an adopted story shares plan and test, then its judge and the adopt gate deliver it",
+          code == 0 and stage_lines == ["stage plan+test", "stage judge"] and delivered,
+          f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
     code, output, starts, delivered = shared_run(dry=True)
     check("shared builder: the dry run shows the one shared invocation and starts nothing",
           "stage plan+test+build+tidy  (tool: stand-in, one shared context)" in output and starts == [],
@@ -1073,7 +1114,7 @@ def verify_runner(runner, verbose=False):
                                        "FIXTURE_PLAN": shell_path(os.path.join(root, "plan.md"))})
         check("runner: a stage that asks a question names the record and the command that resumes",
               code == 3 and ".agents/factory/decisions/STORY-1-01.md" in output
-              and "--from plan" in output,
+              and "run --story STORY-1 — it resumes at plan" in output,
               [l for l in output.splitlines() if "decision" in l][:3])
         # and with the question still open, the next run does not start a stage
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
@@ -1352,7 +1393,7 @@ exit 0
             handle.write(stand_in)
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         check("runner: a judge's story conflict with a record waits for the answer at the stage that applies it",
-              code == 3 and "--from test" in output, f"exit {code}; {[l for l in output.splitlines() if 'decision' in l][:3]}")
+              code == 3 and "it resumes at test" in output, f"exit {code}; {[l for l in output.splitlines() if 'decision' in l][:3]}")
 
     # 1n. what a stage cost: recorded per invocation, summed per story and stage, bounded per story
     claude_like = ('{"result":"done","total_cost_usd":0.01,"modelUsage":{"some-model":{"inputTokens":100,'
@@ -1914,7 +1955,11 @@ PRESET_FIXTURES = {
                                   "dependencies { testE2eImplementation 'com.microsoft.playwright:playwright:1.62.0' }\n"},
     "gradle-conventions": {"gradlew": "#!/bin/sh\n",
                            ".agents/dca/conventions.md": "Run `./gradlew archTest` for the architecture rules.\n"},
+    "gradle-integration": {"gradlew": "#!/bin/sh\n", "build.gradle": "apply from: 'gradle/plugins/test-integration.gradle'\n",
+                           "gradle/plugins/test-integration.gradle": "tasks.register('test-integration', Test)\n"},
     "maven": {"pom.xml": "<project/>\n"},
+    "maven-integration": {"pom.xml": "<project><source>src/test-integration/java</source></project>\n"},
+    "dotnet-integration": {"App.sln": "\n", "tests/App.IntegrationTests/App.IntegrationTests.csproj": "<Project/>\n"},
     "maven-playwright": {"pom.xml": "<project><dependency>com.microsoft.playwright</dependency></project>\n"},
     "dotnet": {"App.sln": "\n"},
     "dotnet-playwright": {"App.sln": "\n", "tests/App.E2E/App.E2E.csproj":
@@ -1941,7 +1986,10 @@ PRESET_GOLDEN = {
     "gradle-playwright-e2e": [_GRADLE[0] + " testE2eClasses", _GRADLE[1], "e2eTest: ./gradlew test-e2e --rerun"]
                              + _GRADLE[3:] + ["browser: playwright"],
     "gradle-conventions": _GRADLE[:5] + ["architecture: ./gradlew archTest"],
+    "gradle-integration": _GRADLE + ["test.integration: ./gradlew test-integration --rerun"],
     "maven": _MAVEN,
+    "maven-integration": _MAVEN + ["test.integration: ./mvnw test", "covers.test.integration: src/test-integration/"],
+    "dotnet-integration": _DOTNET + ["test.integration: dotnet test tests/App.IntegrationTests --logger trx"],
     "maven-playwright": _MAVEN + ["browser: playwright"],
     "dotnet": _DOTNET,
     "dotnet-playwright": _DOTNET[:2] + ["e2eTest: dotnet test tests/App.E2E/App.E2E.csproj --logger trx"]
@@ -2009,6 +2057,15 @@ def verify_setup(runner, verbose=False):
             wanted += [l.replace("{py}", python or "python3") for l in PRESET_GOLDEN[name]]
             check(f"presets: the {name} fixture gets the profile the installer wrote before the presets",
                   code == 0 and lines == wanted, f"exit {code}; got {lines}; want {wanted}")
+
+    # a profile without an integration level is named until someone decides one
+    for name, want in (("gradle", True), ("gradle-integration", False)):
+        with tmpdir() as root:
+            fixture(root, PRESET_FIXTURES[name])
+            run_setup(runner, root, "--tool", "none", "--from", lone)
+            checked = run_setup(runner, root, "--check")[1]
+            check(f"setup: --check {'names' if want else 'does not name'} a missing integration level ({name})",
+                  ("no integration level" in checked or "? integration level" in checked) == want, checked.strip()[-400:])
 
     # item 4: a new stack is one file — a made-up one in FACTORY_STACKS_DIR, no change to the script
     with tmpdir() as root, tmpdir() as stacks:
@@ -2379,6 +2436,47 @@ def verify_setup(runner, verbose=False):
             check("renames: a link into a folder that no longer exists is pruned and the skill linked afresh",
                   os.path.isfile(os.path.join(link, "SKILL.md")) and "no longer exists" in output,
                   os.readlink(link) if os.path.islink(link) else "no link")
+    if SYMLINKS:
+        # an update from a newer version in the plugin cache: the links into the older one are the install's own
+        for tool, extra in (("codex", ""), ("claude", "carrier.build: e2e-testing\n")):
+            with tmpdir() as root, tmpdir() as home:
+                cache = os.path.join(home, ".claude", "plugins", "cache", "m")
+                def version(number, craft):
+                    write_file(os.path.join(cache, "dca-factory", number), ".claude-plugin/plugin.json", "{}")
+                    shutil.copytree(source, os.path.join(cache, "dca-factory", number, "skills"), symlinks=True)
+                    write_file(os.path.join(cache, "dca-craft", craft), "skills/e2e-testing/SKILL.md",
+                               f"---\nname: e2e-testing\ndescription: craft {craft}\n---\n")
+                    return shell_path(os.path.join(cache, "dca-factory", number, "skills"))
+                older = version("9.0.0", "0.6.0")
+                build_project(root, profile=PROFILE + extra)
+                run_setup(runner, root, "--tool", tool, "--from", older, env={"HOME": home})
+                newer = version("9.1.0", "0.7.0")
+                code, output = run_runner(project_runner(root), root, "update", "--from", newer, env={"HOME": home})
+                skills = os.path.join(root, f".{tool}", "skills")
+                where = {n: os.path.realpath(os.path.join(skills, n)) for n in ("factory-run", "e2e-testing")}
+                check(f"update: {tool}'s links into an older cache version follow the newer one, the carrier's too",
+                      code == 0 and "/9.1.0/" in where["factory-run"] and "/0.7.0/" in where["e2e-testing"]
+                      and "kept the project's own" not in output, f"exit {code}; {where}")
+        with tmpdir() as root, tmpdir() as home:
+            # the links point into a version since removed from the cache, and nothing ignores them
+            cache = os.path.join(home, ".claude", "plugins", "cache", "m")
+            for number in ("9.0.0", "9.1.0"):
+                write_file(os.path.join(cache, "dca-factory", number), ".claude-plugin/plugin.json", "{}")
+                shutil.copytree(source, os.path.join(cache, "dca-factory", number, "skills"), symlinks=True)
+            build_project(root)
+            skills = os.path.join(root, ".claude", "skills")
+            os.makedirs(skills)
+            for name in os.listdir(source):
+                if os.path.isdir(os.path.join(source, name)):
+                    os.symlink(os.path.join(cache, "dca-factory", "9.0.0", "skills", name), os.path.join(skills, name))
+            run_setup(runner, root, "--tool", "none", "--from", source)
+            shutil.rmtree(os.path.join(cache, "dca-factory", "9.0.0"))
+            code, output = run_runner(project_runner(root), root, "update", "--from",
+                                      shell_path(os.path.join(cache, "dca-factory", "9.1.0", "skills")), env={"HOME": home})
+            run_skill = os.path.join(skills, "factory-run", "SKILL.md")
+            check("update: a tool whose skill links are broken is updated, not skipped",
+                  code == 0 and os.path.isfile(run_skill) and "/9.1.0/" in os.path.realpath(run_skill),
+                  f"exit {code}; {os.path.realpath(run_skill)}; {output.strip()[-300:]}")
     shutil.rmtree(lone_home, ignore_errors=True)
 
     failures = [name for name, ok, _ in results if not ok]
@@ -2575,6 +2673,9 @@ def main(argv=None):
          dict(story=ADOPTED, green=both_green, tests=TESTS + CHARACTERIZED,
               extra_sources=(("tasks/STORY-1/judge.md", "verdict: pass\n"), ("unrelated.txt", "a\n"),
                              ("tasks/STORY-1/breaks/com.example.WidgetPageTest--showsTheThing.patch", BREAK_NOTHING)))),
+        (Case("adopt: a break that changes nothing is refused where the code sits in a package named `tasks`",
+              "adopt", 1, must_fail=("break-proof",), text=("stays green under its break",)),
+         dict(story=ADOPTED, profile=PACKAGED_PROFILE, tests=TESTS + CHARACTERIZED, extra_sources=PACKAGED_SOURCES)),
         (Case("test: a journey's test is green at its gate, the inverse of a story", "test", 0,
               must_pass=("tests-green",)),
          dict(story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
@@ -2874,6 +2975,15 @@ def main(argv=None):
         (Case("document: `## needs-human` with `- None.` or `_None._` stops nothing either", "document", 0,
               must_pass=("documented",)),
          dict(document=DOCUMENT + "\n## needs-human\n- None.\n_None._\n")),
+        (Case("document: a judge who asked for changes delivers nothing", "document", 1,
+              must_fail=("story-pass",), text=("verdict: changes-requested",)),
+         dict(document=DOCUMENT, extra_sources=(("tasks/STORY-1/judge.md", "## Verdict\nverdict: changes-requested\n"),))),
+        (Case("document: a judge's file without a verdict delivers nothing", "document", 1,
+              must_fail=("story-pass",), text=("`verdict: none`",)),
+         dict(document=DOCUMENT, extra_sources=(("tasks/STORY-1/judge.md", ""),))),
+        (Case("document: a story changed after it was planned delivers nothing", "document", 1,
+              must_fail=("story-pass",), text=("changed after it was planned",)),
+         dict(document=DOCUMENT, extra_sources=(("tasks/STORY-1/.story-digest", "0" * 64),))),
         (Case("test: a test recorded red before may be green when its expectation changed on a decision",
               "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
          dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,
@@ -2886,6 +2996,9 @@ def main(argv=None):
         (Case("test: without that decision, green before the build is still refused", "test", 1,
               must_fail=("tests-red",), text=("passes before the build stage",)),
          dict(green=both_green, ledger=both_green)),
+        (Case("test: a story planned again keeps the tests an earlier pass saw red and built green",
+              "test", 0, must_pass=("tests-red",), text=("recorded red in an earlier pass",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(("tasks/STORY-1/build.md", "# Build\n"),))),
         (Case("test: a story running again for a human's correction keeps the tests it had met, green",
               "test", 0, must_pass=("tests-red",), text=("expectation changed on decision STORY-1-accept-1",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
@@ -3888,6 +4001,9 @@ def main(argv=None):
         # that it passed — and the schedule reads both
         backlog_project(root, extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),
                                              ("tasks/STORY-1/tests.md", TESTS),
+                                             ("tasks/STORY-1/build.md", "# Build\n"),
+                                             ("tasks/STORY-1/tidy.md", "# Tidy\n"),
+                                             ("tasks/STORY-1/judge.md", "## Verdict\nverdict: pass\n"),
                                              ("tasks/STORY-1/document.md", DOCUMENT)))
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: a document file without its gate's mark is not delivered",
@@ -4032,6 +4148,9 @@ def main(argv=None):
     def accept_fixture(root, profile_lines, *stories, extra=()):
         backlog_project(root, *stories, extra_sources=(("tasks/STORY-1/plan.md", PLAN_APPLIED),
                                                        ("tasks/STORY-1/tests.md", TESTS),
+                                                       ("tasks/STORY-1/build.md", "# Build\n"),
+                                                       ("tasks/STORY-1/tidy.md", "# Tidy\n"),
+                                                       ("tasks/STORY-1/judge.md", "## Verdict\nverdict: pass\n"),
                                                        ("tasks/STORY-1/document.md", DOCUMENT)) + tuple(extra))
         with open(os.path.join(root, ".agents", "factory", "factory.profile.yaml"), "a", encoding="utf-8") as h:
             h.write(profile_lines)
@@ -4081,6 +4200,7 @@ def main(argv=None):
                              pending.returncode == 1 and "correction that is not in the story" in pending.stdout
                              and rows.get("STORY-1") == ("in-progress", "plan") and not delivered(root),
                              f"exit {pending.returncode}; {rows.get('STORY-1')}"))
+        gate_run(root, "--story", "STORY-1", "--stage", "plan")        # the correction ran: planned again
         asked_again = gate_run(root, "--story", "STORY-1", "--stage", "document")
         expectations.append(("acceptance: after the correction ran, the story is asked again, in a record of its own",
                              asked_again.returncode == 3 and os.path.isfile(record(root, 2)),
@@ -4434,6 +4554,36 @@ def main(argv=None):
                              and "STORY-1" in two.stdout, two.stdout))
         expectations.append(("start: an unknown story is refused (exit 2)", unknown.returncode == 2,
                              unknown.stdout + unknown.stderr))
+    for label, older, newer, want in (
+            # a story planned again — its text changed, a correction, a story conflict — runs every stage after
+            ("a re-planned story resumes after its new plan, not at an earlier pass's document",
+             ("tests.md", "build.md", "tidy.md", "judge.md", "document.md"), ("plan.md",), "test"),
+            ("`changes-requested` over an earlier pass's document resumes at build",
+             ("plan.md", "tests.md", "build.md", "tidy.md", "document.md"), ("judge.md",), "build"),
+            ("a build run again after `changes-requested` resumes at tidy, not at build once more",
+             ("plan.md", "tests.md", "tidy.md", "judge.md"), ("build.md",), "tidy")):
+        with tmpdir() as root:
+            files = {"plan.md": "# Plan\n", "tests.md": TESTS, "build.md": "# Build\n", "tidy.md": "# Tidy\n",
+                     "judge.md": "## Verdict\nverdict: " + ("changes-requested" if "judge.md" in newer
+                                                             or "changes" in label else "pass") + "\n",
+                     "document.md": "# Document\n"}
+            backlog_project(root, extra_sources=tuple((f"tasks/STORY-1/{n}", files[n]) for n in older + newer))
+            for number, name in enumerate(older):
+                os.utime(os.path.join(root, "tasks", "STORY-1", name), (1000 + number, 1000 + number))
+            start = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--start"], cwd=root,
+                                   capture_output=True, text=True, encoding="utf-8").stdout
+            expectations.append((f"start: {label}", f"start: {want}" in start, start))
+    with tmpdir() as root:
+        # in git, the scratch copy is what git sees — a package named `tasks` comes along
+        build_project(root, story=ADOPTED, profile=PACKAGED_PROFILE, tests=TESTS + CHARACTERIZED,
+                      extra_sources=PACKAGED_SOURCES)
+        write_file(root, ".gitignore", "build/\n")
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_gate(args.gate, root, "adopt")
+        expectations.append(("adopt: in git, a break that changes nothing is refused where the code sits in a "
+                             "package named `tasks`", code == 1 and "stays green under its break" in output,
+                             output[-500:]))
     with tmpdir() as root:
         # a program missing on the PATH is the environment, not the story
         build_project(root, profile=PROFILE.replace("compile: true", "compile: dca-no-such-tool --version"))

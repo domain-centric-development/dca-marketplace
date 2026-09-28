@@ -143,13 +143,19 @@ When the product description names a surface with pages (server-rendered or a cl
 `dca-add browser`. It sets up the runner and one smoke test on the start page before the first feature, so the
 first story's end-user test has something to run on.
 
+### 6a. The integration level: `dca-add integration-tests`
+
+Every project gets it, as it gets a formatter: a story's scenarios other than its happy path run at the
+integration level, and a project without one stops at its first plan. It is set up now, on the skeleton, with
+one smoke test that starts the application.
+
 ### 7. Proof
 
 The project is done when all three hold — show each:
 
 - **It starts.** `./gradlew bootRun` / `mvn spring-boot:run` / `dotnet run --project src/<Name>.Web`, one
   request to `/` answers, then stop it.
-- **Every suite is green.** `./gradlew build` (runs `check`, `test-architecture` included) and the browser
+- **Every suite is green.** `./gradlew build` (runs `check`, `test-architecture` and `test-integration` included) and the browser
   suite (`./gradlew test-e2e`, `mvn verify`); `dotnet build` and `dotnet test` (Debug). The expected entries
   of a project without domain code — `DCA-STR-012` on `warn`, a freshly generated context map — are named,
   not hidden.

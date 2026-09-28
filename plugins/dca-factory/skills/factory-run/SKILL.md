@@ -106,8 +106,9 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
      human decides it. Say which criterion conflicts with what.
 10. **`stage-document`** → `tasks/<story>/document.md`: the glossary, the context map and the
    project's reader documentation follow what the story changed.
-11. **gate `document`** — every file, path and identifier the stage claims exists, and every claim
-   says how it was checked. A story whose documents still describe yesterday is not delivered.
+11. **gate `document`** — every stage of this pass wrote its file after the one before it, the judge
+   passed it, the story is the one that was planned, every file, path and identifier the stage claims
+   exists, and every claim says how it was checked. A story whose documents still describe yesterday is not delivered.
    Where the profile's `acceptance:` applies, the gate does not deliver yet: it writes an
    acceptance record and exits **3** — a question to a human, not a refusal; count no round. Stop,
    and name in the report what to look at (the record lists it) and `/factory-decisions` to answer.
@@ -136,6 +137,7 @@ correctly after an interruption, in another session or in another tool:
 | `build.md`, gate `build` failing | `stage-build` again (count the round) — the runner does this for every refused gate after its stage |
 | `document.md` without `.delivered` | gate `document`; it writes `.delivered` when it passes, and only then is the story delivered |
 | `.story-digest` differs from the story file | the story changed after it was planned: `stage-plan` again, and every stage after it |
+| a stage file older than the one before it | it belongs to an earlier pass — a stage ran again since (a re-plan, a build after `changes-requested`); that stage file and every later one count as not written |
 | `build.md`, gate `build` passing, no `tidy.md` | `stage-tidy` |
 | `tidy.md`, gate `tidy` passing, no `judge.md` | `stage-judge` |
 | `judge.md` with `changes-requested` | `stage-build` (count the round) |
@@ -145,7 +147,7 @@ correctly after an interruption, in another session or in another tool:
 | `.rounds` at 3 | stop, escalate to the human |
 | any stage file with a `## needs-human` section | stop; the section names a decision record under `.agents/factory/decisions/` — say which file and what to write into it |
 | a decision record for the story is open (no `## Answer`, or one without `by:` and `at:`) | stop — no stage runs while the story waits |
-| a decision record is answered and its `stage:` still ends in `## needs-human` | run that stage again; it applies the answer and cites the id (at the plan stage, the plan gate lets exactly this through) |
+| a decision record is answered and the stage that applies it (`applies:` in the answer, else `stage:`) has not cited it | run that stage again; it applies the answer and cites the id (at the plan stage, the plan gate lets exactly this through) |
 
 ## Execution tier
 
@@ -248,8 +250,8 @@ A question is a **file**, not a sentence in a report: the stage writes
 options, its recommendation, never an answer — and names it in its `## needs-human` as
 `decision: <id>`. That is what makes the question survive the session and reach whoever answers
 it, in this session or another (see `reference/file-contracts.md`, *Decision records*). When you
-resume a story whose record is answered, run the stage that asked (`stage:` in the record) with
-the answer in front of it; the gate checks that its new file cites the id, and stamps the record
+resume a story whose record is answered, run the stage that applies it — `applies:` in the answer, else
+`stage:` in the record — with the answer in front of it; the gate checks that its new file cites the id, and stamps the record
 applied. The human answers through `factory-decisions` — in this session or another — which lists
 the records (`story-gate.py --list-decisions`), explains one and writes `## Answer` only on their
 confirmation.
@@ -333,7 +335,7 @@ python3 .agents/factory/story-gate.py --schedule
 ```
 
 prints each story with its state — `delivered` (its document gate passed), `waiting` (an open decision record), `resumable`
-(answered, with the stage that asked), `in-progress` (with the stage it continues from: a refused
+(answered, with the stage that applies the answer), `in-progress` (with the stage it continues from: a refused
 gate's stage, else the first missing file), `ready`, `stopped` (three rounds, a story conflict, a
 refused plan gate, a `## needs-human` without a record), `blocked` (a dependency not delivered,
 unknown or on a cycle), `unreleased`/`superseded` — and ends with `next: <story> <stage>` or
@@ -349,7 +351,7 @@ schedule names, asks again, and ends when nothing can run. A story that stops fo
 not end it (`run` exits 3 there); any other stop does, because retrying a failure spends a run on
 the same refusal. `--watch` keeps it waiting while a story waits on a human: it re-reads the
 schedule every `--interval` seconds (default 60, 1–3600), invokes no agent while nothing changed,
-and resumes the answered story at the stage that asked. `--max-stages <n>` caps the agent
+and resumes the answered story at the stage that applies the answer. `--max-stages <n>` caps the agent
 invocations of the run (exit 4, the work so far stays); `.agents/factory/stop` ends it before the
 next story.
 
