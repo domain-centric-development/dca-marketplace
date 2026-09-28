@@ -5,23 +5,28 @@ without any tooling. No database, no JSON as the source. A generated `index.json
 tools; it is derived and gitignored.
 
 It lives beside the project description, under `project/` — what is to be built, written by people
-before the code. How it is worked through lives under `.agents/factory/` (the machine's), the
-stages' hand-overs under `tasks/`, and what exists and why under `docs/`:
+before the code. The installed pipeline lives under `.agents/factory/`, a run's protocol under
+`.dca-factory/runs/`, and what exists and why under `docs/`:
 
 ```
+dca-factory.profile.yaml   the stack profile
 project/
-  product.md         the product description
-  tech.md            the technical decisions
-  domain.md          the designed domain (optional)
-  backlog/
+  product.md               the product description
+  tech.md                  the technical decisions
+  domain.md                the designed domain (optional)
+  epics/
     <epic>/
-      epic.md        the epic
-      <story>.md     one story
+      epic.md              the epic
+      <story>.md           one story — with its state: draft | approved | delivered | adopted | superseded
+      <story>.decisions/   its questions (<nn>.md) and acceptances (accept-<n>.md)
 ```
 
-The stack profile's `product:`, `tech:`, `domain:` and `backlog:` name other places; without them
-these are the places. There is no fallback to a backlog at the project root: where the gate finds
-`backlog/` and nothing under `project/`, it names the move in one line.
+Stories stay with their epic for life; they never move between folders. *Backlog* is a view:
+`factory.sh backlog` lists every story with its state and the next one that can run — approved, not
+delivered, its dependencies met. The stack profile's `product:`, `tech:`, `domain:`, `epics:` and
+`runs:` name other places; without them these are the places. An older layout — `project/backlog/`,
+a profile under `.agents/factory/`, records under `.agents/factory/decisions/`, run artefacts under
+`tasks/` — is named by the gate and moved once by `factory.sh update`; nothing reads it as a fallback.
 
 ## Project description
 
@@ -92,11 +97,12 @@ Front matter:
 
 | Field | Meaning |
 |---|---|
-| `id` | stable identifier |
+| `id` | stable identifier, unique in the whole project — the run folder and the decision records are named after it, and the schedule keys stories by it; a second story with the same id is refused, naming both files |
 | `epic` | the epic's `id`; its `epic.md` must exist |
 | `context` | the bounded context the story changes. It must exist on the designed map (`domain.md`), or on the one generated from the code where there is no designed map — a story that would need a new context or a new context relationship is not a story, it is a question about the project description |
 | `title` | short name |
-| `status` | `draft` while it is still being written, `approved` once a human released it for building, `adopted` when it describes behaviour the project already has — adopted, never built (below) — `superseded` when another story replaced it. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
+| `status` | `draft` while it is still being written, `approved` once a human released it for building, `adopted` when it describes behaviour the project already has — adopted, never built (below) — `superseded` when another story replaced it, `delivered` once the document gate passed it. The person writes `draft → approved`; the gate alone writes `→ delivered`, and takes it back on a reopen. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
+| `delivered` | the UTC time the gate delivered the story, written with `status: delivered` (an adopted story keeps `status: adopted` and gains this line). Never written by hand; the story's digest leaves it out |
 | `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by id; an unknown id or a cycle blocks the story and is named |
 
 Body sections:
@@ -168,9 +174,9 @@ a step lists the journey test under `## Changed tests`, as any other.
 `status: adopted` describes behaviour the project already has. The factory never builds it; it adopts it:
 plan, test and judge map every scenario to a test that exists and is **green**, a test the adoption writes
 itself (a *characterization* test, listed under `## Characterization` in `tests.md`) comes with a break —
-`tasks/<story>/breaks/<Class>--<method>.patch`, a minimal change to the production code that turns exactly
+`.dca-factory/runs/<story>/breaks/<Class>--<method>.patch`, a minimal change to the production code that turns exactly
 this test red — and the adopt gate applies each break to a scratch copy, requires red, and delivers the
-story (`.delivered` holds `adopted`). The working tree is never touched. `adopt.breakProof: all` in the
+story (`delivered:` with the time goes into the story; its status stays `adopted`). The working tree is never touched. `adopt.breakProof: all` in the
 profile asks for a break for every mapped test, not only the written ones. A story is adopted whole or not
 at all: the adoption writes the tests that are missing. A `depends_on` on an adopted story is met once it
 is adopted, not by its status alone; afterwards its tests are guarded like any delivered story's.

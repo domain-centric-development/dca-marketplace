@@ -83,8 +83,10 @@ dca-marketplace/
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
   discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`) is optional, the git
   pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile
-  (`.agents/factory/factory.profile.yaml`) and `project/` — the description (product, tech, designed
-  domain) and the backlog — beside the glossaries and the generated context map.
+  (`dca-factory.profile.yaml` at the project root) and `project/` — the description (product, tech, designed
+  domain) and the epics with their stories, each story carrying its state and its decisions beside it —
+  beside the glossaries and the generated context map. Run artefacts go to `.dca-factory/runs/`, which is
+  protocol and disposable; `.agents/factory/` is the installed pipeline alone.
 - **dca-craft** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/ubiquitous-language`, `/context-map`,
   `/review-ddd`, `/review-hexagonal`, `/review-clean-code`; agents `e2e-tester`, `ddd-reviewer`,
   `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the

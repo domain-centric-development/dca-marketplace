@@ -6,17 +6,20 @@ fresh context, in a subagent or in a separate process without changing the resul
 
 | Stage | Reads | Writes |
 |---|---|---|
-| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `tasks/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration \| browser-only (<why>)`; the test gate reads `browser-only` |
-| `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `tasks/<story>/tests.md` (with the `gate:tests` table) |
-| `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `tasks/<story>/build.md` |
-| `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `tasks/<story>/tidy.md` |
-| `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `tasks/<story>/judge.md` |
-| `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries | `tasks/<story>/document.md` |
+The run folder is `.dca-factory/runs/` unless the stack profile's `runs:` names another place; the
+stories are under `project/epics/` unless `epics:` does.
+
+| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `.dca-factory/runs/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration \| browser-only (<why>)`; the test gate reads `browser-only` |
+| `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table) |
+| `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `.dca-factory/runs/<story>/build.md` |
+| `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `.dca-factory/runs/<story>/tidy.md` |
+| `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `.dca-factory/runs/<story>/judge.md` |
+| `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries | `.dca-factory/runs/<story>/document.md` |
 
 The tidy stage's moves reach the judge and the document stage through the story diff, not through
 `tidy.md`: what a stage reads is what it needs, not everything that exists.
 
-## What changed — `tasks/<story>/.verify/changed-<stage>.txt`, `changed.txt`, `story.diff`
+## What changed — `.dca-factory/runs/<story>/.verify/changed-<stage>.txt`, `changed.txt`, `story.diff`
 
 The pipeline records what a story changes; no stage reconstructs it. Around every stage the
 runner — or `--stage-start`/`--stage-end` in a session — snapshots the working tree (every file git
@@ -26,7 +29,7 @@ as `deleted`). After the stage the gate writes `changed-<stage>.txt` (`added` / 
 against a tree object recorded at the story's first stage — written once, without committing, so a
 repository without a commit gets a diff as well and a stage run again does not move the story's
 starting point. Paths are the project's, also where the project is a directory inside a larger
-repository. Run artefacts (`tasks/`, `.agents/factory/`) and gitignored files are left out. Without
+repository. The run folder, the installed pipeline (`.agents/factory/`), a story's `.decisions/` records and gitignored files are left out. Without
 git the tree cannot be compared: the snapshots and the records then carry one line, `# not observed:`
 and the reason, `story.diff` says there is no diff, and the gate skips the files check and names the
 reason — never "0 files changed".
@@ -39,7 +42,7 @@ In a table only the first cell names a file; the other cells say why, and a back
 there is prose. A stage that changed no file (a tidy with nothing to tidy) needs no such section.
 The next stages open these files first and search the tree only for what they do not answer.
 
-`tasks/<story>/.tests-red` records which selectors the test stage actually saw fail. The build gate
+`.dca-factory/runs/<story>/.tests-red` records which selectors the test stage actually saw fail. The build gate
 requires each green test to appear in it, because a runner that matched **no** test exits 0 exactly
 like a passing one: without the record, a criterion with a mistyped or misplaced test would be
 certified green. When the file is absent altogether — the run artefacts need not be committed — the
@@ -51,24 +54,47 @@ a test. The build and tidy gates compare the digest with the file as it is
 answered decision of stage `test` changed what it expects. A line without a digest proves the red run
 but not the version, so the comparison is skipped and named.
 
-`tasks/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
+`.dca-factory/runs/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
 the orchestrator remembers, because an in-session run has no other honest way to count and a
 resumed run must see the same number. At three the run stops. A refusal on `gate:fail environment` (a
 profile command's program missing on the gate's PATH) counts no round. A person's `factory.sh run
 --story <id> --from <stage>` starts a new count: the runner moves the file to
-`tasks/<story>/.verify/rounds.<UTC time>` and writes a `rounds-reset` line into the journal.
+`.dca-factory/runs/<story>/.verify/rounds.<UTC time>` and writes a `rounds-reset` line into the journal.
 
 A mapped test is run with the profile command that **covers the file it was found in** — the
 end-user tests and the unit tests usually live in different projects or source sets, and a selector
 run against the wrong one matches nothing. When no declared command covers that path, the gate says
 so instead of guessing.
 
-`tasks/` holds run artefacts. Whether they are committed is the project's choice; the pipeline
-only requires that a stage finds its predecessor's file.
+## One owner per place — the story carries its state, the run folder is protocol
+
+`.dca-factory/runs/<story>/` holds what a run produces: the hand-overs, the marks (`.story-digest`,
+`.tests-red`, `.tests-baseline`, `.rounds`, a gate's refusal), the journal and the snapshots under
+`.verify/`. Nothing the factory needs *after* a run lives there. Whether a story is delivered stands
+in the story itself: the document gate — or the adopt gate — writes `status: delivered` and
+`delivered: <UTC time>` into its front matter when it passes (an adopted story keeps `status: adopted`
+and gains the date). No stage, no skill and no person writes those two lines; `draft → approved` is
+the person's, `→ delivered` the gate's. The plan gate's story digest leaves the two lines out, so a
+delivery never reads as "the story changed after it was planned". A reopen (`--reopen`, on an answered
+correction the story cites) takes them out again and moves the delivered pass's hand-overs to
+`.verify/pass-<n>/`, so the first pass stays readable beside the next.
+
+So the run folder is disposable: delete `.dca-factory/` at any time and the schedule, the
+dependencies and the status read the same — what is lost is history (hand-overs, journal, tokens),
+never what is delivered or decided. Whether the project commits it is its choice (the README says
+what that buys). Absent files are skipped and named: a red ledger that is gone makes the green
+check a skip, not a pass. One edge the schedule watches: code changed in the checkout that no story's
+run folder claims — a folder removed while a story was past its plan, a person's work in progress — is
+named and nothing starts on top of it, unless a story was delivered since the last commit (its code
+waits for its commit, the normal state).
+
+A story's **id is unique in the whole project**: the run folder and the decision records are named
+after it, and the schedule keys stories by it. A second story under the same id is refused by the
+backlog check, the plan gate and the schedule, naming both files.
 
 ## The `gate:tests` table
 
-`tasks/<story>/tests.md` carries one machine-readable table. The gate reads nothing else from
+`.dca-factory/runs/<story>/tests.md` carries one machine-readable table. The gate reads nothing else from
 the file:
 
 ```markdown
@@ -102,11 +128,15 @@ orchestrator stops the run at that point. Two situations always escalate rather 
 The section names the question as a **decision record** (below): `decision: <id>` on its own
 line. A `## needs-human` without one has asked nobody, and the next gate refuses it.
 
-## Decision records — `.agents/factory/decisions/<story>-<nn>.md`
+## Decision records — `<story>.decisions/<nn>.md`, beside the story
 
 The question a stage may not answer, kept as a file of its own so the answer has a place to land
 and a second session — or the same one tomorrow, or another tool — finds it without any
-transcript. Committed with the project. Markdown with front matter, from
+transcript. It lives beside the story it belongs to, `project/epics/<epic>/<story>.decisions/<nn>.md`
+(an acceptance as `accept-<n>.md`), because a human's answer is human-written state and belongs in
+the people's place; committed with the story. The record's `id:` is `<story>-<nn>` (`<story>-accept-<n>`),
+which is how stages, the gate and the inbox cite it, and the file is found by that name: a record
+whose `id:` or `story:` does not match its place is refused. Markdown with front matter, from
 `templates/decision.md.tmpl`:
 
 ```markdown
@@ -177,7 +207,7 @@ What this does not do, on purpose: no leases, no revision numbers, no stale-answ
 the story changes underneath, no authorisation beyond `by:`. Files writable by the same user give
 process guarantees, not security ones.
 
-## Tests that existed before the story — `tasks/<story>/.tests-baseline`
+## Tests that existed before the story — `.dca-factory/runs/<story>/.tests-baseline`
 
 The plan gate runs before any stage of a story touches a test. In a git repository it records every
 test file — found by name: `test_*.py`, `*Test.java`, `*Tests.cs`, `*IT.java`, `*.spec.ts`,

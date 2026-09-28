@@ -6,15 +6,25 @@ through them — six stage skills with file hand-overs, a deterministic story ga
 one orchestrator.
 
 ```
+dca-factory.profile.yaml   the stack profile — the person's, committed; the one fixed path
 project/                   what is to be built (a person writes it)
   product.md               what, for whom, surfaces, qualities, what it is not
   tech.md                  stack, frontend approach, persistence, runtime, integrations, version policy
   domain.md                the designed cut: contexts, subdomain types, relationship patterns and why
-  backlog/<epic>/epic.md · <story>.md
-.agents/factory/           how it is worked through (the machine: profile, gate, runner)
-tasks/<story>/             the stages' hand-overs
+  epics/<epic>/epic.md · <story>.md · <story>.decisions/<nn>.md
+.agents/factory/           the installed pipeline (gate, cli, runner, hook) — factory-update owns it whole
+.dca-factory/runs/<story>/ the run's protocol: hand-overs, marks, journal — disposable
 docs/                      what exists and why — written after the code; generated maps live here
 ```
+
+One owner per place. `project/` is the people's: the description, the epics with their stories and,
+beside each story, its decisions (questions a stage asked, a human's answers, acceptances). A story
+carries its own state — `status: draft | approved | adopted | superseded` is the person's line,
+`status: delivered` and `delivered:` are the gate's, written by nothing else. `.dca-factory/` is
+protocol: delete it at any time and the factory still knows what is delivered and what was decided;
+what is lost is history — hand-overs, the journal, the tokens. Every place is the profile's to move
+(`epics:`, `runs:`, `product:`, `tech:`, `domain:`); the profile itself stays where it is, because it
+is where the others are read from.
 
 `project/` holds intent, written before the code and read as a story's input; `docs/` holds what
 exists, written after the code by people and by `stage-document`. Where the two meet — the designed
@@ -69,7 +79,7 @@ when it is a checkout (a clone of the marketplace, or `FACTORY_PLUGIN_DIR`: an e
 `--copy` and `--link` name the other one. Check the files it wrote before the first run:
 
 ```
-.agents/factory/factory.profile.yaml     your build and test commands, one per test source set
+dca-factory.profile.yaml     your build and test commands, one per test source set
 .agents/factory/story-gate.py            the gate, callable from a terminal and from CI
 .agents/factory/factory-cli.py           what shows and coordinates — status, help, usage, the checkout — beside it
 .githooks/pre-commit                     the change check on what every commit contains (core.hooksPath)
@@ -97,7 +107,7 @@ change that contradicts them.
 (Installed as a plugin, the skills are namespaced: `/dca-factory:factory-backlog`. The bare
 `factory.sh` and gate commands below are the same in every tool.)
 
-Say what the behaviour is. It writes `project/backlog/<epic>/epic.md` and one story, asks for the four
+Say what the behaviour is. It writes `project/epics/<epic>/epic.md` and one story, asks for the four
 epic fields rather than inventing them (`intent`, `goal`, `metric`, `domain_contact`), and leaves
 the story `status: draft` until you release it — the one check no script can replace.
 
@@ -105,7 +115,7 @@ the story `status: draft` until you release it — the one check no script can r
 /factory-run
 ```
 
-Six stages, a gate between them, one hand-over file each under `tasks/<story>/`. It stops and says
+Six stages, a gate between them, one hand-over file each under `.dca-factory/runs/<story>/`. It stops and says
 so when a stage escalates, when the judge finds the *story* wrong, or when three rounds did not
 converge. The stages run in your session — a subagent each, where the tool has them. One process per
 stage, outside the session, is the runner, and it runs only when you start it:
@@ -127,7 +137,7 @@ table in the product description (`s`, `m`, `l`, `xl`), never in pixels.
 
 Several stories are one command. It runs them in dependency order, runs past a story that waits
 for a decision, and with `--watch` picks that story up again at the stage that asked, once the
-answer is written (`--max-stages` caps the agent invocations, `.agents/factory/stop` ends it):
+answer is written (`--max-stages` caps the agent invocations, `.dca-factory/stop` ends it):
 
 ```
 bash .agents/factory/factory.sh run --tool claude --watch
@@ -253,7 +263,7 @@ and `--format json` for tools.
 ## A model per stage
 
 ```yaml
-model.claude.tidy: <model>        # in .agents/factory/factory.profile.yaml
+model.claude.tidy: <model>        # in dca-factory.profile.yaml
 model.claude: <model>             # the default for every other stage of that tool
 ```
 
@@ -314,9 +324,11 @@ starts fresh and reads the skill, the story and its predecessor's file again.
   <log>` or `codex-session <log>`
   (`~/.claude/projects/<project>/<session>.jsonl`, `~/.codex/sessions/<date>/rollout-*.jsonl`).
 
-**History.** Every number lives in the project: `tasks/<story>/.verify/journal.tsv`, next to the gate
-reports and each invocation's raw output (`*.out`). Commit `tasks/` and the history travels with the
-repository — `factory.sh status --usage` without `--story` shows every story ever run. The journal is append-only, so
+**History.** Every number lives in the project: `.dca-factory/runs/<story>/.verify/journal.tsv`, next to the gate
+reports and each invocation's raw output (`*.out`). Whether `.dca-factory/runs/` is committed is the
+project's choice: committed, the history travels with the repository — `factory.sh status --usage`
+without `--story` shows every story ever run, `status --story` its passes and costs; left out, a clone
+still knows what is delivered (the story says so) and what was decided (the records beside it). The journal is append-only, so
 the install marks it `merge=union` in `.gitattributes`: two branches that ran the same story merge
 without a conflict, a window read on one side and pending on the other counts once, and "running" is
 judged by time, not by line order. An in-session stage first
@@ -345,8 +357,8 @@ Only for stages run inside a session, marked with `--stage-start`/`--stage-end`,
 
 It reads with the rights of whoever runs it, so only their own logs. `FACTORY_SESSION_USAGE=off`
 switches it off for one person, `sessionUsage: off` in the stack profile for the project; in-session
-stages are then unknown. A committed `tasks/` carries token counts, models, times and the stages'
-final messages — leave `tasks/**/.verify/` out of the repository where that is internal.
+stages are then unknown. A committed `.dca-factory/runs/` carries token counts, models, times and the stages'
+final messages — leave `.dca-factory/runs/**/.verify/` out of the repository where that is internal.
 
 ## What it carries, and what it does not
 
@@ -363,16 +375,16 @@ what must be true before the next one starts.
 | Skill | Does |
 |---|---|
 | `factory-run` | runs one story (an adopted story — `status: adopted`, behaviour the project already has — runs plan, test, judge and the adopt gate, which maps every scenario to a green test and applies a break to every test the adoption wrote, on a scratch copy; contract 9: the happy path end to end, every other scenario integrated, the test gate holding the levels; a `kind: journey` item runs plan, test, judge, document and is green at its test gate): gate → plan → test → gate → build → gate → tidy → gate → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `factory.sh backlog` reads every story's state off the files, and `factory.sh run` without `--story` runs them in that order. `/factory-run <your words>` takes a wish: the gate tells an id from a wish (`--resolve`), `factory-backlog` writes the story with fixed questions (`reference/questions.md`: which epic, the criteria, run now), and the run follows once it is released |
-| `stage-plan` | story → `tasks/<story>/plan.md`: elements that change, criteria, test shape per criterion |
-| `stage-test` | plan → tests plus `tasks/<story>/tests.md` with the criterion-to-test table |
-| `stage-build` | red tests → production code plus `tasks/<story>/build.md` |
-| `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `tasks/<story>/tidy.md`; changes no test and no behaviour |
-| `stage-judge` | the change → `tasks/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-review` in a DCA project) |
-| `stage-document` | the change → `tasks/<story>/document.md`: glossary, context map and reader documentation follow the code |
+| `stage-plan` | story → `.dca-factory/runs/<story>/plan.md`: elements that change, criteria, test shape per criterion |
+| `stage-test` | plan → tests plus `.dca-factory/runs/<story>/tests.md` with the criterion-to-test table |
+| `stage-build` | red tests → production code plus `.dca-factory/runs/<story>/build.md` |
+| `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `.dca-factory/runs/<story>/tidy.md`; changes no test and no behaviour |
+| `stage-judge` | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-review` in a DCA project) |
+| `stage-document` | the change → `.dca-factory/runs/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
 | `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
-| — `decisions/` | the questions a run may not answer, one file each under `.agents/factory/decisions/<story>-<nn>.md`, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
-| `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies. Reports the versions and the profile's contract line; commits nothing |
+| — `decisions/` | the questions a run may not answer, one file each under `<story>.decisions/<nn>.md` beside the story, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
+| `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies; migrates an older layout once (profile to the root, `project/backlog/` → `project/epics/`, records beside their stories, run artefacts out of `tasks/`, the delivery mark into the story) and prints every move. Reports the versions and the profile's contract line; commits nothing |
 | `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`factory.sh status [--story <id>]`). Reads files; changes and starts nothing |
 | `factory-decisions` | the inbox for those records: lists what waits on a human (`factory.sh decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer. A structural answer — a new bounded context, a new relationship, a surface an actor lacks — also brings `project/domain.md` and the product description in line |
 | `factory-help` | the factory explained in one fixed view (`factory.sh help`): the flow from describing the project to accepting a story with this project's place in it, every command for agent and shell, the marks, the files, what to do next. Reads files; changes and starts nothing |
@@ -402,7 +414,7 @@ python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy
 | `tidy` | the build gate's checks again — the tidy stage's whole claim is that it changed no behaviour |
 | `document` | every file, path and identifier the document stage claims **exists**; every claim names how it was checked; every term the plan proposed has landed in a glossary or is named as open |
 | test, build, tidy | a test that existed before the story still expects what it did — added cases pass; a changed or removed line passes only when the plan lists it under `## Changed tests`, backed by the story's `## Changed expectations` or by an answered decision (`tests-kept`, from the plan gate's git baseline) |
-| every stage | the story's **decision records** (`.agents/factory/decisions/`): a `## needs-human` names one; an open one blocks the story and says where to answer; an answered one is applied by the stage that asked and stamped `## Applied` |
+| every stage | the story's **decision records** (`<story>.decisions/` beside each story): a `## needs-human` names one; an open one blocks the story and says where to answer; an answered one is applied by the stage that asked and stamped `## Applied` |
 
 A command the stack profile does not declare is skipped and named in the report — never failed,
 unless the profile's `required:` names it (below).
@@ -547,7 +559,7 @@ guessing.
 ## Project knowledge
 
 None is baked in. Everything project-specific comes from two places the project owns: the
-**stack profile** (`.agents/factory/factory.profile.yaml` — build and test commands, `format:` and
+**stack profile** (`dca-factory.profile.yaml` — build and test commands, `format:` and
 `formatFix:`, `browser:`, `acceptance:` and `run:`, the carriers) and `project/` with the
 **description, backlog**, beside the glossaries and the context map. A skill that would break in a project without a
 particular domain concept would be wrong.

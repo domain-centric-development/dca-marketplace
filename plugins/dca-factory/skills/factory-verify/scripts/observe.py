@@ -6,7 +6,7 @@ does is cross-check the **claims** in the stage files against what the repositor
 run's journal show. A stage saying "all tests green" is a claim; the gate's own report is evidence;
 a test file whose content changed after the test stage is a fact.
 
-    observe.py --story <id> [--tasks tasks] [--backlog <dir>] [--root .] [--json]
+    observe.py --story <id> [--runs <dir>] [--epics <dir>] [--root .] [--json]
 
 Exit code 0 means every claim it could check held. Anything it could not see is listed as such
 rather than counted as fine.
@@ -36,6 +36,9 @@ import importlib.util as _importlib
 _GATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "story-gate.py")
 if not os.path.isfile(_GATE):
     _GATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "factory-run", "scripts", "story-gate.py")
+# No bytecode beside the gate: a `__pycache__` in the project is an untracked file the commit check would
+# refuse, and a cache is nothing a project should carry.
+sys.dont_write_bytecode = True
 _spec = _importlib.spec_from_file_location("story_gate", _GATE)
 _gate = _importlib.module_from_spec(_spec)
 sys.modules["story_gate"] = _gate
@@ -103,17 +106,12 @@ def front_of(path):
         return {}
 
 
-def story_file(backlog, story_id):
-    for root, _dirs, files in os.walk(backlog):
-        for name in files:
-            if not name.endswith(".md") or name == "epic.md":
-                continue
-            path = os.path.join(root, name)
-            if os.path.splitext(name)[0].lower() == story_id.lower():
-                return path
-            if str(front_of(path).get("id", "")).lower() == story_id.lower():
-                return path
-    return None
+def story_file(epics, story_id):
+    """The story as the gate finds it — one file per id, or nothing."""
+    try:
+        return _gate.find_story(epics, story_id)
+    except GateError:
+        return None
 
 
 def criteria_of(text):
@@ -206,7 +204,7 @@ def locate(project, selector):
     simple = cls.rsplit(".", 1)[-1]
     for root, dirs, files in os.walk(project):
         dirs[:] = [d for d in dirs if d not in ("build", "out", "bin", "obj", "target",
-                                                "node_modules", ".git", "tasks")]
+                                                "node_modules", ".git", _gate.runs_top())]
         for name in files:
             if os.path.splitext(name)[0] == simple:
                 path = os.path.join(root, name)
@@ -216,13 +214,13 @@ def locate(project, selector):
     return None
 
 
-def observe(project, tasks, backlog, story_id):
+def observe(project, runs, epics, story_id):
     report = Report()
-    run_dir = os.path.join(project, tasks, story_id)
+    run_dir = os.path.join(project, runs, story_id)
     journal_dir = os.path.join(run_dir, ".verify")
 
     if not os.path.isdir(run_dir):
-        report.finding("run", f"no run artefacts at {os.path.join(tasks, story_id)} — nothing to observe")
+        report.finding("run", f"no run artefacts at {os.path.join(runs, story_id)} — nothing to observe")
         return report
 
     # --- 1. the file contract -------------------------------------------
@@ -244,9 +242,9 @@ def observe(project, tasks, backlog, story_id):
             report.ok("contract", f"{name} carries the sections the contract names")
 
     # --- 2. criterion keys are committed identifiers ---------------------
-    story_path = story_file(os.path.join(project, backlog), story_id)
+    story_path = story_file(os.path.join(project, epics), story_id)
     if not story_path:
-        report.blind("criteria", f"no story file for {story_id} under {backlog}/")
+        report.blind("criteria", f"no story file for {story_id} under {epics}/")
         story_keys = []
     else:
         story_keys = criteria_of(read(story_path))
@@ -296,7 +294,7 @@ def observe(project, tasks, backlog, story_id):
                 if re.match(rf"story\s+{re.escape(story_id)}\s+stage\s+\w+$", detail):
                     continue
                 report.finding("gate", f"{name.split('.')[0]} reported: {detail}",
-                               f"{tasks}/{story_id}/.verify/{name}")
+                               f"{runs}/{story_id}/.verify/{name}")
             skipped = [l.strip()[10:] for l in text.splitlines() if l.startswith("gate:skip")]
             for entry in skipped:
                 report.blind("gate", f"{name.split('.')[0]} skipped: {entry}")
@@ -380,7 +378,7 @@ def observe(project, tasks, backlog, story_id):
                     and re.fullmatch(r"\.[A-Za-z0-9]{1,6}", extension)):
                 claimed.add(candidate)
         code_changes = {f for f in actual
-                        if not f.startswith((tasks + "/", backlog + "/", ".agents/", ".claude/", ".codex/", ".opencode/"))
+                        if not f.startswith((runs + "/", epics + "/", ".agents/", ".claude/", ".codex/", ".opencode/"))
                         and not f.endswith(".md")}
         unclaimed = sorted(f for f in code_changes if f not in claimed)
         phantom = sorted(c for c in claimed
@@ -402,7 +400,7 @@ def observe(project, tasks, backlog, story_id):
             planned.add(word)
         surprises = []
         for path in actual:
-            if path.startswith((tasks + "/", backlog + "/", ".agents/", ".claude/")) or path.endswith(".md"):
+            if path.startswith((runs + "/", epics + "/", ".agents/", ".claude/")) or path.endswith(".md"):
                 continue
             stem = os.path.splitext(os.path.basename(path))[0]
             if stem not in planned:
@@ -414,7 +412,7 @@ def observe(project, tasks, backlog, story_id):
             report.ok("plan-coverage", "every changed file was named in the plan")
 
     # --- 7. commands a stage claims vs. what the project declares --------
-    profile = read(os.path.join(project, ".agents", "factory", "factory.profile.yaml")) or ""
+    profile = read(os.path.join(project, _gate.resolve_profile(None, project) or _gate.PROFILE_FILE)) or ""
     declared = {}
     for line in profile.splitlines():
         if ":" in line and not line.strip().startswith("#"):
@@ -490,18 +488,16 @@ def observe(project, tasks, backlog, story_id):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="observe one real factory run")
     parser.add_argument("--story", required=True)
-    parser.add_argument("--tasks", default="tasks")
-    parser.add_argument("--backlog", help="default: the profile's `backlog:`, else project/backlog")
+    parser.add_argument("--runs", help="the run artefacts (default: the profile's `runs:`, else .dca-factory/runs)")
+    parser.add_argument("--epics", help="where the stories are (default: the profile's `epics:`, else project/epics)")
     parser.add_argument("--root", default=".")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
     project = os.path.abspath(args.root)
-    if not args.backlog:
-        profile = read(os.path.join(project, ".agents", "factory", "factory.profile.yaml")) or ""
-        named = [l.split(":", 1)[1].strip().strip("\"'") for l in profile.splitlines() if l.startswith("backlog:")]
-        args.backlog = (named[0] if named and named[0] else "project/backlog")
-    report = observe(project, args.tasks, args.backlog, args.story)
+    # the places as the gate resolves them — the profile's keys with their defaults, a flag winning
+    _gate.set_places(_gate.read_profile(_gate.resolve_profile(None, project)), epics=args.epics, runs=args.runs)
+    report = observe(project, _gate.place("runs"), _gate.place("epics"), args.story)
 
     if args.json:
         print(json.dumps({"story": args.story, "findings": report.findings,

@@ -54,9 +54,8 @@ GATE=".agents/factory/story-gate.py"
 # needs-human section, an open record — so the runner parses nothing the gate parses.
 CLI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/factory-cli.py"
 cli() { "$PY" "$CLI" "$@"; }
-TASKS="tasks"
-DECISIONS=".agents/factory/decisions"
-STOP_FILE=".agents/factory/stop"             # exists → a backlog run stops before its next story
+RUNS=""                                      # the run folder — resolved below through the cli, from the profile
+STOP_FILE=""                                 # <run folder's parent>/stop: exists → a backlog run stops before its next story
 INVOCATIONS=0                                # agent invocations in this process
 GATE_FIRST=""                                # set for the first stage of an explicit story run: its gate decides first
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
@@ -110,6 +109,10 @@ fi
 # Every Python this runner starts writes UTF-8 — the gate's and the setup's lines carry `—` and `→`,
 # and a Windows console's code page (cp1252) cannot encode them: the print raises and the step dies.
 export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
+# Where the run artefacts go: the profile's `runs:` or its default, read through the cli like every other
+# place — the runner hard-codes no path of the project's. The stop file lives beside the runs.
+RUNS=$(cli --place runs 2>/dev/null); RUNS=${RUNS:-.dca-factory/runs}
+STOP_FILE="$(dirname "$RUNS")/stop"
 
 # Whether `ln -s` in this shell makes a symlink. On Windows (Git Bash, MSYS2) it needs developer
 # mode or an administrator *and* `MSYS=winsymlinks:nativestrict`; without those it silently makes
@@ -576,7 +579,7 @@ invoke() {                                  # invoke <tool> <prompt>
   local choice model_args; choice=$(model_choice "$tool" "${stage_in_flight:-}"); model_args=${choice%%|*}
   if [ -n "${FACTORY_TOOL_CMD:-}" ]; then
     FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}" FACTORY_PROMPT="$prompt" \
-      FACTORY_MODEL="$(model_key "$tool" "${stage_in_flight:-}")" sh -c "$FACTORY_TOOL_CMD" > "$raw"
+      FACTORY_RUNS="$RUNS" FACTORY_MODEL="$(model_key "$tool" "${stage_in_flight:-}")" sh -c "$FACTORY_TOOL_CMD" > "$raw"
     local code=$?
     [ "$raw" = /dev/null ] || { [ -n "${FACTORY_USAGE_FORMAT:-}" ] || cat "$raw"; }
     return $code
@@ -624,7 +627,7 @@ record_usage() {                            # record_usage <story> <stage> <tool
   [ -n "${5:-}" ] && fields="$fields	seconds=$5"
   [ "$(usage_format "$3")" = none ] || printf '%s\n' "$out" | sed '1d'
   printf '%s\tusage\t%s\ttool=%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "$3" "$fields" \
-    >> "$TASKS/$1/.verify/journal.tsv"
+    >> "$RUNS/$1/.verify/journal.tsv"
 }
 
 # --- install -----------------------------------------------------------------
@@ -806,6 +809,9 @@ install_project() {                         # install_project <tool> <skill fold
   # The profile first: the carriers it names are linked by this same run, so the first `run` does not
   # stop in the carrier check, and the per-skill branch for Claude's directory below sees them.
   must "create .agents/factory and .githooks" mkdir -p .agents/factory .githooks
+  # An older layout first — the profile under .agents/factory/, project/backlog/, a decisions store, run
+  # artefacts under tasks/ — so the profile below is found where it now lives and not written twice.
+  cli --migrate-layout | grep -v "^migrate: nothing to move" | sed 's/^migrate: /factory: migrated /'
   [ -f "$PROFILE" ] || write_profile "$from"
   # The mode follows the source: a plugin cache holds one folder per version and drops a version some
   # time after an update, so a link into it goes stale for everyone who installed from the marketplace
@@ -1035,7 +1041,7 @@ install_project() {                         # install_project <tool> <skill fold
   # lines at its end, which git reports as a conflict although keeping both is always right.
   if ! grep -qs "journal.tsv merge=union" .gitattributes; then
     [ -s .gitattributes ] && [ -n "$(tail -c 1 .gitattributes)" ] && printf '\n' >> .gitattributes
-    printf '%s\n' "tasks/**/.verify/journal.tsv merge=union" >> .gitattributes
+    printf '%s\n' "$RUNS/**/.verify/journal.tsv merge=union" >> .gitattributes
     echo "factory: .gitattributes merges the story journals by keeping both sides (merge=union)"
   fi
   write_agents_block
@@ -1082,7 +1088,7 @@ conventions_file() {
 # What a build tool looks like, and which commands it gets, is data: one flat `key: value` file per
 # detection case in templates/presets/, applied at setup and compared by `setup --check`. This script
 # knows no build tool. A preset is never read at run time — the profile is the only contract there.
-PROFILE=".agents/factory/factory.profile.yaml"
+PROFILE="dca-factory.profile.yaml"          # at the project root: the person's, committed; the one fixed path
 
 presets_dir() {                             # presets_dir [<skill folder>] — where the presets are
   if [ -n "${FACTORY_STACKS_DIR:-}" ]; then echo "$FACTORY_STACKS_DIR"; return 0; fi
@@ -1140,7 +1146,7 @@ KINDS = ("stack", "browser", "format", "governance", "stub", "integration")
 #: Folders no detection looks into: build output, dependencies, tool state. Bounded in depth as well,
 #: so a detection never walks a whole disk from a mistaken directory.
 PRUNED = {".git", ".gradle", ".idea", ".vs", "build", "bin", "obj", "target", "dist", "out",
-          "node_modules", ".venv", "venv", "__pycache__", ".agents", ".claude", ".codex", ".opencode", "tasks"}
+          "node_modules", ".venv", "venv", "__pycache__", ".agents", ".claude", ".codex", ".opencode", ".dca-factory"}
 DEPTH = 4
 #: The project description's default places — the gate's defaults, so no key is needed for them.
 LOCATIONS = {"product": "project/product.md", "tech": "project/tech.md", "domain": "project/domain.md"}
@@ -1558,7 +1564,7 @@ PYEOF
 # than assume the run continues: `changes-requested` goes back to the build stage (one round),
 # `story-conflict` stops the run — the story or the plan is wrong, and no build round fixes that.
 verdict_of() {                              # verdict_of <story>
-  cli --tasks "$TASKS" --verdict "$1" 2>/dev/null
+  cli --verdict "$1" 2>/dev/null
 }
 
 # Whether a stage file stops the run: a `## needs-human` section with something in it. A bare
@@ -1575,22 +1581,23 @@ stopped_for_human() {                       # stopped_for_human <artefact> <stag
   local artefact=$1 stage=$2 story=$3 ids id applies
   echo "factory: stage '$stage' ends with a needs-human section — the run stops here." >&2
   # the id alone: a stage may go on writing after it on the same line ("decision: s-01. The browser …")
-  local lines; lines=$(cli --needs-human "$artefact" 2>/dev/null)
+  local lines record; lines=$(cli --needs-human "$artefact" --story "$story" 2>/dev/null)
   ids=$(printf '%s\n' "$lines" | awk -F'\t' 'NF {print $1}')
   if [ -z "$ids" ]; then
     echo "factory:   the section names no 'decision: <id>' — the stage has to write the question as" >&2
-    echo "factory:   $DECISIONS/<story>-<nn>.md; the next gate refuses a question nobody was asked." >&2
+    echo "factory:   <story>.decisions/<nn>.md beside the story; the next gate refuses a question nobody was asked." >&2
   fi
   for id in $ids; do
-    if [ -f "$DECISIONS/$id.md" ]; then
+    record=$(printf '%s\n' "$lines" | awk -F'\t' -v i="$id" '$1 == i {print $3}' | head -1)
+    if [ -n "$record" ] && [ "$record" != - ] && [ -f "$record" ]; then
       # The record names the stage that applies the answer — for a judge's story conflict that is not the
       # judge — unless the answer names another (`applies:`). The run without --from reads which off the files.
       applies=$(printf '%s\n' "$lines" | awk -F'\t' -v i="$id" '$1 == i && $2 != "-" {print $2}' | head -1)
-      echo "factory:   decision $id → $DECISIONS/$id.md — answer it there under '## Answer'" >&2
+      echo "factory:   decision $id → $record — answer it there under '## Answer'" >&2
       echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story — it resumes at" \
            "${applies:-$stage}, or earlier where the answer's applies: names an earlier stage" >&2
     else
-      echo "factory:   decision $id is named but $DECISIONS/$id.md does not exist." >&2
+      echo "factory:   decision $id is named but its record ${record:-beside the story} does not exist." >&2
     fi
   done
   echo "factory:   read $artefact and decide; the stages after it were not run." >&2
@@ -1619,7 +1626,7 @@ run_shared_builder() {                      # run_shared_builder <story> <tool> 
   local prompt="Carry out these stages of the delivery pipeline for backlog story $story, one after another, \
 in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//') — apply each stage's skill in turn, \
 reading only the story and the files that stage's skill names as its input, and writing its output file under \
-$TASKS/$story/. After the test, build and tidy stages run that stage's gate, \
+$RUNS/$story/. After the test, build and tidy stages run that stage's gate, \
 \`$PY $GATE --story $story --stage <stage>\`, and fix exactly what it names before the next stage, at most \
 three attempts per stage. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
 document stage."
@@ -1642,11 +1649,11 @@ document stage."
   if [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
     echo "factory: --max-stages $MAX_STAGES reached before the shared stages of $story." >&2; return 4
   fi
-  local journal="$TASKS/$story/.verify/journal.tsv" began raw_out invoked=0
+  local journal="$RUNS/$story/.verify/journal.tsv" began raw_out invoked=0
   [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
   snapshot "$story" "before-builder"
   printf '%s\tstage-start\tbuilder\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" >> "$journal"
-  raw_out="$TASKS/$story/.verify/builder.$(date -u +%H%M%S).out"
+  raw_out="$RUNS/$story/.verify/builder.$(date -u +%H%M%S).out"
   began=$(date +%s)
   invocation_raw="$raw_out" stage_in_flight=builder story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
   record_usage "$story" builder "$tool" "$raw_out" "$(( $(date +%s) - began ))"
@@ -1655,7 +1662,7 @@ document stage."
   snapshot "$story" "after-builder"
   [ -f "$GATE" ] && "$PY" "$GATE" --record-changes builder --story "$story" >/dev/null 2>&1
   for st in "${range[@]}"; do
-    local artefact="$TASKS/$story/$(stage_file "$st")"
+    local artefact="$RUNS/$story/$(stage_file "$st")"
     [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage '$st' is not finished." >&2; return 1; }
     if asks_human "$artefact"; then stopped_for_human "$artefact" "$st" "$story"; return $?; fi
   done
@@ -1665,8 +1672,8 @@ document stage."
     echo "── gate test  (re-checked by the runner)"
     gate test "$story" || { echo "factory: the runner's re-check of gate 'test' refused the shared stages' work." >&2; return 1; }
   fi
-  if [ "$kind" = story ] && [[ " ${range[*]} " == *" test "* ]] && [ ! -s "$TASKS/$story/.tests-red" ]; then
-    echo "factory: the shared stages left no red proof ($TASKS/$story/.tests-red) — the test gate never saw the tests fail." >&2
+  if [ "$kind" = story ] && [[ " ${range[*]} " == *" test "* ]] && [ ! -s "$RUNS/$story/.tests-red" ]; then
+    echo "factory: the shared stages left no red proof ($RUNS/$story/.tests-red) — the test gate never saw the tests fail." >&2
     return 1
   fi
   for st in build tidy; do
@@ -1678,7 +1685,7 @@ document stage."
 }
 
 bump_rounds() {                             # bump_rounds <story> -> current count
-  local file="$TASKS/$1/.rounds" count=0
+  local file="$RUNS/$1/.rounds" count=0
   [ -f "$file" ] && count=$(tr -dc '0-9' < "$file")
   count=$(( ${count:-0} + 1 ))
   printf '%s\n' "$count" > "$file"
@@ -1688,7 +1695,7 @@ bump_rounds() {                             # bump_rounds <story> -> current cou
 # A refusal whose cause is the machine, not the story: the gate found no program a profile command
 # needs. No stage can put a tool on the PATH, so no round is counted and nothing runs again.
 environment_refused() {                     # environment_refused <stage> <story>
-  local report="$TASKS/$2/.gate-$1.txt"
+  local report="$RUNS/$2/.gate-$1.txt"
   [ -f "$report" ] && grep -q '^gate:fail environment' "$report" || return 1
   echo "factory: gate '$1' refused on the environment, not on the story — $(sed -n 's/^gate:fail environment — //p' "$report" | head -n 1)" >&2
   echo "factory:   no round is counted. Fix it, then: factory.sh run --story $2" >&2
@@ -1698,23 +1705,23 @@ environment_refused() {                     # environment_refused <stage> <story
 # A person's --from restarts the story's count: the rounds so far were theirs to judge, and they chose
 # to go on. The old count is kept in the journal folder, never deleted.
 reset_rounds() {                            # reset_rounds <story>
-  local file="$TASKS/$1/.rounds"
+  local file="$RUNS/$1/.rounds"
   [ -f "$file" ] || return 0
-  mkdir -p "$TASKS/$1/.verify"
-  mv "$file" "$TASKS/$1/.verify/rounds.$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$RUNS/$1/.verify"
+  mv "$file" "$RUNS/$1/.verify/rounds.$(date -u +%Y%m%dT%H%M%SZ)"
   printf '%s	rounds-reset	-	by=--from
-' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$TASKS/$1/.verify/journal.tsv"
-  echo "factory: --from $from starts a new count of rounds for $1 (the old one is under $TASKS/$1/.verify/)."
+' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$RUNS/$1/.verify/journal.tsv"
+  echo "factory: --from $from starts a new count of rounds for $1 (the old one is under $RUNS/$1/.verify/)."
 }
 
 prompt_for() {                              # prompt_for <stage> <story>
   local stage=$1 story=$2 repeat=""
   # A repeat round that cannot see why the gate refused works blind, and every stage skill says to
   # work only on what the gate confirmed. So the refusal is named as an input, not remembered.
-  [ -f "$TASKS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before; its \
-report is $TASKS/$story/.gate-$stage.txt — read it and fix exactly what it names, nothing else."
-  [ "$stage" = judge ] && [ -f "$TASKS/$story/.judge-previous.md" ] && repeat=" This is a repeat round: \
-the previous verdict is $TASKS/$story/.judge-previous.md. Account for each defect it confirmed under \
+  [ -f "$RUNS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before; its \
+report is $RUNS/$story/.gate-$stage.txt — read it and fix exactly what it names, nothing else."
+  [ "$stage" = judge ] && [ -f "$RUNS/$story/.judge-previous.md" ] && repeat=" This is a repeat round: \
+the previous verdict is $RUNS/$story/.judge-previous.md. Account for each defect it confirmed under \
 '## Previous round' — fixed (with the evidence) or withdrawn (with the reason) — before judging anew."
   # The guard the profile names holds the invariants while code is edited: said in the prompt of the two
   # stages that write production code, so no build or tidy stage starts without it in view.
@@ -1725,13 +1732,13 @@ the previous verdict is $TASKS/$story/.judge-previous.md. Account for each defec
   esac
   printf '%s' "Apply the stage-$stage skill for backlog story $story. \
 Read only the story and the files the skill names as its input, and write its output file under \
-$TASKS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages.$guard$repeat"
+$RUNS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages.$guard$repeat"
 }
 
 gate() {                                    # gate <stage> <story>
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
-  local report="$TASKS/$2/.gate-$1.txt" journal="$TASKS/$2/.verify"
-  mkdir -p "$TASKS/$2" "$journal"
+  local report="$RUNS/$2/.gate-$1.txt" journal="$RUNS/$2/.verify"
+  mkdir -p "$RUNS/$2" "$journal"
   "$PY" "$GATE" --story "$2" --stage "$1" 2>&1 | tee "$report"
   local code=${PIPESTATUS[0]}
   # Every gate run is kept for the observer, with its verdict; only a *refusal* is kept where the
@@ -1766,7 +1773,7 @@ NO_HASHES="# no-sha256-command: names only, no content hashes"
 # What the working tree looks like right now, so a later stage's claim about what it changed can be
 # checked rather than believed. Cheap: one porcelain listing plus a hash per file git reports.
 snapshot() {                                # snapshot <story> <label>
-  local journal="$TASKS/$1/.verify" file hash prefix entry code origin
+  local journal="$RUNS/$1/.verify" file hash prefix entry code origin
   mkdir -p "$journal"
   hash=$(hasher)
   if [ "$hash" = none ]; then
@@ -1809,7 +1816,7 @@ snapshot() {                                # snapshot <story> <label>
   } > "$journal/tree-$2.txt" 2>/dev/null || true
 }
 
-# A record under $DECISIONS that names this story and carries no '## Answer' yet. The gate does the
+# A record beside the story that carries no '## Answer' yet. The gate does the
 # fine reading (a draft without a name is still open); this is the cheap check that keeps a run from
 # starting a stage while the story waits for a human.
 open_decisions() {                          # open_decisions <story>
@@ -1883,13 +1890,13 @@ run_story() {
     # holds costs no invocation, and a stage that does run reads a report of now, not of a round the
     # machine lost (a tool missing on the PATH, a count reset by --from).
     if [ -n "$GATE_FIRST" ] && [ "$stage" = "$from" ] && [ -z "$dry" ] && [ "$stage" != document ] \
-       && [[ " ${POST_GATED[*]} " == *" $stage "* ]] && [ -f "$TASKS/$story/$(stage_file "$stage")" ]; then
+       && [[ " ${POST_GATED[*]} " == *" $stage "* ]] && [ -f "$RUNS/$story/$(stage_file "$stage")" ]; then
       GATE_FIRST=""
       echo "── gate $stage  (the file exists — checked before the stage is invoked)"
       local first_code=0
       gate "$stage" "$story" >/dev/null 2>&1 || first_code=$?
       if [ "$first_code" = 0 ]; then
-        echo "factory: $TASKS/$story/$(stage_file "$stage") already holds — stage '$stage' is not invoked again."
+        echo "factory: $RUNS/$story/$(stage_file "$stage") already holds — stage '$stage' is not invoked again."
         ran="${ran:+$ran,}$stage"
         continue
       fi
@@ -1898,11 +1905,11 @@ run_story() {
     GATE_FIRST=""
     # A resumed story whose document file exists and was never refused: its gate decides first, and a
     # file that already holds costs no invocation.
-    if [ "$stage" = document ] && [ -z "$dry" ] && [ -f "$TASKS/$story/document.md" ] \
-       && [ ! -f "$TASKS/$story/.gate-document.txt" ] && [ ! -f "$TASKS/$story/.delivered" ]; then
+    if [ "$stage" = document ] && [ -z "$dry" ] && [ -f "$RUNS/$story/document.md" ] \
+       && [ ! -f "$RUNS/$story/.gate-document.txt" ] && ! cli --delivered "$story" >/dev/null 2>&1; then
       echo "── gate document  (the file exists — checked before the stage is invoked)"
       if gate document "$story" >/dev/null 2>&1; then
-        echo "factory: $TASKS/$story/document.md already holds — the document stage is not invoked again."
+        echo "factory: $RUNS/$story/document.md already holds — the document stage is not invoked again."
         ran="${ran:+$ran,}document"
         break
       fi
@@ -1934,7 +1941,7 @@ run_story() {
       local stage_started; stage_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
       # The previous verdict is an input to the next one, not something to overwrite: a defect a judge
       # confirmed may not vanish in the next round without a word.
-      [ "$stage" = judge ] && [ -f "$TASKS/$story/judge.md" ] && mv "$TASKS/$story/judge.md" "$TASKS/$story/.judge-previous.md"
+      [ "$stage" = judge ] && [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
       [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
       snapshot "$story" "before-$stage"
       local choice requested note model_fields=""
@@ -1942,8 +1949,8 @@ run_story() {
       [ -n "$requested" ] && model_fields="	model_requested=$requested"
       [ -n "$note" ] && model_fields="$model_fields	model_applied=no ($note)"
       [ -n "$note" ] && echo "factory: model.$tool.$stage: $requested — $note"
-      printf '%s\tstage-start\t%s\ttool=%s%s\n' "$stage_started" "$stage" "$tool" "$model_fields" >> "$TASKS/$story/.verify/journal.tsv"
-      local raw_out; raw_out="$TASKS/$story/.verify/$stage.$(date -u +%H%M%S).out"
+      printf '%s\tstage-start\t%s\ttool=%s%s\n' "$stage_started" "$stage" "$tool" "$model_fields" >> "$RUNS/$story/.verify/journal.tsv"
+      local raw_out; raw_out="$RUNS/$story/.verify/$stage.$(date -u +%H%M%S).out"
       local invoked=0
       local began; began=$(date +%s)
       invocation_raw="$raw_out" stage_in_flight="$stage" story_in_flight="$story" \
@@ -1951,14 +1958,14 @@ run_story() {
       record_usage "$story" "$stage" "$tool" "$raw_out" "$(( $(date +%s) - began ))"
       [ "$invoked" = 0 ] || {
         printf '%s\tstage-end\t%s\texit=nonzero\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
-          >> "$TASKS/$story/.verify/journal.tsv"
+          >> "$RUNS/$story/.verify/journal.tsv"
         echo "factory: the tool exited non-zero during stage '$stage'." >&2; return 1; }
       printf '%s\tstage-end\t%s\texit=0\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
-        >> "$TASKS/$story/.verify/journal.tsv"
+        >> "$RUNS/$story/.verify/journal.tsv"
       snapshot "$story" "after-$stage"
       # What the stage changed and the story's diff so far, for the next stage to read first.
       [ -f "$GATE" ] && "$PY" "$GATE" --record-changes "$stage" --story "$story" >/dev/null 2>&1
-      local artefact="$TASKS/$story/$(stage_file "$stage")"
+      local artefact="$RUNS/$story/$(stage_file "$stage")"
       [ -f "$artefact" ] || {
         echo "factory: stage '$stage' produced no $artefact — a stage is finished when its file exists." >&2
         return 1; }
@@ -2020,11 +2027,11 @@ run_story() {
           return $?
           ;;
         story-conflict)
-          echo "factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes back to the build stage. needs-human: read $TASKS/$story/judge.md." >&2
+          echo "factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes back to the build stage. needs-human: read $RUNS/$story/judge.md." >&2
           return 1
           ;;
         "")
-          echo "factory: $TASKS/$story/judge.md carries no 'verdict:' line — the judge stage is not finished." >&2
+          echo "factory: $RUNS/$story/judge.md carries no 'verdict:' line — the judge stage is not finished." >&2
           return 1
           ;;
         *)
@@ -2134,6 +2141,12 @@ setup_check() {                             # setup_check [brief]
     return 1
   fi
   presets "$dir" check "$PROFILE" ${brief:+brief}
+  local code=$?
+  # One architecture command, checked: the profile's `architecture:` was copied from the conventions file at
+  # setup, and nothing merges them — changed on one side, the gate and the method's review run different
+  # commands. Named, never fixed: the person decides which is right.
+  cli --drift ${brief:+--brief} || true
+  return $code
 }
 
 # Adds what detection finds and the profile lacks; never overwrites a value a person wrote, except the

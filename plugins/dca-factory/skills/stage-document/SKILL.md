@@ -5,10 +5,10 @@ description: Documentation stage of a factory run — brings the project's own d
 
 # Document what the story changed
 
-Input: the story, `tasks/<story>/plan.md`, `build.md`, `judge.md`, and the diff —
-`tasks/<story>/.verify/story.diff`, which the pipeline writes (where it says there is no diff,
+Input: the story, `.dca-factory/runs/<story>/plan.md`, `build.md`, `judge.md`, and the diff —
+`.dca-factory/runs/<story>/.verify/story.diff`, which the pipeline writes (where it says there is no diff,
 `changed.txt` lists the files). Nothing else.
-Output: the updated documents, plus `tasks/<story>/document.md`.
+Output: the updated documents, plus `.dca-factory/runs/<story>/document.md`.
 
 A story is not delivered when its code is green and its documents describe the system as it was
 yesterday. This stage closes that gap — and it closes it with **checkable** statements only.
@@ -31,7 +31,7 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    never by hand. A story that *needs* a new context or
    relationship should never have reached this stage; if you find one, write `## needs-human`
    naming a decision record (`decision: <story>-<nn>`), written to
-   `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
+   `<story>.decisions/<nn>.md` beside the story with the front matter `id: <story>-<nn>`,
    `story:`, `stage: document`, `asked:` (UTC) and the sections `## Question`, `## Options`,
    `## Recommendation` (full shape: `factory-run/templates/decision.md.tmpl`).
    When you run again on a story whose record is answered — asked here, or answered `applies:

@@ -93,7 +93,12 @@
 #              The three are written with the person by /factory-setup (through the project's
 #              description skill); `setup` writes a key only where the project instructions name
 #              another place. A key that names no file fails the gate
-# backlog      where the epics and stories are (default: project/backlog)
+# epics        where the epics and stories are (default: project/epics). A story carries its own state:
+#              `status: draft | approved | adopted | superseded` is the person's, `status: delivered` and
+#              `delivered:` are written by the gate alone. Beside each story, `<story>.decisions/` holds
+#              its questions and acceptances
+# runs         where a run keeps its protocol — hand-overs, marks, the journal (default: .dca-factory/runs).
+#              Disposable: deleting it loses history, never what is delivered or decided
 # contextMap   the context map generated from the code, "as built" (found by convention when absent);
 #              a difference to `domain` is a finding, not a duplicate
 # glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
@@ -112,7 +117,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 9
+contract: 10
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}

@@ -10,11 +10,12 @@ be built), a **backlog** of epics and stories, and a **runner** that works throu
 project. Output: what was missing, and one line for everything that was already there.
 
 ```
+dca-factory.profile.yaml   the stack profile — the person's, committed
 project/                   what is to be built (a person writes it)
   product.md · tech.md · domain.md
-  backlog/<epic>/epic.md · <story>.md
-.agents/factory/           how it is worked through (the machine: profile, gate, runner)
-tasks/<story>/             the stages' hand-overs
+  epics/<epic>/epic.md · <story>.md · <story>.decisions/<nn>.md
+.agents/factory/           the installed pipeline (gate, cli, runner, hook)
+.dca-factory/runs/<story>/ the run's protocol: hand-overs, marks, journal — disposable
 docs/                      what exists and why — written after the code, some of it generated
 ```
 

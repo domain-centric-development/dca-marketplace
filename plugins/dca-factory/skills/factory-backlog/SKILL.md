@@ -9,7 +9,7 @@ Input: what the human tells you, plus the project description — the product, t
 decisions and the designed domain — and the glossaries. Output: `<backlog>/<epic>/epic.md`,
 `<backlog>/<epic>/<story>.md`, or a correction to one of them. The places are the stack profile's
 `product:`, `tech:`, `domain:` and `backlog:`, by default `project/product.md`, `project/tech.md`,
-`project/domain.md` and `project/backlog`.
+`project/domain.md` and `project/epics`.
 You write no plan, no test and no code. Run the pipeline separately once the item stands.
 
 The full contract is in `factory-run/reference/backlog-contract.md`; read it before your first
@@ -134,7 +134,7 @@ that smuggles the decision in.
 10. **Check it with the gate, not with your own judgement:**
    `python3 .agents/factory/story-gate.py --check-backlog --story <id>` — the plan gate's checks on
    the story, writing nothing. Not `--stage plan`: that one records the story and the tests as the run
-   found them, and a record taken while the story is still being written leaves files under `tasks/`
+   found them, and a record taken while the story is still being written leaves files under `.dca-factory/runs/`
    that the commit hook then refuses. Every finding it reports is yours to fix before you hand the
    item over. Report what it said.
 
@@ -143,7 +143,7 @@ that smuggles the decision in.
    `python3 .agents/factory/factory-cli.py --window-start backlog --story <id>`, and when you hand the
    story over — released and committed, or stopped with open questions — first
    `python3 .agents/factory/factory-cli.py --window-end backlog --story <id>`, then commit (the journal
-   under `tasks/<id>/` is part of the commit). One window per session; a session that picks the story
+   under `.dca-factory/runs/<id>/` is part of the commit). One window per session; a session that picks the story
    up again opens its own. The window claims nothing: a runner working another story is not held up.
    An epic alone opens no window.
 
@@ -218,4 +218,5 @@ inside one anyway.
 - Do not migrate an existing backlog wholesale. The contract applies to new items; the gate only
   ever looks at the story it is called with, and rewriting finished work invents intents nobody
   stated.
-- Do not touch `tasks/` — those are run artefacts, not backlog.
+- Do not touch `.dca-factory/` — those are run artefacts, not backlog — and never write `status: delivered`
+  or `delivered:`: those two lines are the gate's.

@@ -11,7 +11,7 @@ file the project's instruction file names (its ``- conventions: `<path>` `` line
 naming suffixes and the resolved configuration the architecture suite holds the code to), and the
 glossary and the context map generated from the code (`contextMap:`) where the project has them.
 Nothing else — not the chat history, not an earlier run.
-Output: `tasks/<story>/plan.md`, and nothing else. You write no test and no production code.
+Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test and no production code.
 
 ## Do
 
@@ -172,7 +172,7 @@ decision: <story>-<nn>
 <one line saying what is asked>
 ```
 
-A `## needs-human` names a **decision record**: write `.agents/factory/decisions/<story>-<nn>.md`
+A `## needs-human` names a **decision record**: write `<story>.decisions/<nn>.md` beside the story
 (`nn` — the next two-digit number among this story's records) with the question, the options you
 see, the evidence you read and your recommendation; never an answer. The full shape is
 `factory-run/templates/decision.md.tmpl`, beside this skill; the gate reads exactly this front

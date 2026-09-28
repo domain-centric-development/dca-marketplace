@@ -15,9 +15,9 @@ them apart is what makes a run reproducible.
 | Thing | Where | Missing? |
 |---|---|---|
 | the project description | `project/product.md`, `project/tech.md` (and the optional designed map `project/domain.md`), or where the profile points | `/factory-setup` writes it with the person, through the project's description skill; stop and say so |
-| the story | `project/backlog/<epic>/<story>.md`, or under the profile's `backlog:` | offer to write one (`/factory-backlog`) and stop |
-| the epic | `project/backlog/<epic>/epic.md` | same |
-| the stack profile | `.agents/factory/factory.profile.yaml` | create it from the template by detecting the build (see below) |
+| the story | `project/epics/<epic>/<story>.md`, or under the profile's `epics:` | offer to write one (`/factory-backlog`) and stop |
+| the epic | `project/epics/<epic>/epic.md` | same |
+| the stack profile | `dca-factory.profile.yaml` | create it from the template by detecting the build (see below) |
 | an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with the method's setup skill (in a DCA project `/dca-init`), and the factory never calls a skill that writes code. Without one, the build gate skips the architecture check and names it |
 | the gate | `.agents/factory/story-gate.py` — it decides; `factory-cli.py` beside it shows and coordinates (status, schedule, marks, the checkout) | the installer writes both (step 1 below) |
 | the commit guard | `.githooks/pre-commit` | the installer writes it and sets `core.hooksPath` (step 1 below) |
@@ -46,7 +46,7 @@ pipeline, say so and hand over to it. What it runs:
    Code, the gate's permission and a SessionStart hook; it writes the stack profile first, from what
    it detects. The hook runs `factory.sh check --staged`: tool hooks and deny rules do not port
    between agent tools, but every tool commits through git, so that is where the guard belongs.
-2. Check the stack profile setup wrote (`.agents/factory/factory.profile.yaml`, from
+2. Check the stack profile setup wrote (`dca-factory.profile.yaml`, from
    `templates/factory.profile.yaml.tmpl`), and add the `required:` line with what the human says
    must hold for every change. Where a command is wrong or missing, fix it there.
    **Detected, not assumed:** the commands come from the presets in `templates/presets/` — one flat
@@ -76,29 +76,29 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    silence. Do not
    repair the backlog yourself beyond obvious typos; an epic without an intent is a question for
    the story's `domain_contact`.
-2. **`stage-plan`** → `tasks/<story>/plan.md`
-3. **`stage-test`** → `tasks/<story>/tests.md`
+2. **`stage-plan`** → `.dca-factory/runs/<story>/plan.md`
+3. **`stage-test`** → `.dca-factory/runs/<story>/tests.md`
 4. **gate `test`** — every criterion mapped, test sources compile, every mapped test red. A
    mapped test that is already green means the criterion is not new behaviour or the test asserts
    nothing; send it back to `stage-test`. With contract 9 it also holds the levels: a test the
    end-user command runs must belong to the happy path or to a scenario the plan gave `browser-only`.
-5. **`stage-build`** → `tasks/<story>/build.md`
+5. **`stage-build`** → `.dca-factory/runs/<story>/build.md`
 6. **gate `build`** — every mapped test green, and the profile's `architecture:` and `format:`
    commands succeed. Both run in the gate, not on a stage's word. On failure, hand the gate output back to
    `stage-build`. Every repeat round — this one, a refused gate after any stage, a judge's
-   `changes-requested` — increments `tasks/<story>/.rounds`; at **three** the run
+   `changes-requested` — increments `.dca-factory/runs/<story>/.rounds`; at **three** the run
    stops and escalates. The counter is a file, not something you remember — an in-session run has
    no other honest way to count, and a resumed run must see the same number. Two refusals count no
    round: `gate:fail environment` — a profile command whose program the gate's shell did not find, which
    no stage can fix; stop and name it — and none at all when a person restarts the story with
-   `--from`, which starts a new count (the runner keeps the old one under `tasks/<story>/.verify/`).
-7. **`stage-tidy`** → `tasks/<story>/tidy.md`: the refactor half of red–green–refactor, inside
+   `--from`, which starts a new count (the runner keeps the old one under `.dca-factory/runs/<story>/.verify/`).
+7. **`stage-tidy`** → `.dca-factory/runs/<story>/tidy.md`: the refactor half of red–green–refactor, inside
    this story's footprint, with every test green and no test changed. A stage that changes nothing
    and says why is finished, not skipped.
 8. **gate `tidy`** — the same checks as the build gate, run again: the stage's whole claim is that
    nothing it touched changed what the code does.
-9. **`stage-judge`** → `tasks/<story>/judge.md`. Hand it what its skill names as input — the story,
-   the plan, `tests.md`, `build.md` and `tasks/<story>/.verify/story.diff`, which the end mark of the
+9. **`stage-judge`** → `.dca-factory/runs/<story>/judge.md`. Hand it what its skill names as input — the story,
+   the plan, `tests.md`, `build.md` and `.dca-factory/runs/<story>/.verify/story.diff`, which the end mark of the
    stage before wrote — never "the tree against HEAD": the diff is the story's, HEAD may hold more.
    The file carries one of three verdicts:
    - `pass` — done, go to the report.
@@ -107,7 +107,7 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    - `story-conflict` — the story or the plan is wrong. **Stop.** This never goes back to
      `stage-build`: a correction that changes an agreed criterion belongs in the story, and a
      human decides it. Say which criterion conflicts with what.
-10. **`stage-document`** → `tasks/<story>/document.md`: the glossary, the context map and the
+10. **`stage-document`** → `.dca-factory/runs/<story>/document.md`: the glossary, the context map and the
    project's reader documentation follow what the story changed.
 11. **gate `document`** — every stage of this pass wrote its file after the one before it, the judge
    passed it, the story is the one that was planned, every file, path and identifier the stage claims
@@ -123,9 +123,10 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    and every open assumption from the story. A run that skipped a check must not read as a
    complete verification. The run commits nothing — and a story waiting for acceptance is not
    ready to commit; say what the story's commit holds — the code
-   and tests the stages changed **and `tasks/<story>/`** with its hidden files (the red ledger,
-   the story digest, the journal under `.verify/`), which are the story's record. The commit hook
-   checks the index against the working tree, so a commit without them is refused.
+   and tests the stages changed, the story (its `status: delivered` line) and its `.decisions/`, and —
+   where the project commits its run history — `.dca-factory/runs/<story>/` with its hidden files (the
+   red ledger, the story digest, the journal under `.verify/`). The commit hook checks the index against
+   the working tree, so a commit that leaves any of them behind untracked is refused.
    Then give the checkout back — `python3 .agents/factory/factory-cli.py --release` — delivered or
    stopped alike: a claim nobody releases keeps every other worker out until it goes stale
    (`FACTORY_STALE_AFTER`, two hours).
@@ -141,7 +142,7 @@ correctly after an interruption, in another session or in another tool:
 | `plan.md`, no `tests.md` | `stage-test` |
 | `tests.md`, gate `test` red-and-mapped | `stage-build` |
 | `build.md`, gate `build` failing | `stage-build` again (count the round) — the runner does this for every refused gate after its stage |
-| `document.md` without `.delivered` | gate `document`; it writes `.delivered` when it passes, and only then is the story delivered |
+| `document.md`, the story not `status: delivered` | gate `document`; it writes `status: delivered` and `delivered:` into the story when it passes, and only then is the story delivered — the gate is the one writer of that line |
 | `.story-digest` differs from the story file | the story changed after it was planned: `stage-plan` again, and every stage after it |
 | a stage file older than the one before it | it belongs to an earlier pass — a stage ran again since (a re-plan, a build after `changes-requested`); that stage file and every later one count as not written |
 | `build.md`, gate `build` passing, no `tidy.md` | `stage-tidy` |
@@ -151,7 +152,7 @@ correctly after an interruption, in another session or in another tool:
 | `judge.md` with `pass`, no `document.md` | gate `document` is next after `stage-document` |
 | `document.md`, gate `document` passing | report and stop |
 | `.rounds` at 3 | stop, escalate to the human |
-| any stage file with a `## needs-human` section | stop; the section names a decision record under `.agents/factory/decisions/` — say which file and what to write into it |
+| any stage file with a `## needs-human` section | stop; the section names a decision record under `<story>.decisions/` beside each story — say which file and what to write into it |
 | a decision record for the story is open (no `## Answer`, or one without `by:` and `at:`) | stop — no stage runs while the story waits |
 | a decision record is answered and the stage it resumes at (the earlier of `stage:` and the answer's `applies:`) has not cited it | run that stage again; it applies the answer and cites the id (at the plan stage, the plan gate lets exactly this through) |
 
@@ -190,7 +191,7 @@ again. In a session, the same variant is one subagent for plan to tidy, running 
 stage and stopping on a refusal it cannot fix in three attempts; its window is marked as one stage,
 `builder` — `--stage-start builder` before it, `--stage-end builder` after its last file — and the gate
 reads that window as plan to tidy. After the end mark do what the runner does: check that
-`tasks/<story>/.tests-red` exists (a builder that never ran its test gate left no red proof; a
+`.dca-factory/runs/<story>/.tests-red` exists (a builder that never ran its test gate left no red proof; a
 journey's or an adoption's test gate runs again instead), then run the build and tidy gates yourself —
 they now check the hand-overs against `changed-builder.txt`. In both, the judge and the document
 stage keep a fresh context of their own, and every stage still writes its own file, so the story can
@@ -257,7 +258,7 @@ Stop the run and hand back to the human when:
 Name the decision, the file it belongs in, and who is asked. Do not decide it yourself.
 
 A question is a **file**, not a sentence in a report: the stage writes
-`.agents/factory/decisions/<story>-<nn>.md` from `templates/decision.md.tmpl` — the question, the
+`<story>.decisions/<nn>.md` beside the story from `templates/decision.md.tmpl` — the question, the
 options, its recommendation, never an answer — and names it in its `## needs-human` as
 `decision: <id>`. That is what makes the question survive the session and reach whoever answers
 it, in this session or another (see `reference/file-contracts.md`, *Decision records*). When you
@@ -363,7 +364,7 @@ not end it (`run` exits 3 there); any other stop does, because retrying a failur
 the same refusal. `--watch` keeps it waiting while a story waits on a human: it re-reads the
 schedule every `--interval` seconds (default 60, 1–3600), invokes no agent while nothing changed,
 and resumes the answered story at the stage that applies the answer. `--max-stages <n>` caps the agent
-invocations of the run (exit 4, the work so far stays); `.agents/factory/stop` ends it before the
+invocations of the run (exit 4, the work so far stays); `.dca-factory/stop` ends it before the
 next story.
 
 `factory.sh run --story <id>` without `--from` starts where that story's files say, as the schedule

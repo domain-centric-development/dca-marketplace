@@ -5,11 +5,11 @@ description: Test stage of a factory run — writes one end-user test per accept
 
 # Write the tests for one story
 
-Input: the story, `tasks/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
+Input: the story, `.dca-factory/runs/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
 product description (`project/product.md`, or where the profile's `product:` points) where the plan
 says a criterion touches them. Nothing else. Open the files the plan's
 `## Files` names first — the pattern to mirror, the fixture to reuse; search only for the rest.
-Output: the test sources, plus `tasks/<story>/tests.md` with a `## Files` section naming the test
+Output: the test sources, plus `.dca-factory/runs/<story>/tests.md` with a `## Files` section naming the test
 files written. You write **no** production behaviour.
 
 ## Do
@@ -25,7 +25,7 @@ files written. You write **no** production behaviour.
    is installed, write the tests file with a `## needs-human` section naming the missing runner
    and stop — do not install it, and do not silently drop to a unit test that asserts less. The
    section names a decision record (`decision: <story>-<nn>`), written to
-   `.agents/factory/decisions/<story>-<nn>.md` with the front matter `id: <story>-<nn>`,
+   `<story>.decisions/<nn>.md` beside the story with the front matter `id: <story>-<nn>`,
    `story:`, `stage: test`, `asked:` (UTC) and the sections `## Question`, `## Options`,
    `## Recommendation` — never an answer (full shape: `factory-run/templates/decision.md.tmpl`).
    When you run again on a story whose record is answered — asked here, or answered `applies: test`
@@ -111,7 +111,7 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 
 ## The tests file
 
-`tasks/<story>/tests.md`, with exactly one machine-readable table — the gate reads this and
+`.dca-factory/runs/<story>/tests.md`, with exactly one machine-readable table — the gate reads this and
 nothing else from the file:
 
 ```markdown
@@ -140,7 +140,7 @@ test covers.
 For a story with `status: adopted`: map every scenario in the `gate:tests` table to the existing test the
 plan names, green as it is. For a scenario without one, write a **characterization test** — green on
 today's code, asserting the scenario's `Then` with its values — list it under `## Characterization` in
-`tests.md` (`- <Class>#<method>`), and write its **break**: `tasks/<story>/breaks/<Class>--<method>.patch`,
+`tests.md` (`- <Class>#<method>`), and write its **break**: `.dca-factory/runs/<story>/breaks/<Class>--<method>.patch`,
 a unified diff against the working tree that changes the production code minimally so that exactly this
 test turns red (`git diff` of the change, then revert it). Change no production code and no existing test;
 the gate applies the break to a scratch copy and expects red there.

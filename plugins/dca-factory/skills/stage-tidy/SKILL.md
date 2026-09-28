@@ -5,11 +5,11 @@ description: Tidy stage of a factory run — the refactor step the build stage d
 
 # Tidy one story's code
 
-Input: the story, `tasks/<story>/plan.md`, `tasks/<story>/build.md`, and the code as the build
-stage left it — green: the files `tasks/<story>/.verify/changed.txt` lists, which the pipeline
+Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/runs/<story>/build.md`, and the code as the build
+stage left it — green: the files `.dca-factory/runs/<story>/.verify/changed.txt` lists, which the pipeline
 recorded from the working tree. Nothing else. Every file you change is a row under `## Moves`; the
 gate checks the table against what changed.
-Output: the tidied code, plus `tasks/<story>/tidy.md`.
+Output: the tidied code, plus `.dca-factory/runs/<story>/tidy.md`.
 
 The build stage answers the criteria with the smallest change that works, which is the right thing
 for it to do and leaves the second half of red–green–refactor undone. This stage is that half. It

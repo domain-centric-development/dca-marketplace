@@ -5,17 +5,17 @@ description: Judge stage of a factory run — reviews the story's change from th
 
 # Judge one story's change
 
-Input: the story, `tasks/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
-`tasks/<story>/.verify/story.diff`, which the pipeline writes; open a whole file only where the
+Input: the story, `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
+`.dca-factory/runs/<story>/.verify/story.diff`, which the pipeline writes; open a whole file only where the
 diff's context does not carry the question, and explore no further than a finding needs — the
 product and the technical description (`project/product.md`, `project/tech.md`, or where the
 profile's `product:` and `tech:` point) — and, in a repeat round, the previous verdict,
-`tasks/<story>/.judge-previous.md`. Nothing else. A change that contradicts the product description
+`.dca-factory/runs/<story>/.judge-previous.md`. Nothing else. A change that contradicts the product description
 — a surface it does not list, state kept where it says otherwise, a page without its stated look or
 accessibility, something under `## Not part of the product` — is a finding like any other, and so
 is a change that brings in what the technical description excludes: a second persistence, a client
 framework where the pages are server-rendered, an integration it does not list.
-Output: `tasks/<story>/judge.md`. You change no code.
+Output: `.dca-factory/runs/<story>/judge.md`. You change no code.
 
 ## Do
 
@@ -124,7 +124,7 @@ breaks a criterion, the architecture suite or the product description; a `should
 and `major` where you confirm it deviates from the plan; a `nit` is `minor`.
 A `story-conflict` is a question to a human, so it is a **decision record** like any other: write
 `## needs-human` in the judge file naming it (`decision: <story>-<nn>`), and the record at
-`.agents/factory/decisions/<story>-<nn>.md` with the front matter `id:`, `story:`, `asked:` (UTC) and
+`<story>.decisions/<nn>.md` beside the story with the front matter `id:`, `story:`, `asked:` (UTC) and
 `stage:` — the stage that will **apply** the answer, not yourself: `plan` when the story or the plan
 has to change, `test` when an agreed expectation has to change. Say in `## Question` that the judge
 asked. The run waits for the answer and resumes at that stage; everything after it runs again.

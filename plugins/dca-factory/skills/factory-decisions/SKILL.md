@@ -5,7 +5,7 @@ description: The decision inbox of a delivery run, questions and acceptances ali
 
 # Read, explain and record a decision
 
-Input: the records under `.agents/factory/decisions/`, the story and the stage file each one
+Input: the records under `<story>.decisions/` beside each story, the story and the stage file each one
 names, and what the human says. Output: at most one `## Answer` section per record, in the human's
 words, on their say-so. You write no plan, no test and no code, and you never write an answer that
 was not given to you.
@@ -24,7 +24,7 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    gate is not installed, read the directory yourself and say that you did.
 2. **Explain one from its files, not from memory.** Read the record: the question, the options,
    the evidence the stage cited, its recommendation. Read the story it names and the stage file
-   that asked (`tasks/<story>/<stage file>`, ending in `## needs-human`). Say what is asked, why
+   that asked (`.dca-factory/runs/<story>/<stage file>`, ending in `## needs-human`). Say what is asked, why
    the stage could not decide it, what each option costs, and what the stage recommended —
    **marked as the stage's recommendation**, never blended into your own reading. Where the record
    cites a file and line, read it before you repeat the claim.
@@ -106,12 +106,12 @@ accepts — no role is checked; the answer is theirs, on their confirmation, as 
 - **Accepted** — write `answer: accepted`. The document gate then delivers the story in its next run,
   which starts there by itself — `/factory-run <story>` in a session, or the person's `factory.sh run
   --story <story>` in a shell; no stage runs again. Start neither from here: answering is not running
-  the story (step 8). The story's commit follows — the code, the tests and `tasks/<story>/`.
+  the story (step 8). The story's commit follows — the code, the tests and `.dca-factory/runs/<story>/`.
 - **A correction** — what the human wants different, in their words: write `answer: correction:
   <their words>`, then bring it into **the same story** through the backlog skill's rules: changed or
   new criteria, one `answered:` line under `## Assumptions` naming the record id, and under
   `## Changed expectations` what the story had delivered that no longer holds. The story then runs
-  again from plan — the schedule sees it changed — in its own `tasks/<story>/`, holding the checkout
+  again from plan — the schedule sees it changed — in its own `.dca-factory/runs/<story>/`, holding the checkout
   until it is accepted.
 - **Before a story was accepted, every answer is a correction**, a changed criterion included; the
   rounds counter bounds how often. **After it was accepted**, adding what the story left unsaid is a
@@ -152,7 +152,7 @@ inside one anyway.
 $ python3 .agents/factory/factory-cli.py --list-decisions
 US-3-01  open      US-3/plan  asked 2026-09-22T20:40:00Z  Does an archived entry count?
 US-2-01  applied   US-2/plan  asked 2026-09-21T09:12:00Z  Which currency does the total carry?  → b by the-expert
-decisions: 2 record(s), 1 waiting for an answer — store .agents/factory/decisions/
+decisions: 2 record(s), 1 waiting for an answer — beside each story (<story>.decisions/)
 ```
 
 Explained: "US-3 (plan stage) asks whether archived entries count as 'the thing' the reader
@@ -172,6 +172,6 @@ at: 2026-09-22T21:04:00Z
 rationale: archived is history, not inventory.
 ```
 
-"Written to `.agents/factory/decisions/US-3-01.md`. The plan stage asked; a running worker picks it
+"Written to `project/epics/<epic>/US-3.decisions/01.md`. The plan stage asked; a running worker picks it
 up by itself, otherwise `/factory-run US-3` resumes it at the plan stage — it re-plans with the
 answer, and the gate stamps the record applied."
