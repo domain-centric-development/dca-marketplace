@@ -148,8 +148,8 @@ from a project-local directory, so the setup writes them there:
 bash <plugin>/skills/factory-run/scripts/factory.sh setup --tool codex      # or opencode, or all
 ```
 
-For those tools it links the craft skills as well, because they have no plugin mechanism to find
-them by. Verified: Codex 0.153.0 and OpenCode 1.18.15 list the same skills and run the same
+For those tools it installs the craft skills as well, because they have no plugin mechanism to find
+them by — copied from a plugin cache, linked from a checkout (`--copy`, `--link` name the other). Verified: Codex 0.153.0 and OpenCode 1.18.15 list the same skills and run the same
 stages against the same gate.
 
 ## Troubleshooting

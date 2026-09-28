@@ -26,11 +26,15 @@ a report of what changed. You commit nothing; the human reviews and commits.
    whether the stack profile's `contract:` line has to be raised, and — where the backlog still sits
    at the project root — the move to `project/` it names (the gate reads no other layout). Raising that line is the human's
    edit — the profile belongs to the project — so show the line and do not change it.
-3. **Say how the skills are held.** Links point into the plugin or a checkout and follow it live; they
-   belong in `.gitignore`. Copies are the project's pinned pipeline: they belong in the repository,
-   and the update listed which it copied, which of the project's own it kept and which it removed.
+3. **Say how the skills are held.** `.dca-factory-skills` beside them says it. Links point into a
+   checkout and follow it live; the install keeps them out of git itself, one `.gitignore` line per
+   link. Copies are the project's pinned pipeline: they belong in the repository, and the update listed
+   which it copied, which of the project's own it kept and which it removed. The update keeps the
+   mode; `--copy` or `--link` switches it on the person's word — name it when the update warns that
+   links point into a plugin cache (its versions are removed after an update).
 4. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, the
-   `AGENTS.md` section, and the skill copies where the project keeps copies.
+   `AGENTS.md` section, `.dca-factory-skills` in each skill folder, and the skill copies where the
+   project keeps copies.
 5. **Name what was renamed.** The method plugins renamed skills (`review-domain` → `review-ddd`,
    `review-boundaries` → `review-hexagonal`, `review-craft` → `review-clean-code`, `ddd-modelling` →
    `dca-modelling`, `dca-bootstrap` → `dca-init`, `dca-scaffold` → `dca-new`). The update removes a

@@ -1812,7 +1812,7 @@ exit 0
         with tmpdir() as root, tmpdir() as home:
             build_project(root, profile=PROFILE + "carrier.build: dca-modelling\n")
             cached = cache_fixture(home)
-            run_setup(runner, root, "--tool", "codex", "--from", shell_path(cached), env={"HOME": home})
+            run_setup(runner, root, "--tool", "codex", "--from", shell_path(cached), "--link", env={"HOME": home})
             skills = os.path.join(root, ".codex", "skills")
             targets = {e: os.path.realpath(os.path.join(skills, e)) for e in os.listdir(skills)} \
                 if os.path.isdir(skills) else {}
@@ -1896,16 +1896,18 @@ exit 0
                   f"held while running {held_while_running}, released {not os.path.exists(lock)}, "
                   f"exit {process.returncode}")
 
-    # 5. install leaves a live link, not a copy — and the whole set where it can
+    # 5. install leaves live links from a checkout, one per skill, never the whole folder
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
     with tmpdir() as root:
         build_project(root)
         code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
         target = os.path.join(root, ".claude", "skills")
         if SYMLINKS:
-            check("install: the pipeline's skills are one live link for Claude Code",
-                  os.path.islink(target) and os.path.realpath(target) == os.path.realpath(source),
-                  f"{target} → {os.path.realpath(target) if os.path.exists(target) else 'missing'}")
+            link = os.path.join(target, "factory-run")
+            check("install: from a checkout the pipeline's skills are live links for Claude Code, one per skill",
+                  os.path.isdir(target) and not os.path.islink(target) and os.path.islink(link)
+                  and os.path.realpath(link) == os.path.realpath(os.path.join(source, "factory-run")),
+                  f"{target} → {os.path.realpath(link) if os.path.exists(link) else 'missing'}")
         else:
             # No symlinks for this account: the install copies and says so, rather than failing
             # on a `ln -s` that this shell cannot honour.
@@ -2232,14 +2234,10 @@ def verify_setup(runner, verbose=False):
         with tmpdir() as root, tmpdir() as home:
             build_project(root)
             run_setup(runner, root, "--tool", "claude", "--from", source)
-            # one link per skill, as a project holds them beside skills of its own
+            # one link per skill, as the install makes them
             skills = os.path.join(root, ".claude", "skills")
-            target = os.path.realpath(skills)
-            os.remove(skills)
-            os.makedirs(skills)
-            for name in os.listdir(target):
-                os.symlink(os.path.join(target, name), os.path.join(skills, name))
             link = os.path.join(skills, "factory-run")
+            target = os.path.dirname(os.path.realpath(link))
             before = os.path.realpath(link)
             env = {"HOME": home, "FACTORY_PLUGIN_DIR": ""}
             code, output = run_runner(project_runner(root), root, "update", "--from",
@@ -2483,7 +2481,7 @@ def verify_setup(runner, verbose=False):
                     return shell_path(os.path.join(cache, "dca-factory", number, "skills"))
                 older = version("9.0.0", "0.6.0")
                 build_project(root, profile=PROFILE + extra)
-                run_setup(runner, root, "--tool", tool, "--from", older, env={"HOME": home})
+                run_setup(runner, root, "--tool", tool, "--from", older, "--link", env={"HOME": home})
                 newer = version("9.1.0", "0.7.0")
                 code, output = run_runner(project_runner(root), root, "update", "--from", newer, env={"HOME": home})
                 skills = os.path.join(root, f".{tool}", "skills")
@@ -2511,6 +2509,89 @@ def verify_setup(runner, verbose=False):
             check("update: a tool whose skill links are broken is updated, not skipped",
                   code == 0 and os.path.isfile(run_skill) and "/9.1.0/" in os.path.realpath(run_skill),
                   f"exit {code}; {os.path.realpath(run_skill)}; {output.strip()[-300:]}")
+    # the install's list names its entries in both modes; the mode follows the source; a project's own
+    # skill with a pipeline name survives setup and update; .gitignore carries one line per link
+    def manifest_of(root, tool="claude"):
+        path = os.path.join(root, f".{tool}", "skills", ".dca-factory-skills")
+        return open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else []
+
+    def ignore_lines(root):
+        path = os.path.join(root, ".gitignore")
+        return open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else []
+
+    if SYMLINKS:
+        with tmpdir() as root:
+            build_project(root)
+            write_file(root, ".claude/skills/factory-run/SKILL.md", "---\nname: factory-run\ndescription: PROJECT OWN\n---\n")
+            code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
+            own = os.path.join(root, ".claude", "skills", "factory-run", "SKILL.md")
+            code2, output2 = run_runner(project_runner(root), root, "update", "--from", source)
+            skills = os.path.join(root, ".claude", "skills")
+            links = [n for n in os.listdir(skills) if os.path.islink(os.path.join(skills, n))]
+            check("install: a project's own folder with a pipeline skill's name survives setup and update, the links stay links",
+                  code == 0 and code2 == 0 and "PROJECT OWN" in open(own, encoding="utf-8").read()
+                  and "kept the project's own .claude/skills/factory-run" in output2 and len(links) >= 13
+                  and "mode: link" in manifest_of(root) and "factory-run" not in manifest_of(root),
+                  f"exit {code}/{code2}; links {len(links)}; {manifest_of(root)[:3]}; {output2.strip()[-300:]}")
+            check("install: .gitignore carries one line per link, none for the folder or the project's own skill",
+                  ".claude/skills/stage-plan" in ignore_lines(root) and ".claude/skills/factory-run" not in ignore_lines(root)
+                  and ".claude/skills" not in ignore_lines(root) and ".claude/skills/" not in ignore_lines(root),
+                  ignore_lines(root)[:5])
+        with tmpdir() as root, tmpdir() as home:
+            cache = os.path.join(home, ".claude", "plugins", "cache", "m")
+            write_file(os.path.join(cache, "dca-factory", "9.0.0"), ".claude-plugin/plugin.json", "{}")
+            shutil.copytree(source, os.path.join(cache, "dca-factory", "9.0.0", "skills"), symlinks=True)
+            cached = shell_path(os.path.join(cache, "dca-factory", "9.0.0", "skills"))
+            build_project(root)
+            code, output = run_setup(runner, root, "--tool", "claude", "--from", cached, env={"HOME": home})
+            skills = os.path.join(root, ".claude", "skills")
+            plan = os.path.join(skills, "stage-plan")
+            check("install: from a plugin cache the skills are copies, listed as such, and nothing is ignored",
+                  code == 0 and os.path.isdir(plan) and not os.path.islink(plan) and "mode: copy" in manifest_of(root)
+                  and "source: cache" in manifest_of(root) and "plugin cache" in output and not ignore_lines(root),
+                  f"exit {code}; {manifest_of(root)[:3]}; {output.strip()[-200:]}")
+            code, output = run_runner(project_runner(root), root, "update", "--from", source, "--link", env={"HOME": home})
+            check("update: --link switches the project's copies to links into a checkout, listed and ignored",
+                  code == 0 and os.path.islink(plan) and "mode: link" in manifest_of(root)
+                  and "source: checkout" in manifest_of(root) and ".claude/skills/stage-plan" in ignore_lines(root),
+                  f"exit {code}; {manifest_of(root)[:3]}; {output.strip()[-200:]}")
+            code, output = run_runner(project_runner(root), root, "update", "--from", cached, "--link", env={"HOME": home})
+            check("update: a link into a checkout follows to a cache when named, and the report warns about the cache",
+                  code == 0 and "/9.0.0/" in os.path.realpath(plan) and "plugin cache" in output
+                  and "kept the project's own" not in output, f"exit {code}; {os.path.realpath(plan)}; {output.strip()[-300:]}")
+            code, output = run_runner(project_runner(root), root, "update", "--from", cached, "--copy", env={"HOME": home})
+            check("update: --copy switches back to copies and drops the ignore lines",
+                  code == 0 and os.path.isdir(plan) and not os.path.islink(plan) and "mode: copy" in manifest_of(root)
+                  and ".claude/skills/stage-plan" not in ignore_lines(root), f"exit {code}; {ignore_lines(root)}")
+        with tmpdir() as root:
+            build_project(root)
+            run_setup(runner, root, "--tool", "none", "--from", source)
+            os.makedirs(os.path.join(root, ".claude", "skills"))
+            os.symlink(os.path.join(root, "nowhere"), os.path.join(root, ".claude", "skills", "gone-skill"))
+            gate = os.path.join(root, ".agents", "factory", "story-gate.py")
+            result = subprocess.run([sys.executable, gate, "--status", "--brief"], cwd=root, capture_output=True,
+                                    text=True, encoding="utf-8", errors="replace")
+            check("status: --brief names a skill link that points nowhere and the update that relinks it",
+                  "gone-skill points nowhere" in result.stdout and "/factory-update" in result.stdout,
+                  result.stdout.strip()[-300:] + result.stderr.strip()[-200:])
+    with tmpdir() as root:
+        # a copy from before the list: taken over only byte for byte, an edited one is the project's
+        build_project(root)
+        run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
+        skills = os.path.join(root, ".claude", "skills")
+        os.remove(os.path.join(skills, ".dca-factory-skills"))
+        with open(os.path.join(skills, "stage-plan", "SKILL.md"), "a", encoding="utf-8") as handle:
+            handle.write("# edited by the project\n")
+        code, output = run_runner(project_runner(root), root, "update", "--from", source)
+        check("update: a copy from before the list is taken over only byte for byte; an edited one is kept and named",
+              code == 0 and "edited by the project" in open(os.path.join(skills, "stage-plan", "SKILL.md"), encoding="utf-8").read()
+              and "kept the project's own .claude/skills/stage-plan" in output and "stage-plan" not in manifest_of(root)
+              and "stage-build" in manifest_of(root), f"exit {code}; {output.strip()[-300:]}")
+    with tmpdir() as root:
+        build_project(root)
+        code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
+        check("install: for Claude Code the report names the second listing under the plugin's namespace",
+              "dca-factory:<skill>" in output, output.strip()[-300:])
     shutil.rmtree(lone_home, ignore_errors=True)
 
     failures = [name for name, ok, _ in results if not ok]

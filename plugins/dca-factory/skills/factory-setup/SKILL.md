@@ -38,9 +38,11 @@ docs/                      what exists and why — written after the code, some 
    `bash <this skill's folder>/../factory-run/scripts/factory.sh setup --tool <claude|codex|opencode>`,
    and report what it printed. It works without code: what it cannot detect it leaves out of the
    stack profile. It writes the profile first — the build commands the presets detect, and a
-   carrier line only for a method skill that is installed beside the pipeline — then links the
-   skills, copies the gate, the runner and the observer, installs the commit hook and the pipeline's
-   section in `AGENTS.md`.
+   carrier line only for a method skill that is installed beside the pipeline — then places the
+   skills (copies from a plugin cache, links from a checkout; `.dca-factory-skills` beside them says
+   which, and the install keeps links out of git itself), copies the gate, the runner and the observer,
+   installs the commit hook and the pipeline's section in `AGENTS.md`. Say which mode it chose and
+   why, in its words.
 4. **What the profile does not know yet.** The runner is there → run
    `bash .agents/factory/factory.sh setup --check`. It lists the detected keys the profile lacks
    (a browser runner, a formatter, a carrier skill installed since) and the values that differ from

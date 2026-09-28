@@ -61,13 +61,17 @@ leaves a command no preset detects *out* rather than writing a placeholder the g
 run. A new stack is one more preset file, no change to the script. It names a carrier skill only
 where that skill is installed beside the pipeline (`dca-modelling`, `dca-discipline`, `dca-review`
 where the project has the DCA rule packages; `ubiquitous-language`, `context-map`, `e2e-testing`
-wherever they are installed) and links it in the same run. Check the file it wrote before the first
-run:
+wherever they are installed) and installs it in the same run. The skills go into the tool's skill
+folder as **copies** when the source is a plugin cache (the marketplace install: a cache folder is
+versioned and removed some time after an update, so a link into it would go stale) and as **links**
+when it is a checkout (a clone of the marketplace, or `FACTORY_PLUGIN_DIR`: an edit is live);
+`--copy` and `--link` name the other one. Check the files it wrote before the first run:
 
 ```
 .agents/factory/factory.profile.yaml     your build and test commands, one per test source set
 .agents/factory/story-gate.py            the gate, callable from a terminal and from CI
 .githooks/pre-commit                     the change check on what every commit contains (core.hooksPath)
+.claude/skills/.dca-factory-skills       what the install placed there, in which mode, from which kind of source
 ```
 
 ## The project description, before the first story
@@ -154,14 +158,14 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 
 | Command | Skill | Does |
 |---|---|---|
-| `factory.sh setup [--tool <t>] [--copy]` | `factory-setup` | installs the pipeline where it is not; on an installed project it only reports |
+| `factory.sh setup [--tool <t>] [--copy\|--link]` | `factory-setup` | installs the pipeline where it is not — copies from a plugin cache, links from a checkout, unless named; on an installed project it only reports |
 | `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
 | `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
 | `factory.sh run [--story <id> [--from <stage>]] [--watch]` | `factory-run` | one story through the six stages, from where its files say · `--from` names the stage and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch` |
 | `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |
-| `factory.sh update [--from <dir>]` | `factory-update` | the newest pipeline found, same tools, links or copies |
+| `factory.sh update [--from <dir>] [--copy\|--link]` | `factory-update` | the newest pipeline found, same tools; the mode the project has, or the one named |
 | `factory.sh verify --story <id>` · `--fixtures` | `factory-verify` | observe a delivered story · check the machinery |
 | `factory.sh check [--staged] [--checks "<c> …"]` · `--parity <config>` | *(hook, CI)* | the profile's checks outside a story, as the commit hook runs them · several implementations against one scenario contract |
 
@@ -186,13 +190,25 @@ and whether the profile's `contract:` line has to be raised. It commits nothing 
 profile; at its end it names `factory.sh setup --check`, which lists what the project gained since
 (a browser runner, a formatter) as profile lines to confirm.
 
-Skills are held one of two ways, and the update keeps whichever the project chose:
+Skills are held one of two ways. The install picks by the source, the update keeps what the project
+has unless `--copy` or `--link` names the other:
 
-- **Links** (the default) point into the plugin or a checkout: always current, not committed.
-- **Copies** (`setup --copy`) are the project's own, committed with it: every clone delivers
-  stories without the marketplace, with exactly this pipeline. `.dca-factory-skills` in each skill
-  folder lists what the pipeline copied; a skill of the project's own — even with a pipeline skill's
-  name — is never overwritten, and one the pipeline dropped is removed.
+- **Copies** — the default from a plugin cache (`/plugin install`): the project's own, committed with it,
+  so every clone delivers stories without the marketplace, with exactly this pipeline; the update
+  refreshes them. A cache folder is versioned and removed some time after an update, which is why a
+  link into it is not the default; `setup --link` makes one anyway and says so.
+- **Links** — the default from a checkout (a clone of the marketplace, `FACTORY_PLUGIN_DIR`): always
+  current, machine-local, kept out of git by the install itself — one `.gitignore` line per link, never
+  the folder. A clone gets them back with `factory.sh update`; a link that points nowhere is named by
+  `status --brief` (the session's start) with the update that relinks it.
+
+`.dca-factory-skills` beside the skills records the mode, the kind of source and every entry the
+install made, and is committed in both modes. Only those entries are the install's to replace or
+remove: a skill of the project's own — even with a pipeline skill's name — is never adopted or
+overwritten, and a copy from before the list is taken over only when it is byte for byte the
+pipeline's. For Claude Code the install also says that, with the plugin enabled, the same skills are
+listed a second time as `dca-factory:<skill>`; the project's entry is the one a session and a runner
+stage use.
 
 `factory.sh status --live` says when the project is behind the pipeline it found.
 
@@ -449,8 +465,11 @@ all — the file contracts and the gate are what make a run honest, not the runn
 | Codex | `--ignore-user-config` (no `~/.codex/config.toml`: its MCP servers, profiles and model stay out; the login stays) — a model then comes from `FACTORY_CODEX_ARGS` | user skills under `~/.codex/skills` |
 
 Carriers the profile names (`carrier.<stage>`, `review.<perspective>`, `knowledge`) are therefore installed into
-the project: `setup --tool claude` links them into `.claude/skills/` (one link per skill, beside the pipeline's
-own), and the runner stops before the first stage when one is missing. `FACTORY_ISOLATION=off` runs the stages
+the project: `setup --tool claude` puts them into `.claude/skills/` (one entry per skill, linked or copied like
+the pipeline's own, beside them), and the runner stops before the first stage when one is missing. The reviewer
+agents of `dca-craft` are not installed: a skill works in every tool, an agent only where its plugin is enabled,
+so a runner stage — and a Codex or OpenCode session — runs the review skills the profile names, and the judge says
+so; the agents are a comfort for a Claude Code session with the plugin. `FACTORY_ISOLATION=off` runs the stages
 with the tool's full setup instead, and says so. Measured in a small project (claude 2.1.281): the first turn of a
 stage starts at 16.2k tokens instead of 25.9k. For a local model through OpenCode and LM Studio, the runner reads
 the loaded context window and warns below `FACTORY_LOCAL_CONTEXT_MIN` (default 65536 tokens). The journal records
@@ -564,9 +583,13 @@ unbuildable project). That is not a red test, and the gate will not record it as
 **"never recorded red by the test stage."** A green test is only evidence if the same test failed
 before the code existed. Run `--stage test` first, or say why this criterion's test cannot fail.
 
-**A skill I added to the source does not show up.** For Claude Code the pipeline's folder is linked
-as a whole, so it appears at once. For Codex and OpenCode the skills come from several sources and
-are linked individually — a *new* one needs `factory.sh update`; an edited one is live either way.
+**A skill I added to the source does not show up.** The entries are made one per skill, so a *new*
+skill needs `factory.sh update`; an edited one is live where the project holds links, and needs the
+update where it holds copies. `.dca-factory-skills` beside them says which.
+
+**A skill link points nowhere.** The version it pointed into was removed from the plugin cache after
+an update, or the checkout moved. `factory.sh update` relinks into the newest pipeline it finds;
+`update --copy` makes the project independent of the cache. `status --brief` names such a link.
 
 **The gate says a command was "skipped and named".** The profile does not declare it. Deliberate: a
 gate that fails on something nobody configured gets switched off, and then nothing is checked at

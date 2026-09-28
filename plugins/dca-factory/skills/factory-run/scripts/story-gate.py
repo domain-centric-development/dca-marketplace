@@ -137,7 +137,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
 CONTRACT = 9
-VERSION = "0.44.0"
+VERSION = "0.45.0"
 
 
 # --- tiny readers (no third-party dependencies) ------------------------------
@@ -3781,6 +3781,23 @@ def running_stages(tasks):
     return found
 
 
+def dangling_skill_links(cwd):
+    """The entries of the tools' skill directories that are links to nothing, as relative paths."""
+    found = []
+    for folder in (".claude/skills", ".codex/skills", ".opencode/skills"):
+        path = os.path.join(cwd, folder)
+        if os.path.islink(path) and not os.path.exists(path):
+            found.append(folder)
+            continue
+        if not os.path.isdir(path):
+            continue
+        for name in sorted(os.listdir(path)):
+            entry = os.path.join(path, name)
+            if os.path.islink(entry) and not os.path.exists(entry):
+                found.append(f"{folder}/{name}")
+    return found
+
+
 def status_brief(cwd, backlog, tasks, session_start=False):
     """Two lines: what is ready, what waits, who works, what it cost — for a session's start."""
     import contextlib
@@ -3811,6 +3828,12 @@ def status_brief(cwd, backlog, tasks, session_start=False):
     listening = listener_line(cwd)
     if listening:
         print(f"factory: {listening}")
+    # A skill link that points nowhere — its plugin version pruned from the cache, a checkout moved: the
+    # skills are then missing for a session and a runner stage alike, and only the update relinks them.
+    dangling = dangling_skill_links(cwd)
+    if dangling:
+        more = f" and {len(dangling) - 1} more" if len(dangling) > 1 else ""
+        print(f"factory: skill link {dangling[0]} points nowhere{more} — /factory-update relinks them (or copies, with --copy)")
     # The part of the factory that is missing, where the files show it: the description, the backlog.
     profile = read_profile(resolve_profile(None, cwd))
     undescribed = [key for key in ("product", "tech") if not os.path.isfile(os.path.join(cwd, location(profile, key)))]
