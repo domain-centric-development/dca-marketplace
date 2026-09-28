@@ -2726,6 +2726,13 @@ def verify_setup(runner, verbose=False):
               and cli(root, "--needs-human", ".dca-factory/runs/STORY-1/tidy.md")[0] == 1
               and cli(root, "--open-decisions", "STORY-1")[1].split("\n") == ["project/epics/sample/STORY-1.decisions/01.md"],
               f"{asks}; {cli(root, '--open-decisions', 'STORY-1')}")
+        # the project's own runner copy runs with the cli beside its gate: the cli takes its version from the gate
+        # by construction (`VERSION = _gate.VERSION`), so the pair is one release
+        code, output = run_runner(project_runner(root), root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                                  env={"FACTORY_ISOLATION": "off"})
+        check("runner: the project's own copy of the runner accepts the cli beside its gate — its version follows the gate's",
+              code != 2 and "one release, two files" not in output and "Nothing was started" not in output,
+              f"exit {code}; {output.strip()[-200:]}")
         # a pair of one release, or no run: the runner refuses a cli of another version and a missing one
         project_cli = cli_in(root)
         text = open(project_cli, encoding="utf-8").read()

@@ -494,6 +494,9 @@ check_contract_first() {
   local gate_version cli_version project_cli=".agents/factory/factory-cli.py"
   if [ -f "$project_cli" ] && [ "$(cd "$(dirname "$GATE")" && pwd -P)" = "$(cd "$(dirname "$CLI")" && pwd -P)" ]; then
     gate_version=$(gate_field "$GATE" VERSION); cli_version=$(gate_field "$CLI" VERSION)
+    # A cli that reads `VERSION = _gate.VERSION` takes its version from the gate beside it: one release by
+    # construction. Only a cli that carries a number of its own — an older release's — can differ.
+    [ "$cli_version" = "_gate.VERSION" ] && cli_version=$gate_version
     if [ "$gate_version" != "$cli_version" ]; then
       echo "factory: story-gate.py is $gate_version and factory-cli.py is $cli_version — one release, two files;" >&2
       echo "factory:   'factory.sh update' puts a matching pair here. Nothing was started." >&2
