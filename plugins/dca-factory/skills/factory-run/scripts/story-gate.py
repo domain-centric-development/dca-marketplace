@@ -217,7 +217,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.49.3"
+VERSION = "0.49.4"
 
 
 def read_front_matter(path):
@@ -3252,9 +3252,13 @@ def stage_open(runs, story_id, stage):
     return last == "stage-start"
 
 
-def check_files_listed(result, runs, story_id, stage):
+def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
     """The test, build and tidy hand-overs name every file the stage changed, so the next stage can read
-    those instead of searching. Checked against the changed-files record, never against the claim."""
+    those instead of searching. Checked against the changed-files record, never against the claim.
+
+    A test file the stage put back to the version the test stage saw red is not the stage's change to
+    list: the red ledger holds that version's digest, and a file that matches it again was restored,
+    not changed — a stage that undid its own edit of a test would otherwise be refused for the undoing."""
     record = os.path.join(runs, story_id, ".verify", f"changed-{stage}.txt")
     handovers = [STAGE_FILES[stage]]
     if last_ended(runs, story_id, (stage, "builder")) == "builder":
@@ -3289,15 +3293,28 @@ def check_files_listed(result, runs, story_id, stage):
                                     f"`## Moves` table) — list every file the stage changed, one line each")
         return
     missing = [path for path in changed if path not in listed and not any(path.endswith("/" + n) for n in listed)]
+    restored = []
+    if missing and located:
+        digests = read_red_digests(runs, story_id)
+        by_file = {test_file: digests.get(selector) for selector, test_file in located.items() if test_file}
+        for path in missing:
+            digest = by_file.get(path)
+            full = os.path.join(cwd, path)
+            if digest and os.path.isfile(full) and file_digest(full) == digest:
+                restored.append(path)
+        missing = [path for path in missing if path not in restored]
     if missing:
         result.fail("files-listed", f"{' / '.join(handovers)} does not list what the stage changed: "
                                     f"{', '.join(missing[:8])}" + (" …" if len(missing) > 8 else ""))
         return
+    put_back = (f"; {', '.join(restored)} restored to the version the test stage saw red — a restoration "
+                f"is not this stage's change to list") if restored else ""
     unchanged = sorted(n for n in listed if "/" in n and n not in changed
                        and not any(p.endswith("/" + n) or p == n for p in changed))
     if unchanged:
         result.note("files-listed", f"listed but not changed by this stage: {', '.join(unchanged[:5])}")
-    result.ok("files-listed", f"{' / '.join(handovers)} list(s) the {len(changed)} file(s) the stage changed")
+    result.ok("files-listed", f"{' / '.join(handovers)} list(s) the {len(changed) - len(restored)} file(s) the stage "
+                              f"changed{put_back}")
 
 
 # Several stories are a loop over one story run, and the loop needs to know what comes next without
@@ -3832,7 +3849,7 @@ def main(argv):
                 check_titles(result, profile, cwd, front, body, mapping, located)
             if args.stage in ("build", "tidy"):
                 check_required_suites(result, profile, cwd)
-            check_files_listed(result, args.runs, story_id, args.stage)
+            check_files_listed(result, args.runs, story_id, args.stage, cwd, located)
             check_existing_tests(result, cwd, args.runs, story_id, body)
             check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:

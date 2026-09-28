@@ -4055,6 +4055,35 @@ def run_groups(args):
         expectations.append(("red-proof: a red record without digests (an older gate) is skipped and named",
                              code == 0 and "red-proof" in checks_by_verdict(output)["skip"],
                              [l for l in output.splitlines() if "red-proof" in l]))
+    # A build stage that edited a test and put it back: the file changed within the window (back), the
+    # hand-over does not list it, and it is the version the ledger holds — a restoration, not a change.
+    with tmpdir() as root:
+        build_project(root)
+        run_gate(args.gate, root, "test")
+        os.makedirs(os.path.join(root, "green"), exist_ok=True)
+        for selector in both_green:
+            with open(os.path.join(root, "green", re.sub(r"[./#]", "", selector)), "w") as handle:
+                handle.write("")
+        page_test = "src/test-pages/java/com/example/WidgetPageTest.java"
+        verify = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify")
+        os.makedirs(verify, exist_ok=True)
+        with open(os.path.join(verify, "changed-build.txt"), "w", encoding="utf-8") as handle:
+            handle.write(f"added\tsrc/main/Thing.java\nmodified\t{page_test}\n")
+        with open(os.path.join(root, ".dca-factory", "runs", "STORY-1", "build.md"), "w", encoding="utf-8") as handle:
+            handle.write("## Changed\n| File | Why |\n|---|---|\n| `src/main/Thing.java` | new |\n")
+        code, output = run_gate(args.gate, root, "build")
+        expectations.append(("files-listed: a test put back to the version the test stage saw red is a restoration, "
+                             "not an unlisted change",
+                             "files-listed" in checks_by_verdict(output)["pass"] and "restored" in output
+                             and "WidgetPageTest.java" in output, [l for l in output.splitlines() if "files-listed" in l]))
+        with open(os.path.join(root, page_test), "w", encoding="utf-8") as handle:
+            handle.write("class WidgetPageTest { void showsTheThing() { /* the assertion went */ } }\n")
+        code, output = run_gate(args.gate, root, "build")
+        expectations.append(("files-listed: the same test changed to another version is still an unlisted change "
+                             "(and fails the red proof)",
+                             code == 1 and "files-listed" in checks_by_verdict(output)["fail"]
+                             and "red-proof" in checks_by_verdict(output)["fail"],
+                             [l for l in output.splitlines() if "files-listed" in l or "red-proof" in l]))
     with tmpdir() as root:
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
                                              (".dca-factory/runs/STORY-1/.verify/journal.tsv",
