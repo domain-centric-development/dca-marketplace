@@ -130,6 +130,16 @@ For "show me the real code", quote the node itself: a `rule` node carries its Ar
 expression and `enforced_by` test name, a `marker` node its signature. Then point at the
 matching type in *the user's own* project — never at another repository.
 
+## Review status
+
+An authored node's `review:` says how far it has been checked: `reviewed` — cite it as the answer; `draft` (the
+majority) — use it and say once that the guidance is a draft, and never let it override a generated node; `superseded` — history, follow `superseded_by`;
+missing — read as `draft`. A generated node (rule, marker, guide, reference) wins over an authored one on every
+contradiction. More in `reference/operations.md`.
+
+A large rule node keeps what it selects and checks; its ArchUnit code — the Java expression, the C# expression,
+the helpers — is in its evidence slices, linked at the node's end.
+
 ## When in doubt
 
 - Lead with `index.md` files (small) before node bodies; filter on frontmatter before reading bodies;
