@@ -136,4 +136,4 @@ matching type in *the user's own* project — never at another repository.
   read the one section, not the chapter. More in `reference/operations.md` (token discipline).
 - The shipped copy is read-only and may be older than the libraries the project uses: cite the node body,
   say so when it looks out of date, never hand-edit it (`reference/operations.md`, "When the catalog looks stale").
-- It explains rules; it does not audit code against them — that is `/dca-review`.
+- It explains rules; it does not audit code against them — that is `/dca-audit`.

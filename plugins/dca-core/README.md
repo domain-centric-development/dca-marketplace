@@ -20,7 +20,7 @@ The verbs follow one another — describe → new → init → add:
 rule catalog against your layout — nothing else to wire — and writes the method's section into
 `AGENTS.md`: the conventions file and the installed skills by role, so a person developing by hand
 has what a pipeline stage has. After that the daily work: `/dca-modelling` builds the domain types,
-`/dca-discipline` applies the invariants while you edit, `/dca-review` reviews what a static rule
+`/dca-discipline` applies the invariants while you edit, `/dca-audit` audits what a static rule
 cannot (aggregate design, use-case granularity, port semantics, naming drift), and `/dca-knowledge`
 answers a question about DCA from the vendored catalog and cites the node it read.
 
@@ -43,7 +43,7 @@ Formatter, Browser runner, Proof, Git, Open — with every field present and `�
 | `/dca-add` | One capability into an existing setup: another rule module, freezing existing violations, a formatter (formatted once, whole), a browser runner | A capability the project gains later |
 | `/dca-modelling` | The tactical-modelling craft: aggregates, entities, values, ids, domain and integration events, domain services, factories, specifications, repositories and stores, in both language spellings; a new term goes through `/ubiquitous-language`; ends with a report | Designing or implementing a domain concept |
 | `/dca-discipline` | The invariants, in one place: framework-free domain, dependency inversion, bounded-context isolation, event hygiene, named failures | Editing `domain/`, `application/`, `adapter/` |
-| `/dca-review [project \| <context> \| <path>]` | The method's audit against DCA conventions the rules cannot check (aggregate design, use-case granularity, port semantics, result shape, event hygiene, declarations against the map), and the rules of the suite to switch on next — the brownfield entry beside `/dca-init`; a delivery pipeline's judge loads it only where a profile adds the `dca` perspective (adoption work) | Auditing a project, a context or a diff for DCA compliance |
+| `/dca-audit [project \| <context> \| <path> \| diff]` | The method's audit: a checklist with a mark per check and bounded context — how far the code fits the method — then the findings the rules cannot catch (aggregate design, use-case granularity, port semantics, result shape, event hygiene, declarations against the map), and the rules of the suite to switch on next — the brownfield entry beside `/dca-init`; a delivery pipeline's judge loads it only where a profile adds the `dca` perspective (adoption work) | Auditing a project, a context or a diff for DCA compliance |
 | `/dca-knowledge` | Grounded Q&A + recipe-driven **build loop** over the OKF knowledge catalog — traverses marker↔rule↔ADR↔section links, cites the source `resource:`, and `save` promotes answers into permanent catalog nodes | Asking what DCA says about X, or constructing DCA code from recipes + rule checklists |
 
 dca-core has no agents. A long modelling session may run in a subagent where the tool has them; the
@@ -54,7 +54,7 @@ reviewer agents live in dca-craft beside the perspectives they apply.
 Install [dca-craft](../dca-craft/) alongside: `/ubiquitous-language` and `/context-map` keep the
 glossary and the designed map the method's skills write through, `/e2e-testing` carries the browser
 runner `/dca-add browser` sets up, and `/review-ddd`, `/review-hexagonal`, `/review-clean-code` give
-the outside view beside `/dca-review`.
+the outside view beside `/dca-audit`.
 
 ## Conventions overlay
 

@@ -125,7 +125,7 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
    lists them, or a project skill directory holds them (`.claude/skills/`, `.agents/skills/`,
    `.codex/skills/`, `.opencode/skills/`). The roles are build (`dca-modelling`), guard (`dca-discipline`),
    glossary (`ubiquitous-language`), map (`context-map`), browser tests (`e2e-testing`) and review
-   (`review-ddd`, `review-hexagonal`, `review-clean-code`, `dca-review`). A skill that is not installed is
+   (`review-ddd`, `review-hexagonal`, `review-clean-code`, `dca-audit`). A skill that is not installed is
    left out of the section, never named.
 
 8. **Summarize** to the user before asking anything:
@@ -305,7 +305,7 @@ file outside the DCA part: dependencies, the architecture source set or project,
 - The section carries the line the general skills read — ``- conventions: `<path>` `` — and the skills by
   role from Phase 1 item 7, each only where it is installed; a role with nothing installed is left out.
   `{{reviewSkills}}` lists the installed ones of `review-ddd`, `review-hexagonal`, `review-clean-code` and
-  `dca-review`. The `- conventions:` and `- <role>:` lines are read by other tools (general skills take the
+  `dca-audit`. The `- conventions:` and `- <role>:` lines are read by other tools (general skills take the
   conventions file from them, a delivery pipeline its carrier names), so keep their form.
 - Why the section exists: a person developing by hand in a session has the same information and the same
   means as a stage of a delivery pipeline — the conventions, the skill that carries each craft, the check.
@@ -327,7 +327,7 @@ not failures: `DCA-STR-012` on `warn` (no layered module yet) and, with decision
 `ContextMapDocumentationTest` that has just generated `{{contextMapPath}}` — skipped in Java, failed once with
 "commit it" in .NET (green from the second run on) — both named in the report. In a retrofit, failures are
 findings about the existing code, not bugs of this skill: point the user to `dca.rules.warn` or
-`dca-add freeze` for a staged adoption, `/dca-review` to triage, `/dca-new` for new code that complies from
+`dca-add freeze` for a staged adoption, `/dca-audit` to triage, `/dca-new` for new code that complies from
 the start.
 
 ## Placeholders
@@ -347,7 +347,7 @@ the start.
 | `{{contextMapPath}}` | decision F | `docs/architecture/context-map.md` |
 | `{{verifyCommand}}` | build system | `./gradlew test-architecture` |
 | `{{conventionsPath}}` | existing file or default | `.agents/dca/conventions.md` |
-| `{{build}}`, `{{guard}}`, `{{glossary}}`, `{{map}}`, `{{browserTests}}`, `{{review}}`, `{{reviewSkills}}` | Phase 1 item 7 | `true`; `` `review-ddd`, `dca-review` `` |
+| `{{build}}`, `{{guard}}`, `{{glossary}}`, `{{map}}`, `{{browserTests}}`, `{{review}}`, `{{reviewSkills}}` | Phase 1 item 7 | `true`; `` `review-ddd`, `dca-audit` `` |
 | `{{catalogPath}}` | decision G (`live catalog`) | `~/…/dca-knowledge-catalog/bundle` |
 
 ## After init — for the user
@@ -364,7 +364,7 @@ python3 <this skill folder>/scripts/dca-report.py --mode init --proof architectu
 skip it — `dca-new` shows the one report at its end. Otherwise add nothing after it but this line:
 
 ```
-Next: run the architecture test for the baseline and tune dca-archunit.properties, never delete a rule silently — /dca-new for new code, /dca-review to triage existing violations.
+Next: run the architecture test for the baseline and tune dca-archunit.properties, never delete a rule silently — /dca-new for new code, /dca-audit to triage existing violations.
 ```
 
 The Transactions choice (Phase 3, Java step 1) is the one decision the report cannot read back from a file
@@ -381,7 +381,7 @@ The report's Open section already names what is missing; the skills that close i
 
 ## For the other skills
 
-`dca-new`, `dca-review`, `dca-modelling` and `dca-discipline` read the project's conventions from the
+`dca-new`, `dca-audit`, `dca-modelling` and `dca-discipline` read the project's conventions from the
 generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, suffixes) and from the
 conventions file the `AGENTS.md` section names — `.agents/dca/conventions.md` by default, falling back to
 `.claude/dca/conventions.md`. There is no constants class to consult.

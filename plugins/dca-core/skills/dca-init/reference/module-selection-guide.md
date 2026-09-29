@@ -82,4 +82,4 @@ structural problems. Raise the bar in this order:
 
 Run once for the baseline: `./gradlew test-architecture`, `mvn test -Dtest='ArchitectureTest'` or
 `dotnet test` (Debug). Expect failures in retrofit projects — those are findings, not bugs. Use
-`/dca-review` to triage and `/dca-new` for new code that complies from the start.
+`/dca-audit` to triage and `/dca-new` for new code that complies from the start.

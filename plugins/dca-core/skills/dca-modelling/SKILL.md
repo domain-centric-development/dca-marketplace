@@ -236,7 +236,7 @@ Verification
 - **`review-ddd`** is your review-only counterpart, an outside view. After
   building, the user may invoke it (often in parallel with `review-hexagonal`
   and `review-clean-code`) for a fresh perspective on what you wrote;
-  `dca-review` checks DCA conformance.
+  `dca-audit` checks DCA conformance.
 - **`dca-discipline`** holds the invariants and applies them while code is
   edited — it's the prevention layer. You are the implementation layer.
 - **`ubiquitous-language`** keeps the glossary truthful. Every new domain term

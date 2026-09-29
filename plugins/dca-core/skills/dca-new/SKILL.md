@@ -449,7 +449,7 @@ class OrderEntity { /* JPA fields, accessors, @Id, @Column ... */ }
 - **A mapper in `application/` or `domain/`** — mapping is an adapter concern.
 - **A domain event as the Kafka payload** — domain events stay inside the context. Across contexts it is an `*IntegrationEvent` (schema version in `IntegrationEventType`; a business `version` stays allowed), mapped in the `adapter/outgoing/event/` publisher.
 
-The complete wiring picture is `dca-review`'s reference `use-case-pattern.md` (section 4, "Adapter wiring: who calls
+The complete wiring picture is `dca-audit`'s reference `use-case-pattern.md` (section 4, "Adapter wiring: who calls
 what?"), the adapter naming table its `naming-conventions.md` (section "Adapter layer").
 
 ---

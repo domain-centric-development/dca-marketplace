@@ -58,7 +58,7 @@ context's code — and to what the code itself shows.
 
 With [dca-core](../dca-core/) installed, the method's skills use these as their craft: the modelling
 skill enters a new term through `/ubiquitous-language`, the description skill writes the designed map
-through `/context-map`, and `dca-review` adds the DCA conformance review beside the three general
+through `/context-map`, and `dca-audit` adds the method's audit beside the three general
 perspectives here. The pointers run that way only: nothing here depends on dca-core, and a check in
 the marketplace keeps DCA artifacts out of this plugin's skills and agents.
 

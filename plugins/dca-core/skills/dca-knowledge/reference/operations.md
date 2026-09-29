@@ -96,7 +96,7 @@ are documented in its `AGENTS.md`.
 
 | Skill | How it pairs |
 |---|---|
-| `/dca-discipline`, `/dca-review` | They *apply* the rules while editing/reviewing; this skill *explains and cites* the rule + its rationale on demand. |
+| `/dca-discipline`, `/dca-audit` | They *apply* the rules while editing/reviewing; this skill *explains and cites* the rule + its rationale on demand. |
 | `/dca-init` | Init installs the markers/ArchUnit suite; this skill answers "what does each installed rule mean and why". |
 | `/dca-new` | New lays out structure; ask this skill which marker/pattern a new use case should follow, with citation. |
 | `/dca-modelling` | Builds the domain types; this skill supplies the recipe, template and rules it builds from. |
@@ -109,7 +109,7 @@ are documented in its `AGENTS.md`.
   generation and review publish knowledge. Read current counts from `index.md` / `log.md` when needed.
 - **Doesn't answer from memory.** No catalog node = no grounded answer. It says so rather
   than guessing.
-- **Doesn't replace `/dca-review`.** It explains rules; it doesn't audit your code against them.
+- **Doesn't replace `/dca-audit`.** It explains rules; it doesn't audit your code against them.
 - **Doesn't fetch remote catalogs.** It reads a local bundle (in-repo or vendored); pointing
   at a remote copy is the user's setup step.
 

@@ -45,7 +45,7 @@ dca-marketplace/
 │   │   ├── reference/archunit-rule-catalog.md   # GENERATED — see below
 │   │   └── templates/
 │   ├── skills/dca-knowledge/catalog/      # GENERATED mirror of dca-knowledge-catalog/bundle — never hand-edit
-│   └── skills/{dca-modelling,dca-discipline,dca-review}/
+│   └── skills/{dca-modelling,dca-discipline,dca-audit}/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
 │   ├── skills/factory-run/                # orchestrator + scripts/{story-gate.py (decides), factory-cli.py (shows, coordinates), factory.sh} + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
@@ -64,7 +64,7 @@ dca-marketplace/
 ## The three plugins
 
 - **dca-core** — `/dca-describe`, `/dca-new`, `/dca-init`, `/dca-add`, `/dca-modelling`, `/dca-discipline`,
-  `/dca-review`, `/dca-knowledge`; no agents. Every skill speaks both languages: Java/Spring (`UseCase<I,O>`,
+  `/dca-audit`, `/dca-knowledge`; no agents. Every skill speaks both languages: Java/Spring (`UseCase<I,O>`,
   packages, `package-info.java`) and .NET/C# (`IUseCase<TIn,TOut>`, namespaces, a `[BoundedContext]` marker
   class). The verbs follow one another: describe (the project description under `project/`) → new (a skeleton
   from a generator, or one more element) → init (the DCA part of an existing project) → add (one capability).
@@ -92,7 +92,7 @@ dca-marketplace/
   `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the
   skills and agents name no DCA artifact (rule ids, `dca-*` names, the building blocks' namespaces and
   DCA-only types, the conventions overlay path) — `scripts/check-skills.py` fails otherwise; the README may
-  say what it pairs with. The reviewers are the outside view; `dca-review` in dca-core is the method's
+  say what it pairs with. The reviewers are the outside view; `dca-audit` in dca-core is the method's
   audit — a person runs it on a project, a context or a diff; the factory's judge does not load it by default.
   Knowledge lives in the skills; the agents are thin wrappers for an isolated context and a tool restriction.
 
@@ -128,13 +128,13 @@ interfaces are aliased to the library ones or kept and declared through `DcaLayo
 
 | Change elsewhere | Update here |
 |---|---|
-| Rule added/changed in `dca-java` / `dca-dotnet` (`rules.json`) | `python3 scripts/render-rule-catalog.py`; `dca-review/reference/checklist.md` if the rule has a semantic counterpart; `dca-discipline/SKILL.md` layer table if it names rules |
+| Rule added/changed in `dca-java` / `dca-dotnet` (`rules.json`) | `python3 scripts/render-rule-catalog.py`; `dca-audit/reference/checklist.md` if the rule has a semantic counterpart; `dca-discipline/SKILL.md` layer table if it names rules |
 | Consumer API of the libraries (`DcaLayout` options, `DcaArchitectureTest`, `dca-archunit.properties` keys, package coordinates) | `dca-init/SKILL.md`, its templates and `reference/*`; `dca-add` for the rule modules and freezing |
-| Building-block marker added/renamed | `dca-new` templates, `dca-modelling`, `dca-discipline`, `dca-review` (both language examples) — never the dca-craft skills |
-| Naming convention or package/namespace structure in the guide | `dca-review/reference/naming-conventions.md`, `dca-new/SKILL.md` + templates, `dca-discipline/SKILL.md` |
-| Use-case / result pattern in the guide or samples | `dca-review/reference/use-case-pattern.md`, `dca-new/templates/use-case/` |
+| Building-block marker added/renamed | `dca-new` templates, `dca-modelling`, `dca-discipline`, `dca-audit` (both language examples) — never the dca-craft skills |
+| Naming convention or package/namespace structure in the guide | `dca-audit/reference/naming-conventions.md`, `dca-new/SKILL.md` + templates, `dca-discipline/SKILL.md` |
+| Use-case / result pattern in the guide or samples | `dca-audit/reference/use-case-pattern.md`, `dca-new/templates/use-case/` |
 | Guide text (`dca-guide/*.md`) or authored catalog nodes | regenerate the catalog; the mirror follows |
-| Context-map relationship declarations or renderer options | `dca-init` (the renderer test) and `dca-review` (declarations against the map); `context-map` in dca-craft only for a change to DDD's relationship patterns themselves |
+| Context-map relationship declarations or renderer options | `dca-init` (the renderer test) and `dca-audit` (declarations against the map); `context-map` in dca-craft only for a change to DDD's relationship patterns themselves |
 | Craft that a delivery stage or a review perspective needs (test writing, implementation, a review angle) | the **skill** carries it (portable — every tool reads skills); an agent stays a thin wrapper around that skill for isolated context and a restricted tool set. Knowledge in an agent alone is Claude-only |
 | A gate check, a stage order or the runner changed | extend `plugins/dca-factory/skills/factory-verify/scripts/verify.py` with a case for what changed — the gate is the correctness argument for every stage, so it may not rest on a hand check. `.github/workflows/check.yml` runs the suite on every push and pull request, on Linux, macOS and Windows (Git Bash); never state a case count in prose, it drifts |
 | Delivery process: backlog fields, stage order, gate checks, file hand-overs | `dca-factory/skills/factory-run/SKILL.md`, its `reference/{backlog-contract,file-contracts}.md`, `scripts/story-gate.py`, and the affected `stage-*/SKILL.md`. A gate check is a script change, never a hook or a stage self-assessment |

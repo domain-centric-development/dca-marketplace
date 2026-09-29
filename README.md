@@ -74,7 +74,7 @@ how the code should look.
 your project's layout. It writes the method's section into `AGENTS.md`: the conventions file and the
 skills by role, so a person working by hand in a session has what a pipeline stage has. From then on
 `/dca-discipline` applies the invariants while you edit, `/dca-modelling` builds the domain types,
-`/dca-review` reviews what static rules cannot, and `/dca-knowledge` answers "what does DCA say
+`/dca-audit` audits a project, a context or a diff for what static rules cannot, and `/dca-knowledge` answers "what does DCA say
 about X" from a catalog it cites rather than from memory. `/dca-new context|usecase|aggregate|store|domainservice`
 lays out one more element.
 

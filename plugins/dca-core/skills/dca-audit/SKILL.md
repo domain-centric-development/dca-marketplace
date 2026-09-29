@@ -1,17 +1,19 @@
 ---
-name: dca-review
+name: dca-audit
 description: |
   Audits Java/Spring or .NET/C# code against Domain-Centric Architecture (DCA) conventions — a whole project,
   one bounded context, or a diff. Complements ArchUnit by checking semantic aspects that static rules can't:
   aggregate-design quality, use-case granularity, port semantics, domain-event hygiene, failure types and their
   translation, cross-context boundaries, naming consistency — and says which rules of the suite the project
   could switch on next. The brownfield entry beside `dca-init`. Use when the user asks to "review my DCA code",
-  "is this DCA-compliant", "audit this project / this context for DCA", "where does this code stand against the
-  method", or "/dca-review [<scope>]". Default scope is the git diff against main; a path, a context name or
-  `project` widens it. A person runs it; a delivery pipeline's judge does not load it by default.
+  "is this DCA-compliant", "audit this project / this context for DCA", "/dca-review" (the former name), "where does this code stand against the
+  method", "/dca-review" (the former name), or "/dca-audit [<scope>]". The answer leads with a checklist — every
+  check of the method with a mark, per bounded context — then the findings and the rules to switch on next.
+  Default scope is the whole project; `diff`, a path or a context name narrows it. A person runs it; a delivery
+  pipeline's judge does not load it by default.
 ---
 
-# dca-review
+# dca-audit
 
 Audits code for **DCA compliance** — a diff, a bounded context or the whole project — focusing on
 issues that ArchUnit rules can't detect because they are semantic, not structural, and on the rules
@@ -40,11 +42,11 @@ A delivery pipeline's judge runs the three general perspectives and the project'
 story; this audit is not one of its defaults — the rules it would confirm already run as ArchUnit in
 every gate, and its anti-patterns that neither the suite nor the general reviews catch are few. A
 project adopting the method through the pipeline (adoption stories) opts in with a profile line
-(`reviews: dca` and `review.dca: dca-review`): there, the layer classification below is the question.
+(`reviews: dca` and `review.dca: dca-audit`): there, the layer classification below is the question.
 
-## Where ArchUnit ends and dca-review begins
+## Where ArchUnit ends and dca-audit begins
 
-| Checked by ArchUnit | Checked by dca-review |
+| Checked by ArchUnit | Checked by dca-audit |
 |---|---|
 | Class names match suffix patterns | Whether the names actually describe what the class does |
 | Domain doesn't depend on adapters | Whether use cases hold too many output ports (god-use-case) |
@@ -61,14 +63,14 @@ Where the checklist cites a rule id, the review confirms what that rule cannot s
 
 ### Phase 1: Scope
 
-Determine which files to review. The scope is the argument (`/dca-review <scope>`):
+Determine which files to audit. The scope is the argument (`/dca-audit <scope>`):
 
-- `project` — every source file under the base package or namespace: the brownfield audit. Report per
-  bounded context, contexts in the order the designed map lists them.
+- nothing, or `project` — every source file under the base package or namespace: the brownfield audit,
+  the default. Report per bounded context, contexts in the order the designed map lists them.
 - a context name (`billing`) or a path (`src/main/java/com/example/billing`) — that context's files.
-- nothing — the git diff, as below.
+- `diff` — what changed on this branch, the reader of a change before it is committed:
 
-**Default — git diff:**
+**`diff` — git:**
 ```bash
 git diff --name-only main...HEAD                  # commits on this branch
 git diff --name-only HEAD                         # uncommitted (modified + staged)
@@ -78,7 +80,7 @@ Combine to get all changed `*.java` / `*.cs` files. If no git repo or no diff, f
 
 **User-specified paths.** If the user passed explicit paths (files or directories), review those instead.
 
-If neither: ask the user which paths to review.
+Without a repository or a diff, `diff` falls back to the whole project and says so.
 
 ### Phase 2: Layer classification
 
@@ -137,12 +139,31 @@ After the review, two lists:
 
 ### Phase 5: Output
 
-Produce a structured report:
+Produce a structured report. It **leads with the checklist**: how far the code fits the method, check by
+check, so a reader sees the standing before the findings — that is what an audit is for. One row per
+section of `reference/checklist.md` that applies to the scope (a section whose layer the scope has no
+files for is `–`), one column per bounded context in scope (one column for a single context or a diff),
+and a mark per cell: `✓` every check of the section holds, `✗ n` the number of places that break one,
+`–` not applicable. The summary line counts the sections that hold.
 
 ```
-## DCA Review
+## DCA Audit
 
-**Scope:** {N} files changed in this branch (vs. main)
+**Scope:** the project — 3 contexts, {N} source files          (or: {N} files changed on this branch)
+**Standing:** 21 of 27 applicable checks hold · 6 with findings · rule suite: 118 rules enforced, 9 on warn
+
+### Checklist
+| Check (`reference/checklist.md`) | catalog | ordering | shipping |
+|---|---|---|---|
+| Domain — Model: aggregate roots | ✓ | ✗ 2 | ✓ |
+| Domain — Model: value objects | ✓ | ✓ | ✓ |
+| Domain — Failures | ✗ 1 | ✓ | – |
+| Domain — Events | ✓ | ✓ | – |
+| Application — Use cases: input port, implementation, command, result | ✓ | ✓ | ✗ 1 |
+| Application — Output ports: basics, granularity, location, repository vs store | ✓ | ✗ 1 | ✓ |
+| Adapter — Incoming: resources, failure translation, consumers | ✓ | ✓ | ✓ |
+| Adapter — Outgoing: repositories, publishers | ✓ | ✓ | ✓ |
+| Cross-cutting: imports, framework placement, package structure, declarations against the map | ✓ | ✗ 1 | ✓ |
 
 ### Findings ({must-fix} must-fix · {should-fix} should-fix · {nit} nits)
 
@@ -169,6 +190,10 @@ then the rules the suite lacks and could carry)
 - Events are emitted only when a domain fact needs publication ✓
 - Output ports are interfaces in application, shared when reused and local when owned by one operation ✓
 ```
+
+Every `✗ n` in the checklist has its `n` findings below, file and line each; a `✓` is a claim about every
+file of that layer in that context, so say in one line how many files the check ran over. Run the audit
+again after the fixes: the checklist is what a team compares between two runs.
 
 ## Anti-patterns this review catches
 

@@ -64,7 +64,7 @@ It MAY NOT import:
 
 1. Define an output port interface in `application/shared/` (or in the use
    case's own folder if it's only used there — see the decision guide in
-   `dca-review`'s reference `use-case-pattern.md`, section 3).
+   `dca-audit`'s reference `use-case-pattern.md`, section 3).
 2. Reference the port from the use case.
 3. Add an implementation in `adapter/outgoing/...`.
 
@@ -257,7 +257,7 @@ If no conventions file: use the DCA defaults the guide's rules state (`dca-knowl
 
 ## What this skill does NOT do
 
-- **Doesn't review existing code.** That's `dca-review` and the reviewer agents.
+- **Doesn't audit existing code.** That's `dca-audit` and the reviewer agents.
 - **Doesn't lay out new code.** That's `dca-new`; the domain types themselves are `dca-modelling`'s.
 - **Doesn't enforce naming.** That's `/clean-code` and `/ubiquitous-language`.
 - **Doesn't run ArchUnit.** ArchUnit is the safety net *after* this skill;
