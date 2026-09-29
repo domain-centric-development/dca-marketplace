@@ -217,7 +217,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.50.2"
+VERSION = "0.50.3"
 
 
 def read_front_matter(path):
@@ -3257,6 +3257,19 @@ def last_ended(runs, story_id, names):
     return last
 
 
+def window_open(runs, story_id, window):
+    """True while the journal's last mark for that exact window name is its start."""
+    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    if not os.path.isfile(journal):
+        return False
+    last = None
+    for line in read_text(journal).splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[1] in ("stage-start", "stage-end") and parts[2] == window:
+            last = parts[1]
+    return last == "stage-start"
+
+
 def stage_open(runs, story_id, stage):
     """True while the journal's last mark for the stage is its start: the stage is running (plan to tidy
     also while a shared builder, which marks itself `builder`, runs them; judge and document also while a
@@ -3288,7 +3301,20 @@ def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
         record = os.path.join(runs, story_id, ".verify", "changed-builder.txt")
         handovers = [STAGE_FILES[name] for name in ("test", "build", "tidy")
                      if os.path.isfile(os.path.join(runs, story_id, STAGE_FILES[name]))]
-    if not os.path.isfile(record) or stage_open(runs, story_id, stage):
+    base_file = os.path.join(runs, story_id, ".verify", "base-tree")
+    if window_open(runs, story_id, "builder") and stage in SHARED_WINDOWS["builder"] and os.path.isfile(base_file):
+        # A shared builder runs its own gates inside its window, before any changed-files record exists. What the
+        # story changed so far is the tree against its base: checked now, the builder can still list a file it
+        # forgot — found only by the runner afterwards, it costs a round.
+        base = read_text(base_file).strip()
+        now = git_tree(cwd) if base and base != "none" else None
+        rows = tree_changes(cwd, base, now, runs) if now else None
+        if rows is not None:
+            record = None
+            handovers = [STAGE_FILES[name] for name in ("test", "build", "tidy")
+                         if os.path.isfile(os.path.join(runs, story_id, STAGE_FILES[name]))]
+            changed_now = [path for _kind, path in rows]
+    if record is not None and (not os.path.isfile(record) or stage_open(runs, story_id, stage)):
         if stage_open(runs, story_id, stage):
             # A stage that runs its own gate does so inside its window: its record is written at the
             # stage's end, and the gate after `--stage-end` (the orchestrator's, the runner's) checks it.
@@ -3297,11 +3323,14 @@ def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
         else:
             result.skip("files-listed", f"no changed-files record for {stage} — the stage was not snapshotted")
         return
-    reason = snapshot_reason(record)
-    if reason:
-        result.skip("files-listed", f"the {stage} stage's changes were not observed — {reason}")
-        return
-    changed = [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
+    if record is None:
+        changed = changed_now
+    else:
+        reason = snapshot_reason(record)
+        if reason:
+            result.skip("files-listed", f"the {stage} stage's changes were not observed — {reason}")
+            return
+        changed = [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
     found = [listed_files(os.path.join(runs, story_id, name)) for name in handovers]
     listed = set().union(*[names for names in found if names is not None]) if any(n is not None for n in found) \
         else None

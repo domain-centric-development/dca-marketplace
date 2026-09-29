@@ -1197,6 +1197,45 @@ def verify_runner(runner, verbose=False):
           code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "verifier", "test", "build", "tidy", "verifier"],
           f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
 
+    # 1b-recheck. the runner's re-check of a shared builder refuses: a round with the gate's report, not a stop
+    recheck_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
+                   'printf "%s\\n" "$FACTORY_PROMPT" >> builder-prompts.txt; '
+                   'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                   'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
+                   'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi ;; esac; done; '
+                   'if [ ! -f built-once ]; then : > built-once; mkdir -p src/main; echo "class Stray {}" > src/main/Stray.java; '
+                   'else printf -- "- src/main/Stray.java\\n" >> .dca-factory/runs/STORY-1/build.md; fi; '
+                   'else sh -c "$FIXTURE_STAND_IN"; fi')
+    with tmpdir() as root:
+        build_project(root)
+        copy_scripts(runner, root)
+        in_git(root)
+        tests_path = os.path.join(root, "fixture-tests.md")
+        with open(tests_path, "w", encoding="utf-8") as handle:
+            handle.write(TESTS)
+        os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+        with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+            handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+        write_file(root, ".gitignore", "build/\nbuilder-prompts.txt\nbuilt-once\n")   # test reports; the fixture's own notes
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        subprocess.run(["git", "-c", "user.name=v", "-c", "user.email=v@v", "commit", "-qm", "base"], cwd=root, capture_output=True)
+        env = {"FACTORY_TOOL_CMD": recheck_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
+               "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
+                                  "--shared-builder", env=env)
+        journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+        starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                  if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+        prompts = open(os.path.join(root, "builder-prompts.txt"), encoding="utf-8").read().strip().splitlines() \
+            if os.path.isfile(os.path.join(root, "builder-prompts.txt")) else []
+        check("shared builder: a refused re-check is a round — the builder runs again from that stage with the gate's "
+              "report, and the story is delivered",
+              code == 0 and story_delivered(root) and starts[:2] == ["builder", "builder"]
+              and len(prompts) == 2 and ".gate-build.txt" in prompts[1] and "stage-plan" not in prompts[1]
+              and output.count("── gate build  (re-checked by the runner)") == 2
+              and output.count("ran through") == 1,
+              f"exit {code}; starts {starts}; prompts {[p[-120:] for p in prompts]}; {output.strip().splitlines()[-4:]}")
+
     # 1c. a stage that writes no file stops the run, and says which file was missing
     with tmpdir() as root:
         build_project(root)
@@ -4278,6 +4317,34 @@ def run_groups(args):
                    back_to("## Verdict\nverdict: changes-requested\nback: `build`\n"))
         expectations.append(("back-to: the judge's `back: test` sends the story to the test stage; without it, the build",
                              answers == ("test", "build", "build"), answers))
+    # A shared builder runs its own gates inside its open window, before any changed-files record exists. The
+    # gate reads the story's changes against its base tree instead, so the builder sees an unlisted file while
+    # it can still list it — not only the runner, afterwards.
+    def builder_window(listed):
+        with tmpdir() as root:
+            build_project(root, green=both_green, ledger=both_green)
+            write_file(root, ".gitignore", "build/\n")      # test reports, as a real project ignores them
+            in_git(root)
+            subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+            subprocess.run(["git", "-c", "user.name=v", "-c", "user.email=v@v", "commit", "-qm", "base"], cwd=root,
+                           capture_output=True)
+            subprocess.run([sys.executable, args.gate, "--record-base", "--story", "STORY-1"], cwd=root, capture_output=True)
+            write_file(root, "src/main/Thing.java", "class Thing {}\n")
+            write_file(root, "src/main/State.java", "enum State { OPEN }\n")
+            write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv",
+                       "2026-09-29T14:05:22.000Z\tstage-start\tbuilder\ttool=claude\n")
+            rows = "".join(f"| `{p}` | new |\n" for p in listed)
+            write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Changed\n| File | Why |\n|---|---|\n" + rows)
+            return run_gate(args.gate, root, "build")
+    code, output = builder_window(["src/main/Thing.java"])
+    expectations.append(("builder window: the gate inside an open shared-builder window checks the hand-overs against "
+                         "the story's changes so far, and names the unlisted file",
+                         "files-listed" in checks_by_verdict(output)["fail"] and "src/main/State.java" in output,
+                         [l for l in output.splitlines() if "files-listed" in l]))
+    code, output = builder_window(["src/main/Thing.java", "src/main/State.java"])
+    expectations.append(("builder window: with every changed file listed, the check passes inside the window",
+                         "files-listed" in checks_by_verdict(output)["pass"],
+                         [l for l in output.splitlines() if "files-listed" in l]))
     # The gate's brief report: what passed is one line, what did not stays verbatim — for a stage that runs its
     # own gate and reads the report into its context.
     with tmpdir() as root:

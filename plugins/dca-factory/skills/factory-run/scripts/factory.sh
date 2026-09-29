@@ -58,6 +58,7 @@ RUNS=""                                      # the run folder — resolved below
 STOP_FILE=""                                 # <run folder's parent>/stop: exists → a backlog run stops before its next story
 INVOCATIONS=0                                # agent invocations in this process
 TOOL_IN_FLIGHT=""                            # the tool a stage prompt is built for (the catalog path depends on it)
+NESTED_CODE=0                                # the result of a story run a shared builder's round started
 GATE_FIRST=""                                # set for the first stage of an explicit story run: its gate decides first
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
@@ -1656,6 +1657,11 @@ document stage. This session was started by the pipeline's runner, which holds t
 named at session start is the one that started you, not a second writer. $(where_things_are "$tool" builder "$story")"
   local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
   [ -n "$guard" ] && prompt="$prompt In the build and tidy stages apply the $guard skill (the profile's carrier.guard) to every file you write."
+  local refused
+  for refused in "${range[@]}"; do
+    [ -f "$RUNS/$story/.gate-$refused.txt" ] && prompt="$prompt The gate refused stage $refused before; its report is \
+$RUNS/$story/.gate-$refused.txt — read it and fix exactly what it names in that stage, nothing else."
+  done
   if [ -f "$RUNS/$story/judge.md" ] && [ "$(verdict_of "$story")" = changes-requested ]; then
     prompt="$prompt The judge asked for changes: $RUNS/$story/judge.md — each stage fixes exactly the confirmed defects \
 that are its own (a test that asserts too little is the test stage's, with its break; the code is the build's)."
@@ -1707,7 +1713,20 @@ that are its own (a test that asserts too little is the test stage's, with its b
   for st in build tidy; do
     [[ " ${range[*]} " == *" $st "* ]] || continue
     echo "── gate $st  (re-checked by the runner)"
-    gate "$st" "$story" || { echo "factory: the runner's re-check of gate '$st' refused the shared stages' work." >&2; return 1; }
+    if ! gate "$st" "$story"; then
+      environment_refused "$st" "$story" && return 1
+      # The same way back a refusal takes between separate stages: one round, the builder again from the
+      # refused stage with the gate's report as its input, three rounds stop the story.
+      local refused_rounds; refused_rounds=$(bump_rounds "$story")
+      if [ "$refused_rounds" -ge 3 ]; then
+        echo "factory: the runner's re-check of gate '$st' refused in round $refused_rounds — three rounds did not converge. needs-human." >&2
+        return 1
+      fi
+      echo "factory: the runner's re-check of gate '$st' refused — round $refused_rounds runs the shared stages again from '$st' with the gate's report." >&2
+      run_story "$story" "$tool" "$st" "$dry"
+      NESTED_CODE=$?
+      return 99
+    fi
   done
   return 0
 }
@@ -2036,7 +2055,11 @@ run_story() {
 
     if [ -n "$SHARED_BUILDER" ] && [[ " ${BUILDER_STAGES[*]} " == *" $stage "* ]]; then
       if [ -z "$built" ]; then
-        run_shared_builder "$story" "$tool" "$stage" "$dry" "$kind" || return $?
+        local shared_code=0
+        run_shared_builder "$story" "$tool" "$stage" "$dry" "$kind" || shared_code=$?
+        # 99: a refused re-check ran the story again from there — that run's result is this one's
+        [ "$shared_code" = 99 ] && return "$NESTED_CODE"
+        [ "$shared_code" = 0 ] || return "$shared_code"
         built=1
       fi
       ran="${ran:+$ran,}$stage"
