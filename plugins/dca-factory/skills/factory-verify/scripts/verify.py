@@ -3523,6 +3523,13 @@ def run_groups(args):
               must_fail=("files-listed",)),
          dict(tests=TESTS.split("\n## Files")[0] + "\n", extra_sources=(
              (".dca-factory/runs/STORY-1/.verify/changed-test.txt", "modified\tsrc/test/java/com/example/WidgetUnitTest.java\n"),))),
+        # WP-79 A2: the cheap checks come first, and a refusal among them leaves every process unstarted.
+        (Case("test: a refusal before the suites leaves the runner uncalled", "test", 1,
+              must_fail=("files-listed",), must_skip=("compiles", "tests-red"), text=("refused first",)),
+         dict(tests=TESTS.split("\n## Files")[0] + "\n", extra_sources=(
+             (".dca-factory/runs/STORY-1/.verify/changed-test.txt", "modified\tsrc/test/java/com/example/WidgetUnitTest.java\n"),),
+              after=lambda root: [] if not os.path.isfile(os.path.join(root, "build/runner-calls.log"))
+              else ["the runner was called: " + open(os.path.join(root, "build/runner-calls.log")).read()])),
         (Case("test: an unmapped criterion is refused", "test", 1, must_fail=("tests-mapped",)),
          dict(tests="\n".join(TESTS.splitlines()[:5]) + "\n")),
         (Case("test: a selector with no source file is refused", "test", 1,

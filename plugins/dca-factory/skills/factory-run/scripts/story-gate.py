@@ -217,7 +217,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.51.0"
+VERSION = "0.51.1"
 
 
 def read_front_matter(path):
@@ -1933,7 +1933,7 @@ def joined_filter(profile, flag, patterns):
 
 
 def check_test_state(result, profile, cwd, mapping, expected, located=None, runs=None, story=None, guard=False,
-                     whole_for=()):
+                     whole_for=(), red_proof=True):
     """expected 'red': every mapped test must fail. 'green': all must pass. A `guard` — a journey over
     delivered stories — is green without ever having been red: its steps exist before it is written.
 
@@ -1942,7 +1942,8 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
     `whole_for` (the policy's `required:` commands at the build and tidy gates) runs whole instead, and
     the run is returned — `{command: (key, code, output, ran)}` — so the suite check reads it rather than
     running the same command again. `testEvidence: exit-code` keeps one process per selector: it has no
-    report to read a name from."""
+    report to read a name from. `red_proof=False` leaves the red proof to a caller that checked it before
+    any process started — it is a digest comparison, not a run."""
     fallback = profile.get("e2eTest") or profile.get("test")
     flag = profile.get("filterFlag", "")
     fmt = profile.get("filterFormat", "{class}.{method}")
@@ -2178,7 +2179,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
                 timeout_note(result, expected, selector)
     if expected == "red":
         write_red_ledger(runs, story, now_red, located, cwd)
-    elif have_ledger:
+    elif have_ledger and red_proof:
         check_red_proof(result, cwd, located, read_red_digests(runs, story), story)
     return whole_runs
 
@@ -3994,34 +3995,52 @@ def main(argv):
         if args.stage in ("test", "build", "tidy"):
             mapping = check_mapping(result, args.runs, story_id, criteria)
             located = check_exists(result, cwd, mapping)
-            check_compiles(result, profile, cwd)
-            # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
-            # At build and tidy the policy's required test commands run whole anyway: that run is the
-            # evidence for the mapped tests as well, so those commands are not started a second time.
-            whole_for = ()
-            if args.stage in ("build", "tidy"):
-                whole_for = tuple(k for k in test_command_keys(profile)
-                                  if k in set(split_list(profile.get("required"))) and profile.get(k))
-            whole_runs = check_test_state(
-                result,
-                profile,
-                cwd,
-                mapping,
-                "red" if args.stage == "test" and story_kind(front) == "story" else "green",
-                located,
-                args.runs,
-                story_id,
-                guard=story_kind(front) in ("journey", "adopt"),
-                whole_for=whole_for,
-            )
+            # The checks that need no process come first, and a refusal among them ends the run before
+            # a suite starts: a file list that is wrong is wrong in a millisecond, not after a minute of
+            # tests. What did not run is named, so the report says what is still unproven.
+            check_files_listed(result, args.runs, story_id, args.stage, cwd, located)
+            check_existing_tests(result, cwd, args.runs, story_id, body)
             if args.stage == "test":
                 check_levels(result, profile, args.runs, story_id, front, body, mapping, located)
                 check_titles(result, profile, cwd, front, body, mapping, located)
-            if args.stage in ("build", "tidy"):
-                check_required_suites(result, profile, cwd, whole_runs)
-            check_files_listed(result, args.runs, story_id, args.stage, cwd, located)
-            check_existing_tests(result, cwd, args.runs, story_id, body)
-            check_stage_commands(result, profile, cwd, args.stage)
+            # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
+            expected = "red" if args.stage == "test" and story_kind(front) == "story" else "green"
+            ledger = red_ledger_path(args.runs, story_id)
+            if expected == "green" and ledger and os.path.isfile(ledger):
+                # the red proof compares digests, so it belongs here, before any process
+                check_red_proof(result, cwd, located, read_red_digests(args.runs, story_id), story_id)
+            if result.failed:
+                refused = sorted({check for state, check, _m in result.entries if state == "fail"})
+                unrun = ["compiles", f"tests-{expected}"]
+                if args.stage in ("build", "tidy"):
+                    unrun.append("suite")
+                unrun += [key for key in STAGE_CHECKS.get(args.stage, ()) if profile.get(key)]
+                for check in unrun:
+                    result.skip(check, f"not run — {', '.join(refused)} refused first; fix that, then it runs")
+            else:
+                check_compiles(result, profile, cwd)
+                # At build and tidy the policy's required test commands run whole anyway: that run is the
+                # evidence for the mapped tests as well, so those commands are not started a second time.
+                whole_for = ()
+                if args.stage in ("build", "tidy"):
+                    whole_for = tuple(k for k in test_command_keys(profile)
+                                      if k in set(split_list(profile.get("required"))) and profile.get(k))
+                whole_runs = check_test_state(
+                    result,
+                    profile,
+                    cwd,
+                    mapping,
+                    expected,
+                    located,
+                    args.runs,
+                    story_id,
+                    guard=story_kind(front) in ("journey", "adopt"),
+                    whole_for=whole_for,
+                    red_proof=False,
+                )
+                if args.stage in ("build", "tidy"):
+                    check_required_suites(result, profile, cwd, whole_runs)
+                check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:
         result.fail("gate", str(error))
         return result.report(args.story, args.stage, args.json, args.brief)
