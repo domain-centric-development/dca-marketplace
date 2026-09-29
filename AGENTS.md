@@ -92,7 +92,8 @@ dca-marketplace/
   `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the
   skills and agents name no DCA artifact (rule ids, `dca-*` names, the building blocks' namespaces and
   DCA-only types, the conventions overlay path) — `scripts/check-skills.py` fails otherwise; the README may
-  say what it pairs with. The reviewers are the outside view; `dca-review` in dca-core is the DCA reviewer.
+  say what it pairs with. The reviewers are the outside view; `dca-review` in dca-core is the method's
+  audit — a person runs it on a project, a context or a diff; the factory's judge does not load it by default.
   Knowledge lives in the skills; the agents are thin wrappers for an isolated context and a tool restriction.
 
 ## Generated content — never hand-edit

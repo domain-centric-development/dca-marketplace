@@ -290,7 +290,9 @@ file outside the DCA part: dependencies, the architecture source set or project,
 
 **Conventions file and `AGENTS.md` section (both languages)**
 
-- `templates/agents/conventions.md.tmpl` → `.agents/dca/conventions.md` (`{{conventionsPath}}`), with the
+- `templates/agents/conventions.md.tmpl` → `.agents/dca/conventions.md` (`{{conventionsPath}}`) — its
+  `building_blocks_api:` line points a session at the catalog node that documents the markers, so no
+  session hunts for the library's jar to read a signature — with the
   resolved-configuration section — the suffix lines from decision D, or from the `DcaLayout` the project
   already has (`reference/resolved-configuration.md`); `catalog_path` only with decision G's live catalog. A
   project that already has `.claude/dca/conventions.md` keeps that file and writes to it; the section then

@@ -99,6 +99,32 @@ the file, see it green. Use `.yml` even where the application keeps `application
 The generator's `@SpringBootTest` context test in the unit source set stays where it is: on a fresh
 skeleton it is the unit suite's only test, and a unit command that runs none fails a check that requires it.
 
+## Starting clean — the project's reset convention (Java)
+
+Integration tests share one application context and one test database, so each test starts by emptying
+what it writes — a `@BeforeEach` that deletes the rows, in the test class or a small base class the
+level's tests extend:
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class IntegrationTest {
+
+  @Autowired JdbcClient jdbcClient;   // or the JPA repositories' deleteAll()
+
+  @BeforeEach
+  void startClean() {
+    jdbcClient.sql("DELETE FROM <table>").update();   // one line per table the tests write
+  }
+}
+```
+
+This is how tests here start clean — **not** `@DirtiesContext` per test method, which rebuilds the whole
+Spring context for every test and makes the level slow for nothing, and not a random schema per test.
+Write the convention into the skeleton with the smoke test, even before there is a table: a test stage
+follows the layout it finds, and a project without a reset convention gets whichever one the first
+story's author reaches for.
+
 ## .NET
 
 A test project of its own, named `<Solution>.IntegrationTests`, that hosts the application in memory:
@@ -129,10 +155,16 @@ Shown to fail once: change `"/"` to a path the application does not serve, run
 `dotnet test tests/<Name>.IntegrationTests`, see it red, restore it, see it green. A project with no page
 at `/` asks for an endpoint it has instead.
 
+**Starting clean (.NET):** one `WebApplicationFactory<Program>` per class (`IClassFixture`), and a reset of
+what the tests write before each test — a `DELETE` through the host's connection, or the in-memory
+store's `Clear()` resolved from the factory's services — in the test's constructor or a shared base
+class. Not a new factory per test method: that is the same context rebuild the Java note warns about.
+
 ## Recorded
 
-An `## Integration tests` section in the conventions file, with the source set and the command:
-`integration: src/test-integration` and `integrationTest: ./gradlew test-integration` (Maven: `./mvnw
-test`; .NET: `integration: tests/<Name>.IntegrationTests`, `integrationTest: dotnet test
-tests/<Name>.IntegrationTests`). A delivery pipeline's setup detects the task, the added test source or the project
+An `## Integration tests` section in the conventions file, with the source set, the command and the
+reset convention: `integration: src/test-integration`, `integrationTest: ./gradlew test-integration`
+(Maven: `./mvnw test`; .NET: `integration: tests/<Name>.IntegrationTests`, `integrationTest: dotnet test
+tests/<Name>.IntegrationTests`) and `reset: each test empties the tables it writes in @BeforeEach
+(IntegrationTest base class); never a context per test`. A delivery pipeline's setup detects the task, the added test source or the project
 and proposes its `test.integration:` line.

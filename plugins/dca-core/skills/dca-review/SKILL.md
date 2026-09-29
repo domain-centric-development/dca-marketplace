@@ -1,18 +1,23 @@
 ---
 name: dca-review
 description: |
-  Reviews Java/Spring or .NET/C# code against Domain-Centric Architecture (DCA) conventions. Complements
-  ArchUnit by checking semantic aspects that static rules can't: aggregate-design quality,
-  use-case granularity, port semantics, domain-event hygiene, failure types and their translation,
-  cross-context boundaries, naming consistency. Use when the user asks to "review my DCA code", "is this DCA-compliant", "audit
-  the changes for DCA", or "/dca-review". Default scope is the git diff against main; the user
-  can pass explicit paths instead.
+  Audits Java/Spring or .NET/C# code against Domain-Centric Architecture (DCA) conventions — a whole project,
+  one bounded context, or a diff. Complements ArchUnit by checking semantic aspects that static rules can't:
+  aggregate-design quality, use-case granularity, port semantics, domain-event hygiene, failure types and their
+  translation, cross-context boundaries, naming consistency — and says which rules of the suite the project
+  could switch on next. The brownfield entry beside `dca-init`. Use when the user asks to "review my DCA code",
+  "is this DCA-compliant", "audit this project / this context for DCA", "where does this code stand against the
+  method", or "/dca-review [<scope>]". Default scope is the git diff against main; a path, a context name or
+  `project` widens it. A person runs it; a delivery pipeline's judge does not load it by default.
 ---
 
 # dca-review
 
-Reviews changed code (or specific paths) for **DCA compliance** — focusing on issues that
-ArchUnit rules can't detect because they are semantic, not structural.
+Audits code for **DCA compliance** — a diff, a bounded context or the whole project — focusing on
+issues that ArchUnit rules can't detect because they are semantic, not structural, and on the rules
+the project could enforce next. It is the method's audit, run by a person: the entry point for a
+brownfield project after `dca-init` installed the rules ("where does this code stand against the
+method, and which rules can we switch on?"), and the reader of a change before it is committed.
 
 It assumes `dca-init` may or may not have run. If it ran, the review reads the project's `DcaLayout`
 from the architecture test and the conventions file for naming conventions — the file the project
@@ -29,6 +34,13 @@ Its checklist is its own. The general perspectives `review-ddd`, `review-hexagon
 `review-clean-code` (in `dca-craft`) give the outside view — Evans/Vernon, Cockburn, Martin/Fowler —
 without knowing the markers or the rules. The overlap is intended: where the two views disagree about
 the same code, that is a finding to report, not a drift to reconcile.
+
+**Where it runs, and where not.** A person runs it: on a brownfield project, on a context, on a branch.
+A delivery pipeline's judge runs the three general perspectives and the project's rule suite on every
+story; this audit is not one of its defaults — the rules it would confirm already run as ArchUnit in
+every gate, and its anti-patterns that neither the suite nor the general reviews catch are few. A
+project adopting the method through the pipeline (adoption stories) opts in with a profile line
+(`reviews: dca` and `review.dca: dca-review`): there, the layer classification below is the question.
 
 ## Where ArchUnit ends and dca-review begins
 
@@ -49,7 +61,12 @@ Where the checklist cites a rule id, the review confirms what that rule cannot s
 
 ### Phase 1: Scope
 
-Determine which files to review.
+Determine which files to review. The scope is the argument (`/dca-review <scope>`):
+
+- `project` — every source file under the base package or namespace: the brownfield audit. Report per
+  bounded context, contexts in the order the designed map lists them.
+- a context name (`billing`) or a path (`src/main/java/com/example/billing`) — that context's files.
+- nothing — the git diff, as below.
 
 **Default — git diff:**
 ```bash
@@ -104,14 +121,19 @@ For each finding, capture:
 - **Why** (one sentence — quote the principle)
 - **Suggested fix** (one-line code suggestion when feasible)
 
-### Phase 4: Suggest missing ArchUnit rules
+### Phase 4: The rules to switch on next
 
-After the review, if you noticed patterns that *could* be enforced statically but aren't covered
-by the current ArchUnit suite, suggest adding rules. Format:
+After the review, two lists:
 
-Past-tense event names are a language review prompt: `Sent` is valid without an `ed` suffix.
-Do not propose a suffix rule to infer tense. Propose a static rule only for a structural property with
-named positive and negative fixtures and a clear selection scope.
+1. **Rules of the suite the project does not enforce yet** and could: read `dca-archunit.properties`
+   (or the .NET configuration) for sets and rules on `warn`, `off` or absent, and name, per finding above,
+   the rule id that would have caught it statically — with the count of places that would fail today. That
+   is the adoption path: switch on what fails nowhere, freeze what fails somewhere, and fix the frozen list
+   story by story. The catalog's adoption tiers (`dca-knowledge`: `guide/archunit-governance/`) say the order.
+2. **Patterns the suite has no rule for** that *could* be enforced statically: propose one only for a
+   structural property with named positive and negative fixtures and a clear selection scope. Past-tense
+   event names are a language review prompt: `Sent` is valid without an `ed` suffix — do not propose a
+   suffix rule to infer tense.
 
 ### Phase 5: Output
 
@@ -137,9 +159,10 @@ Produce a structured report:
 - `path/CartCleared.java` — Event name is past tense ✓ but carries no `occurredOn`
   Suggested fix: add `UUID eventId, Instant occurredOn` — the two members the `DomainEvent` contract requires.
 
-### Suggested ArchUnit rules
+### Rules to switch on next
 
-(rules that would catch these statically — add to your test-architecture suite)
+(the suite's rules on warn or off that would have caught findings above, with the places that fail today —
+then the rules the suite lacks and could carry)
 
 ### Strengths
 
