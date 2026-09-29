@@ -1236,6 +1236,55 @@ def verify_runner(runner, verbose=False):
               and output.count("ran through") == 1,
               f"exit {code}; starts {starts}; prompts {[p[-120:] for p in prompts]}; {output.strip().splitlines()[-4:]}")
 
+    # 1b-buildback. the build stage finds a defect in a test's own code (not in what it asserts): it writes
+    # `back: test`, and the round goes to the test stage — no human asked, the break proves the repair
+    buildback_cmd = ('if [ "$FACTORY_STAGE" = build ] && [ ! -f sent-back ]; then : > sent-back; '
+                     'sh -c "$FIXTURE_STAND_IN"; printf "\\n## Back to the test stage\\nback: test\\n'
+                     'The page object cannot match any entry; what the test asserts is unchanged.\\n" >> .dca-factory/runs/STORY-1/build.md; '
+                     'elif [ "$FACTORY_STAGE" = builder ]; then '
+                     'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                     'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
+                     'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi ;; esac; done; '
+                     'if [ ! -f sent-back ]; then : > sent-back; printf "\\nback: test\\n" >> .dca-factory/runs/STORY-1/build.md; fi; '
+                     'else if [ "$FACTORY_STAGE" = test ]; then printf "%s\\n" "$FACTORY_PROMPT" >> test-prompts.txt; fi; '
+                     'sh -c "$FIXTURE_STAND_IN"; fi')
+    def buildback_run(shared=False):
+        with tmpdir() as root:
+            build_project(root)
+            copy_scripts(runner, root)
+            tests_path = os.path.join(root, "fixture-tests.md")
+            with open(tests_path, "w", encoding="utf-8") as handle:
+                handle.write(TESTS)
+            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+            env = {"FACTORY_TOOL_CMD": buildback_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
+                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+            args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-builder"] if shared else [])
+            code, output = run_runner(runner, root, *args, env=env)
+            journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+            starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                      if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+            prompts_file = os.path.join(root, "test-prompts.txt")
+            prompts = open(prompts_file, encoding="utf-8").read().strip().splitlines() if os.path.isfile(prompts_file) else []
+            asked = os.path.isdir(os.path.join(root, "project", "epics", "sample", "STORY-1.decisions"))
+            return code, output, starts, story_delivered(root), prompts, asked
+    code, output, starts, delivered, prompts, asked = buildback_run()
+    check("build sent back: `back: test` in build.md runs the test stage again, then the build — no human asked, "
+          "the story is delivered",
+          code == 0 and delivered and not asked
+          and starts == ["plan", "test", "build", "test", "build", "tidy", "judge", "document"]
+          and "goes back to the test stage" in output,
+          f"exit {code}; starts {starts}; asked {asked}; {output.strip().splitlines()[-3:]}")
+    check("build sent back: the second test prompt names build.md and says not to change what the test asserts",
+          len(prompts) == 2 and "build.md" in prompts[1] and "assert" in prompts[1],
+          prompts[-1][-260:] if prompts else "no test prompt recorded")
+    code, output, starts, delivered, prompts, asked = buildback_run(shared=True)
+    check("build sent back: a shared builder's `back: test` is a round from the test stage as well",
+          code == 0 and delivered and not asked and starts[:2] == ["builder", "builder"]
+          and "goes back to the test stage" in output,
+          f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+
     # 1c. a stage that writes no file stops the run, and says which file was missing
     with tmpdir() as root:
         build_project(root)
@@ -4312,6 +4361,14 @@ def run_groups(args):
             write_file(root, ".dca-factory/runs/STORY-1/judge.md", text)
             return subprocess.run([sys.executable, cli_of(args.gate), "--back-to", "STORY-1"], cwd=root,
                                   capture_output=True, text=True, encoding="utf-8").stdout.strip()
+        write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Criteria\n\n## Back to the test stage\nback: test\n")
+        from_build = subprocess.run([sys.executable, cli_of(args.gate), "--back-to", "STORY-1", "--stage", "build"],
+                                    cwd=root, capture_output=True, text=True, encoding="utf-8").stdout.strip()
+        write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Criteria\n")
+        none_from_build = subprocess.run([sys.executable, cli_of(args.gate), "--back-to", "STORY-1", "--stage", "build"],
+                                         cwd=root, capture_output=True, text=True, encoding="utf-8").stdout.strip()
+        expectations.append(("back-to: `--stage build` reads build.md — `test` when it says so, else nothing to go back to",
+                             from_build == "test" and none_from_build == "", (from_build, none_from_build)))
         answers = (back_to("## Verdict\nverdict: changes-requested\nback: test\n"),
                    back_to("## Verdict\nverdict: changes-requested\n"),
                    back_to("## Verdict\nverdict: changes-requested\nback: `build`\n"))

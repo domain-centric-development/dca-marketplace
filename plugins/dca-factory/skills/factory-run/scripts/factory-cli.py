@@ -2618,6 +2618,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - tests: every selector of the `gate:tests` table green, and its file's digest as `.tests-red` holds it (`red-proof`)
 - {'`## Criteria`: `- <key>: met by <what the code now does>`; `## Deviations from the plan`; `## Checks`: `- <command>: <result>`' if stage == 'build' else '`## Left alone`: what you saw and did not change, and why; `## Checks`: `- <command>: <result>`'}
 - `## needs-human` only to stop, with `decision: <story>-<nn>` and the record beside the story (`stage: {name}`)
+- {'a test that cannot pass for a reason in its own code — a helper, a locator, a fixture — while what it asserts stays as it is: write `back: test` on a line of its own and say what is wrong; the round goes to the test stage, which repairs it and proves it with a break. A change to what a test asserts is still a question (`## needs-human`)' if stage == 'build' else 'no test change: a defect in a test goes back through the build stage'}
 - no criterion key in code, a comment or a test name; no `TODO` for the criterion delivered"""
     if stage == "judge":
         return f"""{CONTRACT_HEAD}
@@ -2748,7 +2749,9 @@ def main(argv):
                         help="the profile's model for that tool and stage (model.<tool>.<stage>, else model.<tool>)")
     parser.add_argument("--verdict", metavar="STORY", help="the judge's verdict of that story, or nothing")
     parser.add_argument("--back-to", metavar="STORY",
-                        help="where a changes-requested verdict sends the story: test (the judge's `back: test`) or build")
+                        help="where a changes-requested verdict sends the story: test (the judge's `back: test`) or build; "
+                             "with --stage build: `test` when build.md sends the story back, else nothing")
+    parser.add_argument("--stage", choices=("build",), help="with --back-to: read that stage's file instead of judge.md")
     parser.add_argument("--needs-human", metavar="FILE",
                         help="the decision ids a stage file's needs-human section names; exit 1 when it asks nobody")
     parser.add_argument("--open-decisions", metavar="STORY",
@@ -2827,6 +2830,11 @@ def main(argv):
         print(verdict_of_story(args.runs, args.verdict))
         return 0
     if args.back_to:
+        if args.stage == "build":
+            # the build stage found a defect in a test's own code, not in what it asserts: only `test` sends it back
+            path = os.path.join(args.runs, args.back_to, STAGE_FILES["build"])
+            print("test" if os.path.isfile(path) and back_in(read_text(path)) == "test" else "")
+            return 0
         path = os.path.join(args.runs, args.back_to, "judge.md")
         print(back_in(read_text(path)) if os.path.isfile(path) else "build")
         return 0

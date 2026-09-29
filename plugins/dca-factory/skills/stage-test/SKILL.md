@@ -140,10 +140,12 @@ One row per criterion, at least. A criterion you could not turn into a test is n
 under `uncovered` — never left silently missing, because the build gate can only fail on what a
 test covers.
 
-## A round the judge sent back
+## A round sent back to this stage
 
 When the judge's verdict says `back: test` (`.dca-factory/runs/<story>/judge.md`), fix exactly the test
-defects it confirmed: add the assertion the criterion names, nothing else. The code already meets it, so
+defects it confirmed: add the assertion the criterion names, nothing else. When the build stage wrote
+`back: test` (`.dca-factory/runs/<story>/build.md`), a test cannot pass because of its own code — a
+helper, a locator, a page object: repair exactly that, and leave what the test asserts as it is. The code already meets it, so
 the strengthened test is green and can never be seen red. Prove instead that it bites: write its
 **break** — `.dca-factory/runs/<story>/breaks/<fully.qualified.Class>--<method>.patch`, a `git apply` patch
 against the production code, the smallest change that removes what the new assertion checks (the word

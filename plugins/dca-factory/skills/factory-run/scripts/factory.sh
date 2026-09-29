@@ -1657,6 +1657,14 @@ document stage. This session was started by the pipeline's runner, which holds t
 named at session start is the one that started you, not a second writer. $(where_things_are "$tool" builder "$story")"
   local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
   [ -n "$guard" ] && prompt="$prompt In the build and tidy stages apply the $guard skill (the profile's carrier.guard) to every file you write."
+  [[ " ${range[*]} " == *" build "* ]] && prompt="$prompt If in the build stage a test cannot pass for a reason in its \
+own code (a helper, a locator), not in what it asserts: write build.md with the finding first, then go back to the test \
+stage in this session — repair the test without changing what it asserts, write its break, run the test gate — and build \
+again. A change to what a test asserts stays a needs-human question."
+  if [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
+    prompt="$prompt The build stage sent the story back: $RUNS/$story/build.md names a defect in a test's own code — \
+repair exactly that in the test stage, without changing what the test asserts, and write the test's break."
+  fi
   local refused
   for refused in "${range[@]}"; do
     [ -f "$RUNS/$story/.gate-$refused.txt" ] && prompt="$prompt The gate refused stage $refused before; its report is \
@@ -1695,6 +1703,17 @@ that are its own (a test that asserts too little is the test stage's, with its b
   [ "$invoked" = 0 ] || { echo "factory: the tool exited non-zero during the shared stages." >&2; return 1; }
   snapshot "$story" "after-builder"
   [ -f "$GATE" ] && "$PY" "$GATE" --record-changes builder --story "$story" >/dev/null 2>&1
+  if [[ " ${range[*]} " == *" build "* ]] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
+    local sent_rounds; sent_rounds=$(bump_rounds "$story")
+    if [ "$sent_rounds" -ge 3 ]; then
+      echo "factory: the build stage sent the story back in round $sent_rounds — three rounds did not converge. needs-human." >&2
+      return 1
+    fi
+    echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the test stage." >&2
+    run_story "$story" "$tool" test "$dry"
+    NESTED_CODE=$?
+    return 99
+  fi
   for st in "${range[@]}"; do
     local artefact="$RUNS/$story/$(stage_file "$st")"
     [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage '$st' is not finished." >&2; return 1; }
@@ -1886,6 +1905,10 @@ prompt_for() {                              # prompt_for <stage> <story>
   # work only on what the gate confirmed. So the refusal is named as an input, not remembered.
   [ -f "$RUNS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before; its \
 report is $RUNS/$story/.gate-$stage.txt — read it and fix exactly what it names, nothing else."
+  if [ "$stage" = test ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
+    repeat="$repeat The build stage sent the story back: $RUNS/$story/build.md names a defect in a test's own code. \
+Repair exactly that without changing what the test asserts, and write the test's break (see the contract)."
+  fi
   if { [ "$stage" = test ] || [ "$stage" = build ]; } && [ -f "$RUNS/$story/judge.md" ] \
      && [ "$(verdict_of "$story")" = changes-requested ]; then
     repeat="$repeat The judge asked for changes: $RUNS/$story/judge.md — fix exactly the confirmed defects that are this \
@@ -2162,6 +2185,18 @@ run_story() {
       # A stage that ends with a needs-human section has stopped, whatever its file otherwise says.
       # Reading only "does the file exist" turns an escalation into a hand-over, and the next stage
       # then builds on a decision nobody took.
+      # The build stage found a defect in a test's own code (a helper, a locator), not in what it asserts: the
+      # round goes to the test stage, which repairs it and proves it with a break — no human is asked.
+      if [ "$stage" = build ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
+        local sent_rounds; sent_rounds=$(bump_rounds "$story")
+        if [ "$sent_rounds" -ge 3 ]; then
+          echo "factory: the build stage sent the story back in round $sent_rounds — three rounds did not converge. needs-human." >&2
+          return 1
+        fi
+        echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the test stage." >&2
+        run_story "$story" "$tool" test "$dry"
+        return $?
+      fi
       if asks_human "$artefact"; then
         stopped_for_human "$artefact" "$stage" "$story"
         return $?

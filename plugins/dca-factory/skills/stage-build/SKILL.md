@@ -93,9 +93,15 @@ recorded as changed, and the next stages read these files first)
 
 ## Do not
 
-- Do not change a test to make it pass. A test that cannot pass for a reason in the test itself —
-  two assertions that exclude each other, a substring that also matches what must be there — is a
-  question, not a deviation: write `## needs-human` naming a decision record (`decision:
+- Do not change a test to make it pass. **A test that cannot pass because of its own code** — a
+  helper, a locator, a fixture, a page object that can never find what the page renders — while what
+  it asserts stays exactly as it is, is not yours to repair and not a human's to decide: write the
+  finding in `build.md` (the test, the line, why it cannot pass, and how you showed that the code
+  meets the scenario) and a line `back: test` on its own; the round goes to the test stage, which
+  repairs the test and proves with a break that it still bites.
+- **A test whose expectation cannot hold** — two assertions that exclude each other, a substring
+  that also matches what must be there — is a question about what the story expects, not a
+  deviation: write `## needs-human` naming a decision record (`decision:
   <story>-<nn>`, written to `<story>.decisions/<nn>.md` beside the story with the front matter
   `id: <story>-<nn>`, `story:`, `stage: build`, `asked:` (UTC) and `## Question`, `## Options`,
   `## Recommendation`) that names the test, the line and why it cannot hold, and stop. Once a human

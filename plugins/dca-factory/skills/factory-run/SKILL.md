@@ -209,6 +209,13 @@ In a session the same variant is one subagent for judge and document, its window
 (`--stage-start verifier` … `--stage-end verifier`); after the end mark read the verdict as the runner
 does and run the document gate yourself. An adoption's verifier is the judge alone.
 
+**A defect in a test goes back to the test stage.** Two stages can send a round there, with a line
+`back: test`: the judge, when a test asserts less than its criterion, and the build, when a test cannot
+pass because of its own code (a helper, a locator) while what it asserts stays the same. The build may
+change no test, so without this way back it would have to ask a human about a repair that changes no
+expectation. The repaired test is green — the code already meets it — so the test gate asks for its
+break instead of a red run. A change to what a test asserts stays a human's question.
+
 **What a stage is told, so it searches for nothing.** Every stage prompt names where things are: the
 stack profile, the story's run folder, the knowledge skill's catalog where the profile names one, and
 `factory-cli.py --contract <stage>` — the exact shape the gate holds that stage's file to, in a page,
