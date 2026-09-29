@@ -7,4 +7,5 @@ e2eTest: ./mvnw test
 architecture: ./mvnw -Dtest=*ArchitectureTest test
 filterFlag: -Dtest
 filterFormat: "{class}#{method}"
+filterJoin: ","
 conventions.architecture: mvnw.*arch

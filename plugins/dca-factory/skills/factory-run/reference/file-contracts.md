@@ -125,6 +125,11 @@ the file:
   (`tests.test_widgets`, `tests.test_widgets.TestWidgets`). The stack profile decides how that
   becomes a filter argument for the runner (`filterFormat`, with `{class}`, `{method}` and the
   located `{file}`).
+- The gate starts one process per test command, not per row: every selector a command covers goes
+  into one filtered run (`filterJoin` where the runner takes one expression), and each row's verdict
+  is read from that run's report by name. Where the build or tidy gate runs a command whole for the
+  policy (`required:`), that whole run is the rows' evidence as well. A row the shared run's report
+  does not show runs alone once before it fails.
 - Every criterion needs at least one row, and the gate looks the test up in the sources: a row
   without a test would look exactly like a red test at the runner, so the run would certify
   nothing. A criterion with no test at all is a criterion the build gate can never fail on.

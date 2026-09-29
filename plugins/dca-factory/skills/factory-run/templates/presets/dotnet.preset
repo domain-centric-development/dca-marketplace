@@ -9,5 +9,6 @@ e2eTest: dotnet test --logger trx
 architecture: dotnet test --filter FullyQualifiedName~Architecture
 filterFlag: --filter
 filterFormat: "FullyQualifiedName~{class}.{method}"
+filterJoin: "|"
 covers.test: **
 conventions.architecture: dotnet.*arch

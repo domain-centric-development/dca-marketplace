@@ -16,6 +16,11 @@
 # filterFormat how a selector `<Class>#<method>` is written for this runner. `{class}` and
 #              `{method}` are the selector's halves; `{file}` is the source file the gate located
 #              the test in, for a runner that selects by path — pytest: `"{file}::{method}"`
+# filterJoin   the gate runs every mapped test a command covers in one process, the flag repeated
+#              per selector (`--tests a --tests b`). A runner that takes one expression joins the
+#              selectors inside it instead: `"|"` for `dotnet test --filter`, `","` for Maven's
+#              `-Dtest`. A selector the joined run's report does not show runs alone once before
+#              it fails, so a wrong join costs processes, never a verdict
 # testReport  where this runner leaves its report of what it executed, as a glob. Found by
 #              convention when absent: JUnit XML (`build/test-results/**`, `surefire-reports/*`)
 #              and TRX (`TestResults/**`). Any stack can emit one of those two — pytest with

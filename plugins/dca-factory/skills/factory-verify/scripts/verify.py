@@ -260,36 +260,43 @@ exit 1
 """
 
 RUNNER_STUB = """#!/bin/sh
-# The fixture's test runner: it stands in for a build tool, and it behaves like one in the two
-# ways that matter here — it only knows the tests in the source set it was pointed at, and a test
-# is red until its marker file says otherwise.
-#   usage: runner.sh <source-set path> --select <Class>#<method>
+# The fixture's test runner: it stands in for a build tool, and it behaves like one in the three
+# ways that matter here — it only knows the tests in the source set it was pointed at, a test is
+# red until its marker file says otherwise, and it takes several `--select` filters in one run,
+# as a build tool does. Every invocation is one line in runner-calls.log.
+#   usage: runner.sh <source-set path> [--select <Class>#<method>]...
 set=$1; shift
-[ "$1" = "--select" ] && shift
-selector=$1
-simple=$(echo "$selector" | sed 's/.*\\.//; s/#.*//')
-simple_method=$(echo "$selector" | sed 's/.*#//')
-if [ -z "$(find "$set" -name "$simple.java" 2>/dev/null | head -1)" ]; then
-  echo "no test matched $selector under $set"
-  exit "${NO_MATCH_EXIT:-0}"          # a runner that matched nothing: 0 here, non-zero elsewhere
-fi
-cls=$(echo "$selector" | sed 's/#.*//')
-mkdir -p build/test-results/run
-report="build/test-results/run/TEST-$simple.xml"
-if [ -f "green/$(echo "$selector" | tr -d './#')" ]; then
-  printf '<testsuite name="%s"><testcase classname="%s" name="%s"/></testsuite>\\n' \\
+mkdir -p build; echo "runner.sh $set $*" >> build/runner-calls.log
+code=0
+while [ $# -gt 0 ]; do
+  [ "$1" = "--select" ] && { shift; continue; }
+  selector=$1; shift
+  simple=$(echo "$selector" | sed 's/.*\\.//; s/#.*//')
+  simple_method=$(echo "$selector" | sed 's/.*#//')
+  if [ -z "$(find "$set" -name "$simple.java" 2>/dev/null | head -1)" ]; then
+    echo "no test matched $selector under $set"
+    [ "${NO_MATCH_EXIT:-0}" = 0 ] || code=$NO_MATCH_EXIT   # a runner that matched nothing: 0 here, non-zero elsewhere
+    continue
+  fi
+  cls=$(echo "$selector" | sed 's/#.*//')
+  mkdir -p build/test-results/run
+  report="build/test-results/run/TEST-$simple.$simple_method.xml"
+  if [ -f "green/$(echo "$selector" | tr -d './#')" ]; then
+    printf '<testsuite name="%s"><testcase classname="%s" name="%s"/></testsuite>\\n' \\
+      "$cls" "$cls" "$simple_method" > "$report"
+    echo "1 test ran, 0 failed: $selector"
+    continue
+  fi
+  printf '<testsuite name="%s"><testcase classname="%s" name="%s"><failure>no</failure></testcase></testsuite>\\n' \\
     "$cls" "$cls" "$simple_method" > "$report"
-  echo "1 test ran, 0 failed: $selector"
-  exit 0
-fi
-printf '<testsuite name="%s"><testcase classname="%s" name="%s"><failure>no</failure></testcase></testsuite>\\n' \\
-  "$cls" "$cls" "$simple_method" > "$report"
-if [ -f "timeout/$(echo "$selector" | tr -d './#')" ]; then
-  echo "TimeoutError: locator.click: Timeout 30000ms exceeded."
-  echo "Call log: waiting for getByRole('button', { name: 'Add' })"
-fi
-echo "1 test ran, 1 failed: $selector"
-exit 1
+  if [ -f "timeout/$(echo "$selector" | tr -d './#')" ]; then
+    echo "TimeoutError: locator.click: Timeout 30000ms exceeded."
+    echo "Call log: waiting for getByRole('button', { name: 'Add' })"
+  fi
+  echo "1 test ran, 1 failed: $selector"
+  code=1
+done
+exit $code
 """
 
 PROFILE = """compile: true
@@ -2301,10 +2308,11 @@ PRESET_FIXTURES = {
 _GRADLE = ['compile: ./gradlew testClasses', 'test: ./gradlew test --rerun', 'e2eTest: ./gradlew test --rerun',
            'filterFlag: --tests', 'filterFormat: "{class}.{method}"', 'architecture: ./gradlew test-architecture']
 _MAVEN = ['compile: ./mvnw test-compile', 'test: ./mvnw test', 'e2eTest: ./mvnw test', 'filterFlag: -Dtest',
-          'filterFormat: "{class}#{method}"', 'architecture: ./mvnw -Dtest=*ArchitectureTest test']
+          'filterFormat: "{class}#{method}"', 'architecture: ./mvnw -Dtest=*ArchitectureTest test',
+          'filterJoin: ","']
 _DOTNET = ['compile: dotnet build', 'test: dotnet test --logger trx', 'e2eTest: dotnet test --logger trx',
            'filterFlag: --filter', 'filterFormat: "FullyQualifiedName~{class}.{method}"',
-           'architecture: dotnet test --filter FullyQualifiedName~Architecture', 'covers.test: **']
+           'architecture: dotnet test --filter FullyQualifiedName~Architecture', 'filterJoin: "|"', 'covers.test: **']
 _PYTEST = ['test: {py} -m pytest -q --junitxml=test-results/pytest.xml',
            'e2eTest: {py} -m pytest -q --junitxml=test-results/pytest.xml', 'filterFormat: "{file}::{method}"',
            'covers.test: **']
@@ -3294,6 +3302,26 @@ def run_groups(args):
 
     both_green = ["com.example.WidgetPageTest#showsTheThing",
                   "com.example.WidgetUnitTest#showsNothingWhenEmpty"]
+    # two tests in one class, both covered by `test:` — one command, so one process
+    unit_two = ["com.example.WidgetUnitTest#showsTheThing", "com.example.WidgetUnitTest#showsNothingWhenEmpty"]
+    UNIT_TESTS = TESTS.replace("| shows-the-thing | com.example.WidgetPageTest#showsTheThing |",
+                               "| shows-the-thing | com.example.WidgetUnitTest#showsTheThing |")
+    UNIT_TWO = ("src/test/java/com/example/WidgetUnitTest.java",
+                "class WidgetUnitTest { void showsTheThing() {} void showsNothingWhenEmpty() {} }\n")
+
+    def expect_calls(root, counts, both=()):
+        """The runner's call log against what one process per command means: `counts` is how many
+        invocations named each source set; `both` are selectors that must share one invocation."""
+        path = os.path.join(root, "build/runner-calls.log")
+        calls = open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else []
+        problems = []
+        for source_set, wanted in counts.items():
+            seen = sum(1 for c in calls if f" {source_set} " in c + " ")
+            if seen != wanted:
+                problems.append(f"{source_set}: {seen} invocation(s), wanted {wanted}")
+        if both and not any(all(s in c for s in both) for c in calls):
+            problems.append(f"no single invocation carries {' and '.join(both)}")
+        return [f"{p} — calls: {calls}" for p in problems]
 
     cases = [
         # --- the plan gate ------------------------------------------------
@@ -3761,6 +3789,51 @@ def run_groups(args):
               must_fail=("documented",), text=("the row saying nothing was updated",)),
          dict(document=DOCUMENT.replace("| `README.md` | one sentence about the thing | read `README.md:1` |",
                                         "| — | none | |"))),
+        # WP-79 A1: one process per test command. Every selector a command covers goes into one run and is
+        # read from that run's report by name; a runner that drops a joined filter costs a process, never a
+        # verdict; a required command runs whole once and that run is the mapped tests' evidence too.
+        (Case("build: every selector a command covers runs in one process of it", "build", 0,
+              must_pass=("tests-green",)),
+         dict(tests=UNIT_TESTS, extra_sources=(UNIT_TWO,), green=unit_two, ledger=unit_two,
+              after=lambda root: expect_calls(root, {"src/test/java": 1}, both=("WidgetUnitTest#showsTheThing",
+                                                                                "WidgetUnitTest#showsNothingWhenEmpty")))),
+        (Case("build: a runner that drops a joined filter costs one process per selector, not a verdict", "build", 0,
+              must_pass=("tests-green",), text=("run alone",)),
+         dict(tests=UNIT_TESTS, green=unit_two, ledger=unit_two,
+              profile=PROFILE.replace("test: sh runner.sh src/test/java", "test: sh first-only.sh src/test/java"),
+              extra_sources=(UNIT_TWO, ("first-only.sh",
+                                        '#!/bin/sh\n# honours the first --select and drops the rest\n'
+                                        'set=$1; shift\n[ "$1" = "--select" ] && shift\n'
+                                        'exec sh runner.sh "$set" --select "$1"\n')),
+              after=lambda root: expect_calls(root, {"src/test/java": 2}))),
+        (Case("build: `filterJoin` puts every selector into one expression of the flag", "build", 0,
+              must_pass=("tests-green",), absent=("run alone",)),
+         dict(tests=UNIT_TESTS, green=unit_two, ledger=unit_two,
+              profile=PROFILE.replace("test: sh runner.sh src/test/java", "test: sh expr-runner.sh src/test/java")
+              + 'filterJoin: "|"\n',
+              extra_sources=(UNIT_TWO, ("expr-runner.sh",
+                                        '#!/bin/sh\n# one --select with the selectors joined by |, as `dotnet test --filter` takes them\n'
+                                        'set=$1; shift\n[ "$1" = "--select" ] && shift\n'
+                                        'expr=$1\nargs=""\nold=$IFS; IFS="|"; for s in $expr; do args="$args --select $s"; done; IFS=$old\n'
+                                        'exec sh runner.sh "$set" $args\n')),
+              after=lambda root: expect_calls(root, {"src/test/java": 1}, both=("WidgetUnitTest#showsTheThing",
+                                                                                "WidgetUnitTest#showsNothingWhenEmpty")))),
+        (Case("build: a required command runs whole once, and that run is the mapped tests' evidence", "build", 0,
+              must_pass=("tests-green", "suite"), text=("the run the mapped tests were read from",)),
+         dict(green=both_green, ledger=both_green,
+              profile=PROFILE.replace("test: sh runner.sh src/test/java", "test: sh whole-runner.sh src/test/java")
+              + "required: test\n",
+              extra_sources=(("whole-runner.sh",
+                              '#!/bin/sh\n# unfiltered, it runs every test it finds in the set, as a build tool does\n'
+                              'set=$1; shift\n'
+                              'if [ $# -eq 0 ]; then\n'
+                              '  for f in $(find "$set" -name "*.java" | sort); do\n'
+                              '    rel=${f#$set/}; cls=$(echo "${rel%.java}" | tr / .)\n'
+                              '    for m in $(grep -o "void [A-Za-z0-9_]*(" "$f" | sed "s/void //; s/(//"); do set -- "$@" --select "$cls#$m"; done\n'
+                              '  done\n'
+                              'fi\n'
+                              'exec sh runner.sh "$set" "$@"\n'),),
+              after=lambda root: expect_calls(root, {"src/test/java": 1, "src/test-pages/java": 1}))),
         (Case("build: a required suite that ran nothing fails the build gate, though the story's tests are green",
               "build", 1, must_fail=("suite",), text=("no report written by this run shows an executed test",)),
          dict(green=both_green, ledger=both_green, profile=PROFILE + "required: test\n")),

@@ -2598,6 +2598,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   plan gave `level: browser-only`; every other scenario's test lives in a `test.<name>:` source set
 - titles: an end-user test's display name is the scenario's `Title:` line verbatim, else its key in words
   (`shows-empty-state` → "Shows empty state"); never the key itself in a name, display name or comment
+- one process per test command: every selector a command covers runs in one invocation and is read from the report by name
 - red: every selector in the table fails before any production code — the gate writes `{folder}/.tests-red`
   (`<selector>\t<sha256 of the test file>`); the build gate refuses a test changed after it was seen red (`red-proof`)
 - a round the judge sent back (`back: test`): a test you strengthen is already green and cannot be seen red — write its

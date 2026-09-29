@@ -217,7 +217,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.50.4"
+VERSION = "0.51.0"
 
 
 def read_front_matter(path):
@@ -1866,10 +1866,10 @@ def outcome_for(ran, cls, method, display=None):
     """What a report says about this selector: (outcome, how it was matched) or (None, "").
 
     The method name is the better key, but it is not always in the report — a JUnit XML writer puts
-    the *display* name in `name`, so a test with a readable title loses its method name there. The
-    class always survives, and the run was filtered to one selector, so a case reported for that
-    class is this test. Where several appear, the filter was not honoured and the verdict covers
-    them all, which the report says out loud rather than pretending precision.
+    the *display* name in `name`, so a test with a readable title loses its method name there; the
+    display name declared on the method is the second key. The class narrows both: a run carries
+    every selector its command covers, or the whole suite, so a case of the right class under another
+    name is a sibling, not this test — the answer then names the cases it saw rather than guessing.
     """
     simple = cls.rsplit(".", 1)[-1]
 
@@ -1918,21 +1918,45 @@ def discriminates(command, flag, fmt, cwd, cache):
     return cache[command]
 
 
-def check_test_state(result, profile, cwd, mapping, expected, located=None, runs=None, story=None, guard=False):
+def joined_filter(profile, flag, patterns):
+    """The filter argument that selects every pattern in one run.
+
+    The flag repeated per pattern is what most runners take (`--tests a --tests b`, pytest's node ids
+    without a flag). A runner that takes one expression joins the patterns inside it instead, with the
+    separator the profile names (`filterJoin: "|"` for `dotnet test --filter`, `","` for Maven's
+    `-Dtest`). One pattern is the single-selector invocation either way.
+    """
+    separator = str(profile.get("filterJoin", "") or "")
+    if separator and len(patterns) > 1:
+        return f'{flag} "{separator.join(patterns)}"'.strip()
+    return " ".join(f'{flag} "{pattern}"'.strip() for pattern in patterns)
+
+
+def check_test_state(result, profile, cwd, mapping, expected, located=None, runs=None, story=None, guard=False,
+                     whole_for=()):
     """expected 'red': every mapped test must fail. 'green': all must pass. A `guard` — a journey over
-    delivered stories — is green without ever having been red: its steps exist before it is written."""
+    delivered stories — is green without ever having been red: its steps exist before it is written.
+
+    One process per test command, not per selector: every selector a command covers goes into one
+    invocation, and each selector's verdict is read from that run's reports by name. A command in
+    `whole_for` (the policy's `required:` commands at the build and tidy gates) runs whole instead, and
+    the run is returned — `{command: (key, code, output, ran)}` — so the suite check reads it rather than
+    running the same command again. `testEvidence: exit-code` keeps one process per selector: it has no
+    report to read a name from."""
     fallback = profile.get("e2eTest") or profile.get("test")
     flag = profile.get("filterFlag", "")
     fmt = profile.get("filterFormat", "{class}.{method}")
     located = located or {}
+    whole_for = set(whole_for or ())
+    whole_runs = {}
     if not fallback:
         result.skip(
             f"tests-{expected}",
             "no `e2eTest:` or `test:` command in the stack profile",
         )
-        return
+        return whole_runs
     if not mapping:
-        return
+        return whole_runs
     ledger = red_ledger_path(runs, story)
     have_ledger = bool(ledger) and os.path.isfile(ledger)
     was_red = read_red_ledger(runs, story)
@@ -1951,7 +1975,11 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
     # A story planned again — its text changed, a story conflict was answered — keeps the criteria its
     # earlier pass already built: their tests were seen red for this story, and a build made them green.
     built_before = bool(runs and story) and os.path.isfile(os.path.join(runs, story, STAGE_FILES["build"]))
-    control = {}                              # one control run per command, not per selector
+    by_report = profile.get("testEvidence", "").strip() != "exit-code"
+
+    # 1. Every selector resolves to the command that covers it — or to a configuration fail — before
+    #    anything runs. Grouped by command, one process then carries every selector it covers.
+    groups = {}
     for key, selectors in sorted(mapping.items()):
         for selector in selectors:
             cls, method = SELECTOR.match(selector).groups()
@@ -1983,19 +2011,95 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
                 continue
             if not command:
                 command_key, command = "e2eTest" if profile.get("e2eTest") else "test", fallback
-            invocation = f'{command} {flag} "{pattern}"'.strip()
-            evidence = ""
-            reporting = profile.get("testEvidence", "").strip() != "exit-code"
-            before_reports = report_state(cwd, profile) if reporting else {}
-            marker = clock_marker(cwd) if reporting else None
-            code, output = run(invocation, cwd)
+            groups.setdefault(command, []).append((key, selector, cls, method, test_path, command_key, pattern))
 
-            # What the test *did* comes from the runner's report, because that is the only artefact
-            # that states which tests were executed. An exit code says how a process ended; a
-            # message says what it printed. Neither says a test ran — a runner that answers "no
-            # tests found for <selector>" produces a different exit code and a different line for
-            # every selector while executing nothing at all.
-            if profile.get("testEvidence", "").strip() == "exit-code":
+    def observed_run(invocation):
+        """(code, output, {(class, method): outcome}) of one invocation, from the reports it wrote."""
+        before, marker = report_state(cwd, profile), clock_marker(cwd)
+        code, output = run(invocation, cwd)
+        return code, output, executed_tests(reports_from_this_run(before, report_state(cwd, profile), marker))
+
+    def verdict(key, selector, command_key, passed, output, evidence):
+        """The selector's verdict against what the ledger and the stage expect — unchanged by how it ran."""
+        if not passed:
+            now_red.add(selector)
+        if expected == "green" and passed and guard:
+            result.ok("tests-green", f"{selector} passes — a journey guards what is delivered ({key})")
+            return
+        if expected == "green" and passed and not have_ledger:
+            # No test stage ran in this checkout — the run artefacts may simply not be
+            # committed. Say that the evidence is missing instead of inventing either verdict.
+            result.skip(
+                "tests-green",
+                f"{selector} is green, but no `{os.path.basename(ledger)}` from a test stage "
+                f"is present here, so nothing proves it ever failed ({key!r}).",
+            )
+            return
+        if expected == "green" and passed and selector not in was_red:
+            # Never seen red: a runner that matched nothing exits 0 exactly like a passing
+            # test, so "green" alone is no evidence that this test ran at all.
+            result.fail(
+                "tests-green",
+                f"{selector} passes now but was never recorded red by the test stage "
+                f"({key!r}) — a test that never failed proves nothing, and a run that "
+                f"matched no test passes too. Run `--stage test` before the build stage.",
+            )
+            return
+        if expected == "red" and passed and selector in was_red and changed_on:
+            now_red.add(selector)
+            result.ok("tests-red", f"{selector} is green now and was recorded red before; its "
+                                   f"expectation changed on decision {', '.join(changed_on)} ({key})")
+            return
+        if expected == "red" and passed and selector in was_red and built_before:
+            recorded = red_digests.get(selector)
+            test_file = located.get(selector)
+            if recorded and test_file and os.path.isfile(os.path.join(cwd, test_file)) \
+                    and file_digest(os.path.join(cwd, test_file)) != recorded:
+                # Changed after its build met it — the judge sent it back as asserting too little. It is
+                # green and can never be seen red again: one change to the code that turns it red shows
+                # that the new assertion bites.
+                probe = Result()
+                check_break(probe, profile, cwd, runs, story, selector, key, located)
+                result.entries.extend(probe.entries)
+                if not probe.failed:
+                    now_red.add(selector)
+                return
+            now_red.add(selector)
+            result.ok("tests-red", f"{selector} is green now and was recorded red in an earlier pass of this "
+                                   f"story, whose build met it ({key})")
+            return
+        if expected == "red" and passed:
+            result.fail(
+                "tests-red",
+                f"{selector} passes before the build stage — a test that is green "
+                f"before the code exists proves nothing about {key!r}. Either the test "
+                f"asserts nothing new (the test stage fixes it), or {key!r} describes "
+                f"behaviour the system already has — then the criterion does not belong in "
+                f"the story, and that is the story author's call, not a stage's.",
+            )
+        elif expected == "green" and not passed:
+            result.fail(
+                "tests-green",
+                f"{selector} fails, so criterion {key!r} is not met:\n{tail(output)}",
+            )
+        else:
+            result.ok(
+                f"tests-{expected}",
+                f"{selector} is {'green' if passed else 'red'} ({key}, via `{command_key}:`"
+                f"{', ' + evidence if evidence else ''})",
+            )
+
+    # 2. One process per command. Where the policy runs the command whole at this gate anyway, the whole
+    #    run is the evidence for its selectors too; elsewhere every selector goes into one filtered run.
+    control = {}                              # one control run per command, not per selector
+    for command, items in groups.items():
+        command_key = items[0][5]
+        patterns = list(dict.fromkeys(item[6] for item in items))
+        if not by_report:
+            # `testEvidence: exit-code`: the exit code is all there is, and it belongs to one selector.
+            for key, selector, cls, method, test_path, command_key, pattern in items:
+                invocation = f'{command} {flag} "{pattern}"'.strip()
+                code, output = run(invocation, cwd)
                 control_code, control_output = discriminates(command, flag, fmt, cwd, control)
                 if code == control_code and normalise(output, cwd) == control_output:
                     result.fail(
@@ -2011,112 +2115,80 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
                     f"not on a report of what ran. A runner that exits like a failing test without "
                     f"running one is indistinguishable here.",
                 )
-            else:
-                reports = reports_from_this_run(before_reports, report_state(cwd, profile), marker)
-                display = display_name_of(located.get(selector), method)
-                outcome, how = outcome_for(executed_tests(reports), cls, method, display)
-                if outcome is None:
-                    detail = (f" — {how}" if how else
-                              f" ({len(reports)} report file(s) written by this run)")
-                    result.fail(
-                        f"tests-{expected}",
-                        f"{selector}: no test report from this run shows it ran{detail}. Let the "
-                        f"runner write one (JUnit XML is the default on the JVM; .NET needs "
-                        f"`--logger trx`), point `testReport:` at it, give the test a name the "
-                        f"report carries, or accept the weaker check with "
-                        f"`testEvidence: exit-code`:\n{tail(output)}",
-                    )
-                    continue
-                if outcome == "skipped":
-                    result.fail(
-                        f"tests-{expected}",
-                        f"{selector} was skipped rather than run, so it says nothing about "
-                        f"{key!r}.",
-                    )
-                    continue
-                # The report decides, not the exit code: a build can fail for reasons beside this
-                # test, and a runner can exit 0 with a failure recorded.
-                code = 0 if outcome == "passed" else 1
-                evidence = f"report {how}"
-
-            passed = code == 0
-            if not passed:
-                now_red.add(selector)
-            if expected == "green" and passed and guard:
-                result.ok("tests-green", f"{selector} passes — a journey guards what is delivered ({key})")
-                continue
-            if expected == "green" and passed and not have_ledger:
-                # No test stage ran in this checkout — the run artefacts may simply not be
-                # committed. Say that the evidence is missing instead of inventing either verdict.
-                result.skip(
-                    "tests-green",
-                    f"{selector} is green, but no `{os.path.basename(ledger)}` from a test stage "
-                    f"is present here, so nothing proves it ever failed ({key!r}).",
-                )
-                continue
-            if expected == "green" and passed and selector not in was_red:
-                # Never seen red: a runner that matched nothing exits 0 exactly like a passing
-                # test, so "green" alone is no evidence that this test ran at all.
+                verdict(key, selector, command_key, code == 0, output, "")
+                if expected == "red" and code != 0 and red_on_timeout(output):
+                    timeout_note(result, expected, selector)
+            continue
+        whole = command_key in whole_for
+        invocation = command if whole else f"{command} {joined_filter(profile, flag, patterns)}".strip()
+        code, output, ran = observed_run(invocation)
+        if whole:
+            whole_runs[command] = (command_key, code, output, ran)
+        shared = whole or len(patterns) > 1
+        timed_out = []
+        for key, selector, cls, method, test_path, command_key, pattern in items:
+            display = display_name_of(test_path, method)
+            outcome, how = outcome_for(ran, cls, method, display)
+            item_output = output
+            if outcome is None and shared:
+                # Not in the shared run's report. Before that fails the selector it runs alone, once: a
+                # runner that honours one filter and drops the second, or a whole run that skipped a
+                # source set, must not fail a test that a run of its own would show.
+                alone = f'{command} {flag} "{pattern}"'.strip()
+                code_alone, item_output, ran_alone = observed_run(alone)
+                outcome, how = outcome_for(ran_alone, cls, method, display)
+                if outcome is not None:
+                    result.note(f"tests-{expected}",
+                                f"{selector}: absent from the report of `{invocation}`, run alone (`{alone}`) — "
+                                f"a runner that drops a joined filter costs one process per selector here")
+            if outcome is None:
+                detail = (f" — {how}" if how else
+                          f" ({len(ran)} case(s) in the report(s) written by this run)")
                 result.fail(
-                    "tests-green",
-                    f"{selector} passes now but was never recorded red by the test stage "
-                    f"({key!r}) — a test that never failed proves nothing, and a run that "
-                    f"matched no test passes too. Run `--stage test` before the build stage.",
-                )
-                continue
-            if expected == "red" and passed and selector in was_red and changed_on:
-                now_red.add(selector)
-                result.ok("tests-red", f"{selector} is green now and was recorded red before; its "
-                                       f"expectation changed on decision {', '.join(changed_on)} ({key})")
-                continue
-            if expected == "red" and passed and selector in was_red and built_before:
-                recorded = red_digests.get(selector)
-                test_file = located.get(selector)
-                if recorded and test_file and os.path.isfile(os.path.join(cwd, test_file)) \
-                        and file_digest(os.path.join(cwd, test_file)) != recorded:
-                    # Changed after its build met it — the judge sent it back as asserting too little. It is
-                    # green and can never be seen red again: one change to the code that turns it red shows
-                    # that the new assertion bites.
-                    probe = Result()
-                    check_break(probe, profile, cwd, runs, story, selector, key, located)
-                    result.entries.extend(probe.entries)
-                    if not probe.failed:
-                        now_red.add(selector)
-                    continue
-                now_red.add(selector)
-                result.ok("tests-red", f"{selector} is green now and was recorded red in an earlier pass of this "
-                                       f"story, whose build met it ({key})")
-                continue
-            if expected == "red" and passed:
-                result.fail(
-                    "tests-red",
-                    f"{selector} passes before the build stage — a test that is green "
-                    f"before the code exists proves nothing about {key!r}. Either the test "
-                    f"asserts nothing new (the test stage fixes it), or {key!r} describes "
-                    f"behaviour the system already has — then the criterion does not belong in "
-                    f"the story, and that is the story author's call, not a stage's.",
-                )
-            elif expected == "green" and not passed:
-                result.fail(
-                    "tests-green",
-                    f"{selector} fails, so criterion {key!r} is not met:\n{tail(output)}",
-                )
-            else:
-                result.ok(
                     f"tests-{expected}",
-                    f"{selector} is {'green' if passed else 'red'} ({key}, via `{command_key}:`"
-                    f"{', ' + evidence if evidence else ''})",
+                    f"{selector}: no test report from this run shows it ran{detail}. Let the "
+                    f"runner write one (JUnit XML is the default on the JVM; .NET needs "
+                    f"`--logger trx`), point `testReport:` at it, give the test a name the "
+                    f"report carries, or accept the weaker check with "
+                    f"`testEvidence: exit-code`:\n{tail(item_output)}",
                 )
-                if expected == "red" and red_on_timeout(output):
-                    result.note("tests-red", f"{selector} is red on a timeout, not on an assertion — an action "
-                                             f"waited for something that is not there. Red is red, but it says "
-                                             f"nothing about what is missing: the first step that can be missing "
-                                             f"should be an expectation (`expect(locator).toBeVisible()` before "
-                                             f"the click or fill), so the failure names it.")
+                continue
+            if outcome == "skipped":
+                result.fail(
+                    f"tests-{expected}",
+                    f"{selector} was skipped rather than run, so it says nothing about "
+                    f"{key!r}.",
+                )
+                continue
+            # The report decides, not the exit code: a build can fail for reasons beside this
+            # test, and a runner can exit 0 with a failure recorded.
+            passed = outcome == "passed"
+            verdict(key, selector, command_key, passed, item_output, f"report {how}")
+            if expected == "red" and not passed and red_on_timeout(item_output):
+                timed_out.append(selector)
+        if timed_out and shared:
+            # One output for the run: which of its red tests hit the timeout is not readable from it.
+            result.note(f"tests-{expected}", f"`{invocation}`: red on a timeout, not on an assertion, somewhere "
+                                             f"among {', '.join(timed_out)} — an action waited for something that "
+                                             f"is not there; the first step that can be missing should be an "
+                                             f"expectation (`expect(locator).toBeVisible()` before the click or "
+                                             f"fill), so the failure names it.")
+        else:
+            for selector in timed_out:
+                timeout_note(result, expected, selector)
     if expected == "red":
         write_red_ledger(runs, story, now_red, located, cwd)
     elif have_ledger:
         check_red_proof(result, cwd, located, read_red_digests(runs, story), story)
+    return whole_runs
+
+
+def timeout_note(result, expected, selector):
+    result.note(f"tests-{expected}", f"{selector} is red on a timeout, not on an assertion — an action "
+                                     f"waited for something that is not there. Red is red, but it says "
+                                     f"nothing about what is missing: the first step that can be missing "
+                                     f"should be an expectation (`expect(locator).toBeVisible()` before "
+                                     f"the click or fill), so the failure names it.")
 
 
 #: What a browser runner prints when an action, not an expectation, ran out of time.
@@ -2557,13 +2629,19 @@ def run_test_command(result, cwd, profile, key, command, required, strict=False)
     before, marker = report_state(cwd, profile), clock_marker(cwd)
     code, output = run(command, cwd)
     ran = executed_tests(reports_from_this_run(before, report_state(cwd, profile), marker))
+    judge_test_run(result, profile, key, command, code, output, ran, required, strict)
+
+
+def judge_test_run(result, profile, key, command, code, output, ran, required, strict=False, reused=""):
+    """The verdict on one run of a test command, from its exit code and the reports it wrote.
+    `reused` names where the run came from when this check did not start it."""
     executed = sum(1 for outcome in ran.values() if outcome != "skipped")
     failed = sum(1 for outcome in ran.values() if outcome == "failed")
     if code != 0 or failed:
         red(result, "test", f"`{command}` ({key}) failed — {failed} failing case(s):\n{tail(output)}",
             required, strict)
     elif executed:
-        result.ok("test", f"`{command}` ({key}) ran {executed} case(s), none failed")
+        result.ok("test", f"`{command}` ({key}) ran {executed} case(s), none failed{reused}")
     elif profile.get("testEvidence") == "exit-code":
         result.skip("test", f"`{command}` ({key}) exited 0 and writes no report "
                             f"(`testEvidence: exit-code`) — nothing shows a test ran")
@@ -2813,11 +2891,14 @@ def check_existing_tests(result, cwd, runs, story_id, story_body=""):
         )
 
 
-def check_required_suites(result, profile, cwd):
+def check_required_suites(result, profile, cwd, already=None):
     """At build and tidy: the test commands the policy requires, run whole.
 
     The mapped tests say this story's behaviour holds; they say nothing about the behaviour the
-    stories before it delivered. Without a policy the stage gates stay as they were."""
+    stories before it delivered. Without a policy the stage gates stay as they were. A command the
+    test-state check already ran whole (`already`: `{command: (key, code, output, ran)}`) is judged
+    from that run — one process per command per gate, not two."""
+    already = already or {}
     required = set(split_list(profile.get("required")))
     if not required:
         return
@@ -2836,7 +2917,12 @@ def check_required_suites(result, profile, cwd):
             continue
         seen.add(profile[key])
         before = len(result.entries)
-        run_test_command(result, cwd, profile, key, profile[key], True, True)
+        if profile[key] in already:
+            _key, code, output, ran = already[profile[key]]
+            judge_test_run(result, profile, key, profile[key], code, output, ran, True, True,
+                           reused=" (the run the mapped tests were read from)")
+        else:
+            run_test_command(result, cwd, profile, key, profile[key], True, True)
         result.entries[before:] = [(state, "suite", message) for state, _check, message in result.entries[before:]]
 
 
@@ -3910,7 +3996,13 @@ def main(argv):
             located = check_exists(result, cwd, mapping)
             check_compiles(result, profile, cwd)
             # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
-            check_test_state(
+            # At build and tidy the policy's required test commands run whole anyway: that run is the
+            # evidence for the mapped tests as well, so those commands are not started a second time.
+            whole_for = ()
+            if args.stage in ("build", "tidy"):
+                whole_for = tuple(k for k in test_command_keys(profile)
+                                  if k in set(split_list(profile.get("required"))) and profile.get(k))
+            whole_runs = check_test_state(
                 result,
                 profile,
                 cwd,
@@ -3920,12 +4012,13 @@ def main(argv):
                 args.runs,
                 story_id,
                 guard=story_kind(front) in ("journey", "adopt"),
+                whole_for=whole_for,
             )
             if args.stage == "test":
                 check_levels(result, profile, args.runs, story_id, front, body, mapping, located)
                 check_titles(result, profile, cwd, front, body, mapping, located)
             if args.stage in ("build", "tidy"):
-                check_required_suites(result, profile, cwd)
+                check_required_suites(result, profile, cwd, whole_runs)
             check_files_listed(result, args.runs, story_id, args.stage, cwd, located)
             check_existing_tests(result, cwd, args.runs, story_id, body)
             check_stage_commands(result, profile, cwd, args.stage)
