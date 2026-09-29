@@ -128,13 +128,17 @@ nothing else from the file:
 | <criterion key> | <fully.qualified.Class>#<method> |
 
 ## Files
-- <every test file this stage wrote or changed, one per line>
+- <every test file this stage wrote or changed, one per line — written by the pipeline, see below>
 
 ## Notes
 - <test>: currently fails on <the assertion>, because <what is missing>
 - unit tests: <class>#<method> for invariant <rule>
 - uncovered: <criterion key> — <why no test was possible>   (only when unavoidable)
 ```
+
+The `## Files` list is the pipeline's to write: run `factory-cli.py --files-skeleton <story> test` when your
+changes are done — it creates the file with every changed file listed, or adds the missing paths to a file you
+wrote first. Fill in the other sections; never type the list yourself, the gate compares it with the tree.
 
 One row per criterion, at least. A criterion you could not turn into a test is named explicitly
 under `uncovered` — never left silently missing, because the build gate can only fail on what a

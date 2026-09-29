@@ -133,6 +133,10 @@ the file:
   (`tests.test_widgets`, `tests.test_widgets.TestWidgets`). The stack profile decides how that
   becomes a filter argument for the runner (`filterFormat`, with `{class}`, `{method}` and the
   located `{file}`).
+- The `## Files` list (the build's `## Changed` and the tidy's `## Moves` table's first column) is written
+  by the pipeline: `factory-cli.py --files-skeleton <story> <stage>` creates the hand-over with every
+  changed file listed, or adds the missing paths to one the stage wrote first, from the same record the
+  gate's `files-listed` reads. The stage fills in the why.
 - The gate starts one process per test command, not per row: every selector a command covers goes
   into one filtered run (`filterJoin` where the runner takes one expression), and each row's verdict
   is read from that run's report by name. Where the build or tidy gate runs a command whole for the

@@ -78,7 +78,10 @@ like any other.
 ## Changed
 | File | Why |
 (one row per file this stage changed — the gate checks the table against the files the pipeline
-recorded as changed, and the next stages read these files first)
+recorded as changed, and the next stages read these files first. The rows' first column is the
+pipeline's: run `factory-cli.py --files-skeleton <story> build` when your changes are done — it creates
+the file with every changed file as a row, or adds the missing rows to a file you wrote first — and
+fill in the why)
 
 ## Criteria
 - <criterion key>: met by <what the code now does>

@@ -4372,6 +4372,65 @@ def run_groups(args):
         expectations.append(("red-proof: a red record without digests (an older gate) is skipped and named",
                              code == 0 and "red-proof" in checks_by_verdict(output)["skip"],
                              [l for l in output.splitlines() if "red-proof" in l]))
+    # WP-79 A4: the hand-over's file list is the pipeline's to write, from the record the gate reads.
+    with tmpdir() as root:
+        build_project(root, green=both_green, ledger=both_green, extra_sources=(
+            (".dca-factory/runs/STORY-1/.verify/changed-build.txt",
+             "added\tsrc/main/Thing.java\nmodified\tsrc/main/Other.java\n"),))
+        build_md = os.path.join(root, ".dca-factory", "runs", "STORY-1", "build.md")
+
+        def skeleton(stage):
+            done = subprocess.run([sys.executable, args.cli, "--files-skeleton", "STORY-1", stage], cwd=root,
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return done.returncode, done.stdout + done.stderr
+        code, out = skeleton("build")
+        text = open(build_md, encoding="utf-8").read() if os.path.isfile(build_md) else ""
+        expectations.append(("files skeleton: a missing build.md is created with every changed file as a row",
+                             code == 0 and "## Changed" in text and "| `src/main/Thing.java` | |" in text
+                             and "| `src/main/Other.java` | |" in text and "## Criteria" in text,
+                             f"exit {code}; {out.strip()[:160]}; {text[:200]!r}"))
+        gate_code, gate_out = run_gate(args.gate, root, "build")
+        expectations.append(("files skeleton: the build gate's files-listed passes on the skeleton's list",
+                             "files-listed" in checks_by_verdict(gate_out)["pass"],
+                             [l for l in gate_out.splitlines() if "files-listed" in l]))
+        with open(build_md, "w", encoding="utf-8") as handle:
+            handle.write("# Build — STORY-1\n\n## Changed\n| File | Why |\n|---|---|\n| `src/main/Thing.java` | the new thing |\n\n"
+                         "## Criteria\n- shows-the-thing: met\n")
+        code, out = skeleton("build")
+        text = open(build_md, encoding="utf-8").read()
+        expectations.append(("files skeleton: a build.md the stage wrote first gains only the missing row and keeps its own",
+                             code == 0 and "| `src/main/Thing.java` | the new thing |" in text
+                             and text.count("Thing.java") == 1 and "| `src/main/Other.java` | |" in text
+                             and text.index("Other.java") < text.index("## Criteria"),
+                             f"exit {code}; {out.strip()[:160]}; {text!r}"))
+        code, out = skeleton("build")
+        expectations.append(("files skeleton: a second run adds nothing",
+                             code == 0 and "nothing added" in out and open(build_md, encoding="utf-8").read() == text,
+                             f"exit {code}; {out.strip()[:160]}"))
+    # Inside a shared builder's window there is no record yet: the tree against the story's base, minus
+    # what the earlier hand-overs list — the union the gate checks.
+    with tmpdir() as root:
+        build_project(root, green=both_green, ledger=both_green)
+        env = dict(os.environ, GIT_AUTHOR_NAME="f", GIT_AUTHOR_EMAIL="f@x", GIT_COMMITTER_NAME="f",
+                   GIT_COMMITTER_EMAIL="f@x")
+        for command in (["git", "init", "-q"], ["git", "add", "-A"], ["git", "commit", "-q", "-m", "base"]):
+            subprocess.run(command, cwd=root, capture_output=True, env=env)
+        subprocess.run([sys.executable, args.gate, "--record-base", "--story", "STORY-1"], cwd=root, capture_output=True)
+        os.makedirs(os.path.join(root, "src", "main"), exist_ok=True)
+        for name in ("Thing.java", "Other.java"):
+            with open(os.path.join(root, "src", "main", name), "w", encoding="utf-8") as handle:
+                handle.write("class X {}\n")
+        with open(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"), "a", encoding="utf-8") as handle:
+            handle.write("- `src/main/Thing.java`\n")
+        done = subprocess.run([sys.executable, args.cli, "--files-skeleton", "STORY-1", "build"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        build_md = os.path.join(root, ".dca-factory", "runs", "STORY-1", "build.md")
+        text = open(build_md, encoding="utf-8").read() if os.path.isfile(build_md) else ""
+        expectations.append(("files skeleton: inside the builder's window the list is the tree against the base, "
+                             "minus what tests.md lists",
+                             done.returncode == 0 and "| `src/main/Other.java` | |" in text and "Thing.java" not in text
+                             and ".dca-factory" not in text,
+                             f"exit {done.returncode}; {(done.stdout + done.stderr).strip()[:160]}; {text!r}"))
     # WP-79 A3: the runner's own record of its suite runs, keyed by the tree and signed with its key.
     with tmpdir() as root:
         build_project(root, green=both_green, ledger=both_green)

@@ -64,6 +64,8 @@ like any other.
 
 ## Moves
 | File | Move | Why it reads better |
+(the first column is the pipeline's: run `factory-cli.py --files-skeleton <story> tidy` when your moves are
+done — it creates the file with every changed file as a row, or adds the missing rows — and fill in the rest)
 
 ## Left alone
 - <what you saw and did not change>: <why — outside the footprint, or a design question>

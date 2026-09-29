@@ -2605,7 +2605,8 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   break, `{folder}/breaks/<fully.qualified.Class>--<method>.patch`, a `git apply` patch against the production code that
   turns it red; the gate applies it on a scratch copy (`break-proof`) and records the test's new version
 - `## Files`: every test file this stage wrote or changed, one per line, as a path from the project root —
-  `files-listed` compares the list with the pipeline's changed-files record
+  `files-listed` compares the list with the pipeline's changed-files record. `factory-cli.py --files-skeleton
+  <story> test` writes the list from the tree (the file's skeleton, or the missing paths): run it, add the rest
 - `## Notes`: `- unit tests: <Class>#<method> for invariant <rule>`; `- uncovered: <key> — <why>` only when unavoidable"""
     if stage in ("build", "tidy"):
         table, name = ("## Changed", "build") if stage == "build" else ("## Moves", "tidy")
@@ -2614,7 +2615,9 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 {name} — {folder}/{STAGE_FILES[stage]} (gate after the stage: tests-green, red-proof, files-listed, existing tests, architecture, format)
 - `{table}`: `| File | Why |` — the first cell is a path from the project root, in backticks or bare; the other cells
   are prose. `files-listed` refuses a file the pipeline recorded as changed that no row names; a listed file that did
-  not change is a note. A stage that changed no file needs no such section (tidy) — say so and why
+  not change is a note. A stage that changed no file needs no such section (tidy) — say so and why.
+  `factory-cli.py --files-skeleton <story> {stage}` writes the rows' first column from the tree (the file's
+  skeleton, or the missing rows): run it when the changes are done, fill in the rest
 - a test file put back to the version the test stage saw red is a restoration, not a change to list
 - tests: every selector of the `gate:tests` table green, and its file's digest as `.tests-red` holds it (`red-proof`)
 - {'`## Criteria`: `- <key>: met by <what the code now does>`; `## Deviations from the plan`; `## Checks`: `- <command>: <result>`' if stage == 'build' else '`## Left alone`: what you saw and did not change, and why; `## Checks`: `- <command>: <result>`'}
@@ -2653,6 +2656,98 @@ document — {folder}/document.md (gate after the stage: story-pass, documented,
 - every term the plan proposed under `## Glossary proposals` is in a glossary now, or named here as still open (`glossary`)
 - `## needs-human` only to stop (`decision: <story>-<nn>`, record `stage: document`)"""
     return None
+
+
+#: The section each builder hand-over lists its files in, and the row shape the gate's `listed_files` reads.
+FILES_SECTIONS = {
+    "test": ("## Files", None, "- `{path}`"),
+    "build": ("## Changed", "| File | Why |\n|---|---|", "| `{path}` | |"),
+    "tidy": ("## Moves", "| File | Move | Why it reads better |\n|---|---|---|", "| `{path}` | | |"),
+}
+FILES_SKELETONS = {
+    "test": "# Tests — {story}\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n\n## Files\n{rows}\n\n## Notes\n",
+    "build": "# Build — {story}\n\n## Changed\n| File | Why |\n|---|---|\n{rows}\n\n## Criteria\n\n"
+             "## Deviations from the plan\n\n## Checks\n",
+    "tidy": "# Tidy — {story}\n\n## Moves\n| File | Move | Why it reads better |\n|---|---|---|\n{rows}\n\n"
+            "## Left alone\n\n## Checks\n",
+}
+
+
+def changed_for_skeleton(cwd, runs, story_id, stage):
+    """The files the stage has to list, from the same sources `files-listed` reads and no other: the stage's
+    changed-files record where the stage has ended; a shared builder's record, or its open window's tree against
+    the story's base, minus what the story's other hand-overs list (the gate checks their union).
+    `None` when nothing was observed — the list is then the stage's, as the gate's skip says."""
+    folder = os.path.join(runs, story_id, ".verify")
+    record = os.path.join(folder, f"changed-{stage}.txt")
+    if os.path.isfile(record) and not _gate.snapshot_reason(record):
+        return [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
+    # the gate checks the union of the three hand-overs against the builder's record: a file another
+    # hand-over lists is not this stage's to list (inside the open window only the earlier ones exist)
+    listed = set()
+    for name in ("test", "build", "tidy"):
+        if name != stage:
+            listed |= _gate.listed_files(os.path.join(runs, story_id, STAGE_FILES[name])) or set()
+    not_listed = lambda path: path not in listed and not any(path.endswith("/" + n) for n in listed)
+    builder = os.path.join(folder, "changed-builder.txt")
+    if os.path.isfile(builder) and not _gate.snapshot_reason(builder):
+        return [path for path in (line.split("\t", 1)[1] for line in read_text(builder).splitlines() if "\t" in line)
+                if not_listed(path)]
+    base_file = os.path.join(folder, "base-tree")
+    if os.path.isfile(base_file):
+        base = read_text(base_file).strip()
+        now = _gate.git_tree(cwd) if base and base != "none" else None
+        rows = _gate.tree_changes(cwd, base, now, runs) if now else None
+        if rows is not None:
+            return [path for _kind, path in rows if not_listed(path)]
+    return None
+
+
+def files_skeleton(runs, story_id, stage, cwd="."):
+    """The stage's hand-over with its file list written by the pipeline: created with the stage's headings
+    when the file is missing, or the missing paths added to its list when the stage wrote the file first.
+    The stage fills in the why; it never types the list — the one refusal that cost the test stage a
+    gate run in the bench. Idempotent: a path already listed is not added twice."""
+    if stage not in FILES_SECTIONS:
+        print(f"factory: --files-skeleton takes test, build or tidy, not {stage!r}", file=sys.stderr)
+        return 2
+    changed = changed_for_skeleton(cwd, runs, story_id, stage)
+    if changed is None:
+        print(f"factory: nothing observed — no changed-files record and no base tree for {story_id}; the {stage} "
+              f"stage lists its files itself", file=sys.stderr)
+        return 1
+    heading, header, row = FILES_SECTIONS[stage]
+    folder = os.path.join(runs, story_id)
+    target = os.path.join(folder, STAGE_FILES[stage])
+    os.makedirs(folder, exist_ok=True)
+    if not os.path.isfile(target):
+        rows = "\n".join(row.format(path=path) for path in changed)
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write(FILES_SKELETONS[stage].format(story=story_id, rows=rows))
+        print(f"factory: {runs}/{story_id}/{STAGE_FILES[stage]} — the skeleton with {len(changed)} path(s) under `{heading}`")
+        return 0
+    already = _gate.listed_files(target) or set()
+    missing = [path for path in changed if path not in already and not any(path.endswith("/" + n) for n in already)]
+    if not missing:
+        print(f"factory: {runs}/{story_id}/{STAGE_FILES[stage]} lists every changed file already — nothing added")
+        return 0
+    lines = read_text(target).splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip().lower() == heading.lower()), None)
+    addition = [row.format(path=path) for path in missing]
+    if start is None:
+        lines += ["", heading] + ([header] if header else []) + addition
+    else:
+        end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+        body = lines[start + 1:end]
+        while body and not body[-1].strip():
+            body.pop()
+        if header and not any(line.lstrip().startswith("|") for line in body):
+            body += header.split("\n")
+        lines = lines[:start + 1] + body + addition + [""] + lines[end:]
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines).rstrip("\n") + "\n")
+    print(f"factory: {runs}/{story_id}/{STAGE_FILES[stage]} — {len(missing)} path(s) added under `{heading}`")
+    return 0
 
 
 def document_skeleton(runs, story_id, cwd="."):
@@ -2767,6 +2862,9 @@ def main(argv):
     parser.add_argument("--contract", metavar="STAGE",
                         help="the exact shape the gate holds that stage's file to (plan, test, build, tidy, judge, "
                              "document), from the gate's own constants, and exit")
+    parser.add_argument("--files-skeleton", nargs=2, metavar=("STORY", "STAGE"),
+                        help="write the test, build or tidy hand-over's file list from what the tree changed "
+                             "(the file's skeleton when it is missing, the missing paths when the stage wrote it)")
     parser.add_argument("--document-skeleton", metavar="STORY",
                         help="write the document stage's file skeleton with every changed path and run file under "
                              "`## Paths`, as they resolve from the project root; an existing file is kept; and exit")
@@ -2792,6 +2890,8 @@ def main(argv):
             return 2
         print(text)
         return 0
+    if args.files_skeleton:
+        return files_skeleton(args.runs, args.files_skeleton[0], args.files_skeleton[1], cwd)
     if args.document_skeleton:
         return document_skeleton(args.runs, args.document_skeleton, cwd)
     if args.migrate_layout:
