@@ -334,6 +334,14 @@ prune_renamed_copies() {                    # prune_renamed_copies <pipeline ski
     [ -d "$target" ] && [ ! -L "$target" ] || continue
     while read -r old new plugin; do
       copy="$target/$old"
+      # A link under the old name whose folder is gone points at nothing: the rename moved the folder,
+      # and the new name is linked by the install. A link that still resolves is the project's own choice.
+      if [ -L "$copy" ] && [ ! -e "$copy" ]; then
+        rm -f "$copy"
+        [ -f "$target/.dca-factory-skills" ] && { grep -vx "$old" "$target/.dca-factory-skills" > "$target/.dca-factory-skills.new"; mv -f "$target/.dca-factory-skills.new" "$target/.dca-factory-skills"; }
+        echo "factory: removed the link $copy — renamed to $new, and its folder is gone"
+        continue
+      fi
       [ -d "$copy" ] && [ ! -L "$copy" ] || continue
       reference=""; best_version=""
       for candidate in "$HOME"/.claude/plugins/cache/*/"$plugin"/*/skills/"$old" "$src/../../$plugin/skills/$old"; do
@@ -440,7 +448,8 @@ named_carriers() { cli --carriers 2>/dev/null; }
 # Skills the method plugins renamed: <old> <new> <the plugin that shipped the old one>. A profile that
 # still names an old one would run yesterday's copy without a word, so the run stops on it, and
 # `update` removes a copy under the old name that nobody edited.
-RENAMED_SKILLS="review-domain review-ddd dca-core
+RENAMED_SKILLS="dca-review dca-audit dca-core
+review-domain review-ddd dca-core
 review-boundaries review-hexagonal dca-core
 review-craft review-clean-code software-craftsmanship
 ddd-modelling dca-modelling dca-core

@@ -403,7 +403,7 @@ what must be true before the next one starts.
 | `stage-test` | plan → tests plus `.dca-factory/runs/<story>/tests.md` with the criterion-to-test table |
 | `stage-build` | red tests → production code plus `.dca-factory/runs/<story>/build.md` |
 | `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `.dca-factory/runs/<story>/tidy.md`; changes no test and no behaviour |
-| `stage-judge` | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-review` — the method's audit, worth it for adoption work; the setup does not write it) |
+| `stage-judge` | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-audit` — the method's audit, worth it for adoption work; the setup does not write it) |
 | `stage-document` | the change → `.dca-factory/runs/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
 | `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |

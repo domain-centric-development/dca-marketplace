@@ -2642,6 +2642,21 @@ def verify_setup(runner, verbose=False):
               and not any("some-guard" in prompts.get(s, "") for s in ("plan", "test", "judge", "document")),
               {k: v[-90:] for k, v in prompts.items()})
     if SYMLINKS:
+        # a link under a skill's OLD name whose folder the rename moved away: the update removes it and
+        # takes the name off the list; the new name is linked by the install
+        with tmpdir() as root, tmpdir() as gone:
+            build_project(root)
+            run_setup(runner, root, "--tool", "claude", "--from", source)
+            stale = os.path.join(root, ".claude", "skills", "dca-review")
+            os.symlink(os.path.join(gone, "dca-core", "skills", "dca-review"), stale)
+            with open(os.path.join(root, ".claude", "skills", ".dca-factory-skills"), "a", encoding="utf-8") as handle:
+                handle.write("dca-review\n")
+            code, output = run_runner(runner, root, "update", "--from", source)
+            listed = open(os.path.join(root, ".claude", "skills", ".dca-factory-skills"), encoding="utf-8").read().split()
+            check("renames: a link under a renamed skill's old name whose folder is gone is removed by the update, "
+                  "and the name leaves the list",
+                  not os.path.lexists(stale) and "dca-review" not in listed and "removed the link" in output,
+                  f"exists {os.path.lexists(stale)}; listed {'dca-review' in listed}; {[l for l in output.splitlines() if 'dca-review' in l][:2]}")
         with tmpdir() as root, tmpdir() as gone:
             build_project(root)
             os.makedirs(os.path.join(root, ".codex", "skills"))
