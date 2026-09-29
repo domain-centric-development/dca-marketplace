@@ -217,7 +217,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.50.1"
+VERSION = "0.50.2"
 
 
 def read_front_matter(path):
@@ -732,8 +732,9 @@ def check_break(result, profile, cwd, runs, story_id, selector, key, located):
         short = selector.split("#")[0].rsplit(".", 1)[-1] + "#" + selector.split("#", 1)[-1]
         patch = break_path(runs, story_id, short) if os.path.isfile(break_path(runs, story_id, short)) else patch
     if not os.path.isfile(patch):
-        result.fail("break-proof", f"{selector} ({key}): no break at {os.path.relpath(patch, cwd)} — a test the "
-                                   f"adoption wrote is shown to work by one change that turns it red")
+        result.fail("break-proof", f"{selector} ({key}): no break at {os.path.relpath(patch, cwd)} — a test that is "
+                                   f"green without ever being seen red (one an adoption wrote, one strengthened after "
+                                   f"its build) is shown to work by one change to the code that turns it red")
         return
     scratch = tempfile.mkdtemp(prefix="dca-break-")
     try:
@@ -1935,6 +1936,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
     ledger = red_ledger_path(runs, story)
     have_ledger = bool(ledger) and os.path.isfile(ledger)
     was_red = read_red_ledger(runs, story)
+    red_digests = read_red_digests(runs, story)
     now_red = set()
     # An expectation that changes on a human's decision: the test was recorded red before the code
     # existed, the decision changed what it expects, and the code now meets it. Only that combination
@@ -2068,6 +2070,19 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
                                        f"expectation changed on decision {', '.join(changed_on)} ({key})")
                 continue
             if expected == "red" and passed and selector in was_red and built_before:
+                recorded = red_digests.get(selector)
+                test_file = located.get(selector)
+                if recorded and test_file and os.path.isfile(os.path.join(cwd, test_file)) \
+                        and file_digest(os.path.join(cwd, test_file)) != recorded:
+                    # Changed after its build met it — the judge sent it back as asserting too little. It is
+                    # green and can never be seen red again: one change to the code that turns it red shows
+                    # that the new assertion bites.
+                    probe = Result()
+                    check_break(probe, profile, cwd, runs, story, selector, key, located)
+                    result.entries.extend(probe.entries)
+                    if not probe.failed:
+                        now_red.add(selector)
+                    continue
                 now_red.add(selector)
                 result.ok("tests-red", f"{selector} is green now and was recorded red in an earlier pass of this "
                                        f"story, whose build met it ({key})")
@@ -3351,6 +3366,16 @@ def verdict_in(text):
         if line.strip().lower().startswith("verdict:"):
             return line.split(":", 1)[1].strip().strip("`\"' ").lower()
     return ""
+
+
+def back_in(text):
+    """Where a `changes-requested` verdict sends the story: `test` when the judge wrote `back: test` — a
+    confirmed defect is in a test (it asserts less than its criterion), which only the test stage may
+    change — else `build`."""
+    for line in text.splitlines():
+        if line.strip().lower().startswith("back:"):
+            return "test" if line.split(":", 1)[1].strip().strip("`\"' ").lower() == "test" else "build"
+    return "build"
 
 
 #: What the plan gate leaves for the schedule: the digest of the story it let through, so a story edited

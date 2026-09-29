@@ -1156,6 +1156,47 @@ def verify_runner(runner, verbose=False):
           and "--document-skeleton STORY-1" in output,
           [l for l in output.splitlines() if l.startswith("── stage")])
 
+    # 1b-back. a judge that sends the story back for a test defect: the run goes to the test stage, not the build
+    back_judge = ('if [ "$FACTORY_STAGE" = judge ] || [ "$FACTORY_STAGE" = verifier ]; then '
+                  'if [ ! -f judged-once ]; then : > judged-once; mkdir -p .dca-factory/runs/STORY-1; '
+                  'printf "## Verdict\\nverdict: changes-requested\\nback: test\\n" > .dca-factory/runs/STORY-1/judge.md; '
+                  'else was=$FACTORY_STAGE; FACTORY_STAGE=judge sh -c "$FIXTURE_STAND_IN"; '
+                  'if [ "$was" = verifier ]; then FACTORY_STAGE=document sh -c "$FIXTURE_STAND_IN"; fi; fi; '
+                  'else if [ "$FACTORY_STAGE" = test ]; then printf "%s\\n" "$FACTORY_PROMPT" >> prompts.txt; fi; '
+                  'sh -c "$FIXTURE_STAND_IN"; fi')
+    def back_run(verifier=False):
+        with tmpdir() as root:
+            build_project(root)
+            copy_scripts(runner, root)
+            tests_path = os.path.join(root, "fixture-tests.md")
+            with open(tests_path, "w", encoding="utf-8") as handle:
+                handle.write(TESTS)
+            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+            env = {"FACTORY_TOOL_CMD": back_judge, "FIXTURE_STAND_IN": stand_in,
+                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+            args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-verifier"] if verifier else [])
+            code, output = run_runner(runner, root, *args, env=env)
+            journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+            starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                      if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+            prompts_file = os.path.join(root, "prompts.txt")
+            prompts = open(prompts_file, encoding="utf-8").read() if os.path.isfile(prompts_file) else ""
+            return code, output, starts, story_delivered(root), prompts
+    code, output, starts, delivered, prompts = back_run()
+    check("judge sent back: `back: test` runs the test stage again, then build, tidy and the judge — the story is delivered",
+          code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "judge", "test", "build", "tidy", "judge", "document"]
+          and "goes back to the test stage" in output,
+          f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+    second = prompts.strip().splitlines()[-1] if prompts.strip() else ""
+    check("judge sent back: the test stage's prompt names the judge's file and its confirmed defects",
+          len(prompts.strip().splitlines()) >= 2 and "judge.md" in second, second[-240:] or "no test prompt recorded")
+    code, output, starts, delivered, prompts = back_run(verifier=True)
+    check("judge sent back: the shared verifier's `back: test` goes to the test stage as well",
+          code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "verifier", "test", "build", "tidy", "verifier"],
+          f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+
     # 1c. a stage that writes no file stops the run, and says which file was missing
     with tmpdir() as root:
         build_project(root)
@@ -4190,6 +4231,53 @@ def run_groups(args):
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: each story shows the stage invocations its journal recorded",
                              "2 stage invocation(s)" in output, [l for l in output.splitlines() if "STORY-1" in l]))
+    # A test the judge sent back to the test stage: strengthened after its build met it, so it is green and can
+    # never be seen red again. The test gate asks for its break — one change to the code that turns it red.
+    page_test = "src/test-pages/java/com/example/WidgetPageTest.java"
+    old_page = "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"
+    new_page = "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() { /* asserts the word too */ } }\n"
+    def strengthened(with_break):
+        with tmpdir() as root:
+            extra = [(page_test, new_page), (".dca-factory/runs/STORY-1/build.md", "## Changed\n"),
+                     ("unrelated.txt", "a\n")]
+            if with_break:
+                extra.append((".dca-factory/runs/STORY-1/breaks/com.example.WidgetPageTest--showsTheThing.patch",
+                              with_break))
+            build_project(root, green=both_green, extra_sources=tuple(extra))
+            digest_old = hashlib.sha256(old_page.encode("utf-8")).hexdigest()
+            unit = os.path.join(root, "src/test/java/com/example/WidgetUnitTest.java")
+            digest_unit = hashlib.sha256(open(unit, "rb").read()).hexdigest()
+            write_file(root, ".dca-factory/runs/STORY-1/.tests-red",
+                       f"com.example.WidgetPageTest#showsTheThing\t{digest_old}\n"
+                       f"com.example.WidgetUnitTest#showsNothingWhenEmpty\t{digest_unit}\n")
+            code, output = run_gate(args.gate, root, "test")
+            ledger = open(os.path.join(root, ".dca-factory/runs/STORY-1/.tests-red"), encoding="utf-8").read()
+            return code, output, ledger
+    code, output, ledger = strengthened(None)
+    expectations.append(("judge sent back: a test changed after its build met it, green without a break, is refused "
+                         "at the test gate", code == 1 and "break-proof" in checks_by_verdict(output)["fail"],
+                         [l for l in output.splitlines() if "break-proof" in l or "tests-red" in l][:4]))
+    code, output, ledger = strengthened(BREAK_THE_THING)
+    new_digest = hashlib.sha256(new_page.encode("utf-8")).hexdigest()
+    expectations.append(("judge sent back: the same test with a break that turns it red passes, and the red record "
+                         "holds its new version", code == 0 and "break-proof" in checks_by_verdict(output)["pass"]
+                         and new_digest in ledger,
+                         [l for l in output.splitlines() if "break-proof" in l or "tests-red" in l][:4]))
+    code, output, ledger = strengthened(BREAK_NOTHING)
+    expectations.append(("judge sent back: a break the strengthened test does not notice is refused",
+                         code == 1 and "break-proof" in checks_by_verdict(output)["fail"] and "stays green" in output,
+                         [l for l in output.splitlines() if "break-proof" in l][:3]))
+    with tmpdir() as root:
+        build_project(root)
+        def back_to(text):
+            write_file(root, ".dca-factory/runs/STORY-1/judge.md", text)
+            return subprocess.run([sys.executable, cli_of(args.gate), "--back-to", "STORY-1"], cwd=root,
+                                  capture_output=True, text=True, encoding="utf-8").stdout.strip()
+        answers = (back_to("## Verdict\nverdict: changes-requested\nback: test\n"),
+                   back_to("## Verdict\nverdict: changes-requested\n"),
+                   back_to("## Verdict\nverdict: changes-requested\nback: `build`\n"))
+        expectations.append(("back-to: the judge's `back: test` sends the story to the test stage; without it, the build",
+                             answers == ("test", "build", "build"), answers))
     # The gate's brief report: what passed is one line, what did not stays verbatim — for a stage that runs its
     # own gate and reads the report into its context.
     with tmpdir() as root:

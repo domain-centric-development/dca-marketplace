@@ -1656,6 +1656,10 @@ document stage. This session was started by the pipeline's runner, which holds t
 named at session start is the one that started you, not a second writer. $(where_things_are "$tool" builder "$story")"
   local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
   [ -n "$guard" ] && prompt="$prompt In the build and tidy stages apply the $guard skill (the profile's carrier.guard) to every file you write."
+  if [ -f "$RUNS/$story/judge.md" ] && [ "$(verdict_of "$story")" = changes-requested ]; then
+    prompt="$prompt The judge asked for changes: $RUNS/$story/judge.md — each stage fixes exactly the confirmed defects \
+that are its own (a test that asserts too little is the test stage's, with its break; the code is the build's)."
+  fi
   echo "── stage $list  (tool: $tool, one shared context)"
   if [ -n "$dry" ]; then
     echo "   would run: $prompt"
@@ -1773,7 +1777,8 @@ second writer. $(where_things_are "$tool" verifier "$story")"
         echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
         return 1
       fi
-      local back=build; { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
+      local back; back=$(cli --back-to "$story" 2>/dev/null || echo build)
+      { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
       echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
       run_story "$story" "$tool" "$back" "$dry"; return $? ;;
     story-conflict)
@@ -1862,6 +1867,11 @@ prompt_for() {                              # prompt_for <stage> <story>
   # work only on what the gate confirmed. So the refusal is named as an input, not remembered.
   [ -f "$RUNS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before; its \
 report is $RUNS/$story/.gate-$stage.txt — read it and fix exactly what it names, nothing else."
+  if { [ "$stage" = test ] || [ "$stage" = build ]; } && [ -f "$RUNS/$story/judge.md" ] \
+     && [ "$(verdict_of "$story")" = changes-requested ]; then
+    repeat="$repeat The judge asked for changes: $RUNS/$story/judge.md — fix exactly the confirmed defects that are this \
+stage's (a test that asserts too little is the test stage's; write its break, see the contract), nothing else."
+  fi
   [ "$stage" = judge ] && [ -f "$RUNS/$story/.judge-previous.md" ] && repeat=" This is a repeat round: \
 the previous verdict is $RUNS/$story/.judge-previous.md. Account for each defect it confirmed under \
 '## Previous round' — fixed (with the evidence) or withdrawn (with the reason) — before judging anew."
@@ -2178,7 +2188,8 @@ run_story() {
             echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
             return 1
           fi
-          local back=build; { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
+          local back; back=$(cli --back-to "$story" 2>/dev/null || echo build)
+          { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
           echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
           run_story "$story" "$tool" "$back" "$dry"
           return $?

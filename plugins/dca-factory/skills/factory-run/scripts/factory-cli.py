@@ -2600,6 +2600,9 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   (`shows-empty-state` → "Shows empty state"); never the key itself in a name, display name or comment
 - red: every selector in the table fails before any production code — the gate writes `{folder}/.tests-red`
   (`<selector>\t<sha256 of the test file>`); the build gate refuses a test changed after it was seen red (`red-proof`)
+- a round the judge sent back (`back: test`): a test you strengthen is already green and cannot be seen red — write its
+  break, `{folder}/breaks/<fully.qualified.Class>--<method>.patch`, a `git apply` patch against the production code that
+  turns it red; the gate applies it on a scratch copy (`break-proof`) and records the test's new version
 - `## Files`: every test file this stage wrote or changed, one per line, as a path from the project root —
   `files-listed` compares the list with the pipeline's changed-files record
 - `## Notes`: `- unit tests: <Class>#<method> for invariant <rule>`; `- uncovered: <key> — <why>` only when unavoidable"""
@@ -2621,7 +2624,9 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 
 judge — {folder}/judge.md (the runner reads the verdict; the document gate reads `story-pass`)
 - `## Verdict`: `verdict: pass | changes-requested | story-conflict` — one line, exactly one of the three
-  (pass: deliverable; changes-requested: back to build, one round; story-conflict: a human, never build)
+  (pass: deliverable; changes-requested: back one round; story-conflict: a human, never build)
+- `back: test` under the verdict when a confirmed defect is in a test (it asserts less than its criterion): the round
+  goes to the test stage, then build; without it the round goes to build, which may not change a test
 - `## Perspectives covered`: `- <perspective>: <skill or agent that ran it, or "in-session"> | not covered — <why>`
 - `## Confirmed defects`: `| Perspective | File:line | Severity | Defect | Fix |` — file as a path from the project root
   with its line; severity blocker | major | minor; only blocker and major prevent `pass`
@@ -2742,6 +2747,8 @@ def main(argv):
     parser.add_argument("--model", nargs=2, metavar=("TOOL", "STAGE"),
                         help="the profile's model for that tool and stage (model.<tool>.<stage>, else model.<tool>)")
     parser.add_argument("--verdict", metavar="STORY", help="the judge's verdict of that story, or nothing")
+    parser.add_argument("--back-to", metavar="STORY",
+                        help="where a changes-requested verdict sends the story: test (the judge's `back: test`) or build")
     parser.add_argument("--needs-human", metavar="FILE",
                         help="the decision ids a stage file's needs-human section names; exit 1 when it asks nobody")
     parser.add_argument("--open-decisions", metavar="STORY",
@@ -2818,6 +2825,10 @@ def main(argv):
         return 0
     if args.verdict:
         print(verdict_of_story(args.runs, args.verdict))
+        return 0
+    if args.back_to:
+        path = os.path.join(args.runs, args.back_to, "judge.md")
+        print(back_in(read_text(path)) if os.path.isfile(path) else "build")
         return 0
     if args.needs_human:
         lines = needs_human_lines(args.needs_human, args.story)

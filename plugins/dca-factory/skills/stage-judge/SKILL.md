@@ -121,7 +121,7 @@ Which value you choose decides where the run goes back to, and that is the point
 | Verdict | Means | The run goes back to |
 |---|---|---|
 | `pass` | no blocking defect left | nowhere — the story is deliverable |
-| `changes-requested` | the code deviates from the plan or is wrong | `stage-build` |
+| `changes-requested` | the code deviates from the plan or is wrong — or a test asserts less than its criterion | `stage-build`, or `stage-test` with `back: test` |
 | `story-conflict` | the **plan or the story itself** was wrong: a criterion contradicts another, the design cannot meet it, or meeting it would need a decision nobody took | the story — a human, never `stage-build` |
 
 Only `blocker` and `major` findings prevent `pass`. A review that finds something everywhere is
@@ -147,6 +147,7 @@ something the code no longer does and nobody notices.
 
 ## Verdict
 verdict: <pass | changes-requested | story-conflict>
+back: test                        (only when a confirmed defect is in a test — see below)
 
 ## Perspectives covered
 - <perspective>: <the skill or agent that ran it, or "in-session"> | not covered — <why>
@@ -164,6 +165,13 @@ verdict: <pass | changes-requested | story-conflict>
 - <defect the previous verdict confirmed>: fixed — <file:line that shows it> | withdrawn — <why it
   was not a defect after all> | still open — listed above
 ```
+
+**Where the round goes.** A `changes-requested` goes to the build stage, which may not change a test —
+its red proof holds each test's version. When a confirmed defect is in a test itself (it asserts less
+than its criterion, it proves the scenario only nominally), write `back: test` under the verdict: the
+round then starts at the test stage, which strengthens the test and proves with a break that the new
+assertion bites, and the build follows for whatever code defect you confirmed beside it. Without a test
+defect, write no `back:` line.
 
 Where the plan lists `## Changed tests`, check each changed test against the line that backs it:
 the new assertion follows from that line, and nothing else in the test changed. A changed test

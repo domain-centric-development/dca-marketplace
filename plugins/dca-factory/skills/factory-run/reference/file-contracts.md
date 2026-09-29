@@ -62,6 +62,12 @@ a test. The build and tidy gates compare the digest with the file as it is
 answered decision of stage `test` changed what it expects. A line without a digest proves the red run
 but not the version, so the comparison is skipped and named.
 
+A test changed after its build met it — a round the judge sent back with `back: test` because the
+test asserted too little — is green and cannot be seen red again. The test gate asks for its break
+instead: `.dca-factory/runs/<story>/breaks/<Class>--<method>.patch`, applied to a scratch copy of the
+project, must turn it red (`break-proof`, the same proof an adoption gives for a test it wrote); the red
+record then holds the test's new version, so the build gate's `red-proof` accepts it.
+
 `.dca-factory/runs/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
 the orchestrator remembers, because an in-session run has no other honest way to count and a
 resumed run must see the same number. At three the run stops. A refusal on `gate:fail environment` (a
