@@ -52,6 +52,15 @@ Smells:
 - **Execution semantics as a port**: a transaction boundary or unit of work
   declared as an output port. It is how the application runs, not a
   capability it lacks.
+- **A domain-owned lookup interface without a stated reason**: the domain
+  declares a read interface that an adapter implements, and a domain service
+  or an aggregate calls it to fetch facts — where the use case could have
+  fetched those facts through its own ports and handed them in as an
+  immutable snapshot. The default is facts supplied by the use case; a
+  domain-owned interface is the explicit exception, narrow, read-only, in the
+  domain's language, and it needs a recorded reason (which effect, which
+  dependency). One that writes, or that an aggregate holds as a field, is a
+  finding. A pure strategy passed in as a parameter is not a lookup.
 
 - **God port**: an output port with 15 methods. One adapter has to implement
   all of them even when it only needs three. Probably should be split.

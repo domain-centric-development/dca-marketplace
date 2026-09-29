@@ -78,7 +78,10 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
 
 - **Domain Service**: operation that doesn't fit into an aggregate, lives in
   the domain layer. Stateless. Common smell: a "service" that's really just
-  business logic that should live inside an aggregate.
+  business logic that should live inside an aggregate. Its facts come in as
+  parameters — snapshots the use case fetched — not through a lookup the
+  service reaches out with; a domain-owned read interface is the exception
+  and carries a recorded reason.
 - **Factory**: when creation logic is non-trivial. Static factory methods on
   the aggregate (`Order.create(...)`) are usually preferable to separate
   factory classes unless the construction crosses aggregate boundaries.
