@@ -93,6 +93,14 @@ delivery never reads as "the story changed after it was planned". A reopen (`--r
 correction the story cites) takes them out again and moves the delivered pass's hand-overs to
 `.verify/pass-<n>/`, so the first pass stays readable beside the next.
 
+`.verify/suites.tsv` is the runner's record of the suite runs its own gates made: one row per passing
+invocation — the tree it ran on (a digest of the sources, the run folder and the tools' folders left
+out), the invocation, its exit code, what the reports said ran, and a signature under a key the runner
+hands to its gate processes alone. A later runner gate on the same tree reads its own rows instead of
+starting the command again and says so in the report (`recorded at <time> for this tree`). A stage's
+own gate run has no key: it writes no row the runner reads, and a row from any other hand carries no
+valid signature. A tree that differs by one byte runs everything.
+
 So the run folder is disposable: delete `.dca-factory/` at any time and the schedule, the
 dependencies and the status read the same — what is lost is history (hand-overs, journal, tokens),
 never what is delivered or decided. Whether the project commits it is its choice (the README says

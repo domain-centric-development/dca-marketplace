@@ -84,6 +84,7 @@ import glob
 
 
 import hashlib
+import hmac
 
 
 import shutil
@@ -217,7 +218,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.51.1"
+VERSION = "0.51.2"
 
 
 def read_front_matter(path):
@@ -1453,14 +1454,95 @@ def run(command, cwd):
     return completed.returncode, output
 
 
+#: The runner's own record of the suite runs its gates made on one tree (WP-79 A3). Set by `main()` when
+#: `--record-suites` is on and the runner's key is in the environment; None in a stage's own gate run.
+SUITES_RECORD = None
+
+
+def suites_tree_key(cwd, runs):
+    """What a recorded run is keyed by: a digest of every source file's path and content — the run folder,
+    the tools' folders and the build outputs left out — plus HEAD where there is one. The gate report the
+    runner copies into `.verify/` between two gates must not turn an unchanged tree into a new one, and a
+    project before its `git init` has a tree as well."""
+    digest = hashlib.sha256()
+    code, head = git(cwd, "rev-parse", "HEAD")
+    digest.update((head.strip() if code == 0 else "no-head").encode("utf-8"))
+    skipped = SKIP_DIRS | {runs_top()}
+    for root, dirs, files in os.walk(cwd):
+        dirs[:] = sorted(d for d in dirs if d not in skipped and not d.startswith("."))
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, cwd).replace(os.sep, "/")
+            if run_owned(rel, runs) or any(folder in "/" + rel for folder in TOOL_FOLDERS):
+                continue
+            try:
+                with open(path, "rb") as handle:
+                    digest.update(rel.encode("utf-8") + b"\0" + hashlib.sha256(handle.read()).digest())
+            except OSError:
+                continue
+    return digest.hexdigest()
+
+
+def suites_signature(key, tree, invocation, code, ran_json):
+    return hmac.new(key.encode("utf-8"), f"{tree}\t{invocation}\t{code}\t{ran_json}".encode("utf-8"),
+                    hashlib.sha256).hexdigest()
+
+
+def open_suites_record(cwd, runs, story_id, key):
+    """The rows of `.verify/suites.tsv` for this tree whose signature the runner's key confirms. A row
+    written by anything else — a stage, a hand — carries no valid signature and is not read."""
+    path = os.path.join(runs, story_id, ".verify", "suites.tsv")
+    tree = suites_tree_key(cwd, runs)
+    rows = {}
+    if tree and os.path.isfile(path):
+        for line in read_text(path).splitlines():
+            parts = line.split("\t")
+            if len(parts) != 6:
+                continue
+            when, row_tree, invocation, code, ran_json, signature = parts
+            if row_tree == tree and hmac.compare_digest(
+                    signature, suites_signature(key, row_tree, invocation, code, ran_json)):
+                rows[invocation] = (when, int(code), json.loads(ran_json))
+    return {"path": path, "key": key, "tree": tree, "rows": rows}
+
+
+def recorded_run(invocation, cwd, profile=None, with_reports=False):
+    """(code, output, ran, reused) — the invocation run now, or the runner's own record of it on this tree.
+
+    Only a run that passed is recorded: a red run is run again, so a fix is seen by the run that judges
+    it. `ran` is what the reports of the run said was executed (empty when `with_reports` is off), and
+    `reused` is the suffix that tells the reader the verdict came from the record."""
+    record = SUITES_RECORD
+    if record and record["tree"] and invocation in record["rows"]:
+        when, code, ran_rows = record["rows"][invocation]
+        return code, "", {(cls, method): outcome for cls, method, outcome in ran_rows}, \
+            f" (recorded at {when} for this tree)"
+    if with_reports:
+        before, marker = report_state(cwd, profile), clock_marker(cwd)
+        code, output = run(invocation, cwd)
+        ran = executed_tests(reports_from_this_run(before, report_state(cwd, profile), marker))
+    else:
+        code, output = run(invocation, cwd)
+        ran = {}
+    if record and record["tree"] and code == 0 and not any(outcome == "failed" for outcome in ran.values()):
+        when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ran_json = json.dumps(sorted([cls, method, outcome] for (cls, method), outcome in ran.items()))
+        signature = suites_signature(record["key"], record["tree"], invocation, code, ran_json)
+        os.makedirs(os.path.dirname(record["path"]), exist_ok=True)
+        with open(record["path"], "a", encoding="utf-8") as handle:
+            handle.write("\t".join((when, record["tree"], invocation, str(code), ran_json, signature)) + "\n")
+        record["rows"][invocation] = (when, code, json.loads(ran_json))
+    return code, output, ran, ""
+
+
 def check_compiles(result, profile, cwd):
     command = profile.get("compile")
     if not command:
         result.skip("compiles", "no `compile:` command in the stack profile")
         return
-    code, output = run(command, cwd)
+    code, output, _ran, reused = recorded_run(command, cwd)
     if code == 0:
-        result.ok("compiles", f"`{command}` succeeded")
+        result.ok("compiles", f"`{command}` succeeded{reused}")
     else:
         result.fail("compiles", f"`{command}` failed:\n{tail(output)}")
 
@@ -1609,9 +1691,9 @@ def check_stage_commands(result, profile, cwd, stage):
         if not command:
             result.skip(key, f"no `{key}:` command in the stack profile")
             continue
-        code, output = run(command, cwd)
+        code, output, _ran, reused = recorded_run(command, cwd)
         if code == 0:
-            result.ok(key, f"`{command}` succeeded")
+            result.ok(key, f"`{command}` succeeded{reused}")
         else:
             result.fail(key, f"`{command}` failed:\n{tail(output)}")
 
@@ -2015,10 +2097,9 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
             groups.setdefault(command, []).append((key, selector, cls, method, test_path, command_key, pattern))
 
     def observed_run(invocation):
-        """(code, output, {(class, method): outcome}) of one invocation, from the reports it wrote."""
-        before, marker = report_state(cwd, profile), clock_marker(cwd)
-        code, output = run(invocation, cwd)
-        return code, output, executed_tests(reports_from_this_run(before, report_state(cwd, profile), marker))
+        """(code, output, {(class, method): outcome}, reused) of one invocation, from the reports it
+        wrote — or from the runner's record of the same invocation on this tree."""
+        return recorded_run(invocation, cwd, profile, with_reports=True)
 
     def verdict(key, selector, command_key, passed, output, evidence):
         """The selector's verdict against what the ledger and the stage expect — unchanged by how it ran."""
@@ -2122,7 +2203,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
             continue
         whole = command_key in whole_for
         invocation = command if whole else f"{command} {joined_filter(profile, flag, patterns)}".strip()
-        code, output, ran = observed_run(invocation)
+        code, output, ran, reused = observed_run(invocation)
         if whole:
             whole_runs[command] = (command_key, code, output, ran)
         shared = whole or len(patterns) > 1
@@ -2136,7 +2217,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
                 # runner that honours one filter and drops the second, or a whole run that skipped a
                 # source set, must not fail a test that a run of its own would show.
                 alone = f'{command} {flag} "{pattern}"'.strip()
-                code_alone, item_output, ran_alone = observed_run(alone)
+                code_alone, item_output, ran_alone, reused = observed_run(alone)
                 outcome, how = outcome_for(ran_alone, cls, method, display)
                 if outcome is not None:
                     result.note(f"tests-{expected}",
@@ -2164,7 +2245,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
             # The report decides, not the exit code: a build can fail for reasons beside this
             # test, and a runner can exit 0 with a failure recorded.
             passed = outcome == "passed"
-            verdict(key, selector, command_key, passed, item_output, f"report {how}")
+            verdict(key, selector, command_key, passed, item_output, f"report {how}{reused}")
             if expected == "red" and not passed and red_on_timeout(item_output):
                 timed_out.append(selector)
         if timed_out and shared:
@@ -2627,10 +2708,8 @@ def red(result, check, message, must, strict):
 
 def run_test_command(result, cwd, profile, key, command, required, strict=False):
     """A test command passes only when its reports show it executed tests and none failed."""
-    before, marker = report_state(cwd, profile), clock_marker(cwd)
-    code, output = run(command, cwd)
-    ran = executed_tests(reports_from_this_run(before, report_state(cwd, profile), marker))
-    judge_test_run(result, profile, key, command, code, output, ran, required, strict)
+    code, output, ran, reused = recorded_run(command, cwd, profile, with_reports=True)
+    judge_test_run(result, profile, key, command, code, output, ran, required, strict, reused=reused)
 
 
 def judge_test_run(result, profile, key, command, code, output, ran, required, strict=False, reused=""):
@@ -3852,6 +3931,7 @@ def hand_over_to_cli(argv):
 
 
 def main(argv):
+    global SUITES_RECORD
     # `--brief` is the gate's own beside `--stage` (a stage's compact report); alone it is the status's, moved.
     moved = MOVED_TO_CLI - ({"--brief"} if "--stage" in argv else set())
     if any(token.split("=", 1)[0] in moved for token in argv):
@@ -3871,6 +3951,9 @@ def main(argv):
     parser.add_argument("--staged", action="store_true",
                         help="with --change: check the Git index, refuse when the working tree differs")
     parser.add_argument("--checks", help="with --change: only these checks (compile test architecture format)")
+    parser.add_argument("--record-suites", action="store_true",
+                        help="the runner's gates: record every passing suite run under .verify/suites.tsv, signed "
+                             "with FACTORY_SUITES_KEY, and reuse the runner's own record on an unchanged tree")
     parser.add_argument("--parity", metavar="CONFIG",
                         help="check every implementation's reports against a scenario contract and exit")
     parser.add_argument("--check-contract", action="store_true",
@@ -3976,6 +4059,13 @@ def main(argv):
         check_status(result, story_path, front)
         check_epic(result, story_path, front, args.epics)
         check_rounds(result, args.runs, story_id)
+        if args.record_suites:
+            key = os.environ.get("FACTORY_SUITES_KEY", "")
+            if key:
+                SUITES_RECORD = open_suites_record(cwd, args.runs, story_id, key)
+            else:
+                result.note("suites", "--record-suites without FACTORY_SUITES_KEY in the environment — "
+                                      "nothing is recorded or reused")
         check_decisions(result, args.runs, story_id, cwd, args.stage, story_path)
         if args.stage == "plan":
             check_happy_path(result, story_path, front, body, profile)

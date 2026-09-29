@@ -1058,8 +1058,11 @@ def verify_runner(runner, verbose=False):
             journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
             starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
                       if "\tstage-start\t" in l] if os.path.isfile(journal) else []
-            return code, output, starts, story_delivered(root)
-    code, output, starts, delivered = shared_run()
+            lines = lambda path: (open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else [])
+            extras = {"calls": lines(os.path.join(root, "build", "runner-calls.log")),
+                      "suites": lines(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "suites.tsv"))}
+            return code, output, starts, story_delivered(root), extras
+    code, output, starts, delivered, extras = shared_run()
     stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
     check("shared builder: plan to tidy run as one process, then judge and document each in their own",
           code == 0 and starts == ["builder", "judge", "document"] and delivered
@@ -1069,11 +1072,18 @@ def verify_runner(runner, verbose=False):
     check("shared builder: the runner re-checks the build and tidy gates itself",
           "── gate build  (re-checked by the runner)" in output and "── gate tidy  (re-checked by the runner)" in output,
           [l for l in output.splitlines() if l.startswith("── gate")])
-    code, output, starts, delivered = shared_run(skip_test_gate=True)
+    # WP-79 A3: the runner's gates record their passing suite runs; the tidy re-check, on the tree the
+    # build re-check just recorded, runs none. The stand-in's own test gate (2 calls, one per command)
+    # and the build re-check (2) are the only calls; on a gate without the record there are 6.
+    check("shared builder: the tidy re-check on the tree the build re-check recorded runs no suite",
+          len(extras["calls"]) == 4 and "recorded at" in output and len(extras["suites"]) >= 2,
+          f"calls {extras['calls']}; suites {len(extras['suites'])} row(s); "
+          f"{[l for l in output.splitlines() if 'recorded at' in l][:2]}")
+    code, output, starts, delivered, _extras = shared_run(skip_test_gate=True)
     check("shared builder: a process that never ran the test gate is caught — no red proof, no judge",
           code == 1 and "no red proof" in output and "judge" not in starts and not delivered,
           f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
-    code, output, starts, delivered = shared_run(
+    code, output, starts, delivered, _extras = shared_run(
         story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
         .replace("depends_on: []", "depends_on: [STORY-0]"), green=both_green)
     stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
@@ -1082,13 +1092,13 @@ def verify_runner(runner, verbose=False):
           code == 0 and stage_lines == ["stage plan+test", "stage judge", "stage document"] and delivered
           and "── gate test  (re-checked by the runner)" in output,
           f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
-    code, output, starts, delivered = shared_run(story=ADOPTED, green=both_green)
+    code, output, starts, delivered, _extras = shared_run(story=ADOPTED, green=both_green)
     stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
                    if l.startswith("── stage ") and "(skipped" not in l]
     check("shared builder: an adopted story shares plan and test, then its judge and the adopt gate deliver it",
           code == 0 and stage_lines == ["stage plan+test", "stage judge"] and delivered,
           f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
-    code, output, starts, delivered = shared_run(dry=True)
+    code, output, starts, delivered, _extras = shared_run(dry=True)
     check("shared builder: the dry run shows the one shared invocation and starts nothing",
           "stage plan+test+build+tidy  (tool: stand-in, one shared context)" in output and starts == [],
           [l for l in output.splitlines() if l.startswith("── stage")])
@@ -4362,6 +4372,56 @@ def run_groups(args):
         expectations.append(("red-proof: a red record without digests (an older gate) is skipped and named",
                              code == 0 and "red-proof" in checks_by_verdict(output)["skip"],
                              [l for l in output.splitlines() if "red-proof" in l]))
+    # WP-79 A3: the runner's own record of its suite runs, keyed by the tree and signed with its key.
+    with tmpdir() as root:
+        build_project(root, green=both_green, ledger=both_green)
+        keyed = dict(os.environ, FACTORY_SUITES_KEY="fixture-key")
+        log = os.path.join(root, "build", "runner-calls.log")
+        calls = lambda: len(open(log, encoding="utf-8").read().splitlines()) if os.path.isfile(log) else 0
+        record = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "suites.tsv")
+
+        # `compile: true` and `architecture: true` are one invocation, so the second is read from the
+        # record inside one gate run; whether the *tests* ran fresh is what the test lines say.
+        fresh = lambda out: not any("recorded at" in l for l in out.splitlines() if "tests-green" in l)
+
+        def gate(*extra, env=None):
+            done = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "build", *extra],
+                                  cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+            return done.returncode, done.stdout + done.stderr
+        code, output = gate(env=keyed)
+        expectations.append(("suites record: a gate without --record-suites writes no record",
+                             code == 0 and not os.path.isfile(record) and calls() == 2, f"exit {code}; calls {calls()}"))
+        code, output = gate("--record-suites")
+        expectations.append(("suites record: --record-suites without the key records nothing and says so",
+                             code == 0 and not os.path.isfile(record) and "without FACTORY_SUITES_KEY" in output,
+                             f"exit {code}; {[l for l in output.splitlines() if 'suites' in l]}"))
+        code, output = gate("--record-suites", env=keyed)
+        first = calls()
+        expectations.append(("suites record: the runner's gate records its passing runs",
+                             code == 0 and os.path.isfile(record) and first == 6 and fresh(output),
+                             f"exit {code}; calls {first}; record {os.path.isfile(record)}"))
+        code, output = gate("--record-suites", env=keyed)
+        expectations.append(("suites record: a second runner gate on the same tree runs no suite and says where the verdict came from",
+                             code == 0 and calls() == first and output.count("recorded at") >= 2
+                             and "tests-green" in checks_by_verdict(output)["pass"],
+                             f"exit {code}; calls {calls()} (was {first}); {[l for l in output.splitlines() if 'recorded at' in l][:3]}"))
+        os.makedirs(os.path.join(root, "src", "main"), exist_ok=True)
+        with open(os.path.join(root, "src", "main", "Thing.java"), "w", encoding="utf-8") as handle:
+            handle.write("class Thing {}\n")
+        code, output = gate("--record-suites", env=keyed)
+        second = calls()
+        expectations.append(("suites record: a tree that differs by one file runs everything again",
+                             code == 0 and second == first + 2 and fresh(output),
+                             f"exit {code}; calls {second} (was {first})"))
+        rows = open(record, encoding="utf-8").read().splitlines() if os.path.isfile(record) else []
+        planted = [row.rsplit("\t", 1)[0] + "\t" + "0" * 64 for row in rows]
+        os.makedirs(os.path.dirname(record), exist_ok=True)
+        with open(record, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(planted) + "\n")
+        code, output = gate("--record-suites", env=keyed)
+        expectations.append(("suites record: a row without the runner's signature is not read",
+                             code == 0 and calls() == second + 2 and fresh(output),
+                             f"exit {code}; calls {calls()} (was {second})"))
     # A build stage that edited a test and put it back: the file changed within the window (back), the
     # hand-over does not list it, and it is the version the ledger holds — a restoration, not a change.
     with tmpdir() as root:

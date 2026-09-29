@@ -67,6 +67,10 @@ case "$(printf '%s' "$SHARED_BUILDER" | tr '[:upper:]' '[:lower:]')" in 0|off|no
 SHARED_VERIFIER="${FACTORY_SHARED_VERIFIER:-}"  # --shared-verifier: judge and document in one process (off by default)
 case "$(printf '%s' "$SHARED_VERIFIER" | tr '[:upper:]' '[:lower:]')" in 0|off|no|false) SHARED_VERIFIER="" ;; esac
 WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
+# The key the runner's own gate runs sign their suite record with (.verify/suites.tsv): a gate on an
+# unchanged tree reuses only rows this key confirms. Handed to the gate process alone, never exported —
+# a stage's gate run, inside the tool's process, has no key, so it writes nothing the runner reads.
+SUITES_KEY=$( (openssl rand -hex 16 2>/dev/null || od -An -N16 -tx1 /dev/urandom) | tr -d ' \n')
 
 # Inside an agent session the stages run in that session (`/factory-run`); a runner started from
 # there would start a tool process per stage on top of it. So `run` and `backlog` refuse to start a
@@ -1938,7 +1942,7 @@ gate() {                                    # gate <stage> <story>
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
   local report="$RUNS/$2/.gate-$1.txt" journal="$RUNS/$2/.verify"
   mkdir -p "$RUNS/$2" "$journal"
-  "$PY" "$GATE" --story "$2" --stage "$1" 2>&1 | tee "$report"
+  FACTORY_SUITES_KEY="$SUITES_KEY" "$PY" "$GATE" --story "$2" --stage "$1" --record-suites 2>&1 | tee "$report"
   local code=${PIPESTATUS[0]}
   # Every gate run is kept for the observer, with its verdict; only a *refusal* is kept where the
   # next stage reads it. A run that has to be reconstructed afterwards from what a stage claimed is
