@@ -217,7 +217,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.49.4"
+VERSION = "0.50.0"
 
 
 def read_front_matter(path):
@@ -2225,6 +2225,11 @@ def record_path(story_id, rid, story_path=None):
 STAGE_FILES = {"plan": "plan.md", "test": "tests.md", "build": "build.md", "tidy": "tidy.md",
                "judge": "judge.md", "document": "document.md"}
 
+#: One process may carry several stages and mark its window under one name: the shared builder (plan to
+#: tidy) and the shared verifier (judge, then document). The journal, the changed-files record and the
+#: usage are that window's; every stage still writes its own file.
+SHARED_WINDOWS = {"builder": ("plan", "test", "build", "tidy"), "verifier": ("judge", "document")}
+
 
 ANSWER_FIELDS = ("answer", "by", "at")
 
@@ -3239,7 +3244,8 @@ def last_ended(runs, story_id, names):
 
 def stage_open(runs, story_id, stage):
     """True while the journal's last mark for the stage is its start: the stage is running (plan to tidy
-    also while a shared builder, which marks itself `builder`, runs them)."""
+    also while a shared builder, which marks itself `builder`, runs them; judge and document also while a
+    shared verifier, `verifier`, runs them)."""
     journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
     if not os.path.isfile(journal):
         return False
@@ -3247,7 +3253,7 @@ def stage_open(runs, story_id, stage):
     for line in read_text(journal).splitlines():
         parts = line.split("\t")
         if len(parts) >= 3 and parts[1] in ("stage-start", "stage-end") and (
-                parts[2] == stage or parts[2] == "builder" and stage in ("plan", "test", "build", "tidy")):
+                parts[2] == stage or parts[2] in SHARED_WINDOWS and stage in SHARED_WINDOWS[parts[2]]):
             last = parts[1]
     return last == "stage-start"
 
@@ -3629,14 +3635,26 @@ class Result:
     def failed(self):
         return any(state == "fail" for state, _, _ in self.entries)
 
-    def report(self, story_id, stage, as_json):
+    def report(self, story_id, stage, as_json, brief=False):
         if MISSING_TOOLS and not any(check == "environment" for _s, check, _m in self.entries):
             tools = sorted({tool for tool, _c in MISSING_TOOLS})
             self.fail("environment", f"the shell running the gate found no {', '.join(f'`{t}`' for t in tools)} "
                                      f"(`{MISSING_TOOLS[0][1]}`) — the process that runs the gate lacks a tool on "
                                      f"its PATH. No stage can fix that: put it on the PATH, then run the story again")
-        for state, check, message in self.entries:
-            print(f"gate:{state} {check} — {message}")
+        if brief:
+            # A stage that runs its own gate reads the report into its context: what passed is one line
+            # there, what did not stays verbatim — the fail line is the stage's next instruction. The
+            # runner's own runs keep the long form, in the report it files for the observer.
+            passed = [check for state, check, _ in self.entries if state == "pass"]
+            if passed:
+                names = sorted(set(passed))
+                print(f"gate:pass {len(passed)} check(s) — {', '.join(names)}")
+            for state, check, message in self.entries:
+                if state != "pass":
+                    print(f"gate:{state} {check} — {message}")
+        else:
+            for state, check, message in self.entries:
+                print(f"gate:{state} {check} — {message}")
         skipped = [check for state, check, _ in self.entries if state == "skip"]
         if skipped:
             print(
@@ -3693,7 +3711,9 @@ def hand_over_to_cli(argv):
 
 
 def main(argv):
-    if any(token.split("=", 1)[0] in MOVED_TO_CLI for token in argv):
+    # `--brief` is the gate's own beside `--stage` (a stage's compact report); alone it is the status's, moved.
+    moved = MOVED_TO_CLI - ({"--brief"} if "--stage" in argv else set())
+    if any(token.split("=", 1)[0] in moved for token in argv):
         return hand_over_to_cli(argv)
     parser = argparse.ArgumentParser(add_help=True, description="story gate")
     parser.add_argument(
@@ -3728,6 +3748,9 @@ def main(argv):
     parser.add_argument("--profile", help=f"the stack profile (default: {PROFILE_FILE} at the project root)")
     parser.add_argument("--root", default=".", help="the project's root directory")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--brief", action="store_true",
+                        help="with --story --stage: the checks that passed as one line, the rest verbatim "
+                             "(for a stage that runs its own gate and reads the report)")
     args = parser.parse_args(argv)
 
     cwd = os.path.abspath(args.root)
@@ -3854,7 +3877,7 @@ def main(argv):
             check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:
         result.fail("gate", str(error))
-        return result.report(args.story, args.stage, args.json)
+        return result.report(args.story, args.stage, args.json, args.brief)
     if not result.failed and args.stage == "plan":
         if is_delivered(front):
             # Delivered is delivered: a plan gate run over a delivered story (a check, a re-verification)
@@ -3901,7 +3924,7 @@ def main(argv):
         stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         write_story_fields(story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built
         result.ok("delivered", f"{shown(story_path)} carries `delivered: {stamp}` — adopted")
-    return result.report(story_id, args.stage, args.json)
+    return result.report(story_id, args.stage, args.json, args.brief)
 
 
 if __name__ == "__main__":

@@ -629,9 +629,10 @@ def journal_usage(runs, story_id, resolve=True):
 
 
 def stage_rank(stage):
-    """Stage order for reports; the shared builder process (plan to tidy in one) sits before the judge."""
+    """Stage order for reports; the shared builder process (plan to tidy in one) sits before the judge, the
+    shared verifier (judge, then document) after it."""
     return STAGE_ORDER.index(stage) if stage in STAGE_ORDER else 3.5 if stage == "builder" \
-        else -1 if stage == "backlog" else 98 if stage == "decisions" else 99
+        else 4.5 if stage == "verifier" else -1 if stage == "backlog" else 98 if stage == "decisions" else 99
 
 
 def tokens_of(entry):
@@ -1885,8 +1886,8 @@ def story_model(cwd, epics, runs, story_id, live=False):
                 + (f" · {entry['runs']} sessions" if entry["runs"] > 1 else "")
             continue
         extra = entry["runs"] - sum(1 for p in facts["passes"] if stage in p["stages"])
-        # a shared builder's window carries plan to tidy: a question any of those stages asked is its
-        covered = ("plan", "test", "build", "tidy") if stage == "builder" else (stage,)
+        # a shared window carries several stages: a question any of those stages asked is its
+        covered = SHARED_WINDOWS.get(stage, (stage,))
         asked = [rid for name in covered for rid in questions.get(name, [])][:max(extra, 0)]
         repeats = max(extra, 0) - len(asked)
         why = [f"{len(asked)} question" + ("s" if len(asked) > 1 else "") + f" ({', '.join(asked)})"] if asked else []
@@ -2562,6 +2563,124 @@ def migrate_layout(cwd):
     return 0
 
 
+CONTRACT_HEAD = ("What the gate checks in this stage's file — the exact shape, from the gate's own code. A stage that "
+                 "wants certainty reads this, not the gate.")
+
+
+def contract_text(stage, runs):
+    """The shape the gate holds a stage's file to, in a page: the table columns, the selector form, the
+    path rule, the section names — taken from the constants the checks read, so the two cannot drift apart
+    without this text changing with them."""
+    folder = f"{runs}/<story>"
+    if stage == "plan":
+        return f"""{CONTRACT_HEAD}
+
+plan — {folder}/plan.md (gate before the stage: story, epic, context map, decisions, rounds; the test gate reads the plan)
+- `## Acceptance criteria`: one line per criterion, the story's key verbatim:
+  `- <key>: <criterion>  →  level: e2e | integration | browser-only (<why>)`
+  the test gate reads `level: browser-only` here (`levels`); a key is `[a-z0-9][a-z0-9-]*`
+- `## Changed tests` (only when the story contradicts an existing test): `| <path from the project root> | <backing line or decision id> |`
+- `## Files`: `- <path from the project root> — <changes|read>: <why>` (the path in backticks) — the next stages open these first
+- `## Glossary proposals`: `- <term>: <definition>` — the document gate checks each term landed in a glossary or is named open
+- `## needs-human` only to stop: `decision: <story>-<nn>`, with the record `<story>.decisions/<nn>.md` beside the story
+  (`id:`, `story:`, `stage: plan`, `asked:`; `## Question`, `## Options`, `## Recommendation`)
+- A citation is a path from the project root, `src/main/java/…/Thing.java:12`; a bare `Thing.java:12` resolves to nothing"""
+    if stage == "test":
+        return f"""{CONTRACT_HEAD}
+
+test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, compiles, tests-red, levels, test-titles, files-listed)
+- the table, right after the marker `<!-- gate:tests -->`, one row per criterion (a criterion may have several rows):
+  `| criterion | test |` then `| <key> | <selector> |`
+  row pattern: {MAPPING_ROW.pattern!r}
+- selector: `<fully.qualified.Class>#<method>` — pattern {SELECTOR.pattern!r}; the class resolves to a file named after it
+  (`WidgetTest.java`), or to a module path (`tests.test_widgets#test_shows` → `tests/test_widgets.py`)
+- levels: a test the profile's `e2eTest:` command runs belongs to the story's `(happy path)` scenario or to a key the
+  plan gave `level: browser-only`; every other scenario's test lives in a `test.<name>:` source set
+- titles: an end-user test's display name is the scenario's `Title:` line verbatim, else its key in words
+  (`shows-empty-state` → "Shows empty state"); never the key itself in a name, display name or comment
+- red: every selector in the table fails before any production code — the gate writes `{folder}/.tests-red`
+  (`<selector>\t<sha256 of the test file>`); the build gate refuses a test changed after it was seen red (`red-proof`)
+- `## Files`: every test file this stage wrote or changed, one per line, as a path from the project root —
+  `files-listed` compares the list with the pipeline's changed-files record
+- `## Notes`: `- unit tests: <Class>#<method> for invariant <rule>`; `- uncovered: <key> — <why>` only when unavoidable"""
+    if stage in ("build", "tidy"):
+        table, name = ("## Changed", "build") if stage == "build" else ("## Moves", "tidy")
+        return f"""{CONTRACT_HEAD}
+
+{name} — {folder}/{STAGE_FILES[stage]} (gate after the stage: tests-green, red-proof, files-listed, existing tests, architecture, format)
+- `{table}`: `| File | Why |` — the first cell is a path from the project root, in backticks or bare; the other cells
+  are prose. `files-listed` refuses a file the pipeline recorded as changed that no row names; a listed file that did
+  not change is a note. A stage that changed no file needs no such section (tidy) — say so and why
+- a test file put back to the version the test stage saw red is a restoration, not a change to list
+- tests: every selector of the `gate:tests` table green, and its file's digest as `.tests-red` holds it (`red-proof`)
+- {'`## Criteria`: `- <key>: met by <what the code now does>`; `## Deviations from the plan`; `## Checks`: `- <command>: <result>`' if stage == 'build' else '`## Left alone`: what you saw and did not change, and why; `## Checks`: `- <command>: <result>`'}
+- `## needs-human` only to stop, with `decision: <story>-<nn>` and the record beside the story (`stage: {name}`)
+- no criterion key in code, a comment or a test name; no `TODO` for the criterion delivered"""
+    if stage == "judge":
+        return f"""{CONTRACT_HEAD}
+
+judge — {folder}/judge.md (the runner reads the verdict; the document gate reads `story-pass`)
+- `## Verdict`: `verdict: pass | changes-requested | story-conflict` — one line, exactly one of the three
+  (pass: deliverable; changes-requested: back to build, one round; story-conflict: a human, never build)
+- `## Perspectives covered`: `- <perspective>: <skill or agent that ran it, or "in-session"> | not covered — <why>`
+- `## Confirmed defects`: `| Perspective | File:line | Severity | Defect | Fix |` — file as a path from the project root
+  with its line; severity blocker | major | minor; only blocker and major prevent `pass`
+- `## Considered and dropped`, `## Criteria re-checked`: `- <key>: met | met only nominally — <what the test does not assert>`
+- `## Previous round` in a repeat round: every defect the previous verdict confirmed — fixed (file:line) | withdrawn (why) | still open
+- a `story-conflict` names a decision record: `## needs-human` with `decision: <story>-<nn>`, the record's `stage:` is the one
+  that applies the answer (plan or test)"""
+    if stage == "document":
+        return f"""{CONTRACT_HEAD}
+
+document — {folder}/document.md (gate after the stage: story-pass, documented, glossary, architecture)
+- `## Glossary`: `| Term | Context | Added or changed | Definition source |` — the last cell names where the definition
+  came from; a row without it is an unsourced claim
+- `## Documents updated`: `| File | What changed | Verified by |` — the first cell is a path from the project root that
+  exists; `Verified by` names the file read or the command run. Nothing updated: one row `| — | none | <what you read> |`
+  (`{'`, `'.join(sorted(n for n in NOTHING if n))}` read as no file). `document.md` itself is never listed
+- `## Not documented`: `- <thing>: <why, and what it waits for>` — one line each
+- every backticked path anywhere in the file resolves from the project root: `src/main/java/com/example/Thing.java:12`,
+  `{folder}/build.md:20`; a bare `Thing.java:12` or a package-relative `example/Thing.java` is refused (`documented`)
+- `## Paths`, when the pipeline wrote the file's skeleton (`factory-cli.py --document-skeleton <story>`): the story's
+  changed files and the run's files in exactly that form — cite from there, do not retype
+- every term the plan proposed under `## Glossary proposals` is in a glossary now, or named here as still open (`glossary`)
+- `## needs-human` only to stop (`decision: <story>-<nn>`, record `stage: document`)"""
+    return None
+
+
+def document_skeleton(runs, story_id, cwd="."):
+    """`document.md` before the document stage runs: the file's headings, and under `## Paths` every file the
+    story changed and every run file, as they resolve from the project root. A path the model never types
+    cannot be package-relative — the one refusal that cost the document stage its rounds. Idempotent: an
+    existing file (a refused round's, a stage's own) is left as it is."""
+    folder = os.path.join(runs, story_id)
+    target = os.path.join(folder, "document.md")
+    if os.path.isfile(target):
+        return 0
+    paths = []
+    record = os.path.join(folder, ".verify", "changed.txt")
+    if os.path.isfile(record):
+        for line in read_text(record).splitlines():
+            parts = line.split("\t", 1)
+            if len(parts) == 2 and parts[0] in ("added", "modified") and os.path.isfile(os.path.join(cwd, parts[1])):
+                paths.append(parts[1])
+    for name in STAGE_ORDER:
+        run_file = os.path.join(folder, STAGE_FILES[name])
+        if os.path.isfile(run_file):
+            paths.append(f"{runs}/{story_id}/{STAGE_FILES[name]}")
+    os.makedirs(folder, exist_ok=True)
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write(f"# Document — {story_id}\n\n## Glossary\n| Term | Context | Added or changed | Definition source |\n"
+                     "|---|---|---|---|\n\n## Documents updated\n| File | What changed | Verified by |\n|---|---|---|\n\n"
+                     "## Not documented\n\n## Paths\n"
+                     "The files this story changed and the run's files, as they resolve from the project root — cite them in "
+                     "exactly this form (with `:<line>` where a line matters); the pipeline wrote this list, leave it in place.\n")
+        for path in paths:
+            handle.write(f"- `{path}`\n")
+    print(f"factory: {runs}/{story_id}/document.md — the skeleton with {len(paths)} path(s) under `## Paths`")
+    return 0
+
+
 def main(argv):
     parser = argparse.ArgumentParser(add_help=True, description="factory cli")
     parser.add_argument("--version", action="version", version=f"factory-cli {VERSION} (file contract {CONTRACT})")
@@ -2634,6 +2753,12 @@ def main(argv):
                         help="where the factory reads KEY (product, tech, domain, epics, runs), from the profile or its default")
     parser.add_argument("--delivered", metavar="STORY",
                         help="exit 0 when the story carries the gate's delivered mark, 1 when it does not")
+    parser.add_argument("--contract", metavar="STAGE",
+                        help="the exact shape the gate holds that stage's file to (plan, test, build, tidy, judge, "
+                             "document), from the gate's own constants, and exit")
+    parser.add_argument("--document-skeleton", metavar="STORY",
+                        help="write the document stage's file skeleton with every changed path and run file under "
+                             "`## Paths`, as they resolve from the project root; an existing file is kept; and exit")
     parser.add_argument("--migrate-layout", action="store_true",
                         help="move an older layout to one owner per place — what `factory.sh update` runs once — and exit")
     parser.add_argument("--epics", help="where the epics and stories are (default: the profile's `epics:`, else project/epics)")
@@ -2649,6 +2774,15 @@ def main(argv):
     set_places(read_profile(profile_path), epics=args.epics, runs=args.runs)
     args.epics, args.runs = place("epics"), place("runs")
     # the runner's questions first: they read one file and print one answer
+    if args.contract:
+        text = contract_text(args.contract, args.runs)
+        if text is None:
+            print(f"factory-cli: --contract takes one of {', '.join(STAGE_ORDER)}, not {args.contract!r}", file=sys.stderr)
+            return 2
+        print(text)
+        return 0
+    if args.document_skeleton:
+        return document_skeleton(args.runs, args.document_skeleton, cwd)
     if args.migrate_layout:
         return migrate_layout(cwd)
     if args.drift:

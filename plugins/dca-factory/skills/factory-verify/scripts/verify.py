@@ -837,6 +837,15 @@ def verify_runner(runner, verbose=False):
         check("runner: the plan gate runs before its stage, every other gate after it",
               order == expected, f"got {order}")
         check("runner: a dry run changes nothing", code == 0 and not os.path.isdir(os.path.join(root, ".dca-factory", "runs", "STORY-1", "plan.md")))
+        check("runner: every stage prompt says where things are — the profile, the run folder, the gate's contract "
+              "through the cli, never the gate's source",
+              output.count("the stack profile is dca-factory.profile.yaml") == 6
+              and output.count("factory-cli.py --contract <stage>") == 6
+              and "never the gate's source" in output,
+              [l[:160] for l in output.splitlines() if "would run" in l][:2])
+        check("runner: the document stage's prompt names the skeleton the pipeline wrote",
+              "document.md as a skeleton" in output and "`## Paths` section" in output,
+              [l[:200] for l in output.splitlines() if "skeleton" in l])
 
     # 1c. an adoption builds nothing: plan, test, judge, then the adopt gate
     with tmpdir() as root:
@@ -1075,6 +1084,76 @@ def verify_runner(runner, verbose=False):
     code, output, starts, delivered = shared_run(dry=True)
     check("shared builder: the dry run shows the one shared invocation and starts nothing",
           "stage plan+test+build+tidy  (tool: stand-in, one shared context)" in output and starts == [],
+          [l for l in output.splitlines() if l.startswith("── stage")])
+
+    # 1b''. --shared-verifier: judge and document in one process, the document gate re-checked by the runner
+    verifier_cmd = ('if [ "$FACTORY_STAGE" = verifier ]; then '
+                    'if [ -n "${FIXTURE_VERDICT:-}" ]; then mkdir -p .dca-factory/runs/STORY-1; '
+                    'printf "## Verdict\\nverdict: %s\\n" "$FIXTURE_VERDICT" > .dca-factory/runs/STORY-1/judge.md; '
+                    'else FACTORY_STAGE=judge sh -c "$FIXTURE_STAND_IN"; fi; '
+                    'if grep -q "verdict: pass" .dca-factory/runs/STORY-1/judge.md; then '
+                    '"$FIXTURE_PY" .agents/factory/factory-cli.py --document-skeleton STORY-1 >/dev/null; '
+                    'FACTORY_STAGE=document sh -c "$FIXTURE_STAND_IN"; fi; '
+                    'elif [ "$FACTORY_STAGE" = builder ]; then for s in plan test build tidy; do '
+                    'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
+                    'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; done; '
+                    'else sh -c "$FIXTURE_STAND_IN"; fi')
+    def verifier_run(verdict="", dry=False, builder=False, **project):
+        with tmpdir() as root:
+            build_project(root, **project)
+            copy_scripts(runner, root)
+            tests_path = os.path.join(root, "fixture-tests.md")
+            with open(tests_path, "w", encoding="utf-8") as handle:
+                handle.write(TESTS)
+            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+            env = {"FACTORY_TOOL_CMD": verifier_cmd, "FIXTURE_STAND_IN": stand_in,
+                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_PY": shell_path(sys.executable),
+                   "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+            if verdict:
+                env["FIXTURE_VERDICT"] = verdict
+            args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in", "--shared-verifier"] \
+                + (["--shared-builder"] if builder else []) + (["--dry-run"] if dry else [])
+            code, output = run_runner(runner, root, *args, env=env)
+            journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+            starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                      if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+            document = os.path.join(root, ".dca-factory", "runs", "STORY-1", "document.md")
+            paths = ""
+            if os.path.isfile(document):
+                paths = open(document, encoding="utf-8").read()
+            return code, output, starts, story_delivered(root), paths
+    code, output, starts, delivered, paths = verifier_run()
+    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
+    check("shared verifier: plan to tidy each in their own process, then judge and document as one",
+          code == 0 and starts == ["plan", "test", "build", "tidy", "verifier"] and delivered
+          and stage_lines == ["stage plan", "stage test", "stage build", "stage tidy", "stage judge+document"]
+          and "ran through plan,test,build,tidy,judge,document." in output,
+          f"exit {code}; starts {starts}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+    check("shared verifier: the runner re-checks the document gate itself",
+          "── gate document  (re-checked by the runner)" in output, [l for l in output.splitlines() if l.startswith("── gate")])
+    code, output, starts, delivered, paths = verifier_run(verdict="changes-requested")
+    check("shared verifier: a judge that asks for changes goes back to the build stage, and no document is written",
+          code == 1 and not delivered and starts.count("verifier") == 3 and starts.count("build") == 3
+          and "three rounds did not converge" in output and not paths,
+          f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
+    code, output, starts, delivered, paths = verifier_run(builder=True)
+    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
+    check("shared verifier: with the shared builder a story runs in two processes — one builds, one checks — never one",
+          code == 0 and starts == ["builder", "verifier"] and delivered
+          and stage_lines == ["stage plan+test+build+tidy", "stage judge+document"],
+          f"exit {code}; starts {starts}; {stage_lines}")
+    code, output, starts, delivered, paths = verifier_run(story=ADOPTED, green=both_green)
+    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
+                   if l.startswith("── stage ") and "(skipped" not in l]
+    check("shared verifier: an adopted story's verifier is the judge alone, then the adopt gate delivers it",
+          code == 0 and stage_lines == ["stage plan", "stage test", "stage judge"] and delivered,
+          f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+    code, output, starts, delivered, paths = verifier_run(dry=True)
+    check("shared verifier: the dry run shows the one shared invocation and starts nothing",
+          "stage judge+document  (tool: stand-in, one shared context)" in output and starts == []
+          and "--document-skeleton STORY-1" in output,
           [l for l in output.splitlines() if l.startswith("── stage")])
 
     # 1c. a stage that writes no file stops the run, and says which file was missing
@@ -2464,7 +2543,7 @@ def verify_setup(runner, verbose=False):
         fixture(root, governed)
         run_setup(runner, root, "--tool", "claude", "--from", source)
         lines = active_lines(profile_of(root)) or []
-        wanted = [f"{key}: {skill}" for key, skill in (("carrier.guard", "dca-discipline"), ("review.dca", "dca-review"),
+        wanted = [f"{key}: {skill}" for key, skill in (("carrier.guard", "dca-discipline"),
                                                          ("knowledge", "dca-knowledge"), ("carrier.plan", "dca-modelling"),
                                                          ("carrier.build", "dca-modelling"),
                                                          ("carrier.glossary", "ubiquitous-language"),
@@ -2477,6 +2556,10 @@ def verify_setup(runner, verbose=False):
         check("carriers: with the method plugins beside it, a line for every installed carrier, and the first run "
               "passes the carrier check", wanted and all(w in lines for w in wanted) and code == 0,
               f"want {wanted}; got {[l for l in lines if 'carrier' in l or 'review' in l]}; exit {code}")
+        check("carriers: the method's audit skill is not written as a judge perspective — no `review.dca:`, no `reviews:` "
+              "from the setup; an adoption opts in by hand",
+              not any(l.startswith(("review.dca", "reviews:")) for l in lines),
+              [l for l in lines if l.startswith(("review", "reviews"))])
         check("carriers: the built-in perspectives get their reviewer and a link, and stay out of `reviews:` — "
               "every judge runs the same one",
               "review-ddd" not in installed or (
@@ -4092,6 +4175,89 @@ def run_groups(args):
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: each story shows the stage invocations its journal recorded",
                              "2 stage invocation(s)" in output, [l for l in output.splitlines() if "STORY-1" in l]))
+    # The gate's brief report: what passed is one line, what did not stays verbatim — for a stage that runs its
+    # own gate and reads the report into its context.
+    with tmpdir() as root:
+        build_project(root, green=both_green, ledger=both_green)
+        done = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "build", "--brief"],
+                              cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        lines = (done.stdout + done.stderr).splitlines()
+        passes = [l for l in lines if l.startswith("gate:pass ") and not l.startswith("gate:pass story ")]
+        expectations.append(("brief: the checks that passed are one line, and the verdict line stays",
+                             done.returncode == 0 and len(passes) == 1 and re.match(r"gate:pass \d+ check\(s\) — ", passes[0])
+                             and "tests-green" in passes[0] and "gate:pass story STORY-1 stage build" in lines,
+                             lines[:6]))
+        write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Criteria\n")
+        write_file(root, ".dca-factory/runs/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\n")
+        done = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "build", "--brief"],
+                              cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        lines = (done.stdout + done.stderr).splitlines()
+        expectations.append(("brief: a refusal stays verbatim beside the one line of passes",
+                             done.returncode == 1 and any(l.startswith("gate:fail files-listed — ") and "has no `## Files` section" in l
+                                                          for l in lines)
+                             and sum(1 for l in lines if re.match(r"gate:pass \d+ check\(s\) — ", l)) == 1,
+                             lines[:8]))
+    # The contract the cli prints is the gate's own: the selector pattern and the table marker are the constants
+    # the checks read, so the text cannot say one thing while the gate checks another.
+    with tmpdir() as root:
+        build_project(root)
+        gate_names = gate_module(args.gate)
+        def contract(stage):
+            done = subprocess.run([sys.executable, cli_of(args.gate), "--contract", stage], cwd=root, capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace")
+            return done.returncode, done.stdout + done.stderr
+        code_t, text_t = contract("test")
+        code_p, text_p = contract("plan")
+        code_j, text_j = contract("judge")
+        code_d, text_d = contract("document")
+        code_x, text_x = contract("verify")
+        expectations.append(("contract: --contract test prints the table marker, the selector pattern the gate matches and the "
+                             "Files section", code_t == 0 and "<!-- gate:tests -->" in text_t
+                             and repr(gate_names.SELECTOR.pattern) in text_t and repr(gate_names.MAPPING_ROW.pattern) in text_t
+                             and "## Files" in text_t and ".tests-red" in text_t and len(text_t) < 3000,
+                             text_t[:300]))
+        expectations.append(("contract: plan, judge and document print their shapes; an unknown stage is refused",
+                             code_p == 0 and "level: e2e | integration | browser-only" in text_p
+                             and code_j == 0 and "verdict: pass | changes-requested | story-conflict" in text_j
+                             and code_d == 0 and "## Paths" in text_d and "Verified by" in text_d
+                             and code_x == 2 and "--contract takes one of" in text_x,
+                             (text_p[:120], text_j[:120], text_d[:120], text_x[:120])))
+    # The document skeleton: every changed path and run file under `## Paths`, root-relative; a skeleton the stage
+    # fills passes the document gate; a bare name typed beside it is still refused.
+    with tmpdir() as root:
+        build_project(root, green=both_green, ledger=both_green, document=DOCUMENT)
+        run_folder = os.path.join(root, ".dca-factory", "runs", "STORY-1")
+        os.remove(os.path.join(run_folder, "document.md"))
+        write_file(root, "src/main/Thing.java", "class Thing {}\n")
+        write_file(root, ".dca-factory/runs/STORY-1/.verify/changed.txt",
+                   "added\tsrc/main/Thing.java\nremoved\tsrc/main/Gone.java\n")
+        def skeleton():
+            done = subprocess.run([sys.executable, cli_of(args.gate), "--document-skeleton", "STORY-1"], cwd=root,
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
+            target = os.path.join(run_folder, "document.md")
+            text = open(target, encoding="utf-8").read() if os.path.isfile(target) else ""
+            return done.returncode, done.stdout + done.stderr, text
+        code_s, out_s, text_s = skeleton()
+        code_2, out_2, text_2 = skeleton()
+        expectations.append(("document-skeleton: the file names every changed path and run file under `## Paths`, from the "
+                             "project root, and a second call keeps the file",
+                             code_s == 0 and "## Paths" in text_s and "- `src/main/Thing.java`" in text_s
+                             and "- `.dca-factory/runs/STORY-1/plan.md`" in text_s and "- `.dca-factory/runs/STORY-1/judge.md`" in text_s
+                             and "Gone.java" not in text_s and "## Documents updated" in text_s
+                             and text_2 == text_s and "2 path(s)" not in out_s and "skeleton with" in out_s,
+                             (out_s.strip(), text_s[-300:])))
+        paths_section = text_s[text_s.index("## Paths"):] if "## Paths" in text_s else "## Paths\n"
+        write_file(root, ".dca-factory/runs/STORY-1/document.md", DOCUMENT + "\n" + paths_section)
+        code, output = run_gate(args.gate, root, "document")
+        expectations.append(("document-skeleton: a skeleton the stage filled, its `## Paths` left in place, passes the document gate",
+                             code == 0 and "documented" in checks_by_verdict(output)["pass"],
+                             [l for l in output.splitlines() if "documented" in l]))
+        write_file(root, ".dca-factory/runs/STORY-1/document.md",
+                   DOCUMENT.replace("read `README.md:1`", "read `WidgetUnitTest.java:1`") + "\n" + paths_section)
+        code, output = run_gate(args.gate, root, "document")
+        expectations.append(("document-skeleton: a bare name typed beside the skeleton's paths is still refused",
+                             code == 1 and "documented" in checks_by_verdict(output)["fail"] and "WidgetUnitTest.java:1" in output,
+                             [l for l in output.splitlines() if "documented" in l]))
     expectations += verify_places(args)
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")

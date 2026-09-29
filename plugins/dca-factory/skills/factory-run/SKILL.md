@@ -193,10 +193,30 @@ stage and stopping on a refusal it cannot fix in three attempts; its window is m
 reads that window as plan to tidy. After the end mark do what the runner does: check that
 `.dca-factory/runs/<story>/.tests-red` exists (a builder that never ran its test gate left no red proof; a
 journey's or an adoption's test gate runs again instead), then run the build and tidy gates yourself —
-they now check the hand-overs against `changed-builder.txt`. In both, the judge and the document
-stage keep a fresh context of their own, and every stage still writes its own file, so the story can
-be resumed stage by stage. It costs less — the stages build on what the one before read — and it gives
-up one thing: build knows how the tests were written. Say in the report which variant ran.
+they now check the hand-overs against `changed-builder.txt`. In both, the judge keeps a fresh context
+of its own, and every stage still writes its own file, so the story can be resumed stage by stage. It
+costs less — the stages build on what the one before read — and it gives up one thing: build knows how
+the tests were written. Say in the report which variant ran.
+
+**Judge and document in one context — only when asked.** The twin of the shared builder: "shared
+verifier", `factory.sh run --shared-verifier`, `FACTORY_SHARED_VERIFIER=1`; off otherwise. One process
+then carries the judge and, only on `verdict: pass`, the document stage, which starts on what the judge
+has just read instead of reading it again; the process runs the document gate itself and the runner
+runs it again. The builder and the verifier are never one process — the judge's independence from the
+builder is the point of the split; the verifier shares a context only with the stage after the verdict,
+which writes no code. With both flags a story runs in two contexts: one that builds, one that checks.
+In a session the same variant is one subagent for judge and document, its window marked `verifier`
+(`--stage-start verifier` … `--stage-end verifier`); after the end mark read the verdict as the runner
+does and run the document gate yourself. An adoption's verifier is the judge alone.
+
+**What a stage is told, so it searches for nothing.** Every stage prompt names where things are: the
+stack profile, the story's run folder, the knowledge skill's catalog where the profile names one, and
+`factory-cli.py --contract <stage>` — the exact shape the gate holds that stage's file to, in a page,
+from the gate's own constants. A stage reads that, never the gate's source. A stage that runs its own
+gate runs it with `--brief`: what passed is one line, what did not stays verbatim. Before the document
+stage the runner writes the stage's file as a skeleton (`factory-cli.py --document-skeleton <story>`) with
+every changed path and run file root-relative under `## Paths`; in a session run it yourself before the
+stage, and cite from it.
 
 **A model per stage.** The profile may name one: `model.<tool>.<stage>`, or `model.<tool>` for
 every stage. The runner passes it as the tool's model flag. In the subagent tier, start the stage's

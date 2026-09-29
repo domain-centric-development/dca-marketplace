@@ -56,13 +56,18 @@ files written. You write **no** production behaviour.
    name the test alike; the test gate refuses an end-user test without it.
 3. Add unit tests for the invariants the plan names: the rules an aggregate or value object must
    never break. These belong to the domain's own vocabulary and are the part of the suite that
-   survives a rewrite of the adapters.
+   survives a rewrite of the adapters. A use case gets no unit test of its own from this stage: the
+   integration test runs it through the wired application, which is what the story observes, and a
+   second test of the same path with doubles proves the doubles.
 4. Place tests where this project places tests. Look at the existing layout and follow it —
    source set, folder, naming, base classes, test data builders. Do not introduce a second
    convention next to the project's own.
 5. Name the test after the behaviour: `showsEmptyStateWhenNothingIsRecorded`. **Never** write a
    criterion key or number into a test name, display name, comment or documentation. The link
-   between criterion and test lives in the table below and nowhere else.
+   between criterion and test lives in the table below and nowhere else — one place the gate reads,
+   one place two implementations of the same story share; a key in a name is a second link that
+   drifts when the story is renumbered, and the display name is the scenario's title (step 2), which
+   already says which scenario a report is about.
 6. Add only the minimum stubs the test sources need to compile — a class, an empty method, a
    port interface. A stub **refuses to answer**: it throws (`UnsupportedOperationException`,
    `NotImplementedException`, whatever the language calls it). It never returns a value, not even

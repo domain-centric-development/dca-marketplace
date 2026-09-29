@@ -99,8 +99,13 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    gate lets the later stages change only what is listed and backed.
 10. Name business terms in the criteria that are not in the glossary yet, as proposals with a
    one-line definition. Do not silently invent domain language.
-11. Back every statement about the code with evidence: the file, and the line or symbol you read
-   it from. A statement without evidence is a guess and is marked as one.
+11. Back every **decision** with evidence — a level chosen, a pattern picked, an element placed, a test
+   named as contradicted: the file, and the line or symbol you read it from, in the same row or line.
+   A row that names the file it changes is its own evidence; do not restate what the file says. A
+   statement without evidence is a guess and is marked as one.
+12. **Keep the plan a page.** Tables and one-line items, no paragraphs: the plan is read by every later
+   stage and by the judge, so every sentence here is read four times. What the story already says is
+   not repeated; what a later stage can read in the code is pointed at, not copied.
 
 ## Adopt mode
 
@@ -143,10 +148,11 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 # Plan — <story id>: <title>
 
 ## Context
-<bounded context, and why this story belongs to it>
+<bounded context, and why this story belongs to it — two lines>
 
 ## Changes
-| Element | Kind | Location | New or changed |
+| Element | Kind | Location | New or changed | Evidence |
+(one row per element; Evidence is the file:line or the catalog node the placement rests on)
 
 ## Acceptance criteria
 - <key>: <criterion>  →  level: e2e | integration | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
@@ -157,9 +163,9 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 | <path from the project root> | <the story's changed-expectation line, or the decision id> |
 
 ## Files
-- `<path>` — changes: <what>          (every file the plan expects to change)
+- `<path>` — changes: <what>          (every file the plan expects to change, from the project root)
 - `<path>` — read: <why>              (the pattern to mirror, the fixture to reuse — what a later
-                                       stage must read to understand the change)
+                                       stage must read to understand the change; one line each)
 
 ## Glossary proposals
 - <term>: <definition>            (omit the section when there are none)

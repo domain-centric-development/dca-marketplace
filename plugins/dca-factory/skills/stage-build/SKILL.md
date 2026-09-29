@@ -84,7 +84,8 @@ recorded as changed, and the next stages read these files first)
 - <criterion key>: met by <what the code now does>
 
 ## Deviations from the plan
-- <element>: <what differed and why>        (omit when there were none)
+- <element>: <what differed and why>        (omit when there were none — "the plan held" is one word,
+                                             not a restatement of its design notes)
 
 ## Checks
 - <command>: <result>

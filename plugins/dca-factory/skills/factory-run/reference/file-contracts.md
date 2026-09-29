@@ -14,10 +14,18 @@ stories are under `project/epics/` unless `epics:` does.
 | `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `.dca-factory/runs/<story>/build.md` |
 | `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `.dca-factory/runs/<story>/tidy.md` |
 | `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `.dca-factory/runs/<story>/judge.md` |
-| `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries | `.dca-factory/runs/<story>/document.md` |
+| `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries, and its own file as the pipeline's skeleton | `.dca-factory/runs/<story>/document.md` — started by `factory-cli.py --document-skeleton <story>`: the headings, and under `## Paths` every changed path and run file as it resolves from the project root; the stage fills the tables and cites from that section |
 
 The tidy stage's moves reach the judge and the document stage through the story diff, not through
 `tidy.md`: what a stage reads is what it needs, not everything that exists.
+
+What the gate holds each file to is printed, in a page, by `factory-cli.py --contract <stage>` — from the
+gate's own constants (the table pattern, the selector pattern, the section names), so the text and the
+check cannot drift apart. A stage reads that, never the gate's source.
+
+Two processes may carry several stages under one window name in the journal and the changed-files
+record: the shared builder (`builder`: plan, test, build, tidy) and the shared verifier (`verifier`: judge,
+document). Every stage still writes its own file; the gate reads a window as the stages it carries.
 
 ## What changed — `.dca-factory/runs/<story>/.verify/changed-<stage>.txt`, `changed.txt`, `story.diff`
 

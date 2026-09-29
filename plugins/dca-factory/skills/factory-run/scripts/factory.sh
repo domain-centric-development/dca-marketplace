@@ -10,7 +10,7 @@
 #   factory.sh setup --write [--replace <key>]   adds the detected keys the profile lacks
 #   factory.sh backlog [--check]             every story's state and the next one; --check the backlog
 #   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch] [--interval <s>]
-#                  [--max-stages <n>] [--story-budget <tokens>] [--shared-builder] [--dry-run]
+#                  [--max-stages <n>] [--story-budget <tokens>] [--shared-builder] [--shared-verifier] [--dry-run]
 #                    one story from where its files say (--from names the stage and starts a new
 #                    count of rounds), or without --story the whole backlog in the schedule's order
 #   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
@@ -57,11 +57,14 @@ cli() { "$PY" "$CLI" "$@"; }
 RUNS=""                                      # the run folder — resolved below through the cli, from the profile
 STOP_FILE=""                                 # <run folder's parent>/stop: exists → a backlog run stops before its next story
 INVOCATIONS=0                                # agent invocations in this process
+TOOL_IN_FLIGHT=""                            # the tool a stage prompt is built for (the catalog path depends on it)
 GATE_FIRST=""                                # set for the first stage of an explicit story run: its gate decides first
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
 SHARED_BUILDER="${FACTORY_SHARED_BUILDER:-}"  # --shared-builder: plan to tidy in one process (off by default)
 case "$(printf '%s' "$SHARED_BUILDER" | tr '[:upper:]' '[:lower:]')" in 0|off|no|false) SHARED_BUILDER="" ;; esac
+SHARED_VERIFIER="${FACTORY_SHARED_VERIFIER:-}"  # --shared-verifier: judge and document in one process (off by default)
+case "$(printf '%s' "$SHARED_VERIFIER" | tr '[:upper:]' '[:lower:]')" in 0|off|no|false) SHARED_VERIFIER="" ;; esac
 WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
 
 # Inside an agent session the stages run in that session (`/factory-run`); a runner started from
@@ -1127,7 +1130,6 @@ carrier.guard dca-discipline governance
 review.ddd review-ddd -
 review.hexagonal review-hexagonal -
 review.clean-code review-clean-code -
-review.dca dca-review governance
 carrier.glossary ubiquitous-language -
 carrier.domain context-map -
 carrier.test e2e-testing -"
@@ -1639,10 +1641,10 @@ run_shared_builder() {                      # run_shared_builder <story> <tool> 
 in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//') — apply each stage's skill in turn, \
 reading only the story and the files that stage's skill names as its input, and writing its output file under \
 $RUNS/$story/. After the test, build and tidy stages run that stage's gate, \
-\`$PY $GATE --story $story --stage <stage>\`, and fix exactly what it names before the next stage, at most \
+\`$PY $GATE --story $story --stage <stage> --brief\`, and fix exactly what it names before the next stage, at most \
 three attempts per stage. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
 document stage. This session was started by the pipeline's runner, which holds the checkout for it: the worker \
-named at session start is the one that started you, not a second writer."
+named at session start is the one that started you, not a second writer. $(where_things_are "$tool" builder "$story")"
   local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
   [ -n "$guard" ] && prompt="$prompt In the build and tidy stages apply the $guard skill (the profile's carrier.guard) to every file you write."
   echo "── stage $list  (tool: $tool, one shared context)"
@@ -1697,6 +1699,105 @@ named at session start is the one that started you, not a second writer."
   return 0
 }
 
+# --shared-verifier: judge and document in ONE tool process — the document stage starts on what the judge
+# has just read (the story, the diff, the plan, the glossary) instead of reading it again. The twin of
+# --shared-builder, and never one process with it: the judge's independence from the builder is the point
+# of the split; the verifier shares a context only with the stage after the verdict, which writes no code.
+# The process runs the document gate itself; the runner reads the verdict, re-checks the document gate,
+# and takes a `changes-requested` back to the build stage as it always does.
+VERIFIER_STAGES=(judge document)
+run_shared_verifier() {                     # run_shared_verifier <story> <tool> <dry> [<kind>]
+  local story=$1 tool=$2 dry=$3 kind=${4:-story} range=(judge)
+  [ "$kind" = adopt ] || range+=(document)  # an adoption documents nothing: its verifier is the judge alone
+  local list; list=$(IFS=+; echo "${range[*]}")
+  local document=""
+  [ "$kind" != adopt ] && document=" Then — only when your judge file says \`verdict: pass\` — run \
+\`$PY ${CLI#"$PWD/"} --document-skeleton $story\` and apply the stage-document skill: fill the skeleton's tables, cite paths \
+from its \`## Paths\` section in exactly that form, run the document gate \`$PY $GATE --story $story --stage document --brief\` \
+and fix exactly what it names, at most three attempts. With any other verdict stop after judge.md; write no document.md."
+  local prompt="Carry out these stages of the delivery pipeline for backlog story $story, one after another, \
+in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//') — apply each stage's skill in turn, \
+reading only the story and the files that stage's skill names as its input, and writing its output file under \
+$RUNS/$story/. Apply the stage-judge skill first and write judge.md with its verdict.$document \
+Do not run the plan, test, build or tidy stage, and change no code. This session was started by the pipeline's \
+runner, which holds the checkout for it: the worker named at session start is the one that started you, not a \
+second writer. $(where_things_are "$tool" verifier "$story")"
+  echo "── stage $list  (tool: $tool, one shared context)"
+  if [ -n "$dry" ]; then
+    echo "   would run: $prompt"
+    echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
+    local dry_choice; dry_choice=$(model_choice "$tool" verifier)
+    echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
+    return 0
+  fi
+  if [ -f "$GATE" ] && ! cli --claim "$WORKER" >/dev/null; then
+    echo "factory: the checkout was taken over by another worker before the shared stages — stopping." >&2; return 5
+  fi
+  if [ -n "$STORY_BUDGET" ] && [ "$(cli --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
+    echo "factory: story $story has reached its --story-budget $STORY_BUDGET — the shared stages are not dispatched." >&2; return 4
+  fi
+  if [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
+    echo "factory: --max-stages $MAX_STAGES reached before the shared stages of $story." >&2; return 4
+  fi
+  local journal="$RUNS/$story/.verify/journal.tsv" began raw_out invoked=0
+  [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
+  [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
+  snapshot "$story" "before-verifier"
+  printf '%s\tstage-start\tverifier\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" >> "$journal"
+  raw_out="$RUNS/$story/.verify/verifier.$(date -u +%H%M%S).out"
+  began=$(date +%s)
+  invocation_raw="$raw_out" stage_in_flight=verifier story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
+  record_usage "$story" verifier "$tool" "$raw_out" "$(( $(date +%s) - began ))"
+  printf '%s\tstage-end\tverifier\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$invoked" = 0 ] && echo 0 || echo nonzero)" >> "$journal"
+  [ "$invoked" = 0 ] || { echo "factory: the tool exited non-zero during the shared stages." >&2; return 1; }
+  snapshot "$story" "after-verifier"
+  [ -f "$GATE" ] && "$PY" "$GATE" --record-changes verifier --story "$story" >/dev/null 2>&1
+  local artefact="$RUNS/$story/judge.md"
+  [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage 'judge' is not finished." >&2; return 1; }
+  if asks_human "$artefact"; then stopped_for_human "$artefact" judge "$story"; return $?; fi
+  local verdict rounds; verdict=$(verdict_of "$story")
+  case "$verdict" in
+    pass) echo "factory: judge verdict 'pass'." ;;
+    changes-requested)
+      rounds=$(bump_rounds "$story")
+      if [ "$rounds" -ge 3 ]; then
+        echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
+        return 1
+      fi
+      local back=build; { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
+      echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
+      run_story "$story" "$tool" "$back" "$dry"; return $? ;;
+    story-conflict)
+      echo "factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes back to the build stage. needs-human: read $RUNS/$story/judge.md." >&2
+      return 1 ;;
+    "") echo "factory: $RUNS/$story/judge.md carries no 'verdict:' line — the judge stage is not finished." >&2; return 1 ;;
+    *) echo "factory: judge verdict '$verdict' is not one of pass|changes-requested|story-conflict." >&2; return 1 ;;
+  esac
+  if [ "$kind" = adopt ]; then adopt_gate "$story" "$tool" "$dry"; return $?; fi
+  artefact="$RUNS/$story/document.md"
+  [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage 'document' is not finished." >&2; return 1; }
+  if asks_human "$artefact"; then stopped_for_human "$artefact" document "$story"; return $?; fi
+  # Checked, not believed: the process says it ran the document gate; the runner looks.
+  echo "── gate document  (re-checked by the runner)"
+  local gate_code=0; gate document "$story" || gate_code=$?
+  if [ "$gate_code" = 3 ]; then
+    echo "factory: story $story waits for a human's acceptance — answer it with /factory-decisions;" >&2
+    echo "factory:   the story holds the checkout until then." >&2
+    return 3
+  fi
+  if [ "$gate_code" != 0 ]; then
+    environment_refused document "$story" && return 1
+    local refused_rounds; refused_rounds=$(bump_rounds "$story")
+    if [ "$refused_rounds" -ge 3 ]; then
+      echo "factory: gate 'document' refused in round $refused_rounds — three rounds did not converge. needs-human." >&2
+      return 1
+    fi
+    echo "factory: gate 'document' refused — round $refused_rounds runs stage 'document' again with the gate's report." >&2
+    run_story "$story" "$tool" document "$dry"; return $?
+  fi
+  return 0
+}
+
 bump_rounds() {                             # bump_rounds <story> -> current count
   local file="$RUNS/$1/.rounds" count=0
   [ -f "$file" ] && count=$(tr -dc '0-9' < "$file")
@@ -1727,6 +1828,25 @@ reset_rounds() {                            # reset_rounds <story>
   echo "factory: --from $from starts a new count of rounds for $1 (the old one is under $RUNS/$1/.verify/)."
 }
 
+# What a stage otherwise searches for — the profile, the run folder, the gate's expectations, the catalog —
+# named in its prompt. Measured on a builder session: about twenty `find`/`ls` and four reads of the gate's
+# source, for facts the runner has in hand.
+where_things_are() {                        # where_things_are <tool> <stage|"the stage"> <story>
+  local tool=$1 stage=$2 story=$3 knowledge="" catalog="" dir
+  knowledge=$(cli --get knowledge 2>/dev/null | awk '{print $1}')
+  if [ -n "$knowledge" ]; then
+    dir=$(skill_dir_of "$tool")
+    for dir in "${dir:-.claude/skills}" .claude/skills .codex/skills .opencode/skills .agents/skills; do
+      [ -d "$dir/$knowledge/catalog" ] && { catalog="$dir/$knowledge/catalog/"; break; }
+    done
+    [ -n "$catalog" ] && catalog=" The $knowledge skill's catalog is at $catalog (its index.md first)."
+  fi
+  local cli_path=${CLI#"$PWD/"}             # the project's own copy, named as the gate is: relative to the root
+  printf '%s' "Where things are: the stack profile is $PROFILE; this story's run folder is $RUNS/$story/; \
+what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
+source; the building blocks' API is in the project's conventions file and the catalog, never in a jar.$catalog"
+}
+
 prompt_for() {                              # prompt_for <stage> <story>
   local stage=$1 story=$2 repeat=""
   # A repeat round that cannot see why the gate refused works blind, and every stage skill says to
@@ -1743,11 +1863,14 @@ the previous verdict is $RUNS/$story/.judge-previous.md. Account for each defect
     guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
     [ -n "$guard" ] && guard=" Apply the $guard skill (the profile's carrier.guard) to every file you write." ;;
   esac
+  local skeleton=""
+  [ "$stage" = document ] && skeleton=" The pipeline wrote $RUNS/$story/document.md as a skeleton: fill its tables and \
+cite paths from its \`## Paths\` section in exactly that form."
   printf '%s' "Apply the stage-$stage skill for backlog story $story. \
 Read only the story and the files the skill names as its input, and write its output file under \
 $RUNS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages. \
 This session was started by the pipeline's runner, which holds the checkout for it: the worker named at \
-session start is the one that started you, not a second writer.$guard$repeat"
+session start is the one that started you, not a second writer. $(where_things_are "$TOOL_IN_FLIGHT" "$stage" "$story")$skeleton$guard$repeat"
 }
 
 gate() {                                    # gate <stage> <story>
@@ -1900,6 +2023,13 @@ run_story() {
       ran="${ran:+$ran,}$stage"
       continue
     fi
+    # The verifier runs where the judge would: judge, then document in the same process. Resumed at the
+    # document stage alone (--from document, a refused document round), the stage runs in its own context.
+    if [ -n "$SHARED_VERIFIER" ] && [ "$stage" = judge ]; then
+      run_shared_verifier "$story" "$tool" "$dry" "$kind" || return $?
+      ran="${ran:+$ran,}judge"; [ "$kind" != adopt ] && ran="$ran,document"
+      break
+    fi
 
     # Resumed at a gated stage whose file exists: the gate decides first, on today's tree. A file that
     # holds costs no invocation, and a stage that does run reads a report of now, not of a round the
@@ -1930,6 +2060,7 @@ run_story() {
       fi
     fi
     echo "── stage $stage  (tool: $tool, fresh context)"
+    TOOL_IN_FLIGHT=$tool
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
       echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
@@ -1958,6 +2089,8 @@ run_story() {
       # confirmed may not vanish in the next round without a word.
       [ "$stage" = judge ] && [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
       [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
+      # The document stage's file starts as the pipeline's skeleton: every path it may cite, root-relative.
+      [ "$stage" = document ] && [ -f "$GATE" ] && cli --document-skeleton "$story" >/dev/null 2>&1
       snapshot "$story" "before-$stage"
       local choice requested note model_fields=""
       choice=$(model_choice "$tool" "$stage"); note=${choice#*|}; requested=$(model_key "$tool" "$stage")
@@ -2264,6 +2397,7 @@ while [ $# -gt 0 ]; do
     --max-stages) MAX_STAGES=$2; shift 2 ;;
     --story-budget) STORY_BUDGET=$2; shift 2 ;;
     --shared-builder) SHARED_BUILDER=1; shift ;;
+    --shared-verifier) SHARED_VERIFIER=1; shift ;;
     *) usage ;;
   esac
 done

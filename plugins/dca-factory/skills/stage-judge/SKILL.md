@@ -21,7 +21,10 @@ Output: `.dca-factory/runs/<story>/judge.md`. You change no code.
 
 Review the change from **ddd**, **hexagonal** and **clean-code**, one pass each, kept apart in the
 report. These three are part of the method, not project configuration: they always run and no
-profile switches them off.
+profile switches them off. There is no fourth built-in: the method's own audit skill, where a
+project has one, is an *added* perspective the profile names — worth it for an adoption, where the
+question is how the existing code stands against the method, and not for a story that the rule
+suite already holds to it.
 
 What the project configures is what it *adds* and *who runs it*:
 
@@ -54,7 +57,9 @@ silently stands in for it.
 2. **hexagonal** — do the dependencies point inward? The domain free of framework types; ports
    declared in the inner layers and implemented in adapters; no raw import across a bounded
    context; input ports carrying commands, queries and results rather than domain objects;
-   translation at the edge, not in the middle.
+   translation at the edge, not in the middle; an adapter that keeps what its port promises — an
+   order the schema secures (a sequence the database assigns, not a timestamp with a random
+   tie-break), a uniqueness the table holds and not only the code checks.
 3. **clean-code** — is it readable? Names that say what a thing is; functions on one level of
    abstraction; no duplication that carries a decision twice; no dead code, no leftover stub, no
    comment describing history instead of the present state.
@@ -67,7 +72,10 @@ and the project has the runner that would prove the behaviour.
 path nor `browser-only` with a reason in the plan; an adapter the plan changed that no integration test
 passes through; a port mocked where the plan changed its adapter — each is **major**: the first makes the
 suite slow and flaky where an integrated test would do, the other two leave the translation untested. A
-journey test that stops short of the epic's outcome event is **major** as well.
+journey test that stops short of the epic's outcome event is **major** as well. A test that rebuilds the
+application context per method where a data reset would do (`@DirtiesContext` on every test, a new host
+per fact) is **minor**: it makes the suite slow for nothing, and the project's own reset convention is
+the fix.
 
 Across the three, check the change against the story itself. A criterion written as a scenario is
 covered only when its test arranges the `Given`, performs the `When` and asserts every `Then` and

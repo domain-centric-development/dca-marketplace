@@ -8,7 +8,11 @@ description: Documentation stage of a factory run — brings the project's own d
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `build.md`, `judge.md`, and the diff —
 `.dca-factory/runs/<story>/.verify/story.diff`, which the pipeline writes (where it says there is no diff,
 `changed.txt` lists the files). Nothing else.
-Output: the updated documents, plus `.dca-factory/runs/<story>/document.md`.
+Output: the updated documents, plus `.dca-factory/runs/<story>/document.md` — which the pipeline starts for
+you: `factory-cli.py --document-skeleton <story>` (the runner runs it; in a session run it yourself before
+the stage) writes the file's headings and, under `## Paths`, every file the story changed and every run
+file **as it resolves from the project root**. Fill the tables; cite paths from that section in exactly
+that form; leave the section in place.
 
 A story is not delivered when its code is green and its documents describe the system as it was
 yesterday. This stage closes that gap — and it closes it with **checkable** statements only.
@@ -52,9 +56,10 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    is not a path: it reads like one, it cannot be opened, and it is indistinguishable from a typo.
    Add the line or the section separately (`file.md:149`, `Book.cs:28-31`) — the location is
    allowed and is not part of the file name.
-5. Record what you did *not* document and why: a decision that belongs in an architecture decision
-   record rather than a README, a term the domain contact has to define first, an open assumption
-   the story never resolved.
+5. Record what you did *not* document and why — one line each: a decision that belongs in an
+   architecture decision record rather than a README, a term the domain contact has to define first,
+   an open assumption the story never resolved. A document you read and left as it was is one line
+   (`project/domain.md` — unchanged, single context), not a paragraph on what you read to know it.
 
 ## Ask, do not recall — but only a source the project named
 
@@ -87,7 +92,10 @@ here fails for the absence of a knowledge skill.
 | File | What changed | Verified by |
 
 ## Not documented
-- <thing>: <why, and what it waits for>
+- <thing>: <why, and what it waits for>           (one line each)
+
+## Paths                           (written by the pipeline — the paths you may cite, in this form; keep it)
+- `<path from the project root>`
 
 ## needs-human                     (only when the run must stop — otherwise leave the heading out)
 ```

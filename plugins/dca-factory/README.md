@@ -70,7 +70,7 @@ or rule package it recognises — the files that give it away and the profile li
 leaves a command no preset detects *out* rather than writing a placeholder the gate would try to
 run. A new stack is one more preset file, no change to the script. It names a **carrier** — the skill a
 stage takes its craft from, `carrier.<stage>:` in the profile — only where that skill is installed beside
-the pipeline (`dca-modelling`, `dca-discipline`, `dca-review`
+the pipeline (`dca-modelling`, `dca-discipline`
 where the project has the DCA rule packages; `ubiquitous-language`, `context-map`, `e2e-testing`
 wherever they are installed) and installs it in the same run. The skills go into the tool's skill
 folder as **copies** when the source is a plugin cache (the marketplace install: a cache folder is
@@ -284,10 +284,34 @@ bash .agents/factory/factory.sh run --story STORY-3 --shared-builder     # or FA
 Off unless you ask for it, per run; leave the flag out (or set `FACTORY_SHARED_BUILDER=0`) and every
 stage has its own process again. With it, one process carries plan, test, build and tidy and runs each
 stage's gate itself; the runner then checks that the red proof exists and runs the build and tidy gates
-again, so a process that skipped a gate is stopped, not trusted. The judge and the document stage
-still run in processes of their own, so the review keeps its fresh look. Measured on one story: −31 %
-cost at the same verdict. In a second story, the shared process stopped with a question the separate
-run did not have. Per-stage model keys do not apply to the shared process; `model.<tool>` does.
+again, so a process that skipped a gate is stopped, not trusted. The judge still runs in a process of
+its own, so the review keeps its fresh look. Measured on one story: −31 % cost at the same verdict. In a
+second story, the shared process stopped with a question the separate run did not have. Per-stage model
+keys do not apply to the shared process; `model.<tool>` does.
+
+## Judge and document in one context
+
+```
+bash .agents/factory/factory.sh run --story STORY-3 --shared-verifier    # or FACTORY_SHARED_VERIFIER=1
+```
+
+The twin of the shared builder, off unless asked for: one process carries the judge and — only on
+`verdict: pass` — the document stage, which starts on what the judge has just read instead of reading it
+again; the process runs the document gate itself and the runner runs it again. The builder and the
+verifier are never one process: the judge's independence from the builder is the point of the split.
+With both flags a story runs in two contexts, one that builds and one that checks. An adoption's
+verifier is the judge alone.
+
+## What a stage is told
+
+Every stage prompt names where things are — the stack profile, the story's run folder, the knowledge
+skill's catalog — and `factory-cli.py --contract <stage>`: the exact shape the gate holds that stage's
+file to, in a page, from the gate's own constants, so a stage reads that and never the gate's source.
+A stage that runs its own gate runs it with `--brief` (what passed is one line, what did not stays
+verbatim). Before the document stage the runner writes the stage's file as a skeleton
+(`factory-cli.py --document-skeleton <story>`) with every changed path and run file root-relative under
+`## Paths`, so a cited path is copied, never retyped package-relative — the one refusal that cost the
+document stage its rounds on Sonnet.
 
 ## How to see what a story cost
 
@@ -379,7 +403,7 @@ what must be true before the next one starts.
 | `stage-test` | plan → tests plus `.dca-factory/runs/<story>/tests.md` with the criterion-to-test table |
 | `stage-build` | red tests → production code plus `.dca-factory/runs/<story>/build.md` |
 | `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `.dca-factory/runs/<story>/tidy.md`; changes no test and no behaviour |
-| `stage-judge` | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-review` in a DCA project) |
+| `stage-judge` | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-review` — the method's audit, worth it for adoption work; the setup does not write it) |
 | `stage-document` | the change → `.dca-factory/runs/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
 | `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
