@@ -1658,7 +1658,8 @@ $RUNS/$story/. After the test, build and tidy stages run that stage's gate, \
 \`$PY $GATE --story $story --stage <stage> --brief\`, and fix exactly what it names before the next stage, at most \
 three attempts per stage. Before you write tests.md, build.md or tidy.md, run \`$PY $CLI --files-skeleton $story <stage>\`: \
 it writes the file's list of changed files from the tree (or adds the missing ones to a file you wrote); fill in the rest, \
-never the list. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
+never the list. The gate is your test run: run single tests while you work, then the stage's gate — do not run the whole \
+suite yourself before it, the gate runs the same commands. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
 document stage. This session was started by the pipeline's runner, which holds the checkout for it: the worker \
 named at session start is the one that started you, not a second writer. $(where_things_are "$tool" builder "$story")"
   local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')

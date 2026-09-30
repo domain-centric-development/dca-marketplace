@@ -26,10 +26,12 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
 4. Use the project's own building blocks and conventions: its markers, its base types, its
    package layout, its error handling. Where the project ships an architecture rule suite, run it
    and take it as binding.
-5. Run what the stack profile declares — compile, unit tests, end-user tests, the architecture
-   suite, the formatter. Do not finish while one of them is red. The build gate runs the
-   architecture and format commands again afterwards, so a stage that skips them only delays its
-   own failure.
+5. The gate is your test run. Run the single test you are making green as often as you like; when
+   you believe the stage is done, run the build gate — it compiles, runs every mapped test and the
+   required suites once per command, the architecture suite and the formatter, and fails on exactly
+   what is red. Do not run the whole suite yourself before it: the gate runs the same commands, and a
+   stage that runs them first pays twice for one answer. Do not finish while the gate names something
+   red.
 6. In a repeat round, work only on what the gate or the judge confirmed. Do not take the
    opportunity to refactor elsewhere.
 7. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
@@ -91,7 +93,7 @@ fill in the why)
                                              not a restatement of its design notes)
 
 ## Checks
-- <command>: <result>
+- gate build: <pass, or what it refused and how that was fixed>
 ```
 
 ## Do not

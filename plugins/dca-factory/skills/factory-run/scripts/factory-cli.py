@@ -2620,7 +2620,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   skeleton, or the missing rows): run it when the changes are done, fill in the rest
 - a test file put back to the version the test stage saw red is a restoration, not a change to list
 - tests: every selector of the `gate:tests` table green, and its file's digest as `.tests-red` holds it (`red-proof`)
-- {'`## Criteria`: `- <key>: met by <what the code now does>`; `## Deviations from the plan`; `## Checks`: `- <command>: <result>`' if stage == 'build' else '`## Left alone`: what you saw and did not change, and why; `## Checks`: `- <command>: <result>`'}
+- {'`## Criteria`: `- <key>: met by <what the code now does>`; `## Deviations from the plan`; `## Checks`: `- gate build: <pass, or what it refused and how that was fixed>` — the gate is the stage\'s test run' if stage == 'build' else '`## Left alone`: what you saw and did not change, and why; `## Checks`: `- gate tidy: <pass, or what it refused and how that was fixed>` — the gate is the stage\'s test run'}
 - `## needs-human` only to stop, with `decision: <story>-<nn>` and the record beside the story (`stage: {name}`)
 - {'a test that cannot pass for a reason in its own code — a helper, a locator, a fixture — while what it asserts stays as it is: write `back: test` on a line of its own and say what is wrong; the round goes to the test stage, which repairs it and proves it with a break. A change to what a test asserts is still a question (`## needs-human`)' if stage == 'build' else 'no test change: a defect in a test goes back through the build stage'}
 - no criterion key in code, a comment or a test name; no `TODO` for the criterion delivered"""

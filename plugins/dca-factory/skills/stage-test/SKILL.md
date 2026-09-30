@@ -74,9 +74,13 @@ files written. You write **no** production behaviour.
    an empty list or a default — for a criterion whose expected answer *is* the empty case, a stub
    returning empty makes the test green before any code exists, and a green test at this stage
    proves nothing. The gate refuses it, and rightly: the criterion would ship uncovered.
-7. Run the project's compile and test commands from the stack profile. Confirm two things: the
-   test sources compile, and every new test fails **on its assertion**, not on a missing class or
-   a wiring error. A test red for the wrong reason proves nothing. In a browser test the first step
+7. The gate is your test run. Run a single test while you write it — that is where you see the
+   assertion it fails on — and when the stage's tests are written, run the test gate: it compiles the
+   sources and runs every mapped test once per command, and its report is the one that counts. Do not
+   run the whole suite yourself before it; the gate runs the same commands and you would pay twice.
+   Confirm two things from its report: the test sources compile, and every new test fails **on its
+   assertion**, not on a missing class or a wiring error. A test red for the wrong reason proves
+   nothing. In a browser test the first step
    that can be missing is an expectation, not an action: `expect(locator).toBeVisible()` before the
    click or the fill, so a form that does not exist yet fails on the expectation and names what is
    missing. A raw `TimeoutError` from an action is red on the harness — the gate accepts the red and

@@ -88,7 +88,9 @@
 #              The build and tidy gates also run the required test commands whole, so a story
 #              cannot break what the stories before it delivered. A build tool that skips an
 #              up-to-date task writes no new report — give a required test command its rerun flag
-#              (Gradle: `./gradlew test --rerun`), since only a report from this run counts
+#              (Gradle: `./gradlew test --rerun`), since only a report from this run counts. Gradle's
+#              `--rerun` is a task option: it reruns the one task named before it, so a line with several
+#              tasks needs one `--rerun` per task, or `--rerun-tasks` for all of them
 # product      the product description (default: project/product.md) — what is built, for whom, its
 #              surfaces, how it works, how it looks. Mandatory before the first story, with `tech`
 # tech         the technical description (default: project/tech.md) — stack, frontend approach,

@@ -39,8 +39,10 @@ freedom is that it may not change what the code *does*.
 6. Stop early. Two or three moves that make the story's code plainly better is a good stage; a
    rewrite is a plan nobody approved. When you find yourself wanting one, write it down as a
    finding and leave the code alone.
-7. Run what the stack profile declares — compile, the tests, the architecture suite, the formatter.
-   The gate runs them again afterwards, so a stage that skips them only delays its own failure.
+7. The gate is your test run. Run a single test while you move things; when the moves are done, run
+   the tidy gate — it compiles, runs every mapped test and the required suites once per command, the
+   architecture suite and the formatter. Do not run the whole suite yourself before it: the gate runs
+   the same commands, and a stage that runs them first pays twice for one answer.
 8. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
    formatting of what you moved. The gate and the commit hook only check `format:`.
 
@@ -71,7 +73,7 @@ done — it creates the file with every changed file as a row, or adds the missi
 - <what you saw and did not change>: <why — outside the footprint, or a design question>
 
 ## Checks
-- <command>: <result>
+- gate tidy: <pass, or what it refused and how that was fixed>
 ```
 
 Where you changed nothing, say so and why: a green build that was already clean is a finished
