@@ -2580,7 +2580,9 @@ def contract_text(stage, runs):
         text += (f"\n- size: what {name} has to say fits in {base / 1000:.1f} kB"
                  + (f" plus {per} bytes per criterion" if per else "")
                  + " — keys and levels, not the story's text; one citation per row; nothing a reader has elsewhere. "
-                   "Larger is a `gate:note size`, never a refusal; a reason is one line")
+                   "Larger is a `gate:note size`, never a refusal, and never a reason to edit the file after the gate "
+                   "ran; a reason is one line"
+                 + (" (the pipeline's `## Paths` does not count)" if name == "document.md" else ""))
     return text
 
 

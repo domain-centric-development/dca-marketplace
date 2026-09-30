@@ -218,7 +218,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 11
 
 
-VERSION = "0.52.0"
+VERSION = "0.52.1"
 
 
 def read_front_matter(path):
@@ -1583,7 +1583,23 @@ def recorded_run(invocation, cwd, profile=None, with_reports=False):
 #: sizes; the largest were half again as big and said nothing more). A note, never a refusal: the number
 #: is the measure `--contract` names, a stage with a reason writes it, and the measurement decides.
 HANDOVER_BUDGET = {"plan.md": (3000, 300), "tests.md": (1500, 200), "build.md": (1500, 150),
-                   "tidy.md": (1500, 0), "judge.md": (3000, 0), "document.md": (2500, 0)}
+                   "tidy.md": (1500, 0), "judge.md": (3000, 100), "document.md": (2500, 150)}
+
+#: Sections the pipeline writes into a hand-over; their bytes are not the stage's and do not count against
+#: its measure — a skeleton's `## Paths` alone ran to 1.5 kB in the bench.
+PIPELINE_SECTIONS = {"document.md": ("## Paths",)}
+
+
+def stage_bytes(path, name):
+    """The bytes of a hand-over that the stage wrote: the file without the sections the pipeline put there."""
+    text = read_text(path)
+    for heading in PIPELINE_SECTIONS.get(name, ()):
+        start = text.find("\n" + heading)
+        if start < 0:
+            continue
+        end = text.find("\n## ", start + 1)
+        text = text[:start] + (text[end:] if end >= 0 else "")
+    return len(text.encode("utf-8"))
 
 
 def check_size(result, runs, story_id, files, count):
@@ -1594,11 +1610,12 @@ def check_size(result, runs, story_id, files, count):
             continue
         base, per = HANDOVER_BUDGET[name]
         budget = base + per * count
-        size = os.path.getsize(path)
+        size = stage_bytes(path, name)
         if size > budget:
-            result.note("size", f"{name} is {size / 1000:.1f} kB; what it has to say for {count} criteria fits in "
-                                f"{budget / 1000:.1f} kB (the contract's measure): keys and levels, not the story's "
-                                f"text; one citation per row; nothing the story, the plan or the code already says")
+            result.note("size", f"{name} is {size / 1000:.1f} kB of the stage's own text; what it has to say for {count} "
+                                f"criteria fits in {budget / 1000:.1f} kB (the contract's measure): keys and levels, not "
+                                f"the story's text; one citation per row; nothing the story, the plan or the code already "
+                                f"says. A note, not a refusal — never a reason to edit the file after the gate ran")
 
 
 def check_compiles(result, profile, cwd):

@@ -88,6 +88,10 @@ beside this skill.
 ## needs-human                     (only when the run must stop — otherwise leave the heading out)
 ```
 
+Run the document gate once your tables are filled and fix exactly what it refuses. A `gate:note` — the
+file's size against its measure — is information, never a reason to trim a cell or run the gate again
+(`factory-run/reference/stage-common.md`).
+
 `Verified by` names how you checked a statement — the file you read, the command you ran. A row
 without it is a claim, and the gate treats it as one. A file you cite is a path from the project root
 with its line — `src/main/java/com/example/billing/domain/model/BookId.java:8`, never `BookId.java:8`:

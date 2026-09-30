@@ -37,11 +37,13 @@ A **carrier** is whatever this tool can actually run under that name: a review s
 every tool reads skills) or, in a tool that has separate review agents, such an agent. Resolve each
 perspective in this order:
 
-1. the carrier its `review.<name>:` names, when this tool offers it;
+1. the carrier its `review.<name>:` names — a review **skill** installed in the project is offered by every
+   tool: load it and run its pass; only an **agent** can be missing;
 2. otherwise a review skill of the project whose own description covers that perspective — a skill
    named for the perspective (`review-ddd`, `review-hexagonal`, `review-clean-code`) is the obvious
    case, but match on what a skill's description says it reviews, never on its name alone;
-3. otherwise, for the three built-ins, the question below — you run the pass yourself.
+3. otherwise, for the three built-ins, the question below — the fallback for a project that has no such
+   skill installed, never a shortcut where one is.
 
 Say in the report which of the three it was. A named carrier that this tool does not offer is a
 missing *preference*, not a missing review: the built-in pass still runs, and the report says so
@@ -59,8 +61,9 @@ silently stands in for it.
 
 Each perspective is described in **one** place — the review skill named in parentheses, the one the
 profile's `review.<name>:` points at and `factory.sh setup` installs beside the pipeline. This file
-holds the question each asks, not the description; a judge without the skill reviews from the
-question and says so under `## Perspectives covered`.
+holds the question each asks, not the description. Where the skill is installed you load it — the
+question is what you review from only in a project without it, and then `## Perspectives covered`
+says so.
 
 Where the profile names a browser runner (`browser:` other than `none`), an end-user test that reads a page's script or markup as
 text in place of driving the browser is a **major** finding: it proves the wording, not the behaviour,

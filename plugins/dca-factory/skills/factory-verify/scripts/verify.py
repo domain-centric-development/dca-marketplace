@@ -4033,6 +4033,15 @@ def run_groups(args):
               must_fail=("documented",)),
          dict(green=both_green, ledger=both_green,
               document=DOCUMENT.replace("`docs/context-map.md:3` — the context's own description", ""))),
+        # 0.52.1: the measure counts the stage's own text — the pipeline's `## Paths` does not — with a share per criterion.
+        (Case("document: a long pipeline-written Paths section earns no size note", "document", 0,
+              must_pass=("documented",), absent=("gate:note size",)),
+         dict(green=both_green, ledger=both_green,
+              document=DOCUMENT + "\n## Paths\n" + "- `src/test/java/com/example/WidgetUnitTest.java`\n" * 60)),
+        (Case("document: a document.md over its measure in its own text is noted, never refused", "document", 0,
+              must_pass=("documented",), text=("gate:note size — document.md is", "of the stage's own text", "never a reason to edit")),
+         dict(green=both_green, ledger=both_green,
+              document=DOCUMENT + "\n## Not documented\n" + ("- a sentence restated once more for nobody at all\n" * 60))),
         # WP-80 B: a proposed term is found by any of its words; open only under `## Not documented`.
         (Case("document: a proposed term is found in the glossary by its code word", "document", 0,
               must_pass=("glossary",)),

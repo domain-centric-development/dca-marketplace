@@ -185,6 +185,7 @@ STAGE_COMMON_SENTENCES = (
     "the next two-digit number among this story's records",
     "a stage that runs them first pays twice for one answer",
     "The gate and the commit hook only check `format:`",
+    "never a reason to edit your file after the gate ran",
 )
 
 

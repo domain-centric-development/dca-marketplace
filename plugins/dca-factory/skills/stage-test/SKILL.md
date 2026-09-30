@@ -123,7 +123,9 @@ What each test fails on is not written here: the gate's red run records it, asse
 
 The `## Files` list is the pipeline's to write: run `factory-cli.py --files-skeleton <story> test` when your
 changes are done — it creates the file with every changed file listed, or adds the missing paths to a file you
-wrote first. Fill in the other sections; never type the list yourself, the gate compares it with the tree.
+wrote first. Fill in the other sections — the `gate:tests` table first of all — **then** run the gate; never type
+the list yourself, the gate compares it with the tree. A gate run on the bare skeleton refuses on the empty
+table and costs a suite run for nothing.
 
 One row per criterion, at least. A criterion you could not turn into a test is named explicitly
 under `uncovered` — never left silently missing, because the build gate can only fail on what a

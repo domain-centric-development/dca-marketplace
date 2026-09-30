@@ -1658,7 +1658,8 @@ $RUNS/$story/. After the test, build and tidy stages run that stage's gate, \
 \`$PY $GATE --story $story --stage <stage> --brief\`, and fix exactly what it names before the next stage, at most \
 three attempts per stage. Before you write tests.md, build.md or tidy.md, run \`$PY $CLI --files-skeleton $story <stage>\`: \
 it writes the file's list of changed files from the tree (or adds the missing ones to a file you wrote); fill in the rest, \
-never the list. Before you write plan.md, run \`$PY $CLI --plan-skeleton $story\`: it writes the plan's headings and one \
+never the list, and run the stage's gate only when the file is filled — never on the bare skeleton. A gate:note is \
+information, never a reason to edit a hand-over or run the gate again. Before you write plan.md, run \`$PY $CLI --plan-skeleton $story\`: it writes the plan's headings and one \
 line per criterion key — give each its level, never retype the story's text. The gate is your test run: run single tests \
 while you work, then the stage's gate — do not run the whole suite yourself before it, the gate runs the same commands, \
 and write nothing about the gate into a hand-over: its report is the record. At the test stage a type with nothing a \
