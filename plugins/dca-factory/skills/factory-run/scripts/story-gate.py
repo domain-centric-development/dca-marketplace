@@ -218,7 +218,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 11
 
 
-VERSION = "0.52.2"
+VERSION = "0.53.0"
 
 
 def read_front_matter(path):
@@ -958,8 +958,8 @@ def check_models(result, profile):
                        f"({', '.join(MODEL_TOOLS)})")
         elif parts[1] not in MODEL_TOOLS:
             bad.append(f"`{key}`: no tool `{parts[1]}` ({', '.join(MODEL_TOOLS)})")
-        elif len(parts) == 3 and parts[2] not in STAGE_ORDER:
-            bad.append(f"`{key}`: no stage `{parts[2]}` ({', '.join(STAGE_ORDER)})")
+        elif len(parts) == 3 and parts[2] not in STAGE_ORDER + MODEL_PROCESSES:
+            bad.append(f"`{key}`: no stage `{parts[2]}` ({', '.join(STAGE_ORDER + MODEL_PROCESSES)})")
         elif len(parts) > 3:
             bad.append(f"`{key}` is not `model.<tool>.<stage>`")
         elif not str(profile[key]).strip():
@@ -1576,6 +1576,53 @@ def recorded_run(invocation, cwd, profile=None, with_reports=False):
             handle.write("\t".join((when, record["tree"], invocation, str(code), ran_json, signature)) + "\n")
         record["rows"][invocation] = (when, code, json.loads(ran_json))
     return code, output, ran, ""
+
+
+#: The judge's built-in perspectives — part of the method, never switched off; `reviews:` in the profile adds more.
+BUILT_IN_PERSPECTIVES = ("ddd", "hexagonal", "clean-code")
+#: A review report carries its findings under these ranks (the review skills' own format).
+REVIEW_RANKS = ("must-fix", "should-fix", "nit")
+
+
+def perspectives_of(profile):
+    """`(name, carrier)` per perspective: the three built-ins and the profile's `reviews:`, each with the skill
+    `review.<name>:` names — the plugin prefix dropped — or `review-<name>` where the profile names none."""
+    names = list(BUILT_IN_PERSPECTIVES)
+    for extra in re.split(r"[,\s]+", str(profile.get("reviews", "")).strip()):
+        if extra and extra not in names:
+            names.append(extra)
+    out = []
+    for name in names:
+        carrier = str(profile.get(f"review.{name}", "")).split()
+        out.append((name, (carrier[0].rsplit(":", 1)[-1] if carrier else f"review-{name}")))
+    return out
+
+
+def check_reviews(result, runs, story_id, profile):
+    """One review file per perspective, `reviews/<name>.md`, in the review skills' report format. A missing
+    file is a note — the judge then ran that pass itself and says so — a file without a findings section is
+    not a review and is refused: the judge would converge from nothing while the report claims a perspective."""
+    folder = os.path.join(runs, story_id, "reviews")
+    read, missing, malformed = [], [], []
+    for name, _carrier in perspectives_of(profile):
+        path = os.path.join(folder, f"{name}.md")
+        if not os.path.isfile(path):
+            missing.append(name)
+            continue
+        text = read_text(path).lower()
+        if not any(rank in text for rank in REVIEW_RANKS) and "nothing found" not in text and "no finding" not in text:
+            malformed.append(name)
+            continue
+        read.append(name)
+    if malformed:
+        result.fail("reviews", f"reviews/{', reviews/'.join(malformed)}.md carries no must-fix, should-fix or nit "
+                               f"section and says of no finding that there is none — not a review report")
+        return
+    if missing:
+        result.note("reviews", f"no review file for {', '.join(missing)} (reviews/<perspective>.md) — the judge ran "
+                               f"that pass itself, and `## Perspectives covered` says so")
+    if read:
+        result.ok("reviews", f"{len(read)} review file(s) for the judge to converge from: {', '.join(read)}")
 
 
 #: What a hand-over has to say fits in this many bytes for a story of n criteria: a base and a share per
@@ -3633,6 +3680,8 @@ def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
 # anyone remembering it. So the state is read off the same files a single run leaves — stage files,
 # refusal reports, the round counter, the verdict, the decision records — and never stored.
 STAGE_ORDER = ("plan", "test", "build", "tidy", "judge", "document")
+#: Processes a model key may name beside the stages: the shared builder and verifier, and the reviewers.
+MODEL_PROCESSES = ("builder", "verifier", "review")
 
 
 JOURNEY_ORDER = ("plan", "test", "judge", "document")       # nothing to build: the steps are delivered
@@ -4175,6 +4224,7 @@ def main(argv):
             check_story_pass(result, args.runs, story_id, story_path, front)
             check_documented(result, args.runs, story_id, cwd)
             check_proposals_landed(result, args.runs, story_id, cwd, profile)
+            check_reviews(result, args.runs, story_id, profile)
             check_size(result, args.runs, story_id, ("judge.md", "document.md"), len(criteria))
             check_stage_commands(result, profile, cwd, args.stage)
         if args.stage == "adopt":

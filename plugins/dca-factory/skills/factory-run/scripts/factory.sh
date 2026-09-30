@@ -576,6 +576,7 @@ for m in data.get('data',[]):
 # example for a provider that does not work here — and the run says so. Exactly one model flag is
 # ever passed: which of two a tool would honour is its behaviour, not something to rely on.
 model_key() {                               # model_key <tool> <stage> — the profile's choice, or nothing
+  set -- "$1" "${2%%:*}"                    # review:<perspective> takes the key of `review`
   printf '%s' "$(cli --model "$1" "$2" 2>/dev/null)"
 }
 tool_args() { case "$1" in claude) printf '%s' "${FACTORY_CLAUDE_ARGS:-}" ;; codex) printf '%s' "${FACTORY_CODEX_ARGS:-}" ;; opencode) printf '%s' "${FACTORY_OPENCODE_ARGS:-}" ;; esac; }
@@ -1782,6 +1783,73 @@ that are its own (a test that asserts too little is the test stage's, with its b
 # The process runs the document gate itself; the runner reads the verdict, re-checks the document gate,
 # and takes a `changes-requested` back to the build stage as it always does.
 VERIFIER_STAGES=(judge document)
+
+# The reviews: one tool process per perspective, started at once, each writing its report to
+# reviews/<perspective>.md; the judge then converges from the files instead of reviewing in its own context —
+# a reviewer that did not build and a judge that did not review. The perspectives and their carriers come from
+# the profile through the cli (the three built-ins plus `reviews:`). An adoption reviews no change and gets none.
+# A reviewer that leaves no file is not stood in for: the judge names the perspective as run in-session.
+run_reviews() {                             # run_reviews <story> <tool> <dry> [<kind>]
+  local story=$1 tool=$2 dry=$3 kind=${4:-story}
+  [ "$kind" = adopt ] && return 0
+  local lines; lines=$(cli --perspectives 2>/dev/null) || return 0
+  [ -n "$lines" ] || return 0
+  local names=() carriers=() name carrier
+  while IFS=$'\t' read -r name carrier; do [ -n "$name" ] && { names+=("$name"); carriers+=("$carrier"); }; done <<< "$lines"
+  local folder="$RUNS/$story/reviews" i prompt
+  local listed=""; for name in "${names[@]}"; do listed="${listed:+$listed, }$name"; done
+  echo "   reviews: $listed — one process each, at once; the judge converges from reviews/<perspective>.md"
+  local prompts=()
+  for i in "${!names[@]}"; do
+    name=${names[$i]}; carrier=${carriers[$i]}
+    prompt="Review the change of backlog story $story from the $name perspective: apply the \`$carrier\` skill to the diff \
+$RUNS/$story/.verify/story.diff — open a whole file only where the diff's context does not carry the question — with the \
+story, $RUNS/$story/plan.md, tests.md and build.md and the product and technical description as its input. Write your \
+report to $folder/$name.md in the skill's own format: \`## Findings\` with must-fix, should-fix and nits, every finding \
+with the file and line it stands on and a one-line fix; say plainly when you found nothing. Change no other file and no \
+code; you are one of several reviewers, a judge reads the reports. This session was started by the pipeline's runner, \
+which holds the checkout for it: the worker named at session start is the one that started you, not a second writer. \
+$(where_things_are "$tool" "review:$name" "$story")"
+    prompts+=("$prompt")
+  done
+  if [ -n "$dry" ]; then
+    for i in "${!names[@]}"; do echo "   would run (review:${names[$i]}): ${prompts[$i]}"; done
+    return 0
+  fi
+  if [ -f "$GATE" ] && ! cli --claim "$WORKER" >/dev/null; then
+    echo "factory: the checkout was taken over by another worker before the reviews — stopping." >&2; return 5
+  fi
+  if [ -n "$STORY_BUDGET" ] && [ "$(cli --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
+    echo "factory: story $story has reached its --story-budget $STORY_BUDGET — the reviews are not dispatched." >&2; return 4
+  fi
+  if [ -n "$MAX_STAGES" ] && [ "$((INVOCATIONS + ${#names[@]}))" -gt "$MAX_STAGES" ]; then
+    echo "factory: --max-stages $MAX_STAGES reached before the reviews of $story (${#names[@]} process(es))." >&2; return 4
+  fi
+  local journal="$RUNS/$story/.verify/journal.tsv" began pids=() raws=()
+  mkdir -p "$folder" "$RUNS/$story/.verify"
+  rm -f "$folder"/*.md                       # a repeat round reviews today's change, never last round's report
+  began=$(date +%s)
+  for i in "${!names[@]}"; do
+    name=${names[$i]}
+    printf '%s\tstage-start\treview:%s\ttool=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$name" "$tool" >> "$journal"
+    raws[$i]="$RUNS/$story/.verify/review-$name.$(date -u +%H%M%S).out"
+    ( invocation_raw="${raws[$i]}" stage_in_flight="review:$name" story_in_flight="$story" \
+        invoke "$tool" "${prompts[$i]}"; echo $? > "${raws[$i]}.rc" ) &
+    pids[$i]=$!
+  done
+  wait "${pids[@]}" 2>/dev/null
+  INVOCATIONS=$((INVOCATIONS + ${#names[@]}))
+  local seconds=$(( $(date +%s) - began )) code
+  for i in "${!names[@]}"; do
+    name=${names[$i]}
+    code=$(cat "${raws[$i]}.rc" 2>/dev/null || echo 1); rm -f "${raws[$i]}.rc"
+    record_usage "$story" "review:$name" "$tool" "${raws[$i]}" "$seconds"
+    printf '%s\tstage-end\treview:%s\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$name" "$([ "$code" = 0 ] && echo 0 || echo nonzero)" >> "$journal"
+    [ -f "$folder/$name.md" ] || echo "factory: the $name reviewer left no $folder/$name.md — the judge runs that pass itself and says so." >&2
+  done
+  return 0
+}
+
 run_shared_verifier() {                     # run_shared_verifier <story> <tool> <dry> [<kind>]
   local story=$1 tool=$2 dry=$3 kind=${4:-story} range=(judge)
   [ "$kind" = adopt ] || range+=(document)  # an adoption documents nothing: its verifier is the judge alone
@@ -2115,6 +2183,12 @@ run_story() {
       fi
       ran="${ran:+$ran,}$stage"
       continue
+    fi
+    # The reviews come before the judge, in every tier: one process per perspective, at once.
+    if [ "$stage" = judge ]; then
+      local reviews_code=0
+      run_reviews "$story" "$tool" "$dry" "$kind" || reviews_code=$?
+      [ "$reviews_code" = 0 ] || return "$reviews_code"
     fi
     # The verifier runs where the judge would: judge, then document in the same process. Resumed at the
     # document stage alone (--from document, a refused document round), the stage runs in its own context.

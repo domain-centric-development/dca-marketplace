@@ -9,7 +9,9 @@ Input: the story, `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, t
 `.dca-factory/runs/<story>/.verify/story.diff`, which the pipeline writes; open a whole file only where the
 diff's context does not carry the question, and explore no further than a finding needs — the
 product and the technical description (`project/product.md`, `project/tech.md`, or where the
-profile's `product:` and `tech:` point) — and, in a repeat round, the previous verdict,
+profile's `product:` and `tech:` point) — **the review files** `.dca-factory/runs/<story>/reviews/<perspective>.md`,
+one per perspective, written by the reviewers the pipeline started before you (each in a context of
+its own, at the same time) — and, in a repeat round, the previous verdict,
 `.dca-factory/runs/<story>/.judge-previous.md`. Nothing else. A change that contradicts the product description
 — a surface it does not list, state kept where it says otherwise, a page without its stated look or
 accessibility, something under `## Not part of the product` — is a finding like any other, and so
@@ -19,9 +21,15 @@ Output: `.dca-factory/runs/<story>/judge.md`. You change no code.
 
 ## Do
 
-Review the change from **ddd**, **hexagonal** and **clean-code**, one pass each, kept apart in the
+The change is reviewed from **ddd**, **hexagonal** and **clean-code**, one pass each, kept apart in the
 report. These three are part of the method, not project configuration: they always run and no
-profile switches them off. There is no fourth built-in: the method's own audit skill, where a
+profile switches them off. The passes are not yours where a review file exists: the pipeline starts
+one reviewer per perspective before you, each applying its skill in its own context, and you
+**converge** — read `reviews/<perspective>.md`, confirm every must-fix and should-fix in the code at the
+file and line it names (or drop it, with the reason), deduplicate across the files, and judge. A
+reviewer that did not build and a judge that did not review is the point of the split; a judge who
+reviews again in its own context puts the bias back that the files took out. Only a perspective
+**without** a file is yours to run — load its carrier and say so. There is no fourth built-in: the method's own audit skill, where a
 project has one, is an *added* perspective the profile names — worth it for an adoption, where the
 question is how the existing code stands against the method, and not for a story that the rule
 suite already holds to it.
@@ -137,7 +145,7 @@ verdict: <pass | changes-requested | story-conflict>
 back: test                        (only when a confirmed defect is in a test — see below)
 
 ## Perspectives covered
-- <perspective>: <the skill or agent that ran it, or "in-session"> | not covered — <why>
+- <perspective>: reviews/<perspective>.md (<carrier>) | in-session — <why there was no file> | not covered — <why>
 
 ## Confirmed defects
 | Perspective | File:line | Severity | Defect | Fix |

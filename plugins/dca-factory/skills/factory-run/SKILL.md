@@ -209,6 +209,19 @@ In a session the same variant is one subagent for judge and document, its window
 (`--stage-start verifier` … `--stage-end verifier`); after the end mark read the verdict as the runner
 does and run the document gate yourself. An adoption's verifier is the judge alone.
 
+**The reviews run beside each other, before the judge.** In every tier the judge converges from one
+review file per perspective — `.dca-factory/runs/<story>/reviews/<perspective>.md`, the three built-ins
+plus the profile's `reviews:`, each written by the carrier `review.<perspective>:` names — instead of
+reviewing in its own context. The runner starts one tool process per perspective **at once** and waits
+for all before the judge (an adoption gets none: nothing was built); each is a `review:<perspective>`
+window in the journal with its cost. In a session, start one subagent per perspective at once where
+the tool has them — the reviewer agents the craft plugin carries are these — each writing its file;
+without subagents, run each review skill in-session one after another and still write the files. A
+perspective without a file is the judge's own pass, named so under `## Perspectives covered`; the
+document gate notes a missing file and refuses one without a findings section (`reviews`).
+`factory-cli.py --perspectives` lists the perspectives with their carriers; `--contract review` the
+file's shape.
+
 **A defect in a test goes back to the test stage.** Two stages can send a round there, with a line
 `back: test`: the judge, when a test asserts less than its criterion, and the build, when a test cannot
 pass because of its own code (a helper, a locator) while what it asserts stays the same. The build may
@@ -370,7 +383,7 @@ same loop outside any session is the runner's `backlog --watch`, which the perso
 
 ## Several stories
 
-One story per run; several stories are a loop over it, never agents working in parallel on one
+One story per run; several stories are a loop over it, never two builders working in parallel on one
 code base. What comes next is read off the files, like everything else:
 
 ```

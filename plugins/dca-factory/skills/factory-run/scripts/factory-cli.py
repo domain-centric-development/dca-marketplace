@@ -632,7 +632,8 @@ def stage_rank(stage):
     """Stage order for reports; the shared builder process (plan to tidy in one) sits before the judge, the
     shared verifier (judge, then document) after it."""
     return STAGE_ORDER.index(stage) if stage in STAGE_ORDER else 3.5 if stage == "builder" \
-        else 4.5 if stage == "verifier" else -1 if stage == "backlog" else 98 if stage == "decisions" else 99
+        else 3.8 if stage.startswith("review:") else 4.5 if stage == "verifier" else -1 if stage == "backlog" \
+        else 98 if stage == "decisions" else 99
 
 
 def tokens_of(entry):
@@ -2657,7 +2658,7 @@ judge — {folder}/judge.md (the runner reads the verdict; the document gate rea
   (pass: deliverable; changes-requested: back one round; story-conflict: a human, never build)
 - `back: test` under the verdict when a confirmed defect is in a test (it asserts less than its criterion): the round
   goes to the test stage, then build; without it the round goes to build, which may not change a test
-- `## Perspectives covered`: `- <perspective>: <skill or agent that ran it, or "in-session"> | not covered — <why>`
+- `## Perspectives covered`: `- <perspective>: reviews/<perspective>.md (<carrier>) | in-session — <why no file> | not covered — <why>`
 - `## Confirmed defects`: `| Perspective | File:line | Severity | Defect | Fix |` — file as a path from the project root
   with its line; severity blocker | major | minor; only blocker and major prevent `pass`
 - `## Considered and dropped`, `## Criteria re-checked`: `- <key>: met | met only nominally — <what the test does not assert>`
@@ -2682,6 +2683,20 @@ document — {folder}/document.md (gate after the stage: story-pass, documented,
   `## Not documented` (`glossary`). The skeleton pre-fills a `## Glossary` row per proposal — write the entry from it
 {GLOSSARY_RULE}
 - `## needs-human` only to stop (`decision: <story>-<nn>`, record `stage: document`)"""
+    if stage == "review":
+        return f"""{CONTRACT_HEAD}
+
+review — {folder}/reviews/<perspective>.md (one per perspective: {', '.join(_gate.BUILT_IN_PERSPECTIVES)} and the profile's
+`reviews:`; the document gate reads them as `reviews`)
+- written by the perspective's carrier — the review skill `review.<perspective>:` names, or `review-<perspective>` — in that
+  skill's report format: `## Findings` with `### must-fix`, `### should-fix`, `### nits`, each finding with the file and
+  line it stands on and a one-line fix; "nothing found" said plainly where that is the case
+- the reviewer reads the diff (`{folder}/.verify/story.diff`), the story, plan.md, tests.md, build.md and the product and
+  technical description; it opens a file only where the diff's context does not carry the question; it changes nothing
+- the judge converges from these files: it confirms each must-fix and should-fix in the code, drops what it cannot point at,
+  deduplicates across perspectives, and names the file it read per perspective under `## Perspectives covered`
+- a missing file is a note at the document gate (the judge ran that pass itself and says so); a file without a findings
+  section is refused"""
     if stage == "glossary":
         return f"""{CONTRACT_HEAD}
 
@@ -2924,6 +2939,8 @@ def main(argv):
     parser.add_argument("--get", metavar="KEY", help="the profile's value for KEY, or nothing")
     parser.add_argument("--command-heads", action="store_true",
                         help="the first word of every command the profile declares, one per line")
+    parser.add_argument("--perspectives", action="store_true",
+                        help="the judge's perspectives with their carriers, one `<name>\t<carrier>` per line")
     parser.add_argument("--carriers", action="store_true",
                         help="the skills the profile names as carrier, reviewer or knowledge, one per line")
     parser.add_argument("--carrier-lines", action="store_true", help="those keys with their values, `key value` per line")
@@ -2975,7 +2992,7 @@ def main(argv):
     if args.contract:
         text = contract_text(args.contract, args.runs)
         if text is None:
-            print(f"factory-cli: --contract takes one of {', '.join(STAGE_ORDER)} or glossary, not {args.contract!r}", file=sys.stderr)
+            print(f"factory-cli: --contract takes one of {', '.join(STAGE_ORDER)}, review or glossary, not {args.contract!r}", file=sys.stderr)
             return 2
         print(text)
         return 0
@@ -3008,6 +3025,10 @@ def main(argv):
         return 0
     if args.command_heads:
         print("\n".join(command_heads(read_profile(profile_path))))
+        return 0
+    if args.perspectives:
+        for name, carrier in _gate.perspectives_of(read_profile(resolve_profile(None, cwd))):
+            print(f"{name}\t{carrier}")
         return 0
     if args.carriers:
         print("\n".join(carriers(read_profile(profile_path))))

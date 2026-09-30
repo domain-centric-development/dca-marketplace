@@ -844,10 +844,14 @@ def verify_runner(runner, verbose=False):
         check("runner: the plan gate runs before its stage, every other gate after it",
               order == expected, f"got {order}")
         check("runner: a dry run changes nothing", code == 0 and not os.path.isdir(os.path.join(root, ".dca-factory", "runs", "STORY-1", "plan.md")))
+        check("reviews: a dry run names one reviewer per built-in perspective, each with its carrier and its file",
+              output.count("would run (review:") == 3 and "apply the `review-ddd` skill" in output
+              and ".dca-factory/runs/STORY-1/reviews/hexagonal.md" in output
+              and output.index("would run (review:ddd)") < output.index("── stage judge"), [l[:120] for l in output.splitlines() if "review:" in l][:3])
         check("runner: every stage prompt says where things are — the profile, the run folder, the gate's contract "
               "through the cli, never the gate's source",
-              output.count("the stack profile is dca-factory.profile.yaml") == 6
-              and output.count("factory-cli.py --contract <stage>") == 6
+              output.count("the stack profile is dca-factory.profile.yaml") == 9
+              and output.count("factory-cli.py --contract <stage>") == 9
               and "never the gate's source" in output,
               [l[:160] for l in output.splitlines() if "would run" in l][:2])
         check("runner: the document stage's prompt names the skeleton the pipeline wrote",
@@ -864,6 +868,8 @@ def verify_runner(runner, verbose=False):
         check("runner: an adopted story runs plan, test and judge — build, tidy and document are skipped",
               order == ["gate plan", "stage plan", "stage test", "gate test", "stage judge"]
               and "stage document  (skipped: an adopted story is not built)" in output, f"got {order}")
+        check("reviews: an adopted story gets no reviewers — nothing was built",
+              "would run (review:" not in output and "reviews:" not in output)
 
     # 1b. a journey walks what is delivered: no build, no tidy
     with tmpdir() as root:
@@ -985,6 +991,9 @@ def verify_runner(runner, verbose=False):
     # loop — a stage silently skipped, a report naming stages that never ran — fails here rather
     # than after an hour of real work.
     stand_in = (
+        'case "$FACTORY_STAGE" in review:*) mkdir -p .dca-factory/runs/STORY-1/reviews; '
+        '  printf "# Review\\n\\n## Findings\\n\\n### must-fix (0)\\n\\n### should-fix (0)\\n\\n### nits (0)\\n" '
+        '  > ".dca-factory/runs/STORY-1/reviews/${FACTORY_STAGE#review:}.md"; exit 0 ;; esac; '
         'case "$FACTORY_STAGE" in '
         'test) f=tests.md ;; *) f="$FACTORY_STAGE.md" ;; esac; '
         'mkdir -p .dca-factory/runs/STORY-1; '
@@ -1029,9 +1038,22 @@ def verify_runner(runner, verbose=False):
               [l for l in output.splitlines() if "ran through" in l])
         journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify")
         kept = os.listdir(journal) if os.path.isdir(journal) else []     # absent when nothing ran
+        journal_text = open(os.path.join(journal, "journal.tsv"), encoding="utf-8").read() \
+            if os.path.isfile(os.path.join(journal, "journal.tsv")) else ""
         check("runner: the journal records a start and an end per stage",
-              os.path.isfile(os.path.join(journal, "journal.tsv"))
-              and open(os.path.join(journal, "journal.tsv"), encoding="utf-8").read().count("stage-end") == 6)
+              len([l for l in journal_text.splitlines() if "\tstage-end\t" in l and "\treview:" not in l]) == 6)
+        # WP-81: one reviewer per perspective before the judge, each its own window, each leaving its file
+        names = [l.split("\t")[2] for l in journal_text.splitlines() if "\tstage-start\t" in l]
+        reviews = [n for n in names if n.startswith("review:")]
+        review_files = sorted(os.listdir(os.path.join(root, ".dca-factory", "runs", "STORY-1", "reviews"))) \
+            if os.path.isdir(os.path.join(root, ".dca-factory", "runs", "STORY-1", "reviews")) else []
+        check("reviews: three reviewers start before the judge, each a window of its own, each leaving reviews/<perspective>.md",
+              sorted(reviews) == ["review:clean-code", "review:ddd", "review:hexagonal"]
+              and names.index("judge") > max(names.index(r) for r in reviews)
+              and review_files == ["clean-code.md", "ddd.md", "hexagonal.md"]
+              and "reviews: ddd, hexagonal, clean-code" in output
+              and len([l for l in journal_text.splitlines() if "\tusage\treview:" in l]) == 3,
+              (names, review_files))
         check("runner: a tree snapshot is kept around every stage",
               len([f for f in kept if f.startswith("tree-")]) == 12)
         check("runner: every gate run is kept, not only a refusal",
@@ -1063,7 +1085,7 @@ def verify_runner(runner, verbose=False):
             code, output = run_runner(runner, root, *args, env=env)
             journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
             starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                      if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+                      if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
             lines = lambda path: (open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else [])
             extras = {"calls": lines(os.path.join(root, "build", "runner-calls.log")),
                       "suites": lines(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "suites.tsv"))}
@@ -1141,7 +1163,7 @@ def verify_runner(runner, verbose=False):
             code, output = run_runner(runner, root, *args, env=env)
             journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
             starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                      if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+                      if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
             document = os.path.join(root, ".dca-factory", "runs", "STORY-1", "document.md")
             paths = ""
             if os.path.isfile(document):
@@ -1203,7 +1225,7 @@ def verify_runner(runner, verbose=False):
             code, output = run_runner(runner, root, *args, env=env)
             journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
             starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                      if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+                      if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
             prompts_file = os.path.join(root, "prompts.txt")
             prompts = open(prompts_file, encoding="utf-8").read() if os.path.isfile(prompts_file) else ""
             return code, output, starts, story_delivered(root), prompts
@@ -1248,7 +1270,7 @@ def verify_runner(runner, verbose=False):
                                   "--shared-builder", env=env)
         journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
         starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                  if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+                  if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
         prompts = open(os.path.join(root, "builder-prompts.txt"), encoding="utf-8").read().strip().splitlines() \
             if os.path.isfile(os.path.join(root, "builder-prompts.txt")) else []
         check("shared builder: a refused re-check is a round — the builder runs again from that stage with the gate's "
@@ -1287,7 +1309,7 @@ def verify_runner(runner, verbose=False):
             code, output = run_runner(runner, root, *args, env=env)
             journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
             starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                      if "\tstage-start\t" in l] if os.path.isfile(journal) else []
+                      if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
             prompts_file = os.path.join(root, "test-prompts.txt")
             prompts = open(prompts_file, encoding="utf-8").read().strip().splitlines() if os.path.isfile(prompts_file) else []
             asked = os.path.isdir(os.path.join(root, "project", "epics", "sample", "STORY-1.decisions"))
@@ -1581,11 +1603,26 @@ exit 0
               code == 0 and story_delivered(root, "STORY-2"),
               f"exit {code}; {output.strip().splitlines()[-2:]}")
 
-    six = ["plan", "test", "build", "tidy", "judge", "document"]
+    # nine invocations per story: the six stages and the three reviewers before the judge — started at once, so
+    # their order in the log is not the run's to decide; `norm` sorts each run of reviewer entries
+    six = ["plan", "test", "build", "tidy", "review:clean-code", "review:ddd", "review:hexagonal", "judge", "document"]
+
+    def norm(ran):
+        out, i = list(ran), 0
+        while i < len(out):
+            if " review:" in out[i]:
+                j = i
+                while j < len(out) and " review:" in out[j]:
+                    j += 1
+                out[i:j] = sorted(out[i:j])
+                i = j
+            else:
+                i += 1
+        return out
     with tmpdir() as root:
         env = backlog_fixture(root)
         code, output = run_runner(runner, root, "run", env=env)
-        ran = invocations(root)
+        ran = norm(invocations(root))
         check("backlog: a story that asks at its plan stage does not stop the stories that do not need it",
               code == 0 and ran == ["STORY-1 plan"] + [f"STORY-2 {s}" for s in six],
               f"exit {code}, invocations {ran}, last lines: {output.strip().splitlines()[-3:]}")
@@ -1593,7 +1630,7 @@ exit 0
               "STORY-3  blocked" in output, [l for l in output.splitlines() if "STORY-3" in l])
         answer(root)
         code, output = run_runner(runner, root, "run", env=env)
-        ran = invocations(root)[7:]
+        ran = norm(invocations(root)[10:])
         check("backlog: after the answer the story resumes at the stage that asked, then its dependant runs",
               code == 0 and ran == [f"STORY-1 {s}" for s in six] + [f"STORY-3 {s}" for s in six],
               f"exit {code}, invocations {ran}, last lines: {output.strip().splitlines()[-4:]}")
@@ -1602,7 +1639,7 @@ exit 0
         check("backlog: the resumed stage's answer is stamped applied", "## Applied" in record)
         code, output = run_runner(runner, root, "run", env=env)
         check("backlog: with everything delivered a run invokes nothing",
-              code == 0 and len(invocations(root)) == 19 and "nothing more can run" in output,
+              code == 0 and len(invocations(root)) == 28 and "nothing more can run" in output,
               f"exit {code}, {len(invocations(root))} invocations")
 
     # 1h. --watch: waits on the answer without invoking anything, then picks the story up itself
@@ -1629,10 +1666,10 @@ exit 0
                 code = "timeout"
         output = open(log_path, encoding="utf-8", errors="replace").read()
         check("watch: waiting for an answer invokes no agent",
-              idle_before == 7 and idle_after == idle_before,
+              idle_before == 10 and idle_after == idle_before,
               f"{idle_before} invocations when the wait began, {idle_after} three seconds later")
         check("watch: a confirmed answer is picked up without anyone restarting the story",
-              code == 0 and len(invocations(root)) == 19 and "nothing waits on an answer" in output,
+              code == 0 and len(invocations(root)) == 28 and "nothing waits on an answer" in output,
               f"exit {code}, {len(invocations(root))} invocations, last lines: {output.strip().splitlines()[-3:]}")
 
     # 1i. the limits: --max-stages stops dispatch and keeps the work, the stop file ends a run
@@ -1725,16 +1762,16 @@ exit 0
         journal = open(os.path.join(root, ".dca-factory", "runs", "STORY-2", ".verify", "journal.tsv"), encoding="utf-8").read()
         stages = usage_json(os.path.join(root, ".agents", "factory", "story-gate.py"), root, "STORY-2")
         check("usage: each invocation's tokens land in the story's journal",
-              code == 0 and journal.count("\tusage\t") == 6 and "output=900" in journal,
+              code == 0 and journal.count("\tusage\t") == 9 and "output=900" in journal,
               f"exit {code}; usage lines {journal.count(chr(9) + 'usage' + chr(9))}")
         check("usage: the report sums tokens and cost per stage and per story",
-              len(stages) == 6 and sum(e["tokens"] for e in stages.values()) == 6000
-              and round(sum(e["cost"] for e in stages.values()), 2) == 0.06
-              and sum(e["output"] for e in stages.values()) == 5400,
+              len(stages) == 9 and sum(e["tokens"] for e in stages.values()) == 9000
+              and round(sum(e["cost"] for e in stages.values()), 2) == 0.09
+              and sum(e["output"] for e in stages.values()) == 8100,
               {k: (e["tokens"], e["output"], e["cost"]) for k, e in stages.items()})
         check("usage: the stage's final message still reaches the log", "done" in output, output[-200:])
         _, _, _, sched = schedule_of(os.path.join(root, ".agents", "factory", "story-gate.py"), root)
-        check("usage: the schedule shows a story's tokens", "6,000 tokens" in sched,
+        check("usage: the schedule shows a story's tokens", "9,000 tokens" in sched,
               [l for l in sched.splitlines() if "STORY-2" in l])
     with tmpdir() as root:
         env = backlog_fixture(root)
@@ -1752,7 +1789,7 @@ exit 0
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         stages = usage_json(os.path.join(root, ".agents", "factory", "story-gate.py"), root, "STORY-2")
         check("usage: a tool that reports nothing is counted as unknown, never as zero",
-              sum(e["runs"] - e["measured"] for e in stages.values()) == 6
+              sum(e["runs"] - e["measured"] for e in stages.values()) == 9
               and all(e["tokens"] == 0 for e in stages.values()), {k: (e["runs"], e["measured"]) for k, e in stages.items()})
 
     # 1l. a resumed document stage whose file already holds is not invoked again
@@ -1886,7 +1923,7 @@ exit 0
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in",
                                   env=dict(env, CLAUDE_CODE_SESSION_ID="some-session"))
         check("runner: a stand-in starts no tool and is not refused inside a session",
-              code == 0 and len(invocations(root)) == 6, f"exit {code}")
+              code == 0 and len(invocations(root)) == 9, f"exit {code}")
 
     # 1q. a custom command is handed the stage's model and the journal says it was not applied by the runner
     with tmpdir() as root:
@@ -1925,7 +1962,7 @@ exit 0
                                   env=dict(env, FACTORY_STALE_AFTER="0"))
         released = not os.path.exists(os.path.join(root, ".git", "dca-factory-worker.lock"))
         check("runner: it takes over a stale claim, runs, and gives the checkout back at the end",
-              code == 0 and len(invocations(root)) == 6 and released, f"exit {code}, released {released}")
+              code == 0 and len(invocations(root)) == 9 and released, f"exit {code}, released {released}")
 
     # 1q. a session starts knowing where the pipeline stands: AGENTS.md for every tool, a hook for Claude
     with tmpdir() as root:
@@ -4039,6 +4076,27 @@ def run_groups(args):
               must_fail=("documented",)),
          dict(green=both_green, ledger=both_green,
               document=DOCUMENT.replace("`docs/context-map.md:3` — the context's own description", ""))),
+        # WP-81: one review file per perspective; a missing one is a note, a malformed one is refused.
+        (Case("document: three review files in the skills' format pass the reviews check", "document", 0,
+              must_pass=("reviews",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=tuple(
+             (f".dca-factory/runs/STORY-1/reviews/{name}.md", "# Review\n\n## Findings\n\n### must-fix (0)\n\n### should-fix (0)\n\n### nits (0)\n")
+             for name in ("ddd", "hexagonal", "clean-code")))),
+        (Case("document: a perspective without a review file is a note, not a refusal", "document", 0,
+              text=("gate:note reviews — no review file for hexagonal",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=tuple(
+             (f".dca-factory/runs/STORY-1/reviews/{name}.md", "# Review\n\n## Findings\n\n### must-fix (0)\n\n### should-fix (0)\n\n### nits (0)\n")
+             for name in ("ddd", "clean-code")))),
+        (Case("document: a review file without a findings section is refused", "document", 1,
+              must_fail=("reviews",), text=("not a review report",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+             (".dca-factory/runs/STORY-1/reviews/ddd.md", "# Review\n\nLooks fine to me.\n"),))),
+        (Case("document: `reviews:` in the profile adds a perspective the check expects a file for", "document", 0,
+              text=("gate:note reviews — no review file for security",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, profile=PROFILE + "reviews: security\n",
+              extra_sources=tuple(
+             (f".dca-factory/runs/STORY-1/reviews/{name}.md", "# Review\n\n## Findings\n\n### must-fix (0)\n\n### should-fix (0)\n\n### nits (0)\n")
+             for name in ("ddd", "hexagonal", "clean-code")))),
         # 0.52.1: the measure counts the stage's own text — the pipeline's `## Paths` does not — with a share per criterion.
         (Case("document: a long pipeline-written Paths section earns no size note", "document", 0,
               must_pass=("documented",), absent=("gate:note size",)),
@@ -4723,7 +4781,19 @@ def run_groups(args):
         code_j, text_j = contract("judge")
         code_d, text_d = contract("document")
         code_g, text_g = contract("glossary")
+        code_r, text_r = contract("review")
         code_x, text_x = contract("verify")
+        expectations.append(("contract: --contract review says who writes reviews/<perspective>.md, in what shape, and how the judge reads it",
+                             code_r == 0 and "reviews/<perspective>.md" in text_r and "### must-fix" in text_r
+                             and "converges" in text_r, text_r[:200]))
+        with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("reviews: security, frontend\nreview.security: dca-craft:review-security\n")
+        listed = subprocess.run([sys.executable, args.cli, "--perspectives"], cwd=root, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace").stdout.splitlines()
+        expectations.append(("perspectives: the three built-ins first, then the profile's `reviews:`, each with the carrier "
+                             "`review.<name>:` names or `review-<name>`, the plugin prefix dropped",
+                             listed == ["ddd\treview-ddd", "hexagonal\treview-hexagonal", "clean-code\treview-clean-code",
+                                        "security\treview-security", "frontend\treview-frontend"], listed))
         expectations.append(("contract: --contract glossary says how a proposed term is found and the entry's shape; "
                              "--contract document says the same rule and names no `## Checks` for build",
                              code_g == 0 and "found by `titel` or by `title`" in text_g and "**Definition:**" in text_g
