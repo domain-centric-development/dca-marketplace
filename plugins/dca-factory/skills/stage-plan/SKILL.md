@@ -69,10 +69,15 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
      level the project runs today (an HTTP-level test against the running application, an API test).
      The mark comes from the backlog; never pick it yourself — a story without one was refused by
      the plan gate already.
-   - **Every other scenario** gets `integration`: the use case through the wired application —
-     through its input port or its HTTP surface, whichever the scenario's `When` names — with real
-     adapters, persistence as the project runs it in tests, and an external system stubbed at the
-     protocol (`http.stub:`). The test lives in the source set a `test.<name>:` key declares.
+   - **Every other scenario** gets `integration`, in one of two shapes, in the source set a
+     `test.<name>:` key declares. A `Then` that is a business outcome — what is stored, refused,
+     published, returned — is asserted on the **use case through its input port** in the wired
+     application, with real outgoing adapters, persistence as the project runs it in tests, and an
+     external system stubbed at the protocol (`http.stub:`): the use case is tested once, however
+     many adapters call it. A `Then` only an incoming adapter produces — a text on the page, a status
+     code, a redirect, a message's payload — is asserted on **that adapter's translation**, against a
+     stubbed input port that answers with the outcome. Write the shape after the level:
+     `level: integration (port)` or `level: integration (adapter: <Adapter>)`.
    - **`browser-only (<why>)`** for a scenario whose `Then` only a browser can observe — a countdown,
      a script's reaction to a click, a notification, anything that happens after the page has
      loaded. It needs a browser runner; with `browser: none` the project has decided without one:
@@ -92,6 +97,12 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    A **journey** item (`kind: journey`) has no happy path and builds nothing: plan one journey test
    that walks the steps its epic's `## Journey` names through the delivered stories and asserts the
    epic's outcome event, in the source set `test.journey:` declares.
+8a. **Name the invariants of every domain type you change.** For each aggregate, entity, value object and
+   domain service in `## Changes`: the rules it must never break — what the criteria imply and the guards
+   its type implies (a value that is required, trimmed, within a range, unique in its aggregate). One line
+   each under `## Invariants`; a type without rules of its own says `none — <why>`. The test stage writes a
+   unit test for every rule named here, and the build writes no guard that is not named: a check nobody
+   planned is code no test asked for. The test gate refuses a changed domain type without its line.
 9. **Find the existing tests the story contradicts** — every test in the project, whoever wrote it:
    the ones that assert the behaviour the criteria change. Read the test sources, not the backlog;
    a test need not belong to any story. List each under `## Changed tests` with what backs the
@@ -148,8 +159,12 @@ your file. The rule in full: `factory-run/reference/stage-common.md`.
 (one row per element; Evidence is the file:line, or the catalog node by its path inside the catalog)
 
 ## Acceptance criteria
-- <key>  →  level: e2e | integration | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
+- <key>  →  level: e2e | integration (port) | integration (adapter: <Adapter>) | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
                                   (the key alone; the criterion's text stays in the story)
+
+## Invariants
+- <Element>: <rule>; <rule>           (one line per domain type in `## Changes`, its guards included)
+- <Element>: none — <why>
 
 ## Changed tests                  (omit the section when the story contradicts no existing test)
 | Test file | Backed by |

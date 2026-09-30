@@ -165,8 +165,9 @@ What this skill checks afterwards, because a runner that cannot fail is worse th
 
 ## `integration-tests`
 
-The level between a unit test and an end-user test: a use case through the wired application, real adapters,
-an external system stubbed at the protocol. A delivery pipeline puts every scenario but a story's happy path
+The level between a unit test and an end-user test: a use case through its input port in the wired application,
+real outgoing adapters, an external system stubbed at the protocol — and each incoming adapter's translation
+against a stubbed input port. A delivery pipeline puts every scenario but a story's happy path
 here, so a project without it stops at its first story's plan. The setup per stack is in
 `reference/integration-tests.md`.
 

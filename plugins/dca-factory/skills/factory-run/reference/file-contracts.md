@@ -9,8 +9,8 @@ fresh context, in a subagent or in a separate process without changing the resul
 The run folder is `.dca-factory/runs/` unless the stack profile's `runs:` names another place; the
 stories are under `project/epics/` unless `epics:` does.
 
-| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `.dca-factory/runs/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration \| browser-only (<why>)`; the test gate reads `browser-only` |
-| `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table) |
+| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `.dca-factory/runs/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration (port) \| integration (adapter: <Adapter>) \| browser-only (<why>)`, and `## Invariants`, one line per domain type it changes; the test gate reads `browser-only` and the invariants |
+| `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table, and a `## Notes` line per invariant's unit test) |
 | `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `.dca-factory/runs/<story>/build.md` |
 | `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `.dca-factory/runs/<story>/tidy.md` |
 | `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `.dca-factory/runs/<story>/judge.md` |

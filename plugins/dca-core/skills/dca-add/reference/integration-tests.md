@@ -1,8 +1,10 @@
 # An integration level
 
-An integration test runs a use case through the wired application: its input port or its HTTP surface,
-the real adapters, persistence as the project runs it in tests, an external system stubbed at the protocol
-(`http-stub`). It sits between a unit test, which proves one type, and an end-user test, which drives the
+An integration test has two shapes. The **port test** runs a use case through its input port in the wired
+application: the real outgoing adapters, persistence as the project runs it in tests, an external system stubbed
+at the protocol (`http-stub`) — the use case tested once, however many adapters call it. The **adapter test**
+runs one incoming adapter against a stubbed input port: the request it turns into a command, the page or
+response it makes of the result and of each refusal. It sits between a unit test, which proves one type, and an end-user test, which drives the
 running application from outside. A delivery pipeline puts every scenario but a story's happy path here, so a
 project without this level has nowhere to put them.
 
@@ -125,6 +127,47 @@ Write the convention into the skeleton with the smoke test, even before there is
 follows the layout it finds, and a project without a reset convention gets whichever one the first
 story's author reaches for.
 
+## The two shapes (Java, Spring)
+
+The port test takes the input port from the wired application and asserts the outcome on what the use case
+returns and what persistence holds — no request, no page:
+
+```java
+class AddTaskIntegrationTest extends IntegrationTest {
+
+  @Autowired AddTaskInputPort addTask;
+
+  @Test
+  void aTrimmedTitleIsStored() {
+    addTask.execute(new AddTaskCommand("  Milch kaufen "));
+    assertThat(jdbcClient.sql("SELECT title FROM tasks").query(String.class).single()).isEqualTo("Milch kaufen");
+  }
+}
+```
+
+The adapter test runs the controller in the web slice with the input port stubbed, and asserts what only the
+page shows — the result's and each refusal's translation:
+
+```java
+@WebMvcTest(TaskController.class)
+class TaskControllerIntegrationTest {
+
+  @Autowired MockMvc mvc;
+  @MockitoBean AddTaskInputPort addTask;
+
+  @Test
+  void aRefusedTitleShowsTheMessageAndKeepsTheInput() throws Exception {
+    when(addTask.execute(any())).thenThrow(new TitleLengthViolated(201));
+    mvc.perform(post("/tasks").param("title", "x".repeat(201)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("höchstens 200 Zeichen")));
+  }
+}
+```
+
+The `IntegrationTest` base class below is the port tests' (the wired application, the reset); an adapter test
+starts only its slice and needs no reset, because it writes nothing.
+
 ## .NET
 
 A test project of its own, named `<Solution>.IntegrationTests`, that hosts the application in memory:
@@ -154,6 +197,11 @@ public class ApplicationTests(WebApplicationFactory<Program> factory) : IClassFi
 Shown to fail once: change `"/"` to a path the application does not serve, run
 `dotnet test tests/<Name>.IntegrationTests`, see it red, restore it, see it green. A project with no page
 at `/` asks for an endpoint it has instead.
+
+**The two shapes (.NET):** the port test resolves the input port from the factory's services
+(`factory.Services.CreateScope().ServiceProvider.GetRequiredService<IAddTask>()`) and asserts on its result and
+the store; the adapter test replaces the port in the host (`factory.WithWebHostBuilder(b =>
+b.ConfigureTestServices(s => s.AddSingleton<IAddTask>(stub)))`) and asserts on the response's status and body.
 
 **Starting clean (.NET):** one `WebApplicationFactory<Program>` per class (`IClassFixture`), and a reset of
 what the tests write before each test — a `DELETE` through the host's connection, or the in-memory

@@ -31,9 +31,14 @@ files written. You write **no** production behaviour.
    application started by the test, the fake clock for anything that counts or expires, a stand-in for
    a permission the user answers. Never read the page's script or markup as text to infer what the
    browser would do.
-2a. **An integration test** runs the use case through the wired application — through its input port
-   or its HTTP surface, whichever the scenario's `When` names — with real adapters and persistence as
-   the project runs it in tests, in the source set a `test.<name>:` key declares. An external system
+2a. **An integration test** has the shape the plan wrote after its level, in the source set a
+   `test.<name>:` key declares. `integration (port)`: the use case through its input port in the wired
+   application, with real outgoing adapters and persistence as the project runs it in tests — the
+   scenario's outcome asserted on what the use case returns, stores or publishes. `integration (adapter:
+   <Adapter>)`: that incoming adapter's translation — the request it turns into a command, the page,
+   status or payload it makes of the result and of each refusal — against a stubbed input port that
+   answers with the outcome; stubbing the input port here is right, the use case behind it has its own
+   test. A plan line with the bare `integration` of an older plan is the port shape. An external system
    is stubbed **at the protocol**, with the stub the profile names (`http.stub:` — WireMock,
    WireMock.Net): the stub's answer is the test's arrangement, and allowed. Never a mock of the port
    whose adapter the plan changes — that tests everything except the translation — and never a
@@ -48,11 +53,14 @@ files written. You write **no** production behaviour.
 2c. **An end-user test's display name is its scenario's title, verbatim** — the `Title:` line under the
    scenario's heading, else its key in words ("Shows empty state"). Two implementations of one story then
    name the test alike; the test gate refuses an end-user test without it.
-3. Add unit tests for the invariants the plan names: the rules an aggregate or value object must
-   never break. These belong to the domain's own vocabulary and are the part of the suite that
-   survives a rewrite of the adapters. A use case gets no unit test of its own from this stage: the
-   integration test runs it through the wired application, which is what the story observes, and a
-   second test of the same path with doubles proves the doubles.
+3. **A unit test for every invariant the plan's `## Invariants` names** — each rule, the guards
+   included: a required value refused when absent, a trimmed one refused untrimmed, a range at both
+   bounds. The test drives the domain type alone, no framework. List it under `## Notes` as
+   `- unit tests: <Class>#<method> for invariant <Element>: <rule>`; the test gate refuses a named
+   element no line covers. These belong to the domain's own vocabulary and are the part of the suite
+   that survives a rewrite of the adapters. A use case gets no unit test of its own from this stage: its
+   port test runs it in the wired application, and a second test of the same path with doubles proves
+   the doubles.
 4. Place tests where this project places tests. Look at the existing layout and follow it —
    source set, folder, naming, base classes, test data builders. Do not introduce a second
    convention next to the project's own.
@@ -115,7 +123,7 @@ nothing else from the file:
 - <every test file this stage wrote or changed, one per line — written by the pipeline, see below>
 
 ## Notes
-- unit tests: <class>#<method> for invariant <rule>
+- unit tests: <Class>#<method> for invariant <Element>: <rule>
 - uncovered: <criterion key> — <why no test was possible>   (only when unavoidable)
 ```
 

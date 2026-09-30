@@ -101,6 +101,10 @@ Then converge:
    suite already enforces — a rule catches it every run, a review comment does not.
 5. Discard style preferences, speculative concerns and anything you cannot point at in the code.
    Every remaining finding names a file, a line and the fix.
+5a. An **unplanned invariant** the build file names — a guard it found necessary and left out, since the plan
+   did not name it — is a confirmed `minor` against the plan (`plan` perspective), with the rule as its fix; a
+   guard in a changed domain type that the plan's `## Invariants` does not name and no unit test covers is
+   the same finding, whoever wrote it.
 6. Check the story once more against the criteria: is each one actually met by behaviour, not just
    by a green test? A test that asserts too little is a **test** defect and belongs in the report.
 

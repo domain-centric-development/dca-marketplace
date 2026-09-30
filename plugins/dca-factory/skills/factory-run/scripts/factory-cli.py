@@ -2605,6 +2605,9 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
   `- <key>  →  level: e2e | integration | browser-only (<why>)`
   `factory-cli.py --plan-skeleton <story>` writes the file's headings and these lines with the keys: give each its level.
   The test gate reads `level: browser-only` here (`levels`); a key is `[a-z0-9][a-z0-9-]*`
+- `## Invariants`: one line per aggregate, entity, value object or domain service `## Changes` names —
+  `- <Element>: <rule>; <rule>` with its guards (required, trimmed, in range), or `- <Element>: none — <why>`.
+  The test gate reads it (`invariants`): each named rule needs a unit test in tests.md's `## Notes`
 - `## Changed tests` (only when the story contradicts an existing test): `| <path from the project root> | <backing line or decision id> |`
 - `## Files`: `- <path from the project root> — <changes|read>: <why>` (the path in backticks) — the next stages open these first
 - `## Glossary proposals`: `- <term>: <definition>` — the document gate checks each term landed in a glossary or is named open
@@ -2616,7 +2619,7 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
     if stage == "test":
         return f"""{CONTRACT_HEAD}
 
-test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, compiles, tests-red, levels, test-titles, files-listed)
+test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, compiles, tests-red, levels, test-titles, invariants, files-listed)
 - the table, right after the marker `<!-- gate:tests -->`, one row per criterion (a criterion may have several rows):
   `| criterion | test |` then `| <key> | <selector> |`
   row pattern: {MAPPING_ROW.pattern!r}
@@ -2635,8 +2638,8 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - `## Files`: every test file this stage wrote or changed, one per line, as a path from the project root —
   `files-listed` compares the list with the pipeline's changed-files record. `factory-cli.py --files-skeleton
   <story> test` writes the list from the tree (the file's skeleton, or the missing paths): run it, add the rest
-- `## Notes`: `- unit tests: <Class>#<method> for invariant <rule>`; `- uncovered: <key> — <why>` only when unavoidable —
-  not what a test fails on: the red run records that
+- `## Notes`: `- unit tests: <Class>#<method> for invariant <Element>: <rule>`, one per plan invariant;
+  `- uncovered: <key> — <why>` only when unavoidable — not what a test fails on: the red run records it
 - stubs: a type with nothing a criterion observes (a record and its fields, an enum, an interface, an exception type) is
   written whole here; a method whose outcome a criterion asserts throws — whatever a criterion observes, throws"""
     if stage in ("build", "tidy"):
@@ -2813,7 +2816,7 @@ def files_skeleton(runs, story_id, stage, cwd="."):
 
 
 PLAN_SKELETON = ("# Plan — {story}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"
-                 "| --- | --- | --- | --- | --- |\n\n## Acceptance criteria\n{rows}\n\n## Files\n\n## Glossary proposals\n\n"
+                 "| --- | --- | --- | --- | --- |\n\n## Acceptance criteria\n{rows}\n\n## Invariants\n\n## Files\n\n## Glossary proposals\n\n"
                  "## Open assumptions\n")
 
 

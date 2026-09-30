@@ -19,7 +19,11 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
    the change has a surface. A page built to no stated look is correct only where the product
    description states none.
 2. Follow the plan's change list. An element the plan did not name is a sign the plan was wrong:
-   note it in the build file rather than quietly extending the design.
+   note it in the build file rather than quietly extending the design. The same holds for a **guard in a
+   domain type** — a null check, a trim, a range, a uniqueness rule — that the plan's `## Invariants`
+   does not name: it is code no test asked for, so it stays out; name it in the build file as an
+   unplanned invariant (`<Element>: <rule>`), and the judge reads it as the plan's gap it is. Every guard
+   the plan names has a unit test already — make it pass, add none beside it.
 3. Keep the architecture intact — the same rules the plan worked under: no framework types in the
    domain, ports declared inward and implemented in adapters, no raw cross-context imports, one
    aggregate per transaction, domain events published and cleared where the plan says so.

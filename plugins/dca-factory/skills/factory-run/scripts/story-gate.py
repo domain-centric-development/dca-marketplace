@@ -215,10 +215,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 11
+CONTRACT = 12
 
 
-VERSION = "0.54.0"
+VERSION = "0.55.0"
 
 
 def read_front_matter(path):
@@ -706,6 +706,89 @@ def check_plan_levels(result, runs, story_id):
                                    + (" …" if len(unfinished) > 6 else "")
                                    + " — the skeleton's line is still empty; the plan stage gives each criterion "
                                      "`level: e2e | integration | browser-only (<why>)`")
+
+
+#: The kinds of a plan's `## Changes` row that carry invariants: the domain's own types. A use case, a port, an
+#: adapter or a read model has none of its own — its rules are the domain's, reached through the use case.
+DOMAIN_KINDS = re.compile(r"\b(aggregate|entity|value object|value|domain service)\b", re.I)
+
+
+def plan_domain_elements(plan):
+    """The elements of the plan's `## Changes` table whose kind is a domain type, in the table's order."""
+    elements = []
+    for line in section_of(plan, "changes") or []:
+        cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or not cells[0] or set(cells[0]) <= set("-: ") or cells[0].lower() == "element":
+            continue
+        if DOMAIN_KINDS.search(cells[1]) and not re.search(r"\bevent\b", cells[1], re.I):
+            elements.append(cells[0])
+    return elements
+
+
+def plan_invariants(plan):
+    """`## Invariants` as {element: rules}: one line per domain type, `- <Element>: <rule>; <rule>` or
+    `- <Element>: none — <why>`. None when the section is absent."""
+    lines = section_of(plan, "invariants")
+    if lines is None:
+        return None
+    found = {}
+    for line in lines:
+        match = re.match(r"^\s*-\s+`?([\w.]+)`?\s*:\s*(.+?)\s*$", line)
+        if match:
+            found[match.group(1)] = match.group(2)
+    return found
+
+
+def check_invariants(result, profile, cwd, runs, story_id, front):
+    """Contract 12: every domain type the plan changes names its invariants — the rules it must never break,
+    its guards included (required, trimmed, in range) — and every one named is covered by a unit test the
+    tests file names under `## Notes` (`unit tests: <Class>#<method> for invariant <Element>: <rule>`), in a
+    file that exists. A guard nobody named is code no test asked for; a named one nobody tested is a plan
+    the test stage did not follow."""
+    if story_kind(front) != "story" or contract_of(profile) < 12:
+        return
+    plan_path, tests_path = os.path.join(runs, story_id, "plan.md"), os.path.join(runs, story_id, "tests.md")
+    if not os.path.isfile(plan_path):
+        return
+    plan = read_text(plan_path)
+    elements = plan_domain_elements(plan)
+    named = plan_invariants(plan)
+    if not elements and not named:
+        return
+    missing = [e for e in elements if e not in (named or {})]
+    if missing:
+        result.fail("invariants", "plan.md changes domain types without an `## Invariants` line: "
+                                  + ", ".join(missing) + " — name each one's rules, its guards included "
+                                  "(`- <Element>: <rule>; <rule>`), or `- <Element>: none — <why>`")
+        return
+    notes = [l for l in (section_of(read_text(tests_path), "notes") or []) if "unit tests:" in l] \
+        if os.path.isfile(tests_path) else []
+    sources = set()
+    for root, dirs, files in os.walk(cwd):
+        dirs[:] = [d for d in dirs if d not in BREAK_IGNORE and not d.startswith(".")]
+        sources.update(os.path.splitext(f)[0] for f in files)
+    untested, absent = [], []
+    for element, rules in sorted((named or {}).items()):
+        if re.match(r"^none\b", rules, re.I):
+            continue
+        simple = element.rsplit(".", 1)[-1]
+        lines = [l for l in notes if re.search(rf"\b{re.escape(simple)}\b", l.split("for invariant", 1)[-1])]
+        if not lines:
+            untested.append(element)
+            continue
+        for line in lines:
+            for cls in re.findall(r"([\w.]+)(?:#\w+)?\s+(?:\(|for invariant)", line):
+                if cls.rsplit(".", 1)[-1] not in sources:
+                    absent.append(f"{cls} ({element})")
+    if untested:
+        result.fail("invariants", "invariants the plan names without a unit test in tests.md's `## Notes`: "
+                                  + ", ".join(untested) + " — `- unit tests: <Class>#<method> for invariant "
+                                  "<Element>: <rule>`, a test of the domain type alone")
+    elif absent:
+        result.fail("invariants", "unit tests named for invariants that are not in the project: " + "; ".join(absent))
+    else:
+        result.ok("invariants", f"every domain type the plan changes names its invariants, each tested at unit level "
+                                f"({len(named or {})})")
 
 
 def check_levels(result, profile, runs, story_id, front, body, mapping, located):
@@ -4324,6 +4407,7 @@ def main(argv):
                        ("plan.md", "tests.md") if args.stage == "test" else (STAGE_FILES[args.stage],), len(criteria))
             if args.stage == "test":
                 check_plan_levels(result, args.runs, story_id)
+                check_invariants(result, profile, cwd, args.runs, story_id, front)
                 check_levels(result, profile, args.runs, story_id, front, body, mapping, located)
                 check_titles(result, profile, cwd, front, body, mapping, located)
             # a journey is a guard over what is delivered: green at its test gate, the inverse of a story

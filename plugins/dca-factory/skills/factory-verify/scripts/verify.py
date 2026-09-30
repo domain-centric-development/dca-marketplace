@@ -226,6 +226,27 @@ TESTS = """# Tests — STORY-1
 - src/test/java/com/example/WidgetUnitTest.java
 """
 
+#: WP-82: a plan that changes one value object, with and without its invariants line.
+INVARIANT_PLAN = """# Plan — STORY-1
+
+## Changes
+| Element | Kind | Location | New or changed | Evidence |
+| --- | --- | --- | --- | --- |
+| Widget | Value object | domain/model | new | the story |
+
+## Acceptance criteria
+- shows-the-thing  →  level: e2e
+- shows-nothing-when-empty  →  level: integration
+
+## Invariants
+- Widget: name required; name trimmed; 1 to 40 characters
+"""
+
+INVARIANT_NOTES = """
+## Notes
+- unit tests: com.example.WidgetUnitTest#showsNothingWhenEmpty for invariant Widget: name required, trimmed, 1 to 40
+"""
+
 # The fixture's runner: exit 1 while the marker for that test is absent, 0 once it is there. It
 # also refuses a selector it cannot see, so "a run that matched nothing" is reproducible too.
 #: A runner invoked the way a build tool is — `gradlew <task>`, no path anywhere in the command.
@@ -3595,6 +3616,33 @@ def run_groups(args):
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
                               "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: e2e\n"
                               "- shows-nothing-when-empty  →  level: \n"),))),
+        # WP-82: every domain type the plan changes names its invariants, and each named one has a unit test.
+        (Case("test: a plan that changes a value object without an invariants line is refused", "test", 1,
+              must_fail=("invariants",), text=("without an `## Invariants` line: Widget",)),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0]),))),
+        (Case("test: an invariant the plan names without a unit test is refused", "test", 1,
+              must_fail=("invariants",), text=("without a unit test in tests.md's `## Notes`: Widget",)),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN),))),
+        (Case("test: an invariant covered by a unit test in the project passes", "test", 0,
+              must_pass=("invariants", "tests-red")),
+         dict(tests=TESTS + INVARIANT_NOTES, extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN),))),
+        (Case("test: a unit test named for an invariant but missing from the project is refused", "test", 1,
+              must_fail=("invariants",), text=("not in the project: com.example.WidgetRulesTest",)),
+         dict(tests=TESTS + INVARIANT_NOTES.replace("WidgetUnitTest", "WidgetRulesTest"),
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN),))),
+        (Case("test: a domain type with `none — <why>` needs no unit test", "test", 0,
+              must_pass=("invariants", "tests-red")),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.replace(
+             "- Widget: name required; name trimmed; 1 to 40 characters",
+             "- Widget: none — a name only, rules live in WidgetName")),))),
+        (Case("test: a plan that changes no domain type is not asked for invariants", "test", 0,
+              must_pass=("tests-red",), absent=("gate:fail invariants", "gate:pass invariants")),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0].replace(
+             "| Widget | Value object |", "| ShowWidgets | Use case |")),))),
+        (Case("test: a profile on contract 11 is not asked for invariants", "test", 0,
+              must_pass=("tests-red",), absent=("gate:fail invariants",)),
+         dict(profile=PROFILE + "contract: 11\n",
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0]),))),
         (Case("test: a lean plan gets no size note", "test", 0, must_pass=("tests-red",), absent=("gate:note size",)),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
                               "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: e2e\n"
