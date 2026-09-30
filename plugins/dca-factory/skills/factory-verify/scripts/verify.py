@@ -4076,6 +4076,14 @@ def run_groups(args):
               must_fail=("documented",)),
          dict(green=both_green, ledger=both_green,
               document=DOCUMENT.replace("`docs/context-map.md:3` — the context's own description", ""))),
+        # 0.54.0: the judge's confirmed defects that did not block are kept beside the story at delivery.
+        (Case("document: the judge's confirmed minors land in <story>.findings.md when the story is delivered", "document", 0,
+              must_pass=("delivered", "findings"), text=("2 confirmed finding(s) kept in", "2 open there")),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=((".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | Defect | Fix |\n|---|---|---|---|---|\n| clean-code | src/main/Thing.java:3 | minor | a name that says nothing | rename it |\n| ddd | src/main/Thing.java:9 | minor | an event in the present tense | past tense |\n"),),
+              after=lambda root: [] if os.path.isfile(os.path.join(root, "project/epics/sample/STORY-1.findings.md"))
+              and open(os.path.join(root, "project/epics/sample/STORY-1.findings.md"), encoding="utf-8").read().count("| open |") == 2
+              else ["no STORY-1.findings.md with two open rows beside the story"])),
         # WP-81: one review file per perspective; a missing one is a note, a malformed one is refused.
         (Case("document: three review files in the skills' format pass the reviews check", "document", 0,
               must_pass=("reviews",)),
@@ -4811,6 +4819,26 @@ def run_groups(args):
                              and code_d == 0 and "## Paths" in text_d and "Verified by" in text_d
                              and code_x == 2 and "--contract takes one of" in text_x,
                              (text_p[:120], text_j[:120], text_d[:120], text_x[:120])))
+    # 0.54.0: a second delivery adds no row twice; the findings file is no story; --findings lists the open rows
+    with tmpdir() as root:
+        build_project(root, green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+            (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | Defect | Fix |\n|---|---|---|---|---|\n| clean-code | src/main/Thing.java:3 | minor | a name that says nothing | rename it |\n| ddd | src/main/Thing.java:9 | minor | an event in the present tense | past tense |\n"),))
+        run_gate(args.gate, root, "document")
+        write_file(root, "project/epics/sample/STORY-1.md",
+                   open(os.path.join(root, "project/epics/sample/STORY-1.md"), encoding="utf-8").read()
+                   .replace("status: delivered", "status: approved"))
+        run_gate(args.gate, root, "document")
+        path = os.path.join(root, "project/epics/sample/STORY-1.findings.md")
+        text = open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
+        listed = subprocess.run([sys.executable, cli_of(args.gate), "--findings"], cwd=root, capture_output=True,
+                                text=True, encoding="utf-8", errors="replace").stdout
+        backlog = subprocess.run([sys.executable, args.gate, "--check-backlog"], cwd=root, capture_output=True,
+                                 text=True, encoding="utf-8", errors="replace").stdout
+        expectations.append(("findings: a story delivered twice keeps two rows, not four; the file is no story to the backlog "
+                             "check; --findings lists the open rows with story, severity and place",
+                             text.count("| open |") == 2 and "STORY-1.findings" not in backlog
+                             and listed.count("STORY-1\tminor\tsrc/main/Thing.java") == 2 and "2 open finding(s)" in listed,
+                             (text[-300:], listed[:200], [l for l in backlog.splitlines() if "findings" in l])))
     # WP-80 B: the skeleton carries one `## Glossary` row per proposed term, as the plan wrote it.
     with tmpdir() as root:
         build_project(root, green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(

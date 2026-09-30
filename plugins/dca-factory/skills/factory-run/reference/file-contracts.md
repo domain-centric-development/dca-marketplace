@@ -167,6 +167,15 @@ perspective under `## Perspectives covered`. The document gate reads them as `re
 is a note (the judge ran that pass itself and says so), a file without a findings section is refused.
 A repeat round writes new files; the old ones are not kept. `--contract review` prints the shape.
 
+## Findings — `<story>.findings.md`, beside the story
+
+The judge's confirmed defects that did not block the story — its minors — written by the document gate when it
+delivers the story, from `judge.md`'s `## Confirmed defects` table: one row per finding, `| # | Perspective |
+File:line | Severity | Defect | Fix | Status |`, `Status` `open`; a row already there (same file:line and defect)
+is not written twice. The file lives beside the story like its `.decisions/` folder, is committed with the project
+and is no story to the backlog. A person sets `done` or `wont-fix`; a later story may take the open rows as its
+brief. `factory-cli.py --findings` lists the open rows, and the status brief counts them.
+
 ## Escalation
 
 A stage that cannot finish writes its file anyway, with a `## needs-human` section, and the

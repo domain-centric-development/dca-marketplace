@@ -218,7 +218,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 11
 
 
-VERSION = "0.53.0"
+VERSION = "0.54.0"
 
 
 def read_front_matter(path):
@@ -288,8 +288,91 @@ def story_files(epics):
         dirs[:] = sorted(d for d in dirs if not d.endswith(".decisions"))
         if os.path.normpath(root) == os.path.normpath(epics):
             continue                                    # a file beside the epics — a README — is not a story
-        found += [os.path.join(root, name) for name in sorted(files) if name.endswith(".md") and name != "epic.md"]
+        found += [os.path.join(root, name) for name in sorted(files)
+                  if name.endswith(".md") and name != "epic.md" and not name.endswith(".findings.md")]
     return found
+
+
+FINDINGS_HEADER = "| # | Perspective | File:line | Severity | Defect | Fix | Status |"
+
+
+def findings_path(story_path):
+    """The judge's confirmed findings, kept beside the story like its decisions: `<story>.findings.md`."""
+    return story_path[:-3] + ".findings.md" if story_path.endswith(".md") else story_path + ".findings.md"
+
+
+def confirmed_defects(judge_text):
+    """The rows of judge.md's `## Confirmed defects` table: (perspective, file:line, severity, defect, fix)."""
+    rows, inside = [], False
+    for line in judge_text.splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip().lower() == "confirmed defects"
+            continue
+        if not inside or not line.lstrip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 5 or cells[0].lower() == "perspective" or set(cells[0]) <= set("-: "):
+            continue
+        rows.append(tuple(cells[:5]))
+    return rows
+
+
+def findings_rows(path):
+    """The rows of a findings file: (n, perspective, file:line, severity, defect, fix, status)."""
+    rows = []
+    if not os.path.isfile(path):
+        return rows
+    for line in read_text(path).splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) == 7 and cells[0].isdigit():
+            rows.append(tuple(cells))
+    return rows
+
+
+def record_findings(story_path, story_id, front, runs):
+    """Keep the judge's confirmed defects beside the story, as `<story>.findings.md`, when the story is delivered:
+    a finding that did not block (a minor) would otherwise live in the run folder alone, which is protocol and
+    disposable. One row per finding, `open` until a person or a later story closes it; a row already there
+    (same file:line and defect) is not written twice. Returns (added, open)."""
+    judge = os.path.join(runs, story_id, "judge.md")
+    if not os.path.isfile(judge):
+        return 0, 0
+    new = confirmed_defects(read_text(judge))
+    path = findings_path(story_path)
+    have = findings_rows(path)
+    known = {(r[2], r[4]) for r in have}
+    added = [r for r in new if (r[1], r[3]) not in known]
+    if not have and not added:
+        return 0, 0
+    if not os.path.isfile(path):
+        text = (f"---\nstory: {story_id}\nepic: {front.get('epic', '')}\n---\n\n# Findings — {story_id}\n\n"
+                "The judge's confirmed defects that did not block the story, kept for a later story or a person's look. "
+                "The pipeline appends; a person sets `Status` to `done` or `wont-fix`.\n\n"
+                f"{FINDINGS_HEADER}\n|---|---|---|---|---|---|---|\n")
+    else:
+        text = read_text(path).rstrip("\n") + "\n"
+    n = len(have)
+    for perspective, where, severity, defect, fix in added:
+        n += 1
+        text += f"| {n} | {perspective} | {where} | {severity} | {defect} | {fix} | open |\n"
+    if added:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+    return len(added), sum(1 for r in findings_rows(path) if r[6] == "open")
+
+
+def open_findings(epics):
+    """Every open finding under the epics: (story id, file:line, severity, defect), read from the findings files."""
+    out = []
+    for root, dirs, files in os.walk(epics):
+        dirs[:] = sorted(d for d in dirs if not d.endswith(".decisions"))
+        for name in sorted(files):
+            if name.endswith(".findings.md"):
+                story = name[:-len(".findings.md")]
+                out += [(story, r[2], r[3], r[4]) for r in findings_rows(os.path.join(root, name)) if r[6] == "open"]
+    return out
 
 
 def story_id_of(path, front=None):
@@ -4326,6 +4409,11 @@ def main(argv):
             stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             write_story_fields(story_path, status="delivered", delivered=stamp)
             result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`")
+            # The judge's confirmed defects that did not block: kept beside the story, not in the run folder alone.
+            added, open_now = record_findings(story_path, story_id, front, args.runs)
+            if added or open_now:
+                result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
+                                      f"{open_now} open there")
     if not result.failed and args.stage == "adopt" and not is_delivered(front):
         stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         write_story_fields(story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built

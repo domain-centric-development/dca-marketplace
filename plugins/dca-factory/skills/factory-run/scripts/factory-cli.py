@@ -901,6 +901,11 @@ def status_brief(cwd, epics, runs, session_start=False):
     listening = listener_line(cwd)
     if listening:
         print(f"factory: {listening}")
+    findings = _gate.open_findings(epics)
+    if findings:
+        stories = sorted({f[0] for f in findings})
+        print(f"factory: {len(findings)} open finding(s) from the judge in {len(stories)} story file(s) "
+              f"(<story>.findings.md beside the story) — `factory-cli.py --findings` lists them")
     # A skill link that points nowhere — its plugin version pruned from the cache, a checkout moved: the
     # skills are then missing for a session and a runner stage alike, and only the update relinks them.
     dangling = dangling_skill_links(cwd)
@@ -2939,6 +2944,8 @@ def main(argv):
     parser.add_argument("--get", metavar="KEY", help="the profile's value for KEY, or nothing")
     parser.add_argument("--command-heads", action="store_true",
                         help="the first word of every command the profile declares, one per line")
+    parser.add_argument("--findings", action="store_true",
+                        help="the judge's confirmed findings that did not block, open ones first, from <story>.findings.md")
     parser.add_argument("--perspectives", action="store_true",
                         help="the judge's perspectives with their carriers, one `<name>\t<carrier>` per line")
     parser.add_argument("--carriers", action="store_true",
@@ -3025,6 +3032,15 @@ def main(argv):
         return 0
     if args.command_heads:
         print("\n".join(command_heads(read_profile(profile_path))))
+        return 0
+    if args.findings:
+        rows = _gate.open_findings(args.epics)
+        if not rows:
+            print("factory: no open finding — the judges confirmed nothing that did not block, or every row is closed")
+            return 0
+        for story, where, severity, defect in rows:
+            print(f"{story}\t{severity}\t{where}\t{defect}")
+        print(f"factory: {len(rows)} open finding(s); set Status to done or wont-fix in the story's .findings.md")
         return 0
     if args.perspectives:
         for name, carrier in _gate.perspectives_of(read_profile(resolve_profile(None, cwd))):

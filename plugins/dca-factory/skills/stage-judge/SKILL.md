@@ -177,6 +177,11 @@ anew. A defect does not disappear because this round's reading missed it: it is 
 line that shows it, or withdrawn, with the reason — and a withdrawal that contradicts the source
 the previous round cited (a glossary line, a criterion) is a `story-conflict`, not a `pass`.
 
+A `minor` you confirm is not lost with the run folder: when the story is delivered, the pipeline copies every
+row of `## Confirmed defects` into `<story>.findings.md` beside the story (`| # | Perspective | File:line |
+Severity | Defect | Fix | Status |`, `open` until a person or a later story closes it). So a row you write
+here is a row somebody will read later — file and line exact, the fix one sentence.
+
 `verdict: pass` means the change is deliverable. Say it plainly when it is true; inventing a
 finding to look thorough costs a build round and teaches the pipeline nothing. Every finding
 names the file and line it stands on — a finding without that is a suspicion and is marked as one.

@@ -407,17 +407,18 @@ detect_tool() {
 # The shell a stage may use without asking, beside the gate, the cli and the profile's commands: the ordinary
 # reading and text tools, and the three git verbs that look without changing anything (`git apply --check` is
 # how a stage tries a break patch). Measured on the bench: without them a stage hit the allow-list about three
-# times per story — `sed`, `xargs`, `git apply --check`, a `grep` after `git ls-files` — each a wasted turn.
+# times per story — `sed`, `xargs`, `git apply --check`, a `grep` after `git ls-files`, then `cd <folder> && …` chains
+# once those were allowed — each a wasted turn.
 # A script fed on stdin (`python3 -`) stays out on purpose: a file is changed with the editor tools, and a
 # stage that reaches for a script instead is told so in its prompt.
-STAGE_SHELL="sed, grep, find, xargs, cat, ls, head, tail, wc, sort, diff, mkdir, and git status, git diff, git log, git ls-files, git apply --check"
+STAGE_SHELL="cd, ls, cat, head, tail, wc, sort, grep, find, xargs, sed, diff, echo, printf, pwd, mkdir, and git status, git diff, git log, git ls-files, git apply --check"
 allowed_commands() {
   local list="Bash($PY $GATE:*),Bash($PY .agents/factory/factory-cli.py:*)" head
   for head in $(cli --command-heads 2>/dev/null); do
     case "$list" in *"Bash($head:*)"*) ;; *) list="$list,Bash($head:*)" ;; esac
   done
   local tool
-  for tool in "sed" "grep" "find" "xargs" "cat" "ls" "head" "tail" "wc" "sort" "diff" "mkdir" \
+  for tool in "cd" "ls" "cat" "head" "tail" "wc" "sort" "grep" "find" "xargs" "sed" "diff" "echo" "printf" "pwd" "mkdir" \
               "git status" "git diff" "git log" "git ls-files" "git apply --check"; do
     case "$list" in *"Bash($tool:*)"*) ;; *) list="$list,Bash($tool:*)" ;; esac
   done
