@@ -891,6 +891,12 @@ def verify_runner(runner, verbose=False):
               "per-machine system prompt", bool(flags) and all(w in flags[0] for w in wanted), flags[:1])
         check("isolation: every stage gets the same flags, so the prompt prefix is shared across stages",
               len(flags) == 6 and len(set(flags)) == 1, flags)
+        shell = [line.split("shell allowed:", 1)[1] for line in output.splitlines() if "shell allowed:" in line]
+        check("shell: the stage's allow-list names the gate, the cli, the reading tools and git's looking verbs, and "
+              "no script on stdin",
+              bool(shell) and all(s in shell[0] for s in ("story-gate.py:*)", "factory-cli.py:*)", "Bash(sed:*)",
+                                                             "Bash(xargs:*)", "Bash(git apply --check:*)"))
+              and "python3 -" not in shell[0] and "Bash(python3:*)" not in shell[0], shell[:1])
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   env=dict(os.environ, FACTORY_ISOLATION="off"))
         flags = [line.split("tool flags:", 1)[1].strip() for line in output.splitlines() if "tool flags:" in line]

@@ -404,10 +404,22 @@ detect_tool() {
 # The commands a stage must be allowed to run: the gate and whatever the stack profile declares.
 # A tool that asks for permission has nobody to ask in a headless run, and a project settings file
 # is ignored while the workspace is untrusted — so the allowlist is passed on the command line.
+# The shell a stage may use without asking, beside the gate, the cli and the profile's commands: the ordinary
+# reading and text tools, and the three git verbs that look without changing anything (`git apply --check` is
+# how a stage tries a break patch). Measured on the bench: without them a stage hit the allow-list about three
+# times per story — `sed`, `xargs`, `git apply --check`, a `grep` after `git ls-files` — each a wasted turn.
+# A script fed on stdin (`python3 -`) stays out on purpose: a file is changed with the editor tools, and a
+# stage that reaches for a script instead is told so in its prompt.
+STAGE_SHELL="sed, grep, find, xargs, cat, ls, head, tail, wc, sort, diff, mkdir, and git status, git diff, git log, git ls-files, git apply --check"
 allowed_commands() {
   local list="Bash($PY $GATE:*),Bash($PY .agents/factory/factory-cli.py:*)" head
   for head in $(cli --command-heads 2>/dev/null); do
     case "$list" in *"Bash($head:*)"*) ;; *) list="$list,Bash($head:*)" ;; esac
+  done
+  local tool
+  for tool in "sed" "grep" "find" "xargs" "cat" "ls" "head" "tail" "wc" "sort" "diff" "mkdir" \
+              "git status" "git diff" "git log" "git ls-files" "git apply --check"; do
+    case "$list" in *"Bash($tool:*)"*) ;; *) list="$list,Bash($tool:*)" ;; esac
   done
   echo "$list"
 }
@@ -1690,6 +1702,7 @@ that are its own (a test that asserts too little is the test stage's, with its b
   if [ -n "$dry" ]; then
     echo "   would run: $prompt"
     echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
+    echo "   shell allowed: $(allowed_commands)"
     local dry_choice; dry_choice=$(model_choice "$tool" builder)
     echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
     return 0
@@ -1789,6 +1802,7 @@ second writer. $(where_things_are "$tool" verifier "$story")"
   if [ -n "$dry" ]; then
     echo "   would run: $prompt"
     echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
+    echo "   shell allowed: $(allowed_commands)"
     local dry_choice; dry_choice=$(model_choice "$tool" verifier)
     echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
     return 0
@@ -1908,7 +1922,9 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
   local cli_path=${CLI#"$PWD/"}             # the project's own copy, named as the gate is: relative to the root
   printf '%s' "Where things are: the stack profile is $PROFILE; this story's run folder is $RUNS/$story/; \
 what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
-source; the building blocks' API is in the project's conventions file and the catalog, never in a jar.$catalog"
+source; the building blocks' API is in the project's conventions file and the catalog, never in a jar.$catalog \
+The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL. Change a file \
+with the editor tools; a script fed on stdin (python3 -) is refused and costs a turn."
 }
 
 prompt_for() {                              # prompt_for <stage> <story>
@@ -2141,6 +2157,7 @@ run_story() {
     if [ -n "$dry" ]; then
       echo "   would run: $(prompt_for "$stage" "$story")"
       echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
+      echo "   shell allowed: $(allowed_commands)"
       local dry_choice; dry_choice=$(model_choice "$tool" "$stage")
       echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
     elif [ -f "$GATE" ] && ! cli --claim "$WORKER" >/dev/null; then

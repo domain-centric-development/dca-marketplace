@@ -238,6 +238,11 @@ starts no tool; `run` starts a tool process per stage, so no skill runs it and t
 inside an agent session (`FACTORY_ALLOW_NESTED=1` to force).
 The first message — even "hi" — then gets the state and the choices.
 
+The runner's own processes get a fixed allow-list instead: the gate, the cli, the commands the profile
+declares, and the ordinary reading and text tools (`sed`, `grep`, `find`, `xargs`, `cat`, `head`, `tail`,
+`git diff`, `git ls-files`, `git apply --check`, …) — `factory.sh run --dry-run` prints it as `shell allowed`.
+A script on stdin (`python3 -`) is not on it: a stage changes files with the editor tools.
+
 ## How to see where it stands
 
 From any session in the project — beside a running `run --watch` too, since it only reads:

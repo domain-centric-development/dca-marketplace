@@ -223,7 +223,11 @@ from the gate's own constants. A stage reads that, never the gate's source. A st
 gate runs it with `--brief`: what passed is one line, what did not stays verbatim. Before the document
 stage the runner writes the stage's file as a skeleton (`factory-cli.py --document-skeleton <story>`) with
 every changed path and run file root-relative under `## Paths`; in a session run it yourself before the
-stage, and cite from it.
+stage, and cite from it. The prompt also names the shell the stage has without asking — the gate, the
+cli, the profile's commands and the ordinary reading and text tools (`reference/stage-common.md`, *The
+shell a stage has*) — and that a file is changed with the editor, never with a script on stdin: in an
+unattended run a refused command is a lost turn, nothing more, and the bench counted three per story
+before the list carried what a stage reaches for.
 
 **A model per stage.** The profile may name one: `model.<tool>.<stage>`, or `model.<tool>` for
 every stage. The runner passes it as the tool's model flag. In the subagent tier, start the stage's

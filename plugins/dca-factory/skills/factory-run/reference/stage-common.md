@@ -82,6 +82,16 @@ your file: its report is the record, and a stage edits no hand-over after the ga
 (a size, an older contract) is information for whoever maintains the pipeline; it is never a reason
 to edit your file after the gate ran, and never a reason to run the gate again.
 
+## The shell a stage has
+
+The runner lets a stage run, without asking, the gate, the cli, the commands the stack profile declares,
+and the ordinary reading and text tools — `sed`, `grep`, `find`, `xargs`, `cat`, `ls`, `head`, `tail`,
+`wc`, `sort`, `diff`, `mkdir`, and `git status`, `git diff`, `git log`, `git ls-files`, `git apply
+--check` (how a break patch is tried). Everything else asks, and in an unattended run nobody answers:
+the call is refused and the turn is lost. A file is changed with the editor tools, never with a script
+fed on stdin (`python3 -` and a heredoc) — that is the one habit the bench saw refused three times per
+story. In a session the same tools are the ones a person answers "yes" to without looking twice.
+
 ## The formatter runs last
 
 Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
