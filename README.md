@@ -98,7 +98,7 @@ With `acceptance: pages` in the profile, a story with something to see waits for
 before it is delivered; a correction goes into the same story, which runs again.
 
 The pipeline needs three things from your project: a **project description** under `project/`, a
-**stack profile** (`.agents/factory/factory.profile.yaml` — your build and test commands, detected
+**stack profile** (`dca-factory.profile.yaml` — your build and test commands, detected
 from presets) and the gate script next to it. `/factory-setup` sees to all three; underneath it runs
 
 ```
@@ -163,7 +163,7 @@ developing, add the clone as the marketplace and let the project link the skill 
 
 **The pipeline says a command is "skipped and named".** Your stack profile does not declare it. That
 is deliberate: a gate that fails on something nobody configured gets switched off, so it reports the
-gap instead. Add the command to `.agents/factory/factory.profile.yaml`.
+gap instead. Add the command to `dca-factory.profile.yaml`.
 
 **A gate refuses a story I consider fine.** Read the check name in its output — each one states what
 it refused and why. `factory-verify` shows the same checks against fixtures if you suspect the gate
