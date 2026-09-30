@@ -39,25 +39,18 @@ freedom is that it may not change what the code *does*.
 6. Stop early. Two or three moves that make the story's code plainly better is a good stage; a
    rewrite is a plan nobody approved. When you find yourself wanting one, write it down as a
    finding and leave the code alone.
-7. The gate is your test run. Run a single test while you move things; when the moves are done, run
-   the tidy gate — it compiles, runs every mapped test and the required suites once per command, the
-   architecture suite and the formatter. Do not run the whole suite yourself before it: the gate runs
-   the same commands, and a stage that runs them first pays twice for one answer.
-8. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
-   formatting of what you moved. The gate and the commit hook only check `format:`.
+7. The gate is your test run (`factory-run/reference/stage-common.md`): a single test while you move
+   things, then the tidy gate, never the whole suite before it. Write nothing about the gate into
+   your file: its report is the record.
+8. `formatFix:` runs last, before you finish (`factory-run/reference/stage-common.md`).
 
 ## Who carries this stage
 
-The stack profile may name a carrier — `carrier.tidy: <name>` — the skill or agent that holds this
-project's craft for readable code. A review **skill** works in every tool; an **agent** only where
-the tool has agents. Use the named carrier where this tool offers it; otherwise do the stage as
-described here and say in your file which it was ("in-session; `<carrier>` not available here").
-
-**The guard beside the carrier.** The profile may also name `carrier.guard: <name>` — the skill that
-holds the architecture's invariants while code is edited (in a DCA project `dca-discipline`). Apply
-it for every file you write, the same way you use the carrier: where this tool offers it; otherwise
-keep the invariants as described here and say so in your file. An absent key is skipped and named
-like any other.
+`carrier.tidy: <name>` in the stack profile names the skill or agent that holds this project's craft
+for it; use it where this tool offers it, otherwise do the stage as described here and say so in
+your file. `carrier.guard: <name>` names the skill that holds the architecture's invariants while
+you edit — apply it to every file you write, the same way. The rule in full: `factory-
+run/reference/stage-common.md`.
 
 ## The tidy file
 
@@ -71,10 +64,10 @@ done — it creates the file with every changed file as a row, or adds the missi
 
 ## Left alone
 - <what you saw and did not change>: <why — outside the footprint, or a design question>
-
-## Checks
-- gate tidy: <pass, or what it refused and how that was fixed>
 ```
+
+The gate's outcome is not recorded here: its report is the evidence, and a stage edits no hand-over
+after the gate ran.
 
 Where you changed nothing, say so and why: a green build that was already clean is a finished
 stage, not a skipped one. An empty `## Moves` with a reason is a better outcome than a move made

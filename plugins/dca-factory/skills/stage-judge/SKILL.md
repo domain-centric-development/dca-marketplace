@@ -41,7 +41,7 @@ perspective in this order:
 2. otherwise a review skill of the project whose own description covers that perspective — a skill
    named for the perspective (`review-ddd`, `review-hexagonal`, `review-clean-code`) is the obvious
    case, but match on what a skill's description says it reviews, never on its name alone;
-3. otherwise, for the three built-ins, the description below — you run the pass yourself.
+3. otherwise, for the three built-ins, the question below — you run the pass yourself.
 
 Say in the report which of the three it was. A named carrier that this tool does not offer is a
 missing *preference*, not a missing review: the built-in pass still runs, and the report says so
@@ -49,20 +49,18 @@ missing *preference*, not a missing review: the built-in pass still runs, and th
 built-in description, so if its carrier is unavailable it is reported as **not covered** and nothing
 silently stands in for it.
 
-1. **ddd** — is the model right? Real invariants inside the aggregate rather than an anemic
-   record with setters; the correct choice between entity and value object; aggregate boundaries
-   that one transaction can hold; domain events in the past tense, published where the fact
-   occurs; the vocabulary of the criteria and the glossary in the code, with no synonym drift; a
-   repository only for an aggregate root.
-2. **hexagonal** — do the dependencies point inward? The domain free of framework types; ports
-   declared in the inner layers and implemented in adapters; no raw import across a bounded
-   context; input ports carrying commands, queries and results rather than domain objects;
-   translation at the edge, not in the middle; an adapter that keeps what its port promises — an
-   order the schema secures (a sequence the database assigns, not a timestamp with a random
-   tie-break), a uniqueness the table holds and not only the code checks.
-3. **clean-code** — is it readable? Names that say what a thing is; functions on one level of
-   abstraction; no duplication that carries a decision twice; no dead code, no leftover stub, no
-   comment describing history instead of the present state.
+1. **ddd** — is the model right? (`review-ddd`: aggregates and invariants, entity against value
+   object, events, the language, repository against store.)
+2. **hexagonal** — do the dependencies point inward? (`review-hexagonal`: framework-free domain,
+   ports inside and adapters outside, no raw cross-context import, command/query/result shape,
+   translation at the edge, an adapter that keeps what its port promises.)
+3. **clean-code** — is it readable? (`review-clean-code`: names, one level of abstraction, no
+   duplication that carries a decision twice, no dead code, no comment on history.)
+
+Each perspective is described in **one** place — the review skill named in parentheses, the one the
+profile's `review.<name>:` points at and `factory.sh setup` installs beside the pipeline. This file
+holds the question each asks, not the description; a judge without the skill reviews from the
+question and says so under `## Perspectives covered`.
 
 Where the profile names a browser runner (`browser:` other than `none`), an end-user test that reads a page's script or markup as
 text in place of driving the browser is a **major** finding: it proves the wording, not the behaviour,
@@ -95,24 +93,12 @@ Then converge:
 6. Check the story once more against the criteria: is each one actually met by behaviour, not just
    by a green test? A test that asserts too little is a **test** defect and belongs in the report.
 
-## Ask, do not recall — but only a source the project named
+## Ask, do not recall
 
-Where the stack profile names a **knowledge skill** — `knowledge: <skill>`, one that answers
-architecture questions from a catalog and cites the node it read — use it instead of your own
-recollection whenever the answer would decide something: which pattern applies, why a rule exists,
-whether a construct is a pitfall, what a recipe prescribes. Name the node you relied on in your
-file, the way you name a file and line for a claim about the code.
-
-**Never adopt a knowledge source the profile did not name.** A catalog that happens to be installed
-may be a vendored copy of an older release: its rule ids, marker names and recipes can describe a
-version the project does not use, and a citation makes that wrongness look verified. If you notice
-such a skill, say so in your file — "`<skill>` is available but not named in the profile, so it was
-not used" — and decide from the project's own rules, markers and documents instead. Those are the
-source of truth; a catalog is a convenience the project has to vouch for.
-
-Without a `knowledge:` entry, work from what the project itself carries: its rule catalog and the
-report its architecture suite prints, its building blocks, its glossary, its documents. Nothing
-here fails for the absence of a knowledge skill.
+Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
+answer would decide something, and cite the node by its path inside the catalog; never adopt a
+knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
+beside this skill.
 
 ## The verdict has three values, not two
 
@@ -130,12 +116,10 @@ The perspectives rank in their own words — `must-fix`, `should-fix`, `nit` —
 what you confirmed in the code, never by copying: a `must-fix` is `major`, and `blocker` where it
 breaks a criterion, the architecture suite or the product description; a `should-fix` is `minor`,
 and `major` where you confirm it deviates from the plan; a `nit` is `minor`.
-A `story-conflict` is a question to a human, so it is a **decision record** like any other: write
-`## needs-human` in the judge file naming it (`decision: <story>-<nn>`), and the record at
-`<story>.decisions/<nn>.md` beside the story with the front matter `id:`, `story:`, `asked:` (UTC) and
-`stage:` — the stage that will **apply** the answer, not yourself: `plan` when the story or the plan
-has to change, `test` when an agreed expectation has to change. Say in `## Question` that the judge
-asked. The run waits for the answer and resumes at that stage; everything after it runs again.
+A `story-conflict` is a question to a human, so it is a **decision record** like any other (`factory-run/reference/stage-common.md`):
+`## needs-human` in the judge file naming it, and the record's `stage:` is the stage that will
+**apply** the answer, not yourself — `plan` when the story or the plan has to change, `test` when an
+agreed expectation has to change. Say in `## Question` that the judge asked. The run waits for the answer and resumes at that stage; everything after it runs again.
 Never resolve a `story-conflict` by quietly reinterpreting the criterion — a correction that
 changes an agreed decision belongs in the story, where a human decides it, or after five rounds the story describes
 something the code no longer does and nobody notices.

@@ -985,9 +985,9 @@ def verify_runner(runner, verbose=False):
         'case "$FACTORY_STAGE" in '
         '  plan) printf "## Context\\n## Changes\\n## Acceptance criteria\\n" ;; '
         '  test) cat "$FIXTURE_TESTS" ;; '
-        '  build) printf "## Changed\\n## Criteria\\n## Checks\\n## Files\\n"; '
+        '  build) printf "## Changed\\n## Deviations from the plan\\n## Files\\n"; '
         '    for s in $(cat "$FIXTURE_GREEN" 2>/dev/null); do printf -- "- green/%s\\n" "$s"; done ;; '
-        '  tidy) printf "## Moves\\n## Checks\\n## Files\\n" ;; '
+        '  tidy) printf "## Moves\\n## Left alone\\n## Files\\n" ;; '
         '  judge) printf "## Verdict\\nverdict: pass\\n" ;; '
         '  document) printf "## Glossary\\n" ;; '
         'esac > ".dca-factory/runs/STORY-1/$f"; '
@@ -3217,7 +3217,8 @@ def verify_places(args):
                              "project/epics/, each record lands beside its story, the run artefacts move and the delivery "
                              "goes into the story — the project's own files under tasks/ untouched, a second run moves nothing",
                              first.returncode == 0 and "status: delivered\ndelivered: 2026-09-20T10:00:00Z" in story_1
-                             and "epics: project/epics" in profile and "backlog:" not in profile and "contract: 10" in profile
+                             and "epics: project/epics" in profile and "backlog:" not in profile
+                             and f"contract: {gate_module(args.gate).CONTRACT}" in profile
                              and not os.path.exists(os.path.join(root, OLD_PROFILE))
                              and os.path.isfile(os.path.join(root, "project", "epics", "sample", "STORY-1.decisions", "01.md"))
                              and os.path.isfile(os.path.join(root, "project", "epics", "sample", "STORY-1.decisions", "accept-1.md"))
@@ -4032,6 +4033,33 @@ def run_groups(args):
               must_fail=("documented",)),
          dict(green=both_green, ledger=both_green,
               document=DOCUMENT.replace("`docs/context-map.md:3` — the context's own description", ""))),
+        # WP-80 B: a proposed term is found by any of its words; open only under `## Not documented`.
+        (Case("document: a proposed term is found in the glossary by its code word", "document", 0,
+              must_pass=("glossary",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Glossary proposals\n- Titel (title): the text of a task\n"),
+             ("src/main/java/com/example/glossary.md", "# Glossary\n\n### Title\n\n**Definition:** the text.\n\n**Type:** Value Object\n")))),
+        (Case("document: a proposed term is found by the domain word before the parenthesis", "document", 0,
+              must_pass=("glossary",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Glossary proposals\n- Titel (title): the text of a task\n"),
+             ("src/main/java/com/example/glossary.md", "# Glossary\n\n### TITEL (TaskTitle)\n\n**Definition:** the text.\n\n**Type:** Value Object\n")))),
+        (Case("document: a proposed term named open under Not documented is accounted for", "document", 0,
+              must_pass=("glossary",)),
+         dict(green=both_green, ledger=both_green,
+              document=DOCUMENT + "\n## Not documented\n- Titel (title): the domain contact has to define it\n",
+              extra_sources=(
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Glossary proposals\n- Titel (title): the text of a task\n"),
+             ("src/main/java/com/example/glossary.md", "# Glossary\n\n### Thing\n\n**Definition:** a thing.\n\n**Type:** Entity\n")))),
+        (Case("document: a proposed term only in a pre-filled Glossary row is refused", "document", 1,
+              must_fail=("glossary",), text=("named as open under `## Not documented`",)),
+         dict(green=both_green, ledger=both_green,
+              document=DOCUMENT.replace("| Thing | Widgets | added | `docs/context-map.md:3` — the context's own description |",
+                                        "| Thing | Widgets | added | `docs/context-map.md:3` — the context's own description |\n"
+                                        "| Titel (title) | Widgets | added | `.dca-factory/runs/STORY-1/plan.md` `## Glossary proposals` |"),
+              extra_sources=(
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Glossary proposals\n- Titel (title): the text of a task\n"),
+             ("src/main/java/com/example/glossary.md", "# Glossary\n\n### Thing\n\n**Definition:** a thing.\n\n**Type:** Entity\n")))),
         (Case("document: a needs-human section stops the run", "document", 1,
               must_fail=("documented",)),
          dict(green=both_green, ledger=both_green,
@@ -4423,7 +4451,8 @@ def run_groups(args):
         text = open(build_md, encoding="utf-8").read() if os.path.isfile(build_md) else ""
         expectations.append(("files skeleton: a missing build.md is created with every changed file as a row",
                              code == 0 and "## Changed" in text and "| `src/main/Thing.java` | |" in text
-                             and "| `src/main/Other.java` | |" in text and "## Criteria" in text,
+                             and "| `src/main/Other.java` | |" in text and "## Deviations from the plan" in text
+                             and "## Criteria" not in text and "## Checks" not in text,
                              f"exit {code}; {out.strip()[:160]}; {text[:200]!r}"))
         gate_code, gate_out = run_gate(args.gate, root, "build")
         expectations.append(("files skeleton: the build gate's files-listed passes on the skeleton's list",
@@ -4678,7 +4707,14 @@ def run_groups(args):
         code_p, text_p = contract("plan")
         code_j, text_j = contract("judge")
         code_d, text_d = contract("document")
+        code_g, text_g = contract("glossary")
         code_x, text_x = contract("verify")
+        expectations.append(("contract: --contract glossary says how a proposed term is found and the entry's shape; "
+                             "--contract document says the same rule and names no `## Checks` for build",
+                             code_g == 0 and "found by `titel` or by `title`" in text_g and "**Definition:**" in text_g
+                             and "found by `titel` or by `title`" in text_d and "## Not documented" in text_d
+                             and "## Checks" not in contract("build")[1].split("no `## Checks`")[0],
+                             (text_g[:200], text_d[-400:])))
         expectations.append(("contract: --contract test prints the table marker, the selector pattern the gate matches and the "
                              "Files section", code_t == 0 and "<!-- gate:tests -->" in text_t
                              and repr(gate_names.SELECTOR.pattern) in text_t and repr(gate_names.MAPPING_ROW.pattern) in text_t
@@ -4690,6 +4726,23 @@ def run_groups(args):
                              and code_d == 0 and "## Paths" in text_d and "Verified by" in text_d
                              and code_x == 2 and "--contract takes one of" in text_x,
                              (text_p[:120], text_j[:120], text_d[:120], text_x[:120])))
+    # WP-80 B: the skeleton carries one `## Glossary` row per proposed term, as the plan wrote it.
+    with tmpdir() as root:
+        build_project(root, green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+            (".dca-factory/runs/STORY-1/plan.md",
+             "# Plan\n\n## Glossary proposals\n- Titel (title): the text of a task\n- Liste: the tasks in order\n"),))
+        run_folder = os.path.join(root, ".dca-factory", "runs", "STORY-1")
+        os.remove(os.path.join(run_folder, "document.md"))
+        done = subprocess.run([sys.executable, cli_of(args.gate), "--document-skeleton", "STORY-1"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        target = os.path.join(run_folder, "document.md")
+        text = open(target, encoding="utf-8").read() if os.path.isfile(target) else ""
+        expectations.append(("document-skeleton: one `## Glossary` row per proposed term, the term as the plan wrote it, "
+                             "the story's context, and the plan as the source",
+                             done.returncode == 0 and "| Titel (title) | Widgets | added | `.dca-factory/runs/STORY-1/plan.md`" in text
+                             and "| Liste | Widgets | added |" in text and "2 proposed term(s)" in done.stdout
+                             and text.index("| Titel (title) |") < text.index("## Documents updated"),
+                             (done.stdout.strip()[:160], text[:400])))
     # The document skeleton: every changed path and run file under `## Paths`, root-relative; a skeleton the stage
     # fills passes the document gate; a bare name typed beside it is still refused.
     with tmpdir() as root:

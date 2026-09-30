@@ -65,6 +65,11 @@ früheren Iterationen im Umlauf, sind aber abgelöst.
 Required fields: `Definition`, `Type`.
 Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Operations`, `Notes`.
 
+The heading carries the term as the people who own it say it, and — where the code's word differs —
+that word in parentheses: `### Titel (TaskTitle)`. Whoever looks a term up, a reader or a delivery
+pipeline's check, finds it by either word; a heading with only the code's word is a glossary of the
+code, not of the domain.
+
 `Type` is one of: `Aggregate Root`, `Entity`, `Value Object`, `Domain Event`,
 `Integration Event`, `Domain Service`, `Specification`, `Concept` (anything else).
 

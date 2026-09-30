@@ -176,6 +176,45 @@ def self_test(patterns):
     return failures
 
 
+# Paragraphs every delivery stage holds to, said once in `factory-run/reference/stage-common.md`; a stage skill
+# that carries one of them again has drifted back to saying it four times per shared builder.
+STAGE_COMMON = "plugins/dca-factory/skills/factory-run/reference/stage-common.md"
+STAGE_COMMON_SENTENCES = (
+    "Never adopt a knowledge source the profile did not name",
+    "A missing carrier is a missing preference, never a reason to skip the stage",
+    "the next two-digit number among this story's records",
+    "a stage that runs them first pays twice for one answer",
+    "The gate and the commit hook only check `format:`",
+)
+
+
+def check_stage_common(root):
+    problems = []
+    common = os.path.join(root, STAGE_COMMON)
+    if not os.path.isfile(common):
+        return [f"{STAGE_COMMON}: missing — the stage skills point at it"]
+    with open(common, encoding="utf-8") as handle:
+        text = " ".join(handle.read().split())      # the paragraphs wrap; a sentence is matched across the break
+    for sentence in STAGE_COMMON_SENTENCES:
+        if sentence not in text:
+            problems.append(f"{STAGE_COMMON}: no longer says `{sentence}`")
+    skills = os.path.join(root, "plugins", "dca-factory", "skills")
+    for name in sorted(os.listdir(skills)):
+        if not name.startswith("stage-"):
+            continue
+        path = os.path.join(skills, name, "SKILL.md")
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as handle:
+            skill = " ".join(handle.read().split())
+        if "stage-common.md" not in skill:
+            problems.append(f"dca-factory/skills/{name}: does not point at stage-common.md")
+        for sentence in STAGE_COMMON_SENTENCES:
+            if sentence in skill:
+                problems.append(f"dca-factory/skills/{name}: repeats `{sentence}` — it is said once in stage-common.md")
+    return problems
+
+
 def main():
     read = dca_java_types(ROOT)
     patterns = boundary_patterns(read)
@@ -214,6 +253,12 @@ def main():
     for problem in problems:
         print(f"check-skills: {problem}", file=sys.stderr)
     print(f"check-skills: {counted - len(problems)}/{counted} skills carry a name and a description")
+    common = check_stage_common(ROOT)
+    for problem in common:
+        print(f"check-skills: {problem}", file=sys.stderr)
+    print(f"check-skills: the stage skills point at stage-common.md and repeat none of its {len(STAGE_COMMON_SENTENCES)} rules"
+          if not common else f"check-skills: {len(common)} stage-common problem(s)")
+    problems += common
     boundary = check_boundary(ROOT, patterns)
     for problem in boundary:
         print(f"check-skills: {problem}", file=sys.stderr)

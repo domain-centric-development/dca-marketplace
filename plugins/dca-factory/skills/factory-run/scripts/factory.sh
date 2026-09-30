@@ -1660,7 +1660,9 @@ three attempts per stage. Before you write tests.md, build.md or tidy.md, run \`
 it writes the file's list of changed files from the tree (or adds the missing ones to a file you wrote); fill in the rest, \
 never the list. Before you write plan.md, run \`$PY $CLI --plan-skeleton $story\`: it writes the plan's headings and one \
 line per criterion key — give each its level, never retype the story's text. The gate is your test run: run single tests \
-while you work, then the stage's gate — do not run the whole suite yourself before it, the gate runs the same commands. \
+while you work, then the stage's gate — do not run the whole suite yourself before it, the gate runs the same commands, \
+and write nothing about the gate into a hand-over: its report is the record. At the test stage a type with nothing a \
+criterion observes is written whole; whatever a criterion observes, throws. \
 Each hand-over says what the next stage needs and nothing a reader has elsewhere; \`--contract <stage>\` names its measure. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
 document stage. This session was started by the pipeline's runner, which holds the checkout for it: the worker \
 named at session start is the one that started you, not a second writer. $(where_things_are "$tool" builder "$story")"

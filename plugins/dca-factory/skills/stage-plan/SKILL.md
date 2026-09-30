@@ -106,7 +106,10 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
 11. Back every **decision** with evidence — a level chosen, a pattern picked, an element placed, a test
    named as contradicted: the file, and the line or symbol you read it from, in the same row or line.
    A row that names the file it changes is its own evidence; do not restate what the file says. A
-   statement without evidence is a guess and is marked as one.
+   statement without evidence is a guess and is marked as one. A catalog node is cited by its path
+   inside the catalog, as the knowledge skill cites it (`recipe/add-an-aggregate.md`,
+   `marker/port-out/repository.md`) — never by a path into a skill folder, and never rewritten after
+   the fact.
 12. **Keep the plan a page.** Tables and one-line items, no paragraphs: the plan is read by every later
    stage and by the judge, so every sentence here is read four times. What the story already says is
    not repeated; what a later stage can read in the code is pointed at, not copied.
@@ -119,32 +122,18 @@ and **which existing test covers it** (file, class, method) — or that none doe
 production code and no change to an existing test. A scenario the code does not show at all is not
 adoptable: stop with a `## needs-human` — the story describes behaviour the system does not have.
 
-## Ask, do not recall — but only a source the project named
+## Ask, do not recall
 
-Where the stack profile names a **knowledge skill** — `knowledge: <skill>`, one that answers
-architecture questions from a catalog and cites the node it read — use it instead of your own
-recollection whenever the answer would decide something: which pattern applies, why a rule exists,
-whether a construct is a pitfall, what a recipe prescribes. Name the node you relied on in your
-file, the way you name a file and line for a claim about the code.
-
-**Never adopt a knowledge source the profile did not name.** A catalog that happens to be installed
-may be a vendored copy of an older release: its rule ids, marker names and recipes can describe a
-version the project does not use, and a citation makes that wrongness look verified. If you notice
-such a skill, say so in your file — "`<skill>` is available but not named in the profile, so it was
-not used" — and decide from the project's own rules, markers and documents instead. Those are the
-source of truth; a catalog is a convenience the project has to vouch for.
-
-Without a `knowledge:` entry, work from what the project itself carries: its rule catalog and the
-report its architecture suite prints, its building blocks, its glossary, its documents. Nothing
-here fails for the absence of a knowledge skill.
+Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
+answer would decide something, and cite the node by its path inside the catalog; never adopt a
+knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
+beside this skill.
 
 ## Who carries this stage
 
-The stack profile may name a carrier for this stage — `carrier.plan: <name>` — the skill or
-agent that holds this project's craft for it. A review **skill** works in every tool; an **agent**
-only where the tool has agents. Use the named carrier when this tool offers it; otherwise do the
-stage as described here and say in your file which it was ("in-session; `<carrier>` not available
-here"). A missing carrier is a missing preference, never a reason to skip the stage.
+`carrier.plan: <name>` in the stack profile names the skill or agent that holds this project's craft
+for it; use it where this tool offers it, otherwise do the stage as described here and say so in
+your file. The rule in full: `factory-run/reference/stage-common.md`.
 
 ## The plan file
 
@@ -156,7 +145,7 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 
 ## Changes
 | Element | Kind | Location | New or changed | Evidence |
-(one row per element; Evidence is the file:line or the catalog node the placement rests on)
+(one row per element; Evidence is the file:line, or the catalog node by its path inside the catalog)
 
 ## Acceptance criteria
 - <key>  →  level: e2e | integration | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
@@ -183,30 +172,8 @@ decision: <story>-<nn>
 <one line saying what is asked>
 ```
 
-A `## needs-human` names a **decision record**: write `<story>.decisions/<nn>.md` beside the story
-(`nn` — the next two-digit number among this story's records) with the question, the options you
-see, the evidence you read and your recommendation; never an answer. The full shape is
-`factory-run/templates/decision.md.tmpl`, beside this skill; the gate reads exactly this front
-matter, and a record without `id:` equal to the file name is refused:
-
-```markdown
----
-id: <story>-<nn>
-story: <story>
-stage: plan
-asked: <now, UTC, ISO 8601>
----
-
-# <the question in one line>
-
-## Question
-## Options
-## Recommendation
-```
- The gate refuses a `## needs-human` that names no record. When
-you run again on a story whose record is answered, read the answer, plan with it, and cite the id
-in the plan where it landed (`Decision <id> answered <option>: …`) — that is what lets the gate
-stamp the record applied.
+A `## needs-human` names a **decision record** with `stage: plan` — the shape, and how an answered
+record is cited when you plan again, in `factory-run/reference/stage-common.md`.
 
 ## Do not
 

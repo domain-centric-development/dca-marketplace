@@ -135,7 +135,8 @@ the file:
   located `{file}`).
 - Every hand-over says what the next stage needs and nothing a reader has elsewhere: the plan lists the
   criteria by key and level, not by the story's text (`factory-cli.py --plan-skeleton <story>` writes the
-  headings and the keys); a change row cites one node; `## Checks` names the gate run. `--contract <stage>`
+  headings and the keys); a change row cites one node; no hand-over records the gate's outcome — the gate's
+  report under `.verify/` is the evidence, and a stage edits no hand-over after the gate ran. `--contract <stage>`
   names each file's measure — a base plus a share per criterion — and the gate notes a larger file
   (`gate:note size`), never refuses it.
 - The `## Files` list (the build's `## Changed` and the tidy's `## Moves` table's first column) is written

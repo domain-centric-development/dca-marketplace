@@ -2602,7 +2602,9 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
 - `## Glossary proposals`: `- <term>: <definition>` — the document gate checks each term landed in a glossary or is named open
 - `## needs-human` only to stop: `decision: <story>-<nn>`, with the record `<story>.decisions/<nn>.md` beside the story
   (`id:`, `story:`, `stage: plan`, `asked:`; `## Question`, `## Options`, `## Recommendation`)
-- A citation is a path from the project root, `src/main/java/…/Thing.java:12`; a bare `Thing.java:12` resolves to nothing"""
+- A citation is a path from the project root, `src/main/java/…/Thing.java:12`; a bare `Thing.java:12` resolves to nothing.
+  A catalog node is cited by its path inside the catalog (`recipe/add-an-aggregate.md`), as the knowledge skill cites it —
+  never by a path into a skill folder"""
     if stage == "test":
         return f"""{CONTRACT_HEAD}
 
@@ -2625,7 +2627,10 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - `## Files`: every test file this stage wrote or changed, one per line, as a path from the project root —
   `files-listed` compares the list with the pipeline's changed-files record. `factory-cli.py --files-skeleton
   <story> test` writes the list from the tree (the file's skeleton, or the missing paths): run it, add the rest
-- `## Notes`: `- unit tests: <Class>#<method> for invariant <rule>`; `- uncovered: <key> — <why>` only when unavoidable"""
+- `## Notes`: `- unit tests: <Class>#<method> for invariant <rule>`; `- uncovered: <key> — <why>` only when unavoidable —
+  not what a test fails on: the red run records that
+- stubs: a type with nothing a criterion observes (a record and its fields, an enum, an interface, an exception type) is
+  written whole here; a method whose outcome a criterion asserts throws — whatever a criterion observes, throws"""
     if stage in ("build", "tidy"):
         table, name = ("## Changed", "build") if stage == "build" else ("## Moves", "tidy")
         return f"""{CONTRACT_HEAD}
@@ -2638,7 +2643,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   skeleton, or the missing rows): run it when the changes are done, fill in the rest
 - a test file put back to the version the test stage saw red is a restoration, not a change to list
 - tests: every selector of the `gate:tests` table green, and its file's digest as `.tests-red` holds it (`red-proof`)
-- {'`## Criteria`: `- <key>: met by <what the code now does>`; `## Deviations from the plan`; `## Checks`: `- gate build: <pass, or what it refused and how that was fixed>` — the gate is the stage\'s test run' if stage == 'build' else '`## Left alone`: what you saw and did not change, and why; `## Checks`: `- gate tidy: <pass, or what it refused and how that was fixed>` — the gate is the stage\'s test run'}
+- {'`## Deviations from the plan`: `- <element>: <what differed and why>`, or nothing when the plan held. No `## Criteria` (the judge re-checks each one) and no `## Checks`: the gate\'s report is the evidence, and a stage edits no hand-over after the gate ran — the gate is the stage\'s test run' if stage == 'build' else '`## Left alone`: what you saw and did not change, and why. No `## Checks`: the gate\'s report is the evidence, and a stage edits no hand-over after the gate ran — the gate is the stage\'s test run'}
 - `## needs-human` only to stop, with `decision: <story>-<nn>` and the record beside the story (`stage: {name}`)
 - {'a test that cannot pass for a reason in its own code — a helper, a locator, a fixture — while what it asserts stays as it is: write `back: test` on a line of its own and say what is wrong; the round goes to the test stage, which repairs it and proves it with a break. A change to what a test asserts is still a question (`## needs-human`)' if stage == 'build' else 'no test change: a defect in a test goes back through the build stage'}
 - no criterion key in code, a comment or a test name; no `TODO` for the criterion delivered"""
@@ -2671,9 +2676,27 @@ document — {folder}/document.md (gate after the stage: story-pass, documented,
   `{folder}/build.md:20`; a bare `Thing.java:12` or a package-relative `example/Thing.java` is refused (`documented`)
 - `## Paths`, when the pipeline wrote the file's skeleton (`factory-cli.py --document-skeleton <story>`): the story's
   changed files and the run's files in exactly that form — cite from there, do not retype
-- every term the plan proposed under `## Glossary proposals` is in a glossary now, or named here as still open (`glossary`)
+- every term the plan proposed under `## Glossary proposals` is in a glossary now, or named as still open under
+  `## Not documented` (`glossary`). The skeleton pre-fills a `## Glossary` row per proposal — write the entry from it
+{GLOSSARY_RULE}
 - `## needs-human` only to stop (`decision: <story>-<nn>`, record `stage: document`)"""
+    if stage == "glossary":
+        return f"""{CONTRACT_HEAD}
+
+glossary — how the document gate matches a proposed term (`glossary`), and the entry the glossary skill writes
+{GLOSSARY_RULE}
+- an entry: `### <Term>` — the heading carries the term as the plan proposed it, the domain word with the code word in
+  parentheses where they differ (`### Titel (TaskTitle)`) — then `**Definition:**` and `**Type:**` (the glossary skill's
+  format; `Type` is one of Aggregate Root, Entity, Value Object, Domain Event, Integration Event, Domain Service,
+  Specification, Concept); `Identity`, `Synonyms (avoid)`, `Related terms`, `Operations` where they apply"""
     return None
+
+
+#: How `check_proposals_landed` finds a proposed term, said once for `--contract document` and `--contract glossary`.
+GLOSSARY_RULE = ("- a term is found in a glossary by any of its words: the term as written, the word before a parenthesis or "
+                 "the word inside it (`Titel (title)` is found by `titel` or by `title`), case aside; the whole glossary "
+                 "file counts, a heading is the place to put it. A term not landed is named open under `## Not documented`, "
+                 "nowhere else — a pre-filled `## Glossary` row does not account for it")
 
 
 #: The section each builder hand-over lists its files in, and the row shape the gate's `listed_files` reads.
@@ -2684,10 +2707,9 @@ FILES_SECTIONS = {
 }
 FILES_SKELETONS = {
     "test": "# Tests — {story}\n\n<!-- gate:tests -->\n| criterion | test |\n| --- | --- |\n\n## Files\n{rows}\n\n## Notes\n",
-    "build": "# Build — {story}\n\n## Changed\n| File | Why |\n|---|---|\n{rows}\n\n## Criteria\n\n"
-             "## Deviations from the plan\n\n## Checks\n",
+    "build": "# Build — {story}\n\n## Changed\n| File | Why |\n|---|---|\n{rows}\n\n## Deviations from the plan\n",
     "tidy": "# Tidy — {story}\n\n## Moves\n| File | Move | Why it reads better |\n|---|---|---|\n{rows}\n\n"
-            "## Left alone\n\n## Checks\n",
+            "## Left alone\n",
 }
 
 
@@ -2816,16 +2838,32 @@ def document_skeleton(runs, story_id, cwd="."):
         run_file = os.path.join(folder, STAGE_FILES[name])
         if os.path.isfile(run_file):
             paths.append(f"{runs}/{story_id}/{STAGE_FILES[name]}")
+    # the plan's proposals as the glossary table's rows: the term as the plan wrote it — the word the gate
+    # looks for — the story's context, and the plan line as the definition's source; the stage writes the
+    # glossary entry from the row and never retypes the term (the refusal that cost the bench a second run)
+    glossary_rows = ""
+    plan_file = os.path.join(folder, "plan.md")
+    if os.path.isfile(plan_file):
+        context = ""
+        try:
+            story_path = find_story(place("epics"), story_id)
+            context = str(read_front_matter(story_path)[0].get("context", "")).strip()
+        except GateError:
+            pass
+        for term in _gate.plan_proposals(read_text(plan_file)):
+            glossary_rows += f"| {term} | {context} | added | `{runs}/{story_id}/plan.md` `## Glossary proposals` |\n"
     os.makedirs(folder, exist_ok=True)
     with open(target, "w", encoding="utf-8") as handle:
         handle.write(f"# Document — {story_id}\n\n## Glossary\n| Term | Context | Added or changed | Definition source |\n"
-                     "|---|---|---|---|\n\n## Documents updated\n| File | What changed | Verified by |\n|---|---|---|\n\n"
+                     f"|---|---|---|---|\n{glossary_rows}\n## Documents updated\n| File | What changed | Verified by |\n|---|---|---|\n\n"
                      "## Not documented\n\n## Paths\n"
                      "The files this story changed and the run's files, as they resolve from the project root — cite them in "
                      "exactly this form (with `:<line>` where a line matters); the pipeline wrote this list, leave it in place.\n")
         for path in paths:
             handle.write(f"- `{path}`\n")
-    print(f"factory: {runs}/{story_id}/document.md — the skeleton with {len(paths)} path(s) under `## Paths`")
+    terms = glossary_rows.count("\n")
+    print(f"factory: {runs}/{story_id}/document.md — the skeleton with {len(paths)} path(s) under `## Paths`"
+          + (f" and {terms} proposed term(s) under `## Glossary`" if terms else ""))
     return 0
 
 
@@ -2935,7 +2973,7 @@ def main(argv):
     if args.contract:
         text = contract_text(args.contract, args.runs)
         if text is None:
-            print(f"factory-cli: --contract takes one of {', '.join(STAGE_ORDER)}, not {args.contract!r}", file=sys.stderr)
+            print(f"factory-cli: --contract takes one of {', '.join(STAGE_ORDER)} or glossary, not {args.contract!r}", file=sys.stderr)
             return 2
         print(text)
         return 0

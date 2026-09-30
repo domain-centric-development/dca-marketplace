@@ -422,8 +422,9 @@ def observe(project, runs, epics, story_id):
         text = present.get(name)
         if not text:
             continue
-        section = text.split("## Checks", 1)[-1] if "## Checks" in text else ""
-        for token in BACKTICKED.findall(section):
+        # a hand-over records no gate outcome (its report is the evidence); a build command it names anywhere
+        # is still a claim about what ran
+        for token in BACKTICKED.findall(text):
             head = token.split()[0] if token.split() else ""
             if head in ("./gradlew", "dotnet", "mvn", "./mvnw", "npm", "make"):
                 if not any(token.strip() in v for v in declared.values()):

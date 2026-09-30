@@ -600,7 +600,9 @@ perspectives it adds — is bound in the profile too: `carrier.<stage>:` and
 tool has agents, and a carrier this tool cannot offer falls back to the stage's own description
 with that fact in the report.
 
-See `skills/factory-run/reference/backlog-contract.md` and `.../file-contracts.md`.
+See `skills/factory-run/reference/backlog-contract.md`, `.../file-contracts.md` and `.../stage-common.md` — the rules
+every stage holds to (the knowledge source, the carrier, the decision record, the gate as the test run, the
+formatter), said once; each stage skill names them in a line and points there.
 
 ## Troubleshooting
 

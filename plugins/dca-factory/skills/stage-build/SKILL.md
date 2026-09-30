@@ -26,51 +26,28 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
 4. Use the project's own building blocks and conventions: its markers, its base types, its
    package layout, its error handling. Where the project ships an architecture rule suite, run it
    and take it as binding.
-5. The gate is your test run. Run the single test you are making green as often as you like; when
-   you believe the stage is done, run the build gate — it compiles, runs every mapped test and the
-   required suites once per command, the architecture suite and the formatter, and fails on exactly
-   what is red. Do not run the whole suite yourself before it: the gate runs the same commands, and a
-   stage that runs them first pays twice for one answer. Do not finish while the gate names something
-   red.
+5. The gate is your test run (`factory-run/reference/stage-common.md`): the single test you are
+   making green as often as you like, then the build gate, never the whole suite before it. Do not
+   finish while the gate names something red — and write nothing about the gate into your file: its
+   report is the record.
 6. In a repeat round, work only on what the gate or the judge confirmed. Do not take the
    opportunity to refactor elsewhere.
-7. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
-   formatting of what you wrote. The gate and the commit hook only check `format:` and change no
-   file. A file it reformats that this story never touched is not yours to keep quiet about — the
-   pipeline's record of what changed names it, and the judge reads it as the finding it is.
+7. `formatFix:` runs last, before you finish (`factory-run/reference/stage-common.md`).
 
-## Ask, do not recall — but only a source the project named
+## Ask, do not recall
 
-Where the stack profile names a **knowledge skill** — `knowledge: <skill>`, one that answers
-architecture questions from a catalog and cites the node it read — use it instead of your own
-recollection whenever the answer would decide something: which pattern applies, why a rule exists,
-whether a construct is a pitfall, what a recipe prescribes. Name the node you relied on in your
-file, the way you name a file and line for a claim about the code.
-
-**Never adopt a knowledge source the profile did not name.** A catalog that happens to be installed
-may be a vendored copy of an older release: its rule ids, marker names and recipes can describe a
-version the project does not use, and a citation makes that wrongness look verified. If you notice
-such a skill, say so in your file — "`<skill>` is available but not named in the profile, so it was
-not used" — and decide from the project's own rules, markers and documents instead. Those are the
-source of truth; a catalog is a convenience the project has to vouch for.
-
-Without a `knowledge:` entry, work from what the project itself carries: its rule catalog and the
-report its architecture suite prints, its building blocks, its glossary, its documents. Nothing
-here fails for the absence of a knowledge skill.
+Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
+answer would decide something, and cite the node by its path inside the catalog; never adopt a
+knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
+beside this skill.
 
 ## Who carries this stage
 
-The stack profile may name a carrier for this stage — `carrier.build: <name>` — the skill or
-agent that holds this project's craft for it. A review **skill** works in every tool; an **agent**
-only where the tool has agents. Use the named carrier when this tool offers it; otherwise do the
-stage as described here and say in your file which it was ("in-session; `<carrier>` not available
-here"). A missing carrier is a missing preference, never a reason to skip the stage.
-
-**The guard beside the carrier.** The profile may also name `carrier.guard: <name>` — the skill that
-holds the architecture's invariants while code is edited (in a DCA project `dca-discipline`). Apply
-it for every file you write, the same way you use the carrier: where this tool offers it; otherwise
-keep the invariants as described here and say so in your file. An absent key is skipped and named
-like any other.
+`carrier.build: <name>` in the stack profile names the skill or agent that holds this project's
+craft for it; use it where this tool offers it, otherwise do the stage as described here and say so
+in your file. `carrier.guard: <name>` names the skill that holds the architecture's invariants while
+you edit — apply it to every file you write, the same way. The rule in full: `factory-
+run/reference/stage-common.md`.
 
 ## The build file
 
@@ -85,16 +62,14 @@ pipeline's: run `factory-cli.py --files-skeleton <story> build` when your change
 the file with every changed file as a row, or adds the missing rows to a file you wrote first — and
 fill in the why)
 
-## Criteria
-- <criterion key>: met by <what the code now does>
-
 ## Deviations from the plan
 - <element>: <what differed and why>        (omit when there were none — "the plan held" is one word,
                                              not a restatement of its design notes)
-
-## Checks
-- gate build: <pass, or what it refused and how that was fixed>
 ```
+
+That is the whole file. The criteria are not restated here — the judge re-checks each one against the
+code itself — and the gate's outcome is not recorded here: its report is the evidence, and a stage edits
+no hand-over after the gate ran.
 
 ## Do not
 
@@ -106,13 +81,9 @@ fill in the why)
   repairs the test and proves with a break that it still bites.
 - **A test whose expectation cannot hold** — two assertions that exclude each other, a substring
   that also matches what must be there — is a question about what the story expects, not a
-  deviation: write `## needs-human` naming a decision record (`decision:
-  <story>-<nn>`, written to `<story>.decisions/<nn>.md` beside the story with the front matter
-  `id: <story>-<nn>`, `story:`, `stage: build`, `asked:` (UTC) and `## Question`, `## Options`,
-  `## Recommendation`) that names the test, the line and why it cannot hold, and stop. Once a human
-  has answered — and repaired the test where the answer says so — the build runs again and cites
-  the id in `build.md` where it landed (`Decision <id> answered <option>: …`); the gate refuses a
-  build file that does not cite it.
+  deviation: write `## needs-human` naming a decision record with `stage: build` that names the
+  test, the line and why it cannot hold, and stop (`factory-run/reference/stage-common.md`). Once a human has answered — and repaired
+  the test where the answer says so — the build runs again and cites the id in `build.md`.
 - Do not write a criterion key into code, documentation or a comment.
 - Do not leave commented-out code, a `TODO` for the criterion you were asked to deliver, or a
   disabled test behind.

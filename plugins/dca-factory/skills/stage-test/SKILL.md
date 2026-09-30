@@ -24,14 +24,8 @@ files written. You write **no** production behaviour.
    runner is a stack decision, not part of a story. If the planned shape is impossible with what
    is installed, write the tests file with a `## needs-human` section naming the missing runner
    and stop — do not install it, and do not silently drop to a unit test that asserts less. The
-   section names a decision record (`decision: <story>-<nn>`), written to
-   `<story>.decisions/<nn>.md` beside the story with the front matter `id: <story>-<nn>`,
-   `story:`, `stage: test`, `asked:` (UTC) and the sections `## Question`, `## Options`,
-   `## Recommendation` — never an answer (full shape: `factory-run/templates/decision.md.tmpl`).
-   When you run again on a story whose record is answered — asked here, or answered `applies: test`
-   — read the answer, apply it, and cite the id in your file where it landed (`Decision <id>
-   answered <option>: …`): the gate stamps the record applied only then, and refuses a file that
-   does not cite it.
+   section names a decision record with `stage: test` (the shape, and the citation of an answered
+   record: `factory-run/reference/stage-common.md`).
    Where the profile names a browser runner (`browser:` other than `none`), an end-user test of a page drives the browser: use
    the end-user testing craft (the `e2e-testing` skill, or the profile's `carrier.test`) — the
    application started by the test, the fake clock for anything that counts or expires, a stand-in for
@@ -68,55 +62,41 @@ files written. You write **no** production behaviour.
    one place two implementations of the same story share; a key in a name is a second link that
    drifts when the story is renumbered, and the display name is the scenario's title (step 2), which
    already says which scenario a report is about.
-6. Add only the minimum stubs the test sources need to compile — a class, an empty method, a
-   port interface. A stub **refuses to answer**: it throws (`UnsupportedOperationException`,
-   `NotImplementedException`, whatever the language calls it). It never returns a value, not even
-   an empty list or a default — for a criterion whose expected answer *is* the empty case, a stub
-   returning empty makes the test green before any code exists, and a green test at this stage
-   proves nothing. The gate refuses it, and rightly: the criterion would ship uncovered.
-7. The gate is your test run. Run a single test while you write it — that is where you see the
-   assertion it fails on — and when the stage's tests are written, run the test gate: it compiles the
-   sources and runs every mapped test once per command, and its report is the one that counts. Do not
-   run the whole suite yourself before it; the gate runs the same commands and you would pay twice.
-   Confirm two things from its report: the test sources compile, and every new test fails **on its
-   assertion**, not on a missing class or a wiring error. A test red for the wrong reason proves
-   nothing. In a browser test the first step
+6. Write the types the tests need to compile — and draw the line at **behaviour**. A type with nothing a
+   criterion observes is structure, and structure is written whole here: a record with its fields and a
+   null guard, an enum with its values, an interface with its methods, an exception type with its
+   message. A method whose outcome a criterion asserts — a validation, a state change, a query's
+   answer, a use case's body — is a stub that **refuses to answer**: it throws
+   (`UnsupportedOperationException`, `NotImplementedException`, whatever the language calls it). It
+   never returns a value, not even an empty list or a default — for a criterion whose expected answer
+   *is* the empty case, a stub returning empty makes the test green before any code exists, and a green
+   test at this stage proves nothing. The gate refuses it, and rightly: the criterion would ship
+   uncovered. The line in one sentence: whatever a criterion observes, throws.
+7. The gate is your test run (`factory-run/reference/stage-common.md`): a single test while you
+   write it — that is where you see the assertion it fails on — then the test gate, never the whole
+   suite before it. Confirm two things from its report: the test sources compile, and every new test
+   fails **on its assertion**, not on a missing class or a wiring error. A test red for the wrong
+   reason proves nothing. In a browser test the first step
    that can be missing is an expectation, not an action: `expect(locator).toBeVisible()` before the
    click or the fill, so a form that does not exist yet fails on the expectation and names what is
    missing. A raw `TimeoutError` from an action is red on the harness — the gate accepts the red and
    notes it, and the build stage learns nothing from it.
 8. Delete every spike, scratch or exploration test before you finish. A passing spike trips no
    gate, so nothing else will catch it.
-9. Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
-   formatting of what you wrote, so the stages after you find their own files as the formatter
-   wants them. The gate and the commit hook only check `format:` and change no file.
+9. `formatFix:` runs last, before you finish (`factory-run/reference/stage-common.md`).
 
-## Ask, do not recall — but only a source the project named
+## Ask, do not recall
 
-Where the stack profile names a **knowledge skill** — `knowledge: <skill>`, one that answers
-architecture questions from a catalog and cites the node it read — use it instead of your own
-recollection whenever the answer would decide something: which pattern applies, why a rule exists,
-whether a construct is a pitfall, what a recipe prescribes. Name the node you relied on in your
-file, the way you name a file and line for a claim about the code.
-
-**Never adopt a knowledge source the profile did not name.** A catalog that happens to be installed
-may be a vendored copy of an older release: its rule ids, marker names and recipes can describe a
-version the project does not use, and a citation makes that wrongness look verified. If you notice
-such a skill, say so in your file — "`<skill>` is available but not named in the profile, so it was
-not used" — and decide from the project's own rules, markers and documents instead. Those are the
-source of truth; a catalog is a convenience the project has to vouch for.
-
-Without a `knowledge:` entry, work from what the project itself carries: its rule catalog and the
-report its architecture suite prints, its building blocks, its glossary, its documents. Nothing
-here fails for the absence of a knowledge skill.
+Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
+answer would decide something, and cite the node by its path inside the catalog; never adopt a
+knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
+beside this skill.
 
 ## Who carries this stage
 
-The stack profile may name a carrier for this stage — `carrier.test: <name>` — the skill or
-agent that holds this project's craft for it. A review **skill** works in every tool; an **agent**
-only where the tool has agents. Use the named carrier when this tool offers it; otherwise do the
-stage as described here and say in your file which it was ("in-session; `<carrier>` not available
-here"). A missing carrier is a missing preference, never a reason to skip the stage.
+`carrier.test: <name>` in the stack profile names the skill or agent that holds this project's craft
+for it; use it where this tool offers it, otherwise do the stage as described here and say so in
+your file. The rule in full: `factory-run/reference/stage-common.md`.
 
 ## The tests file
 
@@ -135,10 +115,11 @@ nothing else from the file:
 - <every test file this stage wrote or changed, one per line — written by the pipeline, see below>
 
 ## Notes
-- <test>: currently fails on <the assertion>, because <what is missing>
 - unit tests: <class>#<method> for invariant <rule>
 - uncovered: <criterion key> — <why no test was possible>   (only when unavoidable)
 ```
+
+What each test fails on is not written here: the gate's red run records it, assertion by assertion.
 
 The `## Files` list is the pipeline's to write: run `factory-cli.py --files-skeleton <story> test` when your
 changes are done — it creates the file with every changed file listed, or adds the missing paths to a file you

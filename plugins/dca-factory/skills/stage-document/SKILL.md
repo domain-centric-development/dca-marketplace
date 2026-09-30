@@ -28,20 +28,20 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    profile names as `carrier.glossary:` (the glossary skill, where installed), so the glossary's format
    is described in one place; by hand in the glossary's existing format otherwise. A term nobody can
    define is a term the model should not carry: say so rather than inventing a definition.
+   The skeleton's `## Glossary` table already carries one row per proposed term, the term **as the plan
+   wrote it**: write each entry from its row and keep the term's words in the entry's heading — the
+   domain word, with the code word in parentheses where they differ (`### Titel (TaskTitle)`). The
+   gate finds a term by any of those words, case aside, anywhere in a glossary file; a term you leave
+   out goes under `## Not documented` with what it waits for, and nowhere else (`factory-cli.py
+   --contract glossary` says the rule and the entry's shape).
 2. Update the context maps when the story changed how contexts relate — a new upstream, a new
    translation site, a relationship that changed kind. The designed map (`domain:` in the profile,
    `project/domain.md` by default) through the skill the profile names as `carrier.domain:`, where
    the story built what it designs; a map generated from the code by running what generates it,
    never by hand. A story that *needs* a new context or
    relationship should never have reached this stage; if you find one, write `## needs-human`
-   naming a decision record (`decision: <story>-<nn>`), written to
-   `<story>.decisions/<nn>.md` beside the story with the front matter `id: <story>-<nn>`,
-   `story:`, `stage: document`, `asked:` (UTC) and the sections `## Question`, `## Options`,
-   `## Recommendation` (full shape: `factory-run/templates/decision.md.tmpl`).
-   When you run again on a story whose record is answered — asked here, or answered `applies:
-   document` — read the answer, apply it, and cite the id in your file where it landed (`Decision
-   <id> answered <option>: …`): the gate stamps the record applied only then, and refuses a file
-   that does not cite it.
+   naming a decision record with `stage: document` (the shape, and the citation of an answered
+   record: `factory-run/reference/stage-common.md`).
 3. Update the documents the project keeps for readers, and only where the story made them wrong:
    the package or namespace layout when it changed, a described flow that now works differently, a
    list of contexts or capabilities that is now incomplete. Where the project declares its
@@ -61,24 +61,12 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    an open assumption the story never resolved. A document you read and left as it was is one line
    (`project/domain.md` — unchanged, single context), not a paragraph on what you read to know it.
 
-## Ask, do not recall — but only a source the project named
+## Ask, do not recall
 
-Where the stack profile names a **knowledge skill** — `knowledge: <skill>`, one that answers
-architecture questions from a catalog and cites the node it read — use it instead of your own
-recollection whenever the answer would decide something: which pattern applies, why a rule exists,
-whether a construct is a pitfall, what a recipe prescribes. Name the node you relied on in your
-file, the way you name a file and line for a claim about the code.
-
-**Never adopt a knowledge source the profile did not name.** A catalog that happens to be installed
-may be a vendored copy of an older release: its rule ids, marker names and recipes can describe a
-version the project does not use, and a citation makes that wrongness look verified. If you notice
-such a skill, say so in your file — "`<skill>` is available but not named in the profile, so it was
-not used" — and decide from the project's own rules, markers and documents instead. Those are the
-source of truth; a catalog is a convenience the project has to vouch for.
-
-Without a `knowledge:` entry, work from what the project itself carries: its rule catalog and the
-report its architecture suite prints, its building blocks, its glossary, its documents. Nothing
-here fails for the absence of a knowledge skill.
+Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
+answer would decide something, and cite the node by its path inside the catalog; never adopt a
+knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
+beside this skill.
 
 ## The document file
 

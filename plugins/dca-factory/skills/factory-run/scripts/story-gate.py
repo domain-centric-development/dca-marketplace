@@ -215,10 +215,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 10
+CONTRACT = 11
 
 
-VERSION = "0.51.6"
+VERSION = "0.52.0"
 
 
 def read_front_matter(path):
@@ -1104,14 +1104,20 @@ def glossary_files(cwd, profile):
     return found
 
 
-def check_proposals_landed(result, runs, story_id, cwd, profile):
-    """Every term the plan proposed is either in a glossary now or named as still open. A
-    proposal that quietly disappears is how a model's private vocabulary enters a code base."""
-    plan_path = os.path.join(runs, story_id, "plan.md")
-    try:
-        plan = read_text(plan_path)
-    except GateError:
-        return
+def proposal_words(term):
+    """The words the gate looks for in a glossary for one proposed term: the term as written, the domain
+    word before a parenthesis and the code word inside it — `Titel (title)` is found by `titel` or by
+    `title`. Case does not count."""
+    term = term.strip().strip("`*").lower()
+    words = {term}
+    match = re.match(r"^(.*?)\s*\(([^)]*)\)\s*$", term)
+    if match:
+        words |= {match.group(1).strip(), match.group(2).strip()}
+    return {w for w in words if w}
+
+
+def plan_proposals(plan):
+    """The terms a plan proposes under `## Glossary proposals`: the part before the colon of each list item."""
     proposals, collecting = [], False
     for line in plan.splitlines():
         if line.strip().lower().startswith("## glossary proposals"):
@@ -1121,6 +1127,20 @@ def check_proposals_landed(result, runs, story_id, cwd, profile):
             break
         if collecting and line.strip().startswith("-") and ":" in line:
             proposals.append(line.strip()[1:].split(":", 1)[0].strip().strip("`*"))
+    return proposals
+
+
+def check_proposals_landed(result, runs, story_id, cwd, profile):
+    """Every term the plan proposed is either in a glossary now or named as still open. A proposal that
+    quietly disappears is how a model's private vocabulary enters a code base. A term is found in a
+    glossary by any of its words (`proposal_words`), and it is named open only under `## Not documented`
+    of document.md — a row the pipeline pre-filled under `## Glossary` names it, it does not account for it."""
+    plan_path = os.path.join(runs, story_id, "plan.md")
+    try:
+        plan = read_text(plan_path)
+    except GateError:
+        return
+    proposals = plan_proposals(plan)
     if not proposals:
         return
     files = glossary_files(cwd, profile)
@@ -1131,21 +1151,30 @@ def check_proposals_landed(result, runs, story_id, cwd, profile):
         )
         return
     corpus = "\n".join(read_text(f).lower() for f in files)
-    document = ""
+    open_section = ""
     try:
-        document = read_text(os.path.join(runs, story_id, "document.md")).lower()
+        document = read_text(os.path.join(runs, story_id, "document.md"))
+        collecting = False
+        for line in document.splitlines():
+            if line.startswith("## "):
+                collecting = line[3:].strip().lower() == "not documented"
+                continue
+            if collecting:
+                open_section += line.lower() + "\n"
     except GateError:
         pass
     missing = [
         term
         for term in proposals
-        if term.lower() not in corpus and term.lower() not in document
+        if not any(word in corpus for word in proposal_words(term))
+        and not any(word in open_section for word in proposal_words(term))
     ]
     if missing:
         result.fail(
             "glossary",
-            f"proposed but neither in a glossary nor named as open: {', '.join(missing)} — a term "
-            f"the code uses and no glossary defines is private vocabulary",
+            f"proposed but neither in a glossary nor named as open under `## Not documented`: {', '.join(missing)} — "
+            f"a term the code uses and no glossary defines is private vocabulary (a term is found by the word before "
+            f"the parenthesis or the word inside it, case aside)",
         )
     else:
         result.ok("glossary", f"{len(proposals)} proposed term(s) accounted for")
@@ -1553,7 +1582,7 @@ def recorded_run(invocation, cwd, profile=None, with_reports=False):
 #: criterion, set from the bench's stories (the leanest files carried what the next stage needed at these
 #: sizes; the largest were half again as big and said nothing more). A note, never a refusal: the number
 #: is the measure `--contract` names, a stage with a reason writes it, and the measurement decides.
-HANDOVER_BUDGET = {"plan.md": (3000, 300), "tests.md": (1500, 250), "build.md": (2000, 200),
+HANDOVER_BUDGET = {"plan.md": (3000, 300), "tests.md": (1500, 200), "build.md": (1500, 150),
                    "tidy.md": (1500, 0), "judge.md": (3000, 0), "document.md": (2500, 0)}
 
 
