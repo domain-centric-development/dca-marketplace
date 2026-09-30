@@ -4544,6 +4544,12 @@ def run_groups(args):
     expectations.append(("judge sent back: a test changed after its build met it, green without a break, is refused "
                          "at the test gate", code == 1 and "break-proof" in checks_by_verdict(output)["fail"],
                          [l for l in output.splitlines() if "break-proof" in l or "tests-red" in l][:4]))
+    old_digest = hashlib.sha256(old_page.encode("utf-8")).hexdigest()
+    expectations.append(("judge sent back: a refused break leaves the earlier red proof in the record, so the next run "
+                         "can prove the new version instead of a test never seen red",
+                         f"com.example.WidgetPageTest#showsTheThing\t{old_digest}" in ledger
+                         and "com.example.WidgetUnitTest#showsNothingWhenEmpty" in ledger,
+                         ledger.splitlines()))
     code, output, ledger = strengthened(BREAK_THE_THING)
     new_digest = hashlib.sha256(new_page.encode("utf-8")).hexdigest()
     expectations.append(("judge sent back: the same test with a break that turns it red passes, and the red record "

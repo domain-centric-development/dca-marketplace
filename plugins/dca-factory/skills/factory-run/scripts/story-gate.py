@@ -218,7 +218,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.51.3"
+VERSION = "0.51.4"
 
 
 def read_front_matter(path):
@@ -2045,6 +2045,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
     was_red = read_red_ledger(runs, story)
     red_digests = read_red_digests(runs, story)
     now_red = set()
+    kept = {}                                 # entries an earlier run made that this run leaves as they are
     # An expectation that changes on a human's decision: the test was recorded red before the code
     # existed, the decision changed what it expects, and the code now meets it. Only that combination
     # lets a green test through the red check — without the decision it is the refusal below.
@@ -2145,6 +2146,10 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
                 result.entries.extend(probe.entries)
                 if not probe.failed:
                     now_red.add(selector)
+                else:
+                    # The earlier proof stands for the version it was taken against; losing it would make
+                    # the next run treat this test as one never seen red, which no break can repair.
+                    kept[selector] = recorded
                 return
             now_red.add(selector)
             result.ok("tests-red", f"{selector} is green now and was recorded red in an earlier pass of this "
@@ -2259,7 +2264,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
             for selector in timed_out:
                 timeout_note(result, expected, selector)
     if expected == "red":
-        write_red_ledger(runs, story, now_red, located, cwd)
+        write_red_ledger(runs, story, now_red, located, cwd, kept)
     elif have_ledger and red_proof:
         check_red_proof(result, cwd, located, read_red_digests(runs, story), story)
     return whole_runs
@@ -2340,13 +2345,21 @@ def read_red_ledger(runs, story):
     return set(read_red_digests(runs, story))
 
 
-def write_red_ledger(runs, story, selectors, located=None, cwd="."):
+def write_red_ledger(runs, story, selectors, located=None, cwd=".", kept=None):
+    """The red record: every selector seen red now, bound to its test file's digest — and, in `kept`, the
+    entries an earlier run made that this run could neither confirm nor replace (a strengthened test whose
+    break is still missing keeps its old proof, so the next run can prove the new version instead of
+    treating a test it once saw red as one it never did)."""
     path = red_ledger_path(runs, story)
     if not path:
         return
     os.makedirs(os.path.dirname(path), exist_ok=True)
     lines = []
-    for selector in sorted(selectors):
+    for selector in sorted(set(selectors) | set(kept or {})):
+        if selector not in selectors:
+            digest = (kept or {}).get(selector)
+            lines.append(f"{selector}\t{digest}" if digest else selector)
+            continue
         test_file = (located or {}).get(selector)
         full = os.path.join(cwd, test_file) if test_file else None
         lines.append(f"{selector}\t{file_digest(full)}" if full and os.path.isfile(full) else selector)
