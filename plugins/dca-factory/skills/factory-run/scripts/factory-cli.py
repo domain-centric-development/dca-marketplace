@@ -2568,6 +2568,23 @@ CONTRACT_HEAD = ("What the gate checks in this stage's file — the exact shape,
 
 
 def contract_text(stage, runs):
+    """The stage's contract, with the hand-over's measure appended: what the file has to say fits in a base plus a
+    share per criterion (the gate notes a larger file, never refuses it)."""
+    text = contract_body(stage, runs)
+    if text is None:
+        return None
+    files = {"plan": ("plan.md",), "test": ("tests.md",), "build": ("build.md",), "tidy": ("tidy.md",),
+             "judge": ("judge.md",), "document": ("document.md",)}.get(stage, ())
+    for name in files:
+        base, per = HANDOVER_BUDGET[name]
+        text += (f"\n- size: what {name} has to say fits in {base / 1000:.1f} kB"
+                 + (f" plus {per} bytes per criterion" if per else "")
+                 + " — keys and levels, not the story's text; one citation per row; nothing a reader has elsewhere. "
+                   "Larger is a `gate:note size`, never a refusal; a reason is one line")
+    return text
+
+
+def contract_body(stage, runs):
     """The shape the gate holds a stage's file to, in a page: the table columns, the selector form, the
     path rule, the section names — taken from the constants the checks read, so the two cannot drift apart
     without this text changing with them."""
@@ -2576,9 +2593,10 @@ def contract_text(stage, runs):
         return f"""{CONTRACT_HEAD}
 
 plan — {folder}/plan.md (gate before the stage: story, epic, context map, decisions, rounds; the test gate reads the plan)
-- `## Acceptance criteria`: one line per criterion, the story's key verbatim:
-  `- <key>: <criterion>  →  level: e2e | integration | browser-only (<why>)`
-  the test gate reads `level: browser-only` here (`levels`); a key is `[a-z0-9][a-z0-9-]*`
+- `## Acceptance criteria`: one line per criterion, the story's key verbatim and its level — not the story's text:
+  `- <key>  →  level: e2e | integration | browser-only (<why>)`
+  `factory-cli.py --plan-skeleton <story>` writes the file's headings and these lines with the keys: give each its level.
+  The test gate reads `level: browser-only` here (`levels`); a key is `[a-z0-9][a-z0-9-]*`
 - `## Changed tests` (only when the story contradicts an existing test): `| <path from the project root> | <backing line or decision id> |`
 - `## Files`: `- <path from the project root> — <changes|read>: <why>` (the path in backticks) — the next stages open these first
 - `## Glossary proposals`: `- <term>: <definition>` — the document gate checks each term landed in a glossary or is named open
@@ -2750,6 +2768,34 @@ def files_skeleton(runs, story_id, stage, cwd="."):
     return 0
 
 
+PLAN_SKELETON = ("# Plan — {story}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"
+                 "| --- | --- | --- | --- | --- |\n\n## Acceptance criteria\n{rows}\n\n## Files\n\n## Glossary proposals\n\n"
+                 "## Open assumptions\n")
+
+
+def plan_skeleton(runs, story_id, cwd="."):
+    """`plan.md` before the plan stage runs: the file's headings and, under `## Acceptance criteria`, one line per
+    criterion of the story with its key — the stage gives each its level and never retypes the story's text.
+    Idempotent: an existing file (a refused round's, a stage's own) is left as it is."""
+    folder = os.path.join(runs, story_id)
+    target = os.path.join(folder, "plan.md")
+    if os.path.isfile(target):
+        print(f"factory: {runs}/{story_id}/plan.md exists — left as it is")
+        return 0
+    try:
+        story_path = find_story(place("epics"), story_id)
+        criteria = criteria_of(story_path, read_front_matter(story_path)[1])
+    except GateError as error:
+        print(f"factory: {error}", file=sys.stderr)
+        return 1
+    rows = "\n".join(f"- {key}  →  level: " for key, _text in criteria)
+    os.makedirs(folder, exist_ok=True)
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write(PLAN_SKELETON.format(story=story_id, rows=rows))
+    print(f"factory: {runs}/{story_id}/plan.md — the skeleton with {len(criteria)} criterion key(s) under `## Acceptance criteria`")
+    return 0
+
+
 def document_skeleton(runs, story_id, cwd="."):
     """`document.md` before the document stage runs: the file's headings, and under `## Paths` every file the
     story changed and every run file, as they resolve from the project root. A path the model never types
@@ -2865,6 +2911,9 @@ def main(argv):
     parser.add_argument("--files-skeleton", nargs=2, metavar=("STORY", "STAGE"),
                         help="write the test, build or tidy hand-over's file list from what the tree changed "
                              "(the file's skeleton when it is missing, the missing paths when the stage wrote it)")
+    parser.add_argument("--plan-skeleton", metavar="STORY",
+                        help="write plan.md's headings and, under `## Acceptance criteria`, one line per criterion "
+                             "key of the story (a stage gives each its level; an existing file is left as it is)")
     parser.add_argument("--document-skeleton", metavar="STORY",
                         help="write the document stage's file skeleton with every changed path and run file under "
                              "`## Paths`, as they resolve from the project root; an existing file is kept; and exit")
@@ -2892,6 +2941,8 @@ def main(argv):
         return 0
     if args.files_skeleton:
         return files_skeleton(args.runs, args.files_skeleton[0], args.files_skeleton[1], cwd)
+    if args.plan_skeleton:
+        return plan_skeleton(args.runs, args.plan_skeleton, cwd)
     if args.document_skeleton:
         return document_skeleton(args.runs, args.document_skeleton, cwd)
     if args.migrate_layout:

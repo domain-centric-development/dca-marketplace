@@ -1658,8 +1658,10 @@ $RUNS/$story/. After the test, build and tidy stages run that stage's gate, \
 \`$PY $GATE --story $story --stage <stage> --brief\`, and fix exactly what it names before the next stage, at most \
 three attempts per stage. Before you write tests.md, build.md or tidy.md, run \`$PY $CLI --files-skeleton $story <stage>\`: \
 it writes the file's list of changed files from the tree (or adds the missing ones to a file you wrote); fill in the rest, \
-never the list. The gate is your test run: run single tests while you work, then the stage's gate — do not run the whole \
-suite yourself before it, the gate runs the same commands. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
+never the list. Before you write plan.md, run \`$PY $CLI --plan-skeleton $story\`: it writes the plan's headings and one \
+line per criterion key — give each its level, never retype the story's text. The gate is your test run: run single tests \
+while you work, then the stage's gate — do not run the whole suite yourself before it, the gate runs the same commands. \
+Each hand-over says what the next stage needs and nothing a reader has elsewhere; \`--contract <stage>\` names its measure. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
 document stage. This session was started by the pipeline's runner, which holds the checkout for it: the worker \
 named at session start is the one that started you, not a second writer. $(where_things_are "$tool" builder "$story")"
   local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
@@ -2163,6 +2165,12 @@ run_story() {
       [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
       # The document stage's file starts as the pipeline's skeleton: every path it may cite, root-relative.
       [ "$stage" = document ] && [ -f "$GATE" ] && cli --document-skeleton "$story" >/dev/null 2>&1
+      [ "$stage" = plan ] && [ -f "$GATE" ] && cli --plan-skeleton "$story" >/dev/null 2>&1
+      # A skeleton the pipeline wrote is not the stage's file: kept aside, so a stage that left it untouched
+      # is a stage that produced nothing, not a finished one.
+      rm -f "$RUNS/$story/.verify/$stage.skeleton"
+      [ -f "$RUNS/$story/$(stage_file "$stage")" ] && { [ "$stage" = plan ] || [ "$stage" = document ]; } \
+        && cp "$RUNS/$story/$(stage_file "$stage")" "$RUNS/$story/.verify/$stage.skeleton"
       snapshot "$story" "before-$stage"
       local choice requested note model_fields=""
       choice=$(model_choice "$tool" "$stage"); note=${choice#*|}; requested=$(model_key "$tool" "$stage")
@@ -2189,6 +2197,10 @@ run_story() {
       [ -f "$artefact" ] || {
         echo "factory: stage '$stage' produced no $artefact — a stage is finished when its file exists." >&2
         return 1; }
+      if [ -f "$RUNS/$story/.verify/$stage.skeleton" ] && cmp -s "$artefact" "$RUNS/$story/.verify/$stage.skeleton"; then
+        echo "factory: stage '$stage' produced no $artefact beyond the pipeline's skeleton — a stage is finished when it wrote its file." >&2
+        return 1
+      fi
       # A stage that ends with a needs-human section has stopped, whatever its file otherwise says.
       # Reading only "does the file exist" turns an escalation into a hand-over, and the next stage
       # then builds on a decision nobody took.

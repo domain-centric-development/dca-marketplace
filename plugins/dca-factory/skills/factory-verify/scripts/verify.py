@@ -3540,6 +3540,21 @@ def run_groups(args):
              (".dca-factory/runs/STORY-1/.verify/changed-test.txt", "modified\tsrc/test/java/com/example/WidgetUnitTest.java\n"),),
               after=lambda root: [] if not os.path.isfile(os.path.join(root, "build/runner-calls.log"))
               else ["the runner was called: " + open(os.path.join(root, "build/runner-calls.log")).read()])),
+        # WP-79 C10: a hand-over larger than what it has to say is noted, never refused.
+        (Case("test: a plan larger than its measure is noted, and the gate passes", "test", 0,
+              must_pass=("tests-red",), text=("gate:note size — plan.md is",)),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
+                              "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: e2e\n\n## Context\n"
+                              + ("the same sentence, restated once more for nobody. " * 90) + "\n"),))),
+        (Case("test: a plan line the skeleton wrote and nobody finished is refused", "test", 1,
+              must_fail=("plan-levels",), text=("gives no level to shows-nothing-when-empty",)),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
+                              "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: e2e\n"
+                              "- shows-nothing-when-empty  →  level: \n"),))),
+        (Case("test: a lean plan gets no size note", "test", 0, must_pass=("tests-red",), absent=("gate:note size",)),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
+                              "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: e2e\n"
+                              "- shows-nothing-when-empty  →  level: integration\n"),))),
         (Case("test: an unmapped criterion is refused", "test", 1, must_fail=("tests-mapped",)),
          dict(tests="\n".join(TESTS.splitlines()[:5]) + "\n")),
         (Case("test: a selector with no source file is refused", "test", 1,
@@ -4372,6 +4387,27 @@ def run_groups(args):
         expectations.append(("red-proof: a red record without digests (an older gate) is skipped and named",
                              code == 0 and "red-proof" in checks_by_verdict(output)["skip"],
                              [l for l in output.splitlines() if "red-proof" in l]))
+    # WP-79 C10: the plan's criteria lines come with the keys; the stage gives the levels.
+    with tmpdir() as root:
+        build_project(root)
+        done = subprocess.run([sys.executable, args.cli, "--plan-skeleton", "STORY-1"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        plan = os.path.join(root, ".dca-factory", "runs", "STORY-1", "plan.md")
+        text = open(plan, encoding="utf-8").read() if os.path.isfile(plan) else ""
+        expectations.append(("plan skeleton: the file's headings and one line per criterion key, no criterion text",
+                             done.returncode == 0 and "- shows-the-thing  →  level: " in text
+                             and "- shows-nothing-when-empty  →  level: " in text and "The reader sees the thing" not in text
+                             and "## Files" in text and "## Glossary proposals" in text,
+                             f"exit {done.returncode}; {(done.stdout + done.stderr).strip()[:160]}; {text!r}"))
+        with open(plan, "w", encoding="utf-8") as handle:
+            handle.write(text.replace("- shows-nothing-when-empty  →  level: ",
+                                      "- shows-nothing-when-empty  →  level: browser-only (the Then is a layout)"))
+        again = subprocess.run([sys.executable, args.cli, "--plan-skeleton", "STORY-1"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+        expectations.append(("plan skeleton: an existing plan is left as it is",
+                             again.returncode == 0 and "left as it is" in again.stdout
+                             and "browser-only" in open(plan, encoding="utf-8").read(),
+                             f"exit {again.returncode}; {again.stdout.strip()[:120]}"))
     # WP-79 A4: the hand-over's file list is the pipeline's to write, from the record the gate reads.
     with tmpdir() as root:
         build_project(root, green=both_green, ledger=both_green, extra_sources=(

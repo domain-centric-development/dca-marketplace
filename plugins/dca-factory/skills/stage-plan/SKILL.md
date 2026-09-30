@@ -53,8 +53,12 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    declared inward and implemented in adapters, no raw cross-context imports, one aggregate
    changed per transaction. Ask the project's knowledge skill where one is
    installed (see below) rather than deciding a pattern question from memory.
-7. Restate the acceptance criteria, keeping the story's **keys** verbatim — the later stages and
-   the gate join on them. A story written in scenarios keeps its rules and each scenario's steps;
+7. List the acceptance criteria by **key** — the story's keys verbatim, the later stages and the
+   gate join on them — and give each its level (step 8). The criterion's text stays in the story;
+   a plan that retypes it says nothing the reader does not have. The pipeline writes these lines:
+   `factory-cli.py --plan-skeleton <story>` (the runner runs it; in a session run it yourself
+   before the stage) puts the file's headings and one line per key in place. A story written in
+   scenarios keeps its rules and each scenario's steps;
    plan within `## Out of scope` — what it lists is not planned, however close it lies. Add a criterion for every concrete detail the story specifies (wording,
    placement, ordering): a detail that is not a criterion is a detail no test will cover and no
    stage will build.
@@ -155,7 +159,8 @@ here"). A missing carrier is a missing preference, never a reason to skip the st
 (one row per element; Evidence is the file:line or the catalog node the placement rests on)
 
 ## Acceptance criteria
-- <key>: <criterion>  →  level: e2e | integration | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
+- <key>  →  level: e2e | integration | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
+                                  (the key alone; the criterion's text stays in the story)
 
 ## Changed tests                  (omit the section when the story contradicts no existing test)
 | Test file | Backed by |

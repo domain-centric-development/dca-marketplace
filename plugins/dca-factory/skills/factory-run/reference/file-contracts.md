@@ -133,6 +133,11 @@ the file:
   (`tests.test_widgets`, `tests.test_widgets.TestWidgets`). The stack profile decides how that
   becomes a filter argument for the runner (`filterFormat`, with `{class}`, `{method}` and the
   located `{file}`).
+- Every hand-over says what the next stage needs and nothing a reader has elsewhere: the plan lists the
+  criteria by key and level, not by the story's text (`factory-cli.py --plan-skeleton <story>` writes the
+  headings and the keys); a change row cites one node; `## Checks` names the gate run. `--contract <stage>`
+  names each file's measure — a base plus a share per criterion — and the gate notes a larger file
+  (`gate:note size`), never refuses it.
 - The `## Files` list (the build's `## Changed` and the tidy's `## Moves` table's first column) is written
   by the pipeline: `factory-cli.py --files-skeleton <story> <stage>` creates the hand-over with every
   changed file listed, or adds the missing paths to one the stage wrote first, from the same record the

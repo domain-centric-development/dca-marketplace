@@ -218,7 +218,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 10
 
 
-VERSION = "0.51.5"
+VERSION = "0.51.6"
 
 
 def read_front_matter(path):
@@ -609,6 +609,20 @@ def plan_levels(runs, story_id):
     """The keys the plan gave `browser-only` — a `Then` only a browser can observe, with its reason."""
     text = read_text(os.path.join(runs, story_id, "plan.md")) if os.path.isfile(os.path.join(runs, story_id, "plan.md")) else ""
     return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*browser-only", text, re.M)}
+
+
+def check_plan_levels(result, runs, story_id):
+    """A plan line the pipeline's skeleton wrote and the stage never finished — a key with no level after it —
+    is a plan that was not made: refused at the test gate, before any test is read against it."""
+    path = os.path.join(runs, story_id, "plan.md")
+    if not os.path.isfile(path):
+        return
+    unfinished = [m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\s+→\s+level:\s*$", read_text(path), re.M)]
+    if unfinished:
+        result.fail("plan-levels", f"plan.md gives no level to {', '.join(unfinished[:6])}"
+                                   + (" …" if len(unfinished) > 6 else "")
+                                   + " — the skeleton's line is still empty; the plan stage gives each criterion "
+                                     "`level: e2e | integration | browser-only (<why>)`")
 
 
 def check_levels(result, profile, runs, story_id, front, body, mapping, located):
@@ -1533,6 +1547,29 @@ def recorded_run(invocation, cwd, profile=None, with_reports=False):
             handle.write("\t".join((when, record["tree"], invocation, str(code), ran_json, signature)) + "\n")
         record["rows"][invocation] = (when, code, json.loads(ran_json))
     return code, output, ran, ""
+
+
+#: What a hand-over has to say fits in this many bytes for a story of n criteria: a base and a share per
+#: criterion, set from the bench's stories (the leanest files carried what the next stage needed at these
+#: sizes; the largest were half again as big and said nothing more). A note, never a refusal: the number
+#: is the measure `--contract` names, a stage with a reason writes it, and the measurement decides.
+HANDOVER_BUDGET = {"plan.md": (3000, 300), "tests.md": (1500, 250), "build.md": (2000, 200),
+                   "tidy.md": (1500, 0), "judge.md": (3000, 0), "document.md": (2500, 0)}
+
+
+def check_size(result, runs, story_id, files, count):
+    """A note when a hand-over is larger than what it has to say for a story of `count` criteria."""
+    for name in files:
+        path = os.path.join(runs, story_id, name)
+        if name not in HANDOVER_BUDGET or not os.path.isfile(path):
+            continue
+        base, per = HANDOVER_BUDGET[name]
+        budget = base + per * count
+        size = os.path.getsize(path)
+        if size > budget:
+            result.note("size", f"{name} is {size / 1000:.1f} kB; what it has to say for {count} criteria fits in "
+                                f"{budget / 1000:.1f} kB (the contract's measure): keys and levels, not the story's "
+                                f"text; one citation per row; nothing the story, the plan or the code already says")
 
 
 def check_compiles(result, profile, cwd):
@@ -4092,6 +4129,7 @@ def main(argv):
             check_story_pass(result, args.runs, story_id, story_path, front)
             check_documented(result, args.runs, story_id, cwd)
             check_proposals_landed(result, args.runs, story_id, cwd, profile)
+            check_size(result, args.runs, story_id, ("judge.md", "document.md"), len(criteria))
             check_stage_commands(result, profile, cwd, args.stage)
         if args.stage == "adopt":
             check_adopt(result, profile, cwd, args.runs, story_id, front, criteria)
@@ -4103,7 +4141,10 @@ def main(argv):
             # tests. What did not run is named, so the report says what is still unproven.
             check_files_listed(result, args.runs, story_id, args.stage, cwd, located)
             check_existing_tests(result, cwd, args.runs, story_id, body)
+            check_size(result, args.runs, story_id,
+                       ("plan.md", "tests.md") if args.stage == "test" else (STAGE_FILES[args.stage],), len(criteria))
             if args.stage == "test":
+                check_plan_levels(result, args.runs, story_id)
                 check_levels(result, profile, args.runs, story_id, front, body, mapping, located)
                 check_titles(result, profile, cwd, front, body, mapping, located)
             # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
