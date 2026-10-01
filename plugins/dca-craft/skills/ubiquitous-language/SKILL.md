@@ -77,9 +77,10 @@ An operation is the verb the people who own the domain use for what happens to t
 word, and the code's word in parentheses where it differs — `anlegen (create)`, `erledigen (complete)`.
 Where the domain's word could name more than one operation, add one line that says which it is.
 
-A verb is a modelling decision, not a translation. *Create* brings a thing into existence; *add* puts
-an existing thing into a collection — and which one it is says which object holds the rules. A word
-like *anlegen* covers both. Whoever writes the code and translates it picks one, the next writer may
+A verb is a modelling decision, not a translation. One domain word can name operations with different
+effects, and the effect says which object holds the rules: *anlegen* covers *create* (the thing comes
+into existence) and *add* (an existing thing goes into a collection); *löschen* covers *delete* (gone)
+and *cancel* or *archive* (kept, with a state). Whoever writes the code and translates it picks one, the next writer may
 pick the other; where the glossary gives the code word, both use it. So the code word of an operation
 is asked, never chosen while translating.
 
@@ -89,10 +90,28 @@ Ask in the grammar of Event Storming, without the workshop:
    fact more readily than on a procedure, and the participle fixes the verb.
 2. **The command** that caused it — the operation, with its code word.
 3. **The aggregate** that accepts the command and holds the rules — the term the operation is entered on.
-   The create-or-add question decides it: "Does the thing exist before this step?"
+   The effect decides it: "What exists before this step and after it, and whose state changes?"
 4. **The read model** a person looks at to decide — a term of its own.
 5. **Policies** ("whenever this happens, do that") — an operation that an event triggers.
 6. **Hot spots** — what nobody can answer yet. A hot spot stays an open question; it is not entered.
+
+### Look up how the field names it — per bounded context
+
+Before asking, and where the session can search, look up how the field of **this** context names its
+operations. The same word means different things in different contexts — *cancel* an authorization in
+payment, *cancel* an order in ordering — so the lookup is per context, never for the product as a whole:
+
+1. **A published standard** for the context's subdomain, where one exists (healthcare, payments,
+   logistics have them). Offer it first.
+2. **The vocabulary of widely used systems** of that subdomain — their APIs and documentation.
+3. **The operations they keep apart that look alike** — two verbs with different effects, such as holding
+   an amount and collecting it. These are the most useful finding: each is a question the person answers.
+
+Offer what you find per operation as options, each with its source; where the sources disagree, show
+the disagreement, it is a decision for the context. Nothing found enters the glossary unconfirmed. How
+far to follow the field depends on the subdomain: a **generic** context usually adopts the established
+vocabulary (it often conforms to a product it integrates); a **core** context keeps its own language and
+uses the lookup for the distinctions, not for the words. Without a search, ask as below.
 
 Names in the code then follow from the entry: the operation's code word names the method, the command
 and whatever the code calls the operation, and the event is the term plus the past participle
@@ -114,8 +133,9 @@ and whatever the code calls the operation, and the event is the term plus the pa
 4. Check whether the term appears in code as a different word (e.g. user
    says "Order", but code uses "Purchase") → suggest renaming the code or
    adding the code term as a synonym.
-5. For an operation: ask for the event first, then the code word, and where the word could mean
-   creating or adding, ask which (see *Operations are entered like terms*). Enter it on the term it
+5. For an operation: look up how the context's field names it, where the session can search
+   (*Look up how the field names it*); then ask for the event first, then the code word, and where the
+   word could name more than one effect, ask which (see *Operations are entered like terms*). Enter it on the term it
    acts on, never as a heading of its own.
 6. Write the entry. Add cross-references in related entries.
 
