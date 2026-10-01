@@ -112,8 +112,12 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    expectation each holds today and what the story would need instead, and stop. Once answered,
    plan again and cite the id in each row. A test the story does not contradict is not listed; the
    gate lets the later stages change only what is listed and backed.
-10. Name business terms in the criteria that are not in the glossary yet, as proposals with a
-   one-line definition. Do not silently invent domain language.
+10. Name business terms **and operations** in the criteria that are not in the glossary yet, as
+   proposals with a one-line definition — an operation as `<domain word> (<code word>): <what it does
+   to which term>`. Name use cases, commands and events from the operation's code word. The code word
+   comes from the glossary, the description's `## Glossary` or the story's answered assumptions; where
+   none of them gives it and the word could name more than one operation (creating a thing or adding
+   it), it is a `## needs-human`, not a choice. Do not silently invent domain language.
 11. Back every **decision** with evidence — a level chosen, a pattern picked, an element placed, a test
    named as contradicted: the file, and the line or symbol you read it from, in the same row or line.
    A row that names the file it changes is its own evidence; do not restate what the file says. A

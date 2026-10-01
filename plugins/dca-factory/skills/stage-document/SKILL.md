@@ -22,8 +22,8 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 1. Read the plan's glossary proposals and the diff's new names. Every **domain** identifier the
    story introduced — an aggregate, a value object, an event, a use case, a domain term in a result
    — needs an entry in the bounded context's glossary; a use case is no glossary type of its own —
-   it is an `Operations` line on the term it acts on, or a `Concept` where it names a term nobody
-   had. Add the missing ones in the project's own
+   it is an `Operations` line on the term it acts on — the domain word with the code word in
+   parentheses, as the plan proposed it — or a `Concept` where it names a term nobody had. Add the missing ones in the project's own
    words, taking the definition from the plan's proposal where there is one — through the skill the
    profile names as `carrier.glossary:` (the glossary skill, where installed), so the glossary's format
    is described in one place; by hand in the glossary's existing format otherwise. A term nobody can

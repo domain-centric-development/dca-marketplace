@@ -118,12 +118,17 @@ that smuggles the decision in.
    - **repeated or abusive use:** a rule a user can probe or exhaust;
    - **coverage:** a rule without a scenario, a scenario with two causes, a `Then` no test can observe;
    - **out of scope:** what this story leaves to another → `## Out of scope`.
+   - **operations:** is every scenario's `When` an operation the glossary or the description names,
+     with the word the code uses? Ask a missing one as its meaning — does the thing exist before this
+     step, or does the step create it? — never as a translation. The answer is an `answered:`
+     assumption with both words (`anlegen (create)`); the plan proposes it for the glossary.
 
    What the project description already answers is not asked again. Answers go into rules, scenarios or
    `answered:` assumptions; what stays open is an `open:` assumption.
-7. **Use the project's own words.** Read the context's glossary first and write the story in those
-   terms. A term the story needs that no glossary carries goes into `## Assumptions` as a question
-   for the domain contact, not into the story as if it were established.
+7. **Use the project's own words.** Read the context's glossary and the description's `## Glossary`
+   first and write the story in those terms and operations. A term or a verb the story needs that
+   neither carries goes into `## Assumptions` as a question for the domain contact, not into the story
+   as if it were established.
 8. **Assumptions are questions, never decisions.** Each line is `open:` or `answered:`. What the
    team decided itself belongs in the criteria or in a plan, not here. A story whose criterion
    contradicts one of its own open assumptions is not ready — the judge will stop the run for it,
@@ -155,7 +160,9 @@ that smuggles the decision in.
 ## A journey
 
 An epic may name its **journey** — `## Journey` in `epic.md`: the steps as a user takes them, across the
-epic's stories and contexts, to the epic's outcome event, and why a break would hurt. Ask for it when an
+epic's stories and contexts, to the epic's outcome event, and why a break would hurt. Write the steps
+as an event timeline — each a command and the event it causes (`place → OrderPlaced`), the last
+one the outcome event; a step whose command or event the glossary does not name is a question first. Ask for it when an
 epic is created ("Which flow through this epic must never break, and why?"); leave it `open:` when the
 person cannot say yet — a journey emerges from delivered stories — and add it at any later time. An epic
 without one has no journey test, which is a decision, not a gap. The product description's
