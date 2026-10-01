@@ -37,6 +37,11 @@ An alternative path can be set in the conventions file the project instructions 
 ``- conventions: `<path>` `` line in `AGENTS.md`). Where the glossaries already exist
 elsewhere, use their place and say so; never start a second glossary beside one.
 
+A project may describe its designed contexts before they have code, with a section of words per context.
+Until the context's glossary file exists, that section is its glossary. The first entry written to the
+file takes the section's rows with it and leaves one line there naming the file — moved, not copied: the
+words of one context have one place.
+
 ## Glossary entry format
 
 Every entry uses this shape:
