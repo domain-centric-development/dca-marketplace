@@ -21,7 +21,7 @@ could show goes to `docs/`.
    exists there. A file that is complete stays as it is unless the person wants to change it — you
    check it, you do not rewrite it.
 2. **One question per heading, from the catalogue.** The headings are fixed by the templates in
-   `templates/` — the product's six, the technical description's six, the domain's three tables — and
+   `templates/` — the product's six, the technical description's six, the domain's contexts, relationships and one glossary table per context — and
    `reference/questions.md` holds the question for each, word for word, with its options and its
    default. Look every heading up, then ask **only the open ones — all at once, in catalogue order,
    word for word**; write the answers in the person's words. Never invent an answer: a stage or a
@@ -49,9 +49,12 @@ could show goes to `docs/`.
    its field names its operations — a published standard, the vocabulary of widely used systems, the
    look-alike operations they keep apart — where the session can search, and offer what you find with
    its source as the drafts of DESC-GLOSSARY (the `ubiquitous-language` skill describes the lookup). A
-   draft counts as open until the person confirms it. Once a
-   context's code has a glossary of its own (through the `ubiquitous-language` skill, where installed),
-   that glossary carries the entries; a contradiction between the two is a finding the person decides.
+   draft counts as open until the person confirms it.
+   **The glossary is per context, and every entry has one place.** Each designed context gets its own
+   `### <context>` section under `## Glossary`. A context that already has code and a glossary file of its
+   own gets its entries there — through the `ubiquitous-language` skill, where installed — and its section
+   is one line naming that file. When a context's code is created later, its section moves into the
+   context's glossary (`dca-new context` does it): moved, not copied, never two places for one word.
 6. **One designed map, never two.** A designed map written earlier at `docs/context-map.md` — or
    under another name the project used — is moved, not copied: propose
    `git mv docs/context-map.md project/domain.md` and do it on the person's confirmation. A map

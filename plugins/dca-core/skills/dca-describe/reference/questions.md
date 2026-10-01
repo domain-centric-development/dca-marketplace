@@ -150,9 +150,9 @@ paths are the defaults; the `dca-describe` section of `AGENTS.md` names the plac
 - answer goes to: `project/domain.md → ## Relationships`
 
 ### DESC-GLOSSARY
-- look up: the `## Glossary` table; drafts per context from the lookup of how its field names its operations (SKILL step 5), each with its source
+- look up: the `## Glossary` section — a `### <context>` table per designed context, or the context's own glossary where it has code; drafts per context from the lookup of how its field names its operations (SKILL step 5), each with its source
 - asked: when open, once per designed context
 - question: What happens in each context — the main events, in the past tense and in your words? For each: which operation causes it, on which term, and what does a person look at to decide? Give every word the code should use, and where a word could name more than one effect — creating or adding a thing, deleting or cancelling it — say which.
 - options: none yet — each story asks for the words it needs
 - default: —
-- answer goes to: `project/domain.md → ## Glossary`
+- answer goes to: `project/domain.md → ## Glossary → ### <context>`, or the context's own glossary where it already has one

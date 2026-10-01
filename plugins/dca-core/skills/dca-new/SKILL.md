@@ -270,7 +270,11 @@ consistent) conventions.
    (`templates/bounded-context/Context.cs.tmpl`) and the DI extension `Add{Context}Context()` in `Infrastructure/`
    (`ContextRegistration.cs.tmpl`); tell the user to call it from the host's `Program.cs`.
 5. **Add Gradle module** if multi-module: create `build.gradle.kts` from `templates/bounded-context/build.gradle.kts.tmpl` and add `include("{context}")` to `settings.gradle.kts`.
-6. **Verify:** run the architecture tests if they exist. The new (empty) context should not break anything.
+6. **Move the context's glossary.** Where the designed domain (`- domain:` in `AGENTS.md`, `project/domain.md` by
+   default) has a `### {context}` section under `## Glossary`, write its rows as entries of the new context's
+   glossary through `ubiquitous-language` — at the place its *Glossary location* names — and replace the section
+   with one line naming that file. Moved, not copied: one place per word.
+7. **Verify:** run the architecture tests if they exist. The new (empty) context should not break anything.
 
 ---
 
