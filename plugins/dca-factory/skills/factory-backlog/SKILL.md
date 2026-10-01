@@ -119,8 +119,12 @@ that smuggles the decision in.
    - **coverage:** a rule without a scenario, a scenario with two causes, a `Then` no test can observe;
    - **out of scope:** what this story leaves to another → `## Out of scope`.
    - **operations:** is every scenario's `When` an operation the glossary or the description names,
-     with the word the code uses? Ask a missing one as its meaning — does the thing exist before this
-     step, or does the step create it? — never as a translation. The answer is an `answered:`
+     with the word the code uses? Ask a missing one as its effect — what exists before the step and
+     after it, and whose state changes (e.g. does the thing exist before, or does the step create it?
+     is it gone afterwards, or kept with a state?) — never as a translation. Where the session can
+     search, look up first how the field of the story's context names that operation (a standard, the
+     vocabulary of widely used systems, the look-alike operations they keep apart) and offer what you
+     find, with its source, as the options. The answer is an `answered:`
      assumption with both words (`anlegen (create)`); the plan proposes it for the glossary.
 
    What the project description already answers is not asked again. Answers go into rules, scenarios or
