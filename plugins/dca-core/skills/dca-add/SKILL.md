@@ -217,6 +217,9 @@ stack is in `reference/coverage.md`: JaCoCo for Gradle and Maven, coverlet with 
 3. **No threshold.** Coverage is a reading, never a check that fails the build: a number to reach invites tests
    written for the number. The gap that matters is in the domain — an uncovered branch in an aggregate, entity
    or value object is an invariant nobody named; it goes back as an invariant with a unit test.
+   **Outside every build and test command:** the report task joins neither `check` nor a test command a
+   delivery pipeline's profile names (`test:`, `test.<name>:`, `e2eTest:`) — a story whose criteria are all
+   green must never fail on a number.
 4. **Shown to work:** the domain's types in the report with covered lines; one unit test of a guard commented
    out shows that branch missed; the test restored.
 5. **Record it** in the conventions file's `## Coverage` section: `coverage:` (the command) and

@@ -10,8 +10,14 @@ domain: an uncovered branch in an aggregate, entity or value object is an invari
 tested (a guard against `null`, an untrimmed value, a range). It goes back as an invariant with a unit test, not
 as a test written to colour the line.
 
+**Outside every build and test command.** The report task joins neither `check` nor a command a delivery
+pipeline's profile names as a test command, and no `violationRules` are configured: the gate runs those
+commands, and a story whose criteria are all green would fail on a number.
+
 Versions are looked up at setup time (Maven Central for `org.jacoco`, NuGet for `coverlet.collector` and
-`dotnet-reportgenerator-globaltool`) — the latest stable release.
+`dotnet-reportgenerator-globaltool`) — the latest stable release. For JaCoCo the version must know the JDK's
+class file version (Java 25 needs 0.8.14 or later): an agent that cannot read the bytecode makes every test
+fail, and with it every gate.
 
 ## Java — Gradle (JaCoCo)
 
