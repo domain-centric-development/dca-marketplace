@@ -194,6 +194,10 @@ D. **Suffix conventions** (INIT-SUFFIX where the code uses two) — DCA's defaul
    `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention, and the
    conventions file records the resolved suffixes (`use_case_suffix:` and the others) so that whoever names a
    new element reads them there, before the suite runs.
+   The failure suffix is the project's choice, not the suite's: a domain or use-case failure is named by the
+   rule it breaks, and `failure_suffix:` under `## Naming` says what follows — `Exception` by default, as Java
+   and .NET expect, `none` where the team names failures without it (`InsufficientStock`). On a retrofit,
+   read it from the existing failures; where they use both, ask.
 
 E. **Spring Modulith** (INIT-MODULITH; Java, only when detected) — add `dev.domaincentric:dca-archunit-spring-modulith` and a
    second thin test, `class ModulithTest extends DcaSpringModulithTest` with the same layout? It runs

@@ -148,3 +148,11 @@ paths are the defaults; the `dca-describe` section of `AGENTS.md` names the plac
 - options: —
 - default: —
 - answer goes to: `project/domain.md → ## Relationships`
+
+### DESC-GLOSSARY
+- look up: the `## Glossary` table
+- asked: when open
+- question: What happens in each context — the main events, in the past tense and in your words? For each: which operation causes it, on which term, and what does a person look at to decide? Give every word the code should use, and where a word could mean creating or adding a thing, say which.
+- options: none yet — each story asks for the words it needs
+- default: —
+- answer goes to: `project/domain.md → ## Glossary`

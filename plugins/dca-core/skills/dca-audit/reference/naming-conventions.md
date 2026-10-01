@@ -21,6 +21,10 @@ deviations as findings.
 | `*DataPort` | output port for cross-context data fetch | `ArticleDataPort` |
 | `*EventPublisher` | output port for integration events | `OrderEventPublisher` |
 
+**Use-case names come from the glossary:** the operation's code word plus the term (`PlaceOrder`), the same
+word in the command, the result and the domain event (`OrderPlaced`). A use case whose verb the context's glossary
+does not carry is a finding: the word was translated, not decided.
+
 **Use-case folder names:** lowercase, no separator (`placeorder`, `getorderbyid`, not `placeOrder` or `place-order`).
 
 **Feature folder names** (optional group of use cases, `application/{feature}/{usecasename}/`): lowercase terms of
@@ -65,6 +69,7 @@ The conventions are one set; the two languages spell them differently. Review ei
 | `*Snapshot`, `*View` (in `domain/readmodel/`) | read model / snapshot `Value` an aggregate hands out |
 | `*Factory` | factory for complex aggregate creation |
 | `*Specification` | business rule object (`DCA-ADV-017`) |
+| the broken rule + failure suffix | domain or use-case failure, e.g. `InsufficientStockException`; `InsufficientStock` where the conventions file says `failure_suffix: none` |
 
 **Event members:** every `DomainEvent` and `IntegrationEvent` carries `eventId` and `occurredOn` (C#: `EventId`,
 `OccurredOn`) — the marker's contract. An integration event's type name and schema version live in

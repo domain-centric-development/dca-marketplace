@@ -38,7 +38,8 @@ Before writing any code, gather context:
    - Suffix conventions (e.g. `*UseCase` vs `*ApplicationService`) — from the conventions file's
      `use_case_suffix:`, `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`,
      `rest_controller_suffix:` lines first; then the `DcaLayout` builder in the architecture test;
-     the existing code last
+     the existing code last. A failure is named by the rule it breaks, with the conventions file's
+     `failure_suffix:` (`Exception` when the line is missing)
    - Whether the project uses Lombok or pure Java records; in C#, `sealed record`
      for values and events, `readonly record struct` for ids
    - Allowed domain imports (some projects allow JSpecify, Apache Commons, etc.)
@@ -47,9 +48,12 @@ Before writing any code, gather context:
    - Existing events: any base class? `eventId`/`occurredOn`/`version` fields?
    - Existing repositories: do they extend a base interface or stand alone?
 3. **Inspect the bounded context's glossary** (`{context}/domain/glossary.md`)
-   if it exists — adopt those terms verbatim. A term that is not in it — or a
-   context without a glossary — is entered through `ubiquitous-language`
-   before the term appears in code.
+   if it exists — adopt those terms verbatim, and the operations too: a use
+   case, a command and a domain event are named from the operation's code word
+   (`PlaceOrder`, `OrderPlaced`). A term or an operation that is not in it — or
+   a context without a glossary — is entered through `ubiquitous-language`
+   before it appears in code; a verb that could mean creating or adding a thing
+   is asked, never chosen by translating.
 
 Adapt to what's there. If the project uses `BaseAggregateRoot<T, ID>`, use it.
 If it uses a flat `AggregateRoot` marker without a base class, follow that.

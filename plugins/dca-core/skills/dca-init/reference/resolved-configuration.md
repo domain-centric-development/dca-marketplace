@@ -20,6 +20,9 @@ library's default (`UseCase`, `InputPort`, `Repository`, `Controller`, `Resource
 controller kinds). They are written here so that a plan, a modelling skill or a delivery stage names a new element
 correctly before the architecture suite runs — the suite is the check, this section is what the writer reads.
 
+Beside it, `## Naming` holds what no suite resolves: `failure_suffix:` (`Exception` by default, or `none`) —
+the suffix of every domain and use-case failure, whose name is the rule it breaks. Keep a value the team set.
+
 For Java use-case templates:
 
 | Value | spring, declarative write | none, constructor wiring |

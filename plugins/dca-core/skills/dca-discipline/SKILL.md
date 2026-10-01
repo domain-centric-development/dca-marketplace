@@ -249,7 +249,8 @@ Read the project's conventions file — the one the `AGENTS.md` line ``- convent
   `outgoing`) or alternatives (`in` / `out`) — also readable from the
   `DcaLayout` builder in the architecture test
 - The naming suffixes the architecture suite holds the project to (`use_case_suffix:`,
-  `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`, `rest_controller_suffix:`)
+  `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`, `rest_controller_suffix:`),
+  and the failure suffix the project chose (`failure_suffix:` under `## Naming`)
 - Project-specific exceptions (e.g. "Bean Validation annotations allowed in
   domain")
 

@@ -85,7 +85,9 @@ over the vendored snapshot.
 - **Craft independent of the architecture style** (TDD, Clean Code, ADRs, end-user tests, glossary,
   context map, the general review perspectives) — see dca-craft.
 - **Event Storming / Discovery workshops** — those are facilitated activities,
-  not tooling.
+  not tooling. The skills use Event Storming's grammar (event, command, aggregate,
+  read model, policy, hot spot) to ask for the domain's words; the workshop itself
+  stays outside.
 
 ## Installation
 

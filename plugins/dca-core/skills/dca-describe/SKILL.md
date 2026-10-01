@@ -1,6 +1,6 @@
 ---
 name: dca-describe
-description: Writes the project description with the person who decides what is built — the product (what, for whom, surfaces, how it works, how it looks, qualities, what it is not), the technical decisions (stack, frontend approach, persistence, runtime, integrations, version policy) and the designed domain (bounded contexts, subdomain types, relationships and why) — under project/, and the AGENTS.md line that makes every implementation read them first. Use before the first line of code or the first story, when a project has code but no description, when a description is incomplete, or on "/dca-describe". Never invents an answer; writes no code and no story.
+description: Writes the project description with the person who decides what is built — the product (what, for whom, surfaces, how it works, how it looks, qualities, what it is not), the technical decisions (stack, frontend approach, persistence, runtime, integrations, version policy) and the designed domain (bounded contexts, subdomain types, relationships and why, the glossary of terms and operations with their code words) — under project/, and the AGENTS.md line that makes every implementation read them first. Use before the first line of code or the first story, when a project has code but no description, when a description is incomplete, or on "/dca-describe". Never invents an answer; writes no code and no story.
 ---
 
 # Describe the project
@@ -21,7 +21,7 @@ could show goes to `docs/`.
    exists there. A file that is complete stays as it is unless the person wants to change it — you
    check it, you do not rewrite it.
 2. **One question per heading, from the catalogue.** The headings are fixed by the templates in
-   `templates/` — the product's six, the technical description's six, the domain's two tables — and
+   `templates/` — the product's six, the technical description's six, the domain's three tables — and
    `reference/questions.md` holds the question for each, word for word, with its options and its
    default. Look every heading up, then ask **only the open ones — all at once, in catalogue order,
    word for word**; write the answers in the person's words. Never invent an answer: a stage or a
@@ -42,6 +42,11 @@ could show goes to `docs/`.
    questions to ask when a context or a relationship is added. Otherwise write it from
    `templates/domain.md.tmpl` with the same questions. The designed map is optional where a project
    has one context; say so rather than inventing a second.
+   The glossary table holds the words before the code does: terms **and operations**, each with the
+   word the code uses. Ask the events first (DESC-GLOSSARY); a verb is a modelling decision, so an
+   operation whose word could mean creating or adding a thing is asked which, never translated. Once a
+   context's code has a glossary of its own (through the `ubiquitous-language` skill, where installed),
+   that glossary carries the entries; a contradiction between the two is a finding the person decides.
 6. **One designed map, never two.** A designed map written earlier at `docs/context-map.md` — or
    under another name the project used — is moved, not copied: propose
    `git mv docs/context-map.md project/domain.md` and do it on the person's confirmation. A map
@@ -63,7 +68,8 @@ could show goes to `docs/`.
    - tech: `project/tech.md` — stack, frontend approach, persistence, runtime, integrations,
      version policy
    - domain: `project/domain.md` — the designed bounded contexts, their subdomain types and
-     relationships; the map generated from the code shows what was built
+     relationships, and the glossary of their terms and operations; the map generated from the code
+     shows what was built
    <!-- dca-describe: end -->
    ```
 
