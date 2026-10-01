@@ -52,8 +52,9 @@ Before writing any code, gather context:
    case, a command and a domain event are named from the operation's code word
    (`PlaceOrder`, `OrderPlaced`). A term or an operation that is not in it — or
    a context without a glossary — is entered through `ubiquitous-language`
-   before it appears in code; a verb that could mean creating or adding a thing
-   is asked, never chosen by translating.
+   before it appears in code; a verb that could name more than one effect
+   (creating or adding a thing, deleting or cancelling it) is asked, never
+   chosen by translating.
 
 Adapt to what's there. If the project uses `BaseAggregateRoot<T, ID>`, use it.
 If it uses a flat `AggregateRoot` marker without a base class, follow that.

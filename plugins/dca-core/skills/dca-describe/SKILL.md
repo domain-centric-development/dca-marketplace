@@ -44,7 +44,12 @@ could show goes to `docs/`.
    has one context; say so rather than inventing a second.
    The glossary table holds the words before the code does: terms **and operations**, each with the
    word the code uses. Ask the events first (DESC-GLOSSARY); a verb is a modelling decision, so an
-   operation whose word could mean creating or adding a thing is asked which, never translated. Once a
+   operation whose word could name more than one effect (creating or adding a thing, deleting or
+   cancelling it) is asked which, never translated. Before asking, look up per designed context how
+   its field names its operations — a published standard, the vocabulary of widely used systems, the
+   look-alike operations they keep apart — where the session can search, and offer what you find with
+   its source as the drafts of DESC-GLOSSARY (the `ubiquitous-language` skill describes the lookup). A
+   draft counts as open until the person confirms it. Once a
    context's code has a glossary of its own (through the `ubiquitous-language` skill, where installed),
    that glossary carries the entries; a contradiction between the two is a finding the person decides.
 6. **One designed map, never two.** A designed map written earlier at `docs/context-map.md` — or
