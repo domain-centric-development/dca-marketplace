@@ -59,16 +59,44 @@ früheren Iterationen im Umlauf, sind aber abgelöst.
 - `OrderPlaced` (Domain Event)
 - `Customer` (referenced by ID, lives in `customer` context)
 
-**Operations:** `place`, `cancel`, `markPaid`, `fulfill`
+**Operations:** aufgeben (`place`), stornieren (`cancel`), als bezahlt markieren (`markPaid`),
+ausliefern (`fulfill`)
 ```
 
-Required fields: `Definition`, `Type`.
-Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Operations`, `Notes`.
+Required fields: `Definition`, `Type`; `Operations` as well for an `Aggregate Root`.
+Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Operations` (other types), `Notes`.
 
 The heading carries the term as the people who own it say it, and — where the code's word differs —
 that word in parentheses: `### Titel (TaskTitle)`. Whoever looks a term up, a reader or a delivery
 pipeline's check, finds it by either word; a heading with only the code's word is a glossary of the
 code, not of the domain.
+
+### Operations are entered like terms
+
+An operation is the verb the people who own the domain use for what happens to the term: the domain's
+word, and the code's word in parentheses where it differs — `anlegen (create)`, `erledigen (complete)`.
+Where the domain's word could name more than one operation, add one line that says which it is.
+
+A verb is a modelling decision, not a translation. *Create* brings a thing into existence; *add* puts
+an existing thing into a collection — and which one it is says which object holds the rules. A word
+like *anlegen* covers both. Whoever writes the code and translates it picks one, the next writer may
+pick the other; where the glossary gives the code word, both use it. So the code word of an operation
+is asked, never chosen while translating.
+
+Ask in the grammar of Event Storming, without the workshop:
+
+1. **The event first** — what happened, in the past tense, in the domain's words. People agree on a
+   fact more readily than on a procedure, and the participle fixes the verb.
+2. **The command** that caused it — the operation, with its code word.
+3. **The aggregate** that accepts the command and holds the rules — the term the operation is entered on.
+   The create-or-add question decides it: "Does the thing exist before this step?"
+4. **The read model** a person looks at to decide — a term of its own.
+5. **Policies** ("whenever this happens, do that") — an operation that an event triggers.
+6. **Hot spots** — what nobody can answer yet. A hot spot stays an open question; it is not entered.
+
+Names in the code then follow from the entry: the operation's code word names the method, the command
+and whatever the code calls the operation, and the event is the term plus the past participle
+(`OrderPlaced` for `place`).
 
 `Type` is one of: `Aggregate Root`, `Entity`, `Value Object`, `Domain Event`,
 `Integration Event`, `Domain Service`, `Specification`, `Concept` (anything else).
@@ -86,7 +114,10 @@ code, not of the domain.
 4. Check whether the term appears in code as a different word (e.g. user
    says "Order", but code uses "Purchase") → suggest renaming the code or
    adding the code term as a synonym.
-5. Write the entry. Add cross-references in related entries.
+5. For an operation: ask for the event first, then the code word, and where the word could mean
+   creating or adding, ask which (see *Operations are entered like terms*). Enter it on the term it
+   acts on, never as a heading of its own.
+6. Write the entry. Add cross-references in related entries.
 
 ### `/ubiquitous-language check [path]`
 
@@ -100,6 +131,8 @@ For each source file (`*.java`, `*.cs`):
 4. For each identifier:
    - Is it in the glossary? ✓ silent pass.
    - Is it a near-miss synonym (`OrderItem` vs glossary's `OrderLine`)? → finding.
+   - Does it name an operation by a verb the term's `Operations` do not carry (`addEntry` where the
+     glossary says `create`)? → finding.
    - Is it a generic technical name (`*Helper`, `*Util`, `*Data`, `*Info`)? →
      finding (suggests a domain name). `*Manager` is domain vocabulary when the
      glossary says so (`PortfolioManager`), not a technical suffix.
@@ -180,6 +213,9 @@ Read the conventions file the project instructions name (a ``- conventions: `<pa
 - **Doesn't auto-generate definitions.** The user / domain expert writes
   the *Definition* prose. Claude can suggest, but the human ratifies.
 - **Doesn't translate.** If the project's Ubiquitous Language is in German
-  (e.g. `Bestellung`, `Auftrag`), keep it German. Don't anglicize.
+  (e.g. `Bestellung`, `Auftrag`), keep it German. Don't anglicize. Where the
+  code is written in another language, the code's word stands beside the
+  domain's word in the entry — decided by the people who own the domain,
+  never picked by translating.
 - **Doesn't enforce length.** A glossary entry can be one sentence or one
   paragraph. The point is shared meaning, not exhaustive docs.
