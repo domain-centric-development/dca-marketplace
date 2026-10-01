@@ -57,7 +57,7 @@ how the code should look.
 |---|---|
 | **from zero** | `/dca-describe` (what is to be built) → `/dca-new` (a running skeleton: generator, git, the DCA part, a formatter, a browser runner where there are pages) |
 | **an existing project** | `/dca-init` (the DCA part: packages, one architecture test, the method's section in `AGENTS.md`) |
-| **one capability later** | `/dca-add rules <module>` · `freeze` · `formatter` · `browser` |
+| **one capability later** | `/dca-add rules <module>` · `freeze` · `formatter` · `browser` · `integration-tests` · `http-stub` · `coverage` |
 | **delivering stories** | `/factory-setup` → `/factory-backlog` → `/factory-run` |
 
 ### Start a project, or adopt DCA in one

@@ -6,10 +6,11 @@ description: |
   baseline so only new ones fail), `formatter` (Spotless for Gradle or Maven, or `dotnet format`, with one
   formatting run over the whole code base) and `browser` (a browser runner and a smoke test, through
   `e2e-testing`), `integration-tests` (an integration source set or test project with its own command and
-  one smoke test) and `http-stub` (WireMock or WireMock.Net, for integration tests against an external
-  system stubbed at the protocol). Use when the user asks to "add the tactical rules", "freeze the existing
+  one smoke test), `http-stub` (WireMock or WireMock.Net, for integration tests against an external
+  system stubbed at the protocol) and `coverage` (JaCoCo or coverlet, one report over every suite, no
+  threshold). Use when the user asks to "add the tactical rules", "freeze the existing
   violations", "set up a formatter", "add Playwright", "add browser tests", "add WireMock", "stub the
-  payment provider in tests", "add an integration test level", or "/dca-add <capability>". Java (Gradle, Maven)
+  payment provider in tests", "add an integration test level", "add test coverage", "add JaCoCo", or "/dca-add <capability>". Java (Gradle, Maven)
   and .NET. Changes only what the capability needs and never overwrites a file.
 ---
 
@@ -21,7 +22,7 @@ run.
 
 **What belongs on this list:** a capability carries knowledge beyond the tool's own documentation, or a
 delivery pipeline needs it. Everything else is ordinary work without a skill — do it, but do not add it here.
-Today the list is six entries:
+Today the list is seven entries:
 
 | Capability | Does | The knowledge lives in |
 |---|---|---|
@@ -31,6 +32,7 @@ Today the list is six entries:
 | `browser` | a browser runner and one smoke test on the start page | `e2e-testing`'s setup mode |
 | `integration-tests` | an integration source set or test project, its command, one smoke test shown to fail | `reference/integration-tests.md` |
 | `http-stub` | an HTTP stub for integration tests, on a free port, and one smoke test shown to fail | `reference/http-stub.md` |
+| `coverage` | line and branch coverage over every suite together and per suite, one report, no threshold | `reference/coverage.md` |
 
 ## Before any capability
 
@@ -202,6 +204,23 @@ The setup per stack is in `reference/http-stub.md`: WireMock for Java (Gradle, M
    here.
 5. **Record it**: `http.stub: wiremock` / `wiremock-net` in the conventions file, where the general skills
    and a delivery pipeline's profile read it.
+
+## `coverage`
+
+One report of line and branch coverage over the unit, integration and end-user suites together, and one per
+suite — the browser suite included, since it drives the application in the test's own process. The setup per
+stack is in `reference/coverage.md`: JaCoCo for Gradle and Maven, coverlet with ReportGenerator for .NET.
+
+1. **Already there?** A JaCoCo plugin, a `coverlet` collector with a report step: report it and stop.
+2. **Every suite the project has**, not the unit suite alone: a report of one suite calls a use case untested
+   that its port test runs.
+3. **No threshold.** Coverage is a reading, never a check that fails the build: a number to reach invites tests
+   written for the number. The gap that matters is in the domain — an uncovered branch in an aggregate, entity
+   or value object is an invariant nobody named; it goes back as an invariant with a unit test.
+4. **Shown to work:** the domain's types in the report with covered lines; one unit test of a guard commented
+   out shows that branch missed; the test restored.
+5. **Record it** in the conventions file's `## Coverage` section: `coverage:` (the command) and
+   `coverageReport:` (the report's path).
 
 ## After each capability
 

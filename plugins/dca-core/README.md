@@ -14,7 +14,7 @@ The verbs follow one another — describe → new → init → add:
 | nothing written yet | `/dca-describe` — the project description under `project/`, with you |
 | an empty directory | `/dca-new` — a running skeleton from the stack's generator, then git, the DCA part, a formatter, and a browser runner where there are pages |
 | an existing project | `/dca-init` — the DCA part only |
-| one capability later | `/dca-add rules <module>` · `freeze` · `formatter` · `browser` · `http-stub` |
+| one capability later | `/dca-add rules <module>` · `freeze` · `formatter` · `browser` · `integration-tests` · `http-stub` · `coverage` |
 
 `/dca-init` adds the published packages and generates **one** architecture test that runs the whole
 rule catalog against your layout — nothing else to wire — and writes the method's section into
@@ -40,7 +40,7 @@ Formatter, Browser runner, Proof, Git, Open — with every field present and `�
 | `/dca-describe` | Writes the project description with the person — `project/product.md`, `project/tech.md`, `project/domain.md` (through `/context-map`) — and the `AGENTS.md` line that makes every implementation read them first; drafts from the code where there is code, never invents an answer | Before the first code or story, or when the description is missing |
 | `/dca-new` | `project` from an empty directory (generator, git, `/dca-init`, `/dca-add formatter`, `/dca-add browser`); `context`, `usecase`, `aggregate`, `store`, `domainservice` lay out one more element, Java or C#. Invoked by a person only | Starting a project; adding DCA structure |
 | `/dca-init` | Adds the published packages (Java: `dca-building-blocks` + `dca-archunit`; .NET: `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit`), one architecture test with the project's `DcaLayout`, a `dca-archunit.properties`, and the method's section in `AGENTS.md` | Introducing DCA into an existing Java or .NET codebase |
-| `/dca-add` | One capability into an existing setup: another rule module, freezing existing violations, a formatter (formatted once, whole), a browser runner | A capability the project gains later |
+| `/dca-add` | One capability into an existing setup: another rule module, freezing existing violations, a formatter (formatted once, whole), a browser runner, an integration level, an HTTP stub, test coverage over every suite | A capability the project gains later |
 | `/dca-modelling` | The tactical-modelling craft: aggregates, entities, values, ids, domain and integration events, domain services, factories, specifications, repositories and stores, in both language spellings; a new term goes through `/ubiquitous-language`; ends with a report | Designing or implementing a domain concept |
 | `/dca-discipline` | The invariants, in one place: framework-free domain, dependency inversion, bounded-context isolation, event hygiene, named failures | Editing `domain/`, `application/`, `adapter/` |
 | `/dca-audit [project \| <context> \| <path> \| diff]` | The method's audit: a checklist with a mark per check and bounded context — how far the code fits the method — then the findings the rules cannot catch (aggregate design, use-case granularity, port semantics, result shape, event hygiene, declarations against the map), and the rules of the suite to switch on next — the brownfield entry beside `/dca-init`; a delivery pipeline's judge loads it only where a profile adds the `dca` perspective (adoption work) | Auditing a project, a context or a diff for DCA compliance |
