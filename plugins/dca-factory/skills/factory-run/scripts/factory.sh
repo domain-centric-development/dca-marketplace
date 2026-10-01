@@ -1730,7 +1730,15 @@ that are its own (a test that asserts too little is the test stage's, with its b
   [ "$invoked" = 0 ] || { echo "factory: the tool exited non-zero during the shared stages." >&2; return 1; }
   snapshot "$story" "after-builder"
   [ -f "$GATE" ] && "$PY" "$GATE" --record-changes builder --story "$story" >/dev/null 2>&1
-  if [[ " ${range[*]} " == *" build "* ]] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
+  # A `back: test` the session already acted on is no round: it went back to the test stage in its own context,
+  # repaired the test, built again and tidied — tidy.md newer than build.md says so, and the re-checked gates below
+  # decide. Sending it back again finds nothing to do, three times, and ends in needs-human (bench 2026-10-01).
+  local repaired=""
+  if [[ " ${range[*]} " == *" tidy "* ]] && [ "$RUNS/$story/tidy.md" -nt "$RUNS/$story/build.md" ]; then repaired=1; fi
+  if [[ " ${range[*]} " == *" build "* ]] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ] && [ -n "$repaired" ]; then
+    echo "factory: build.md names a defect in a test's own code that the shared session repaired before tidy — the gates re-check it."
+  fi
+  if [[ " ${range[*]} " == *" build "* ]] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ] && [ -z "$repaired" ]; then
     local sent_rounds; sent_rounds=$(bump_rounds "$story")
     if [ "$sent_rounds" -ge 3 ]; then
       echo "factory: the build stage sent the story back in round $sent_rounds — three rounds did not converge. needs-human." >&2

@@ -1314,7 +1314,7 @@ def verify_runner(runner, verbose=False):
                      'if [ ! -f sent-back ]; then : > sent-back; printf "\\nback: test\\n" >> .dca-factory/runs/STORY-1/build.md; fi; '
                      'else if [ "$FACTORY_STAGE" = test ]; then printf "%s\\n" "$FACTORY_PROMPT" >> test-prompts.txt; fi; '
                      'sh -c "$FIXTURE_STAND_IN"; fi')
-    def buildback_run(shared=False):
+    def buildback_run(shared=False, cmd=None):
         with tmpdir() as root:
             build_project(root)
             copy_scripts(runner, root)
@@ -1324,7 +1324,7 @@ def verify_runner(runner, verbose=False):
             os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
             with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
                 handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
-            env = {"FACTORY_TOOL_CMD": buildback_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
+            env = {"FACTORY_TOOL_CMD": cmd or buildback_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
                    "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
             args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-builder"] if shared else [])
             code, output = run_runner(runner, root, *args, env=env)
@@ -1349,6 +1349,21 @@ def verify_runner(runner, verbose=False):
     check("build sent back: a shared builder's `back: test` is a round from the test stage as well",
           code == 0 and delivered and not asked and starts[:2] == ["builder", "builder"]
           and "goes back to the test stage" in output,
+          f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+    # 0.55.1: the shared builder went back to the test stage in its own session, repaired the test, built again and
+    # tidied — build.md still carries the finding's `back: test`, tidy.md is newer. That round converged; sending
+    # the story back again would find nothing to do, three times, and end in needs-human (bench 2026-10-01).
+    resolved_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
+                    'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                    'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
+                    'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; '
+                    'if [ "$s" = build ]; then printf "\\n## Back to the test stage\\nback: test\\n" >> .dca-factory/runs/STORY-1/build.md; sleep 1; fi ;; '
+                    'esac; done; '
+                    'else sh -c "$FIXTURE_STAND_IN"; fi')
+    code, output, starts, delivered, prompts, asked = buildback_run(shared=True, cmd=resolved_cmd)
+    check("build sent back: a `back: test` the shared session repaired before tidy is no round — one builder, delivered",
+          code == 0 and delivered and not asked and starts.count("builder") == 1
+          and "goes back to the test stage" not in output,
           f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
 
     # 1c. a stage that writes no file stops the run, and says which file was missing
