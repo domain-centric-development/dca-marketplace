@@ -2677,7 +2677,7 @@ judge — {folder}/judge.md (the runner reads the verdict; the document gate rea
     if stage == "document":
         return f"""{CONTRACT_HEAD}
 
-document — {folder}/document.md (gate after the stage: story-pass, documented, glossary, architecture)
+document — {folder}/document.md (gate after the stage: story-pass, outcome, documented, glossary, architecture)
 - `## Glossary`: `| Term | Context | Added or changed | Definition source |` — the last cell names where the definition
   came from; a row without it is an unsourced claim
 - `## Documents updated`: `| File | What changed | Verified by |` — the first cell is a path from the project root that

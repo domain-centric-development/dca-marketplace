@@ -126,6 +126,11 @@ that smuggles the decision in.
      vocabulary of widely used systems, the look-alike operations they keep apart) and offer what you
      find, with its source, as the options. The answer is an `answered:`
      assumption with both words (`anlegen (create)`); the plan proposes it for the glossary.
+   - **outcome:** is this the story after which the epic's outcome event (`metric:`) can happen — the
+     step that completes the flow? Then it says so in its front matter, `publishes: <Event>`, with the
+     event's name exactly as the epic's `metric:` writes it. The plan gate refuses a name the metric does
+     not carry, and the document gate refuses the story while the code declares no such type or nothing
+     the story changed raises it. Ask where it is not obvious: "After which story can the outcome happen?"
 
    What the project description already answers is not asked again. Answers go into rules, scenarios or
    `answered:` assumptions; what stays open is an `open:` assumption.

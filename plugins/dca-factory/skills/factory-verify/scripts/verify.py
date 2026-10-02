@@ -773,6 +773,16 @@ def marked_build_outside_git(root, args):
                    capture_output=True, env=env)
 
 
+#: The outcome event of the fixture epic, declared and raised by the aggregate the story changed (WP-84 V1).
+OUTCOME_CODE = (
+    ("src/main/java/com/example/SomethingHappened.java", "public record SomethingHappened(String widgetId) {}\n"),
+    ("src/main/java/com/example/Widget.java",
+     "class Widget { void show() { registerEvent(new SomethingHappened(\"w\")); } }\n"),
+    (".dca-factory/runs/STORY-1/.verify/changed.txt",
+     "added\tsrc/main/java/com/example/SomethingHappened.java\nadded\tsrc/main/java/com/example/Widget.java\n"),
+)
+
+
 def tests_rewritten_after_build(passes):
     """A shared session that went back to its test stage after the build: tests.md is newer than build.md,
     tidy and the rest come after it. `passes` writes the runner's journal lines for the gates that passed
@@ -4073,6 +4083,33 @@ def run_groups(args):
         (Case("document: a story changed after it was planned delivers nothing", "document", 1,
               must_fail=("story-pass",), text=("changed after it was planned",)),
          dict(document=DOCUMENT, extra_sources=((".dca-factory/runs/STORY-1/.story-digest", "0" * 64),))),
+        # WP-84 V1 (contract 14): the story that introduces the epic's outcome event says so (`publishes:`); the plan
+        # gate holds it to the epic's metric, the document gate to the code — the bench's epic said `TaskCreated`, the
+        # code published `TaskAdded`, and nothing compared them (TODO #117)
+        (Case("plan: a story's `publishes:` is the epic's outcome event", "plan", 0, must_pass=("outcome",)),
+         dict(story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"))),
+        (Case("plan: a story that publishes an event the epic's metric does not name is refused", "plan", 1,
+              must_fail=("outcome",), text=("SomethingAdded",)),
+         dict(story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingAdded"))),
+        (Case("document: the outcome event is declared, and a production file the story changed raises it", "document", 0,
+              must_pass=("outcome",)),
+         dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
+              extra_sources=OUTCOME_CODE)),
+        (Case("document: an outcome event the code does not declare is refused — the code named it otherwise", "document", 1,
+              must_fail=("outcome",), text=("no type `SomethingHappened`",)),
+         dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
+              extra_sources=tuple((path.replace("SomethingHappened", "SomethingAdded"),
+                                   text.replace("SomethingHappened", "SomethingAdded")) for path, text in OUTCOME_CODE))),
+        (Case("document: an outcome event nothing the story changed raises is refused", "document", 1,
+              must_fail=("outcome",), text=("nothing the story changed",)),
+         dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
+              extra_sources=OUTCOME_CODE[:1] + ((".dca-factory/runs/STORY-1/.verify/changed.txt",
+                                                  "added\tsrc/main/java/com/example/SomethingHappened.java\n"),
+                                                 ("src/main/java/com/example/Widget.java", "class Widget {}\n")))),
+        (Case("document: a contract 13 profile is not asked for the outcome event", "document", 0,
+              absent=("outcome",)),
+         dict(document=DOCUMENT, profile=PROFILE + "contract: 13\n",
+              story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"))),
         (Case("document: a build whose gate passed after the tests were rewritten in the same pass delivers",
               "document", 0, must_pass=("story-pass",), absent=("written for an earlier pass",)),
          dict(document=DOCUMENT, prepare=tests_rewritten_after_build((("build", 1320), ("tidy", 1360))))),
@@ -6264,6 +6301,19 @@ def run_groups(args):
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("start: a refused document gate over an earlier pass's build resumes at build, "
                              "not at document", "start: build" in start, start))
+    with tmpdir() as root:
+        # WP-84 V1: the document gate found no outcome event in the code — the build adds it, not the document stage
+        files = (("plan.md", "# Plan\n", 1000), ("tests.md", TESTS, 1100), ("build.md", "# Build\n", 1200),
+                 ("tidy.md", "# Tidy\n", 1300), ("judge.md", "## Verdict\nverdict: pass\n", 1400),
+                 ("document.md", "# Document\n", 1500),
+                 (".gate-document.txt", "gate:fail outcome — no type `SomethingHappened`\n", 1600))
+        backlog_project(root, extra_sources=tuple((f".dca-factory/runs/STORY-1/{n}", c) for n, c, _a in files))
+        for name, _content, at in files:
+            os.utime(os.path.join(root, ".dca-factory", "runs", "STORY-1", name), (at, at))
+        start = subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8").stdout
+        expectations.append(("start: a document gate that found no outcome event resumes at build",
+                             "start: build" in start, start))
     with tmpdir() as root:
         # in git, the scratch copy is what git sees — a package named `tasks` comes along
         build_project(root, story=ADOPTED, profile=PACKAGED_PROFILE, tests=TESTS + CHARACTERIZED,

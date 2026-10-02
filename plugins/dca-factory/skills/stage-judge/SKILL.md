@@ -5,7 +5,7 @@ description: Judge stage of a factory run — reviews the story's change from th
 
 # Judge one story's change
 
-Input: the story, `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
+Input: the story and its epic (`epic.md` beside it), `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
 `.dca-factory/runs/<story>/.verify/story.diff`, which the pipeline writes; open a whole file only where the
 diff's context does not carry the question, and explore no further than a finding needs — the
 product and the technical description (`project/product.md`, `project/tech.md`, or where the
@@ -81,7 +81,9 @@ and the project has the runner that would prove the behaviour.
 path nor `browser-only` with a reason in the plan; an adapter the plan changed that no integration test
 passes through; a port mocked where the plan changed its adapter — each is **major**: the first makes the
 suite slow and flaky where an integrated test would do, the other two leave the translation untested. A
-journey test that stops short of the epic's outcome event is **major** as well. A test that rebuilds the
+journey test that stops short of the epic's outcome event is **major** as well, and so is a change that names the
+epic's outcome event otherwise than its `metric:` does — a synonym, a translation (`TaskAdded` where the epic says
+`TaskCreated`): the outcome is then measured by an event nobody publishes. A test that rebuilds the
 application context per method where a data reset would do (`@DirtiesContext` on every test, a new host
 per fact) is **minor**: it makes the suite slow for nothing, and the project's own reset convention is
 the fix.

@@ -103,6 +103,7 @@ Front matter:
 | `title` | short name |
 | `status` | `draft` while it is still being written, `approved` once a human released it for building, `adopted` when it describes behaviour the project already has — adopted, never built (below) — `superseded` when another story replaced it, `delivered` once the document gate passed it. The person writes `draft → approved`; the gate alone writes `→ delivered`, and takes it back on a reopen. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
 | `delivered` | the UTC time the gate delivered the story, written with `status: delivered` (an adopted story keeps `status: adopted` and gains this line). Never written by hand; the story's digest leaves it out |
+| `publishes` | optional (contract 14): the epic's outcome event, on the story after which it can happen — the step that completes the flow. Its name is a word of the epic's `metric:` (the plan gate's `outcome`); at the document gate the production code declares a type of that name and a file the story changed — the aggregate that raises it, or the use case that publishes it — refers to it (`outcome`). One event, or a list |
 | `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by id; an unknown id or a cycle blocks the story and is named |
 
 Body sections:

@@ -215,10 +215,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 13
+CONTRACT = 14
 
 
-VERSION = "0.57.1"
+VERSION = "0.58.0"
 
 
 def read_front_matter(path):
@@ -1502,6 +1502,88 @@ def check_epic(result, story_path, front, epics):
         )
     else:
         result.ok("epic", f"epic {epic_name!r} complete ({', '.join(EPIC_FIELDS)})")
+
+
+#: A source file of the project's code: the gate reads no profile key for where the code lives, so it reads every
+#: file with a code extension outside the build's and the tools' folders and outside the tests.
+CODE_FILE = re.compile(r"\.(java|kt|scala|groovy|cs|fs|py|ts|tsx|js|jsx|mjs|go|rb|php|rs|swift)$")
+TEST_DIR = re.compile(r"^(tests?|specs?|__tests__)$|^tests?[-_.]|[-_.]tests?$", re.I)
+
+
+def publishes_of(front):
+    """The outcome events a story's `publishes:` names — one, or a list."""
+    value = front.get("publishes")
+    items = value if isinstance(value, list) else split_list(value)
+    return [str(item).strip().strip("`") for item in items if str(item).strip().strip("`")]
+
+
+def production_files(cwd):
+    found = []
+    skipped = SKIP_DIRS | {runs_top()}
+    for root, dirs, files in os.walk(cwd):
+        dirs[:] = sorted(d for d in dirs if d not in skipped and not d.startswith(".") and not TEST_DIR.search(d))
+        for name in sorted(files):
+            if CODE_FILE.search(name) and not TEST_FILE.search(name):
+                found.append(os.path.relpath(os.path.join(root, name), cwd).replace(os.sep, "/"))
+    return found
+
+
+def check_outcome_named(result, profile, story_path, front, epics):
+    """Contract 14 (WP-84 V1): the event a story declares under `publishes:` is the epic's outcome event — a word of
+    its `metric:`. Two names for one outcome are found here, before a line of code is written."""
+    if story_kind(front) != "story" or contract_of(profile) < 14:
+        return
+    events = publishes_of(front)
+    if not events:
+        return
+    epic_path, epic_name = epic_of(story_path, front, epics)
+    metric = str(read_front_matter(epic_path)[0].get("metric", ""))
+    foreign = [e for e in events if not re.search(rf"(?<!\w){re.escape(e)}(?!\w)", metric)]
+    if foreign:
+        result.fail("outcome", f"the story publishes {', '.join(foreign)}, which epic {epic_name!r}'s `metric:` does not "
+                               f"name ({metric.strip() or 'empty'}) — the story names the epic's outcome event as the "
+                               f"epic does, or the epic's metric is corrected first")
+    else:
+        result.ok("outcome", f"the story publishes {', '.join(events)}, the outcome event epic {epic_name!r} is measured by")
+
+
+def check_outcome_raised(result, profile, cwd, runs, story_id, front):
+    """Contract 14 (WP-84 V1): delivered means the outcome event exists. Every event of `publishes:` is a type the
+    production code declares, and a production file the story changed — the aggregate that raises it or the use case
+    that publishes it — refers to it besides the event's own file."""
+    if story_kind(front) != "story" or contract_of(profile) < 14:
+        return
+    events = publishes_of(front)
+    if not events:
+        return
+    files = production_files(cwd)
+    texts = {rel: read_text(os.path.join(cwd, rel)) for rel in files}
+    record = os.path.join(runs, story_id, ".verify", "changed.txt")
+    changed, scope = None, "the story changed"
+    if os.path.isfile(record) and not read_text(record).startswith(NOT_OBSERVED):
+        changed = {parts[1] for parts in (line.split("\t", 1) for line in read_text(record).splitlines())
+                   if len(parts) == 2 and parts[0] in ("added", "modified")}
+    if changed is None:
+        scope = "the project has (no record of what the story changed)"
+    problems, found = [], []
+    for event in events:
+        declares = re.compile(rf"\b(?:class|record|interface|struct|enum|object|type)\s+{re.escape(event)}\b")
+        declared = [rel for rel, text in texts.items() if declares.search(text)]
+        if not declared:
+            problems.append(f"no type `{event}` in the production code — the story says it publishes it")
+            continue
+        mention = re.compile(rf"(?<!\w){re.escape(event)}(?!\w)")
+        raisers = [rel for rel, text in texts.items() if rel not in declared and mention.search(text)
+                   and (changed is None or rel in changed)]
+        if not raisers:
+            problems.append(f"`{event}` is declared in {declared[0]}, but nothing {scope} refers to it — the "
+                            f"aggregate raises it or the use case publishes it")
+            continue
+        found.append(f"{event} (declared in {declared[0]}, raised in {raisers[0]})")
+    if problems:
+        result.fail("outcome", "; ".join(problems))
+    else:
+        result.ok("outcome", "the outcome event exists: " + "; ".join(found))
 
 
 def read_mapping(runs, story_id):
@@ -4209,6 +4291,9 @@ def story_state(cwd, runs, story_id, front, story_path=None):
         if stale:
             return "in-progress", stale[0], (f"the {refused[0]} gate refused over an earlier pass's "
                                              f"{STAGE_FILES[stale[0]]} — the story runs on from {stale[0]}")
+        # The outcome event is code: the document stage cannot write it, the build can.
+        if refused[0] == "document" and "gate:fail outcome" in read_text(os.path.join(folder, ".gate-document.txt")):
+            return "in-progress", "build", "the document gate found no outcome event in the code — the build adds it"
         return "in-progress", refused[0], f"the {refused[0]} gate refused — the stage runs again"
     adopt = story_kind(front) == "adopt"
     if adopt and verdict_in(texts.get("judge", "")) == "pass":
@@ -4472,6 +4557,8 @@ def main(argv):
         check_contract(result, profile)
         check_status(result, story_path, front)
         check_epic(result, story_path, front, args.epics)
+        if args.stage == "plan":
+            check_outcome_named(result, profile, story_path, front, args.epics)
         check_rounds(result, args.runs, story_id)
         if args.record_suites:
             key = os.environ.get("FACTORY_SUITES_KEY", "")
@@ -4491,6 +4578,7 @@ def main(argv):
             check_models(result, profile)
         if args.stage == "document":
             check_story_pass(result, args.runs, story_id, story_path, front)
+            check_outcome_raised(result, profile, cwd, args.runs, story_id, front)
             check_documented(result, args.runs, story_id, cwd)
             check_proposals_landed(result, args.runs, story_id, cwd, profile)
             check_reviews(result, args.runs, story_id, profile)

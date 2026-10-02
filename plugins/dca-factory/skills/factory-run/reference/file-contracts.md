@@ -13,7 +13,7 @@ stories are under `project/epics/` unless `epics:` does.
 | `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table, and the `gate:invariants` table: one row per rule of the plan's `## Invariants`, each with its own unit test) |
 | `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `.dca-factory/runs/<story>/build.md` |
 | `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `.dca-factory/runs/<story>/tidy.md` |
-| `stage-judge` | the story, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `.dca-factory/runs/<story>/judge.md` |
+| `stage-judge` | the story and its epic, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `.dca-factory/runs/<story>/judge.md` |
 | `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries, and its own file as the pipeline's skeleton | `.dca-factory/runs/<story>/document.md` — started by `factory-cli.py --document-skeleton <story>`: the headings, and under `## Paths` every changed path and run file as it resolves from the project root; the stage fills the tables and cites from that section |
 
 The tidy stage's moves reach the judge and the document stage through the story diff, not through

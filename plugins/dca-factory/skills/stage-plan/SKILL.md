@@ -104,6 +104,10 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    is one thing the type refuses or keeps; a type without rules of its own says `none — <why>`. The test stage writes a
    unit test for every rule named here, and the build writes no guard that is not named: a check nobody
    planned is code no test asked for. The test gate refuses a changed domain type without its line.
+8b. **A story that publishes the epic's outcome event** (`publishes:` in its front matter) plans the event
+   in `## Changes` under that exact name — no synonym, no translation — and the domain type or use case that
+   raises it. The document gate refuses the story while the code declares no such type, or nothing the story
+   changed refers to it.
 9. **Find the existing tests the story contradicts** — every test in the project, whoever wrote it:
    the ones that assert the behaviour the criteria change. Read the test sources, not the backlog;
    a test need not belong to any story. List each under `## Changed tests` with what backs the

@@ -1813,7 +1813,7 @@ run_reviews() {                             # run_reviews <story> <tool> <dry> [
     name=${names[$i]}; carrier=${carriers[$i]}
     prompt="Review the change of backlog story $story from the $name perspective: apply the \`$carrier\` skill to the diff \
 $RUNS/$story/.verify/story.diff — open a whole file only where the diff's context does not carry the question — with the \
-story, $RUNS/$story/plan.md, tests.md and build.md and the product and technical description as its input. Write your \
+story and its epic (epic.md beside it), $RUNS/$story/plan.md, tests.md and build.md and the product and technical description as its input. Write your \
 report to $folder/$name.md in the skill's own format: \`## Findings\` with must-fix, should-fix and nits, every finding \
 with the file and line it stands on and a one-line fix; say plainly when you found nothing. Change no other file and no \
 code; you are one of several reviewers, a judge reads the reports. This session was started by the pipeline's runner, \
