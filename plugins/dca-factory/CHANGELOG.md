@@ -1,24 +1,25 @@
 # dca-factory — changelog
 
 How the delivery pipeline grew, from the first six stages to today. The milestones group the versions that
-worked on one theme; the table below them names every version and what it changed against the one before.
+worked on one theme, and what each made more deterministic — decided by a rule, a script or a recorded answer
+instead of by the model; the table below them names every version and what it changed against the one before.
 
 ## Milestones
 
-| Versions | Theme | What it brought |
-|---|---|---|
-| 0.1 – 0.4 | **The pipeline** | Six stages from story to documentation (plan, test, build, tidy, judge, document), a deterministic gate between them, and test cases that verify the pipeline itself |
-| 0.6 – 0.8, 0.11 | **Ask, never guess** | A question a stage may not answer becomes a decision record beside the story; an inbox to answer it; the backlog runs on past an open question; a story that contradicts itself is a question, not a guess |
-| 0.10, 0.12 – 0.14 | **Rounds and proof** | A refused gate loops back into a round; existing tests keep what they expect; a story that changes behaviour says so; the red proof holds for one version of a test |
-| 0.15 – 0.24 | **Visible and bounded** | Cost per story and per stage, with a ceiling; `/factory-status` from any session; update a project to the newest pipeline; one worker per checkout |
-| 0.25 – 0.30 | **Smaller context, lower cost** | The product scope before the first story; a stage sees only the project; every stage is handed what the story changed; a model per stage; plan to tidy in one shared session (−37 % cost on one story) |
-| 0.31 – 0.38 | **Set up and used by a person** | Stack presets and guided setup; `dca-new`, `dca-init`, `dca-add`; acceptance before delivery; a self-explanatory status view; `/factory-help`; `/factory-run <wish>` turns a sentence into a story; one test level per scenario |
-| 0.39 – 0.41 | **Existing code** | Adopt behaviour a project already has: map its tests, prove each can break; scenario titles as test names; the browser suite starts the application itself |
-| 0.42 – 0.49 | **Hardened by review** | Review findings closed; an integration test level; deterministic installs; the gate split from the CLI; the story carries its own state, the run folder is protocol only |
-| 0.50 – 0.52 | **Faster** | One test process per command, cheap checks first, test runs reused on an unchanged tree, the hand-over's file list and plan lines written by the pipeline, leaner hand-overs — four stories from 54.9 to 39.7 minutes at the same quality |
-| 0.53 – 0.54 | **Independent reviews** | Three reviewers run side by side in their own contexts, the judge confirms only what it finds in the code (16 instead of 5 confirmed findings); minor findings stay beside the story for later |
-| 0.55 – 0.57 | **Test quality** | The plan names every domain type's invariants, each gets a unit test of its own in a table the pipeline writes; the use case is tested once at its port, each adapter for its translation — branch coverage 81 → 92 % |
-| 0.56 | **A deterministic domain model** | Two runs of the same story name the same operations and events: a story's verbs come from the glossary, never from a translation; a verb that could mean creating or adding is decided by its effect (does the thing exist before this step?); the journey reads as a timeline of commands and events. Found by the bench: the epic said `TaskCreated`, the code published `TaskAdded` |
+| Versions | Theme | What it brought | What makes it more deterministic |
+|---|---|---|---|
+| 0.1 – 0.4 | **The pipeline** | Six stages from story to documentation (plan, test, build, tidy, judge, document), a deterministic gate between them, and test cases that verify the pipeline itself | A script decides whether a stage is done, not the model's own report — the same files get the same verdict every time |
+| 0.6 – 0.8, 0.11 | **Ask, never guess** | A question a stage may not answer becomes a decision record beside the story; an inbox to answer it; the backlog runs on past an open question; a story that contradicts itself is a question, not a guess | An open point is answered once by a person and recorded; every later run reads that answer instead of guessing anew |
+| 0.10, 0.12 – 0.14 | **Rounds and proof** | A refused gate loops back into a round; existing tests keep what they expect; a story that changes behaviour says so; the red proof holds for one version of a test | "Done" rests on evidence — the test was red before the change and green after, for that exact version of the test |
+| 0.15 – 0.24 | **Visible and bounded** | Cost per story and per stage, with a ceiling; `/factory-status` from any session; update a project to the newest pipeline; one worker per checkout | One writer per checkout, and a cost ceiling that ends a run the same way each time |
+| 0.25 – 0.30 | **Smaller context, lower cost** | The product scope before the first story; a stage sees only the project; every stage is handed what the story changed; a model per stage; plan to tidy in one shared session (−37 % cost on one story) | Every stage starts from the same small input — the project and what the story changed — not from whatever lies around |
+| 0.31 – 0.38 | **Set up and used by a person** | Stack presets and guided setup; `dca-new`, `dca-init`, `dca-add`; acceptance before delivery; a self-explanatory status view; `/factory-help`; `/factory-run <wish>` turns a sentence into a story; one test level per scenario | The same questions in the same order and the same report: two fresh sessions asked the same 22 questions, word for word; the happy path is marked in the story, never picked by a plan |
+| 0.39 – 0.41 | **Existing code** | Adopt behaviour a project already has: map its tests, prove each can break; scenario titles as test names; the browser suite starts the application itself | A test proves it can fail — a patch that breaks the code must turn it red — for adopted code as for new |
+| 0.42 – 0.49 | **Hardened by review** | Review findings closed; an integration test level; deterministic installs; the gate split from the CLI; the story carries its own state, the run folder is protocol only | The same files from the same source on every install; each piece of state lives in one place |
+| 0.50 – 0.52 | **Faster** | One test process per command, cheap checks first, test runs reused on an unchanged tree, the hand-over's file list and plan lines written by the pipeline, leaner hand-overs — four stories from 54.9 to 39.7 minutes at the same quality | What a model would type and could get wrong — file lists, plan lines — the pipeline writes |
+| 0.53 – 0.54 | **Independent reviews** | Three reviewers run side by side in their own contexts, the judge confirms only what it finds in the code (16 instead of 5 confirmed findings); minor findings stay beside the story for later | Each perspective in a fresh context, uninfluenced by the others; a finding counts only with the file and line it stands on |
+| 0.55 – 0.57 | **Test quality** | The plan names every domain type's invariants, each gets a unit test of its own in a table the pipeline writes; the use case is tested once at its port, each adapter for its translation — branch coverage 81 → 92 % | Which unit tests exist follows from the plan's invariants and a table the pipeline writes and the gate checks — not from a model's habit |
+| 0.56 | **A deterministic domain model** | Two runs of the same story name the same operations and events: a story's verbs come from the glossary, never from a translation; a verb that could mean creating or adding is decided by its effect (does the thing exist before this step?); the journey reads as a timeline of commands and events. Found by the bench: the epic said `TaskCreated`, the code published `TaskAdded` | A word in the code comes from the glossary, and an ambiguous verb is decided by one fixed question — not by how a model happens to translate |
 
 ## Every version
 
