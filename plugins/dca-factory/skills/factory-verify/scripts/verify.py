@@ -3058,6 +3058,39 @@ def verify_setup(runner, verbose=False):
             check("setup: a project's own skill folder with a pipeline skill's name is kept and named",
                   os.path.isdir(own) and not os.path.islink(own) and "ours" in open(os.path.join(own, "SKILL.md")).read()
                   and "kept the project's own .claude/skills/stage-plan" in output, output.strip()[-300:])
+    with tmpdir() as root, tmpdir() as market:
+        # a copy install whose method skills were copied by hand (dca-new, a bench base): not the install's, so
+        # never replaced unasked — an identical one is taken over, a different one is named with `--adopt`, and an
+        # adopted one follows the method plugin from then on
+        pipeline = os.path.join(market, "plugins", "dca-factory", "skills")
+        shutil.copytree(source, pipeline, symlinks=True)
+        def method(name, text):
+            write_file(os.path.join(market, "plugins", "dca-core", "skills"), f"{name}/SKILL.md",
+                       f"---\nname: {name}\ndescription: {text}\n---\n")
+        method("dca-modelling", "modelling v2"); method("dca-knowledge", "knowledge v1")
+        build_project(root)
+        run_setup(runner, root, "--tool", "claude", "--from", shell_path(pipeline), "--copy")
+        write_file(root, ".claude/skills/dca-modelling/SKILL.md", "---\nname: dca-modelling\ndescription: modelling v1\n---\n")
+        write_file(root, ".claude/skills/dca-knowledge/SKILL.md", "---\nname: dca-knowledge\ndescription: knowledge v1\n---\n")
+        skill_text = lambda n: open(os.path.join(root, ".claude", "skills", n, "SKILL.md"), encoding="utf-8").read()
+        listed = lambda: open(os.path.join(root, ".claude", "skills", ".dca-factory-skills"), encoding="utf-8").read().split()
+        code, output = run_runner(project_runner(root), root, "update", "--from", shell_path(pipeline))
+        check("update: a hand-made copy of a method skill that differs is kept and named with `--adopt`",
+              code == 0 and "modelling v1" in skill_text("dca-modelling")
+              and "update --adopt dca-modelling" in output, output.strip()[-400:])
+        method("dca-knowledge", "knowledge v2")
+        code, output = run_runner(project_runner(root), root, "update", "--from", shell_path(pipeline))
+        check("update: an identical hand-made copy of a method skill is the install's from then on — it follows the plugin",
+              code == 0 and "knowledge v2" in skill_text("dca-knowledge") and "dca-knowledge" in listed(),
+              output.strip()[-400:])
+        code, output = run_runner(project_runner(root), root, "update", "--from", shell_path(pipeline),
+                                  "--adopt", "dca-modelling")
+        method("dca-modelling", "modelling v3")
+        code2, output2 = run_runner(project_runner(root), root, "update", "--from", shell_path(pipeline))
+        check("update: `--adopt <skill>` takes a method skill's copy over, and every later update refreshes it",
+              code == 0 and code2 == 0 and "modelling v3" in skill_text("dca-modelling")
+              and "dca-modelling" in listed() and "kept the project's own .claude/skills/dca-modelling" not in output2,
+              output.strip()[-300:] + " | " + output2.strip()[-300:])
     if SYMLINKS:
         # an update from a newer version in the plugin cache: the links into the older one are the install's own
         for tool, extra in (("codex", ""), ("claude", "carrier.build: e2e-testing\n")):

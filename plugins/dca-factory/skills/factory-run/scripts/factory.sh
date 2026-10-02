@@ -18,7 +18,8 @@
 #   factory.sh discover --check <topic>      the discovery report of one topic against its contract
 #   factory.sh help [--format text|md|json]  the factory explained: the flow and where this project stands,
 #                                            every command in its agent and its shell form, the marks, the files
-#   factory.sh update [--from <skill folder>] [--copy|--link]   the newest pipeline found, same tools; the mode
+#   factory.sh update [--from <skill folder>] [--copy|--link] [--adopt <skill>,…|all]   the newest pipeline found,
+#                    same tools; --adopt takes over a copy of a method skill the install did not make; the mode
 #                                            the project has, or the one named
 #   factory.sh verify --story <id> | --fixtures   observe a delivered story | check the machinery
 #   factory.sh check [--staged] [--checks "<c> …"] | --parity <config>   for the commit hook and CI
@@ -229,6 +230,10 @@ manifest_has() {                            # manifest_has <target> <name>
 manifest_start() {                          # manifest_start <target> <mode> <source kind> — begins <list>.new
   printf 'mode: %s\nsource: %s\n' "$2" "$3" > "$1/$MANIFEST_NAME.new"
 }
+adopts() {                                  # adopts <name> — the person named it with --adopt (or all)
+  case " ${ADOPT:-} " in *" all "*|*" $1 "*) return 0 ;; esac
+  return 1
+}
 manifest_add() {                            # manifest_add <target> <name> — into the list, once
   grep -qsx "$2" "$1/$MANIFEST_NAME" || {
     [ -f "$1/$MANIFEST_NAME" ] || printf 'mode: link\nsource: checkout\n' > "$1/$MANIFEST_NAME"
@@ -293,7 +298,8 @@ update_project() {                          # update_project <explicit skill fol
   local newest="$src/factory-run/scripts/factory.sh" self
   self=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")
   if [ -z "${FACTORY_UPDATE_HANDED:-}" ] && [ -f "$newest" ] && [ "$self" != "$newest" ]; then
-    FACTORY_UPDATE_HANDED=1 exec bash "$newest" update --from "$src" ${copy_mode:+--copy} ${LINK_MODE:+--link}
+    FACTORY_UPDATE_HANDED=1 exec bash "$newest" update --from "$src" ${copy_mode:+--copy} ${LINK_MODE:+--link} \
+      ${ADOPT:+--adopt "$ADOPT"}
   fi
   before=$(sed -n 's/^version:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
   before_contract=$(sed -n 's/^contract:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
@@ -907,8 +913,10 @@ install_project() {                         # install_project <tool> <skill fold
         [ -d "$skill" ] || continue
         name=$(basename "$skill")
         grep -qx "$name" "$manifest.new" && continue         # the pipeline's own wins a name clash
-        if { [ -e "$target/$name" ] || [ -L "$target/$name" ]; } && ! printf '%s\n' "$previous" | grep -qx "$name"; then
-          echo "factory: kept the project's own $target/$name — the pipeline's $name was not copied" >&2
+        if { [ -e "$target/$name" ] || [ -L "$target/$name" ]; } && ! printf '%s\n' "$previous" | grep -qx "$name" \
+           && ! adopts "$name"; then
+          echo "factory: kept the project's own $target/$name — the pipeline's $name was not copied" \
+               "('factory.sh update --adopt $name' takes it over)" >&2
           kept=$((kept + 1))
           continue
         fi
@@ -917,6 +925,32 @@ install_project() {                         # install_project <tool> <skill fold
         echo "$name" >> "$manifest.new"
         copied=$((copied + 1))
       done < <(printf '%s\n' "$copy_dirs" | while IFS= read -r dir; do [ -n "$dir" ] && printf '%s\n' "$dir"/*; done)
+      # Claude's directory gets the method plugins' skills only as carriers — but a project may hold copies of
+      # them made by hand (`dca-new`, a bench base). Not the install's, so never replaced unasked: a copy that is
+      # byte for byte the plugin's, or one the person names with --adopt, becomes the install's and follows the
+      # plugin from then on; a different one is named. Only what the project already holds — nothing is added.
+      if [ "$target" = ".claude/skills" ]; then
+        local method_dir
+        for method_dir in $(method_skill_dirs "$source_abs"); do
+          for skill in "$method_dir"/*; do
+            [ -d "$skill" ] || continue
+            name=$(basename "$skill")
+            grep -qx "$name" "$manifest.new" && continue
+            { [ -e "$target/$name" ] || [ -L "$target/$name" ]; } || continue
+            if printf '%s\n' "$previous" | grep -qx "$name" || adopts "$name" \
+               || diff -rq -x __pycache__ "$skill" "$target/$name" >/dev/null 2>&1; then
+              rm -rf "${target:?}/$name"
+              must "copy $name into $target" cp -R "$skill" "$target/$name"
+              echo "$name" >> "$manifest.new"
+              copied=$((copied + 1))
+            else
+              echo "factory: kept the project's own $target/$name — the method plugin beside the pipeline has another" \
+                   "version; 'factory.sh update --adopt $name' takes it over and keeps it current" >&2
+              kept=$((kept + 1))
+            fi
+          done
+        done
+      fi
       for name in $previous; do
         grep -qx "$name" "$manifest.new" && continue            # copied again just now
         # A carrier the profile names is not the pipeline's skill but one it copied beside it: it
@@ -2635,6 +2669,7 @@ while [ $# -gt 0 ]; do
     --from) case "$command" in setup|update) source_dir=$2 ;; *) from=$2 ;; esac; shift 2 ;;
     --copy) copy_mode=1; shift ;;
     --link) LINK_MODE=1; shift ;;
+    --adopt) [ $# -ge 2 ] || usage; ADOPT="${ADOPT:+$ADOPT }$(printf '%s' "$2" | tr ',' ' ')"; shift 2 ;;
     --check) [ "$command" = setup ] || usage; setup_mode=check; shift ;;
     --write) [ "$command" = setup ] || usage; setup_mode=write; shift ;;
     --replace) [ "$command" = setup ] && [ $# -ge 2 ] || usage; replace_key=$2; shift 2 ;;

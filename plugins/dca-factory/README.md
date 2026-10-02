@@ -180,7 +180,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |
-| `factory.sh update [--from <dir>] [--copy\|--link]` | `factory-update` | the newest pipeline found, same tools; the mode the project has, or the one named |
+| `factory.sh update [--from <dir>] [--copy\|--link] [--adopt <skill>,…\|all]` | `factory-update` | the newest pipeline found, same tools; the mode the project has, or the one named; `--adopt` takes over a method skill's copy the install did not make, which every later update then refreshes |
 | `factory.sh verify --story <id>` · `--fixtures` | `factory-verify` | observe a delivered story · check the machinery |
 | `factory.sh check [--staged] [--checks "<c> …"]` · `--parity <config>` | *(hook, CI)* | the profile's checks outside a story, as the commit hook runs them · several implementations against one scenario contract |
 

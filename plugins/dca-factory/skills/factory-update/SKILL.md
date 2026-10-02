@@ -40,6 +40,11 @@ a report of what changed. You commit nothing; the human reviews and commits.
    which it copied, which of the project's own it kept and which it removed. The update keeps the
    mode; `--copy` or `--link` switches it on the person's word — name it when the update warns that
    links point into a plugin cache (its versions are removed after an update).
+   **A method skill the install did not copy** — `dca-modelling`, `ubiquitous-language` and the like, copied by
+   hand or by `dca-new` — is named as `kept the project's own … has another version`. Show each one and ask
+   whether to take it over; on the person's yes run the update again with `--adopt <skill>,…` (or `--adopt
+   all`). From then on every update refreshes it. A copy byte for byte the plugin's is taken over without a
+   question; one the person edited on purpose stays theirs.
 5. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, the
    `AGENTS.md` section, `.dca-factory-skills` in each skill folder, the skill copies where the
    project keeps copies — and after a migration the moved files: the profile at the root, `project/epics/`
