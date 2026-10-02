@@ -3,7 +3,7 @@
 The **delivery pipeline** for a Domain-Centric Architecture project, in three parts: a **project
 description** (what is to be built), a **backlog** of epics and stories, and a **runner** that works
 through them — six stage skills with file hand-overs, a deterministic story gate between them and
-one orchestrator.
+one orchestrator. How it grew, version by version: [`CHANGELOG.md`](CHANGELOG.md).
 
 ```
 dca-factory.profile.yaml   the stack profile — the person's, committed; the one fixed path
