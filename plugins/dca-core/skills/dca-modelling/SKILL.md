@@ -119,6 +119,10 @@ Don't impose patterns the project doesn't use.
 - Carry **IDs and value objects only** — never aggregate references.
 - Place in `{context}/domain/model/` (or `/domain/event/` if the project has
   that subfolder).
+- **An outcome event** — the event a body of work is measured by, named before the code (an epic's
+  metric, a key result) — is a domain event of the context where the outcome happens, named exactly as the
+  measure names it: no synonym, no translation. The aggregate raises it at the state transition that
+  completes the flow, the use case publishes it. A second name for it is an outcome nobody can measure.
 
 ### Integration Events
 
