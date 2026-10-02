@@ -100,7 +100,8 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
 8a. **Name the invariants of every domain type you change.** For each aggregate, entity, value object and
    domain service in `## Changes`: the rules it must never break — what the criteria imply and the guards
    its type implies (a value that is required, trimmed, within a range, unique in its aggregate). One line
-   each under `## Invariants`; a type without rules of its own says `none — <why>`. The test stage writes a
+   each under `## Invariants`, the rules separated by `;` — each rule gets its own unit test, so one rule
+   is one thing the type refuses or keeps; a type without rules of its own says `none — <why>`. The test stage writes a
    unit test for every rule named here, and the build writes no guard that is not named: a check nobody
    planned is code no test asked for. The test gate refuses a changed domain type without its line.
 9. **Find the existing tests the story contradicts** — every test in the project, whoever wrote it:
@@ -167,7 +168,7 @@ your file. The rule in full: `factory-run/reference/stage-common.md`.
                                   (the key alone; the criterion's text stays in the story)
 
 ## Invariants
-- <Element>: <rule>; <rule>           (one line per domain type in `## Changes`, its guards included)
+- <Element>: <rule>; <rule>           (one line per domain type in `## Changes`, its guards included; `;` separates rules)
 - <Element>: none — <why>
 
 ## Changed tests                  (omit the section when the story contradicts no existing test)

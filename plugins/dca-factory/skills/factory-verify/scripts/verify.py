@@ -226,25 +226,36 @@ TESTS = """# Tests — STORY-1
 - src/test/java/com/example/WidgetUnitTest.java
 """
 
-#: WP-82: a plan that changes one value object, with and without its invariants line.
+#: WP-82: a plan that changes one value object — its cell describes it too — with three rules, one of them holding a
+#: parenthesis and a `;` inside backticks; the unit test file; the filled `gate:invariants` table.
+INVARIANT_LINE = "- Widget: name required (null refused); name trimmed (`a; b` stays one rule); 1 to 40 characters"
 INVARIANT_PLAN = """# Plan — STORY-1
 
 ## Changes
 | Element | Kind | Location | New or changed | Evidence |
 | --- | --- | --- | --- | --- |
-| Widget | Value object | domain/model | new | the story |
+| `Widget` — the thing the page shows (`name`) | Value object | domain/model | new | the story |
 
 ## Acceptance criteria
 - shows-the-thing  →  level: e2e
-- shows-nothing-when-empty  →  level: integration
+- shows-nothing-when-empty  →  level: integration (port)
 
 ## Invariants
-- Widget: name required; name trimmed; 1 to 40 characters
-"""
+""" + INVARIANT_LINE + "\n"
 
-INVARIANT_NOTES = """
-## Notes
-- unit tests: com.example.WidgetUnitTest#showsNothingWhenEmpty for invariant Widget: name required, trimmed, 1 to 40
+INVARIANT_TEST_FILE = ("src/test/java/com/example/WidgetNameTest.java",
+                       "package com.example;\nclass WidgetNameTest { void refusesMissing() {} void refusesUntrimmed() {} "
+                       "void refusesLong() {} }\n")
+PLAN_AND_TEST = ((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN), INVARIANT_TEST_FILE)
+
+INVARIANT_TABLE = """
+## Invariants
+<!-- gate:invariants -->
+| element | rule | invariant | test |
+| --- | --- | --- | --- |
+| Widget | 1 | name required (null refused) | com.example.WidgetNameTest#refusesMissing |
+| Widget | 2 | name trimmed | com.example.WidgetNameTest#refusesUntrimmed |
+| Widget | 3 | 1 to 40 characters | com.example.WidgetNameTest#refusesLong |
 """
 
 # The fixture's runner: exit 1 while the marker for that test is absent, 0 once it is there. It
@@ -3631,32 +3642,41 @@ def run_groups(args):
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
                               "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: e2e\n"
                               "- shows-nothing-when-empty  →  level: \n"),))),
-        # WP-82: every domain type the plan changes names its invariants, and each named one has a unit test.
+        # WP-82, 0.57.0: every domain type the plan changes names its invariants; every rule has its own unit test in
+        # tests.md's `gate:invariants` table, a selector that exists as class and method and is no criterion's test.
         (Case("test: a plan that changes a value object without an invariants line is refused", "test", 1,
               must_fail=("invariants",), text=("without an `## Invariants` line: Widget",)),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0]),))),
-        (Case("test: an invariant the plan names without a unit test is refused", "test", 1,
-              must_fail=("invariants",), text=("without a unit test in tests.md's `## Notes`: Widget",)),
-         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN),))),
-        (Case("test: an invariant covered by a unit test in the project passes", "test", 0,
-              must_pass=("invariants", "tests-red")),
-         dict(tests=TESTS + INVARIANT_NOTES, extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN),))),
-        (Case("test: a unit test named for an invariant but missing from the project is refused", "test", 1,
-              must_fail=("invariants",), text=("not in the project: com.example.WidgetRulesTest",)),
-         dict(tests=TESTS + INVARIANT_NOTES.replace("WidgetUnitTest", "WidgetRulesTest"),
-              extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN),))),
+        (Case("test: every rule with its own unit test passes — the element read from a cell that describes it too, "
+              "a rule's parentheses no class name", "test", 0, must_pass=("invariants", "tests-red"),
+              text=("3 rules, 3 rows",)),
+         dict(tests=TESTS + INVARIANT_TABLE, extra_sources=PLAN_AND_TEST)),
+        (Case("test: named invariants without a `gate:invariants` table are refused", "test", 1,
+              must_fail=("invariants",), text=("no `<!-- gate:invariants -->` table",)),
+         dict(extra_sources=PLAN_AND_TEST)),
+        (Case("test: a criterion's test named for an invariant is refused — an invariant gets its own", "test", 1,
+              must_fail=("invariants",), text=("is a criterion's test",)),
+         dict(tests=TESTS + INVARIANT_TABLE.replace("com.example.WidgetNameTest#refusesMissing",
+                                                    "com.example.WidgetUnitTest#showsNothingWhenEmpty"),
+              extra_sources=PLAN_AND_TEST)),
+        (Case("test: an invariant test whose method is not in the class is refused", "test", 1,
+              must_fail=("invariants",), text=("WidgetNameTest#refusesNothing is not in the project",)),
+         dict(tests=TESTS + INVARIANT_TABLE.replace("#refusesLong", "#refusesNothing"), extra_sources=PLAN_AND_TEST)),
+        (Case("test: a rule whose row has no test is refused, naming the rule", "test", 1,
+              must_fail=("invariants",), text=("without a unit test of their own: Widget 2",)),
+         dict(tests=TESTS + INVARIANT_TABLE.replace("com.example.WidgetNameTest#refusesUntrimmed", ""),
+              extra_sources=PLAN_AND_TEST)),
         (Case("test: a domain type with `none — <why>` needs no unit test", "test", 0,
               must_pass=("invariants", "tests-red")),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.replace(
-             "- Widget: name required; name trimmed; 1 to 40 characters",
-             "- Widget: none — a name only, rules live in WidgetName")),))),
+             INVARIANT_LINE, "- Widget: none — a name only, rules live in WidgetName")),))),
         (Case("test: a plan that changes no domain type is not asked for invariants", "test", 0,
               must_pass=("tests-red",), absent=("gate:fail invariants", "gate:pass invariants")),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0].replace(
-             "| Widget | Value object |", "| ShowWidgets | Use case |")),))),
-        (Case("test: a profile on contract 11 is not asked for invariants", "test", 0,
+             "| Value object |", "| Use case |")),))),
+        (Case("test: a profile on contract 12 is not asked for invariants", "test", 0,
               must_pass=("tests-red",), absent=("gate:fail invariants",)),
-         dict(profile=PROFILE + "contract: 11\n",
+         dict(profile=PROFILE + "contract: 12\n",
               extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0]),))),
         (Case("test: a lean plan gets no size note", "test", 0, must_pass=("tests-red",), absent=("gate:note size",)),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
@@ -4580,6 +4600,26 @@ def run_groups(args):
                              again.returncode == 0 and "left as it is" in again.stdout
                              and "browser-only" in open(plan, encoding="utf-8").read(),
                              f"exit {again.returncode}; {again.stdout.strip()[:120]}"))
+    # 0.57.0: the test stage's skeleton carries one `gate:invariants` row per rule the plan names; the stage fills in
+    # the tests only, so format, numbering and a forgotten rule cannot be refused.
+    with tmpdir() as root:
+        build_project(root, tests=None, extra_sources=PLAN_AND_TEST + (
+            (".dca-factory/runs/STORY-1/.verify/changed-test.txt", "added\tsrc/test/java/com/example/WidgetNameTest.java\n"),))
+        tests_md = os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md")
+        done = subprocess.run([sys.executable, args.cli, "--files-skeleton", "STORY-1", "test"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        text = open(tests_md, encoding="utf-8").read() if os.path.isfile(tests_md) else ""
+        again = subprocess.run([sys.executable, args.cli, "--files-skeleton", "STORY-1", "test"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+        text_again = open(tests_md, encoding="utf-8").read() if os.path.isfile(tests_md) else ""
+        expectations.append(("invariants skeleton: --files-skeleton test writes one empty row per plan rule under "
+                             "`## Invariants`, the `;` inside backticks kept in one rule, and adds none a second time",
+                             done.returncode == 0 and "<!-- gate:invariants -->" in text
+                             and "| Widget | 1 | name required (null refused) | |" in text
+                             and "| Widget | 2 | name trimmed (`a; b` stays one rule) | |" in text
+                             and "| Widget | 3 | 1 to 40 characters | |" in text and "| Widget | 4 |" not in text
+                             and text_again == text,
+                             f"exit {done.returncode}; {done.stdout.strip()[-160:]}; {text[-400:]!r}"))
     # WP-79 A4: the hand-over's file list is the pipeline's to write, from the record the gate reads.
     with tmpdir() as root:
         build_project(root, green=both_green, ledger=both_green, extra_sources=(

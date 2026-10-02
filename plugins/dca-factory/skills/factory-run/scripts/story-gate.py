@@ -215,10 +215,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 12
+CONTRACT = 13
 
 
-VERSION = "0.56.1"
+VERSION = "0.57.0"
 
 
 def read_front_matter(path):
@@ -713,82 +713,160 @@ def check_plan_levels(result, runs, story_id):
 DOMAIN_KINDS = re.compile(r"\b(aggregate|entity|value object|value|domain service)\b", re.I)
 
 
+def first_identifier(cell):
+    """The name a table cell or a list item starts with — `Task`, `` `TaskCompleted(eventId, …)` ``, `Task — field
+    state` all start with their element's name; what follows it is description, never part of the name."""
+    match = re.search(r"[A-Za-z_][\w.]*", cell)
+    return match.group(0) if match else ""
+
+
 def plan_domain_elements(plan):
     """The elements of the plan's `## Changes` table whose kind is a domain type, in the table's order."""
     elements = []
     for line in section_of(plan, "changes") or []:
-        cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
-        if len(cells) < 2 or not cells[0] or set(cells[0]) <= set("-: ") or cells[0].lower() == "element":
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or set(cells[0]) <= set("-: ") or cells[0].strip("` ").lower() == "element":
             continue
-        if DOMAIN_KINDS.search(cells[1]) and not re.search(r"\bevent\b", cells[1], re.I):
-            elements.append(cells[0])
+        name = first_identifier(cells[0])
+        if name and DOMAIN_KINDS.search(cells[1]) and not re.search(r"\bevent\b", cells[1], re.I):
+            elements.append(name)
     return elements
 
 
+def split_rules(text):
+    """A plan invariant line's rules, split at `;` outside parentheses and backticks — `complete() (open → done;
+    done → no change)` is one rule."""
+    rules, depth, tick, current = [], 0, False, ""
+    for char in text:
+        if char == "`":
+            tick = not tick
+        elif not tick and char in "([":
+            depth += 1
+        elif not tick and char in ")]" and depth:
+            depth -= 1
+        if char == ";" and depth == 0 and not tick:
+            rules.append(current.strip())
+            current = ""
+        else:
+            current += char
+    if current.strip():
+        rules.append(current.strip())
+    return [r for r in rules if r]
+
+
 def plan_invariants(plan):
-    """`## Invariants` as {element: rules}: one line per domain type, `- <Element>: <rule>; <rule>` or
-    `- <Element>: none — <why>`. None when the section is absent."""
+    """`## Invariants` as {element: [rule, …]}: one line per domain type, `- <Element>: <rule>; <rule>`, or
+    `- <Element>: none — <why>` (an empty list). None when the section is absent."""
     lines = section_of(plan, "invariants")
     if lines is None:
         return None
     found = {}
     for line in lines:
-        match = re.match(r"^\s*-\s+`?([\w.]+)`?\s*:\s*(.+?)\s*$", line)
-        if match:
-            found[match.group(1)] = match.group(2)
+        match = re.match(r"^\s*-\s+(.+?)\s*:\s*(.+?)\s*$", line)
+        if not match:
+            continue
+        name = first_identifier(match.group(1))
+        rules = match.group(2)
+        found[name] = [] if re.match(r"^none\b", rules, re.I) else split_rules(rules)
     return found
 
 
-def check_invariants(result, profile, cwd, runs, story_id, front):
-    """Contract 12: every domain type the plan changes names its invariants — the rules it must never break,
-    its guards included (required, trimmed, in range) — and every one named is covered by a unit test the
-    tests file names under `## Notes` (`unit tests: <Class>#<method> for invariant <Element>: <rule>`), in a
-    file that exists. A guard nobody named is code no test asked for; a named one nobody tested is a plan
-    the test stage did not follow."""
-    if story_kind(front) != "story" or contract_of(profile) < 12:
+INVARIANTS_MARKER = "<!-- gate:invariants -->"
+
+
+def read_invariant_rows(text):
+    """The `gate:invariants` table of tests.md: [(element, [rule numbers], selector)] — `| TaskTitle | 1 | <rule> |
+    <Class>#<method> |`, several numbers as `1, 2`; the selector is the last cell. None when the table is absent."""
+    if INVARIANTS_MARKER not in text:
+        return None
+    rows = []
+    for line in text.split(INVARIANTS_MARKER, 1)[1].splitlines():
+        stripped = line.strip()
+        if stripped.startswith("##"):
+            break
+        cells = [c.strip().strip("`") for c in stripped.strip("|").split("|")] if stripped.startswith("|") else []
+        if len(cells) < 3 or cells[0].lower() == "element" or set(cells[0]) <= set("-: "):
+            continue
+        numbers = [int(n) for n in re.findall(r"\d+", cells[1])]
+        rows.append((first_identifier(cells[0]), numbers, cells[-1]))
+    return rows
+
+
+def locate_selector(cwd, selector):
+    """The file that holds `<Class>#<method>`: a file named after the class, in its package, that mentions the method."""
+    match = SELECTOR.match(selector)
+    if not match:
+        return None
+    cls, method = match.groups()
+    simple = cls.rsplit(".", 1)[-1]
+    candidates = []
+    for root, dirs, files in os.walk(cwd):
+        dirs[:] = [d for d in dirs if d not in BREAK_IGNORE and not d.startswith(".")]
+        candidates += [os.path.join(root, f) for f in files if os.path.splitext(f)[0] == simple]
+    found = [path for path in in_package(candidates, cls) if contains(path, method)]
+    return found[0] if found else None
+
+
+def check_invariants(result, profile, cwd, runs, story_id, front, mapping):
+    """Contract 13: every domain type the plan changes names its invariants — its rules, the guards included, one
+    per `;` — and every rule has its own unit test in tests.md's `gate:invariants` table: a selector that exists as
+    class and method, and that is no criterion's test. A guard nobody named is code no test asked for; a rule whose
+    only test is a criterion's is a rule nobody tested on its own."""
+    if story_kind(front) != "story" or contract_of(profile) < 13:
         return
     plan_path, tests_path = os.path.join(runs, story_id, "plan.md"), os.path.join(runs, story_id, "tests.md")
     if not os.path.isfile(plan_path):
         return
     plan = read_text(plan_path)
-    elements = plan_domain_elements(plan)
-    named = plan_invariants(plan)
-    if not elements and not named:
+    elements, named = plan_domain_elements(plan), plan_invariants(plan) or {}
+    if not elements and not any(named.values()):
         return
-    missing = [e for e in elements if e not in (named or {})]
+    missing = [e for e in elements if e not in named]
     if missing:
         result.fail("invariants", "plan.md changes domain types without an `## Invariants` line: "
                                   + ", ".join(missing) + " — name each one's rules, its guards included "
                                   "(`- <Element>: <rule>; <rule>`), or `- <Element>: none — <why>`")
         return
-    notes = [l for l in (section_of(read_text(tests_path), "notes") or []) if "unit tests:" in l] \
-        if os.path.isfile(tests_path) else []
-    sources = set()
-    for root, dirs, files in os.walk(cwd):
-        dirs[:] = [d for d in dirs if d not in BREAK_IGNORE and not d.startswith(".")]
-        sources.update(os.path.splitext(f)[0] for f in files)
-    untested, absent = [], []
-    for element, rules in sorted((named or {}).items()):
-        if re.match(r"^none\b", rules, re.I):
+    if not any(named.values()):
+        result.ok("invariants", "every domain type the plan changes names why it has no invariant of its own")
+        return
+    rows = read_invariant_rows(read_text(tests_path)) if os.path.isfile(tests_path) else None
+    if rows is None:
+        result.fail("invariants", f"tests.md has no `{INVARIANTS_MARKER}` table under `## Invariants` — "
+                                  "`factory-cli.py --files-skeleton <story> test` writes it with one row per rule; "
+                                  "fill in each row's test")
+        return
+    criterion_tests = {sel for sels in mapping.values() for sel in sels}
+    covered, problems = set(), []
+    for element, numbers, selector in rows:
+        rules = named.get(element)
+        if rules is None:
+            problems.append(f"{element} is not in plan.md's `## Invariants`")
             continue
-        simple = element.rsplit(".", 1)[-1]
-        lines = [l for l in notes if re.search(rf"\b{re.escape(simple)}\b", l.split("for invariant", 1)[-1])]
-        if not lines:
-            untested.append(element)
+        wrong = [n for n in numbers if not 1 <= n <= len(rules)]
+        if not numbers or wrong:
+            problems.append(f"{element} has {len(rules)} rule(s), the row names {', '.join(map(str, wrong)) or 'none'}")
             continue
-        for line in lines:
-            for cls in re.findall(r"([\w.]+)(?:#\w+)?\s+(?:\(|for invariant)", line):
-                if cls.rsplit(".", 1)[-1] not in sources:
-                    absent.append(f"{cls} ({element})")
-    if untested:
-        result.fail("invariants", "invariants the plan names without a unit test in tests.md's `## Notes`: "
-                                  + ", ".join(untested) + " — `- unit tests: <Class>#<method> for invariant "
-                                  "<Element>: <rule>`, a test of the domain type alone")
-    elif absent:
-        result.fail("invariants", "unit tests named for invariants that are not in the project: " + "; ".join(absent))
+        if not selector:
+            continue                          # the skeleton's row, not filled: reported as untested below
+        if not SELECTOR.match(selector):
+            problems.append(f"{selector!r} is not `<Class>#<method>`")
+        elif selector in criterion_tests:
+            problems.append(f"{selector} is a criterion's test — an invariant gets a unit test of its own")
+        elif not locate_selector(cwd, selector):
+            problems.append(f"{selector} is not in the project (no file named after the class mentions the method)")
+        else:
+            covered.update((element, n) for n in numbers)
+    untested = [f"{e} {n} ({rules[n - 1][:60]})" for e, rules in named.items() for n in range(1, len(rules) + 1)
+                if (e, n) not in covered]
+    if problems:
+        result.fail("invariants", "the `gate:invariants` table: " + "; ".join(problems[:6]) + (" …" if len(problems) > 6 else ""))
+    elif untested:
+        result.fail("invariants", "invariants without a unit test of their own: " + "; ".join(untested[:6])
+                                  + (" …" if len(untested) > 6 else "") + " — the row's last cell, `<Class>#<method>`")
     else:
-        result.ok("invariants", f"every domain type the plan changes names its invariants, each tested at unit level "
-                                f"({len(named or {})})")
+        result.ok("invariants", f"every rule the plan names has a unit test of its own "
+                                f"({sum(len(r) for r in named.values())} rules, {len(rows)} rows)")
 
 
 def check_levels(result, profile, runs, story_id, front, body, mapping, located):
@@ -4407,7 +4485,7 @@ def main(argv):
                        ("plan.md", "tests.md") if args.stage == "test" else (STAGE_FILES[args.stage],), len(criteria))
             if args.stage == "test":
                 check_plan_levels(result, args.runs, story_id)
-                check_invariants(result, profile, cwd, args.runs, story_id, front)
+                check_invariants(result, profile, cwd, args.runs, story_id, front, mapping)
                 check_levels(result, profile, args.runs, story_id, front, body, mapping, located)
                 check_titles(result, profile, cwd, front, body, mapping, located)
             # a journey is a guard over what is delivered: green at its test gate, the inverse of a story

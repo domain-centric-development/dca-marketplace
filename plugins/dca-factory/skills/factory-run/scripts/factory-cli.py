@@ -2629,17 +2629,18 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   plan gave `level: browser-only`; every other scenario's test lives in a `test.<name>:` source set
 - titles: an end-user test's display name is the scenario's `Title:` line verbatim, else its key in words
   (`shows-empty-state` → "Shows empty state"); never the key itself in a name, display name or comment
-- one process per test command: every selector a command covers runs in one invocation and is read from the report by name
+- one process per test command; each selector is read from its report by name
 - red: every selector in the table fails before any production code — the gate writes `{folder}/.tests-red`
   (`<selector>\t<sha256 of the test file>`); the build gate refuses a test changed after it was seen red (`red-proof`)
 - a round the judge sent back (`back: test`): a test you strengthen is already green and cannot be seen red — write its
   break, `{folder}/breaks/<fully.qualified.Class>--<method>.patch`, a `git apply` patch against the production code that
   turns it red; the gate applies it on a scratch copy (`break-proof`) and records the test's new version
 - `## Files`: every test file this stage wrote or changed, one per line, as a path from the project root —
-  `files-listed` compares the list with the pipeline's changed-files record. `factory-cli.py --files-skeleton
-  <story> test` writes the list from the tree (the file's skeleton, or the missing paths): run it, add the rest
-- `## Notes`: `- unit tests: <Class>#<method> for invariant <Element>: <rule>`, one per plan invariant;
-  `- uncovered: <key> — <why>` only when unavoidable — not what a test fails on: the red run records it
+  `files-listed` compares it with the changed-files record; `factory-cli.py --files-skeleton <story> test`
+  writes it from the tree, and the invariant rows below: run it, add the rest
+- `## Invariants`: `<!-- gate:invariants -->`, a row per plan rule `| <Element> | <n> | <rule> | <Class>#<method> |`:
+  each its own test, not a criterion's (`invariants`)
+- `## Notes`: `- uncovered: <key> — <why>` only when unavoidable — not what a test fails on: the red run records it
 - stubs: a type with nothing a criterion observes (a record and its fields, an enum, an interface, an exception type) is
   written whole here; a method whose outcome a criterion asserts throws — whatever a criterion observes, throws"""
     if stage in ("build", "tidy"):
@@ -2768,7 +2769,7 @@ def changed_for_skeleton(cwd, runs, story_id, stage):
     return None
 
 
-def files_skeleton(runs, story_id, stage, cwd="."):
+def _files_skeleton(runs, story_id, stage, cwd="."):
     """The stage's hand-over with its file list written by the pipeline: created with the stage's headings
     when the file is missing, or the missing paths added to its list when the stage wrote the file first.
     The stage fills in the why; it never types the list — the one refusal that cost the test stage a
@@ -2813,6 +2814,46 @@ def files_skeleton(runs, story_id, stage, cwd="."):
         handle.write("\n".join(lines).rstrip("\n") + "\n")
     print(f"factory: {runs}/{story_id}/{STAGE_FILES[stage]} — {len(missing)} path(s) added under `{heading}`")
     return 0
+
+
+def files_skeleton(runs, story_id, stage, cwd="."):
+    """The stage's file list (below), and at the test stage the `gate:invariants` table with one row per rule the
+    plan names — element, number, the rule's text — so the stage fills in only each row's test."""
+    code = _files_skeleton(runs, story_id, stage, cwd)
+    if code == 0 and stage == "test":
+        invariants_skeleton(runs, story_id)
+    return code
+
+
+def invariants_skeleton(runs, story_id):
+    """tests.md's `## Invariants` table from plan.md's `## Invariants`: one row per rule, the test cell empty for the
+    stage to fill; rows already there are kept, missing ones added. Nothing when the plan names no rule."""
+    plan_path, target = os.path.join(runs, story_id, "plan.md"), os.path.join(runs, story_id, "tests.md")
+    if not os.path.isfile(plan_path) or not os.path.isfile(target):
+        return
+    named = _gate.plan_invariants(read_text(plan_path)) or {}
+    wanted = [(element, n, rule) for element, rules in named.items() for n, rule in enumerate(rules, 1)]
+    if not wanted:
+        return
+    text = read_text(target)
+    present = {(e, n) for e, numbers, _sel in (_gate.read_invariant_rows(text) or []) for n in numbers}
+    rows = [f"| {e} | {n} | {rule.replace('|', '/')} | |" for e, n, rule in wanted if (e, n) not in present]
+    if not rows:
+        return
+    if _gate.INVARIANTS_MARKER not in text:
+        text = text.rstrip("\n") + "\n\n## Invariants\n" + _gate.INVARIANTS_MARKER + \
+            "\n| element | rule | invariant | test |\n| --- | --- | --- | --- |\n" + "\n".join(rows) + "\n"
+    else:
+        lines = text.splitlines()
+        at = next(i for i, line in enumerate(lines) if _gate.INVARIANTS_MARKER in line)
+        end = next((i for i in range(at + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+        while end > at + 1 and not lines[end - 1].strip():
+            end -= 1
+        lines = lines[:end] + rows + lines[end:]
+        text = "\n".join(lines).rstrip("\n") + "\n"
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    print(f"factory: {runs}/{story_id}/tests.md — {len(rows)} invariant row(s) under `## Invariants`; fill in each test")
 
 
 PLAN_SKELETON = ("# Plan — {story}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"

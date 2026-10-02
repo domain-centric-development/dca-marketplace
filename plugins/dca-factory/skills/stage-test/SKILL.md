@@ -55,9 +55,11 @@ files written. You write **no** production behaviour.
    name the test alike; the test gate refuses an end-user test without it.
 3. **A unit test for every invariant the plan's `## Invariants` names** — each rule, the guards
    included: a required value refused when absent, a trimmed one refused untrimmed, a range at both
-   bounds. The test drives the domain type alone, no framework. List it under `## Notes` as
-   `- unit tests: <Class>#<method> for invariant <Element>: <rule>`; the test gate refuses a named
-   element no line covers. These belong to the domain's own vocabulary and are the part of the suite
+   bounds. The test drives the domain type alone, no framework, and is its own — never a criterion's
+   test. `factory-cli.py --files-skeleton <story> test` writes tests.md's `## Invariants` table with one
+   row per rule the plan names (element, number, the rule's text); fill in each row's last cell,
+   `<Class>#<method>`. The test gate refuses a rule without its own test, a test that is not in the
+   project, and a criterion's test in that table. These belong to the domain's own vocabulary and are the part of the suite
    that survives a rewrite of the adapters. A use case gets no unit test of its own from this stage: its
    port test runs it in the wired application, and a second test of the same path with doubles proves
    the doubles.
@@ -122,8 +124,13 @@ nothing else from the file:
 ## Files
 - <every test file this stage wrote or changed, one per line — written by the pipeline, see below>
 
+## Invariants                     (written by --files-skeleton, one row per rule of the plan's `## Invariants`)
+<!-- gate:invariants -->
+| element | rule | invariant | test |
+| --- | --- | --- | --- |
+| <Element> | <n> | <the rule, from the plan> | <fully.qualified.Class>#<method> |
+
 ## Notes
-- unit tests: <Class>#<method> for invariant <Element>: <rule>
 - uncovered: <criterion key> — <why no test was possible>   (only when unavoidable)
 ```
 
