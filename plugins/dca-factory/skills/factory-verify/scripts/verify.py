@@ -773,6 +773,21 @@ def marked_build_outside_git(root, args):
                    capture_output=True, env=env)
 
 
+def tests_rewritten_after_build(passes):
+    """A shared session that went back to its test stage after the build: tests.md is newer than build.md,
+    tidy and the rest come after it. `passes` writes the runner's journal lines for the gates that passed
+    after tests.md was written — the build held for the current tests — or none (bench 2026-10-02)."""
+    def prepare(root, _args):
+        folder = os.path.join(root, ".dca-factory", "runs", "STORY-1")
+        for name, at in (("plan.md", 1000), ("build.md", 1200), ("tests.md", 1300), ("tidy.md", 1350),
+                         ("judge.md", 1400), ("document.md", 1500)):
+            os.utime(os.path.join(folder, name), (at, at))
+        lines = "".join(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(at))}\tgate\t{stage}\texit=0\n"
+                        for stage, at in passes)
+        write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv", lines)
+    return prepare
+
+
 def run_gate(gate, root, stage):
     result = subprocess.run(
         [sys.executable, gate, "--story", "STORY-1", "--stage", stage],
@@ -1376,6 +1391,41 @@ def verify_runner(runner, verbose=False):
           code == 0 and delivered and not asked and starts.count("builder") == 1
           and "goes back to the test stage" not in output,
           f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+
+    # 0.57.1: the shared verifier rewrote tests.md after the build gate passed — the document gate's `story-pass`
+    # refuses over an earlier pass's build.md, and the round runs on from the build, not the document stage alone,
+    # which cannot fix it and ends in needs-human (bench 2026-10-02)
+    stale_cmd = ('if [ "$FACTORY_STAGE" = verifier ]; then FACTORY_STAGE=judge sh -c "$FIXTURE_STAND_IN"; '
+                 '"$FIXTURE_PY" .agents/factory/factory-cli.py --document-skeleton STORY-1 >/dev/null; '
+                 'FACTORY_STAGE=document sh -c "$FIXTURE_STAND_IN"; '
+                 'if [ ! -f touched ]; then : > touched; sleep 3; touch .dca-factory/runs/STORY-1/tests.md; fi; '
+                 'elif [ "$FACTORY_STAGE" = builder ]; then '
+                 'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                 'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
+                 'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi ;; '
+                 'esac; done; '
+                 'else sh -c "$FIXTURE_STAND_IN"; fi')
+    with tmpdir() as root:
+        build_project(root)
+        copy_scripts(runner, root)
+        tests_path = os.path.join(root, "fixture-tests.md")
+        with open(tests_path, "w", encoding="utf-8") as handle:
+            handle.write(TESTS)
+        os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+        with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+            handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+        env = {"FACTORY_TOOL_CMD": stale_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
+               "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
+                                  "--shared-builder", "--shared-verifier", env=env)
+        journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+        starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                  if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
+        check("story-pass: a document gate refused over an earlier pass's build runs on from the build — "
+              "builder, verifier, builder, verifier, delivered",
+              code == 0 and story_delivered(root) and starts == ["builder", "verifier", "builder", "verifier"]
+              and "runs stage 'build' again" in output,
+              f"exit {code}; starts {starts}; {output.strip().splitlines()[-4:]}")
 
     # 1c. a stage that writes no file stops the run, and says which file was missing
     with tmpdir() as root:
@@ -4023,6 +4073,12 @@ def run_groups(args):
         (Case("document: a story changed after it was planned delivers nothing", "document", 1,
               must_fail=("story-pass",), text=("changed after it was planned",)),
          dict(document=DOCUMENT, extra_sources=((".dca-factory/runs/STORY-1/.story-digest", "0" * 64),))),
+        (Case("document: a build whose gate passed after the tests were rewritten in the same pass delivers",
+              "document", 0, must_pass=("story-pass",), absent=("written for an earlier pass",)),
+         dict(document=DOCUMENT, prepare=tests_rewritten_after_build((("build", 1320), ("tidy", 1360))))),
+        (Case("document: a build older than the tests, its gate not run since, is an earlier pass's", "document", 1,
+              must_fail=("story-pass",), text=("build.md (written for an earlier pass)",)),
+         dict(document=DOCUMENT, prepare=tests_rewritten_after_build((("build", 1210),)))),
         (Case("test: a test recorded red before may be green when its expectation changed on a decision",
               "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
          dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,
@@ -6195,6 +6251,19 @@ def run_groups(args):
             start = subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
                                    capture_output=True, text=True, encoding="utf-8").stdout
             expectations.append((f"start: {label}", f"start: {want}" in start, start))
+    with tmpdir() as root:
+        # the document gate refused for `story-pass`: build.md is an earlier pass's, so the story runs on from the
+        # build — running the document stage again changes nothing it could fix (bench 2026-10-02)
+        files = (("plan.md", "# Plan\n", 1000), ("build.md", "# Build\n", 1100), ("tests.md", TESTS, 1200),
+                 ("tidy.md", "# Tidy\n", 1300), ("judge.md", "## Verdict\nverdict: pass\n", 1400),
+                 ("document.md", "# Document\n", 1500), (".gate-document.txt", "gate:fail story-pass\n", 1600))
+        backlog_project(root, extra_sources=tuple((f".dca-factory/runs/STORY-1/{n}", c) for n, c, _a in files))
+        for name, _content, at in files:
+            os.utime(os.path.join(root, ".dca-factory", "runs", "STORY-1", name), (at, at))
+        start = subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8").stdout
+        expectations.append(("start: a refused document gate over an earlier pass's build resumes at build, "
+                             "not at document", "start: build" in start, start))
     with tmpdir() as root:
         # in git, the scratch copy is what git sees — a package named `tasks` comes along
         build_project(root, story=ADOPTED, profile=PACKAGED_PROFILE, tests=TESTS + CHARACTERIZED,

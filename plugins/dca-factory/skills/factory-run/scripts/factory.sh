@@ -1947,10 +1947,24 @@ second writer. $(where_things_are "$tool" verifier "$story")"
       echo "factory: gate 'document' refused in round $refused_rounds — three rounds did not converge. needs-human." >&2
       return 1
     fi
-    echo "factory: gate 'document' refused — round $refused_rounds runs stage 'document' again with the gate's report." >&2
-    run_story "$story" "$tool" document "$dry"; return $?
+    local again; again=$(refused_from "$story" document)
+    echo "factory: gate 'document' refused — round $refused_rounds runs stage '$again' again with the gate's report." >&2
+    run_story "$story" "$tool" "$again" "$dry"; return $?
   fi
   return 0
+}
+
+# The stage a refused gate's round starts at: the refused stage, or an earlier one whose file the story's
+# state reads as an earlier pass's — the document gate's `story-pass` refuses over it, and the document stage
+# alone cannot fix that (bench 2026-10-02).
+refused_from() {                            # refused_from <story> <refused stage> -> stage
+  local start st
+  start=$(cli --story "$1" --start 2>/dev/null | sed -n 's/^start: //p')
+  for st in "${STAGES[@]}"; do
+    [ "$st" = "$2" ] && break
+    [ "$st" = "$start" ] && { echo "$start"; return; }
+  done
+  echo "$2"
 }
 
 bump_rounds() {                             # bump_rounds <story> -> current count
@@ -2343,8 +2357,9 @@ run_story() {
           echo "factory: gate '$stage' refused in round $refused_rounds — three rounds did not converge. needs-human." >&2
           return 1
         fi
-        echo "factory: gate '$stage' refused — round $refused_rounds runs stage '$stage' again with the gate's report." >&2
-        run_story "$story" "$tool" "$stage" "$dry"
+        local again; again=$(refused_from "$story" "$stage")
+        echo "factory: gate '$stage' refused — round $refused_rounds runs stage '$again' again with the gate's report." >&2
+        run_story "$story" "$tool" "$again" "$dry"
         return $?
       fi
     fi

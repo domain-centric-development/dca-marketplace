@@ -142,3 +142,4 @@ instead of by the model; the table below them names every version and what it ch
 | 0.56.0 | 2026-10-01 | A story's verbs come from the glossary, never from a translation — so two runs name the same operations |
 | 0.56.1 | 2026-10-01 | The backlog looks up a new verb in the story's context; an ambiguous verb is decided by its effect |
 | 0.57.0 | 2026-10-02 | Every invariant rule gets a unit test of its own, in a table the pipeline writes |
+| 0.57.1 | 2026-10-02 | A build whose gate passed after the tests were rewritten holds for the pass; a refused round runs on from the stage that is out of date |

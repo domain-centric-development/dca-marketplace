@@ -218,7 +218,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 13
 
 
-VERSION = "0.57.0"
+VERSION = "0.57.1"
 
 
 def read_front_matter(path):
@@ -4093,16 +4093,33 @@ def accepted_criteria(body):
 STALE_AFTER_SECONDS = 2.0
 
 
+def gate_passes(folder):
+    """{stage: epoch} of the last passed gate per stage, from the runner's journal lines (`gate <stage> exit=0`)."""
+    journal = os.path.join(folder, ".verify", "journal.tsv")
+    passes = {}
+    if not os.path.isfile(journal):
+        return passes
+    for line in read_text(journal).splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 4 and parts[1] == "gate" and parts[3] == "exit=0":
+            with contextlib.suppress(ValueError):
+                passes[parts[2]] = calendar.timegm(time.strptime(parts[0][:19], "%Y-%m-%dT%H:%M:%S"))
+    return passes
+
+
 def current_stage_files(folder, order):
     """{stage: text} for the stage files of the story's current pass. A stage that ran again — a re-plan, a
     build after `changes-requested`, a test stage applying an answer — makes every later file an earlier
-    pass's: it stays on disk as history, but it no longer says where the story stands."""
+    pass's: it stays on disk as history, but it no longer says where the story stands. A stage whose gate
+    passed after the file before it was written holds for this pass, though its own file is older: a shared
+    session that went back to its test stage after the build and had the build gate pass again."""
     texts, newest = {}, None
+    passes = gate_passes(folder)
     for stage in order:
         path = os.path.join(folder, STAGE_FILES[stage])
         if not os.path.isfile(path):
             continue
-        written = os.path.getmtime(path)
+        written = max(os.path.getmtime(path), passes.get(stage, 0))
         if newest is not None and written < newest - STALE_AFTER_SECONDS:
             break
         texts[stage] = read_text(path)
@@ -4184,6 +4201,14 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     refused = [stage for stage in STAGE_ORDER
                if os.path.isfile(os.path.join(folder, f".gate-{stage}.txt"))]
     if refused:
+        # A refusal over an earlier pass's file — the document gate's `story-pass` — runs on from that stage:
+        # running the refused stage again changes nothing it could fix.
+        order = STAGE_ORDER[:STAGE_ORDER.index(refused[0])] if refused[0] in STAGE_ORDER else []
+        stale = [stage for stage in order
+                 if stage not in texts and os.path.isfile(os.path.join(folder, STAGE_FILES[stage]))]
+        if stale:
+            return "in-progress", stale[0], (f"the {refused[0]} gate refused over an earlier pass's "
+                                             f"{STAGE_FILES[stale[0]]} — the story runs on from {stale[0]}")
         return "in-progress", refused[0], f"the {refused[0]} gate refused — the stage runs again"
     adopt = story_kind(front) == "adopt"
     if adopt and verdict_in(texts.get("judge", "")) == "pass":
