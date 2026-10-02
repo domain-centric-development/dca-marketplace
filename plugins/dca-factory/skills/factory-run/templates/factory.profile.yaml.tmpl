@@ -60,7 +60,7 @@
 #              only `format:` and change no file
 # carrier.<r>  the skill that carries a stage's craft or a role — `carrier.plan`, `carrier.test`,
 #              `carrier.build`, `carrier.tidy`, `carrier.guard` (the invariants build and tidy keep),
-#              `carrier.glossary`, `carrier.domain` (the designed context map); the list is open. A
+#              `carrier.glossary`, `carrier.domain` (the designed context map), `carrier.discover`; the list is open. A
 #              skill works in every tool; an agent only where a tool has them. `factory.sh setup`
 #              writes a line only for a skill installed beside the pipeline — a named carrier that is
 #              missing stops a run — and leaves the rest commented out, found by description
@@ -144,6 +144,7 @@ formatFix: {{FORMAT_FIX_COMMAND}}
 #carrier.guard: <the skill that holds the invariants while build and tidy edit>
 #carrier.glossary: <the skill that keeps the glossary>
 #carrier.domain: <the skill that keeps the designed context map>
+#carrier.discover: <the skill that carries product discovery>
 # The reviewer of each built-in perspective. `factory.sh setup` names the review skill installed beside
 # the pipeline and links it into the project, so every judge runs the same one; without a line the judge
 # looks for a project skill whose description covers the perspective, and runs the pass itself otherwise.

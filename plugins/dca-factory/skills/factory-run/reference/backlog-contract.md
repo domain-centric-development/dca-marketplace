@@ -84,6 +84,9 @@ Front matter, every field non-empty; the gate refuses an epic without `intent`, 
 | `metric` | the **outcome event** that measures it: a domain or integration event whose publication in production is the evidence. Not a story count, not a burndown |
 | `domain_contact` | who answers domain questions for this epic |
 
+Optional: `discovery` — the report the epic came from (`project/discovery/<topic>/discovery.md`, written by
+`factory-discover`); the gate refuses a link to a report that is not there.
+
 An epic missing one of `intent`, `goal`, `metric`, `domain_contact` is refused by the gate at
 the plan stage. The reason is not bureaucracy: a stage that cannot read the intent invents one.
 

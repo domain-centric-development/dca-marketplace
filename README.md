@@ -84,6 +84,7 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 
 ```
 /factory-setup            # the project description, git, the runner — only what is missing
+/factory-discover <topic> # which problem is worth solving: a report with sources, proposed epics
 /factory-backlog          # write the epic and the story, in the contract the gate reads
 /factory-run              # plan → test → build → tidy → judge → document, gated
 /factory-run <your words> # a wish: written as a story (which epic, the criteria), then run
@@ -117,6 +118,7 @@ Details, including the backlog contract and every gate check:
 /e2e-testing          # Page Objects, stable selectors, one flow per test — and setting up a runner
 /ubiquitous-language  # the glossary per context
 /context-map          # the designed context map
+/product-discovery    # a problem, its evidence and an observable outcome, every claim with its source
 /review-ddd · /review-hexagonal · /review-clean-code   # three review perspectives
 ```
 

@@ -1074,6 +1074,8 @@ HELP_COMMANDS = (
     ("where it stands", "what runs, what waits for you, every story with its times and tokens",
      "/factory-status", "status"),
     ("one story", "its stages, passes and tokens", "/factory-status <story>", "status --story <story>"),
+    ("find the problem", "a problem or a wished deliverable → a report with sources and proposed epics, each with "
+                         "its outcome event", "/factory-discover <topic>", ""),
     ("the backlog", "the epics and stories, their state, the next one", "/factory-backlog", "backlog"),
     ("check the backlog", "the plan gate's checks over every open story, writing nothing", "/factory-backlog",
      "backlog --check"),

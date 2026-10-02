@@ -100,6 +100,9 @@ change that contradicts them.
 
 ## Your first story
 
+Where the problem itself is not clear yet, `/factory-discover <topic>` comes first: it writes a report with
+sources and proposes epics, each with its outcome event, and the backlog takes the one you release.
+
 ```
 /factory-backlog
 ```
@@ -411,6 +414,7 @@ what must be true before the next one starts.
 | `stage-judge` | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-audit` — the method's audit, worth it for adoption work; the setup does not write it) |
 | `stage-document` | the change → `.dca-factory/runs/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
+| `factory-discover` | before the backlog: a problem or a wished deliverable becomes `project/discovery/<topic>/discovery.md` — problem, users and evidence, options, outcome, risks, proposed epics each with its outcome event — from a fixed question catalogue, with every claim citing a source (web with the date read, a project file, an anonymised excerpt under `sources/`; the originals stay in a git-ignored `originals/`). Applies the `product-discovery` craft (`carrier.discover:`); `story-gate.py --check-discovery <topic>` checks the report; writes an epic only once the person releases a proposal, through `factory-backlog`, linked by `discovery:` |
 | `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
 | — `<story>.findings.md` | the judge's confirmed minors, kept beside the story when it is delivered (the run folder is disposable, these are not): one row per finding with file, line, fix and `Status`; `factory-cli.py --findings` lists the open ones, the status brief counts them |
 | — `decisions/` | the questions a run may not answer, one file each under `<story>.decisions/<nn>.md` beside the story, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |

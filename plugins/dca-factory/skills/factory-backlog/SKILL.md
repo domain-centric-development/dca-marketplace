@@ -45,6 +45,10 @@ that smuggles the decision in.
    the intent invents one. If the human has not stated them, ask — one question per missing field,
    in their words, not a form. A placeholder is worse than a missing file, because the gate passes
    it.
+2a. **An epic from a discovery report** (`project/discovery/<topic>/discovery.md`, a proposal the person
+   released): take its `intent`, `goal` and `metric` as the report writes them, add `discovery:` with the
+   report's path, and ask only what it leaves `open` — the domain contact, the journey. Where the problem itself
+   is unclear and no report exists, offer `/factory-discover <topic>` before writing an epic.
 3. **The metric is an outcome event, not a count.** Ask which domain or integration event the
    project publishes when the epic has actually worked for someone — the event whose appearance in
    production is the evidence. A story count, a burndown or "feature shipped" is not a metric. If

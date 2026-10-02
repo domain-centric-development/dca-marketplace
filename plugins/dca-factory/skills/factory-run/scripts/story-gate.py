@@ -148,6 +148,7 @@ DEFAULTS = {
     "domain": "project/domain.md",
     "epics": "project/epics",
     "runs": ".dca-factory/runs",
+    "discovery": "project/discovery",
 }
 
 
@@ -218,7 +219,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 14
 
 
-VERSION = "0.59.0"
+VERSION = "0.60.0"
 
 
 def read_front_matter(path):
@@ -1500,6 +1501,10 @@ def check_epic(result, story_path, front, epics):
             f"changes for the user (goal), which outcome event measures it (metric) "
             f"and who answers domain questions (domain_contact).",
         )
+    elif str(epic_front.get("discovery") or "").strip() and \
+            not os.path.isfile(str(epic_front["discovery"]).strip().strip("`")):
+        result.fail("epic", f"{epic_path}: `discovery: {str(epic_front['discovery']).strip()}` names a report that is "
+                            f"not there — the epic links the discovery it came from, or no `discovery:` line")
     else:
         result.ok("epic", f"epic {epic_name!r} complete ({', '.join(EPIC_FIELDS)})")
 
@@ -1584,6 +1589,77 @@ def check_outcome_raised(result, profile, cwd, runs, story_id, front):
         result.fail("outcome", "; ".join(problems))
     else:
         result.ok("outcome", "the outcome event exists: " + "; ".join(found))
+
+
+#: The sections of a discovery report, in order (WP-85) — the craft's five parts, the proposed work and the sources.
+DISCOVERY_SECTIONS = ("Problem", "Users and evidence", "Options", "Outcome", "Risks and open questions",
+                      "Proposed work", "Sources")
+#: The fields every proposed body of work carries before it can become an epic; `domain_contact` may stay `open`.
+DISCOVERY_FIELDS = ("intent", "goal", "metric")
+SOURCE_LINE = re.compile(r"^\s*-\s*\[(S\d+)\]\s*(.+?)\s*$")
+CITATION = re.compile(r"\[(S\d+)\]")
+READ_ON = re.compile(r"\bread \d{4}-\d{2}-\d{2}\b")
+
+
+def check_discovery(result, cwd, profile, topic):
+    """`project/discovery/<topic>/discovery.md`: the sections in order, every citation a listed source, every
+    source resolving — an excerpt under the topic's folder, a project file, or a URL with the date it was read —
+    every proposed body of work with intent, goal and metric, and the topic's `originals/` ignored by git."""
+    folder = os.path.join(location(profile, "discovery"), topic).replace(os.sep, "/")
+    report = f"{folder}/discovery.md"
+    if not os.path.isfile(os.path.join(cwd, report)):
+        result.fail("discovery", f"no {report} — `factory-discover {topic}` writes it")
+        return
+    text = read_text(os.path.join(cwd, report))
+    headings = [h.strip() for h in re.findall(r"^## (.+)$", text, re.M)]
+    missing = [h for h in DISCOVERY_SECTIONS if h not in headings]
+    order = [h for h in headings if h in DISCOVERY_SECTIONS]
+    problems = []
+    if missing:
+        problems.append("missing " + ", ".join(f"`## {h}`" for h in missing))
+    elif order != list(DISCOVERY_SECTIONS):
+        problems.append("the sections are out of order — " + " → ".join(DISCOVERY_SECTIONS))
+    sources = {}
+    for line in (section_of(text, "sources") or []):
+        match = SOURCE_LINE.match(line)
+        if match:
+            sources[match.group(1)] = match.group(2)
+    body = text.split("\n## Sources", 1)[0]
+    unknown = sorted(set(CITATION.findall(body)) - set(sources), key=lambda c: int(c[1:]))
+    if unknown:
+        problems.append("cited but not under `## Sources`: " + ", ".join(f"[{c}]" for c in unknown))
+    for sid, entry in sources.items():
+        url = re.search(r"https?://\S+", entry)
+        if url:
+            if not READ_ON.search(entry):
+                problems.append(f"{sid}: a web source names the date it was read (`read YYYY-MM-DD`)")
+            continue
+        paths = [bare_path(p) for p in re.findall(r"`([^`]+)`", entry)] or \
+            [bare_path(p) for p in re.findall(r"(?<!\S)([\w.-]+/[\w./-]+\.[A-Za-z0-9]{1,6}(?::L?\d+(?:[-–:]\d+)?)?)", entry)]
+        if not paths:
+            problems.append(f"{sid}: names no file and no URL")
+            continue
+        for path in paths:
+            if not (os.path.isfile(os.path.join(cwd, folder, path)) or os.path.isfile(os.path.join(cwd, path))):
+                problems.append(f"{sid}: {path} is not there — an excerpt lives under {folder}/sources/")
+    work = text.split("\n## Proposed work", 1)[1].split("\n## ", 1)[0] if "\n## Proposed work" in text else ""
+    items = re.split(r"^### ", work, flags=re.M)[1:]
+    if "Proposed work" in headings and not items:
+        problems.append("`## Proposed work` proposes nothing — one `### <id>` per body of work, or a line saying why none")
+    for item in items:
+        name = item.splitlines()[0].strip()
+        fields = dict(re.findall(r"^\s*-\s*([a-z_]+):\s*(.*?)\s*$", item, re.M))
+        lacking = [f for f in DISCOVERY_FIELDS if not fields.get(f) or fields[f].lower() == "open" or "{{" in fields[f]]
+        if lacking:
+            problems.append(f"proposed `{name}` lacks {', '.join(lacking)}")
+    ignore = os.path.join(cwd, folder, ".gitignore")
+    if not (os.path.isfile(ignore) and re.search(r"^/?originals/?\s*$", read_text(ignore), re.M)):
+        problems.append(f"{folder}/.gitignore does not ignore `originals/` — the handed-over originals stay out of git")
+    if problems:
+        result.fail("discovery", f"{report}: " + "; ".join(problems))
+    else:
+        result.ok("discovery", f"{report}: {len(DISCOVERY_SECTIONS)} sections, {len(sources)} source(s) resolving, "
+                               f"{len(items)} proposed body(ies) of work")
 
 
 def read_mapping(runs, story_id):
@@ -4463,6 +4539,8 @@ def main(argv):
                         help="with --story: write changed-<stage>.txt, changed.txt and story.diff from the snapshots")
     parser.add_argument("--project", action="store_true",
                         help="check the project description — product and technical — alone, and exit")
+    parser.add_argument("--check-discovery", metavar="TOPIC",
+                        help="check the discovery report of one topic (project/discovery/<topic>/) and exit")
     parser.add_argument("--check-backlog", action="store_true",
                         help="the plan gate's backlog checks over every story that is not done (or --story), "
                              "writing nothing, and exit")
@@ -4501,6 +4579,15 @@ def main(argv):
         if args.record_changes:
             record_changes(cwd, args.runs, args.story, args.record_changes)
         return 0
+    if args.check_discovery:
+        result = Result()
+        try:
+            check_discovery(result, cwd, read_profile(resolve_profile(args.profile, cwd)), args.check_discovery)
+        except GateError as error:
+            result.fail("discovery", str(error))
+        for state, check, message in result.entries:
+            print(f"gate:{state} {check} — {message}")
+        return 1 if result.failed else 0
     if args.project:
         result = Result()
         try:

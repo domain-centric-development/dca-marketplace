@@ -52,7 +52,7 @@ dca-marketplace/
 │   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-help,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; the factory explained; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
 ├── plugins/dca-craft/                     # craft independent of the architecture style; names no DCA artifact
-│   ├── skills/{tdd,clean-code,adr,e2e-testing,ubiquitous-language,context-map}/
+│   ├── skills/{tdd,clean-code,adr,e2e-testing,ubiquitous-language,context-map,product-discovery}/
 │   ├── skills/{review-ddd,review-hexagonal,review-clean-code}/   # the three general review perspectives
 │   └── agents/{e2e-tester,ddd-reviewer,hexagonal-reviewer,clean-code-reviewer}.md
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
@@ -87,7 +87,7 @@ dca-marketplace/
   domain) and the epics with their stories, each story carrying its state and its decisions beside it —
   beside the glossaries and the generated context map. Run artefacts go to `.dca-factory/runs/`, which is
   protocol and disposable; `.agents/factory/` is the installed pipeline alone.
-- **dca-craft** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/ubiquitous-language`, `/context-map`,
+- **dca-craft** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/ubiquitous-language`, `/context-map`, `/product-discovery`,
   `/review-ddd`, `/review-hexagonal`, `/review-clean-code`; agents `e2e-tester`, `ddd-reviewer`,
   `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the
   skills and agents name no DCA artifact (rule ids, `dca-*` names, the building blocks' namespaces and

@@ -773,6 +773,46 @@ def marked_build_outside_git(root, args):
                    capture_output=True, env=env)
 
 
+#: A discovery report in the shape `factory-discover` writes (WP-85): every claim cites a listed source, an excerpt
+#: resolves under the topic's `sources/`, a web source carries the date it was read.
+DISCOVERY = """# Discovery: the monthly report
+
+## Problem
+
+The team rebuilds the monthly report by hand, four hours each month [S1].
+
+## Users and evidence
+
+- Team leads rebuild it [S1] after every month's close; the tool has no export [S2].
+
+## Options
+
+- Do nothing — four hours a month stay.
+- An export of the month's figures.
+
+## Outcome
+
+- ReportSent — a report reaches its readers without a rebuild.
+
+## Risks and open questions
+
+- open: how many teams build it.
+
+## Proposed work
+
+### monthly-report
+- intent: Team leads rebuild the monthly report by hand.
+- goal: The report is sent from the figures, no rebuild.
+- metric: ReportSent
+- domain_contact: open
+
+## Sources
+
+- [S1] Interview 1 — sources/interview-1.md
+- [S2] The tool's feature list — https://example.com/features, read 2026-10-02
+"""
+
+
 #: The outcome event of the fixture epic, declared and raised by the aggregate the story changed (WP-84 V1).
 OUTCOME_CODE = (
     ("src/main/java/com/example/SomethingHappened.java", "public record SomethingHappened(String widgetId) {}\n"),
@@ -4086,6 +4126,13 @@ def run_groups(args):
         # WP-84 V1 (contract 14): the story that introduces the epic's outcome event says so (`publishes:`); the plan
         # gate holds it to the epic's metric, the document gate to the code — the bench's epic said `TaskCreated`, the
         # code published `TaskAdded`, and nothing compared them (TODO #117)
+        # WP-85: an epic that came from a discovery links its report, and the link resolves
+        (Case("plan: an epic's `discovery:` link to a report that is there passes", "plan", 0, must_pass=("epic",)),
+         dict(epic=EPIC.replace("domain_contact:", "discovery: project/discovery/sample/discovery.md\ndomain_contact:"),
+              extra_sources=(("project/discovery/sample/discovery.md", "# Discovery\n"),))),
+        (Case("plan: an epic's `discovery:` link to a report that is not there is refused", "plan", 1,
+              must_fail=("epic",), text=("project/discovery/sample/discovery.md",)),
+         dict(epic=EPIC.replace("domain_contact:", "discovery: project/discovery/sample/discovery.md\ndomain_contact:"))),
         (Case("plan: a story's `publishes:` is the epic's outcome event", "plan", 0, must_pass=("outcome",)),
          dict(story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"))),
         (Case("plan: a story that publishes an event the epic's metric does not name is refused", "plan", 1,
@@ -5991,6 +6038,37 @@ def run_groups(args):
                              wish.returncode == 1 and "new wish" in wish.stdout and delivered(root),
                              wish.stdout.strip()[-200:]))
 
+    # WP-85: a discovery report under project/discovery/<topic>/ — the shape, the sources, the proposed work
+    discovery = DISCOVERY
+    for label, files, want_code, want_text in (
+            ("discovery: a report in shape, every claim's source resolving, passes", (), 0, "gate:pass discovery"),
+            ("discovery: a missing section is refused", (("discovery.md", discovery.replace("## Options\n", "## Choices\n")),),
+             1, "## Options"),
+            ("discovery: a claim citing a source the list does not carry is refused",
+             (("discovery.md", discovery.replace("[S1] after", "[S7] after")),), 1, "[S7]"),
+            ("discovery: an excerpt that is not there is refused", (("sources/interview-1.md", None),), 1,
+             "sources/interview-1.md"),
+            ("discovery: a web source without the date it was read is refused",
+             (("discovery.md", discovery.replace(", read 2026-10-02", "")),), 1, "S2"),
+            ("discovery: proposed work without its outcome fact is refused",
+             (("discovery.md", discovery.replace("- metric: ReportSent\n", "")),), 1, "metric"),
+            ("discovery: a topic whose originals/ git does not ignore is refused", ((".gitignore", None),), 1, "originals/")):
+        with tmpdir() as root:
+            topic = "project/discovery/monthly-report/"
+            base = {"discovery.md": discovery, "sources/interview-1.md": "Interview 1, a team lead:\n\nWe rebuild it by hand.\n",
+                    ".gitignore": "originals/\n"}
+            base.update(dict(files))
+            backlog_project(root, extra_sources=tuple((topic + n, c) for n, c in base.items() if c is not None))
+            done = subprocess.run([sys.executable, args.gate, "--check-discovery", "monthly-report"], cwd=root,
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
+            expectations.append((label, done.returncode == want_code and want_text in done.stdout, done.stdout.strip()[-300:]))
+    with tmpdir() as root:
+        backlog_project(root)
+        done = subprocess.run([sys.executable, args.gate, "--check-discovery", "nothing-here"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        expectations.append(("discovery: a topic without a report is refused, not passed as empty",
+                             done.returncode == 1 and "project/discovery/nothing-here/discovery.md" in done.stdout,
+                             done.stdout.strip()[-300:]))
     with tmpdir() as root:
         # the backlog skill checks one story while it is still being written: the plan gate's checks,
         # none of its marks — a baseline taken then would be the wrong one, and the files it leaves

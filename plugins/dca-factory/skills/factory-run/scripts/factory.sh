@@ -1160,7 +1160,8 @@ review.hexagonal review-hexagonal -
 review.clean-code review-clean-code -
 carrier.glossary ubiquitous-language -
 carrier.domain context-map -
-carrier.test e2e-testing -"
+carrier.test e2e-testing -
+carrier.discover product-discovery -"
 
 # The skill names of the method plugins beside the pipeline whose presets are in <dir>.
 method_skill_names() {                      # method_skill_names <presets dir>
