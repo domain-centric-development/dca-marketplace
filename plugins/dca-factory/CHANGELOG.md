@@ -18,7 +18,7 @@ worked on one theme; the table below them names every version and what it change
 | 0.50 – 0.52 | **Faster** | One test process per command, cheap checks first, test runs reused on an unchanged tree, the hand-over's file list and plan lines written by the pipeline, leaner hand-overs — four stories from 54.9 to 39.7 minutes at the same quality |
 | 0.53 – 0.54 | **Independent reviews** | Three reviewers run side by side in their own contexts, the judge confirms only what it finds in the code (16 instead of 5 confirmed findings); minor findings stay beside the story for later |
 | 0.55 – 0.57 | **Test quality** | The plan names every domain type's invariants, each gets a unit test of its own in a table the pipeline writes; the use case is tested once at its port, each adapter for its translation — branch coverage 81 → 92 % |
-| 0.56 | **The project's language** | A story's verbs come from the glossary, never from a translation; a new verb is looked up in the story's context |
+| 0.56 | **A deterministic domain model** | Two runs of the same story name the same operations and events: a story's verbs come from the glossary, never from a translation; a verb that could mean creating or adding is decided by its effect (does the thing exist before this step?); the journey reads as a timeline of commands and events. Found by the bench: the epic said `TaskCreated`, the code published `TaskAdded` |
 
 ## Every version
 
@@ -138,6 +138,6 @@ worked on one theme; the table below them names every version and what it change
 | 0.54.0 | 2026-09-30 | The judge's minor findings stay beside the story (`<story>.findings.md`) |
 | 0.55.0 | 2026-09-30 | Invariants named in the plan, each with a unit test; the use case tested once at its port |
 | 0.55.1 | 2026-10-01 | A test defect the session repaired itself causes no extra round |
-| 0.56.0 | 2026-10-01 | A story's verbs come from the glossary, never from a translation |
-| 0.56.1 | 2026-10-01 | The backlog looks up a new verb in the story's context |
+| 0.56.0 | 2026-10-01 | A story's verbs come from the glossary, never from a translation — so two runs name the same operations |
+| 0.56.1 | 2026-10-01 | The backlog looks up a new verb in the story's context; an ambiguous verb is decided by its effect |
 | 0.57.0 | 2026-10-02 | Every invariant rule gets a unit test of its own, in a table the pipeline writes |
