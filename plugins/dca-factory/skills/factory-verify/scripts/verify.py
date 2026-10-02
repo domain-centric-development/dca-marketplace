@@ -982,6 +982,29 @@ def verify_runner(runner, verbose=False):
               order == ["gate plan", "stage plan", "stage test", "gate test", "stage judge", "stage document",
                         "gate document"] and "stage build  (skipped: a journey builds nothing)" in output, f"got {order}")
 
+    # 1d. a later gate sent the story back: its report is the earlier stage's input, or the stage repeats the refusal
+    with tmpdir() as root:
+        build_project(root, extra_sources=((".dca-factory/runs/STORY-1/.gate-document.txt",
+                                            "gate:fail outcome — no type `SomethingHappened` in the production code\n"),))
+        copy_scripts(runner, root)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "build", "--tool", "claude",
+                                  "--dry-run")
+        build_prompt = [l for l in output.splitlines() if "would run" in l and "stage-build skill" in l]
+        tidy_prompt = [l for l in output.splitlines() if "would run" in l and "stage-tidy skill" in l]
+        check("runner: a build the document gate sent the story back to is handed that gate's report — the tidy "
+              "stage after it is not",
+              bool(build_prompt) and ".gate-document.txt" in build_prompt[0]
+              and "The document gate refused the story and sent it back to this stage" in build_prompt[0]
+              and bool(tidy_prompt) and ".gate-document.txt" not in tidy_prompt[0],
+              [l[:200] for l in output.splitlines() if "gate-document" in l][:2])
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "build", "--tool", "claude",
+                                  "--dry-run", "--shared-builder")
+        shared = [l for l in output.splitlines() if "would run" in l and "Carry out these stages" in l]
+        check("runner: the shared builder a document gate sent the story back to is handed that gate's report too",
+              bool(shared) and ".gate-document.txt" in shared[0]
+              and "sent it back to stage build" in shared[0],
+              [l[:200] for l in output.splitlines() if "Carry out" in l][:1])
+
     # 1a. the stage process sees only the project: the isolation flags, one prefix for every stage
     with tmpdir() as root:
         build_project(root)
@@ -2821,6 +2844,13 @@ def verify_setup(runner, verbose=False):
         code, output = run_runner(project_runner(root), root, "backlog", "--check")
         check("verbs: `backlog --check` runs the plan gate's backlog checks over every story",
               code == 0 and "1 story(ies) checked" in output, output.strip().splitlines()[-2:])
+        code, output = run_runner(project_runner(root), root, "discover", "--check", "nothing-here")
+        check("verbs: `discover --check <topic>` is the discovery report's check through the gate",
+              code == 1 and "gate:fail discovery" in output and "project/discovery/nothing-here/discovery.md" in output,
+              output.strip().splitlines()[-2:])
+        code, output = run_runner(project_runner(root), root, "discover")
+        check("verbs: `discover` without --check is a usage error — the report is written in a session", code == 2,
+              f"exit {code}")
         code, output = run_runner(project_runner(root), root, "status", "--story", "STORY-1")
         check("verbs: `status --story` is the story's view", code == 0, output.strip().splitlines()[:1])
         code, output = run_runner(project_runner(root), root, "check", "--checks", "compile")
@@ -3778,6 +3808,17 @@ def run_groups(args):
               must_pass=("tests-red",), absent=("gate:fail invariants",)),
          dict(profile=PROFILE + "contract: 12\n",
               extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0]),))),
+        (Case("test: an element with its kind in parentheses — `- Widget (value object): …` — is that element", "test", 0,
+              must_pass=("invariants",)),
+         dict(tests=TESTS + INVARIANT_TABLE,
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md",
+                              INVARIANT_PLAN.replace("- Widget:", "- Widget (value object):")), INVARIANT_TEST_FILE))),
+        (Case("test: an invariant line that names no element — a sentence before the colon — is no element", "test", 0,
+              must_pass=("invariants",), absent=("Note", "aggregate")),
+         dict(tests=TESTS + INVARIANT_TABLE,
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN
+                              + "- Note on the rules: none crosses an aggregate\n- The aggregate Widget: holds them all\n"),
+                             INVARIANT_TEST_FILE))),
         (Case("test: a lean plan gets no size note", "test", 0, must_pass=("tests-red",), absent=("gate:note size",)),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
                               "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: e2e\n"
@@ -4153,6 +4194,36 @@ def run_groups(args):
               extra_sources=OUTCOME_CODE[:1] + ((".dca-factory/runs/STORY-1/.verify/changed.txt",
                                                   "added\tsrc/main/java/com/example/SomethingHappened.java\n"),
                                                  ("src/main/java/com/example/Widget.java", "class Widget {}\n")))),
+        (Case("document: an outcome event nested in the aggregate that raises it counts as raised", "document", 0,
+              must_pass=("outcome",)),
+         dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
+              extra_sources=(("src/main/java/com/example/Widget.java",
+                              "class Widget { record SomethingHappened(String id) {} "
+                              "void show() { registerEvent(new SomethingHappened(\"w\")); } }\n"),
+                             (".dca-factory/runs/STORY-1/.verify/changed.txt",
+                              "added\tsrc/main/java/com/example/Widget.java\n")))),
+        (Case("document: an event the project raised before this story is named as the wrong story's `publishes:`",
+              "document", 1, must_fail=("outcome",), text=("belongs on the story that introduces the event",)),
+         dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
+              extra_sources=OUTCOME_CODE[:2] + ((".dca-factory/runs/STORY-1/.verify/changed.txt",
+                                                  "modified\tsrc/main/java/com/example/Other.java\n"),
+                                                 ("src/main/java/com/example/Other.java", "class Other {}\n")))),
+        (Case("document: an event's own factory and an import are no raise — the event file names itself, the "
+              "aggregate only imports it", "document", 1, must_fail=("outcome",), text=("nothing the story changed",)),
+         dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
+              extra_sources=(("src/main/java/com/example/SomethingHappened.java",
+                              "public record SomethingHappened(String widgetId) {\n"
+                              "  static SomethingHappened of(String id) { return new SomethingHappened(id); } }\n"),
+                             ("src/main/java/com/example/Widget.java",
+                              "import com.example.SomethingHappened;\nclass Widget { void show() {} }\n"),
+                             (".dca-factory/runs/STORY-1/.verify/changed.txt",
+                              "added\tsrc/main/java/com/example/SomethingHappened.java\n"
+                              "added\tsrc/main/java/com/example/Widget.java\n")))),
+        (Case("document: a camel-cased test source set is no production code", "document", 1,
+              must_fail=("outcome",), text=("no type `SomethingHappened`",)),
+         dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
+              extra_sources=tuple((path.replace("src/main/java", "src/integrationTest/java"), text)
+                                  for path, text in OUTCOME_CODE))),
         (Case("document: a contract 13 profile is not asked for the outcome event", "document", 0,
               absent=("outcome",)),
          dict(document=DOCUMENT, profile=PROFILE + "contract: 13\n",
@@ -6301,6 +6372,14 @@ def run_groups(args):
                              "happy-path" in checked and "STORY-2" in checked and "0 scenarios marked" in checked,
                              checked[-500:]))
     with tmpdir() as root:
+        backlog_project(root, extra_sources=(("project/epics/sample/STORY-2.md",
+                                               story("STORY-2").replace("depends_on: []",
+                                                                        "depends_on: []\npublishes: SomethingAdded")),))
+        checked = subprocess.run([sys.executable, args.gate, "--check-backlog"], cwd=root, capture_output=True,
+                                 text=True, encoding="utf-8").stdout
+        expectations.append(("check-backlog: a `publishes:` the epic's metric does not name is refused before the run",
+                             "gate:fail STORY-2 outcome" in checked and "SomethingAdded" in checked, checked[-500:]))
+    with tmpdir() as root:
         # an adopted story: to adopt, then delivered (adopted); a story depending on it waits for the adoption
         backlog_project(root, ("STORY-2", ["STORY-1"]),
                         story=STORY.replace("status: approved", "status: adopted"))
@@ -6514,7 +6593,7 @@ def run_groups(args):
     expectations.append(("vocabulary: no skill, reference or template names a sample's domain",
                          not hits, ", ".join(hits[:5])))
     # the skills call only the runner's verbs, which mirror them (WP-62 item 11)
-    verbs = {"setup", "backlog", "run", "status", "decisions", "help", "update", "verify", "check"}
+    verbs = {"setup", "backlog", "run", "status", "decisions", "discover", "help", "update", "verify", "check"}
     called = []
     for folder, _, names in os.walk(skills_root):
         for name in names:

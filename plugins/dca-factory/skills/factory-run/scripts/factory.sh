@@ -15,6 +15,7 @@
 #                    count of rounds), or without --story the whole backlog in the schedule's order
 #   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
 #   factory.sh decisions [--story <id>]      the decision inbox
+#   factory.sh discover --check <topic>      the discovery report of one topic against its contract
 #   factory.sh help [--format text|md|json]  the factory explained: the flow and where this project stands,
 #                                            every command in its agent and its shell form, the marks, the files
 #   factory.sh update [--from <skill folder>] [--copy|--link]   the newest pipeline found, same tools; the mode
@@ -1697,6 +1698,8 @@ repair exactly that in the test stage, without changing what the test asserts, a
     [ -f "$RUNS/$story/.gate-$refused.txt" ] && prompt="$prompt The gate refused stage $refused before; its report is \
 $RUNS/$story/.gate-$refused.txt — read it and fix exactly what it names in that stage, nothing else."
   done
+  # a gate after the shared range — the document gate's `outcome` or `story-pass` — sent the story back to <from>
+  prompt="$prompt$(later_refusals "$story" "${range[${#range[@]}-1]}" "stage $from")"
   if [ -f "$RUNS/$story/judge.md" ] && [ "$(verdict_of "$story")" = changes-requested ]; then
     prompt="$prompt The judge asked for changes: $RUNS/$story/judge.md — each stage fixes exactly the confirmed defects \
 that are its own (a test that asserts too little is the test stage's, with its break; the code is the build's)."
@@ -2019,12 +2022,34 @@ The shell you have without asking: the gate, the cli, the profile's commands, an
 with the editor tools; a script fed on stdin (python3 -) is refused and costs a turn."
 }
 
+start_stage() {                             # start_stage <story> -> the stage the story's files say it runs from
+  cli --story "$1" --start 2>/dev/null | sed -n 's/^start: //p'
+}
+
+# The reports of the gates after <stage> that refused the story: a later gate sent it back to <stage>, and that
+# stage cannot fix what it does not see. <where> is how the sentence names the stage ("this stage", "stage build").
+later_refusals() {                          # later_refusals <story> <stage> <where> -> sentences
+  local later seen=0
+  for later in "${STAGES[@]}"; do
+    [ "$later" = "$2" ] && { seen=1; continue; }
+    [ "$seen" = 1 ] && [ -f "$RUNS/$1/.gate-$later.txt" ] && printf ' The %s gate refused the story and sent it back to %s; its report is %s/%s/.gate-%s.txt — fix in that stage exactly what it names, nothing else.' \
+      "$later" "$3" "$RUNS" "$1" "$later"
+  done
+  return 0
+}
+
 prompt_for() {                              # prompt_for <stage> <story>
   local stage=$1 story=$2 repeat=""
   # A repeat round that cannot see why the gate refused works blind, and every stage skill says to
   # work only on what the gate confirmed. So the refusal is named as an input, not remembered.
   [ -f "$RUNS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before; its \
 report is $RUNS/$story/.gate-$stage.txt — read it and fix exactly what it names, nothing else."
+  # A later gate may have sent the story back to this stage — the document gate's `outcome` to the build,
+  # its `story-pass` to the stage whose file it read as an earlier pass's. Its report is this stage's input
+  # too; without it the stage repeats what was refused. Said to the stage the story starts from alone.
+  # The file checks come first: the cli is asked only on the rare path where a later report exists.
+  local later; later=$(later_refusals "$story" "$stage" "this stage")
+  [ -n "$later" ] && [ "$stage" = "$(start_stage "$story")" ] && repeat="$repeat$later"
   if [ "$stage" = test ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
     repeat="$repeat The build stage sent the story back: $RUNS/$story/build.md names a defect in a test's own code. \
 Repair exactly that without changing what the test asserts, and write the test's break (see the contract)."
@@ -2572,6 +2597,12 @@ case "$command" in
       *) read_command --status --part backlog "$@" ;;
     esac ;;
   decisions) read_command --list-decisions "$@" ;;
+  discover)
+    # The discovery report's check; the report itself is written in a session, by `factory-discover`.
+    case "${1:-}" in
+      --check) [ $# -eq 2 ] || usage; gate_command --check-discovery "$2" ;;
+      *) usage ;;
+    esac ;;
   help)
     # The help works before the pipeline is installed too: then the plugin's gate explains it.
     exec "$PY" "$CLI" --help-view "$@" ;;

@@ -219,7 +219,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 14
 
 
-VERSION = "0.60.0"
+VERSION = "0.60.1"
 
 
 def read_front_matter(path):
@@ -767,6 +767,11 @@ def plan_invariants(plan):
         if not match:
             continue
         name = first_identifier(match.group(1))
+        # The part before the `:` is one element's name — bare, in backticks, or followed by a dash and a
+        # description. A sentence there (`- The aggregate Task: …`, `- Note on the rules: …`) names no element.
+        if not name or not re.fullmatch(rf"[`*]*{re.escape(name)}[`*]*(\s*\([^)]*\))?(\s+[—–-].*)?",
+                                        match.group(1).strip()):
+            continue
         rules = match.group(2)
         found[name] = [] if re.match(r"^none\b", rules, re.I) else split_rules(rules)
     return found
@@ -1466,6 +1471,7 @@ def check_backlog(cwd, epics, profile, only=None):
                 result.ok("story", f"{label} in context {context} with {len(criteria)} criterion(s)")
                 check_context_map(result, cwd, profile, context)
             check_epic(result, path, front, epics)
+            check_outcome_named(result, profile, path, front, epics)
             check_happy_path(result, path, front, body, profile)
         except GateError as error:
             result.fail("story", str(error))
@@ -1512,7 +1518,11 @@ def check_epic(result, story_path, front, epics):
 #: A source file of the project's code: the gate reads no profile key for where the code lives, so it reads every
 #: file with a code extension outside the build's and the tools' folders and outside the tests.
 CODE_FILE = re.compile(r"\.(java|kt|scala|groovy|cs|fs|py|ts|tsx|js|jsx|mjs|go|rb|php|rs|swift)$")
-TEST_DIR = re.compile(r"^(tests?|specs?|__tests__)$|^tests?[-_.]|[-_.]tests?$", re.I)
+#: A test folder by name — `test`, `tests`, `test-utils`, `Foo.Tests`, and the camel-cased source set a build tool
+#: names (`integrationTest`, `functionalTests`): a capital T after a lowercase letter, so `latest` and `contest` are not.
+TEST_DIR = re.compile(r"(?i:^(tests?|specs?|__tests__)$|^tests?[-_.]|[-_.]tests?$)|[a-z]Tests?$")
+#: A line that names a type without using it: an import, a using, a package or namespace line.
+IMPORT_LINE = re.compile(r"^\s*(?:import|using|package|namespace|from\s+\S+\s+import)\b.*$", re.M)
 
 
 def publishes_of(front):
@@ -1555,7 +1565,8 @@ def check_outcome_named(result, profile, story_path, front, epics):
 def check_outcome_raised(result, profile, cwd, runs, story_id, front):
     """Contract 14 (WP-84 V1): delivered means the outcome event exists. Every event of `publishes:` is a type the
     production code declares, and a production file the story changed — the aggregate that raises it or the use case
-    that publishes it — refers to it besides the event's own file."""
+    that publishes it — refers to it beyond the declaration: another file, or the declaring file itself where the
+    event is nested in the aggregate that raises it."""
     if story_kind(front) != "story" or contract_of(profile) < 14:
         return
     events = publishes_of(front)
@@ -1578,8 +1589,24 @@ def check_outcome_raised(result, profile, cwd, runs, story_id, front):
             problems.append(f"no type `{event}` in the production code — the story says it publishes it")
             continue
         mention = re.compile(rf"(?<!\w){re.escape(event)}(?!\w)")
-        raisers = [rel for rel, text in texts.items() if rel not in declared and mention.search(text)
-                   and (changed is None or rel in changed)]
+
+        constructs = re.compile(rf"\bnew\s+{re.escape(event)}\b|(?<!\w){re.escape(event)}\s*\.\s*\w+\s*\(")
+
+        def raises(rel, text):
+            # The event's own file (`TaskCompleted.java`) never raises it: its factory names it, nothing else does.
+            # An import, using or package line names it without raising it. A declaring file raises it where the
+            # event is nested in it (the aggregate) and constructed there — `new TaskCompleted(…)`, `TaskCompleted.of(…)`.
+            if os.path.splitext(os.path.basename(rel))[0] == event.rsplit(".", 1)[-1]:
+                return False
+            body = IMPORT_LINE.sub("", text)
+            return bool(constructs.search(body)) if rel in declared else bool(mention.search(body))
+        raising = [rel for rel, text in texts.items() if raises(rel, text)]
+        raisers = [rel for rel in raising if changed is None or rel in changed]
+        if not raisers and raising:
+            problems.append(f"`{event}` is declared in {declared[0]} and raised in {raising[0]}, but by nothing the "
+                            f"story changed — `publishes:` belongs on the story that introduces the event; this "
+                            f"story drops the line")
+            continue
         if not raisers:
             problems.append(f"`{event}` is declared in {declared[0]}, but nothing {scope} refers to it — the "
                             f"aggregate raises it or the use case publishes it")

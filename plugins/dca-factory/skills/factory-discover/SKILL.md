@@ -61,7 +61,7 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
    (`open` where nobody is named yet). For every one ask how its effect will be recognised — the
    question a list of deliverables does not ask. A target goes into `goal:` only where the person can
    measure it.
-6. **Check it with the gate:** `python3 .agents/factory/story-gate.py --check-discovery <topic>` — the
+6. **Check it with the gate:** `bash .agents/factory/factory.sh discover --check <topic>` — the
    sections, every citation listed, every source resolving, every proposal with intent, goal and metric,
    `originals/` ignored. Fix every finding before you hand the report over. Report what it said.
 7. **The person decides.** Show the proposals; write nothing into the backlog until the person releases
