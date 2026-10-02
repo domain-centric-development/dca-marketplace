@@ -1505,8 +1505,9 @@ def status_model(cwd, epics, runs, live=False):
 
 
 def journey_hints(stories, epics):
-    """An epic whose stories are all delivered and whose `## Journey` is still open, or named without a
-    `kind: journey` item — a hint, never a stop. An epic without the section has decided against one."""
+    """An epic whose stories are all delivered and that has no `kind: journey` item: delivered, unguarded — the way
+    to its outcome event has no test. A hint, never a stop. An epic decides against a journey with `- none: <why>`
+    under `## Journey`; without the section it has decided nothing."""
     hints = []
     for epic in epics:
         paths = [stories[r["story"]].get("path", "") for r in epic["rows"]]
@@ -1522,11 +1523,12 @@ def journey_hints(stories, epics):
         text = read_text(os.path.join(os.path.dirname(paths[0]), "epic.md")) \
             if os.path.isfile(os.path.join(os.path.dirname(paths[0]), "epic.md")) else ""
         section = text.split("## Journey", 1)[1].split("\n## ", 1)[0] if "## Journey" in text else None
-        if section is None:
+        if section is not None and re.search(r"^\s*-\s*none:", section, re.M):
             continue
-        said = "is still open" if re.search(r"^\s*-\s*open:", section, re.M) or not section.strip() \
-            else "has no journey test yet"
-        hints.append(dict(epic=epic["epic"], text=f"every story is delivered and its journey {said}",
+        said = "the epic names no journey" if section is None \
+            else "its journey is still open" if re.search(r"^\s*-\s*open:", section, re.M) or not section.strip() \
+            else "its journey has no journey test yet"
+        hints.append(dict(epic=epic["epic"], text=f"delivered, unguarded — {said}",
                           action=make_action(skill="/factory-backlog", shell="")))
     return hints
 

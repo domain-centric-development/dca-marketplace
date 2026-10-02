@@ -88,8 +88,9 @@ An epic missing one of `intent`, `goal`, `metric`, `domain_contact` is refused b
 the plan stage. The reason is not bureaucracy: a stage that cannot read the intent invents one.
 
 Body section `## Journey` — optional: the flow through the epic that must never break, the steps as a
-user takes them to the outcome event, and why a break would hurt; `open:` while it cannot be said. Its
-test is a backlog item of its own (below).
+user takes them to the outcome event, and why a break would hurt; `open:` while it cannot be said; `- none: <why>`
+when the epic decides against a journey test. Its test is a backlog item of its own (below). An epic whose
+stories are all delivered and that has no journey item is shown as *delivered, unguarded* — unless it said `none:`.
 
 ## Story
 

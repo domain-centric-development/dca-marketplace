@@ -174,7 +174,10 @@ as an event timeline — each a command and the event it causes (`place → Orde
 one the outcome event; a step whose command or event the glossary does not name is a question first. Ask for it when an
 epic is created ("Which flow through this epic must never break, and why?"); leave it `open:` when the
 person cannot say yet — a journey emerges from delivered stories — and add it at any later time. An epic
-without one has no journey test, which is a decision, not a gap. The product description's
+decides against one with `- none: <why>` under `## Journey`; without the section it has decided nothing, and once
+every story of the epic is delivered the status names it *delivered, unguarded*. Then propose its journey item:
+the delivered stories' operations and events as the timeline, ending in the outcome event — or the `none:` line,
+if the person decides against it. The product description's
 `## Qualities` may name flows that must never break; offer them as an epic's journey.
 
 The journey test is its own backlog item in the epic's folder: `kind: journey`, `depends_on:` the stories

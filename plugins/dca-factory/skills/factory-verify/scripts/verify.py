@@ -6377,8 +6377,22 @@ def run_groups(args):
         view = subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog"], cwd=root,
                               capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("status: an epic delivered with its journey still open is named, with the skill",
-                             "journey   sample: every story is delivered and its journey is still open — /factory-backlog"
+                             "journey   sample: delivered, unguarded — its journey is still open — /factory-backlog"
                              in view, view[-600:]))
+    # WP-84 V2: an epic without `## Journey` is no longer a silent decision against one; `- none: <why>` is
+    for label, epic, want in (
+            ("an epic delivered without a `## Journey` is named unguarded", EPIC,
+             "journey   sample: delivered, unguarded — the epic names no journey — /factory-backlog"),
+            ("an epic that decided against a journey (`- none:`) is not named", 
+             EPIC + "\n## Journey\n\n- none: a single page, the story's own end-to-end test walks it\n", None)):
+        with tmpdir() as root:
+            backlog_project(root, epic=epic, story=delivered_story(STORY),
+                            extra_sources=((".dca-factory/runs/STORY-1/document.md", "# Document\n"),))
+            view = subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog"], cwd=root,
+                                  capture_output=True, text=True, encoding="utf-8").stdout
+            expectations.append((f"status: {label}",
+                                 (want in view) if want else ("unguarded" not in view and "journey   sample" not in view),
+                                 view[-600:]))
     with tmpdir() as root:
         # before anything is there: the runner's help explains the factory from the plugin's gate
         shown = subprocess.run([BASH, args.runner, "help", "--format", "json"], cwd=root, capture_output=True,
