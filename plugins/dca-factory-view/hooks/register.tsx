@@ -484,20 +484,21 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             {open.id} — {row?.title ?? ''}
           </Text>
         </Box>,
-        ui.facts([
-          { text: row?.state ?? '', color: MARK_COLOR[mark] },
-          { text: row?.epic ?? '' },
-          row && row.seconds > 0 && { text: `worked ${fmt.time(row.seconds)}` },
-          row && row.tokens > 0 && { text: `${fmt.tokens(row.tokens)} tokens` },
-          row && row.cost > 0 && { text: `cost ${fmt.cost(row.cost)}` },
-        ]),
-        ui.facts([
-          row?.started && { text: `started ${moment(row.started)}` },
-          row?.delivered && { text: `delivered ${moment(row.delivered)}`, color: C.done },
-          view?.accepted_by && { text: `accepted (${view.accepted_by})`, color: C.done },
-          view?.context && { text: `context ${view.context}` },
-          view && view.criteria > 0 && { text: `${view.criteria} acceptance criteria` },
-        ]),
+        ui.fields(
+          [
+            { label: 'state', text: row?.state ?? '', color: MARK_COLOR[mark], bold: true },
+            { label: 'epic', text: row?.epic ?? '' },
+            view?.context && { label: 'context', text: view.context },
+            view && view.criteria > 0 && { label: 'criteria', text: `${view.criteria} acceptance criteria` },
+            row?.started && { label: 'started', text: moment(row.started) },
+            row?.delivered && { label: 'delivered', text: moment(row.delivered), color: C.done },
+            view?.accepted_by && { label: 'accepted', text: view.accepted_by, color: C.done },
+            row && row.seconds > 0 && { label: 'worked', text: fmt.time(row.seconds) },
+            row && row.tokens > 0 && { label: 'tokens', text: fmt.tokens(row.tokens) },
+            row && row.cost > 0 && { label: 'cost', text: fmt.cost(row.cost) },
+          ],
+          2,
+        ),
         ui.actions([
           ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' }),
           row && !row.done && !isRunning() && ui.button('run', '▶ Run (worker)', () => void runWorker($, `run ${open.id}`, ['run', '--story', open.id]), { hotkey: 'r', isPrimary: true }),

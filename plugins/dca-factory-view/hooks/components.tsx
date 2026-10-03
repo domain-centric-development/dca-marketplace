@@ -9,7 +9,8 @@ import { duration, rounds, short, tokens } from './parse'
 
 // The domaincentric.dev palette in its two faces (website `:root`, branding/README.md). Paper is the site's page —
 // beige `--paper`, `--ink` text, `--teal-dark` for what is read as a link, `--line` for rules. Deep is the site's hero
-// and plates — `--deep`, `--mist` text, `--teal`, mist at a third for lines. The cockpit follows Claude Code's theme:
+// and plates — `--deep`, `--mist` text, `--teal`, mist at 70 % for secondary text (the hero's sub-lines), mist at a
+// third for lines. The cockpit follows Claude Code's theme:
 // a button's label takes the terminal's own text colour, so only the face that matches the theme keeps every button
 // readable. Amber, coral and indigo are the brand's accent alternatives, for waiting, refused and proposed.
 const PAPER = {
@@ -34,7 +35,7 @@ const DEEP = {
   wait: '#c9922e',
   fail: '#c96a5a',
   info: '#7d79e0',
-  muted: '#7f838b',
+  muted: '#a9acb4',
   line: '#60656f',
   onAccent: '#ffffff',
 }
@@ -60,6 +61,8 @@ export function applyPalette(isLight: boolean): void {
 applyPalette(false)
 
 export type Phase = { key: string; label: string; hotkey?: string; isOpen: boolean; mark?: { text: string; color: string }; onPress: () => void }
+
+export type Field = { label: string; text: string; color?: string; bold?: boolean }
 
 export type Column = { name: string; width: number; isNumber?: boolean }
 export type Cell = { text?: string; color?: string; bold?: boolean; node?: RenderElement }
@@ -129,6 +132,34 @@ export function components({ Box, Text, Button, Input }: Elements) {
   const line = (columns: Column[], row: Cell[]) => (
     <Box>{columns.flatMap((column, index) => [...(index > 0 ? [divider] : []), tableCell(column, row[index] ?? {})])}</Box>
   )
+
+  // Labelled values: the label as a kicker in a fixed column, the value beside it; `perRow` places several pairs
+  // side by side. Empty values are left out.
+const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1) => {
+    const present = items.filter((item): item is Field => typeof item === 'object' && item !== null && Boolean(item.text))
+    const rowsOf: Field[][] = []
+    for (let index = 0; index < present.length; index += perRow) rowsOf.push(present.slice(index, index + perRow))
+    return (
+      <Box flexDirection="column" marginTop={1}>
+        {rowsOf.map(pairs => (
+          <Box gap={3}>
+            {pairs.map(item => (
+              <Box gap={1} width={perRow > 1 ? 44 : undefined} flexShrink={perRow > 1 ? 0 : 1}>
+                <Box width={10} flexShrink={0}>
+                  <Text bold color={C.accent}>
+                    {item.label.toUpperCase()}
+                  </Text>
+                </Box>
+                <Text color={item.color ?? C.text} bold={item.bold} wrap="truncate">
+                  {item.text}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </Box>
+    )
+  }
 
   return {
     // A heading as the site's kicker — upper case, teal — with a hint beside it; the space above it is the one
@@ -261,10 +292,14 @@ export function components({ Box, Text, Button, Input }: Elements) {
       ),
 
     // An epic's head: its title, progress and the buttons that act on it; its goal and outcome below.
+    fields,
+
+    // An epic's head as a card: its title, progress and the buttons that act on it; goal, outcome and discovery as
+    // labelled values below.
     epicHead: (epic: { title: string; delivered: number; total: number; tokens: number; goal?: string; metric?: string; discovery?: string }, buttons: (RenderElement | false)[]) => (
-      <Box flexDirection="column" marginTop={2}>
+      <Box flexDirection="column" borderStyle="round" borderColor={C.line} paddingX={1} marginTop={2}>
         <Box gap={1} flexWrap="wrap">
-          <Text bold color={epic.total > 0 && epic.delivered === epic.total ? C.done : C.text}>
+          <Text bold color={epic.total > 0 && epic.delivered === epic.total ? C.done : C.bright}>
             {epic.title}
           </Text>
           <Text color={C.done}>{'█'.repeat(epic.total > 0 ? Math.round((epic.delivered / epic.total) * 10) : 0).padEnd(10, '░')}</Text>
@@ -274,21 +309,11 @@ export function components({ Box, Text, Button, Input }: Elements) {
           </Text>
           {buttons.filter((button): button is RenderElement => Boolean(button))}
         </Box>
-        {epic.goal && (
-          <Text color={C.muted} wrap="truncate">
-            goal: {epic.goal}
-          </Text>
-        )}
-        {epic.metric && (
-          <Text color={C.info} wrap="truncate">
-            outcome: {epic.metric}
-          </Text>
-        )}
-        {epic.discovery && (
-          <Text color={C.muted} wrap="truncate">
-            from discovery: {epic.discovery}
-          </Text>
-        )}
+        {fields([
+          epic.goal && { label: 'goal', text: epic.goal },
+          epic.metric && { label: 'outcome', text: epic.metric, color: C.info },
+          epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
+        ])}
       </Box>
     ),
 

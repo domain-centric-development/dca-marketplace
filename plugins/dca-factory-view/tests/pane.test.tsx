@@ -115,7 +115,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /books-app/ })).toBeDefined()
     expect(await pane.find({ text: /add-book — plan asks a question/ })).toBeDefined()
     expect(await pane.find({ text: /Keep track of books/ })).toBeDefined()
-    expect(await pane.find({ text: /outcome: BookAdded/ })).toBeDefined()
+    expect(await pane.find({ text: 'BookAdded' })).toBeDefined()
     expect(await pane.find({ text: '1.5 M' })).toBeDefined()
 
     // backlog: an epic from a discovery without stories, and the button that cuts them
