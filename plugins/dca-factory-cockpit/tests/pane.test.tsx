@@ -118,6 +118,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     // the head: project, waiting banner, next; the backlog tab is the start
     expect(await pane.find({ text: /books-app/ })).toBeDefined()
+    expect(await pane.find({ text: 'FACTORY COCKPIT' })).toBeDefined()
     expect(await pane.find({ text: /add-book — plan asks a question/ })).toBeDefined()
     expect(await pane.find({ text: /Keep track of books/ })).toBeDefined()
     expect(await pane.find({ text: 'BookAdded' })).toBeDefined()

@@ -336,7 +336,7 @@ export const register: Register = on => {
       return { text: 'No factory in this project (.agents/factory/factory.sh is missing) — /factory-setup installs it.' }
     }
     await update($, detail, () => null)
-    await $.ui.open({ id: PANE, title: 'Factory', focus: true })
+    await $.ui.open({ id: PANE, title: 'Factory cockpit', focus: true })
     return { text: 'Factory cockpit opened.' }
   })
 
@@ -401,19 +401,31 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
 
   const head = (
     <Box flexDirection="column">
-      <Box borderStyle="round" borderColor={C.accent} paddingX={1} justifyContent="space-between">
-        {/* as the site's word mark: the name bright, the part after the dot in teal */}
-        <Text bold color={C.bright}>
-          <Text color={C.accent}>⬡ </Text>
-          {now.project}
-          <Text color={C.accent}>.factory</Text>
-        </Text>
-        <Text color={C.muted}>
-          {status.delivered} of {status.total} stories delivered
-          {status.tokens > 0 ? ` · ${fmt.tokens(status.tokens)} tokens` : ''}
-          {job.state === 'running' ? ' · worker ▶' : ''}
-        </Text>
-        {ui.button('close', '✕ close', () => void $.ui.close({ id: PANE }), { hotkey: 'q' })}
+      <Box borderStyle="round" borderColor={C.accent} paddingX={1} flexDirection="column">
+        {/* as the site's navigation: the word mark, the part after the dot in teal, then what this is as a kicker */}
+        <Box justifyContent="space-between">
+          <Box gap={2}>
+            <Text bold color={C.bright}>
+              <Text color={C.accent}>⬡ </Text>
+              domaincentric<Text color={C.accent}>.dev</Text>
+            </Text>
+            <Text color={C.line}>│</Text>
+            <Text bold color={C.accent}>
+              FACTORY COCKPIT
+            </Text>
+          </Box>
+          {ui.button('close', '✕ close', () => void $.ui.close({ id: PANE }), { hotkey: 'q' })}
+        </Box>
+        <Box gap={2}>
+          <Text bold color={C.bright}>
+            {now.project}
+          </Text>
+          <Text color={C.muted}>
+            {status.delivered} of {status.total} stories delivered
+            {status.tokens > 0 ? ` · ${fmt.tokens(status.tokens)} tokens` : ''}
+            {job.state === 'running' ? ' · worker ▶' : ''}
+          </Text>
+        </Box>
       </Box>
       <Box marginTop={1}>
         {ui.phases(
