@@ -98,7 +98,12 @@ for (const surface of ['terminal', 'desktop'] as const) {
     } as never)
     on('clock.now', async () => ({ value: Date.parse('2026-09-23T17:30:00Z') }))
     on('clock.every', async () => ({ value: { cancel: () => {} } }) as never)
+    const closed: string[] = []
     on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+    on('ui.close', async (_: unknown, e: { id: string }) => {
+      closed.push(e.id)
+      return { value: undefined } as never
+    })
     on('ui.status', async () => ({ value: undefined }) as never)
     on('ui.toast', async () => ({ value: undefined }) as never)
     on('command.list', async () => ({ value: [{ name: 'dca-core:dca-describe' }, { name: 'dca-factory:factory-decisions' }, { name: 'dca-factory:factory-backlog' }, { name: 'factory-run' }] }) as never)
@@ -165,5 +170,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(spawned).toEqual([['run', '--story', 'add-book']])
     expect(await pane.find({ text: /factory: add-book — plan/ })).toBeDefined()
     expect(await pane.find({ text: /stopped for a decision/ })).toBeDefined()
+
+    // the close button closes the pane
+    await pane.press({ key: 'close' })
+    expect(closed).toEqual(['factory-view'])
   })
 }

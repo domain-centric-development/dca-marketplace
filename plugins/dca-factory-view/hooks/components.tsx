@@ -354,7 +354,7 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
     // The keys that work now, at the foot of every view.
     keys: (isFocused: boolean, hint: string) => (
       <Box marginTop={1}>
-        <Text color={C.muted}>{isFocused ? `${hint} · 0 describe · 1–5 cycle · Tab/↑↓ move · Enter choose · Esc prompt` : 'ctrl+x tab — steer the cockpit'}</Text>
+        <Text color={C.muted}>{isFocused ? `${hint} · 0 describe · 1–5 cycle · Tab/↑↓ move · Enter choose · q close · Esc prompt` : 'ctrl+x tab — steer the cockpit · /factory-view close'}</Text>
       </Box>
     ),
   }

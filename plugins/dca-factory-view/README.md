@@ -40,7 +40,7 @@ reloading the plugin stops that worker; the runner gives its claim on the worksp
 /factory-view
 ```
 
-`0` opens Describe, `1`–`5` the cycle, `b` goes back, `Esc` returns to the prompt; the pane has the keyboard after
+`0` opens Describe, `1`–`5` the cycle, `b` goes back, `q` closes the pane (`/factory-view close` from the prompt), `Esc` returns to the prompt; the pane has the keyboard after
 `/factory-view` or `ctrl+x tab`.
 
 ## Early access

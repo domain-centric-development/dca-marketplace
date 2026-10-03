@@ -307,7 +307,7 @@ async function runWorker($: EngineInterface, label: string, args: string[]): Pro
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'factory-view', description: 'The product flow as a cockpit: describe beside the cycle discover, backlog, run, decide, delivered' })
+    await $.command.register({ name: 'factory-view', description: 'The product flow as a cockpit: describe beside the cycle discover, backlog, run, decide, delivered — `close` closes it' })
     await refresh($, true)
     $.clock.every(STATUS_MS, () => void refresh($))
     $.clock.every(LIVE_MS, () => {
@@ -319,7 +319,11 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'factory-view' }, async $ => {
+  on('command.run', { command: 'factory-view' }, async ($, e) => {
+    if (e.args.trim() === 'close') {
+      await $.ui.close({ id: PANE })
+      return { text: 'Factory cockpit closed — /factory-view opens it again.' }
+    }
     await refresh($, true)
     if (!(await read($, cockpit))) {
       return { text: 'No factory in this project (.agents/factory/factory.sh is missing) — /factory-setup installs it.' }
@@ -402,6 +406,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           {status.tokens > 0 ? ` · ${fmt.tokens(status.tokens)} tokens` : ''}
           {job.state === 'running' ? ' · worker ▶' : ''}
         </Text>
+        {ui.button('close', '✕ close', () => void $.ui.close({ id: PANE }), { hotkey: 'q' })}
       </Box>
       <Box marginTop={1}>
         {ui.phases(
