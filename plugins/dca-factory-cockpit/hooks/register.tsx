@@ -413,7 +413,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             <Box gap={2}>
               {/* side by side, not nested: a Text inside a Text takes the outer colour */}
               <Box>
-                <Text bold color={C.accent}>
+                <Text bold color={C.bright}>
                   {'⬡ '}
                 </Text>
                 <Text bold color={C.bright}>
