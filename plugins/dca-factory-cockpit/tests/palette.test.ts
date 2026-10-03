@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { C, MARK_COLOR, applyPalette, logoCells, sizeColumns } from '../hooks/components'
+import { C, MARK_COLOR, applyPalette, sizeColumns } from '../hooks/components'
 
 test('a light theme draws on the site\'s paper, a dark one on its deep navy — the marks follow', () => {
   applyPalette(true)
@@ -19,13 +19,4 @@ test('wide columns share what the pane leaves, so every row of a table has the s
   // 100 − fixed 14 − bars 9 − frame 4 − gutter 2 = 71, split over two wide columns
   expect(columns.map(column => column.width)).toEqual([10, 35, 4, 35])
   expect(sizeColumns([{ name: 'title', width: 20, isWide: true }], 10)[0]?.width).toBe(20)
-})
-
-test('the logo is six cells in one colour, so it does not depend on the terminal font', () => {
-  const bytes = Uint8Array.from(atob(logoCells('#148f96')), char => char.charCodeAt(0))
-  const numbers = new Uint32Array(bytes.buffer)
-  expect(numbers.length).toBe(18)
-  expect(String.fromCodePoint(numbers[0] ?? 0)).toBe('▟')
-  expect(numbers[1]).toBe(0x148f96)
-  expect(numbers[2]).toBe(0x01000000)
 })

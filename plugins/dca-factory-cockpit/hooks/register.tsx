@@ -374,7 +374,6 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     Text,
     Button,
     Input: 'Input' in rest ? rest.Input : null,
-    Raster: 'Raster' in rest ? rest.Raster : null,
     width: e.props.bodyColumns ?? e.viewport?.columns ?? 100,
   })
   const at = await $.clock.now()
@@ -408,14 +407,15 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
 
   const head = (
     <Box flexDirection="column">
-      <Box borderStyle="round" borderColor={C.accent} paddingX={1} gap={2}>
-        {/* the brand's hexagon beside the two lines, as the site's navigation draws its mark */}
-        {ui.logo()}
+      <Box borderStyle="round" borderColor={C.accent} paddingX={1}>
         <Box flexDirection="column" flexGrow={1}>
           <Box justifyContent="space-between">
             <Box gap={2}>
               {/* side by side, not nested: a Text inside a Text takes the outer colour */}
               <Box>
+                <Text bold color={C.accent}>
+                  {'⬡ '}
+                </Text>
                 <Text bold color={C.bright}>
                   domaincentric
                 </Text>
