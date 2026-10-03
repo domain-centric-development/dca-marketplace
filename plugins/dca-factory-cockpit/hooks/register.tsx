@@ -405,10 +405,18 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         {/* as the site's navigation: the word mark, the part after the dot in teal, then what this is as a kicker */}
         <Box justifyContent="space-between">
           <Box gap={2}>
-            <Text bold color={C.bright}>
-              <Text color={C.accent}>⬢ </Text>
-              domaincentric<Text color={C.accent}>.dev</Text>
-            </Text>
+            {/* side by side, not nested: a Text inside a Text takes the outer colour */}
+            <Box>
+              <Text bold color={C.accent}>
+                {'⬢ '}
+              </Text>
+              <Text bold color={C.bright}>
+                domaincentric
+              </Text>
+              <Text bold color={C.accent}>
+                .dev
+              </Text>
+            </Box>
             <Text color={C.line}>│</Text>
             <Text bold color={C.accent}>
               FACTORY COCKPIT
