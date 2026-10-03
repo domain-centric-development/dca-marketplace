@@ -116,10 +116,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /add-book — plan asks a question/ })).toBeDefined()
     expect(await pane.find({ text: /Keep track of books/ })).toBeDefined()
     expect(await pane.find({ text: 'BookAdded' })).toBeDefined()
-    expect(await pane.find({ text: '1.5 M' })).toBeDefined()
 
     // backlog: an epic from a discovery without stories, and the button that cuts them
     expect(await pane.find({ text: /Remind the reader/ })).toBeDefined()
+    // two epics: an overview, and an epic opens on Enter with its card and its stories
+    await pane.press({ key: 'epic-reminders' })
     expect(await pane.find({ text: /no stories yet/ })).toBeDefined()
     await pane.press({ key: 'stories-reminders' })
     expect(sent.at(-1)).toBe('/dca-factory:factory-backlog stories reminders')
@@ -150,6 +151,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     // a story: pipeline and history from the journal
     await pane.press({ key: 'tab-backlog' })
+    await pane.press({ key: 'epic-books' })
+    expect(await pane.find({ text: '1.5 M' })).toBeDefined()
     await pane.press({ key: 'story-add-book' })
     expect(await pane.find({ text: /plan ✗ · 2 min/ })).toBeDefined()
     expect(await pane.find({ text: 'gate ✗' })).toBeDefined()

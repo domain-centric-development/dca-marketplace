@@ -115,7 +115,11 @@ export type Cockpit = {
 
 export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'delivered'
 
-export type Detail = { kind: 'story'; id: string } | { kind: 'file'; path: string; title: string; back: Detail | null }
+export type Detail =
+  | { kind: 'story'; id: string }
+  | { kind: 'epic'; epic: string }
+  | { kind: 'topic'; topic: string }
+  | { kind: 'file'; path: string; title: string; back: Detail | null }
 
 export type Worker = {
   state: 'idle' | 'running' | 'ended'

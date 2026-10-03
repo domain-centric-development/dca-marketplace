@@ -266,6 +266,10 @@ async function editFile($: EngineInterface, path: string): Promise<void> {
   $.ui.toast(fallback?.exitCode === 0 ? `factory: opened ${path.split('/').pop()} in the editor` : `factory: no editor could open ${path}`)
 }
 
+async function showDetail($: EngineInterface, next: Detail): Promise<void> {
+  await update($, detail, () => next)
+}
+
 async function showTab($: EngineInterface, id: Tab): Promise<void> {
   await update($, detail, () => null)
   await update($, tab, () => id)
@@ -610,104 +614,156 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     )
   }
 
+  // One topic and one epic as they are drawn everywhere — in their own detail view, and in the tab when it holds
+  // only one of them.
+  type Epic = (typeof status.epics)[number]
+  const topicBody = (topic: Topic) => (
+    <Box flexDirection="column">
+      {ui.card(
+        {
+          title: topic.title,
+          meta: `${topic.proposals.length} proposed epic${topic.proposals.length === 1 ? '' : 's'} · ${topic.proposals.filter(p => p.epic).length} in the backlog`,
+        },
+        [ui.button(`report-${topic.topic}`, 'open report', () => void openFile($, `${now.root}/${topic.report}`, topic.title, open), { isPrimary: true })],
+        [
+          { label: 'topic', text: topic.topic },
+          { label: 'report', text: topic.report, color: C.muted },
+          topic.description_changes.length > 0 && { label: 'changes', text: `${topic.description_changes.length} to the description`, color: C.wait },
+        ],
+      )}
+      {ui.table(
+        [COL.mark, { name: 'proposal', width: 18 }, { name: 'outcome', width: 18 }, { name: 'goal', width: 36 }, COL.action(16)],
+        topic.proposals.map(proposal => [
+          { text: proposal.epic ? '✓' : '○', color: proposal.epic ? C.done : C.info, bold: true },
+          { text: proposal.id, bold: true },
+          { text: proposal.metric, color: C.info },
+          { text: proposal.goal, color: C.muted },
+          proposal.epic
+            ? { node: ui.link(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic })) }
+            : { node: ui.button(`release-${topic.topic}-${proposal.id}`, '→ Make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true }) },
+        ]),
+        'No proposed work in the report yet.',
+      )}
+      {topic.description_changes.length > 0 &&
+        ui.table(
+          [{ name: 'description', width: 24 }, { name: 'change', width: 46 }, COL.action(9)],
+          topic.description_changes.map((change, index) => [
+            { text: change.target, color: C.wait },
+            { text: change.change, color: C.muted },
+            { node: ui.button(`describe-${topic.topic}-${index}`, '→ apply', () => send($, `/dca-describe ${change.target}: ${change.change}`)) },
+          ]),
+        )}
+    </Box>
+  )
+  const epicBody = (epic: Epic) => {
+    const drafts = epic.rows.filter(row => /draft/.test(row.state))
+    return (
+      <Box flexDirection="column">
+        {ui.card(
+          {
+            title: epic.title || epic.epic,
+            color: epic.total > 0 && epic.delivered === epic.total ? C.done : undefined,
+            progress: { done: epic.delivered, total: epic.total },
+            meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${fmt.tokens(epic.tokens)} tokens` : ''}`,
+          },
+          [
+            ui.button(`stories-${epic.epic}`, '+ stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0 }),
+            drafts.length > 0 &&
+              ui.button(`release-all-${epic.epic}`, `release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`, () =>
+                send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
+              ),
+          ],
+          [
+            epic.goal && { label: 'goal', text: epic.goal },
+            epic.metric && { label: 'outcome', text: epic.metric, color: C.info },
+            epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
+          ],
+        )}
+        {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — + stories cuts the first')}
+      </Box>
+    )
+  }
+  const journeys = () =>
+    status.journeys.length > 0
+      ? [
+          ui.section('Journeys'),
+          ui.table(
+            [COL.mark, COL.epic, { name: 'journey', width: 56 }],
+            status.journeys.map(hint => [{ text: '◇', color: C.wait }, { text: hint.epic }, { text: hint.text, color: C.wait }]),
+          ),
+        ]
+      : []
+  const back = ui.actions([ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' })])
+
+  // ---- one topic, one epic
+  if (open?.kind === 'topic') {
+    const topic = now.topics.find(one => one.topic === open.topic)
+    return page([back, topic ? topicBody(topic) : <Text color={C.muted}>No such topic.</Text>], 'b back · → Make epic releases a proposal')
+  }
+  if (open?.kind === 'epic') {
+    const epic = status.epics.find(one => one.epic === open.epic)
+    return page([back, epic ? epicBody(epic) : <Text color={C.muted}>No such epic.</Text>], 'b back · + stories cuts stories · Enter on a story opens it')
+  }
+
   if (current === 'discover') {
+    const one = now.topics.length === 1 ? now.topics[0] : undefined
     return page(
       [
         ui.section('Discovery', 'which problem is worth solving, and how anyone will know it got better'),
-        ...(now.topics.length === 0 ? [<Text color={C.muted}>No discovery yet.</Text>] : []),
-        ...now.topics.map(topic => (
-          <Box flexDirection="column">
-            {ui.card(
-              {
-                title: topic.title,
-                meta: `${topic.proposals.length} proposed epic${topic.proposals.length === 1 ? '' : 's'} · ${topic.proposals.filter(p => p.epic).length} in the backlog`,
-              },
-              [ui.button(`topic-${topic.topic}`, 'open report', () => void openFile($, `${now.root}/${topic.report}`, topic.title, null), { isPrimary: true })],
-              [
-                { label: 'topic', text: topic.topic },
-                { label: 'report', text: topic.report, color: C.muted },
-                topic.description_changes.length > 0 && { label: 'changes', text: `${topic.description_changes.length} to the description`, color: C.wait },
-              ],
-            )}
-            {ui.table(
-              [COL.mark, { name: 'proposal', width: 18 }, { name: 'outcome', width: 18 }, { name: 'goal', width: 36 }, COL.action(16)],
-              topic.proposals.map(proposal => [
-                { text: proposal.epic ? '✓' : '○', color: proposal.epic ? C.done : C.info, bold: true },
-                { text: proposal.id, bold: true },
-                { text: proposal.metric, color: C.info },
-                { text: proposal.goal, color: C.muted },
-                proposal.epic
-                  ? { text: `epic ${proposal.epic}`, color: C.done }
-                  : { node: ui.button(`release-${topic.topic}-${proposal.id}`, '→ Make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true }) },
-              ]),
-              'No proposed work in the report yet.',
-            )}
-            {topic.description_changes.length > 0 &&
-              ui.table(
-                [{ name: 'description', width: 24 }, { name: 'change', width: 46 }, COL.action(9)],
-                topic.description_changes.map((change, index) => [
-                  { text: change.target, color: C.wait },
-                  { text: change.change, color: C.muted },
-                  { node: ui.button(`describe-${topic.topic}-${index}`, '→ apply', () => send($, `/dca-describe ${change.target}: ${change.change}`)) },
-                ]),
-              )}
-          </Box>
-        )),
+        one
+          ? topicBody(one)
+          : ui.table(
+              [COL.mark, { name: 'topic', width: 20 }, { name: 'title', width: 40 }, { name: 'proposed', width: 8, isNumber: true }, { name: 'in backlog', width: 10, isNumber: true }, { name: 'changes', width: 7, isNumber: true }],
+              now.topics.map(topic => {
+                const held = topic.proposals.filter(p => p.epic).length
+                return [
+                  { text: held === topic.proposals.length && held > 0 ? '✓' : '◆', color: held === topic.proposals.length && held > 0 ? C.done : C.info, bold: true },
+                  { node: ui.link(`topic-${topic.topic}`, topic.topic, () => void showDetail($, { kind: 'topic', topic: topic.topic })) },
+                  { text: topic.title, color: C.muted },
+                  { text: String(topic.proposals.length) },
+                  { text: String(held), color: held > 0 ? C.done : C.muted },
+                  { text: topic.description_changes.length > 0 ? String(topic.description_changes.length) : '—', color: topic.description_changes.length > 0 ? C.wait : C.muted },
+                ]
+              }),
+              'No discovery yet.',
+            ),
         <Box marginTop={1} flexDirection="column">
           {ask('discover', 'New topic', 'a problem or a wished deliverable', '/factory-discover')}
         </Box>,
       ],
-      '→ Make epic releases a proposal into the backlog · type a topic, Enter sends it',
+      one ? '→ Make epic releases a proposal into the backlog · type a topic, Enter sends it' : 'Enter on a topic opens it · type a topic, Enter sends it',
     )
   }
 
   if (current === 'backlog') {
+    const one = status.epics.length === 1 ? status.epics[0] : undefined
     return page(
       [
         <Box flexDirection="column" gap={1}>
           {ask('story', 'Write a story', 'what should the product do next?', '/factory-backlog')}
           {ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run')}
         </Box>,
-        ...(status.epics.length === 0 ? [<Text color={C.muted}>The backlog is empty.</Text>] : []),
-        ...status.epics.map(epic => {
-          const drafts = epic.rows.filter(row => /draft/.test(row.state))
-          return (
-            <Box flexDirection="column">
-              {ui.card(
-                {
-                  title: epic.title || epic.epic,
-                  color: epic.total > 0 && epic.delivered === epic.total ? C.done : undefined,
-                  progress: { done: epic.delivered, total: epic.total },
-                  meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${fmt.tokens(epic.tokens)} tokens` : ''}`,
-                },
-                [
-                ui.button(`stories-${epic.epic}`, '+ stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0 }),
-                drafts.length > 0 &&
-                  ui.button(`release-all-${epic.epic}`, `release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`, () =>
-                    send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
-                  ),
-              ],
-                [
-                  epic.goal && { label: 'goal', text: epic.goal },
-                  epic.metric && { label: 'outcome', text: epic.metric, color: C.info },
-                  epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
-                ],
-              )}
-              {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — + stories cuts the first')}
-            </Box>
-          )
-        }),
-        ...(status.journeys.length > 0
-          ? [
-              ui.section('Journeys'),
-              ui.table(
-                [COL.mark, COL.epic, { name: 'journey', width: 56 }],
-                status.journeys.map(hint => [{ text: '◇', color: C.wait }, { text: hint.epic }, { text: hint.text, color: C.wait }]),
-              ),
-            ]
-          : []),
+        one
+          ? epicBody(one)
+          : ui.table(
+              [COL.mark, { name: 'epic', width: 26 }, { name: 'progress', width: 10 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'drafts', width: 6, isNumber: true }, { name: 'outcome', width: 30 }],
+              status.epics.map(epic => {
+                const isDone = epic.total > 0 && epic.delivered === epic.total
+                const drafts = epic.rows.filter(row => /draft/.test(row.state)).length
+                return [
+                  { text: isDone ? '✓' : epic.total === 0 ? '○' : '·', color: isDone ? C.done : epic.total === 0 ? C.wait : C.muted, bold: true },
+                  { node: ui.link(`epic-${epic.epic}`, epic.title || epic.epic, () => void showDetail($, { kind: 'epic', epic: epic.epic })) },
+                  { text: '█'.repeat(epic.total > 0 ? Math.round((epic.delivered / epic.total) * 10) : 0).padEnd(10, '░'), color: C.done },
+                  { text: `${epic.delivered} of ${epic.total}`, color: C.muted },
+                  { text: drafts > 0 ? String(drafts) : '—', color: drafts > 0 ? C.wait : C.muted },
+                  { text: epic.metric || '—', color: C.info },
+                ]
+              }),
+              'The backlog is empty.',
+            ),
+        ...journeys(),
       ],
-      '+ stories cuts stories · release approves drafts · Enter on a story opens it',
+      one ? '+ stories cuts stories · release approves drafts · Enter on a story opens it' : 'Enter on an epic opens it',
     )
   }
 
