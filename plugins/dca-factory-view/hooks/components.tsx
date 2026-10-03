@@ -116,24 +116,34 @@ export function stageColor(run: StageRun): string {
   return C.done
 }
 
+// Every cell has a fixed width, so every row lines up: a wide column gets its share of what the pane has left after
+// the fixed columns, the bars between them (3 cells each), the frame (4) and the page's gutter (2) — never less than
+// its own width.
+export function sizeColumns(columns: Column[], width: number): Column[] {
+  const wide = columns.filter(column => column.isWide)
+  if (wide.length === 0) return columns
+  const fixed = columns.filter(column => !column.isWide).reduce((sum, column) => sum + column.width, 0)
+  const chrome = (columns.length - 1) * 3 + 4 + 2
+  const share = Math.floor((width - fixed - chrome) / wide.length)
+  return columns.map(column => (column.isWide ? { ...column, width: Math.max(column.width, share) } : column))
+}
+
 export type Elements = {
   Box: ElementConstructor<BoxProps>
   Text: ElementConstructor<TextProps>
   Button: ElementConstructor<ButtonProps>
   Input: ElementConstructor<InputProps> | null
+  // the cells across the pane's body, for the widths of wide columns
+  width: number
 }
 
-export function components({ Box, Text, Button, Input }: Elements) {
+export function components({ Box, Text, Button, Input, width }: Elements) {
   const divider = <Text color={C.line}> │ </Text>
 
+  const sized = (columns: Column[]) => sizeColumns(columns, width)
+
   const tableCell = (column: Column, value: Cell) => (
-    <Box
-      width={column.isWide ? undefined : column.width}
-      minWidth={column.isWide ? column.width : undefined}
-      flexGrow={column.isWide ? 1 : 0}
-      flexShrink={column.isWide ? 1 : 0}
-      justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}
-    >
+    <Box width={column.width} flexShrink={0} justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}>
       {value.node ?? (
         <Text color={value.color ?? C.text} bold={value.bold} wrap={column.isWide ? 'wrap' : 'truncate'}>
           {value.text ?? ''}
@@ -196,8 +206,9 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
     ),
 
     // A table drawn as one: a frame, a bold header, a rule under it, a thin bar between the columns.
-    table: (columns: Column[], rows: Cell[][], empty = 'Nothing yet.') =>
-      rows.length === 0 ? (
+    table: (given: Column[], rows: Cell[][], empty = 'Nothing yet.') => {
+      const columns = sized(given)
+      return rows.length === 0 ? (
         <Box marginTop={1}>
           <Text color={C.muted}>{empty}</Text>
         </Box>
@@ -207,7 +218,8 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
           <Text color={C.line}>{columns.map(column => '─'.repeat(column.width)).join('─┼─')}</Text>
           {rows.map(row => line(columns, row))}
         </Box>
-      ),
+      )
+    },
 
     // A word that opens something: a story, a record, a file, a topic.
     link,

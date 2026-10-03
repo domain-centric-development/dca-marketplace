@@ -369,7 +369,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   // the site's paper for a light theme, its deep plates for a dark one — before anything is drawn
   const theme = (await $.config.list().catch(() => [])).find(row => row.key === 'theme')
   applyPalette(/light/i.test(String(theme?.value ?? '')))
-  const ui = components({ Box, Text, Button, Input: 'Input' in rest ? rest.Input : null })
+  const ui = components({ Box, Text, Button, Input: 'Input' in rest ? rest.Input : null, width: e.props.bodyColumns ?? e.viewport?.columns ?? 100 })
   const at = await $.clock.now()
   const current = await read($, tab)
   const open = await read($, detail)
