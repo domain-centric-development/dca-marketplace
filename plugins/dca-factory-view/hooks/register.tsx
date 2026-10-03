@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderInput } from 'claude-code'
+import type { EngineInterface, RenderElement, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderInput } from 'claude-code'
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StageRun, StoryView, Tab, Topic, Worker } from '../types'
 import {
@@ -414,6 +414,29 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     </Box>
   )
 
+  // A table drawn as one: a frame, a bold header, a rule under it, a thin bar between the columns, room in each cell.
+  type Column = { name: string; width: number; isNumber?: boolean }
+  type Cell = { text?: string; color?: string; bold?: boolean; node?: RenderElement }
+  const divider = <Text color={C.muted}> │ </Text>
+  const tableCell = (column: Column, value: Cell) => (
+    <Box width={column.width} flexShrink={0} justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}>
+      {value.node ?? (
+        <Text color={value.color} bold={value.bold} wrap="truncate">
+          {value.text ?? ''}
+        </Text>
+      )}
+    </Box>
+  )
+  const table = (columns: Column[], rows: Cell[][]) => (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.muted} paddingX={1} marginTop={1}>
+      <Box>{columns.flatMap((column, index) => [...(index > 0 ? [divider] : []), tableCell(column, { text: column.name, bold: true, color: C.accent })])}</Box>
+      <Text color={C.muted}>{columns.map(column => '─'.repeat(column.width)).join('─┼─')}</Text>
+      {rows.map(row => (
+        <Box>{columns.flatMap((column, index) => [...(index > 0 ? [divider] : []), tableCell(column, row[index] ?? {})])}</Box>
+      ))}
+    </Box>
+  )
+
   const head = (
     <Box flexDirection="column">
       <Box borderStyle="round" borderColor={C.accent} paddingX={1} justifyContent="space-between">
@@ -751,19 +774,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       </Box>
     )
   } else if (current === 'backlog') {
-    const columns: [string, number][] = [
-      ['story', idWidth],
-      ['state', 22],
-      ['stage', 10],
-      ['passes', 7],
-      ['started UTC', 13],
-      ['worked', 14],
-      ['tokens', 9],
-      ['cost', 11],
-    ]
     body = (
       <Box flexDirection="column">
-        <Box flexDirection="column" marginTop={1}>
+        <Box flexDirection="column" gap={1}>
           {ask('story', 'Write a story', 'what should the product do next?', '/factory-backlog')}
           {ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run')}
         </Box>
@@ -772,7 +785,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           const front = epic
           const drafts = epic.rows.filter(row => /draft/.test(row.state))
           return (
-            <Box flexDirection="column" marginTop={1}>
+            <Box flexDirection="column" marginTop={2}>
               <Box gap={1}>
                 <Text bold>{front.title || epic.epic}</Text>
                 <Text color={C.done}>{bar(epic.delivered, epic.total, 10)}</Text>
@@ -809,21 +822,29 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                   outcome: {front.metric}
                 </Text>
               )}
-              {epic.total > 0 && <Box>{columns.map(([name, width]) => cell(width, name, C.muted))}</Box>}
-              {epic.rows.map(row => (
-                <Box>
-                  <Box width={idWidth} flexShrink={0}>
-                    {storyButton(row)}
-                  </Box>
-                  {cell(22, row.state, MARK_COLOR[row.mark])}
-                  {cell(10, row.stage)}
-                  {cell(7, row.passes > 0 ? String(row.passes) : '—', row.passes > 1 ? C.wait : C.muted)}
-                  {cell(13, short(row.started), C.muted)}
-                  {cell(14, row.seconds > 0 ? duration(row.seconds) : '—')}
-                  {cell(9, row.tokens > 0 ? tokensText(row.tokens) : '—')}
-                  {cell(11, row.cost > 0 ? `${row.cost.toFixed(2)} USD` : '—')}
-                </Box>
-              ))}
+              {epic.total > 0 &&
+                table(
+                  [
+                    { name: 'story', width: idWidth },
+                    { name: 'state', width: 20 },
+                    { name: 'stage', width: 9 },
+                    { name: 'passes', width: 6, isNumber: true },
+                    { name: 'started UTC', width: 12 },
+                    { name: 'worked', width: 12, isNumber: true },
+                    { name: 'tokens', width: 8, isNumber: true },
+                    { name: 'cost', width: 10, isNumber: true },
+                  ],
+                  epic.rows.map(row => [
+                    { node: storyButton(row) },
+                    { text: row.state, color: MARK_COLOR[row.mark] },
+                    { text: row.stage, color: C.muted },
+                    { text: row.passes > 0 ? String(row.passes) : '—', color: row.passes > 1 ? C.wait : C.muted },
+                    { text: short(row.started), color: C.muted },
+                    { text: row.seconds > 0 ? duration(row.seconds) : '—' },
+                    { text: row.tokens > 0 ? tokensText(row.tokens) : '—' },
+                    { text: row.cost > 0 ? `${row.cost.toFixed(2)} USD` : '—' },
+                  ]),
+                )}
             </Box>
           )
         })}
@@ -939,30 +960,25 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     body = (
       <Box flexDirection="column">
         {section('Delivered', `${delivered.length} stories · ${duration(delivered.reduce((sum, row) => sum + row.seconds, 0))} worked`)}
-        <Box>
-          {(
+        {delivered.length > 0 &&
+          table(
             [
-              ['story', idWidth],
-              ['delivered UTC', 15],
-              ['worked', 14],
-              ['tokens', 9],
-              ['cost', 11],
-              ['epic', 24],
-            ] as [string, number][]
-          ).map(([name, width]) => cell(width, name, C.muted))}
-        </Box>
-        {delivered.map(row => (
-          <Box>
-            <Box width={idWidth} flexShrink={0}>
-              {storyButton(row)}
-            </Box>
-            {cell(15, short(row.delivered), C.done)}
-            {cell(14, row.seconds > 0 ? duration(row.seconds) : '—')}
-            {cell(9, row.tokens > 0 ? tokensText(row.tokens) : '—')}
-            {cell(11, row.cost > 0 ? `${row.cost.toFixed(2)} USD` : '—')}
-            {cell(24, row.epic, C.muted)}
-          </Box>
-        ))}
+              { name: 'story', width: idWidth },
+              { name: 'delivered UTC', width: 13 },
+              { name: 'worked', width: 12, isNumber: true },
+              { name: 'tokens', width: 8, isNumber: true },
+              { name: 'cost', width: 10, isNumber: true },
+              { name: 'epic', width: 22 },
+            ],
+            delivered.map(row => [
+              { node: storyButton(row) },
+              { text: short(row.delivered), color: C.done },
+              { text: row.seconds > 0 ? duration(row.seconds) : '—' },
+              { text: row.tokens > 0 ? tokensText(row.tokens) : '—' },
+              { text: row.cost > 0 ? `${row.cost.toFixed(2)} USD` : '—' },
+              { text: row.epic, color: C.muted },
+            ]),
+          )}
         {section('Epics')}
         {status.epics.map(epic => {
           const front = epic
@@ -1000,9 +1016,11 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   }
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" paddingX={1}>
       {head}
-      {body}
+      <Box flexDirection="column" marginTop={1}>
+        {body}
+      </Box>
       {keys(hints[current])}
     </Box>
   )
