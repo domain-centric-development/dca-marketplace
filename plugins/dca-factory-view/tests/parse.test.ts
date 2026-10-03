@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bar, duration, moment, parseJournal, rounds, stagesOf, touchesFactory } from '../hooks/parse'
+import { bar, duration, moment, parseJournal, rounds, stagesOf, touchesFactory, wrapWords } from '../hooks/parse'
 
 test('a factory command or skill refreshes the view, other calls do not', () => {
   expect(touchesFactory({ tool: 'Bash', command: 'bash .agents/factory/factory.sh run' } as { tool: string })).toBe(true)
@@ -48,4 +48,10 @@ test('a write under project/ or the run folder refreshes the view, a write elsew
   expect(touchesFactory({ tool: 'Write', file_path: '/p/project/epics/books/epic.md' } as { tool: string })).toBe(true)
   expect(touchesFactory({ tool: 'Edit', file_path: '/p/.dca-factory/runs/a/plan.md' } as { tool: string })).toBe(true)
   expect(touchesFactory({ tool: 'Write', file_path: '/p/src/Main.java' } as { tool: string })).toBe(false)
+})
+
+test('a wide cell wraps by words, and a word longer than the cell is cut', () => {
+  expect(wrapWords('BookAdded — each added book is the evidence', 16)).toEqual(['BookAdded — each', 'added book is', 'the evidence'])
+  expect(wrapWords('averyveryverylongword', 8)).toEqual(['averyver', 'yverylon', 'gword'])
+  expect(wrapWords('', 8)).toEqual([''])
 })

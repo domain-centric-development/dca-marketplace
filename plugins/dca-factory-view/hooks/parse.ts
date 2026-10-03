@@ -114,3 +114,29 @@ export function appendLines(lines: string[], text: string, keep: number): string
   const joined = (lines.length > 0 ? lines.join('\n') : '') + text
   return joined.split('\n').slice(-keep)
 }
+// Word-wraps a text to a width, as a table cell shows it: whole words where they fit, a word longer than the width
+// cut into pieces. The table draws each line itself, so it knows how tall a row is.
+export function wrapWords(text: string, width: number): string[] {
+  const lines: string[] = []
+  let current = ''
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    let rest = word
+    while (rest.length > width) {
+      if (current) {
+        lines.push(current)
+        current = ''
+      }
+      lines.push(rest.slice(0, width))
+      rest = rest.slice(width)
+    }
+    if (!rest) continue
+    if (!current) current = rest
+    else if (current.length + 1 + rest.length <= width) current = `${current} ${rest}`
+    else {
+      lines.push(current)
+      current = rest
+    }
+  }
+  if (current) lines.push(current)
+  return lines.length > 0 ? lines : ['']
+}

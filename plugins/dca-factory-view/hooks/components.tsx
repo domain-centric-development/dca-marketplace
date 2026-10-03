@@ -1,7 +1,7 @@
 import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, TextProps } from 'claude-code'
 
 import type { StageRun } from '../types'
-import { duration, rounds, short, tokens } from './parse'
+import { duration, rounds, short, tokens, wrapWords } from './parse'
 
 // The cockpit's building blocks. Every view is drawn from these, so a change to a table, a link, a chip or the
 // spacing reaches every tab and every detail at once. They take the surface's elements and ready callbacks —
@@ -138,23 +138,30 @@ export type Elements = {
 }
 
 export function components({ Box, Text, Button, Input, width }: Elements) {
-  const divider = <Text color={C.line}> │ </Text>
 
   const sized = (columns: Column[]) => sizeColumns(columns, width)
 
-  const tableCell = (column: Column, value: Cell) => (
-    <Box width={column.width} flexShrink={0} justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}>
-      {value.node ?? (
-        <Text color={value.color ?? C.text} bold={value.bold} wrap={column.isWide ? 'wrap' : 'truncate'}>
-          {value.text ?? ''}
-        </Text>
-      )}
+  // A wide cell is wrapped here, line by line, so the row knows its height and the bars run the whole of it.
+  const cellLines = (column: Column, value: Cell): string[] =>
+    value.node ? [''] : column.isWide ? wrapWords(value.text ?? '', column.width) : [value.text ?? '']
+
+  const tableCell = (column: Column, value: Cell, lines: string[]) => (
+    <Box width={column.width} flexShrink={0} flexDirection="column" alignItems={column.isNumber ? 'flex-end' : 'flex-start'}>
+      {value.node ??
+        lines.map(text => (
+          <Text color={value.color ?? C.text} bold={value.bold} wrap="truncate">
+            {text || ' '}
+          </Text>
+        ))}
     </Box>
   )
 
-  const line = (columns: Column[], row: Cell[]) => (
-    <Box>{columns.flatMap((column, index) => [...(index > 0 ? [divider] : []), tableCell(column, row[index] ?? {})])}</Box>
-  )
+  const line = (columns: Column[], row: Cell[]) => {
+    const lines = columns.map((column, index) => cellLines(column, row[index] ?? {}))
+    const height = Math.max(1, ...lines.map(one => one.length))
+    const bar = <Text color={C.line}>{Array.from({ length: height }, () => ' │ ').join('\n')}</Text>
+    return <Box>{columns.flatMap((column, index) => [...(index > 0 ? [bar] : []), tableCell(column, row[index] ?? {}, lines[index] ?? [''])])}</Box>
+  }
 
   // Labelled values: the label as a kicker in a fixed column, the value beside it; `perRow` places several pairs
   // side by side. Empty values are left out.
