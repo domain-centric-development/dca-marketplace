@@ -82,8 +82,14 @@ export function rounds(count: number): string {
 // A tool call's arguments sit on the event itself (`command` for Bash, `skill` for Skill).
 export function touchesFactory(call: { tool: string }): boolean {
   const text = JSON.stringify(call)
+  const writes = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(call.tool)
 
-  return (call.tool === 'Bash' && text.includes('factory')) || (call.tool === 'Skill' && /factory-|stage-/.test(text))
+  return (
+    (call.tool === 'Bash' && text.includes('factory')) ||
+    (call.tool === 'Skill' && /factory-|stage-|dca-describe/.test(text)) ||
+    // what the skills write: the description, the backlog, the discovery reports, the run folders
+    (writes && /project\/|\.dca-factory\//.test(text))
+  )
 }
 
 export function bar(part: number, whole: number, width: number): string {

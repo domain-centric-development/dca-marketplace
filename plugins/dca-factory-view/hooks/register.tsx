@@ -335,6 +335,13 @@ export const register: Register = on => {
     return ran
   })
 
+  // A slash command the cockpit sent runs as a turn of its own; when any turn ends, what it wrote is read.
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    void refresh($)
+    return done
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const now = await read($, cockpit)
     const { Text } = $.ui.resolve(e)
