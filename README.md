@@ -17,6 +17,7 @@ Add the marketplace once, then install what you need. No clone, no build step:
 /plugin install dca-core@dca-marketplace       # the architecture method
 /plugin install dca-craft@dca-marketplace      # TDD, Clean Code, ADRs, end-user tests, glossary, context map, reviews
 /plugin install dca-factory@dca-marketplace    # the delivery pipeline
+/plugin install dca-factory-view@dca-marketplace   # optional, Claude Code only: the pipeline as a cockpit
 ```
 
 Check it worked: `/plugin` lists each one as *installed*, and its skills appear under the plugin's
@@ -44,6 +45,7 @@ Only for working *on* these plugins — a clone, so edits take effect without a 
 | start a DCA project from nothing, or add DCA to an existing one | `dca-core` (`/dca-new`, `/dca-init`) |
 | TDD, Clean Code, ADRs, end-user tests, a glossary, a context map and an outside review — with or without DCA | `dca-craft` |
 | deliver stories through plan → test → build → tidy → judge → document with a gate between | `dca-factory` (+ `dca-core` for the method) |
+| see and steer that cycle in a Claude Code pane — discover, backlog, run, decide, delivered | `dca-factory-view` (optional, Claude Code only) |
 
 `dca-core` and `dca-craft` are what a developer invokes directly. `dca-craft` knows no DCA
 artifact: it reads what any project has — code, glossary, context map, `AGENTS.md` — which makes its
@@ -83,9 +85,14 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 ### Deliver a story through the pipeline
 
 ```
+# the foundation — once, and when something moves
 /factory-setup            # the project description, git, the runner — only what is missing
+/dca-describe <change>    # change one statement of the description, in your words
+
+# the cycle — discover → backlog → run → decide → delivered
 /factory-discover <topic> # which problem is worth solving: a report with sources, proposed epics
 /factory-backlog          # write the epic and the story, in the contract the gate reads
+                          # (epic <id> --from <report> · stories <epic> · release <story> …)
 /factory-run              # plan → test → build → tidy → judge → document, gated
 /factory-run <your words> # a wish: written as a story (which epic, the criteria), then run
 /factory-status           # what runs, what waits for a human, what each story cost
