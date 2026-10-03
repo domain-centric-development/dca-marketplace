@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StoryView, Tab, Topic, Worker } from '../types'
-import { C, COL, MARK_COLOR, MARK_GLYPH, components, fmt, type Cell } from './components'
+import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, fmt, type Cell } from './components'
 import { appendLines, bar, clock, day, moment, parseJournal, stagesOf, touchesFactory } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
@@ -343,8 +343,11 @@ export const register: Register = on => {
 
 
 async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
-  const { Box, Text, Button, Markdown, ...rest } = $.ui.resolve(e)
-  const ui = components({ Box, Text, Button, Markdown, Input: 'Input' in rest ? rest.Input : null })
+  const { Box, Text, Button, ...rest } = $.ui.resolve(e)
+  // the site's paper for a light theme, its deep plates for a dark one — before anything is drawn
+  const theme = (await $.config.list().catch(() => [])).find(row => row.key === 'theme')
+  applyPalette(/light/i.test(String(theme?.value ?? '')))
+  const ui = components({ Box, Text, Button, Input: 'Input' in rest ? rest.Input : null })
   const at = await $.clock.now()
   const current = await read($, tab)
   const open = await read($, detail)
@@ -418,7 +421,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         <Text bold color={C.accent}>
           Next ›
         </Text>
-        <Text>{status.next.text}</Text>
+        <Text color={C.text}>{status.next.text}</Text>
       </Box>
       {now.isBehind && (
         <Box gap={1}>
@@ -430,7 +433,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   )
 
   const page = (body: RenderElement | RenderElement[], hint: string) => (
-    <Box flexDirection="column" paddingX={1}>
+    <Box flexDirection="column" paddingX={1} paddingY={1} backgroundColor={C.bg}>
       {head}
       <Box flexDirection="column" marginTop={1}>
         {body}
@@ -444,13 +447,15 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     return page(
       [
         <Box gap={1}>
-          <Text bold>{open.title}</Text>
+          <Text bold color={C.bright}>
+            {open.title}
+          </Text>
         </Box>,
         ui.actions([
           ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back)), { hotkey: 'b' }),
           ui.button('edit', '✎ edit', () => void editFile($, open.path), { hotkey: 'e' }),
         ]),
-        ui.framed(ui.markdown(await read($, fileText))),
+        ui.framed(ui.doc(await read($, fileText))),
       ],
       'b back · e edit in your editor',
     )
@@ -474,7 +479,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           <Text bold color={MARK_COLOR[mark]}>
             {MARK_GLYPH[mark]}
           </Text>
-          <Text bold>
+          <Text bold color={C.bright}>
             {open.id} — {row?.title ?? ''}
           </Text>
         </Box>,

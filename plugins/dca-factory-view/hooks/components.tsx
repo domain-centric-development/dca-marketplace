@@ -1,4 +1,4 @@
-import type { BoxProps, ButtonProps, ElementConstructor, InputProps, MarkdownProps, RenderElement, TextProps } from 'claude-code'
+import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, TextProps } from 'claude-code'
 
 import type { StageRun } from '../types'
 import { duration, rounds, short, tokens } from './parse'
@@ -7,11 +7,28 @@ import { duration, rounds, short, tokens } from './parse'
 // spacing reaches every tab and every detail at once. They take the surface's elements and ready callbacks —
 // never `$`: what acts on the session stays in register.tsx.
 
-// The domaincentric.dev palette, as the site's dark plates use it (branding/README.md, website `--teal`, `--mist`,
-// `--deep`): teal is the accent and the kicker; secondary text is mist at half strength, as the site's comments;
-// lines and frames are mist at a third, as its button borders — quieter than any text. Amber, coral and indigo are
-// the brand's accent alternatives, used here for waiting, refused and proposed.
-export const C = {
+// The domaincentric.dev palette in its two faces (website `:root`, branding/README.md). Paper is the site's page —
+// beige `--paper`, `--ink` text, `--teal-dark` for what is read as a link, `--line` for rules. Deep is the site's hero
+// and plates — `--deep`, `--mist` text, `--teal`, mist at a third for lines. The cockpit follows Claude Code's theme:
+// a button's label takes the terminal's own text colour, so only the face that matches the theme keeps every button
+// readable. Amber, coral and indigo are the brand's accent alternatives, for waiting, refused and proposed.
+const PAPER = {
+  bg: '#f7f6f3',
+  text: '#1c2433',
+  bright: '#1c2433',
+  accent: '#0d6b70',
+  done: '#2f7d4a',
+  wait: '#9a6a17',
+  fail: '#a9493a',
+  info: '#4b47b8',
+  muted: '#5b6472',
+  line: '#dedbd3',
+  onAccent: '#ffffff',
+}
+const DEEP = {
+  bg: '#171d29',
+  text: '#e8eaf0',
+  bright: '#ffffff',
   accent: '#148f96',
   done: '#3f9d5b',
   wait: '#c9922e',
@@ -19,20 +36,28 @@ export const C = {
   info: '#7d79e0',
   muted: '#7f838b',
   line: '#60656f',
-  bright: '#e8eaf0',
   onAccent: '#ffffff',
 }
 
+export const C = { ...DEEP }
+
 export const MARK_GLYPH: Record<string, string> = { done: '✓', running: '▶', look: '!', question: '?', stopped: '✗', next: '→', none: '·' }
-export const MARK_COLOR: Record<string, string> = {
-  done: C.done,
-  running: C.accent,
-  look: C.wait,
-  question: C.wait,
-  stopped: C.fail,
-  next: C.accent,
-  none: C.muted,
+export const MARK_COLOR: Record<string, string> = {}
+
+// Paper for a light theme, deep for a dark one; set before every drawing, so a change of theme shows at once.
+export function applyPalette(isLight: boolean): void {
+  Object.assign(C, isLight ? PAPER : DEEP)
+  Object.assign(MARK_COLOR, {
+    done: C.done,
+    running: C.accent,
+    look: C.wait,
+    question: C.wait,
+    stopped: C.fail,
+    next: C.accent,
+    none: C.muted,
+  })
 }
+applyPalette(false)
 
 export type Phase = { key: string; label: string; hotkey?: string; isOpen: boolean; mark?: { text: string; color: string }; onPress: () => void }
 
@@ -85,17 +110,16 @@ export type Elements = {
   Box: ElementConstructor<BoxProps>
   Text: ElementConstructor<TextProps>
   Button: ElementConstructor<ButtonProps>
-  Markdown: ElementConstructor<MarkdownProps>
   Input: ElementConstructor<InputProps> | null
 }
 
-export function components({ Box, Text, Button, Markdown, Input }: Elements) {
+export function components({ Box, Text, Button, Input }: Elements) {
   const divider = <Text color={C.line}> │ </Text>
 
   const tableCell = (column: Column, value: Cell) => (
     <Box width={column.width} flexShrink={0} justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}>
       {value.node ?? (
-        <Text color={value.color} bold={value.bold} wrap="truncate">
+        <Text color={value.color ?? C.text} bold={value.bold} wrap="truncate">
           {value.text ?? ''}
         </Text>
       )}
@@ -190,7 +214,32 @@ export function components({ Box, Text, Button, Markdown, Input }: Elements) {
       </Box>
     ),
 
-    markdown: (text: string) => <Markdown text={text} />,
+    // A Markdown file drawn line by line in the palette's colours — the surface's own Markdown takes the terminal's
+    // text colour, which the painted background would swallow.
+    doc: (text: string) => {
+      let isCode = false
+      return text.split('\n').map(raw => {
+        if (raw.startsWith('```')) {
+          isCode = !isCode
+          return <Text color={C.line}>{raw}</Text>
+        }
+        if (isCode) return <Text color={C.muted}>{raw || ' '}</Text>
+        const heading = /^(#{1,6})\s+(.*)$/.exec(raw)
+        if (heading) {
+          return (
+            <Box marginTop={heading[1] && heading[1].length <= 2 ? 1 : 0}>
+              <Text bold color={C.accent}>
+                {heading[1] && heading[1].length <= 2 ? (heading[2] ?? '').toUpperCase() : heading[2]}
+              </Text>
+            </Box>
+          )
+        }
+        if (/^\s*\|/.test(raw)) return <Text color={C.muted}>{raw}</Text>
+        if (/^\s*[-*]\s/.test(raw)) return <Text color={C.text}>{raw.replace(/^(\s*)[-*]\s/, '$1• ')}</Text>
+        if (/^---\s*$/.test(raw)) return <Text color={C.line}>{'─'.repeat(40)}</Text>
+        return <Text color={C.text}>{raw.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1') || ' '}</Text>
+      })
+    },
 
     // A banner in one colour, for what waits and what is behind.
     banner: (color: string, lines: string[]) => (
@@ -215,7 +264,7 @@ export function components({ Box, Text, Button, Markdown, Input }: Elements) {
     epicHead: (epic: { title: string; delivered: number; total: number; tokens: number; goal?: string; metric?: string; discovery?: string }, buttons: (RenderElement | false)[]) => (
       <Box flexDirection="column" marginTop={2}>
         <Box gap={1} flexWrap="wrap">
-          <Text bold color={epic.total > 0 && epic.delivered === epic.total ? C.done : undefined}>
+          <Text bold color={epic.total > 0 && epic.delivered === epic.total ? C.done : C.text}>
             {epic.title}
           </Text>
           <Text color={C.done}>{'█'.repeat(epic.total > 0 ? Math.round((epic.delivered / epic.total) * 10) : 0).padEnd(10, '░')}</Text>
