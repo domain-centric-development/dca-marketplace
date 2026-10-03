@@ -616,14 +616,19 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.section('Discovery', 'which problem is worth solving, and how anyone will know it got better'),
         ...(now.topics.length === 0 ? [<Text color={C.muted}>No discovery yet.</Text>] : []),
         ...now.topics.map(topic => (
-          <Box flexDirection="column" marginTop={2}>
-            <Box gap={1}>
-              <Text color={C.info}>◆</Text>
-              {ui.link(`topic-${topic.topic}`, topic.topic, () => void openFile($, `${now.root}/${topic.report}`, topic.title, null))}
-              <Text color={C.muted} wrap="truncate">
-                {topic.title}
-              </Text>
-            </Box>
+          <Box flexDirection="column">
+            {ui.card(
+              {
+                title: topic.title,
+                meta: `${topic.proposals.length} proposed epic${topic.proposals.length === 1 ? '' : 's'} · ${topic.proposals.filter(p => p.epic).length} in the backlog`,
+              },
+              [ui.button(`topic-${topic.topic}`, 'open report', () => void openFile($, `${now.root}/${topic.report}`, topic.title, null), { isPrimary: true })],
+              [
+                { label: 'topic', text: topic.topic },
+                { label: 'report', text: topic.report, color: C.muted },
+                topic.description_changes.length > 0 && { label: 'changes', text: `${topic.description_changes.length} to the description`, color: C.wait },
+              ],
+            )}
             {ui.table(
               [COL.mark, { name: 'proposal', width: 18 }, { name: 'outcome', width: 18 }, { name: 'goal', width: 36 }, COL.action(16)],
               topic.proposals.map(proposal => [
@@ -668,13 +673,26 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           const drafts = epic.rows.filter(row => /draft/.test(row.state))
           return (
             <Box flexDirection="column">
-              {ui.epicHead({ ...epic, title: epic.title || epic.epic }, [
+              {ui.card(
+                {
+                  title: epic.title || epic.epic,
+                  color: epic.total > 0 && epic.delivered === epic.total ? C.done : undefined,
+                  progress: { done: epic.delivered, total: epic.total },
+                  meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${fmt.tokens(epic.tokens)} tokens` : ''}`,
+                },
+                [
                 ui.button(`stories-${epic.epic}`, '+ stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0 }),
                 drafts.length > 0 &&
                   ui.button(`release-all-${epic.epic}`, `release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`, () =>
                     send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
                   ),
-              ])}
+              ],
+                [
+                  epic.goal && { label: 'goal', text: epic.goal },
+                  epic.metric && { label: 'outcome', text: epic.metric, color: C.info },
+                  epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
+                ],
+              )}
               {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — + stories cuts the first')}
             </Box>
           )

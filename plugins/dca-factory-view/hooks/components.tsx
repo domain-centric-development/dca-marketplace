@@ -162,6 +162,15 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
     )
   }
 
+  // A word that opens something — a story, a record, a file, a topic. A teal `›` says it can be chosen before the
+  // focus is on it, and the row lights under the pointer.
+  const link = (key: string, label: string, onPress: () => void) => (
+    <Box key={`link-${key}`} gap={0} hover={{ backgroundColor: C.line }}>
+      <Button key={key} label={label} plain onPress={onPress} />
+      <Text color={C.accent}> ›</Text>
+    </Box>
+  )
+
   return {
     // A heading as the site's kicker — upper case, teal — with a hint beside it; the space above it is the one
     // rhythm between parts.
@@ -189,7 +198,7 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
       ),
 
     // A word that opens something: a story, a record, a file, a topic.
-    link: (key: string, label: string, onPress: () => void) => <Button key={key} label={label} plain onPress={onPress} />,
+    link,
 
     // A mark and the link beside it — how a story appears in every table.
     marked: (mark: string, key: string, label: string, onPress: () => void) => (
@@ -197,7 +206,7 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
         <Text bold color={MARK_COLOR[mark] ?? C.muted}>
           {MARK_GLYPH[mark] ?? '·'}
         </Text>
-        <Button key={key} label={label} plain onPress={onPress} />
+        {link(key, label, onPress)}
       </Box>
     ),
 
@@ -295,26 +304,23 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
     // An epic's head: its title, progress and the buttons that act on it; its goal and outcome below.
     fields,
 
-    // An epic's head as a card: its title, progress and the buttons that act on it; goal, outcome and discovery as
-    // labelled values below.
-    epicHead: (epic: { title: string; delivered: number; total: number; tokens: number; goal?: string; metric?: string; discovery?: string }, buttons: (RenderElement | false)[]) => (
+    // A card: a title with what counts beside it and the buttons that act on it, labelled values below, in one
+    // quiet frame — an epic in the backlog, a topic in discovery.
+    card: (head: { title: string; color?: string; progress?: { done: number; total: number }; meta?: string }, buttons: (RenderElement | false)[], items: (Field | false | null | undefined | '' | 0)[]) => (
       <Box flexDirection="column" borderStyle="round" borderColor={C.line} paddingX={1} marginTop={2}>
         <Box gap={1} flexWrap="wrap">
-          <Text bold color={epic.total > 0 && epic.delivered === epic.total ? C.done : C.bright}>
-            {epic.title}
+          <Text bold color={head.color ?? C.bright}>
+            {head.title}
           </Text>
-          <Text color={C.done}>{'█'.repeat(epic.total > 0 ? Math.round((epic.delivered / epic.total) * 10) : 0).padEnd(10, '░')}</Text>
-          <Text color={C.muted}>
-            {epic.delivered} of {epic.total} delivered
-            {epic.tokens > 0 ? ` · ${tokens(epic.tokens)} tokens` : ''}
-          </Text>
+          {head.progress && (
+            <Text color={C.done}>
+              {'█'.repeat(head.progress.total > 0 ? Math.round((head.progress.done / head.progress.total) * 10) : 0).padEnd(10, '░')}
+            </Text>
+          )}
+          {head.meta && <Text color={C.muted}>{head.meta}</Text>}
           {buttons.filter((button): button is RenderElement => Boolean(button))}
         </Box>
-        {fields([
-          epic.goal && { label: 'goal', text: epic.goal },
-          epic.metric && { label: 'outcome', text: epic.metric, color: C.info },
-          epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
-        ])}
+        {fields(items)}
       </Box>
     ),
 
