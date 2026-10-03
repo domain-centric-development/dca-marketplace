@@ -633,8 +633,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     )
   }
 
-  // One topic and one epic as they are drawn everywhere — in their own detail view, and in the tab when it holds
-  // only one of them.
+  // One topic and one epic as they are drawn in their own detail view, opened from the tab's overview.
   type Epic = (typeof status.epics)[number]
   const topicBody = (topic: Topic) => (
     <Box flexDirection="column">
@@ -725,13 +724,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   }
 
   if (current === 'discover') {
-    const one = now.topics.length === 1 ? now.topics[0] : undefined
     return page(
       [
         ui.section('Discovery', 'which problem is worth solving, and how anyone will know it got better'),
-        one
-          ? topicBody(one)
-          : ui.table(
+        ui.table(
               [COL.mark, { name: 'topic', width: 20 }, { name: 'title', width: 40 }, { name: 'proposed', width: 8, isNumber: true }, { name: 'in backlog', width: 10, isNumber: true }, { name: 'changes', width: 7, isNumber: true }],
               now.topics.map(topic => {
                 const held = topic.proposals.filter(p => p.epic).length
@@ -750,21 +746,18 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           {ask('discover', 'New topic', 'a problem or a wished deliverable', '/factory-discover')}
         </Box>,
       ],
-      one ? '→ Make epic releases a proposal into the backlog · type a topic, Enter sends it' : 'Enter on a topic opens it · type a topic, Enter sends it',
+      'Enter on a topic opens it · type a topic, Enter sends it',
     )
   }
 
   if (current === 'backlog') {
-    const one = status.epics.length === 1 ? status.epics[0] : undefined
     return page(
       [
         <Box flexDirection="column" gap={1}>
           {ask('story', 'Write a story', 'what should the product do next?', '/factory-backlog')}
           {ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run')}
         </Box>,
-        one
-          ? epicBody(one)
-          : ui.table(
+        ui.table(
               [COL.mark, { name: 'epic', width: 26 }, { name: 'progress', width: 10 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'drafts', width: 6, isNumber: true }, { name: 'outcome', width: 30 }],
               status.epics.map(epic => {
                 const isDone = epic.total > 0 && epic.delivered === epic.total
@@ -782,7 +775,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             ),
         ...journeys(),
       ],
-      one ? '+ stories cuts stories · release approves drafts · Enter on a story opens it' : 'Enter on an epic opens it',
+      'Enter on an epic opens it',
     )
   }
 

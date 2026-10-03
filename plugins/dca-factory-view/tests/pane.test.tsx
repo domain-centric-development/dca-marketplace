@@ -132,6 +132,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     // discover: the report's proposals, one already an epic, one released by a press
     await pane.press({ key: 'tab-discover' })
+    // the topics as an overview; Enter opens one with its card, its proposals and its description changes
+    expect(await pane.find({ text: /Readers forget what they meant to read/ })).toBeDefined()
+    await pane.press({ key: 'topic-forgetting' })
     expect(await pane.find({ text: 'epic reminders' })).toBeDefined()
     expect(await pane.find({ text: 'GoalSet' })).toBeDefined()
     await pane.press({ key: 'release-forgetting-reading-goals' })
