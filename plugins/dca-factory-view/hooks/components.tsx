@@ -359,7 +359,7 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
     // The keys that work now, at the foot of every view.
     keys: (isFocused: boolean, hint: string) => (
       <Box marginTop={1}>
-        <Text color={C.muted}>{isFocused ? `${hint} · ${BY_CLAUDE} Claude does it in this session · ↑↓ Tab move · Enter choose · b back · 0–5 tabs · q close · Esc prompt` : 'click here or ctrl+x tab (with an empty prompt) to steer the cockpit · ← is Claude Code’s, not the cockpit’s'}</Text>
+        <Text color={C.muted}>{isFocused ? `${hint} · ${BY_CLAUDE} Claude does it in this session · ↑↓ Tab ⇧Tab move · Enter choose · b back · 0–5 tabs · q close · Esc prompt` : 'click here or ctrl+x tab (with an empty prompt) to steer the cockpit · ← is Claude Code’s, not the cockpit’s'}</Text>
       </Box>
     ),
   }
