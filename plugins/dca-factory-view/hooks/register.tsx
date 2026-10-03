@@ -1,25 +1,14 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, RenderElement, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderInput } from 'claude-code'
+import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
-import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StageRun, StoryView, Tab, Topic, Worker } from '../types'
-import {
-  appendLines,
-  bar,
-  clock,
-  day,
-  duration,
-  moment,
-  parseJournal,
-  rounds as roundsText,
-  short,
-  stagesOf,
-  tokens as tokensText,
-  touchesFactory,
-} from './parse'
+import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StoryView, Tab, Topic, Worker } from '../types'
+import { C, COL, MARK_COLOR, MARK_GLYPH, components, fmt, type Cell } from './components'
+import { appendLines, bar, clock, day, moment, parseJournal, stagesOf, touchesFactory } from './parse'
 
-// The cockpit over the whole product flow: describe, discover, backlog, run, decide, delivered.
+// The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
-// matching command into this session or starts the runner — both are the person's act.
+// matching command into this session or starts the runner — both are the person's act. How things look lives in
+// components.tsx; this file reads, acts and arranges.
 const PANE = 'factory-view'
 const STATUS_MS = 20_000
 const LIVE_MS = 5_000
@@ -29,20 +18,6 @@ const storyView = atom({ plugin: 'dca-factory-view', key: 'story' } as const, nu
 const tab = atom({ plugin: 'dca-factory-view', key: 'tab' } as const, 'backlog' as Tab)
 const detail = atom({ plugin: 'dca-factory-view', key: 'detail' } as const, null as Detail | null)
 const fileText = atom({ plugin: 'dca-factory-view', key: 'fileText' } as const, '')
-
-// The DCA brand palette (branding/README.md): teal is the accent, amber, coral and indigo share its tone.
-const C = { accent: '#148f96', done: '#3f9d5b', wait: '#c9922e', fail: '#c96a5a', info: '#5f5bd0', muted: 'gray', onAccent: '#ffffff' }
-
-const MARK_GLYPH: Record<string, string> = { done: '✓', running: '▶', look: '!', question: '?', stopped: '✗', next: '→', none: '·' }
-const MARK_COLOR: Record<string, string> = {
-  done: C.done,
-  running: C.accent,
-  look: C.wait,
-  question: C.wait,
-  stopped: C.fail,
-  next: C.accent,
-  none: C.muted,
-}
 
 // The recurring cycle; Describe sits beside it with set up and update — written once, changed when things move.
 const TABS: { id: Tab; label: string; key: string }[] = [
@@ -60,19 +35,6 @@ const EXIT_WORDS: Record<number, string> = {
   4: 'stopped at --max-stages',
   5: 'another worker holds the checkout',
   6: 'refused: inside an agent session',
-}
-
-function stageLabel(run: StageRun, now: number): string {
-  const gate = run.gates.length === 0 ? '' : run.gates[run.gates.length - 1] ? ' ✓' : ' ✗'
-  const rounds = run.rounds > 1 ? ` · ${roundsText(run.rounds)}` : ''
-  const time = run.runningSince ? ` · ▶ ${duration((now - Date.parse(run.runningSince)) / 1000)}` : ` · ${duration(run.seconds)}`
-  return `${run.stage}${gate}${rounds}${time}`
-}
-
-function stageColor(run: StageRun): string {
-  if (run.runningSince) return C.accent
-  if (run.gates.length > 0 && !run.gates[run.gates.length - 1]) return C.fail
-  return C.done
 }
 
 // ---------------------------------------------------------------- reading the factory
@@ -304,6 +266,11 @@ async function editFile($: EngineInterface, path: string): Promise<void> {
   $.ui.toast(fallback?.exitCode === 0 ? `factory: opened ${path.split('/').pop()} in the editor` : `factory: no editor could open ${path}`)
 }
 
+async function showTab($: EngineInterface, id: Tab): Promise<void> {
+  await update($, detail, () => null)
+  await update($, tab, () => id)
+}
+
 async function openStory($: EngineInterface, id: string): Promise<void> {
   await update($, storyView, () => null)
   await update($, detail, () => ({ kind: 'story', id }) as Detail)
@@ -374,68 +341,38 @@ export const register: Register = on => {
 
 // ---------------------------------------------------------------- drawing
 
+
 async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   const { Box, Text, Button, Markdown, ...rest } = $.ui.resolve(e)
-  const Input = 'Input' in rest ? rest.Input : null
+  const ui = components({ Box, Text, Button, Markdown, Input: 'Input' in rest ? rest.Input : null })
   const at = await $.clock.now()
   const current = await read($, tab)
   const open = await read($, detail)
   const job = await read($, worker)
   const rows = e.viewport?.rows ?? 40
   const status = now.status
+  const isFocused = Boolean(e.props.isFocused)
 
-  const section = (title: string, hint?: string) => (
-    <Box marginTop={1} gap={1}>
-      <Text bold color={C.accent}>
-        {title}
-      </Text>
-      {hint && <Text color={C.muted}>{hint}</Text>}
-    </Box>
-  )
-  const keys = (hint: string) => (
-    <Box marginTop={1}>
-      <Text color={C.muted}>
-        {e.props.isFocused ? `${hint} · 0 describe · 1–5 cycle · Tab/↑↓ move · Enter choose · Esc prompt` : 'ctrl+x tab — steer the cockpit'}
-      </Text>
-    </Box>
-  )
-  // Where the surface has no Input (mobile), the button fills the prompt and the person types there.
+  // The links every view shares — one way to open a story, a record, a file.
+  const storyCell = (row: Row): Cell => ({ node: ui.marked(row.mark, `story-${row.story}`, row.story, () => void openStory($, row.story)) })
+  const recordCell = (record: DecisionRecord, back: Detail | null): Cell => ({
+    node: ui.link(`record-${record.id}`, record.id, () => void openFile($, `${now.root}/${record.path}`, record.id, back)),
+  })
   const ask = (key: string, label: string, placeholder: string, command: string) =>
-    Input ? (
-      <Input key={key} label={label} placeholder={placeholder} submitLabel="send" onSubmit={(value: string) => void send($, `${command} ${value}`.trim())} />
-    ) : (
-      <Button key={key} label={label} onPress={() => $.prompt.fill({ text: `${command} ` })} />
+    ui.ask(key, label, placeholder, value => send($, `${command} ${value}`.trim()), () => void $.prompt.fill({ text: `${command} ` }))
+  const idWidth = Math.max(8, ...status.rows.map(row => row.story.length)) + 4
+  const recordTable = (list: DecisionRecord[], back: Detail | null) =>
+    ui.table(
+      [COL.mark, { name: 'state', width: 9 }, COL.record, COL.asked, COL.what],
+      list.map(record => [
+        { text: record.kind === 'acceptance' ? '!' : '?', color: record.kind === 'acceptance' ? C.info : C.wait, bold: true },
+        { text: record.state, color: record.state === 'open' ? C.wait : C.muted },
+        recordCell(record, back),
+        { text: fmt.when(record.asked), color: C.muted },
+        { text: record.text, color: C.muted },
+      ]),
+      'No record.',
     )
-  const cell = (width: number, text: string, color?: string, bold?: boolean) => (
-    <Box width={width} flexShrink={0}>
-      <Text color={color} bold={bold} wrap="truncate">
-        {text}
-      </Text>
-    </Box>
-  )
-
-  // A table drawn as one: a frame, a bold header, a rule under it, a thin bar between the columns, room in each cell.
-  type Column = { name: string; width: number; isNumber?: boolean }
-  type Cell = { text?: string; color?: string; bold?: boolean; node?: RenderElement }
-  const divider = <Text color={C.muted}> │ </Text>
-  const tableCell = (column: Column, value: Cell) => (
-    <Box width={column.width} flexShrink={0} justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}>
-      {value.node ?? (
-        <Text color={value.color} bold={value.bold} wrap="truncate">
-          {value.text ?? ''}
-        </Text>
-      )}
-    </Box>
-  )
-  const table = (columns: Column[], rows: Cell[][]) => (
-    <Box flexDirection="column" borderStyle="round" borderColor={C.muted} paddingX={1} marginTop={1}>
-      <Box>{columns.flatMap((column, index) => [...(index > 0 ? [divider] : []), tableCell(column, { text: column.name, bold: true, color: C.accent })])}</Box>
-      <Text color={C.muted}>{columns.map(column => '─'.repeat(column.width)).join('─┼─')}</Text>
-      {rows.map(row => (
-        <Box>{columns.flatMap((column, index) => [...(index > 0 ? [divider] : []), tableCell(column, row[index] ?? {})])}</Box>
-      ))}
-    </Box>
-  )
 
   const head = (
     <Box flexDirection="column">
@@ -445,48 +382,36 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         </Text>
         <Text color={C.muted}>
           {status.delivered} of {status.total} stories delivered
-          {status.tokens > 0 ? ` · ${tokensText(status.tokens)} tokens` : ''}
+          {status.tokens > 0 ? ` · ${fmt.tokens(status.tokens)} tokens` : ''}
           {job.state === 'running' ? ' · worker ▶' : ''}
         </Text>
       </Box>
-      <Box gap={1} flexWrap="wrap">
-        {/* The foundation: done once, changed when the product or the technical situation moves. */}
-        <Button
-          key="tab-describe"
-          label="0 Describe"
-          hotkey="0"
-          variant={current === 'describe' && !open ? 'primary' : 'secondary'}
-          onPress={() => {
-            void update($, detail, () => null)
-            void update($, tab, () => 'describe' as Tab)
-          }}
-        />
-        <Button key="setup" label="setup" plain onPress={() => send($, '/factory-setup')} />
-        <Button key="update" label="update" plain onPress={() => send($, '/factory-update')} />
-        <Text color={C.muted}>│ cycle ›</Text>
-        {TABS.map(one => (
-          <Button
-            key={`tab-${one.id}`}
-            label={`${one.key} ${one.label}${one.id === 'decide' && status.waiting.length > 0 ? ` (${status.waiting.length})` : ''}`}
-            hotkey={one.key}
-            variant={one.id === current && !open ? 'primary' : 'secondary'}
-            onPress={() => {
-              void update($, detail, () => null)
-              void update($, tab, () => one.id)
-            }}
-          />
-        ))}
+      <Box marginTop={1}>
+        {ui.phases(
+          [
+            { key: 'tab-describe', label: 'Describe', hotkey: '0', isOpen: current === 'describe' && !open, onPress: () => void showTab($, 'describe') },
+            { key: 'setup', label: 'setup', isOpen: false, onPress: () => send($, '/factory-setup') },
+            { key: 'update', label: 'update', isOpen: false, onPress: () => send($, '/factory-update') },
+          ],
+          TABS.map(one => ({
+            key: `tab-${one.id}`,
+            label: one.label,
+            hotkey: one.key,
+            isOpen: one.id === current && !open,
+            mark:
+              one.id === 'decide' && status.waiting.length > 0
+                ? { text: String(status.waiting.length), color: C.wait }
+                : one.id === 'run' && (isRunning() || status.running.length > 0)
+                  ? { text: '▶', color: C.accent }
+                  : one.id === 'delivered' && status.delivered > 0
+                    ? { text: String(status.delivered), color: C.done }
+                    : undefined,
+            onPress: () => void showTab($, one.id),
+          })),
+        )}
       </Box>
-      {status.waiting.length > 0 && (
-        <Box borderStyle="round" borderColor={C.wait} paddingX={1} flexDirection="column">
-          {status.waiting.map(wait => (
-            <Text bold color={C.wait}>
-              {MARK_GLYPH[wait.mark] ?? '?'} {wait.story} — {wait.what}
-            </Text>
-          ))}
-        </Box>
-      )}
-      <Box gap={1}>
+      {status.waiting.length > 0 && ui.banner(C.wait, status.waiting.map(wait => `${MARK_GLYPH[wait.mark] ?? '?'} ${wait.story} — ${wait.what}`))}
+      <Box gap={1} marginTop={1}>
         <Text bold color={C.accent}>
           Next ›
         </Text>
@@ -495,533 +420,379 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       {now.isBehind && (
         <Box gap={1}>
           <Text color={C.wait}>This project's pipeline is older than the cockpit reads — the description and discovery views stay empty.</Text>
-          <Button key="behind-update" label="update" plain onPress={() => send($, '/factory-update')} />
+          {ui.link('behind-update', 'update', () => send($, '/factory-update'))}
         </Box>
       )}
     </Box>
   )
 
-  // ---- a file: a description, a discovery report, a hand-over, a decision record
-  if (open?.kind === 'file') {
-    return (
-      <Box flexDirection="column">
-        {head}
-        <Box gap={1} marginTop={1}>
-          <Button key="back" label="← back" hotkey="b" onPress={() => (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back))} />
-          <Button key="edit" label="✎ edit" hotkey="e" onPress={() => editFile($, open.path)} />
-          <Text bold>{open.title}</Text>
-        </Box>
-        <Box borderStyle="single" borderColor={C.muted} paddingX={1} flexDirection="column">
-          <Markdown text={await read($, fileText)} />
-        </Box>
-        {keys('b back · e edit in your editor')}
-      </Box>
-    )
-  }
-
-  // ---- one story: its pipeline, history and hand-overs
-  if (open?.kind === 'story') {
-    const row = status.rows.find(one => one.story === open.id)
-    const events = now.journals[open.id] ?? []
-    const stages = stagesOf(events)
-    const view = (await read($, storyView))?.story === open.id ? await read($, storyView) : null
-    const perStage = view ? Object.entries(view.stages) : []
-    const longest = Math.max(1, ...perStage.map(([, one]) => one.seconds))
-    const records = now.decisions.filter(record => record.story === open.id)
-    const waits = status.waiting.some(wait => wait.story === open.id)
-    const room = Math.max(4, rows - 30)
-    return (
-      <Box flexDirection="column">
-        {head}
-        <Box gap={1} marginTop={1}>
-          <Text bold color={MARK_COLOR[row?.mark ?? 'none']}>
-            {MARK_GLYPH[row?.mark ?? 'none']}
-          </Text>
-          <Text bold>
-            {open.id} — {row?.title ?? ''}
-          </Text>
-        </Box>
-        <Box gap={2} flexWrap="wrap">
-          <Text color={MARK_COLOR[row?.mark ?? 'none']}>{row?.state ?? ''}</Text>
-          <Text color={C.muted}>{row?.epic ?? ''}</Text>
-          {row && row.seconds > 0 && <Text color={C.muted}>worked {duration(row.seconds)}</Text>}
-          {row && row.tokens > 0 && <Text color={C.muted}>{tokensText(row.tokens)} tokens</Text>}
-          {row && row.cost > 0 && <Text color={C.muted}>cost {row.cost.toFixed(2)} USD</Text>}
-        </Box>
-        <Box gap={2} flexWrap="wrap">
-          {row?.started && <Text color={C.muted}>started {moment(row.started)}</Text>}
-          {row?.delivered && <Text color={C.done}>delivered {moment(row.delivered)}</Text>}
-          {view?.accepted_by && <Text color={C.done}>accepted ({view.accepted_by})</Text>}
-        </Box>
-        {view && (
-          <Box gap={2} flexWrap="wrap">
-            {view.context && <Text color={C.muted}>context {view.context}</Text>}
-            {view.criteria > 0 && <Text color={C.muted}>{view.criteria} acceptance criteria</Text>}
-          </Box>
-        )}
-        <Box gap={1} marginTop={1} flexWrap="wrap">
-          <Button key="back" label="← back" hotkey="b" onPress={() => update($, detail, () => null)} />
-          {row && !row.done && !isRunning() && (
-            <Button key="run" label="▶ Run (worker)" hotkey="r" variant="primary" onPress={() => runWorker($, `run ${open.id}`, ['run', '--story', open.id])} />
-          )}
-          {row && !row.done && <Button key="session" label="Run in this session" hotkey="e" onPress={() => send($, `/factory-run ${open.id}`)} />}
-          {waits && <Button key="answer" label="? Answer" hotkey="a" variant="primary" onPress={() => send($, `/factory-decisions ${open.id}`)} />}
-          {row?.done && <Button key="verify" label="Verify" hotkey="v" onPress={() => send($, `/factory-verify ${open.id}`)} />}
-        </Box>
-
-        {section('Pipeline')}
-        {stages.length === 0 ? (
-          <Text color={C.muted}>Not run yet.</Text>
-        ) : (
-          <Box flexWrap="wrap" columnGap={1}>
-            {stages.map((run, index) => (
-              <Box gap={1}>
-                {index > 0 && <Text color={C.muted}>›</Text>}
-                <Text backgroundColor={run.runningSince ? C.accent : undefined} color={run.runningSince ? C.onAccent : stageColor(run)} bold={run.runningSince !== null}>
-                  {` ${stageLabel(run, at)} `}
-                </Text>
-              </Box>
-            ))}
-          </Box>
-        )}
-        {perStage.length > 0 && section('Time per stage', 'the factory\'s own numbers')}
-        {perStage.map(([name, one]) => (
-          <Box gap={1}>
-            {cell(10, name, C.muted)}
-            <Text color={C.accent}>{bar(one.seconds, longest, 20)}</Text>
-            <Text color={C.muted}>
-              {duration(one.seconds)}
-              {one.runs > 1 ? ` · ${one.runs} runs` : ''}
-              {one.tokens > 0 ? ` · ${tokensText(one.tokens)} tokens` : ''}
-              {one.cost > 0 ? ` · ${one.cost.toFixed(2)} USD` : ''}
-              {one.models.length > 0 ? ` · ${one.models.join(', ')}` : ''}
-            </Text>
-          </Box>
-        ))}
-        {view && view.passes.length > 0 && section('Passes')}
-        {view?.passes.map((pass, index) => (
-          <Box gap={1}>
-            {cell(3, `${index + 1}.`, C.muted)}
-            {cell(18, pass.label, index === 0 ? C.done : C.wait)}
-            <Text color={C.muted} wrap="truncate">
-              {short(pass.start)} · {duration(pass.seconds)}
-              {pass.tokens > 0 ? ` · ${tokensText(pass.tokens)} tokens` : ''}
-              {pass.waited > 0 ? ` · waited ${duration(pass.waited)}` : ''} · {pass.stages.join(' ')}
-            </Text>
-          </Box>
-        ))}
-        {section('History')}
-        {events.length === 0 && <Text color={C.muted}>Nothing yet.</Text>}
-        {events
-          .filter(event => event.kind !== 'usage')
-          .slice(-room)
-          .map((event, index, shown) => {
-            const isGate = event.kind === 'gate'
-            const passed = event.fields.exit === '0'
-            const color = isGate ? (passed ? C.done : C.fail) : event.kind === 'stage-start' ? C.accent : C.muted
-            const what = isGate ? (passed ? 'gate ✓' : 'gate ✗') : event.kind === 'stage-start' ? '▶ start' : '■ end'
-            const isNewDay = index === 0 || day(shown[index - 1]?.at ?? '') !== day(event.at)
-            return (
-              <Box flexDirection="column">
-                {isNewDay && (
-                  <Text bold color={C.muted}>
-                    {day(event.at)}
-                  </Text>
-                )}
-                <Box gap={1} paddingLeft={2}>
-                  <Text color={C.muted}>{clock(event.at)}</Text>
-                  <Text color={color}>{`${what} ${event.stage}`}</Text>
-                </Box>
-              </Box>
-            )
-          })}
-        {(now.handovers[open.id] ?? []).length > 0 && section('Hand-over')}
-        <Box gap={1} flexWrap="wrap">
-          {(now.handovers[open.id] ?? []).map(file => (
-            <Button key={`file-${file}`} label={file} onPress={() => openFile($, `${now.root}/.dca-factory/runs/${open.id}/${file}`, `${open.id} / ${file}`, open)} />
-          ))}
-        </Box>
-        {records.length > 0 && section('Decisions')}
-        {records.map(record => (
-          <Box gap={1}>
-            <Text color={record.state === 'open' ? C.wait : C.muted}>{record.state}</Text>
-            <Button key={`record-${record.id}`} label={record.id} plain onPress={() => openFile($, `${now.root}/${record.path}`, record.id, open)} />
-            <Text color={C.muted} wrap="truncate">
-              {record.text}
-            </Text>
-          </Box>
-        ))}
-        {keys(`b back${row && !row.done ? ' · r run · e in session' : ''}${waits ? ' · a answer' : ''}`)}
-      </Box>
-    )
-  }
-
-  const storyButton = (row: Row) => (
-    <Box gap={1}>
-      <Text bold color={MARK_COLOR[row.mark] ?? C.muted}>
-        {MARK_GLYPH[row.mark] ?? '·'}
-      </Text>
-      <Button key={`story-${row.story}`} label={row.story} plain onPress={() => openStory($, row.story)} />
-    </Box>
-  )
-  const idWidth = Math.max(8, ...status.rows.map(row => row.story.length)) + 4
-
-  // ---- the six tabs
-  let body
-  if (current === 'describe') {
-    body = (
-      <Box flexDirection="column">
-        {section('Project description', 'the foundation — written once, changed when the product or the technical situation moves')}
-        {(status.description ?? []).map(part => {
-          const path = `${now.root}/${part.path}`
-          const name = part.path.split('/').pop() ?? part.part
-          const gaps = [...part.missing.map(h => `missing ${h}`), ...part.empty.map(h => `empty ${h}`)]
-          return (
-            <Box flexDirection="column">
-              <Box gap={1}>
-                <Text bold color={!part.present ? C.fail : gaps.length > 0 ? C.wait : C.done}>
-                  {!part.present ? '✗' : gaps.length > 0 ? '!' : '✓'}
-                </Text>
-                {part.present ? (
-                  <Button key={`doc-${part.part}`} label={name} plain onPress={() => openFile($, path, name, null)} />
-                ) : (
-                  <Text color={C.fail}>{name} missing</Text>
-                )}
-                {part.present && <Button key={`edit-${part.part}`} label="✎ edit" plain onPress={() => editFile($, path)} />}
-                <Text color={C.muted} wrap="truncate">
-                  {part.sections.join(' · ')}
-                </Text>
-              </Box>
-              {gaps.length > 0 && (
-                <Text color={C.wait} wrap="truncate">
-                  {'    '}
-                  {gaps.join(' · ')}
-                </Text>
-              )}
-            </Box>
-          )
-        })}
-        <Box marginTop={1} flexDirection="column">
-          {ask('change', 'Change the description', 'what should change? e.g. "the shop also sells gift cards"', '/dca-describe')}
-        </Box>
-        <Box gap={1} marginTop={1}>
-          <Button key="describe" label="✎ Describe / complete the project" variant="primary" onPress={() => send($, '/dca-describe')} />
-        </Box>
-      </Box>
-    )
-  } else if (current === 'discover') {
-    body = (
-      <Box flexDirection="column">
-        {section('Discovery', 'which problem is worth solving, and how anyone will know it got better')}
-        {now.topics.length === 0 && <Text color={C.muted}>No discovery yet.</Text>}
-        {now.topics.map(topic => (
-          <Box flexDirection="column" marginTop={1}>
-            <Box gap={1}>
-              <Text color={C.info}>◆</Text>
-              <Button key={`topic-${topic.topic}`} label={topic.topic} plain onPress={() => openFile($, `${now.root}/${topic.report}`, topic.title, null)} />
-              <Text color={C.muted} wrap="truncate">
-                {topic.title}
-              </Text>
-            </Box>
-            {topic.proposals.length === 0 && <Text color={C.muted}>{'  '}no proposed work in the report yet</Text>}
-            {topic.proposals.map(proposal => (
-              <Box flexDirection="column" paddingLeft={2}>
-                <Box gap={1}>
-                  <Text bold color={proposal.epic ? C.done : C.info}>
-                    {proposal.epic ? '✓' : '○'} {proposal.id}
-                  </Text>
-                  {proposal.epic ? (
-                    <Text color={C.done}>epic {proposal.epic} — see Backlog</Text>
-                  ) : (
-                    <Button
-                      key={`release-${topic.topic}-${proposal.id}`}
-                      label="→ Make epic"
-                      variant="primary"
-                      onPress={() => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`)}
-                    />
-                  )}
-                </Box>
-                {proposal.goal && (
-                  <Text color={C.muted} wrap="truncate">
-                    {'  '}goal: {proposal.goal}
-                  </Text>
-                )}
-                {proposal.metric && (
-                  <Text color={C.info} wrap="truncate">
-                    {'  '}outcome: {proposal.metric}
-                  </Text>
-                )}
-              </Box>
-            ))}
-            {topic.description_changes.map((change, index) => (
-              <Box gap={1} paddingLeft={2}>
-                <Text color={C.wait}>◇ {change.target}</Text>
-                <Text color={C.muted} wrap="truncate">
-                  {change.change}
-                </Text>
-                <Button
-                  key={`describe-${topic.topic}-${index}`}
-                  label="→ apply"
-                  onPress={() => send($, `/dca-describe ${change.target}: ${change.change}`)}
-                />
-              </Box>
-            ))}
-          </Box>
-        ))}
-        <Box marginTop={1} flexDirection="column">
-          {ask('discover', 'New topic', 'a problem or a wished deliverable', '/factory-discover')}
-        </Box>
-      </Box>
-    )
-  } else if (current === 'backlog') {
-    body = (
-      <Box flexDirection="column">
-        <Box flexDirection="column" gap={1}>
-          {ask('story', 'Write a story', 'what should the product do next?', '/factory-backlog')}
-          {ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run')}
-        </Box>
-        {status.epics.length === 0 && <Text color={C.muted}>The backlog is empty.</Text>}
-        {status.epics.map(epic => {
-          const front = epic
-          const drafts = epic.rows.filter(row => /draft/.test(row.state))
-          return (
-            <Box flexDirection="column" marginTop={2}>
-              <Box gap={1}>
-                <Text bold>{front.title || epic.epic}</Text>
-                <Text color={C.done}>{bar(epic.delivered, epic.total, 10)}</Text>
-                <Text color={C.muted}>
-                  {epic.delivered} of {epic.total} delivered{epic.tokens > 0 ? ` · ${tokensText(epic.tokens)} tokens` : ''}
-                </Text>
-                <Button
-                  key={`stories-${epic.epic}`}
-                  label="+ stories"
-                  variant={epic.total === 0 ? 'primary' : 'secondary'}
-                  onPress={() => send($, `/factory-backlog stories ${epic.epic}`)}
-                />
-                {drafts.length > 0 && (
-                  <Button
-                    key={`release-all-${epic.epic}`}
-                    label={`release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`}
-                    onPress={() => send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`)}
-                  />
-                )}
-              </Box>
-              {front?.discovery && (
-                <Text color={C.muted} wrap="truncate">
-                  from discovery: {front.discovery}
-                </Text>
-              )}
-              {epic.total === 0 && <Text color={C.wait}>no stories yet — + stories cuts the first</Text>}
-              {front?.goal && (
-                <Text color={C.muted} wrap="truncate">
-                  goal: {front.goal}
-                </Text>
-              )}
-              {front?.metric && (
-                <Text color={C.info} wrap="truncate">
-                  outcome: {front.metric}
-                </Text>
-              )}
-              {epic.total > 0 &&
-                table(
-                  [
-                    { name: 'story', width: idWidth },
-                    { name: 'state', width: 20 },
-                    { name: 'stage', width: 9 },
-                    { name: 'passes', width: 6, isNumber: true },
-                    { name: 'started UTC', width: 12 },
-                    { name: 'worked', width: 12, isNumber: true },
-                    { name: 'tokens', width: 8, isNumber: true },
-                    { name: 'cost', width: 10, isNumber: true },
-                  ],
-                  epic.rows.map(row => [
-                    { node: storyButton(row) },
-                    { text: row.state, color: MARK_COLOR[row.mark] },
-                    { text: row.stage, color: C.muted },
-                    { text: row.passes > 0 ? String(row.passes) : '—', color: row.passes > 1 ? C.wait : C.muted },
-                    { text: short(row.started), color: C.muted },
-                    { text: row.seconds > 0 ? duration(row.seconds) : '—' },
-                    { text: row.tokens > 0 ? tokensText(row.tokens) : '—' },
-                    { text: row.cost > 0 ? `${row.cost.toFixed(2)} USD` : '—' },
-                  ]),
-                )}
-            </Box>
-          )
-        })}
-        {status.journeys.length > 0 && section('Journeys')}
-        {status.journeys.map(hint => (
-          <Text color={C.wait} wrap="truncate">
-            ◇ {hint.epic}: {hint.text}
-          </Text>
-        ))}
-      </Box>
-    )
-  } else if (current === 'run') {
-    const log = job.lines.slice(-Math.max(6, rows - 26))
-    body = (
-      <Box flexDirection="column">
-        {section('Worker', 'factory.sh run in the background — one stage per process, a gate between them')}
-        <Box gap={1} flexWrap="wrap">
-          {!isRunning() && <Button key="run-all" label="▶ Run the backlog" hotkey="r" variant="primary" autoFocus onPress={() => runWorker($, 'run the backlog', ['run'])} />}
-          {!isRunning() && <Button key="run-watch" label="◉ Run & keep watching" hotkey="w" onPress={() => runWorker($, 'run and watch', ['run', '--watch'])} />}
-          {isRunning() && <Button key="stop" label="■ Stop" hotkey="x" variant="primary" onPress={() => stopWorker($)} />}
-        </Box>
-        <Box gap={2}>
-          <Text color={job.state === 'running' ? C.accent : job.code === 0 ? C.done : job.state === 'ended' ? C.wait : C.muted}>
-            {job.state === 'running'
-              ? `▶ ${job.label} · ${duration((at - job.startedAt) / 1000)}`
-              : job.state === 'ended'
-                ? `■ ${job.label} — ${EXIT_WORDS[job.code ?? -1] ?? `ended (${job.code ?? 'signal'})`}`
-                : 'no worker started from here'}
-          </Text>
-        </Box>
-        {status.extra.map(line => (
-          <Text color={C.muted} wrap="truncate">
-            {line}
-          </Text>
-        ))}
-        {section('Running')}
-        {status.running.length === 0 && <Text color={C.muted}>No stage is running.</Text>}
-        {status.running.map(running => {
-          const stages = stagesOf(now.journals[running.story] ?? [])
-          return (
-            <Box flexDirection="column">
-              <Box gap={1}>
-                <Button key={`running-${running.story}`} label={running.story} plain onPress={() => openStory($, running.story)} />
-                <Text color={running.interrupted ? C.fail : C.accent}>
-                  {running.stage}
-                  {running.ago ? ` · since ${running.ago}` : ''}
-                  {running.interrupted ? ' · interrupted' : ''}
-                </Text>
-              </Box>
-              {running.activity && (
-                <Text color={C.muted} wrap="truncate">
-                  {'  '}
-                  {running.activity}
-                </Text>
-              )}
-              <Box flexWrap="wrap" columnGap={1} paddingLeft={2}>
-                {stages.map(run => (
-                  <Text backgroundColor={run.runningSince ? C.accent : undefined} color={run.runningSince ? C.onAccent : stageColor(run)}>
-                    {` ${stageLabel(run, at)} `}
-                  </Text>
-                ))}
-              </Box>
-            </Box>
-          )
-        })}
-        {section('Output', job.lines.length > 0 ? `last ${log.length} lines` : undefined)}
-        <Box borderStyle="single" borderColor={C.muted} paddingX={1} flexDirection="column">
-          {log.length === 0 ? (
-            <Text color={C.muted}>Nothing yet. A worker started here writes its output into this box.</Text>
-          ) : (
-            log.map(line => (
-              <Text wrap="truncate" color={/refus|fail|error|✗/i.test(line) ? C.fail : /✓|pass|delivered/i.test(line) ? C.done : undefined}>
-                {line || ' '}
-              </Text>
-            ))
-          )}
-        </Box>
-        <Text color={C.muted}>The worker is a child of this session: ending the session or reloading the mod stops it.</Text>
-      </Box>
-    )
-  } else if (current === 'decide') {
-    const pending = now.decisions.filter(record => record.state === 'open' || record.state === 'draft')
-    const answered = now.decisions.filter(record => !pending.includes(record)).slice(0, Math.max(3, rows - 24))
-    const line = (record: (typeof now.decisions)[number]) => (
-      <Box gap={1}>
-        <Text color={record.kind === 'acceptance' ? C.info : C.wait}>{record.kind === 'acceptance' ? '!' : '?'}</Text>
-        {cell(9, record.state, record.state === 'open' ? C.wait : C.muted)}
-        <Button key={`record-${record.id}`} label={record.id} plain onPress={() => openFile($, `${now.root}/${record.path}`, record.id, null)} />
-        <Text color={C.muted} wrap="truncate">
-          {short(record.asked)} · {record.text}
-        </Text>
-      </Box>
-    )
-    body = (
-      <Box flexDirection="column">
-        {section('Waiting for you', 'questions a stage may not decide alone, results to look at')}
-        {pending.length === 0 && status.waiting.length === 0 && <Text color={C.done}>Nothing waits for you.</Text>}
-        {pending.map(line)}
-        {status.waiting.map(wait => (
-          <Box gap={1}>
-            <Text color={C.wait}>{MARK_GLYPH[wait.mark] ?? '?'}</Text>
-            <Text bold>{wait.story}</Text>
-            <Text color={C.muted}>{wait.what}</Text>
-            <Button key={`answer-${wait.story}`} label="Answer in session" variant="primary" onPress={() => send($, `/factory-decisions ${wait.story}`)} />
-          </Box>
-        ))}
-        {section('Answered', `${now.decisions.length - pending.length} records`)}
-        {answered.map(line)}
-      </Box>
-    )
-  } else {
-    const delivered = status.rows.filter(row => row.done)
-    body = (
-      <Box flexDirection="column">
-        {section('Delivered', `${delivered.length} stories · ${duration(delivered.reduce((sum, row) => sum + row.seconds, 0))} worked`)}
-        {delivered.length > 0 &&
-          table(
-            [
-              { name: 'story', width: idWidth },
-              { name: 'delivered UTC', width: 13 },
-              { name: 'worked', width: 12, isNumber: true },
-              { name: 'tokens', width: 8, isNumber: true },
-              { name: 'cost', width: 10, isNumber: true },
-              { name: 'epic', width: 22 },
-            ],
-            delivered.map(row => [
-              { node: storyButton(row) },
-              { text: short(row.delivered), color: C.done },
-              { text: row.seconds > 0 ? duration(row.seconds) : '—' },
-              { text: row.tokens > 0 ? tokensText(row.tokens) : '—' },
-              { text: row.cost > 0 ? `${row.cost.toFixed(2)} USD` : '—' },
-              { text: row.epic, color: C.muted },
-            ]),
-          )}
-        {section('Epics')}
-        {status.epics.map(epic => {
-          const front = epic
-          const unguarded = status.journeys.find(hint => hint.epic === epic.epic)
-          return (
-            <Box flexDirection="column">
-              <Box gap={1}>
-                <Text bold color={epic.delivered === epic.total ? C.done : undefined}>
-                  {epic.delivered === epic.total ? '✓' : '·'} {front.title || epic.epic}
-                </Text>
-                <Text color={C.muted}>
-                  {epic.delivered} of {epic.total}
-                </Text>
-                {unguarded && <Text color={C.wait}>◇ {unguarded.text}</Text>}
-              </Box>
-              {front?.metric && (
-                <Text color={C.info} wrap="truncate">
-                  {'  '}outcome: {front.metric}
-                </Text>
-              )}
-            </Box>
-          )
-        })}
-      </Box>
-    )
-  }
-
-  const hints: Record<Tab, string> = {
-    describe: 'Enter on a file opens it · ✎ edit opens it in your editor · type a change, Enter sends it',
-    discover: '→ Make epic releases a proposal into the backlog · type a topic, Enter sends it',
-    backlog: '+ stories cuts stories · release approves drafts · Enter on a story opens it',
-    run: isRunning() ? 'x stop' : 'r run the backlog · w run & watch',
-    decide: 'Enter on a record opens it',
-    delivered: 'Enter on a story opens it',
-  }
-
-  return (
+  const page = (body: RenderElement | RenderElement[], hint: string) => (
     <Box flexDirection="column" paddingX={1}>
       {head}
       <Box flexDirection="column" marginTop={1}>
         {body}
       </Box>
-      {keys(hints[current])}
+      {ui.keys(isFocused, hint)}
     </Box>
+  )
+
+  // ---- a file: a description, a discovery report, a hand-over, a decision record
+  if (open?.kind === 'file') {
+    return page(
+      [
+        <Box gap={1}>
+          <Text bold>{open.title}</Text>
+        </Box>,
+        ui.actions([
+          ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back)), { hotkey: 'b' }),
+          ui.button('edit', '✎ edit', () => void editFile($, open.path), { hotkey: 'e' }),
+        ]),
+        ui.framed(ui.markdown(await read($, fileText))),
+      ],
+      'b back · e edit in your editor',
+    )
+  }
+
+  // ---- one story: its pipeline, numbers, passes, history, hand-overs and decisions
+  if (open?.kind === 'story') {
+    const row = status.rows.find(one => one.story === open.id)
+    const events = now.journals[open.id] ?? []
+    const stored = await read($, storyView)
+    const view = stored?.story === open.id ? stored : null
+    const perStage = view ? Object.entries(view.stages) : []
+    const longest = Math.max(1, ...perStage.map(([, one]) => one.seconds))
+    const records = now.decisions.filter(record => record.story === open.id)
+    const waits = status.waiting.some(wait => wait.story === open.id)
+    const shown = events.filter(event => event.kind !== 'usage').slice(-Math.max(4, rows - 34))
+    const mark = row?.mark ?? 'none'
+    return page(
+      [
+        <Box gap={1}>
+          <Text bold color={MARK_COLOR[mark]}>
+            {MARK_GLYPH[mark]}
+          </Text>
+          <Text bold>
+            {open.id} — {row?.title ?? ''}
+          </Text>
+        </Box>,
+        ui.facts([
+          { text: row?.state ?? '', color: MARK_COLOR[mark] },
+          { text: row?.epic ?? '' },
+          row && row.seconds > 0 && { text: `worked ${fmt.time(row.seconds)}` },
+          row && row.tokens > 0 && { text: `${fmt.tokens(row.tokens)} tokens` },
+          row && row.cost > 0 && { text: `cost ${fmt.cost(row.cost)}` },
+        ]),
+        ui.facts([
+          row?.started && { text: `started ${moment(row.started)}` },
+          row?.delivered && { text: `delivered ${moment(row.delivered)}`, color: C.done },
+          view?.accepted_by && { text: `accepted (${view.accepted_by})`, color: C.done },
+          view?.context && { text: `context ${view.context}` },
+          view && view.criteria > 0 && { text: `${view.criteria} acceptance criteria` },
+        ]),
+        ui.actions([
+          ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' }),
+          row && !row.done && !isRunning() && ui.button('run', '▶ Run (worker)', () => void runWorker($, `run ${open.id}`, ['run', '--story', open.id]), { hotkey: 'r', isPrimary: true }),
+          row && !row.done && ui.button('session', 'Run in this session', () => send($, `/factory-run ${open.id}`), { hotkey: 'e' }),
+          waits && ui.button('answer', '? Answer', () => send($, `/factory-decisions ${open.id}`), { hotkey: 'a', isPrimary: true }),
+          row?.done && ui.button('verify', 'Verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v' }),
+        ]),
+        ui.section('Pipeline'),
+        ui.chips(stagesOf(events), at),
+        ui.section('Time per stage', "the factory's own numbers"),
+        ui.table(
+          [COL.stage, { name: 'share', width: 20 }, COL.time, COL.runs, COL.tokens, COL.cost, { name: 'model', width: 18 }],
+          perStage.map(([name, one]) => [
+            { text: name, bold: true },
+            { text: bar(one.seconds, longest, 20), color: C.accent },
+            { text: fmt.time(one.seconds) },
+            { text: String(one.runs), color: one.runs > 1 ? C.wait : C.muted },
+            { text: fmt.tokens(one.tokens) },
+            { text: fmt.cost(one.cost) },
+            { text: one.models.join(', ') || '—', color: C.muted },
+          ]),
+          'Not run yet.',
+        ),
+        ui.section('Passes'),
+        ui.table(
+          [{ name: '#', width: 2, isNumber: true }, { name: 'pass', width: 16 }, COL.started, COL.time, { name: 'waited', width: 10, isNumber: true }, COL.tokens, { name: 'stages', width: 30 }],
+          (view?.passes ?? []).map((pass, index) => [
+            { text: String(index + 1), color: C.muted },
+            { text: pass.label, color: index === 0 ? C.done : C.wait },
+            { text: fmt.when(pass.start), color: C.muted },
+            { text: fmt.time(pass.seconds) },
+            { text: fmt.time(pass.waited), color: C.muted },
+            { text: fmt.tokens(pass.tokens) },
+            { text: pass.stages.join(' '), color: C.muted },
+          ]),
+          'No pass yet.',
+        ),
+        ui.section('History', 'UTC'),
+        ui.table(
+          [{ name: 'day', width: 10 }, { name: 'time', width: 9 }, { name: 'event', width: 8 }, COL.stage],
+          shown.map((event, index) => {
+            const isGate = event.kind === 'gate'
+            const passed = event.fields.exit === '0'
+            return [
+              { text: index === 0 || day(shown[index - 1]?.at ?? '') !== day(event.at) ? day(event.at) : '', color: C.muted, bold: true },
+              { text: clock(event.at), color: C.muted },
+              {
+                text: isGate ? (passed ? 'gate ✓' : 'gate ✗') : event.kind === 'stage-start' ? '▶ start' : '■ end',
+                color: isGate ? (passed ? C.done : C.fail) : event.kind === 'stage-start' ? C.accent : C.muted,
+              },
+              { text: event.stage },
+            ]
+          }),
+        ),
+        ui.section('Hand-over'),
+        ui.table(
+          [{ name: 'file', width: 20 }],
+          (now.handovers[open.id] ?? []).map(file => [
+            { node: ui.link(`file-${file}`, file, () => void openFile($, `${now.root}/.dca-factory/runs/${open.id}/${file}`, `${open.id} / ${file}`, open)) },
+          ]),
+          'No hand-over yet.',
+        ),
+        ui.section('Decisions'),
+        recordTable(records, open),
+      ],
+      `b back${row && !row.done ? ' · r run · e in session' : ''}${waits ? ' · a answer' : ''}`,
+    )
+  }
+
+  // ---- the foundation and the five steps of the cycle
+  const story = (row: Row): Cell[] => [
+    storyCell(row),
+    { text: row.state, color: MARK_COLOR[row.mark] },
+    { text: row.stage, color: C.muted },
+    { text: row.passes > 0 ? String(row.passes) : '—', color: row.passes > 1 ? C.wait : C.muted },
+    { text: fmt.when(row.started), color: C.muted },
+    { text: fmt.time(row.seconds) },
+    { text: fmt.tokens(row.tokens) },
+    { text: fmt.cost(row.cost) },
+  ]
+  const storyColumns = [COL.story(idWidth), COL.state, COL.stage, COL.passes, COL.started, COL.worked, COL.tokens, COL.cost]
+
+  if (current === 'describe') {
+    return page(
+      [
+        ui.section('Project description', 'the foundation — written once, changed when the product or the technical situation moves'),
+        ui.table(
+          [COL.mark, { name: 'file', width: 12 }, { name: 'sections', width: 44 }, { name: 'open', width: 30 }, COL.action(7)],
+          (status.description ?? []).map(part => {
+            const path = `${now.root}/${part.path}`
+            const name = part.path.split('/').pop() ?? part.part
+            const gaps = [...part.missing.map(h => `missing ${h}`), ...part.empty.map(h => `empty ${h}`)]
+            return [
+              { text: !part.present ? '✗' : gaps.length > 0 ? '!' : '✓', color: !part.present ? C.fail : gaps.length > 0 ? C.wait : C.done, bold: true },
+              part.present ? { node: ui.link(`doc-${part.part}`, name, () => void openFile($, path, name, null)) } : { text: name, color: C.fail },
+              { text: part.present ? part.sections.join(' · ') : 'missing — Describe writes it', color: C.muted },
+              { text: gaps.join(' · ') || '—', color: gaps.length > 0 ? C.wait : C.muted },
+              part.present ? { node: ui.link(`edit-${part.part}`, '✎ edit', () => void editFile($, path)) } : {},
+            ]
+          }),
+          'No description view — update the pipeline.',
+        ),
+        <Box marginTop={1} flexDirection="column">
+          {ask('change', 'Change the description', 'what should change? e.g. "the shop also sells gift cards"', '/dca-describe')}
+        </Box>,
+        ui.actions([ui.button('describe', '✎ Describe / complete the project', () => send($, '/dca-describe'), { isPrimary: true })]),
+      ],
+      'Enter on a file opens it · ✎ edit opens it in your editor · type a change, Enter sends it',
+    )
+  }
+
+  if (current === 'discover') {
+    return page(
+      [
+        ui.section('Discovery', 'which problem is worth solving, and how anyone will know it got better'),
+        ...(now.topics.length === 0 ? [<Text color={C.muted}>No discovery yet.</Text>] : []),
+        ...now.topics.map(topic => (
+          <Box flexDirection="column" marginTop={2}>
+            <Box gap={1}>
+              <Text color={C.info}>◆</Text>
+              {ui.link(`topic-${topic.topic}`, topic.topic, () => void openFile($, `${now.root}/${topic.report}`, topic.title, null))}
+              <Text color={C.muted} wrap="truncate">
+                {topic.title}
+              </Text>
+            </Box>
+            {ui.table(
+              [COL.mark, { name: 'proposal', width: 18 }, { name: 'outcome', width: 18 }, { name: 'goal', width: 36 }, COL.action(16)],
+              topic.proposals.map(proposal => [
+                { text: proposal.epic ? '✓' : '○', color: proposal.epic ? C.done : C.info, bold: true },
+                { text: proposal.id, bold: true },
+                { text: proposal.metric, color: C.info },
+                { text: proposal.goal, color: C.muted },
+                proposal.epic
+                  ? { text: `epic ${proposal.epic}`, color: C.done }
+                  : { node: ui.button(`release-${topic.topic}-${proposal.id}`, '→ Make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true }) },
+              ]),
+              'No proposed work in the report yet.',
+            )}
+            {topic.description_changes.length > 0 &&
+              ui.table(
+                [{ name: 'description', width: 24 }, { name: 'change', width: 46 }, COL.action(9)],
+                topic.description_changes.map((change, index) => [
+                  { text: change.target, color: C.wait },
+                  { text: change.change, color: C.muted },
+                  { node: ui.button(`describe-${topic.topic}-${index}`, '→ apply', () => send($, `/dca-describe ${change.target}: ${change.change}`)) },
+                ]),
+              )}
+          </Box>
+        )),
+        <Box marginTop={1} flexDirection="column">
+          {ask('discover', 'New topic', 'a problem or a wished deliverable', '/factory-discover')}
+        </Box>,
+      ],
+      '→ Make epic releases a proposal into the backlog · type a topic, Enter sends it',
+    )
+  }
+
+  if (current === 'backlog') {
+    return page(
+      [
+        <Box flexDirection="column" gap={1}>
+          {ask('story', 'Write a story', 'what should the product do next?', '/factory-backlog')}
+          {ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run')}
+        </Box>,
+        ...(status.epics.length === 0 ? [<Text color={C.muted}>The backlog is empty.</Text>] : []),
+        ...status.epics.map(epic => {
+          const drafts = epic.rows.filter(row => /draft/.test(row.state))
+          return (
+            <Box flexDirection="column">
+              {ui.epicHead({ ...epic, title: epic.title || epic.epic }, [
+                ui.button(`stories-${epic.epic}`, '+ stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0 }),
+                drafts.length > 0 &&
+                  ui.button(`release-all-${epic.epic}`, `release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`, () =>
+                    send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
+                  ),
+              ])}
+              {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — + stories cuts the first')}
+            </Box>
+          )
+        }),
+        ...(status.journeys.length > 0
+          ? [
+              ui.section('Journeys'),
+              ui.table(
+                [COL.mark, COL.epic, { name: 'journey', width: 56 }],
+                status.journeys.map(hint => [{ text: '◇', color: C.wait }, { text: hint.epic }, { text: hint.text, color: C.wait }]),
+              ),
+            ]
+          : []),
+      ],
+      '+ stories cuts stories · release approves drafts · Enter on a story opens it',
+    )
+  }
+
+  if (current === 'run') {
+    const log = job.lines.slice(-Math.max(6, rows - 30))
+    return page(
+      [
+        ui.section('Worker', 'factory.sh run in the background — one stage per process, a gate between them'),
+        ui.actions([
+          !isRunning() && ui.button('run-all', '▶ Run the backlog', () => void runWorker($, 'run the backlog', ['run']), { hotkey: 'r', isPrimary: true }),
+          !isRunning() && ui.button('run-watch', '◉ Run & keep watching', () => void runWorker($, 'run and watch', ['run', '--watch']), { hotkey: 'w' }),
+          isRunning() && ui.button('stop', '■ Stop', () => void stopWorker($), { hotkey: 'x', isPrimary: true }),
+        ]),
+        ui.facts([
+          {
+            text:
+              job.state === 'running'
+                ? `▶ ${job.label} · ${fmt.time((at - job.startedAt) / 1000)}`
+                : job.state === 'ended'
+                  ? `■ ${job.label} — ${EXIT_WORDS[job.code ?? -1] ?? `ended (${job.code ?? 'signal'})`}`
+                  : 'no worker started from here',
+            color: job.state === 'running' ? C.accent : job.code === 0 ? C.done : job.state === 'ended' ? C.wait : C.muted,
+          },
+          ...status.extra.map(text => ({ text })),
+        ]),
+        ui.section('Running'),
+        ui.table(
+          [COL.story(idWidth), COL.stage, { name: 'since', width: 14 }, { name: 'activity', width: 40 }],
+          status.running.map(running => [
+            { node: ui.link(`running-${running.story}`, running.story, () => void openStory($, running.story)) },
+            { text: running.stage, color: running.interrupted ? C.fail : C.accent, bold: true },
+            { text: running.interrupted ? 'interrupted' : running.ago ?? fmt.when(running.since), color: running.interrupted ? C.fail : C.muted },
+            { text: running.activity ?? '—', color: C.muted },
+          ]),
+          'No stage is running.',
+        ),
+        ...status.running.map(running => ui.chips(stagesOf(now.journals[running.story] ?? []), at, running.story)),
+        ui.section('Output', job.lines.length > 0 ? `last ${log.length} lines` : undefined),
+        ui.framed(
+          log.length === 0
+            ? [<Text color={C.muted}>Nothing yet. A worker started here writes its output into this box.</Text>]
+            : log.map(text => (
+                <Text wrap="truncate" color={/refus|fail|error|✗/i.test(text) ? C.fail : /✓|pass|delivered/i.test(text) ? C.done : undefined}>
+                  {text || ' '}
+                </Text>
+              )),
+        ),
+        <Text color={C.muted}>The worker is a child of this session: ending the session or reloading the mod stops it.</Text>,
+      ],
+      isRunning() ? 'x stop' : 'r run the backlog · w run & watch',
+    )
+  }
+
+  if (current === 'decide') {
+    const pending = now.decisions.filter(record => record.state === 'open' || record.state === 'draft')
+    const answered = now.decisions.filter(record => !pending.includes(record)).slice(0, Math.max(3, rows - 26))
+    return page(
+      [
+        ui.section('Waiting for you', 'questions a stage may not decide alone, results to look at'),
+        ...(pending.length === 0 && status.waiting.length === 0 ? [<Text color={C.done}>Nothing waits for you.</Text>] : []),
+        ...(pending.length > 0 ? [recordTable(pending, null)] : []),
+        ...(status.waiting.length > 0
+          ? [
+              ui.table(
+                [COL.mark, COL.story(idWidth), { name: 'what', width: 36 }, COL.action(20)],
+                status.waiting.map(wait => [
+                  { text: MARK_GLYPH[wait.mark] ?? '?', color: C.wait, bold: true },
+                  { text: wait.story, bold: true },
+                  { text: wait.what, color: C.muted },
+                  { node: ui.button(`answer-${wait.story}`, 'Answer in session', () => send($, `/factory-decisions ${wait.story}`), { isPrimary: true }) },
+                ]),
+              ),
+            ]
+          : []),
+        ui.section('Answered', `${now.decisions.length - pending.length} records`),
+        recordTable(answered, null),
+      ],
+      'Enter on a record opens it',
+    )
+  }
+
+  const delivered = status.rows.filter(row => row.done)
+  return page(
+    [
+      ui.section('Delivered', `${delivered.length} stories · ${fmt.time(delivered.reduce((sum, row) => sum + row.seconds, 0))} worked`),
+      ui.table(
+        [COL.story(idWidth), COL.delivered, COL.worked, COL.tokens, COL.cost, COL.epic],
+        delivered.map(row => [
+          storyCell(row),
+          { text: fmt.when(row.delivered), color: C.done },
+          { text: fmt.time(row.seconds) },
+          { text: fmt.tokens(row.tokens) },
+          { text: fmt.cost(row.cost) },
+          { text: row.epic, color: C.muted },
+        ]),
+        'Nothing delivered yet.',
+      ),
+      ui.section('Epics'),
+      ui.table(
+        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'outcome', width: 30 }, { name: 'journey', width: 30 }],
+        status.epics.map(epic => {
+          const unguarded = status.journeys.find(hint => hint.epic === epic.epic)
+          const isDone = epic.total > 0 && epic.delivered === epic.total
+          return [
+            { text: isDone ? '✓' : '·', color: isDone ? C.done : C.muted, bold: true },
+            { text: epic.title || epic.epic, bold: true },
+            { text: `${epic.delivered} of ${epic.total}`, color: C.muted },
+            { text: epic.metric || '—', color: C.info },
+            { text: unguarded ? `◇ ${unguarded.text}` : '—', color: unguarded ? C.wait : C.muted },
+          ]
+        }),
+      ),
+    ],
+    'Enter on a story opens it',
   )
 }
