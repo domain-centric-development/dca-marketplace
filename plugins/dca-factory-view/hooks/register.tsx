@@ -346,6 +346,16 @@ export const register: Register = on => {
     return ran
   })
 
+  // An arrow that would carry the focus out of the pane steps back instead while a detail is open — a story, an
+  // epic, a topic, a file; from a tab's overview the focus may leave as the engine moves it.
+  on('ui.focus', { requestId: PANE }, async ($, e, next) => {
+    const open = await read($, detail)
+    if (e.origin.kind !== 'person' || e.element !== undefined || open === null) return next(e)
+    if (open.kind === 'file' && open.back?.kind === 'story') await openStory($, open.back.id)
+    else await update($, detail, () => (open.kind === 'file' ? open.back : null))
+    return {}
+  })
+
   // A slash command the cockpit sent runs as a turn of its own; when any turn ends, what it wrote is read.
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
