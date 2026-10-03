@@ -433,7 +433,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   )
 
   const page = (body: RenderElement | RenderElement[], hint: string) => (
-    <Box flexDirection="column" paddingX={1} paddingY={1} backgroundColor={C.bg}>
+    // the painted surface fills the pane: at least the rows the surface gave its body, the whole width
+    <Box flexDirection="column" paddingX={1} paddingY={1} backgroundColor={C.bg} minHeight={e.props.scroll?.bodyRows ?? rows} width={e.props.bodyColumns ?? '100%'}>
       {head}
       <Box flexDirection="column" marginTop={1}>
         {body}
