@@ -191,6 +191,7 @@ async function refresh($: EngineInterface, isQuiet = false, isLive = false): Pro
       const view = await loadStory($, now.root, open.id).catch(() => null)
       await update($, storyView, () => view)
     }
+    if (open?.kind === 'file') await readFile($, open.path)
     if (!now) {
       $.ui.status(undefined)
       return
@@ -285,9 +286,15 @@ async function openStory($: EngineInterface, id: string): Promise<void> {
   }
 }
 
-async function openFile($: EngineInterface, path: string, title: string, back: Detail | null): Promise<void> {
+// A file is read when it opens and again on every refresh, so a report or a hand-over a skill rewrites shows as it
+// stands now.
+async function readFile($: EngineInterface, path: string): Promise<void> {
   const text = await $.fs.read(path).catch(() => '(not readable)')
   await update($, fileText, () => (text.length > 30_000 ? `${text.slice(0, 30_000)}\n\n…` : text))
+}
+
+async function openFile($: EngineInterface, path: string, title: string, back: Detail | null): Promise<void> {
+  await readFile($, path)
   await update($, detail, () => ({ kind: 'file', path, title, back }) as Detail)
 }
 
