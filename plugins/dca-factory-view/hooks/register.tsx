@@ -685,7 +685,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${fmt.tokens(epic.tokens)} tokens` : ''}`,
           },
           [
-            ui.button(`stories-${epic.epic}`, '+ stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0 }),
+            ui.button(`stories-${epic.epic}`, '✎ draft next stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0 }),
             drafts.length > 0 &&
               ui.button(`release-all-${epic.epic}`, `release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`, () =>
                 send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
@@ -697,7 +697,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
           ],
         )}
-        {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — + stories cuts the first')}
+        {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — ✎ draft next stories lets the backlog skill draft the first')}
       </Box>
     )
   }
@@ -720,7 +720,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   }
   if (open?.kind === 'epic') {
     const epic = status.epics.find(one => one.epic === open.epic)
-    return page([back, epic ? epicBody(epic) : <Text color={C.muted}>No such epic.</Text>], 'b back · + stories cuts stories · Enter on a story opens it')
+    return page([back, epic ? epicBody(epic) : <Text color={C.muted}>No such epic.</Text>], 'b back · ✎ draft next stories: the backlog skill drafts them, you release them · Enter on a story opens it')
   }
 
   if (current === 'discover') {
