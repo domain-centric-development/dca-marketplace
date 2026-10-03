@@ -51,7 +51,7 @@ dca-marketplace/
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
 │   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-help,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; the factory explained; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
-├── plugins/dca-factory-view/              # Claude Code only, optional: the factory cycle as a cockpit (function hooks)
+├── plugins/dca-factory-cockpit/           # Claude Code only, optional: the factory cycle as a cockpit (function hooks)
 ├── plugins/dca-craft/                     # craft independent of the architecture style; names no DCA artifact
 │   ├── skills/{tdd,clean-code,adr,e2e-testing,ubiquitous-language,context-map,product-discovery}/
 │   ├── skills/{review-ddd,review-hexagonal,review-clean-code}/   # the three general review perspectives
@@ -96,12 +96,12 @@ dca-marketplace/
   say what it pairs with. The reviewers are the outside view; `dca-audit` in dca-core is the method's
   audit — a person runs it on a project, a context or a diff; the factory's judge does not load it by default.
   Knowledge lives in the skills; the agents are thin wrappers for an isolated context and a tool restriction.
-- **dca-factory-view** — Claude Code only and optional: `/factory-view` draws the factory's foundation and cycle
+- **dca-factory-cockpit** — Claude Code only and optional: `/factory-cockpit` draws the factory's foundation and cycle
   as a cockpit in a pane (function hooks, an early-access Claude Code surface). It reads `factory.sh` JSON views
   and the journals, sends slash commands through `$.command.run` and may start `factory.sh run` as a child; it
   holds no logic the factory lacks and is never a dependency of `dca-factory`, which stays portable. A view the
   cockpit needs is added to `factory.sh` first (a JSON format every tool can read), then drawn here. Tests:
-  `claude plugin test plugins/dca-factory-view`.
+  `claude plugin test plugins/dca-factory-cockpit`.
 
 ## Generated content — never hand-edit
 

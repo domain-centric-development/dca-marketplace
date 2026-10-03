@@ -113,8 +113,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     })
     on('prompt.fill', async () => ({ isFilled: true }) as never)
 
-    await $.command.run({ command: 'factory-view', args: '' } as never)
-    const pane = await $.ui.mount({ plugin: 'dca-factory-view', surface, component: 'Pane', requestId: 'factory-view', props: { title: 'Factory', isFocused: true } as never })
+    await $.command.run({ command: 'factory-cockpit', args: '' } as never)
+    const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface, component: 'Pane', requestId: 'factory-cockpit', props: { title: 'Factory', isFocused: true } as never })
 
     // the head: project, waiting banner, next; the backlog tab is the start
     expect(await pane.find({ text: /books-app/ })).toBeDefined()
@@ -176,6 +176,6 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     // the close button closes the pane
     await pane.press({ key: 'close' })
-    expect(closed).toEqual(['factory-view'])
+    expect(closed).toEqual(['factory-cockpit'])
   })
 }

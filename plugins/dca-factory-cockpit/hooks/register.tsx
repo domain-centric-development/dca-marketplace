@@ -9,15 +9,15 @@ import { appendLines, bar, clock, day, moment, parseJournal, stagesOf, touchesFa
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
 // matching command into this session or starts the runner — both are the person's act. How things look lives in
 // components.tsx; this file reads, acts and arranges.
-const PANE = 'factory-view'
+const PANE = 'factory-cockpit'
 const STATUS_MS = 20_000
 const LIVE_MS = 5_000
 
-const cockpit = atom({ plugin: 'dca-factory-view', key: 'cockpit' } as const, null)
-const storyView = atom({ plugin: 'dca-factory-view', key: 'story' } as const, null as StoryView | null)
-const tab = atom({ plugin: 'dca-factory-view', key: 'tab' } as const, 'backlog' as Tab)
-const detail = atom({ plugin: 'dca-factory-view', key: 'detail' } as const, null as Detail | null)
-const fileText = atom({ plugin: 'dca-factory-view', key: 'fileText' } as const, '')
+const cockpit = atom({ plugin: 'dca-factory-cockpit', key: 'cockpit' } as const, null)
+const storyView = atom({ plugin: 'dca-factory-cockpit', key: 'story' } as const, null as StoryView | null)
+const tab = atom({ plugin: 'dca-factory-cockpit', key: 'tab' } as const, 'backlog' as Tab)
+const detail = atom({ plugin: 'dca-factory-cockpit', key: 'detail' } as const, null as Detail | null)
+const fileText = atom({ plugin: 'dca-factory-cockpit', key: 'fileText' } as const, '')
 
 // The recurring cycle; Describe sits beside it with set up and update — written once, changed when things move.
 const TABS: { id: Tab; label: string; key: string }[] = [
@@ -121,7 +121,7 @@ async function loadStory($: EngineInterface, root: string, id: string): Promise<
 
 // The worker is factory.sh run, started by the person's press and nothing else. It runs as a child of
 // this module: a reload of the mod or the end of the session ends it, and the runner gives its claim back.
-const worker = atom({ plugin: 'dca-factory-view', key: 'worker' } as const, {
+const worker = atom({ plugin: 'dca-factory-cockpit', key: 'worker' } as const, {
   state: 'idle',
   label: '',
   startedAt: 0,
@@ -314,7 +314,7 @@ async function runWorker($: EngineInterface, label: string, args: string[]): Pro
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'factory-view', description: 'The product flow as a cockpit: describe beside the cycle discover, backlog, run, decide, delivered — `close` closes it' })
+    await $.command.register({ name: 'factory-cockpit', description: 'The product flow as a cockpit: describe beside the cycle discover, backlog, run, decide, delivered — `close` closes it' })
     await refresh($, true)
     $.clock.every(STATUS_MS, () => void refresh($))
     $.clock.every(LIVE_MS, () => {
@@ -326,10 +326,10 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'factory-view' }, async ($, e) => {
+  on('command.run', { command: 'factory-cockpit' }, async ($, e) => {
     if (e.args.trim() === 'close') {
       await $.ui.close({ id: PANE })
-      return { text: 'Factory cockpit closed — /factory-view opens it again.' }
+      return { text: 'Factory cockpit closed — /factory-cockpit opens it again.' }
     }
     await refresh($, true)
     if (!(await read($, cockpit))) {

@@ -1,4 +1,4 @@
-# dca-factory-view
+# dca-factory-cockpit
 
 **Claude Code only, optional.** The dca-factory cycle as a cockpit in a Claude Code pane — a function-hooks
 plugin ("mod"). It draws what `factory.sh` prints and the project's files hold; it decides nothing, and the
@@ -40,14 +40,14 @@ reloading the plugin stops that worker; the runner gives its claim on the worksp
 ## Install and use
 
 ```
-/plugin install dca-factory-view@dca-marketplace
-/factory-view
+/plugin install dca-factory-cockpit@dca-marketplace
+/factory-cockpit
 ```
 
-`0` opens Describe, `1`–`5` the cycle, ↑↓, Tab and Shift+Tab move, `b` goes back, `q` or `ctrl+x x` closes the pane (`/factory-view close` from the prompt), `Esc` returns to the prompt. ← and → are Claude Code's own — a mod receives no left or right arrow. The pane has the keyboard after
-`/factory-view`, a click into it, or `ctrl+x tab` — the last two only while the prompt is empty.
+`0` opens Describe, `1`–`5` the cycle, ↑↓, Tab and Shift+Tab move, `b` goes back, `q` or `ctrl+x x` closes the pane (`/factory-cockpit close` from the prompt), `Esc` returns to the prompt. ← and → are Claude Code's own — a mod receives no left or right arrow. The pane has the keyboard after
+`/factory-cockpit`, a click into it, or `ctrl+x tab` — the last two only while the prompt is empty.
 
 ## Early access
 
 Function hooks are an early-access surface of Claude Code and may change between releases; this plugin keeps its
-own version so it can follow them without touching the factory. Tests: `claude plugin test plugins/dca-factory-view`.
+own version so it can follow them without touching the factory. Tests: `claude plugin test plugins/dca-factory-cockpit`.

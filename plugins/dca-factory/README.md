@@ -292,7 +292,7 @@ and `--format json` for tools. Every epic with an `epic.md` is listed, also befo
 step is `/factory-backlog stories <epic>`), with its title, goal, outcome event and discovery link; the JSON also
 carries the project description as it stands — each part present or missing, its missing and empty headings.
 `factory.sh discover --list [--format json]` lists every discovery topic with its proposed epics, which of them
-are epics already, and its proposed description changes. In Claude Code, the optional `dca-factory-view` plugin
+are epics already, and its proposed description changes. In Claude Code, the optional `dca-factory-cockpit` plugin
 draws all of it as a cockpit; the files and these commands stay the source.
 
 ## A model per stage

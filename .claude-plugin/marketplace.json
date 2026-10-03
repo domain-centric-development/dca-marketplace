@@ -34,13 +34,13 @@
       "source": "./plugins/dca-factory"
     },
     {
-      "name": "dca-factory-view",
+      "name": "dca-factory-cockpit",
       "description": "Claude Code only, optional: the dca-factory cycle as a cockpit in a pane — describe and set up beside the cycle discover, backlog, run, decide, delivered — live, with a background worker. It draws what factory.sh prints and decides nothing; the factory works the same without it.",
       "author": {
         "name": "Christoph Bloemer"
       },
       "category": "development",
-      "source": "./plugins/dca-factory-view"
+      "source": "./plugins/dca-factory-cockpit"
     }
   ]
 }

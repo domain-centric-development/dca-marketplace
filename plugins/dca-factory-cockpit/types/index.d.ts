@@ -131,7 +131,7 @@ export type Worker = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'dca-factory-view': {
+    'dca-factory-cockpit': {
       cockpit: Cockpit | null
       story: StoryView | null
       tab: Tab

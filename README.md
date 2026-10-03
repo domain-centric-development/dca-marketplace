@@ -17,7 +17,7 @@ Add the marketplace once, then install what you need. No clone, no build step:
 /plugin install dca-core@dca-marketplace       # the architecture method
 /plugin install dca-craft@dca-marketplace      # TDD, Clean Code, ADRs, end-user tests, glossary, context map, reviews
 /plugin install dca-factory@dca-marketplace    # the delivery pipeline
-/plugin install dca-factory-view@dca-marketplace   # optional, Claude Code only: the pipeline as a cockpit
+/plugin install dca-factory-cockpit@dca-marketplace   # optional, Claude Code only: the pipeline as a cockpit
 ```
 
 Check it worked: `/plugin` lists each one as *installed*, and its skills appear under the plugin's
@@ -45,7 +45,7 @@ Only for working *on* these plugins — a clone, so edits take effect without a 
 | start a DCA project from nothing, or add DCA to an existing one | `dca-core` (`/dca-new`, `/dca-init`) |
 | TDD, Clean Code, ADRs, end-user tests, a glossary, a context map and an outside review — with or without DCA | `dca-craft` |
 | deliver stories through plan → test → build → tidy → judge → document with a gate between | `dca-factory` (+ `dca-core` for the method) |
-| see and steer that cycle in a Claude Code pane — discover, backlog, run, decide, delivered | `dca-factory-view` (optional, Claude Code only) |
+| see and steer that cycle in a Claude Code pane — discover, backlog, run, decide, delivered | `dca-factory-cockpit` (optional, Claude Code only) |
 
 `dca-core` and `dca-craft` are what a developer invokes directly. `dca-craft` knows no DCA
 artifact: it reads what any project has — code, glossary, context map, `AGENTS.md` — which makes its
