@@ -68,7 +68,9 @@ export type Phase = { key: string; label: string; hotkey?: string; isOpen: boole
 
 export type Field = { label: string; text: string; color?: string; bold?: boolean }
 
-export type Column = { name: string; width: number; isNumber?: boolean }
+// `isWide`: the column takes what is left of the table's width and wraps its text instead of cutting it; `width` is
+// then its least width. Long text — an outcome, a goal, a question — goes in a wide column.
+export type Column = { name: string; width: number; isNumber?: boolean; isWide?: boolean }
 export type Cell = { text?: string; color?: string; bold?: boolean; node?: RenderElement }
 
 // The columns every table shares, one width and one alignment each.
@@ -88,7 +90,8 @@ export const COL = {
   cost: { name: 'cost', width: 10, isNumber: true },
   epic: { name: 'epic', width: 22 },
   record: { name: 'record', width: 28 },
-  what: { name: 'what', width: 48 },
+  what: { name: 'what', width: 30, isWide: true },
+  outcome: { name: 'outcome', width: 18, isWide: true },
   action: (width: number): Column => ({ name: '', width }),
 } satisfies Record<string, Column | ((width: number) => Column)>
 
@@ -124,9 +127,15 @@ export function components({ Box, Text, Button, Input }: Elements) {
   const divider = <Text color={C.line}> │ </Text>
 
   const tableCell = (column: Column, value: Cell) => (
-    <Box width={column.width} flexShrink={0} justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}>
+    <Box
+      width={column.isWide ? undefined : column.width}
+      minWidth={column.isWide ? column.width : undefined}
+      flexGrow={column.isWide ? 1 : 0}
+      flexShrink={column.isWide ? 1 : 0}
+      justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}
+    >
       {value.node ?? (
-        <Text color={value.color ?? C.text} bold={value.bold} wrap="truncate">
+        <Text color={value.color ?? C.text} bold={value.bold} wrap={column.isWide ? 'wrap' : 'truncate'}>
           {value.text ?? ''}
         </Text>
       )}

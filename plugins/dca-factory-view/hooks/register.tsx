@@ -547,7 +547,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ),
         ui.section('Passes'),
         ui.table(
-          [{ name: '#', width: 2, isNumber: true }, { name: 'pass', width: 16 }, COL.started, COL.time, { name: 'waited', width: 10, isNumber: true }, COL.tokens, { name: 'stages', width: 30 }],
+          [{ name: '#', width: 2, isNumber: true }, { name: 'pass', width: 16 }, COL.started, COL.time, { name: 'waited', width: 10, isNumber: true }, COL.tokens, { name: 'stages', width: 20, isWide: true }],
           (view?.passes ?? []).map((pass, index) => [
             { text: String(index + 1), color: C.muted },
             { text: pass.label, color: index === 0 ? C.done : C.wait },
@@ -609,7 +609,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       [
         ui.section('Project description', 'the foundation — written once, changed when the product or the technical situation moves'),
         ui.table(
-          [COL.mark, { name: 'file', width: 12 }, { name: 'sections', width: 44 }, { name: 'open', width: 30 }, COL.action(7)],
+          [COL.mark, { name: 'file', width: 12 }, { name: 'sections', width: 30, isWide: true }, { name: 'open', width: 20, isWide: true }, COL.action(7)],
           (status.description ?? []).map(part => {
             const path = `${now.root}/${part.path}`
             const name = part.path.split('/').pop() ?? part.part
@@ -650,7 +650,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ],
       )}
       {ui.table(
-        [COL.mark, { name: 'proposal', width: 18 }, { name: 'outcome', width: 18 }, { name: 'goal', width: 36 }, COL.action(16)],
+        [COL.mark, { name: 'proposal', width: 18 }, COL.outcome, { name: 'goal', width: 24, isWide: true }, COL.action(16)],
         topic.proposals.map(proposal => [
           { text: proposal.epic ? '✓' : '○', color: proposal.epic ? C.done : C.info, bold: true },
           { text: proposal.id, bold: true },
@@ -664,7 +664,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       )}
       {topic.description_changes.length > 0 &&
         ui.table(
-          [{ name: 'description', width: 24 }, { name: 'change', width: 46 }, COL.action(9)],
+          [{ name: 'description', width: 24 }, { name: 'change', width: 30, isWide: true }, COL.action(9)],
           topic.description_changes.map((change, index) => [
             { text: change.target, color: C.wait },
             { text: change.change, color: C.muted },
@@ -709,7 +709,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ? [
           ui.section('Journeys'),
           ui.table(
-            [COL.mark, COL.epic, { name: 'journey', width: 56 }],
+            [COL.mark, COL.epic, { name: 'journey', width: 30, isWide: true }],
             status.journeys.map(hint => [{ text: '◇', color: C.wait }, { text: hint.epic }, { text: hint.text, color: C.wait }]),
           ),
         ]
@@ -731,7 +731,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       [
         ui.section('Discovery', 'which problem is worth solving, and how anyone will know it got better'),
         ui.table(
-              [COL.mark, { name: 'topic', width: 20 }, { name: 'title', width: 40 }, { name: 'proposed', width: 8, isNumber: true }, { name: 'in backlog', width: 10, isNumber: true }, { name: 'changes', width: 7, isNumber: true }],
+              [COL.mark, { name: 'topic', width: 20 }, { name: 'title', width: 24, isWide: true }, { name: 'proposed', width: 8, isNumber: true }, { name: 'in backlog', width: 10, isNumber: true }, { name: 'changes', width: 7, isNumber: true }],
               now.topics.map(topic => {
                 const held = topic.proposals.filter(p => p.epic).length
                 return [
@@ -761,7 +761,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           {ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run')}
         </Box>,
         ui.table(
-              [COL.mark, { name: 'epic', width: 26 }, { name: 'progress', width: 10 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'drafts', width: 6, isNumber: true }, { name: 'outcome', width: 30 }],
+              [COL.mark, { name: 'epic', width: 26 }, { name: 'progress', width: 10 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'drafts', width: 6, isNumber: true }, COL.outcome],
               status.epics.map(epic => {
                 const isDone = epic.total > 0 && epic.delivered === epic.total
                 const drafts = epic.rows.filter(row => /draft/.test(row.state)).length
@@ -806,7 +806,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ]),
         ui.section('Running'),
         ui.table(
-          [COL.story(idWidth), COL.stage, { name: 'since', width: 14 }, { name: 'activity', width: 40 }],
+          [COL.story(idWidth), COL.stage, { name: 'since', width: 14 }, { name: 'activity', width: 24, isWide: true }],
           status.running.map(running => [
             { node: ui.link(`running-${running.story}`, running.story, () => void openStory($, running.story)) },
             { text: running.stage, color: running.interrupted ? C.fail : C.accent, bold: true },
@@ -843,7 +843,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ...(status.waiting.length > 0
           ? [
               ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'what', width: 36 }, COL.action(20)],
+                [COL.mark, COL.story(idWidth), { name: 'what', width: 24, isWide: true }, COL.action(20)],
                 status.waiting.map(wait => [
                   { text: MARK_GLYPH[wait.mark] ?? '?', color: C.wait, bold: true },
                   { text: wait.story, bold: true },
@@ -878,7 +878,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ),
       ui.section('Epics'),
       ui.table(
-        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'outcome', width: 30 }, { name: 'journey', width: 30 }],
+        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }],
         status.epics.map(epic => {
           const unguarded = status.journeys.find(hint => hint.epic === epic.epic)
           const isDone = epic.total > 0 && epic.delivered === epic.total
