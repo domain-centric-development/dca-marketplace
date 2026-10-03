@@ -428,6 +428,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             {ui.button('close', '✕ close', () => void $.ui.close({ id: PANE }), { hotkey: 'q' })}
           </Box>
           <Box gap={2} marginTop={1}>
+            <Text bold color={C.accent}>
+              PROJECT
+            </Text>
             <Text bold color={C.bright}>
               {now.project}
             </Text>
