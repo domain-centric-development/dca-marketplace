@@ -44,8 +44,8 @@ reloading the plugin stops that worker; the runner gives its claim on the worksp
 /factory-view
 ```
 
-`0` opens Describe, `1`–`5` the cycle, `b` goes back, `q` closes the pane (`/factory-view close` from the prompt), `Esc` returns to the prompt; the pane has the keyboard after
-`/factory-view` or `ctrl+x tab`.
+`0` opens Describe, `1`–`5` the cycle, ↑↓ and Tab move, `b` goes back, `q` or `ctrl+x x` closes the pane (`/factory-view close` from the prompt), `Esc` returns to the prompt. ← and → are Claude Code's own — a mod receives no left or right arrow. The pane has the keyboard after
+`/factory-view`, a click into it, or `ctrl+x tab` — the last two only while the prompt is empty.
 
 ## Early access
 
