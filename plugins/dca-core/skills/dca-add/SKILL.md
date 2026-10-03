@@ -227,11 +227,20 @@ stack is in `reference/coverage.md`: JaCoCo for Gradle and Maven, coverlet with 
 
 ## After each capability
 
+**Record it in the technical description.** A capability is a technical decision the person took with you, so
+the project's technical description follows it: one line under its `## Stack` heading — `<capability>: <tool and
+version>`, e.g. `Browser tests: Playwright 1.56` — in the file the `AGENTS.md` section between
+`<!-- dca-describe: start -->` and `<!-- dca-describe: end -->` names (by default `project/tech.md`). A line that
+is already there is updated, not repeated. Where the description says something the capability contradicts — "no
+end-user tests", another formatter — ask which is right and change the description through `/dca-describe`
+instead of writing over it. Where the project has no technical description yet, write none and say that
+`/dca-describe` writes it.
+
 Report what was added, the commands to run it, and what the user commits:
 
 ```
 ✓ Added {capability}
-  - Changed: {files}
+  - Changed: {files} (the technical description's `## Stack` line among them)
   - Run: {command}
   - Commit: {what, and — for formatter — the one formatting commit on its own}
 ```

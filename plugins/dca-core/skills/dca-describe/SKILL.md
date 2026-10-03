@@ -89,6 +89,13 @@ could show goes to `docs/`.
 
 ## Changing the description later
 
+`/dca-describe <change>` changes one statement in the person's words — "the shop also sells gift cards",
+"we move from H2 to PostgreSQL" — or applies a released description change from a discovery report, written as
+`<product.md | tech.md | domain.md> — <section>: <change>`. Find the heading it belongs to, show the line as it
+stands and as it would read, and write it on the person's yes; ask only what the change leaves open, and say
+which other heading it touches (a new persistence touches `## Runtime` too). `/dca-describe` without an argument
+looks every heading up and asks the open ones.
+
 A story that needs a surface the product description does not list, a second persistence the
 technical description excludes, or a context the designed map does not carry is a question about
 the description, not about the story. The answer changes the description first — through this
