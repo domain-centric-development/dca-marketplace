@@ -12,7 +12,8 @@ import { duration, rounds, short, tokens } from './parse'
 // and plates — `--deep`, `--mist` text, `--teal`, mist at 70 % for secondary text (the hero's sub-lines), mist at a
 // third for lines. The cockpit follows Claude Code's theme:
 // a button's label takes the terminal's own text colour, so only the face that matches the theme keeps every button
-// readable. Amber, coral and indigo are the brand's accent alternatives, for waiting, refused and proposed.
+// readable. Amber, coral and indigo are the brand's accent alternatives, for waiting, refused and proposed; on the
+// deep navy every colour reads at 4.3:1 or more, indigo lifted to a light lavender for it.
 const PAPER = {
   bg: '#f7f6f3',
   text: '#1c2433',
@@ -34,7 +35,7 @@ const DEEP = {
   done: '#3f9d5b',
   wait: '#c9922e',
   fail: '#c96a5a',
-  info: '#7d79e0',
+  info: '#b3b0f2',
   muted: '#a9acb4',
   line: '#60656f',
   onAccent: '#ffffff',
