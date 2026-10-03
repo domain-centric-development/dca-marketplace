@@ -377,8 +377,11 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   const head = (
     <Box flexDirection="column">
       <Box borderStyle="round" borderColor={C.accent} paddingX={1} justifyContent="space-between">
-        <Text bold color={C.accent}>
-          ⬡ {now.project}
+        {/* as the site's word mark: the name bright, the part after the dot in teal */}
+        <Text bold color={C.bright}>
+          <Text color={C.accent}>⬡ </Text>
+          {now.project}
+          <Text color={C.accent}>.factory</Text>
         </Text>
         <Text color={C.muted}>
           {status.delivered} of {status.total} stories delivered

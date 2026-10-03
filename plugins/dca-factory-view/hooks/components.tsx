@@ -7,14 +7,19 @@ import { duration, rounds, short, tokens } from './parse'
 // spacing reaches every tab and every detail at once. They take the surface's elements and ready callbacks —
 // never `$`: what acts on the session stays in register.tsx.
 
-// The DCA brand palette (branding/README.md): teal is the accent, amber, coral and indigo share its tone.
+// The domaincentric.dev palette, as the site's dark plates use it (branding/README.md, website `--teal`, `--mist`,
+// `--deep`): teal is the accent and the kicker; secondary text is mist at half strength, as the site's comments;
+// lines and frames are mist at a third, as its button borders — quieter than any text. Amber, coral and indigo are
+// the brand's accent alternatives, used here for waiting, refused and proposed.
 export const C = {
   accent: '#148f96',
   done: '#3f9d5b',
   wait: '#c9922e',
   fail: '#c96a5a',
-  info: '#5f5bd0',
-  muted: 'gray',
+  info: '#7d79e0',
+  muted: '#7f838b',
+  line: '#60656f',
+  bright: '#e8eaf0',
   onAccent: '#ffffff',
 }
 
@@ -85,7 +90,7 @@ export type Elements = {
 }
 
 export function components({ Box, Text, Button, Markdown, Input }: Elements) {
-  const divider = <Text color={C.muted}> │ </Text>
+  const divider = <Text color={C.line}> │ </Text>
 
   const tableCell = (column: Column, value: Cell) => (
     <Box width={column.width} flexShrink={0} justifyContent={column.isNumber ? 'flex-end' : 'flex-start'}>
@@ -102,11 +107,12 @@ export function components({ Box, Text, Button, Markdown, Input }: Elements) {
   )
 
   return {
-    // A heading with a hint beside it; the space above it is the one rhythm between parts.
+    // A heading as the site's kicker — upper case, teal — with a hint beside it; the space above it is the one
+    // rhythm between parts.
     section: (title: string, hint?: string) => (
-      <Box marginTop={1} gap={1}>
+      <Box marginTop={1} gap={2}>
         <Text bold color={C.accent}>
-          {title}
+          {title.toUpperCase()}
         </Text>
         {hint && <Text color={C.muted}>{hint}</Text>}
       </Box>
@@ -119,9 +125,9 @@ export function components({ Box, Text, Button, Markdown, Input }: Elements) {
           <Text color={C.muted}>{empty}</Text>
         </Box>
       ) : (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.muted} paddingX={1} marginTop={1}>
-          {line(columns, columns.map(column => ({ text: column.name, bold: true, color: C.accent })))}
-          <Text color={C.muted}>{columns.map(column => '─'.repeat(column.width)).join('─┼─')}</Text>
+        <Box flexDirection="column" borderStyle="round" borderColor={C.line} paddingX={1} marginTop={1}>
+          {line(columns, columns.map(column => ({ text: column.name.toUpperCase(), bold: true, color: C.accent })))}
+          <Text color={C.line}>{columns.map(column => '─'.repeat(column.width)).join('─┼─')}</Text>
           {rows.map(row => line(columns, row))}
         </Box>
       ),
@@ -145,7 +151,7 @@ export function components({ Box, Text, Button, Markdown, Input }: Elements) {
         {prefix !== undefined && <Text color={C.muted}>{prefix}</Text>}
         {stages.length === 0 && <Text color={C.muted}>Not run yet.</Text>}
         {stages.flatMap((run, index) => [
-          ...(index > 0 ? [<Text color={C.muted}>›</Text>] : []),
+          ...(index > 0 ? [<Text color={C.line}>›</Text>] : []),
           <Text backgroundColor={run.runningSince ? C.accent : undefined} color={run.runningSince ? C.onAccent : stageColor(run)} bold={run.runningSince !== null}>
             {` ${stageLabel(run, now)} `}
           </Text>,
@@ -179,7 +185,7 @@ export function components({ Box, Text, Button, Markdown, Input }: Elements) {
 
     // A framed box for text that is not a table: a file, the worker's output.
     framed: (children: RenderElement | RenderElement[]) => (
-      <Box borderStyle="round" borderColor={C.muted} paddingX={1} flexDirection="column" marginTop={1}>
+      <Box borderStyle="round" borderColor={C.line} paddingX={1} flexDirection="column" marginTop={1}>
         {children}
       </Box>
     ),
@@ -244,7 +250,7 @@ export function components({ Box, Text, Button, Markdown, Input }: Elements) {
       cycle: Phase[],
     ) => {
       const step = (phase: Phase) => (
-        <Box borderStyle="round" borderColor={phase.isOpen ? C.accent : C.muted} borderDimColor={!phase.isOpen} paddingX={1} gap={1}>
+        <Box borderStyle="round" borderColor={phase.isOpen ? C.accent : C.line} paddingX={1} gap={1}>
           <Button key={phase.key} label={phase.label} hotkey={phase.hotkey} plain variant={phase.isOpen ? 'primary' : 'secondary'} onPress={phase.onPress} />
           {phase.mark && (
             <Text bold color={phase.mark.color}>
@@ -255,10 +261,11 @@ export function components({ Box, Text, Button, Markdown, Input }: Elements) {
       )
       return (
         <Box flexWrap="wrap" alignItems="center" columnGap={1}>
-          <Text color={C.muted}>once</Text>
+          <Text color={C.accent}>ONCE</Text>
           {foundation.map(step)}
-          <Text color={C.muted}> ┃ cycle</Text>
-          {cycle.flatMap((phase, index) => [...(index > 0 ? [<Text color={C.muted}>›</Text>] : []), step(phase)])}
+          <Text color={C.line}> ┃ </Text>
+          <Text color={C.accent}>CYCLE</Text>
+          {cycle.flatMap((phase, index) => [...(index > 0 ? [<Text color={C.line}>›</Text>] : []), step(phase)])}
         </Box>
       )
     },
