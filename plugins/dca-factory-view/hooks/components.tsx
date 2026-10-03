@@ -43,6 +43,9 @@ const DEEP = {
 
 export const C = { ...DEEP }
 
+// The sign of an action Claude carries out in this session: a skill runs, files may change.
+export const BY_CLAUDE = '✦'
+
 export const MARK_GLYPH: Record<string, string> = { done: '✓', running: '▶', look: '!', question: '?', stopped: '✗', next: '→', none: '·' }
 export const MARK_COLOR: Record<string, string> = {}
 
@@ -244,8 +247,10 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
       </Box>
     ),
 
-    button: (key: string, label: string, onPress: () => void, options: { hotkey?: string; isPrimary?: boolean } = {}) => (
-      <Button key={key} label={label} hotkey={options.hotkey} variant={options.isPrimary ? 'primary' : 'secondary'} onPress={onPress} />
+    // A button. `byClaude` marks one that hands the work to Claude in this session — a skill runs, files may change
+    // — with the one sign every such button carries.
+    button: (key: string, label: string, onPress: () => void, options: { hotkey?: string; isPrimary?: boolean; byClaude?: boolean } = {}) => (
+      <Button key={key} label={options.byClaude ? `${BY_CLAUDE} ${label}` : label} hotkey={options.hotkey} variant={options.isPrimary ? 'primary' : 'secondary'} onPress={onPress} />
     ),
 
     // A framed box for text that is not a table: a file, the worker's output.
@@ -296,9 +301,9 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
     // A field that sends what is typed; where the surface has none (mobile), a button that fills the prompt.
     ask: (key: string, label: string, placeholder: string, onSend: (value: string) => void, onFill: () => void) =>
       Input ? (
-        <Input key={key} label={label} placeholder={placeholder} submitLabel="send" onSubmit={(value: string) => onSend(value)} />
+        <Input key={key} label={`${BY_CLAUDE} ${label}`} placeholder={placeholder} submitLabel="send to Claude" onSubmit={(value: string) => onSend(value)} />
       ) : (
-        <Button key={key} label={label} onPress={onFill} />
+        <Button key={key} label={`${BY_CLAUDE} ${label}`} onPress={onFill} />
       ),
 
     // An epic's head: its title, progress and the buttons that act on it; its goal and outcome below.
@@ -354,7 +359,7 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
     // The keys that work now, at the foot of every view.
     keys: (isFocused: boolean, hint: string) => (
       <Box marginTop={1}>
-        <Text color={C.muted}>{isFocused ? `${hint} · 0 describe · 1–5 cycle · Tab/↑↓ move · Enter choose · q close · Esc prompt` : 'ctrl+x tab — steer the cockpit · /factory-view close'}</Text>
+        <Text color={C.muted}>{isFocused ? `${hint} · ${BY_CLAUDE} Claude does it in this session · 0 describe · 1–5 cycle · Enter choose · q close · Esc prompt` : 'ctrl+x tab — steer the cockpit · /factory-view close'}</Text>
       </Box>
     ),
   }

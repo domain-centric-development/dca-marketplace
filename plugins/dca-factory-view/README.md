@@ -12,7 +12,7 @@ factory works the same without it, in Claude Code, Codex or OpenCode.
 |---|---|---|
 | 0 Describe | the project description, each part present or missing, its missing and empty headings | `/dca-describe`, `/dca-describe <change>`, opens a file in the system's editor |
 | 1 Discover | every discovery topic, its proposed epics (which are epics already), its proposed description changes | `/factory-discover <topic>`, `/factory-backlog epic <id> --from <report>`, `/dca-describe <file> — <section>: <change>` |
-| 2 Backlog | every epic — also before its first story — with goal, outcome event, its stories with state, passes, time, tokens, cost | `/factory-backlog <words>`, `stories <epic>` (✎ draft next stories: the skill drafts them as `status: draft`), `release <story> …`, `/factory-run <wish>` |
+| 2 Backlog | every epic — also before its first story — with goal, outcome event, its stories with state, passes, time, tokens, cost | `/factory-backlog <words>`, `stories <epic>` (✦ suggest stories: Claude drafts them as `status: draft`), `release <story> …`, `/factory-run <wish>` |
 | 3 Run | the worker, the running stories with their stage, since when and the stage's last activity, the worker's output | starts `factory.sh run` / `run --watch` as a child of the session, stops it |
 | 4 Decide | open questions and acceptances, answered records as Markdown | `/factory-decisions <story>` |
 | 5 Delivered | delivered stories, epics with their outcome events, unguarded journeys | `/factory-verify <story>` |
@@ -27,6 +27,10 @@ decision records.
 project whose pipeline is older than these views gets a line saying so and a button for `/factory-update`.
 
 ## How it acts
+
+A button or field marked ✦ hands the work to Claude in this session: a skill runs and may write files. The
+others only show or open something, or start the worker (▶).
+
 
 A press sends the matching slash command into the session through `$.command.run`, as if the person typed it
 (Claude Code refuses a plugin prompt that begins with `/`); a press on Run starts `factory.sh run` with

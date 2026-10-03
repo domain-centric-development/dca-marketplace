@@ -419,8 +419,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         {ui.phases(
           [
             { key: 'tab-describe', label: 'Describe', hotkey: '0', isOpen: current === 'describe' && !open, onPress: () => void showTab($, 'describe') },
-            { key: 'setup', label: 'setup', isOpen: false, onPress: () => send($, '/factory-setup') },
-            { key: 'update', label: 'update', isOpen: false, onPress: () => send($, '/factory-update') },
+            { key: 'setup', label: '✦ setup', isOpen: false, onPress: () => send($, '/factory-setup') },
+            { key: 'update', label: '✦ update', isOpen: false, onPress: () => send($, '/factory-update') },
           ],
           TABS.map(one => ({
             key: `tab-${one.id}`,
@@ -449,7 +449,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       {now.isBehind && (
         <Box gap={1}>
           <Text color={C.wait}>This project's pipeline is older than the cockpit reads — the description and discovery views stay empty.</Text>
-          {ui.link('behind-update', 'update', () => send($, '/factory-update'))}
+          {ui.link('behind-update', '✦ update', () => send($, '/factory-update'))}
         </Box>
       )}
     </Box>
@@ -525,9 +525,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.actions([
           ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' }),
           row && !row.done && !isRunning() && ui.button('run', '▶ Run (worker)', () => void runWorker($, `run ${open.id}`, ['run', '--story', open.id]), { hotkey: 'r', isPrimary: true }),
-          row && !row.done && ui.button('session', 'Run in this session', () => send($, `/factory-run ${open.id}`), { hotkey: 'e' }),
-          waits && ui.button('answer', '? Answer', () => send($, `/factory-decisions ${open.id}`), { hotkey: 'a', isPrimary: true }),
-          row?.done && ui.button('verify', 'Verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v' }),
+          row && !row.done && ui.button('session', 'run in this session', () => send($, `/factory-run ${open.id}`), { hotkey: 'e', byClaude: true }),
+          waits && ui.button('answer', 'answer', () => send($, `/factory-decisions ${open.id}`), { hotkey: 'a', isPrimary: true, byClaude: true }),
+          row?.done && ui.button('verify', 'verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v', byClaude: true }),
         ]),
         ui.section('Pipeline'),
         ui.chips(stagesOf(events), at),
@@ -627,7 +627,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         <Box marginTop={1} flexDirection="column">
           {ask('change', 'Change the description', 'what should change? e.g. "the shop also sells gift cards"', '/dca-describe')}
         </Box>,
-        ui.actions([ui.button('describe', '✎ Describe / complete the project', () => send($, '/dca-describe'), { isPrimary: true })]),
+        ui.actions([ui.button('describe', 'describe / complete the project', () => send($, '/dca-describe'), { isPrimary: true, byClaude: true })]),
       ],
       'Enter on a file opens it · ✎ edit opens it in your editor · type a change, Enter sends it',
     )
@@ -658,7 +658,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           { text: proposal.goal, color: C.muted },
           proposal.epic
             ? { node: ui.link(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic })) }
-            : { node: ui.button(`release-${topic.topic}-${proposal.id}`, '→ Make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true }) },
+            : { node: ui.button(`release-${topic.topic}-${proposal.id}`, 'make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true, byClaude: true }) },
         ]),
         'No proposed work in the report yet.',
       )}
@@ -668,7 +668,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           topic.description_changes.map((change, index) => [
             { text: change.target, color: C.wait },
             { text: change.change, color: C.muted },
-            { node: ui.button(`describe-${topic.topic}-${index}`, '→ apply', () => send($, `/dca-describe ${change.target}: ${change.change}`)) },
+            { node: ui.button(`describe-${topic.topic}-${index}`, 'apply', () => send($, `/dca-describe ${change.target}: ${change.change}`), { byClaude: true }) },
           ]),
         )}
     </Box>
@@ -685,10 +685,13 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${fmt.tokens(epic.tokens)} tokens` : ''}`,
           },
           [
-            ui.button(`stories-${epic.epic}`, '✎ draft next stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0 }),
+            ui.button(`stories-${epic.epic}`, 'suggest stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0, byClaude: true }),
             drafts.length > 0 &&
-              ui.button(`release-all-${epic.epic}`, `release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`, () =>
-                send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
+              ui.button(
+                `release-all-${epic.epic}`,
+                `release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`,
+                () => send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
+                { byClaude: true },
               ),
           ],
           [
@@ -697,7 +700,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
           ],
         )}
-        {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — ✎ draft next stories lets the backlog skill draft the first')}
+        {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — ✦ suggest stories: Claude drafts the first, you release them')}
       </Box>
     )
   }
@@ -716,11 +719,11 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   // ---- one topic, one epic
   if (open?.kind === 'topic') {
     const topic = now.topics.find(one => one.topic === open.topic)
-    return page([back, topic ? topicBody(topic) : <Text color={C.muted}>No such topic.</Text>], 'b back · → Make epic releases a proposal')
+    return page([back, topic ? topicBody(topic) : <Text color={C.muted}>No such topic.</Text>], 'b back · ✦ make epic: Claude writes the proposal as an epic')
   }
   if (open?.kind === 'epic') {
     const epic = status.epics.find(one => one.epic === open.epic)
-    return page([back, epic ? epicBody(epic) : <Text color={C.muted}>No such epic.</Text>], 'b back · ✎ draft next stories: the backlog skill drafts them, you release them · Enter on a story opens it')
+    return page([back, epic ? epicBody(epic) : <Text color={C.muted}>No such epic.</Text>], 'b back · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it')
   }
 
   if (current === 'discover') {
@@ -845,7 +848,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                   { text: MARK_GLYPH[wait.mark] ?? '?', color: C.wait, bold: true },
                   { text: wait.story, bold: true },
                   { text: wait.what, color: C.muted },
-                  { node: ui.button(`answer-${wait.story}`, 'Answer in session', () => send($, `/factory-decisions ${wait.story}`), { isPrimary: true }) },
+                  { node: ui.button(`answer-${wait.story}`, 'answer', () => send($, `/factory-decisions ${wait.story}`), { isPrimary: true, byClaude: true }) },
                 ]),
               ),
             ]
