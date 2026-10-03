@@ -406,7 +406,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         <Box justifyContent="space-between">
           <Box gap={2}>
             <Text bold color={C.bright}>
-              <Text color={C.accent}>⬡ </Text>
+              <Text color={C.accent}>⬢ </Text>
               domaincentric<Text color={C.accent}>.dev</Text>
             </Text>
             <Text color={C.line}>│</Text>
