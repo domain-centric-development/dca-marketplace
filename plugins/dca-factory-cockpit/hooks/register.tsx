@@ -414,9 +414,6 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               {/* side by side, not nested: a Text inside a Text takes the outer colour */}
               <Box>
                 <Text bold color={C.bright}>
-                  {'⬡ '}
-                </Text>
-                <Text bold color={C.bright}>
                   domaincentric
                 </Text>
                 <Text bold color={C.accent}>
@@ -430,7 +427,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             </Box>
             {ui.button('close', '✕ close', () => void $.ui.close({ id: PANE }), { hotkey: 'q' })}
           </Box>
-          <Box gap={2}>
+          <Box gap={2} marginTop={1}>
             <Text bold color={C.bright}>
               {now.project}
             </Text>
