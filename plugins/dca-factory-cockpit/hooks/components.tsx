@@ -1,4 +1,4 @@
-import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, TextProps } from 'claude-code'
+import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RasterProps, RenderElement, TextProps } from 'claude-code'
 
 import type { StageRun } from '../types'
 import { duration, rounds, short, tokens, wrapWords } from './parse'
@@ -128,16 +128,30 @@ export function sizeColumns(columns: Column[], width: number): Column[] {
   return columns.map(column => (column.isWide ? { ...column, width: Math.max(column.width, share) } : column))
 }
 
+// The brand's hexagon as 3 × 2 terminal cells in one colour — drawn as a grid, so it does not depend on whether the
+// terminal's font has a hexagon glyph. Each cell is three 32-bit numbers: the character, its colour, its background
+// (0x01000000: the terminal's own).
+export function logoCells(hex: string): string {
+  const colour = Number.parseInt(hex.slice(1), 16)
+  const numbers = ['▟', '█', '▙', '▜', '█', '▛'].flatMap(char => [char.codePointAt(0) ?? 32, colour, 0x01000000])
+  const bytes = new Uint8Array(Uint32Array.from(numbers).buffer)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
 export type Elements = {
   Box: ElementConstructor<BoxProps>
   Text: ElementConstructor<TextProps>
   Button: ElementConstructor<ButtonProps>
   Input: ElementConstructor<InputProps> | null
+  // the terminal's grid of coloured cells, for the logo; absent on a surface that has none
+  Raster: ElementConstructor<RasterProps> | null
   // the cells across the pane's body, for the widths of wide columns
   width: number
 }
 
-export function components({ Box, Text, Button, Input, width }: Elements) {
+export function components({ Box, Text, Button, Input, Raster, width }: Elements) {
 
   const sized = (columns: Column[]) => sizeColumns(columns, width)
 
@@ -201,6 +215,16 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
   )
 
   return {
+    // The brand's hexagon: a grid of cells where the surface draws one, the glyph elsewhere.
+    logo: () =>
+      Raster ? (
+        <Raster key="logo" columns={3} rows={2} cells={logoCells(C.accent)} />
+      ) : (
+        <Text bold color={C.accent}>
+          ⬢
+        </Text>
+      ),
+
     // A heading as the site's kicker — upper case, teal — with a hint beside it; the space above it is the one
     // rhythm between parts.
     section: (title: string, hint?: string) => (

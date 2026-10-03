@@ -369,7 +369,14 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   // the site's paper for a light theme, its deep plates for a dark one — before anything is drawn
   const theme = (await $.config.list().catch(() => [])).find(row => row.key === 'theme')
   applyPalette(/light/i.test(String(theme?.value ?? '')))
-  const ui = components({ Box, Text, Button, Input: 'Input' in rest ? rest.Input : null, width: e.props.bodyColumns ?? e.viewport?.columns ?? 100 })
+  const ui = components({
+    Box,
+    Text,
+    Button,
+    Input: 'Input' in rest ? rest.Input : null,
+    Raster: 'Raster' in rest ? rest.Raster : null,
+    width: e.props.bodyColumns ?? e.viewport?.columns ?? 100,
+  })
   const at = await $.clock.now()
   const current = await read($, tab)
   const open = await read($, detail)
@@ -401,38 +408,38 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
 
   const head = (
     <Box flexDirection="column">
-      <Box borderStyle="round" borderColor={C.accent} paddingX={1} flexDirection="column">
-        {/* as the site's navigation: the word mark, the part after the dot in teal, then what this is as a kicker */}
-        <Box justifyContent="space-between">
-          <Box gap={2}>
-            {/* side by side, not nested: a Text inside a Text takes the outer colour */}
-            <Box>
+      <Box borderStyle="round" borderColor={C.accent} paddingX={1} gap={2}>
+        {/* the brand's hexagon beside the two lines, as the site's navigation draws its mark */}
+        {ui.logo()}
+        <Box flexDirection="column" flexGrow={1}>
+          <Box justifyContent="space-between">
+            <Box gap={2}>
+              {/* side by side, not nested: a Text inside a Text takes the outer colour */}
+              <Box>
+                <Text bold color={C.bright}>
+                  domaincentric
+                </Text>
+                <Text bold color={C.accent}>
+                  .dev
+                </Text>
+              </Box>
+              <Text color={C.line}>│</Text>
               <Text bold color={C.accent}>
-                {'⬢ '}
-              </Text>
-              <Text bold color={C.bright}>
-                domaincentric
-              </Text>
-              <Text bold color={C.accent}>
-                .dev
+                FACTORY COCKPIT
               </Text>
             </Box>
-            <Text color={C.line}>│</Text>
-            <Text bold color={C.accent}>
-              FACTORY COCKPIT
+            {ui.button('close', '✕ close', () => void $.ui.close({ id: PANE }), { hotkey: 'q' })}
+          </Box>
+          <Box gap={2}>
+            <Text bold color={C.bright}>
+              {now.project}
+            </Text>
+            <Text color={C.muted}>
+              {status.delivered} of {status.total} stories delivered
+              {status.tokens > 0 ? ` · ${fmt.tokens(status.tokens)} tokens` : ''}
+              {job.state === 'running' ? ' · worker ▶' : ''}
             </Text>
           </Box>
-          {ui.button('close', '✕ close', () => void $.ui.close({ id: PANE }), { hotkey: 'q' })}
-        </Box>
-        <Box gap={2}>
-          <Text bold color={C.bright}>
-            {now.project}
-          </Text>
-          <Text color={C.muted}>
-            {status.delivered} of {status.total} stories delivered
-            {status.tokens > 0 ? ` · ${fmt.tokens(status.tokens)} tokens` : ''}
-            {job.state === 'running' ? ' · worker ▶' : ''}
-          </Text>
         </Box>
       </Box>
       <Box marginTop={1}>
