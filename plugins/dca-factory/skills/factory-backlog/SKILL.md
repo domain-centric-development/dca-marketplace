@@ -12,6 +12,21 @@ decisions and the designed domain — and the glossaries. Output: `<backlog>/<ep
 `project/domain.md` and `project/epics`.
 You write no plan, no test and no code. Run the pipeline separately once the item stands.
 
+## Arguments
+
+The same words from a person, a view that sends them, or another tool — one meaning each:
+
+| Form | Does |
+|---|---|
+| `/factory-backlog` | asks what is wanted: an epic, a story, a correction |
+| `/factory-backlog epic <id> --from <report>` | the person releases the proposal `### <id>` of that discovery report: write it as an epic (step 2a) |
+| `/factory-backlog stories <epic>` | cut the next stories of that epic, each `status: draft` |
+| `/factory-backlog release <story> [<story> …]` | the person releases these drafts: run the question pass (step 6) for each, set `status: approved` where it leaves nothing open, and say which stay drafts and why |
+| `/factory-backlog <words>` | anything else: what the person wants, in their words — an epic, a story or a correction |
+
+A form names the person's decision; it never skips a check. A release with open questions stays a draft until
+they are answered.
+
 The full contract is in `factory-run/reference/backlog-contract.md`; read it before your first
 item in a project. The templates are `factory-run/templates/backlog/{epic,story}.md.tmpl`.
 

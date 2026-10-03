@@ -10,6 +10,7 @@ have one reader, the gate's, and two callers can never disagree about what they 
     factory-cli.py --status --brief [--session-start]   two lines for a session's start
     factory-cli.py --help-view [--format text|md|json]  the factory explained, with this project's place in it
     factory-cli.py --list-decisions [--story <id>]      the decision inbox, one line per record
+    factory-cli.py --discover-list [--format text|md|json]  every discovery topic, its proposals and which are epics
     factory-cli.py --schedule                           every story's state and the next one to run
     factory-cli.py --story <id> --start | --kind        where a run begins | `story`, `journey` or `adopt`
     factory-cli.py --resolve "<argument>"               what /factory-run <argument> means
@@ -93,6 +94,53 @@ def resolve(epics, argument):
         return 2
     front, _ = read_front_matter(path)
     print(f"story {str(front.get('id', '')).strip() or os.path.splitext(os.path.basename(path))[0]}")
+    return 0
+
+
+def discovery_model(cwd, epics):
+    """Every discovery topic with its proposed epics — and which of them the backlog already holds — and its
+    proposed description changes. What the report says, read the way `--check-discovery` reads it."""
+    profile = read_profile(resolve_profile(None, cwd))
+    folder = location(profile, "discovery")
+    held = epic_files(epics)
+    topics = []
+    for name in sorted(os.listdir(os.path.join(cwd, folder))) if os.path.isdir(os.path.join(cwd, folder)) else []:
+        report = f"{folder}/{name}/discovery.md".replace(os.sep, "/")
+        if not os.path.isfile(os.path.join(cwd, report)):
+            continue
+        text = read_text(os.path.join(cwd, report))
+        title = re.search(r"^# (?:Discovery:\s*)?(.+)$", text, re.M)
+        proposals = []
+        for pid, fields in discovery_items(text, "Proposed work"):
+            epic = next((e["epic"] for e in held if pid in (e["epic"], e["folder"])), "")
+            proposals.append(dict(id=pid, **{k: fields.get(k, "") for k in ("intent", "goal", "metric", "domain_contact")},
+                                  epic=epic))
+        changes = [dict(target=target, change=fields.get("change", ""), why=fields.get("why", ""))
+                   for target, fields in discovery_items(text, DESCRIPTION_CHANGES)]
+        topics.append(dict(topic=name, report=report, title=title.group(1).strip() if title else name,
+                           proposals=proposals, description_changes=changes))
+    return dict(project=os.path.basename(os.path.abspath(cwd)), store=folder.replace(os.sep, "/") + "/", topics=topics)
+
+
+def discovery_list(cwd, epics, fmt="text", colour="auto"):
+    model = discovery_model(cwd, epics)
+    if fmt == "json":
+        print(json.dumps(model, indent=2, ensure_ascii=False))
+        return 0
+    use = use_colour(colour) if fmt == "text" else False
+    out = [f"### Discovery — {model['project']}", ""] if fmt == "md" else [""] + heading(f"Discovery — {model['project']}", use, "═")
+    if not model["topics"]:
+        out += ["", f"No discovery yet — `/factory-discover <topic>` writes one under {model['store']}."]
+    for topic in model["topics"]:
+        out += ["", f"**{topic['topic']}** — {topic['title']} (`{topic['report']}`)" if fmt == "md"
+                else "  " + bold(f"{topic['topic']}", use) + f"   {topic['title']}   {dim(topic['report'], use)}"]
+        for p in topic["proposals"]:
+            state = f"epic {p['epic']}" if p["epic"] else f"proposed — /factory-backlog epic {p['id']} --from {topic['report']}"
+            out.append(f"- `{p['id']}` → {p['metric']} · {state}" if fmt == "md" else f"    {p['id']}   {p['metric']}   {state}")
+        for c in topic["description_changes"]:
+            line = f"description: {c['target']} — {c['change']}"
+            out.append(f"- {line} · /dca-describe" if fmt == "md" else f"    {line}   /dca-describe")
+    print("\n".join(out + [""]))
     return 0
 
 
@@ -1076,6 +1124,15 @@ HELP_COMMANDS = (
     ("one story", "its stages, passes and tokens", "/factory-status <story>", "status --story <story>"),
     ("find the problem", "a problem or a wished deliverable → a report with sources and proposed epics, each with "
                          "its outcome event", "/factory-discover <topic>", "discover --check <topic>"),
+    ("the discoveries", "every topic, its proposed epics and which are epics already, its proposed description changes",
+     "/factory-discover", "discover --list"),
+    ("release a proposal", "a discovery's proposed epic becomes an epic in the backlog",
+     "/factory-backlog epic <id> --from <report>", ""),
+    ("cut stories", "the next stories of an epic, each a draft", "/factory-backlog stories <epic>", ""),
+    ("release stories", "drafts become approved after the question pass — open questions keep them drafts",
+     "/factory-backlog release <story> …", ""),
+    ("change the description", "one statement of the product, the stack or the domain, in your words",
+     "/dca-describe <change>", ""),
     ("the backlog", "the epics and stories, their state, the next one", "/factory-backlog", "backlog"),
     ("check the backlog", "the plan gate's checks over every open story, writing nothing", "/factory-backlog",
      "backlog --check"),
@@ -1090,6 +1147,10 @@ HELP_COMMANDS = (
     ("update the pipeline", "the newest pipeline found, same tools", "/factory-update", "update"),
     ("this help", "the flow, the commands, the marks, the files", "/factory-help", "help"),
 )
+
+
+#: The two parts of the flow: the foundation is written once and changed when things move; the cycle recurs.
+PART_WORDS = {"foundation": "once", "cycle": "↻ cycle"}
 
 
 NOW_WORDS = {"done": "done", "next": "you are here", "look": "waits for your look", "question": "waits for your answer",
@@ -1116,40 +1177,46 @@ def help_model(cwd, epics, runs):
     started = described and has_build
     # what waits for a person comes first: nothing of theirs moves until it is answered
     if waiting_mark:
-        here = "answer or accept"
+        here = "decide"
     elif not started:
-        here = "start"
+        here = "describe"
     elif not profile_path:
         here = "set up"
     elif not has_stories:
-        here = "write stories"
+        here = "backlog"
     else:
         here = "run"
-    # The first two steps happen once, so they can be done. The last three repeat with every story and
-    # never are: there the flow marks only where the project is now (waiting, running, next).
+    # A foundation, done once and changed when the product or the stack moves, and a cycle that recurs with
+    # every body of work. The foundation's steps can be done; the cycle's never are — there the flow marks
+    # only where the project is now (waiting, running, next).
     flow = [
-        dict(step="start", what="the description and a runnable skeleton in one pass — an existing project: "
-                                "/dca-describe", skill="/dca-new project", shell="", once=True, done=started),
-        dict(step="set up", what="the stack profile: build, test, format and browser commands, the carriers",
-             skill="/factory-setup", shell="setup --check" if profile_path else "setup", once=True,
-             done=bool(profile_path)),
-        dict(step="write stories", what="epics and stories with acceptance criteria; a story runs once released",
-             skill="/factory-backlog", shell=""),
-        dict(step="run", what="plan → test → build → tidy → judge → document, a gate between the stages",
+        dict(step="describe", part="foundation",
+             what="product, technical decisions, designed domain — a new project with its skeleton: /dca-new project",
+             skill="/dca-describe", shell="", done=started),
+        dict(step="set up", part="foundation", what="the stack profile: build, test, format and browser commands, the carriers",
+             skill="/factory-setup", shell="setup --check" if profile_path else "setup", done=bool(profile_path)),
+        dict(step="discover", part="cycle", what="optional: which problem is worth solving — a report with sources and "
+                                                 "proposed epics, each with its outcome event",
+             skill="/factory-discover <topic>", shell="discover --list"),
+        dict(step="backlog", part="cycle", what="epics and stories with acceptance criteria; a story runs once released",
+             skill="/factory-backlog", shell="backlog"),
+        dict(step="run", part="cycle", what="plan → test → build → tidy → judge → document, a gate between the stages",
              skill="/factory-run [<story>]", shell="run [--story <story>]"),
-        dict(step="answer or accept", what="a question a stage may not decide alone, or a result to look at: "
-                                           "accepted delivers it, a correction goes back into the story",
+        dict(step="decide", part="cycle", what="a question a stage may not decide alone, or a result to look at: "
+                                               "accepted delivers it, a correction goes back into the story",
              skill="/factory-decisions", shell="decisions"),
+        dict(step="delivered", part="cycle", what="what is delivered — stories, epics and their outcome events; an epic "
+                                                  "without a journey test shows as unguarded",
+             skill="/factory-status", shell="status"),
     ]
     for n, f in enumerate(flow, 1):
         f["number"] = n
         if f["step"] == here:
-            f["mark"] = waiting_mark if here == "answer or accept" else \
+            f["mark"] = waiting_mark if here == "decide" else \
                 "running" if here == "run" and status_view["running"] else "next"
         else:
             f["mark"] = "done" if f.pop("done", False) else "none"
         f.pop("done", None)
-        f.pop("once", None)
     if waiting_mark:
         nxt = status_view["next"]
     elif not described and has_build:
@@ -1184,11 +1251,11 @@ def shell_form(command):
 
 def render_help_text(model, colour=False):
     out = [""] + heading(f"Factory help — {model['project']}", colour, "═")
-    out += section("The flow — and where this project is now", colour)
-    rows = [[f"{f['number']}  {f['step']}", NOW_WORDS.get(f["mark"], ""), f["skill"],
+    out += section("The flow — a foundation once, then the cycle — and where this project is now", colour)
+    rows = [[f"{f['number']}  {f['step']}", PART_WORDS[f["part"]], NOW_WORDS.get(f["mark"], ""), f["skill"],
              shell_form(f["shell"]) or "— needs an agent session", f["what"]] for f in model["flow"]]
-    out += table_text(["step", "now", "agent", "shell", "what it is"], rows,
-                      marks=[f["mark"] if f["mark"] != "none" else None for f in model["flow"]], colour=colour, painted=2)
+    out += table_text(["step", "part", "now", "agent", "shell", "what it is"], rows,
+                      marks=[f["mark"] if f["mark"] != "none" else None for f in model["flow"]], colour=colour, painted=3)
     out += section("Commands", colour)
     out += table_text(["to see", "agent", "shell", "what it shows"],
                       [[c["name"], c["skill"], shell_form(c["shell"]) or "— needs an agent session", c["what"]]
@@ -1206,9 +1273,10 @@ def render_help_text(model, colour=False):
 
 
 def render_help_md(model):
-    out = [f"### Factory help — {model['project']}", "", "**The flow — and where this project is now**", ""]
-    out += table_md(["step", "now", "agent", "shell", "what it is"],
-                    [[f"{f['number']} {f['step']}", f"**{NOW_WORDS[f['mark']]}**" if f["mark"] in NOW_WORDS else "",
+    out = [f"### Factory help — {model['project']}", "",
+           "**The flow — a foundation once, then the cycle — and where this project is now**", ""]
+    out += table_md(["step", "part", "now", "agent", "shell", "what it is"],
+                    [[f"{f['number']} {f['step']}", PART_WORDS[f["part"]], f"**{NOW_WORDS[f['mark']]}**" if f["mark"] in NOW_WORDS else "",
                       f"`{f['skill']}`",
                       f"`{shell_form(f['shell'])}`" if f["shell"] else "— needs an agent session", commands(f["what"], False, md=True)]
                      for f in model["flow"]])
@@ -1410,6 +1478,7 @@ def story_attention(cwd, story_id, story, profile):
 
 
 def status_model(cwd, epics, runs, live=False):
+    epics_dir = epics                                 # the folder; `epics` below becomes the list it holds
     profile = read_profile(resolve_profile(None, cwd))
     data = schedule_data(cwd, epics, runs)
     stories, order = data["stories"], data["order"]
@@ -1468,10 +1537,25 @@ def status_model(cwd, epics, runs, live=False):
                     seconds=sum(r["seconds"] for r in epic["rows"]))
     epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
     journeys = journey_hints(stories, epics)
+    blank = dict(title="", goal="", metric="", discovery="")
+    files = epic_files(epics_dir)
+    for epic in epics:
+        own = next((f for f in files if epic["epic"] in (f["epic"], f["folder"])), None)
+        epic.update({k: (own or blank)[k] for k in blank})
+    named = {e["epic"] for e in epics}
+    # an epic whose folder holds no story yet: listed after the others, its next step is cutting them
+    for own in files:
+        if own["epic"] not in named and own["folder"] not in named:
+            epics.append(dict(epic=own["epic"], rows=[], delivered=0, total=0, tokens=0, measured=0, seconds=0,
+                              **{k: own[k] for k in blank}))
+    empty = [e["epic"] for e in epics if not e["rows"]]
     nxt = data["next"]
     if nxt:
         next_line = dict(text=f"{nxt} can start from {stories[nxt]['start'] or 'plan'} — run it.",
                          action=make_action(skill=f"/factory-run {nxt}", shell=f"{RUNNER} run --story {nxt}"))
+    elif empty and all(r["state"] in ("delivered", "superseded") for r in rows):
+        next_line = dict(text=f"The epic {empty[0]} has no story yet — cut its stories.",
+                         action=make_action(skill=f"/factory-backlog stories {empty[0]}", shell=""))
     elif not rows:
         next_line = dict(text="The backlog is empty — write the first story.",
                          action=make_action(skill="/factory-backlog", shell=""))
@@ -1498,12 +1582,36 @@ def status_model(cwd, epics, runs, live=False):
         note = duplicate_pipeline_note(cwd)
         if note:
             extra.append(note)
+    # the project description as it stands — the foundation a person writes once and changes when things move
+    description = [description_part(cwd, profile, "product", PRODUCT_HEADINGS),
+                   description_part(cwd, profile, "tech", TECH_HEADINGS),
+                   description_part(cwd, profile, "domain", ())]
     return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
+                description=description,
                 rows=rows, next=next_line, journeys=journeys,
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
                 delivered=sum(r["done"] for r in rows), total=len(rows),
                 tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
                 seconds=sum(r["seconds"] for r in rows))
+
+
+def epic_files(epics):
+    """Every epic folder with an epic.md, the one with no story yet included — the status lists the epics
+    from their own files, not from the stories that name them."""
+    found = []
+    if not os.path.isdir(epics):
+        return found
+    for name in sorted(os.listdir(epics)):
+        path = os.path.join(epics, name, "epic.md")
+        if not os.path.isfile(path):
+            continue
+        try:
+            front = read_front_matter(path)[0]
+        except GateError:
+            front = {}
+        found.append(dict(epic=str(front.get("id") or name), folder=name,
+                          **{k: str(front.get(k) or "") for k in ("title", "goal", "metric", "discovery")}))
+    return found
 
 
 def journey_hints(stories, epics):
@@ -1701,7 +1809,7 @@ def token_rows(model):
         row = [label, runs] + [f"{item.get(k, 0):,}" for k in classes] + [f"{item['tokens']:,}"]
         return row + ([f"{item.get('cost', 0):.2f}" if item.get("priced") else "—"] if model["priced"] else [])
     rows, kinds = [], []
-    for epic in model["epics"]:
+    for epic in (e for e in model["epics"] if e["rows"]):
         subtotal = {k: sum(r.get(k, 0) for r in epic["rows"]) for k in classes + ("tokens", "measured", "runs", "cost", "priced")}
         rows.append(cells(epic["epic"] or "(no epic)", subtotal, subtotal["runs"]))
         kinds.append("epic")
@@ -1774,6 +1882,9 @@ def backlog_text(model, colour, heading_line=True):
         mark = epic_mark(epic)
         out += ([""] if n else []) + ["    " + paint(bold(f"{MARKS_TEXT[mark]} {epic['epic'] or '(no epic)'}", colour), mark, colour)
                                       + f"   {dim(epic_summary(epic), colour)}"]
+        if not epic["rows"]:
+            out.append(f"      no story yet — {commands('/factory-backlog stories ' + epic['epic'], colour)}")
+            continue
         cells = [backlog_cells(r, model, MARKS_TEXT) for r in epic["rows"]]
         out += table_text(headers, cells, right, indent="      ", marks=[r["mark"] for r in epic["rows"]],
                           colour=colour, widths=widths)
@@ -1831,6 +1942,9 @@ def backlog_md_lines(model):
     headers, right = backlog_columns(model)
     for epic in model["epics"]:
         out += ["", f"{MARKS_MD[epic_mark(epic)]} *{epic['epic'] or '(no epic)'}* — {epic_summary(epic)}", ""]
+        if not epic["rows"]:
+            out.append(f"No story yet — `/factory-backlog stories {epic['epic']}`.")
+            continue
         out += table_md(headers, [backlog_cells(r, model, MARKS_MD) for r in epic["rows"]], right)
     for hint in model.get("journeys", []):
         out += ["", f"*journey* — {hint['epic']}: {hint['text']} → `{hint['action']['skill']}`"]
@@ -2941,6 +3055,8 @@ def main(argv):
     parser = argparse.ArgumentParser(add_help=True, description="factory cli")
     parser.add_argument("--version", action="version", version=f"factory-cli {VERSION} (file contract {CONTRACT})")
     parser.add_argument("--story")
+    parser.add_argument("--discover-list", action="store_true",
+                        help="every discovery topic, its proposed epics (and which are epics) and its proposed description changes")
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
     parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
@@ -3126,6 +3242,8 @@ def main(argv):
         return 0
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
+    if args.discover_list:
+        return discovery_list(cwd, args.epics, args.format, args.color)
     if args.kind:
         if not args.story:
             parser.error("--kind needs --story")

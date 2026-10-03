@@ -81,6 +81,13 @@ The three ways in all end at the same files:
 /factory-setup                                                                    an existing project
 ```
 
+## When the stack moved
+
+Detection that finds what the profile lacks — a browser runner, a formatter, an integration level added since
+setup — also means the technical description is behind. Name the `## Stack` line of the technical description
+that does not say it yet, and leave the change to the description skill (`/dca-describe <change>` in a DCA
+project); this skill writes the profile, never the description.
+
 ## Structural questions
 
 A plan that needs a new bounded context, a new relationship between contexts or a surface an actor

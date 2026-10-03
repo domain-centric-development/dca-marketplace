@@ -31,6 +31,28 @@ exists, written after the code by people and by `stage-document`. Where the two 
 `project/domain.md` against a map generated from the code — a difference is a finding, not a
 duplicate.
 
+## A foundation once, then the cycle
+
+```
+foundation   set up · describe                         once, and when something moves
+cycle        discover → backlog → run → decide → delivered      with every body of work
+                         └ plan → test → build → tidy → judge → document
+```
+
+| Part | Step | Agent | What it does |
+|---|---|---|---|
+| foundation | set up | `/factory-setup`, `/factory-update` | runner, gate, hook and stack profile — only what is missing |
+| foundation | describe | `/dca-describe`, `/dca-describe <change>` | the project description; a change in your words later |
+| cycle | discover | `/factory-discover <topic>` | optional: the problem worth solving, proposed epics with their outcome events |
+| cycle | backlog | `/factory-backlog epic <id> --from <report>` · `stories <epic>` · `release <story> …` | an epic from a released proposal, its stories as drafts, their release |
+| cycle | run | `/factory-run [<story>]` | the six stages with a gate between them |
+| cycle | decide | `/factory-decisions [<story>]` | questions a stage may not decide, acceptances |
+| cycle | delivered | `/factory-status` | what is delivered — stories, epics, outcome events; delivered is not shipped |
+
+The description is not part of the cycle: it is amended in parts by the step that found the reason — a
+structural answer (`/factory-decisions`), the document stage (glossary, map), a released description change
+from a discovery, a new capability (`/dca-add` writes its `## Stack` line).
+
 ## Install
 
 ```
@@ -266,7 +288,12 @@ its passes — a correction after acceptance is a pass of its own — its stages
 In a terminal the marks are `!` look at it · `?` answer · `✗` stopped · `▶` running · `✓` delivered ·
 `·` nothing to do, in colour where the output is a terminal (`--color always|never`, `NO_COLOR`).
 `--format md` renders the same rows as Markdown tables with 👀 ❓ ⛔ ⏳ ✅ ➖ — what a session shows —
-and `--format json` for tools.
+and `--format json` for tools. Every epic with an `epic.md` is listed, also before its first story (its next
+step is `/factory-backlog stories <epic>`), with its title, goal, outcome event and discovery link; the JSON also
+carries the project description as it stands — each part present or missing, its missing and empty headings.
+`factory.sh discover --list [--format json]` lists every discovery topic with its proposed epics, which of them
+are epics already, and its proposed description changes. In Claude Code, the optional `dca-factory-view` plugin
+draws all of it as a cockpit; the files and these commands stay the source.
 
 ## A model per stage
 

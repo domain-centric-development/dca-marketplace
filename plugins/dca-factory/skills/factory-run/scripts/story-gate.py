@@ -219,7 +219,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 14
 
 
-VERSION = "0.61.0"
+VERSION = "0.62.0"
 
 
 def read_front_matter(path):
@@ -1250,30 +1250,44 @@ def layout_hint(cwd, profile):
     return "the layout changed — `factory.sh update` migrates it (once, and says what it moved): " + "; ".join(old)
 
 
+def description_part(cwd, profile, key, headings):
+    """One part of the project description as it stands: where it is, whether it is there, which required
+    headings are missing or empty, and every `## ` heading it carries. Guidance in HTML comments does not count
+    as content, so an untouched template is empty."""
+    path = location(profile, key)
+    full = os.path.join(cwd, path)
+    part = dict(part=key, path=path.replace(os.sep, "/"), present=os.path.isfile(full), missing=[], empty=[],
+                sections=[], required=list(headings))
+    if not part["present"]:
+        return part
+    text = re.sub(r"<!--.*?-->", "", read_text(full), flags=re.S)
+    sections, order, current = {}, [], None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip().lower()
+            sections[current] = []
+            order.append(line[3:].strip())
+        elif current is not None:
+            sections[current].append(line)
+    part["sections"] = order
+    part["missing"] = [h for h in headings if h.lower() not in sections]
+    part["empty"] = [h for h in headings if h.lower() in sections and not "".join(sections[h.lower()]).strip()]
+    return part
+
+
 def check_described(result, cwd, profile, key, headings, what):
     """One part of the project description. Absent is a note — the gate does not block a project
     that has none, the backlog skill does. A key that names a missing file is a broken reference,
-    and a heading missing or empty is a description nobody finished: both fail. Guidance in HTML
-    comments does not count as content, so an untouched template does not pass."""
+    and a heading missing or empty is a description nobody finished: both fail."""
     named = str(profile.get(key, "")).strip()
-    path = location(profile, key)
-    full = os.path.join(cwd, path)
-    if not os.path.isfile(full):
+    part = description_part(cwd, profile, key, headings)
+    path, missing, empty = part["path"], part["missing"], part["empty"]
+    if not part["present"]:
         if named:
             result.fail(key, f"the profile's `{key}: {named}` names no file")
         else:
             result.note(key, f"no {what} at {path} — `/factory-setup` writes it before the first story")
         return False
-    text = re.sub(r"<!--.*?-->", "", read_text(full), flags=re.S)
-    sections, current = {}, None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            current = line[3:].strip().lower()
-            sections[current] = []
-        elif current is not None:
-            sections[current].append(line)
-    missing = [h for h in headings if h.lower() not in sections]
-    empty = [h for h in headings if h.lower() in sections and not "".join(sections[h.lower()]).strip()]
     if missing or empty:
         detail = "; ".join(filter(None, [
             f"missing `## {'`, `## '.join(missing)}`" if missing else "",
@@ -1623,6 +1637,21 @@ DISCOVERY_SECTIONS = ("Problem", "Users and evidence", "Options", "Outcome", "Ri
                       "Proposed work", "Sources")
 #: The fields every proposed body of work carries before it can become an epic; `domain_contact` may stay `open`.
 DISCOVERY_FIELDS = ("intent", "goal", "metric")
+#: An optional section between the proposed work and the sources: a change the findings make to the project
+#: description, one `### <file> — <section>` each with `- change:`. Discover writes it, never the description:
+#: a released change goes through the description skill.
+DESCRIPTION_CHANGES = "Proposed description changes"
+DESCRIPTION_FILES = ("product.md", "tech.md", "domain.md")
+
+
+def discovery_items(text, section):
+    """The `### <name>` blocks of one `## <section>` of a discovery report: [(name, {field: value})]."""
+    marker = f"\n## {section}"
+    if marker not in text:
+        return []
+    body = text.split(marker, 1)[1].split("\n## ", 1)[0]
+    return [(item.splitlines()[0].strip(), dict(re.findall(r"^\s*-\s*([a-z_]+):\s*(.*?)\s*$", item, re.M)))
+            for item in re.split(r"^### ", body, flags=re.M)[1:]]
 SOURCE_LINE = re.compile(r"^\s*-\s*\[(S\d+)\]\s*(.+?)\s*$")
 CITATION = re.compile(r"\[(S\d+)\]")
 READ_ON = re.compile(r"\bread \d{4}-\d{2}-\d{2}\b")
@@ -1669,24 +1698,33 @@ def check_discovery(result, cwd, profile, topic):
         for path in paths:
             if not (os.path.isfile(os.path.join(cwd, folder, path)) or os.path.isfile(os.path.join(cwd, path))):
                 problems.append(f"{sid}: {path} is not there — an excerpt lives under {folder}/sources/")
-    work = text.split("\n## Proposed work", 1)[1].split("\n## ", 1)[0] if "\n## Proposed work" in text else ""
-    items = re.split(r"^### ", work, flags=re.M)[1:]
+    items = discovery_items(text, "Proposed work")
     if "Proposed work" in headings and not items:
         problems.append("`## Proposed work` proposes nothing — one `### <id>` per body of work, or a line saying why none")
-    for item in items:
-        name = item.splitlines()[0].strip()
-        fields = dict(re.findall(r"^\s*-\s*([a-z_]+):\s*(.*?)\s*$", item, re.M))
+    for name, fields in items:
         lacking = [f for f in DISCOVERY_FIELDS if not fields.get(f) or fields[f].lower() == "open" or "{{" in fields[f]]
         if lacking:
             problems.append(f"proposed `{name}` lacks {', '.join(lacking)}")
+    if DESCRIPTION_CHANGES in headings:
+        if not (headings.index("Proposed work") < headings.index(DESCRIPTION_CHANGES) < headings.index("Sources")
+                if "Proposed work" in headings and "Sources" in headings else False):
+            problems.append(f"`## {DESCRIPTION_CHANGES}` stands between `## Proposed work` and `## Sources`")
+        for name, fields in discovery_items(text, DESCRIPTION_CHANGES):
+            if not any(name.startswith(f) for f in DESCRIPTION_FILES):
+                problems.append(f"description change `{name}` names none of {', '.join(DESCRIPTION_FILES)} — "
+                                f"`### <file> — <section>`")
+            if not fields.get("change") or "{{" in fields["change"]:
+                problems.append(f"description change `{name}` says no `- change:`")
     ignore = os.path.join(cwd, folder, ".gitignore")
     if not (os.path.isfile(ignore) and re.search(r"^/?originals/?\s*$", read_text(ignore), re.M)):
         problems.append(f"{folder}/.gitignore does not ignore `originals/` — the handed-over originals stay out of git")
     if problems:
         result.fail("discovery", f"{report}: " + "; ".join(problems))
     else:
+        changes = len(discovery_items(text, DESCRIPTION_CHANGES))
         result.ok("discovery", f"{report}: {len(DISCOVERY_SECTIONS)} sections, {len(sources)} source(s) resolving, "
-                               f"{len(items)} proposed body(ies) of work")
+                               f"{len(items)} proposed body(ies) of work"
+                               + (f", {changes} proposed description change(s)" if changes else ""))
 
 
 def read_mapping(runs, story_id):

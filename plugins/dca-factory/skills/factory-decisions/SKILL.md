@@ -5,6 +5,9 @@ description: The decision inbox of a delivery run, questions and acceptances ali
 
 # Read, explain and record a decision
 
+`/factory-decisions` lists what waits; `/factory-decisions <story>` explains that story's open record and takes
+the answer. The same words from a person, a view that sends them, or another tool.
+
 Input: the records under `<story>.decisions/` beside each story, the story and the stage file each one
 names, and what the human says. Output: at most one `## Answer` section per record, in the human's
 words, on their say-so. You write no plan, no test and no code, and you never write an answer that

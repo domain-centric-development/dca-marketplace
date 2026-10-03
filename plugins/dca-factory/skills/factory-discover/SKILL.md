@@ -60,19 +60,24 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
    someone, named as the glossary names it, or a new name marked as such) and `- domain_contact:`
    (`open` where nobody is named yet). For every one ask how its effect will be recognised — the
    question a list of deliverables does not ask. A target goes into `goal:` only where the person can
-   measure it.
+   measure it. Where the findings change what the project description says — other users, a new "what it is
+   not", a new quality — add `## Proposed description changes` before `## Sources`: one
+   `### <product.md | tech.md | domain.md> — <section>` per change, with `- change:` (cited) and `- why:`.
+   Leave the section out when nothing changes.
 6. **Check it with the gate:** `bash .agents/factory/factory.sh discover --check <topic>` — the
    sections, every citation listed, every source resolving, every proposal with intent, goal and metric,
    `originals/` ignored. Fix every finding before you hand the report over. Report what it said.
 7. **The person decides.** Show the proposals; write nothing into the backlog until the person releases
-   one. A released proposal becomes an epic through `factory-backlog`, with `discovery:
-   <discovery>/<topic>/discovery.md` in its front matter; the backlog's own questions (the domain
-   contact, the journey) follow there.
+   one. A released proposal becomes an epic through `factory-backlog` —
+   `/factory-backlog epic <id> --from <discovery>/<topic>/discovery.md` — with `discovery:` in its front matter;
+   the backlog's own questions (the domain contact, the journey) follow there. A released description change
+   goes to the description skill (`/dca-describe <the change>` in a DCA project). `factory.sh discover --list`
+   shows every topic, its proposals and which of them are epics already.
 
 ## Do not
 
 - Do not decide which problem to solve or which option to take; propose and say what would decide.
-- Do not write an epic, a story or a plan the person has not released.
+- Do not write an epic, a story or a plan the person has not released, and never the project description.
 - Do not commit an original, or a name from one, without the person's explicit yes.
 - Do not present a single interview as a pattern, or an assumption as evidence.
 - Do not invent a metric, a target or a domain contact.

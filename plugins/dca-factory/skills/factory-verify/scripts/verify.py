@@ -5370,6 +5370,46 @@ def run_groups(args):
             print(f"          {detail}")
             failures.append((name, [], ""))
 
+    # --- status: an epic is listed from its own file, also before its first story -------------------
+    with tmpdir() as root:
+        write_file(root, "project/epics/reminders/epic.md",
+                   "---\nid: reminders\ntitle: Remind the reader\ngoal: fewer forgotten books\nmetric: ReminderSent\n"
+                   "discovery: project/discovery/forgetting/discovery.md\n---\n# Remind the reader\n")
+        shown_status = lambda *more: subprocess.run([sys.executable, args.cli, "--status", *more], cwd=root,
+                                                    capture_output=True, text=True, encoding="utf-8").stdout
+        model = json.loads(shown_status("--format", "json") or "{}")
+        listed = [e for e in model.get("epics", []) if e.get("epic") == "reminders"]
+        expectations = [
+            ("status: an epic without a story is listed from its epic.md, with its title, goal, outcome and discovery",
+             len(listed) == 1 and listed[0]["total"] == 0 and listed[0]["title"] == "Remind the reader"
+             and listed[0]["metric"] == "ReminderSent"
+             and listed[0]["discovery"] == "project/discovery/forgetting/discovery.md", listed),
+            ("status: the next step of an empty epic is cutting its stories, in the backlog skill's argument form",
+             model.get("next", {}).get("action", {}).get("skill") == "/factory-backlog stories reminders", model.get("next")),
+            ("status: the project description as it stands — a missing part says so, with the headings it needs",
+             [(d["part"], d["present"]) for d in model.get("description", [])]
+             == [("product", False), ("tech", False), ("domain", False)]
+             and "Surfaces" in model["description"][0]["required"], model.get("description")),
+            ("status: the terminal and the session view say the empty epic has no story yet",
+             "no story yet — /factory-backlog stories reminders" in shown_status()
+             and "No story yet — `/factory-backlog stories reminders`." in shown_status("--format", "md"),
+             shown_status()[-400:]),
+        ]
+        write_file(root, "project/product.md", "# Product\n\n## What and for whom\n\nA list.\n\n## Surfaces\n\n"
+                                               "<!-- the pages -->\n\n## Qualities\n\nFast.\n")
+        product = json.loads(shown_status("--format", "json") or "{}").get("description", [{}])[0]
+        expectations.append(("status: a part of the description that is there names its missing and its empty headings "
+                             "— a template comment is not content",
+                             product.get("present") and "Surfaces" in product.get("empty", [])
+                             and "How it works" in product.get("missing", [])
+                             and product.get("sections") == ["What and for whom", "Surfaces", "Qualities"], product))
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
+        if not ok:
+            print(f"          {detail}")
+            failures.append((name, [], ""))
+
     # --- status: what runs, what waits, every story, the cost — in one look -------------------------
     with tmpdir() as root:
         backlog_project(root, ("STORY-2", []), extra_sources=(
@@ -5438,11 +5478,16 @@ def run_groups(args):
              "`/factory-run <your words>` | — needs an agent session" in help_md, help_md[:600]),
         ]
         expectations += [
-            ("help: the flow in a fixed order, one place marked — where this project is now: an open question",
-             [f["step"] for f in flow] == ["start", "set up", "write stories", "run", "answer or accept"]
+            ("help: the flow in a fixed order — a foundation once, then the cycle — one place marked: an open question",
+             [f["step"] for f in flow] == ["describe", "set up", "discover", "backlog", "run", "decide", "delivered"]
+             and [f["part"] for f in flow] == ["foundation"] * 2 + ["cycle"] * 5
              and [f["mark"] for f in flow if f["mark"] not in ("none", "done")] == ["question"]
              and {f["step"]: f["mark"] for f in flow}["set up"] == "done"
-             and flow[-1]["mark"] == "question", flow),
+             and {f["step"]: f["mark"] for f in flow}["decide"] == "question", flow),
+            ("help: the backlog skill's argument forms and the discovery list are commands of their own",
+             all(c in help_md for c in ("`/factory-backlog epic <id> --from <report>`", "`/factory-backlog stories <epic>`",
+                                        "`/factory-backlog release <story> …`", "`factory.sh discover --list`",
+                                        "`/dca-describe <change>`")), help_md[:1500]),
             ("help: every command in its agent and its shell form, the marks and the files",
              all(c in help_text for c in ("/factory-status", "factory.sh status", "/factory-decisions",
                                           "factory.sh decisions", "factory.sh help", "Marks", "Files", "Next"))
@@ -6156,7 +6201,19 @@ def run_groups(args):
              (("discovery.md", discovery.replace(", read 2026-10-02", "")),), 1, "S2"),
             ("discovery: proposed work without its outcome fact is refused",
              (("discovery.md", discovery.replace("- metric: ReportSent\n", "")),), 1, "metric"),
-            ("discovery: a topic whose originals/ git does not ignore is refused", ((".gitignore", None),), 1, "originals/")):
+            ("discovery: a topic whose originals/ git does not ignore is refused", ((".gitignore", None),), 1, "originals/"),
+            ("discovery: a proposed description change naming its file and its change passes",
+             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n- change: team leads of small teams too [S1]\n\n## Sources")),), 0,
+             "1 proposed description change(s)"),
+            ("discovery: a proposed description change that names no description file is refused",
+             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### the users\n- change: team leads of small teams too [S1]\n\n## Sources")),), 1,
+             "names none of product.md"),
+            ("discovery: a proposed description change without its change is refused",
+             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n- why: the interviews\n\n## Sources")),), 1,
+             "says no `- change:`"),
+            ("discovery: proposed description changes stand between the proposed work and the sources",
+             (("discovery.md", discovery.replace("## Proposed work", "## Proposed description changes\n\n### product.md — For whom\n- change: team leads of small teams too [S1]\n\n## Proposed work")),), 1,
+             "stands between")):
         with tmpdir() as root:
             topic = "project/discovery/monthly-report/"
             base = {"discovery.md": discovery, "sources/interview-1.md": "Interview 1, a team lead:\n\nWe rebuild it by hand.\n",
@@ -6166,6 +6223,27 @@ def run_groups(args):
             done = subprocess.run([sys.executable, args.gate, "--check-discovery", "monthly-report"], cwd=root,
                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
             expectations.append((label, done.returncode == want_code and want_text in done.stdout, done.stdout.strip()[-300:]))
+    with tmpdir() as root:
+        # the list: every topic, its proposals and which the backlog already holds, its description changes
+        topic = "project/discovery/monthly-report/"
+        backlog_project(root, extra_sources=(
+            (topic + "discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n- change: team leads of small teams too [S1]\n\n## Sources")),
+            ("project/epics/monthly-report/epic.md", "---\nid: monthly-report\ntitle: The report\n---\n# The report\n")))
+        listed = subprocess.run([sys.executable, args.cli, "--discover-list", "--format", "json"], cwd=root,
+                                capture_output=True, text=True, encoding="utf-8", errors="replace")
+        model = json.loads(listed.stdout or "{}")
+        topics = model.get("topics", [])
+        proposals = {p["id"]: p for t in topics for p in t["proposals"]}
+        text = subprocess.run([sys.executable, args.cli, "--discover-list"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        expectations.append(("discover --list: each topic with its proposals — an epic the backlog holds is named, "
+                             "the others say how to release them",
+                             len(topics) == 1 and proposals.get("monthly-report", {}).get("epic") == "monthly-report"
+                             and all(p["metric"] for p in proposals.values())
+                             and topics[0]["description_changes"] == [{"target": "product.md — For whom",
+                                                                       "change": "team leads of small teams too [S1]", "why": ""}]
+                             and "epic monthly-report" in text and "/dca-describe" in text,
+                             listed.stdout[-500:]))
     with tmpdir() as root:
         backlog_project(root)
         done = subprocess.run([sys.executable, args.gate, "--check-discovery", "nothing-here"], cwd=root,
@@ -6593,9 +6671,9 @@ def run_groups(args):
             fresh = {}
         expectations.append(("help: works before the pipeline is installed, the first step marked next",
                              shown.returncode == 0 and fresh
-                             and [f["mark"] for f in fresh["flow"]] == ["next"] + ["none"] * 4
+                             and [f["mark"] for f in fresh["flow"]] == ["next"] + ["none"] * 6
                              and fresh["next"]["action"]["skill"] == "/dca-new project"
-                             and [f["number"] for f in fresh["flow"]] == [1, 2, 3, 4, 5]
+                             and [f["number"] for f in fresh["flow"]] == [1, 2, 3, 4, 5, 6, 7]
                              and {f["step"]: f["shell"] for f in fresh["flow"]}["set up"] == "setup",
                              f"exit {shown.returncode}; {shown.stdout[:200]} {shown.stderr[:200]}"))
     with tmpdir() as root:

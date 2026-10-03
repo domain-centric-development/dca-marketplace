@@ -16,6 +16,7 @@
 #   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh discover --check <topic>      the discovery report of one topic against its contract
+#   factory.sh discover --list [--format text|md|json]   every topic, its proposed epics and which are epics
 #   factory.sh help [--format text|md|json]  the factory explained: the flow and where this project stands,
 #                                            every command in its agent and its shell form, the marks, the files
 #   factory.sh update [--from <skill folder>] [--copy|--link] [--adopt <skill>,…|all]   the newest pipeline found,
@@ -2635,6 +2636,7 @@ case "$command" in
     # The discovery report's check; the report itself is written in a session, by `factory-discover`.
     case "${1:-}" in
       --check) [ $# -eq 2 ] || usage; gate_command --check-discovery "$2" ;;
+      --list) shift; read_command --discover-list "$@" ;;
       *) usage ;;
     esac ;;
   help)
