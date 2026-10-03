@@ -92,10 +92,9 @@ export function touchesFactory(call: { tool: string }): boolean {
   )
 }
 
-export function bar(part: number, whole: number, width: number): string {
-  if (whole <= 0) return '░'.repeat(width)
-  const filled = Math.round((Math.min(part, whole) / whole) * width)
-  return '█'.repeat(filled) + '░'.repeat(width - filled)
+// How many of `width` cells a part of a whole fills — the progress component draws them as a line.
+export function filledCells(part: number, whole: number, width: number): number {
+  return whole <= 0 ? 0 : Math.round((Math.min(part, whole) / whole) * width)
 }
 
 export function tokens(count: number): string {

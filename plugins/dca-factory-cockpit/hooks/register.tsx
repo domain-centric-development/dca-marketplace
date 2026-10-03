@@ -3,7 +3,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, fmt, type Cell } from './components'
-import { appendLines, bar, clock, day, moment, parseJournal, stagesOf, touchesFactory } from './parse'
+import { appendLines, clock, day, moment, parseJournal, stagesOf, touchesFactory } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -563,7 +563,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           [COL.stage, { name: 'share', width: 20 }, COL.time, COL.runs, COL.tokens, COL.cost, { name: 'model', width: 18 }],
           perStage.map(([name, one]) => [
             { text: name, bold: true },
-            { text: bar(one.seconds, longest, 20), color: C.accent },
+            { node: ui.progress(one.seconds, longest, 20, C.accent) },
             { text: fmt.time(one.seconds) },
             { text: String(one.runs), color: one.runs > 1 ? C.wait : C.muted },
             { text: fmt.tokens(one.tokens) },
@@ -795,7 +795,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                 return [
                   { text: isDone ? '✓' : epic.total === 0 ? '○' : '·', color: isDone ? C.done : epic.total === 0 ? C.wait : C.muted, bold: true },
                   { node: ui.link(`epic-${epic.epic}`, epic.title || epic.epic, () => void showDetail($, { kind: 'epic', epic: epic.epic })) },
-                  { text: '█'.repeat(epic.total > 0 ? Math.round((epic.delivered / epic.total) * 10) : 0).padEnd(10, '░'), color: C.done },
+                  { node: ui.progress(epic.delivered, epic.total, 10) },
                   { text: `${epic.delivered} of ${epic.total}`, color: C.muted },
                   { text: drafts > 0 ? String(drafts) : '—', color: drafts > 0 ? C.wait : C.muted },
                   { text: epic.metric || '—', color: C.info },

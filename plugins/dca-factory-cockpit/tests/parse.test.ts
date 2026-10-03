@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bar, duration, moment, parseJournal, rounds, stagesOf, touchesFactory, wrapWords } from '../hooks/parse'
+import { filledCells, duration, moment, parseJournal, rounds, stagesOf, touchesFactory, wrapWords } from '../hooks/parse'
 
 test('a factory command or skill refreshes the view, other calls do not', () => {
   expect(touchesFactory({ tool: 'Bash', command: 'bash .agents/factory/factory.sh run' } as { tool: string })).toBe(true)
@@ -39,9 +39,10 @@ test('formats dates and times as UTC, the way the journal writes them', () => {
   expect(rounds(2)).toBe('2 rounds')
 })
 
-test('draws a progress bar of a given width', () => {
-  expect(bar(3, 5, 10)).toBe('██████░░░░')
-  expect(bar(0, 0, 4)).toBe('░░░░')
+test('a progress fills its share of the cells, none for an empty whole', () => {
+  expect(filledCells(3, 5, 10)).toBe(6)
+  expect(filledCells(0, 0, 4)).toBe(0)
+  expect(filledCells(9, 5, 10)).toBe(10)
 })
 
 test('a write under project/ or the run folder refreshes the view, a write elsewhere does not', () => {

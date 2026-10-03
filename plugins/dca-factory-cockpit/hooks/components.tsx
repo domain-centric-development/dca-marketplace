@@ -1,7 +1,7 @@
 import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, TextProps } from 'claude-code'
 
 import type { StageRun } from '../types'
-import { duration, rounds, short, tokens, wrapWords } from './parse'
+import { duration, filledCells, rounds, short, tokens, wrapWords } from './parse'
 
 // The cockpit's building blocks. Every view is drawn from these, so a change to a table, a link, a chip or the
 // spacing reaches every tab and every detail at once. They take the surface's elements and ready callbacks —
@@ -200,7 +200,21 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
     </Box>
   )
 
+  // A progress line: the filled part as a heavy line in its colour, the rest as a light line in the line colour. A line
+  // sits in the middle of its cell, so two bars in rows one above the other never touch.
+  const progress = (part: number, whole: number, width: number, color: string = C.done) => {
+    const filled = filledCells(part, whole, width)
+    return (
+      <Box>
+        <Text color={color}>{'━'.repeat(filled)}</Text>
+        <Text color={C.line}>{'─'.repeat(width - filled)}</Text>
+      </Box>
+    )
+  }
+
   return {
+    progress,
+
     // A heading as the site's kicker — upper case, teal — with a hint beside it; the space above it is the one
     // rhythm between parts.
     section: (title: string, hint?: string) => (
@@ -345,11 +359,7 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
           <Text bold color={head.color ?? C.bright}>
             {head.title}
           </Text>
-          {head.progress && (
-            <Text color={C.done}>
-              {'█'.repeat(head.progress.total > 0 ? Math.round((head.progress.done / head.progress.total) * 10) : 0).padEnd(10, '░')}
-            </Text>
-          )}
+          {head.progress && progress(head.progress.done, head.progress.total, 10)}
           {head.meta && <Text color={C.muted}>{head.meta}</Text>}
           {buttons.filter((button): button is RenderElement => Boolean(button))}
         </Box>
