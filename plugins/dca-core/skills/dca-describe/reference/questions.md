@@ -89,7 +89,7 @@ paths are the defaults; the `dca-describe` section of `AGENTS.md` names the plac
 - question: Which language, framework and build tool — and why, where it is not obvious?
 - options: Java with Spring Boot and Gradle · Java with Spring Boot and Maven · C# with ASP.NET Core
 - default: —
-- answer goes to: `project/tech.md → ## Stack`
+- answer goes to: `project/tech.md → ## Stack` (a capability added later — formatter, browser tests, HTTP stub, coverage — adds its own line under the same heading)
 
 ### DESC-FRONTEND
 - look up: `## Frontend approach`

@@ -1,6 +1,6 @@
 ---
 name: dca-describe
-description: Writes the project description with the person who decides what is built — the product (what, for whom, surfaces, how it works, how it looks, qualities, what it is not), the technical decisions (stack, frontend approach, persistence, runtime, integrations, version policy) and the designed domain (bounded contexts, subdomain types, relationships and why, the glossary of terms and operations with their code words) — under project/, and the AGENTS.md line that makes every implementation read them first. Use before the first line of code or the first story, when a project has code but no description, when a description is incomplete, or on "/dca-describe". Never invents an answer; writes no code and no story.
+description: Writes the project description with the person who decides what is built — the product (what, for whom, surfaces, how it works, how it looks, qualities, what it is not), the technical decisions (stack, frontend approach, persistence, runtime, integrations, version policy) and the designed domain (bounded contexts, subdomain types, relationships and why, the glossary of terms and operations with their code words) — under project/, and the AGENTS.md line that makes every implementation read them first. Use before the first line of code or the first story, when a project has code but no description, when a description is incomplete, on "/dca-describe", or on "/dca-describe <change>" to change one statement in the person's words. Never invents an answer; writes no code and no story.
 ---
 
 # Describe the project
@@ -94,7 +94,8 @@ could show goes to `docs/`.
 `<product.md | tech.md | domain.md> — <section>: <change>`. Find the heading it belongs to, show the line as it
 stands and as it would read, and write it on the person's yes; ask only what the change leaves open, and say
 which other heading it touches (a new persistence touches `## Runtime` too). `/dca-describe` without an argument
-looks every heading up and asks the open ones.
+looks every heading up and asks the open ones. One exception writes without this skill: a capability's own line
+under `## Stack` comes from `dca-add`, since the person chose the capability there.
 
 A story that needs a surface the product description does not list, a second persistence the
 technical description excludes, or a context the designed map does not carry is a question about

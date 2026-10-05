@@ -11,7 +11,8 @@ description: |
   threshold). Use when the user asks to "add the tactical rules", "freeze the existing
   violations", "set up a formatter", "add Playwright", "add browser tests", "add WireMock", "stub the
   payment provider in tests", "add an integration test level", "add test coverage", "add JaCoCo", or "/dca-add <capability>". Java (Gradle, Maven)
-  and .NET. Changes only what the capability needs and never overwrites a file.
+  and .NET. Changes only what the capability needs, never overwrites a file, and records the capability as one
+  line of the technical description.
 ---
 
 # dca-add
@@ -228,8 +229,8 @@ stack is in `reference/coverage.md`: JaCoCo for Gradle and Maven, coverlet with 
 ## After each capability
 
 **Record it in the technical description.** A capability is a technical decision the person took with you, so
-the project's technical description follows it: one line under its `## Stack` heading — `<capability>: <tool and
-version>`, e.g. `Browser tests: Playwright 1.56` — in the file the `AGENTS.md` section between
+the project's technical description follows it: one line under its `## Stack` heading — the capability in the
+person's words, then the tool and its version, e.g. `Browser tests: Playwright 1.56` — in the file the `AGENTS.md` section between
 `<!-- dca-describe: start -->` and `<!-- dca-describe: end -->` names (by default `project/tech.md`). A line that
 is already there is updated, not repeated. Where the description says something the capability contradicts — "no
 end-user tests", another formatter — ask which is right and change the description through `/dca-describe`
