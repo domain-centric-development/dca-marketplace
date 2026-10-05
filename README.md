@@ -86,13 +86,15 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 
 ```
 # the foundation — once, and when something moves
-/factory-setup            # the project description, git, the runner — only what is missing
+/dca-describe             # the project description — product, technical decisions, designed domain
 /dca-describe <change>    # change one statement of the description, in your words
+/factory-setup            # git, the runner, the stack profile — only what is missing
 
 # the cycle — discover → backlog → run → decide → delivered
 /factory-discover <topic> # which problem is worth solving: a report with sources, proposed epics
 /factory-backlog          # write the epic and the story, in the contract the gate reads
-                          # (epic <id> --from <report> · stories <epic> · release <story> …)
+                          # (epic <id> --from <report> · stories <epic> · release <story> …
+                          #  · journey <epic>)
 /factory-run              # plan → test → build → tidy → judge → document, gated
 /factory-run <your words> # a wish: written as a story (which epic, the criteria), then run
 /factory-status           # what runs, what waits for a human, what each story cost

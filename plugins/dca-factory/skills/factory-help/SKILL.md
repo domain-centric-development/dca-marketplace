@@ -1,6 +1,6 @@
 ---
 name: factory-help
-description: Explains the delivery pipeline in one fixed view — the flow, a foundation done once (set up, describe) and the cycle that recurs (discover, backlog, run, decide, delivered), where this project stands in it, every command in its agent and its shell form, the marks the views use, the files the pipeline reads and writes, and what to do next. Use when someone asks how the factory works, which command does what, what a mark means, where a file is, what to do first, or on "/factory-help". Works before the pipeline is installed; it changes nothing and starts nothing.
+description: Explains the delivery pipeline in one fixed view — the flow, a foundation done once (describe, set up) and the cycle that recurs (discover, backlog, run, decide, delivered), where this project stands in it, every command in its agent and its shell form, the marks the views use, the files the pipeline reads and writes, and what to do next. Use when someone asks how the factory works, which command does what, what a mark means, where a file is, what to do first, or on "/factory-help". Works before the pipeline is installed; it changes nothing and starts nothing.
 ---
 
 # Explain the factory

@@ -219,7 +219,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 14
 
 
-VERSION = "0.62.0"
+VERSION = "0.63.0"
 
 
 def read_front_matter(path):
@@ -1650,7 +1650,8 @@ def discovery_items(text, section):
     if marker not in text:
         return []
     body = text.split(marker, 1)[1].split("\n## ", 1)[0]
-    return [(item.splitlines()[0].strip(), dict(re.findall(r"^\s*-\s*([a-z_]+):\s*(.*?)\s*$", item, re.M)))
+    return [(item.splitlines()[0].strip(),
+             {k.lower(): v for k, v in re.findall(r"^\s*-\s*([A-Za-z_]+):\s*(.*?)\s*$", item, re.M)})
             for item in re.split(r"^### ", body, flags=re.M)[1:]]
 SOURCE_LINE = re.compile(r"^\s*-\s*\[(S\d+)\]\s*(.+?)\s*$")
 CITATION = re.compile(r"\[(S\d+)\]")
@@ -1706,10 +1707,15 @@ def check_discovery(result, cwd, profile, topic):
         if lacking:
             problems.append(f"proposed `{name}` lacks {', '.join(lacking)}")
     if DESCRIPTION_CHANGES in headings:
-        if not (headings.index("Proposed work") < headings.index(DESCRIPTION_CHANGES) < headings.index("Sources")
-                if "Proposed work" in headings and "Sources" in headings else False):
+        # the position is a finding only when both neighbours are there — a missing one is reported above
+        if "Proposed work" in headings and "Sources" in headings and \
+                not headings.index("Proposed work") < headings.index(DESCRIPTION_CHANGES) < headings.index("Sources"):
             problems.append(f"`## {DESCRIPTION_CHANGES}` stands between `## Proposed work` and `## Sources`")
-        for name, fields in discovery_items(text, DESCRIPTION_CHANGES):
+        changes = discovery_items(text, DESCRIPTION_CHANGES)
+        if not changes:
+            problems.append(f"`## {DESCRIPTION_CHANGES}` proposes nothing — one `### <file> — <section>` per change, "
+                            f"or leave the section out")
+        for name, fields in changes:
             if not any(name.startswith(f) for f in DESCRIPTION_FILES):
                 problems.append(f"description change `{name}` names none of {', '.join(DESCRIPTION_FILES)} — "
                                 f"`### <file> — <section>`")

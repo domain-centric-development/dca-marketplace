@@ -86,7 +86,8 @@ The three ways in all end at the same files:
 Detection that finds what the profile lacks — a browser runner, a formatter, an integration level added since
 setup — also means the technical description is behind. Name the `## Stack` line of the technical description
 that does not say it yet, and leave the change to the description skill (`/dca-describe <change>` in a DCA
-project); this skill writes the profile, never the description.
+project); where the capability came in through `dca-add`, the line is already there. This skill writes the
+profile, never the description.
 
 ## Structural questions
 

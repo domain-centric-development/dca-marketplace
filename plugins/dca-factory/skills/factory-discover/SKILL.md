@@ -74,6 +74,13 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
    goes to the description skill (`/dca-describe <the change>` in a DCA project). `factory.sh discover --list`
    shows every topic, its proposals and which of them are epics already.
 
+## Forms
+
+| Form | Does |
+|---|---|
+| `/factory-discover` | the discoveries: every topic, its proposed epics and which are epics already, its proposed description changes — what `factory.sh discover --list` prints, shown and explained |
+| `/factory-discover <topic>` | the discovery of that topic: the question catalogue, the research, the report with its sources and proposals (steps 1–7) |
+
 ## Do not
 
 - Do not decide which problem to solve or which option to take; propose and say what would decide.

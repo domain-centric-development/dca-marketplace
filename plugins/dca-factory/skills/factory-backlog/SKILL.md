@@ -21,6 +21,7 @@ The same words from a person, a view that sends them, or another tool — one me
 | `/factory-backlog` | asks what is wanted: an epic, a story, a correction |
 | `/factory-backlog epic <id> --from <report>` | the person releases the proposal `### <id>` of that discovery report: write it as an epic (step 2a) |
 | `/factory-backlog stories <epic>` | cut the next stories of that epic, each `status: draft` |
+| `/factory-backlog journey <epic>` | the epic is delivered and unguarded: propose its journey (section *A journey*) — the `## Journey` timeline from the delivered stories' operations and events, ending in the outcome event, and the journey item as `status: draft` — or the `- none: <why>` line, if the person decides against one |
 | `/factory-backlog release <story> [<story> …]` | the person releases these drafts: run the question pass (step 6) for each, set `status: approved` where it leaves nothing open, and say which stay drafts and why |
 | `/factory-backlog <words>` | anything else: what the person wants, in their words — an epic, a story or a correction |
 

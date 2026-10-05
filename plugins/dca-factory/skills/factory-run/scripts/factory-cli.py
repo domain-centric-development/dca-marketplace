@@ -1131,6 +1131,8 @@ HELP_COMMANDS = (
     ("cut stories", "the next stories of an epic, each a draft", "/factory-backlog stories <epic>", ""),
     ("release stories", "drafts become approved after the question pass — open questions keep them drafts",
      "/factory-backlog release <story> …", ""),
+    ("guard an epic", "a delivered, unguarded epic gets its journey — the timeline to its outcome event and its "
+                      "journey item as a draft", "/factory-backlog journey <epic>", ""),
     ("change the description", "one statement of the product, the stack or the domain, in your words",
      "/dca-describe <change>", ""),
     ("the backlog", "the epics and stories, their state, the next one", "/factory-backlog", "backlog"),
@@ -1455,7 +1457,7 @@ def story_attention(cwd, story_id, story, profile):
         return "question", "waiting for your answer", make_action(skill="/factory-decisions", shell=by_hand)
     if state == "unreleased":
         return "question", "draft — waits for your release", make_action(
-            text="release it", skill="/factory-backlog",
+            text="release it", skill=f"/factory-backlog release {story_id}",
             shell=f"set `status: approved` in {str(story.get('path', 'the story')).replace(os.sep, '/')}")
     if state == "stopped":
         return "stopped", "stopped", make_action(text=detail, skill=f"/factory-status {story_id}",
@@ -1595,6 +1597,13 @@ def status_model(cwd, epics, runs, live=False):
                 seconds=sum(r["seconds"] for r in rows))
 
 
+def front_text(value):
+    """One front-matter value as text — a list (`key:` with `- item` lines) joined, never its Python form."""
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value)
+    return str(value or "")
+
+
 def epic_files(epics):
     """Every epic folder with an epic.md, the one with no story yet included — the status lists the epics
     from their own files, not from the stories that name them."""
@@ -1610,7 +1619,7 @@ def epic_files(epics):
         except GateError:
             front = {}
         found.append(dict(epic=str(front.get("id") or name), folder=name,
-                          **{k: str(front.get(k) or "") for k in ("title", "goal", "metric", "discovery")}))
+                          **{k: front_text(front.get(k)) for k in ("title", "goal", "metric", "discovery")}))
     return found
 
 
@@ -1632,14 +1641,15 @@ def journey_hints(stories, epics):
             continue
         text = read_text(os.path.join(os.path.dirname(paths[0]), "epic.md")) \
             if os.path.isfile(os.path.join(os.path.dirname(paths[0]), "epic.md")) else ""
-        section = text.split("## Journey", 1)[1].split("\n## ", 1)[0] if "## Journey" in text else None
+        heading = re.search(r"^## Journey\s*$", text, re.M)
+        section = text[heading.end():].split("\n## ", 1)[0] if heading else None
         if section is not None and re.search(r"^\s*-\s*none:", section, re.M):
             continue
         said = "the epic names no journey" if section is None \
             else "its journey is still open" if re.search(r"^\s*-\s*open:", section, re.M) or not section.strip() \
             else "its journey has no journey test yet"
         hints.append(dict(epic=epic["epic"], text=f"delivered, unguarded — {said}",
-                          action=make_action(skill="/factory-backlog", shell="")))
+                          action=make_action(skill=f"/factory-backlog journey {epic['epic']}", shell="")))
     return hints
 
 
@@ -1881,7 +1891,7 @@ def backlog_text(model, colour, heading_line=True):
     for n, epic in enumerate(model["epics"]):
         mark = epic_mark(epic)
         out += ([""] if n else []) + ["    " + paint(bold(f"{MARKS_TEXT[mark]} {epic['epic'] or '(no epic)'}", colour), mark, colour)
-                                      + f"   {dim(epic_summary(epic), colour)}"]
+                                      + (f"   {dim(epic_summary(epic), colour)}" if epic["rows"] else "")]
         if not epic["rows"]:
             out.append(f"      no story yet — {commands('/factory-backlog stories ' + epic['epic'], colour)}")
             continue

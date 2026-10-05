@@ -5375,6 +5375,11 @@ def run_groups(args):
         write_file(root, "project/epics/reminders/epic.md",
                    "---\nid: reminders\ntitle: Remind the reader\ngoal: fewer forgotten books\nmetric: ReminderSent\n"
                    "discovery: project/discovery/forgetting/discovery.md\n---\n# Remind the reader\n")
+        # a second empty epic whose `discovery:` is a list — sorted after the first, so the next step stays the same
+        write_file(root, "project/epics/zz-digest/epic.md",
+                   "---\nid: zz-digest\ntitle: A weekly digest\ngoal: more books finished\nmetric: DigestSent\n"
+                   "discovery:\n  - project/discovery/forgetting/discovery.md\n  - project/discovery/habits/discovery.md\n"
+                   "---\n# A weekly digest\n")
         shown_status = lambda *more: subprocess.run([sys.executable, args.cli, "--status", *more], cwd=root,
                                                     capture_output=True, text=True, encoding="utf-8").stdout
         model = json.loads(shown_status("--format", "json") or "{}")
@@ -5390,6 +5395,14 @@ def run_groups(args):
              [(d["part"], d["present"]) for d in model.get("description", [])]
              == [("product", False), ("tech", False), ("domain", False)]
              and "Surfaces" in model["description"][0]["required"], model.get("description")),
+            ("status: a list-valued front-matter field of an epic is joined with commas, never its Python form",
+             [e.get("discovery") for e in model.get("epics", []) if e.get("epic") == "zz-digest"]
+             == ["project/discovery/forgetting/discovery.md, project/discovery/habits/discovery.md"],
+             [e.get("discovery") for e in model.get("epics", [])]),
+            ("status: the backlog of an epic without a story says No story yet and shows no sums",
+             "No story yet." in shown_status("--part", "backlog")
+             and "0 of 0 delivered" not in shown_status("--part", "backlog")
+             and "0 of 0 delivered" not in shown_status(), shown_status("--part", "backlog")[-400:]),
             ("status: the terminal and the session view say the empty epic has no story yet",
              "no story yet — /factory-backlog stories reminders" in shown_status()
              and "No story yet — `/factory-backlog stories reminders`." in shown_status("--format", "md"),
@@ -5486,7 +5499,8 @@ def run_groups(args):
              and {f["step"]: f["mark"] for f in flow}["decide"] == "question", flow),
             ("help: the backlog skill's argument forms and the discovery list are commands of their own",
              all(c in help_md for c in ("`/factory-backlog epic <id> --from <report>`", "`/factory-backlog stories <epic>`",
-                                        "`/factory-backlog release <story> …`", "`factory.sh discover --list`",
+                                        "`/factory-backlog release <story> …`", "`/factory-backlog journey <epic>`",
+                                        "`factory.sh discover --list`",
                                         "`/dca-describe <change>`")), help_md[:1500]),
             ("help: every command in its agent and its shell form, the marks and the files",
              all(c in help_text for c in ("/factory-status", "factory.sh status", "/factory-decisions",
@@ -6213,7 +6227,13 @@ def run_groups(args):
              "says no `- change:`"),
             ("discovery: proposed description changes stand between the proposed work and the sources",
              (("discovery.md", discovery.replace("## Proposed work", "## Proposed description changes\n\n### product.md — For whom\n- change: team leads of small teams too [S1]\n\n## Proposed work")),), 1,
-             "stands between")):
+             "stands between"),
+            ("discovery: a proposed description change whose field is written `- Change:` is read all the same",
+             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n- Change: team leads of small teams too [S1]\n\n## Sources")),), 0,
+             "1 proposed description change(s)"),
+            ("discovery: an empty `## Proposed description changes` is refused like empty proposed work",
+             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n## Sources")),), 1,
+             "`## Proposed description changes` proposes nothing")):
         with tmpdir() as root:
             topic = "project/discovery/monthly-report/"
             base = {"discovery.md": discovery, "sources/interview-1.md": "Interview 1, a team lead:\n\nWe rebuild it by hand.\n",
@@ -6223,6 +6243,21 @@ def run_groups(args):
             done = subprocess.run([sys.executable, args.gate, "--check-discovery", "monthly-report"], cwd=root,
                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
             expectations.append((label, done.returncode == want_code and want_text in done.stdout, done.stdout.strip()[-300:]))
+    with tmpdir() as root:
+        # a missing `## Proposed work` is one finding — the position of the description changes is not a second
+        topic = "project/discovery/monthly-report/"
+        text = discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n"
+                                               "- change: team leads of small teams too [S1]\n\n## Sources")
+        text = text.split("## Proposed work", 1)[0] + "## Proposed description changes" \
+            + text.split("## Proposed description changes", 1)[1]
+        backlog_project(root, extra_sources=((topic + "discovery.md", text),
+                                             (topic + "sources/interview-1.md", "Interview 1, a team lead:\n\nWe rebuild it by hand.\n"),
+                                             (topic + ".gitignore", "originals/\n")))
+        done = subprocess.run([sys.executable, args.gate, "--check-discovery", "monthly-report"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        expectations.append(("discovery: without `## Proposed work` the missing section is the finding, not the position",
+                             done.returncode == 1 and "`## Proposed work`" in done.stdout and "stands between" not in done.stdout,
+                             done.stdout.strip()[-300:]))
     with tmpdir() as root:
         # the list: every topic, its proposals and which the backlog already holds, its description changes
         topic = "project/discovery/monthly-report/"
@@ -6650,7 +6685,10 @@ def run_groups(args):
     # WP-84 V2: an epic without `## Journey` is no longer a silent decision against one; `- none: <why>` is
     for label, epic, want in (
             ("an epic delivered without a `## Journey` is named unguarded", EPIC,
-             "journey   sample: delivered, unguarded — the epic names no journey — /factory-backlog"),
+             "journey   sample: delivered, unguarded — the epic names no journey — /factory-backlog journey sample"),
+            ("a `### Journey` heading is no `## Journey` — the epic is still named unguarded",
+             EPIC + "\n### Journey\n\n- none: not the section\n",
+             "journey   sample: delivered, unguarded — the epic names no journey — /factory-backlog journey sample"),
             ("an epic that decided against a journey (`- none:`) is not named", 
              EPIC + "\n## Journey\n\n- none: a single page, the story's own end-to-end test walks it\n", None)):
         with tmpdir() as root:
@@ -6661,6 +6699,32 @@ def run_groups(args):
             expectations.append((f"status: {label}",
                                  (want in view) if want else ("unguarded" not in view and "journey   sample" not in view),
                                  view[-600:]))
+    with tmpdir() as root:
+        # 0.63.0: the hint's action names the backlog skill's form with the epic — json, md and text alike
+        backlog_project(root, epic=EPIC, story=delivered_story(STORY),
+                        extra_sources=((".dca-factory/runs/STORY-1/document.md", "# Document\n"),))
+        status = lambda *more: subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog", *more],
+                                              cwd=root, capture_output=True, text=True, encoding="utf-8").stdout
+        try:
+            hints = json.loads(status("--format", "json")).get("journeys", [])
+        except ValueError:
+            hints = []
+        expectations.append(("status: the unguarded epic's action is `/factory-backlog journey <epic>` in json, md and text",
+                             [h.get("action", {}).get("skill") for h in hints] == ["/factory-backlog journey sample"]
+                             and "`/factory-backlog journey sample`" in status("--format", "md")
+                             and "/factory-backlog journey sample" in status(),
+                             (hints, status("--format", "md")[-300:])))
+    with tmpdir() as root:
+        # a draft waits for its release: the hint names the release form with the story
+        backlog_project(root, story=STORY.replace("status: approved", "status: draft"))
+        try:
+            waiting = json.loads(subprocess.run([sys.executable, args.cli, "--status", "--format", "json"], cwd=root,
+                                                capture_output=True, text=True, encoding="utf-8").stdout).get("waiting", [])
+        except ValueError:
+            waiting = []
+        expectations.append(("status: a draft's hint is `/factory-backlog release <story>`",
+                             [w.get("action", {}).get("skill") for w in waiting if w.get("story") == "STORY-1"]
+                             == ["/factory-backlog release STORY-1"], waiting))
     with tmpdir() as root:
         # before anything is there: the runner's help explains the factory from the plugin's gate
         shown = subprocess.run([BASH, args.runner, "help", "--format", "json"], cwd=root, capture_output=True,

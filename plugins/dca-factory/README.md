@@ -34,17 +34,17 @@ duplicate.
 ## A foundation once, then the cycle
 
 ```
-foundation   set up · describe                         once, and when something moves
+foundation   describe · set up                         once, and when something moves
 cycle        discover → backlog → run → decide → delivered      with every body of work
                          └ plan → test → build → tidy → judge → document
 ```
 
 | Part | Step | Agent | What it does |
 |---|---|---|---|
-| foundation | set up | `/factory-setup`, `/factory-update` | runner, gate, hook and stack profile — only what is missing |
 | foundation | describe | `/dca-describe`, `/dca-describe <change>` | the project description; a change in your words later |
+| foundation | set up | `/factory-setup`, `/factory-update` | runner, gate, hook and stack profile — only what is missing |
 | cycle | discover | `/factory-discover <topic>` | optional: the problem worth solving, proposed epics with their outcome events |
-| cycle | backlog | `/factory-backlog epic <id> --from <report>` · `stories <epic>` · `release <story> …` | an epic from a released proposal, its stories as drafts, their release |
+| cycle | backlog | `/factory-backlog epic <id> --from <report>` · `stories <epic>` · `release <story> …` · `journey <epic>` | an epic from a released proposal, its stories as drafts, their release, the journey that guards a delivered epic |
 | cycle | run | `/factory-run [<story>]` | the six stages with a gate between them |
 | cycle | decide | `/factory-decisions [<story>]` | questions a stage may not decide, acceptances |
 | cycle | delivered | `/factory-status` | what is delivered — stories, epics, outcome events; delivered is not shipped |
