@@ -1,7 +1,7 @@
 import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, TextProps } from 'claude-code'
 
 import type { StageRun } from '../types'
-import { duration, filledCells, rounds, short, tokens, wrapWords } from './parse'
+import { duration, filledCells, fit, rounds, short, tokens, wrapWords } from './parse'
 
 // The cockpit's building blocks. Every view is drawn from these, so a change to a table, a link, a chip or the
 // spacing reaches every tab and every detail at once. They take the surface's elements and ready callbacks —
@@ -46,7 +46,25 @@ export const C = { ...DEEP }
 // The sign of an action Claude carries out in this session: a skill runs, files may change.
 export const BY_CLAUDE = '✦'
 
-export const MARK_GLYPH: Record<string, string> = { done: '✓', running: '▶', look: '!', question: '?', stopped: '✗', next: '→', none: '·' }
+// Every mark the cockpit draws, in one table: the factory's own (what `status` prints for a story) and the
+// cockpit's (what a part of the description, a proposal, a topic or an epic is). One glyph and one colour per kind,
+// so the same thing looks the same in every tab.
+export const MARK_GLYPH: Record<string, string> = {
+  done: '✓',
+  running: '▶',
+  look: '!',
+  question: '?',
+  stopped: '✗',
+  next: '→',
+  none: '·',
+  // the cockpit's own kinds
+  missing: '✗',
+  acceptance: '!',
+  proposed: '○',
+  partial: '◆',
+  empty: '○',
+  journey: '◇',
+}
 export const MARK_COLOR: Record<string, string> = {}
 
 // Paper for a light theme, deep for a dark one; set before every drawing, so a change of theme shows at once.
@@ -60,9 +78,46 @@ export function applyPalette(isLight: boolean): void {
     stopped: C.fail,
     next: C.accent,
     none: C.muted,
+    missing: C.fail,
+    acceptance: C.info,
+    proposed: C.info,
+    partial: C.info,
+    empty: C.wait,
+    journey: C.wait,
   })
 }
 applyPalette(false)
+
+// A mark as a table cell — the one way a kind shows in a table.
+export function mark(kind: string): Cell {
+  return { text: MARK_GLYPH[kind] ?? '·', color: MARK_COLOR[kind] ?? C.muted, bold: true }
+}
+
+// An epic as its tables show it — the same cells in the backlog, in the delivered view and in its own card.
+export type EpicLike = { epic: string; title?: string; metric?: string; delivered: number; total: number; tokens: number; rows: { story: string; state: string }[] }
+export type JourneyHint = { epic: string; text: string }
+
+export function epicCells(epic: EpicLike, journey?: JourneyHint) {
+  const isDone = epic.total > 0 && epic.delivered === epic.total
+  const draftRows = epic.rows.filter(row => /draft/.test(row.state))
+  return {
+    isDone,
+    draftRows,
+    kind: isDone ? 'done' : epic.total === 0 ? 'empty' : 'none',
+    mark: mark(isDone ? 'done' : epic.total === 0 ? 'empty' : 'none'),
+    title: { text: epic.title || epic.epic, bold: true } as Cell,
+    count: { text: `${epic.delivered} of ${epic.total}`, color: C.muted } as Cell,
+    drafts: { text: draftRows.length > 0 ? String(draftRows.length) : '—', color: draftRows.length > 0 ? C.wait : C.muted } as Cell,
+    outcome: { text: epic.metric || '—', color: C.info } as Cell,
+    journey: journey ? ({ text: `${MARK_GLYPH.journey} ${journey.text}`, color: MARK_COLOR.journey } as Cell) : ({ text: '—', color: C.muted } as Cell),
+    meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${tokens(epic.tokens)} tokens` : ''}`,
+  }
+}
+
+// How a line of the worker's output is coloured: a refusal or failure, a pass or a delivery, or nothing.
+export function logColor(text: string): string | undefined {
+  return /refus|fail|error|✗/i.test(text) ? C.fail : /✓|pass|delivered/i.test(text) ? C.done : undefined
+}
 
 export type Phase = { key: string; label: string; hotkey?: string; isOpen: boolean; mark?: { text: string; color: string }; onPress: () => void }
 
@@ -92,7 +147,8 @@ export const COL = {
   record: { name: 'record', width: 28 },
   what: { name: 'what', width: 30, isWide: true },
   outcome: { name: 'outcome', width: 18, isWide: true },
-  action: (width: number): Column => ({ name: '', width }),
+  // a link draws ` ›` after its word: the two cells are counted here, so `✎ edit ›` is never cut
+  action: (width: number): Column => ({ name: '', width: width + 2 }),
 } satisfies Record<string, Column | ((width: number) => Column)>
 
 // One way to write each kind of value; a dash where there is none.
@@ -128,6 +184,12 @@ export function sizeColumns(columns: Column[], width: number): Column[] {
   return columns.map(column => (column.isWide ? { ...column, width: Math.max(column.width, share) } : column))
 }
 
+// A labelled pair takes PAIR cells when several share a row; the page's gutter (2) and a gap of 3 between pairs.
+export const PAIR = 44
+export function pairsPerRow(width: number): number {
+  return Math.max(1, Math.floor((width - 2 + 3) / (PAIR + 3)))
+}
+
 export type Elements = {
   Box: ElementConstructor<BoxProps>
   Text: ElementConstructor<TextProps>
@@ -150,7 +212,7 @@ export function components({ Box, Text, Button, Input, width }: Elements) {
       {value.node ??
         lines.map(text => (
           <Text color={value.color ?? C.text} bold={value.bold} wrap="truncate">
-            {text || ' '}
+            {fit(text, column.width) || ' '}
           </Text>
         ))}
     </Box>
@@ -163,10 +225,11 @@ export function components({ Box, Text, Button, Input, width }: Elements) {
     return <Box>{columns.flatMap((column, index) => [...(index > 0 ? [bar] : []), tableCell(column, row[index] ?? {}, lines[index] ?? [''])])}</Box>
   }
 
-  // Labelled values: the label as a kicker in a fixed column, the value beside it; `perRow` places several pairs
-  // side by side. Empty values are left out.
-const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1) => {
+  // Labelled values: the label as a kicker in a fixed column, the value beside it; `wanted` pairs side by side at
+  // most — as many as the pane's width holds (PAIR cells each, a gap between). Empty values are left out.
+  const fields = (items: (Field | false | null | undefined | '' | 0)[], wanted = 1) => {
     const present = items.filter((item): item is Field => typeof item === 'object' && item !== null && Boolean(item.text))
+    const perRow = Math.max(1, Math.min(wanted, pairsPerRow(width)))
     const rowsOf: Field[][] = []
     for (let index = 0; index < present.length; index += perRow) rowsOf.push(present.slice(index, index + perRow))
     return (
@@ -174,7 +237,7 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
         {rowsOf.map(pairs => (
           <Box gap={3}>
             {pairs.map(item => (
-              <Box gap={1} width={perRow > 1 ? 44 : undefined} flexShrink={perRow > 1 ? 0 : 1}>
+              <Box gap={1} width={perRow > 1 ? PAIR : undefined} flexShrink={perRow > 1 ? 0 : 1}>
                 <Box width={10} flexShrink={0}>
                   <Text bold color={C.accent}>
                     {item.label.toUpperCase()}
@@ -340,13 +403,35 @@ const fields = (items: (Field | false | null | undefined | '' | 0)[], perRow = 1
       </Box>
     ),
 
-    // A field that sends what is typed; where the surface has none (mobile), a button that fills the prompt.
-    ask: (key: string, label: string, placeholder: string, onSend: (value: string) => void, onFill: () => void) =>
-      Input ? (
-        <Input key={key} label={`${BY_CLAUDE} ${label}`} placeholder={placeholder} submitLabel="send to Claude" onSubmit={(value: string) => onSend(value)} />
-      ) : (
-        <Button key={key} label={`${BY_CLAUDE} ${label}`} onPress={onFill} />
-      ),
+    // A field that sends what is typed; where the surface has none (mobile), a button that fills the prompt. It
+    // carries its own room above, the same in every tab.
+    ask: (key: string, label: string, placeholder: string, onSend: (value: string) => void, onFill: () => void) => (
+      <Box marginTop={1} flexDirection="column">
+        {Input ? (
+          <Input key={key} label={`${BY_CLAUDE} ${label}`} placeholder={placeholder} submitLabel="send to Claude" onSubmit={(value: string) => onSend(value)} />
+        ) : (
+          <Button key={key} label={`${BY_CLAUDE} ${label}`} onPress={onFill} />
+        )}
+      </Box>
+    ),
+
+    // The worker's output in a frame, line by line in the palette's colours; a word for an empty log.
+    log: (lines: string[], empty: string) => (
+      <Box borderStyle="round" borderColor={C.line} paddingX={1} flexDirection="column" marginTop={1}>
+        {lines.length === 0 ? (
+          <Text color={C.muted}>{empty}</Text>
+        ) : (
+          lines.map(text => (
+            <Text wrap="truncate" color={logColor(text)}>
+              {text || ' '}
+            </Text>
+          ))
+        )}
+      </Box>
+    ),
+
+    // A mark as a table cell, from the one table of marks.
+    mark,
 
     // An epic's head: its title, progress and the buttons that act on it; its goal and outcome below.
     fields,

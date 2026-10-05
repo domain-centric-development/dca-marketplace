@@ -108,29 +108,139 @@ export function short(at: string): string {
   return at.length >= 16 ? `${at.slice(8, 10)}.${at.slice(5, 7)}. ${at.slice(11, 16)}` : '—'
 }
 
-// The worker's output arrives in pieces, not lines: keep the last `keep` whole lines.
+// The worker's output arrives in pieces, not lines: keep the last `keep` whole lines. A piece without a line
+// break would grow one line without end — a line is cut at `LINE_CAP` cells.
+export const LINE_CAP = 2000
 export function appendLines(lines: string[], text: string, keep: number): string[] {
   const joined = (lines.length > 0 ? lines.join('\n') : '') + text
-  return joined.split('\n').slice(-keep)
+  return joined
+    .split('\n')
+    .slice(-keep)
+    .map(line => (line.length > LINE_CAP ? `${line.slice(0, LINE_CAP - 1)}…` : line))
 }
-// Word-wraps a text to a width, as a table cell shows it: whole words where they fit, a word longer than the width
-// cut into pieces. The table draws each line itself, so it knows how tall a row is.
+
+// What `factory.sh run` says with its exit code (factory.sh's header); a stop from the cockpit has its own word.
+export const EXIT_WORDS: Record<number, string> = {
+  0: 'ran through',
+  3: 'stopped for a decision — see Decide',
+  4: 'stopped at --max-stages',
+  5: 'another worker holds the checkout',
+  6: 'refused: inside an agent session',
+}
+export function exitWord(code: number | null, isStopped = false): string {
+  if (isStopped) return 'stopped from the cockpit'
+  return EXIT_WORDS[code ?? -1] ?? `ended (${code ?? 'signal'})`
+}
+
+// A latch one holder takes synchronously — the guard against two presses starting two workers while the first
+// is still between its awaits.
+export function createLatch() {
+  let isHeld = false
+  return {
+    take: (): boolean => {
+      if (isHeld) return false
+      isHeld = true
+      return true
+    },
+    release: (): void => {
+      isHeld = false
+    },
+    isHeld: (): boolean => isHeld,
+  }
+}
+
+// A refresh asked for while one runs is kept, as one: it is quiet only when every request was, and live (the
+// running stories alone) only when every request was — a full one asked for is a full one served.
+export type RefreshWish = { isQuiet: boolean; isLive: boolean }
+export function keepRefresh(pending: RefreshWish | null, isQuiet: boolean, isLive: boolean): RefreshWish {
+  return pending ? { isQuiet: pending.isQuiet && isQuiet, isLive: pending.isLive && isLive } : { isQuiet, isLive }
+}
+
+// What of a story changes its journal and hand-overs: a new state, stage, pass or delivery. Rows with the same
+// signature are not read again.
+export function rowSignature(row: { state: string; stage: string; passes: number; done: boolean; delivered: string }): string {
+  return `${row.state}|${row.stage}|${row.passes}|${row.done ? 1 : 0}|${row.delivered}`
+}
+
+// The cells a text takes in a terminal: East Asian wide and fullwidth forms, and emoji, take two; combining marks
+// none. Enough for titles and goals in any script; the cockpit's own marks (✓ ▶ ◇ ━ ─) are one cell each.
+export function charWidth(point: number): number {
+  if (point === 0 || (point >= 0x300 && point <= 0x36f) || (point >= 0x200b && point <= 0x200f) || point === 0xfe0f) return 0
+  if (
+    (point >= 0x1100 && point <= 0x115f) ||
+    (point >= 0x2e80 && point <= 0x303e) ||
+    (point >= 0x3041 && point <= 0x33ff) ||
+    (point >= 0x3400 && point <= 0x4dbf) ||
+    (point >= 0x4e00 && point <= 0x9fff) ||
+    (point >= 0xa000 && point <= 0xa4cf) ||
+    (point >= 0xac00 && point <= 0xd7a3) ||
+    (point >= 0xf900 && point <= 0xfaff) ||
+    (point >= 0xfe30 && point <= 0xfe4f) ||
+    (point >= 0xff00 && point <= 0xff60) ||
+    (point >= 0xffe0 && point <= 0xffe6) ||
+    (point >= 0x1f300 && point <= 0x1f64f) ||
+    (point >= 0x1f900 && point <= 0x1f9ff) ||
+    (point >= 0x20000 && point <= 0x3fffd)
+  )
+    return 2
+  return 1
+}
+
+export function displayWidth(text: string): number {
+  let width = 0
+  for (const char of text) width += charWidth(char.codePointAt(0) ?? 0)
+  return width
+}
+
+// The longest head of a text that fits `width` cells, an ellipsis where it was cut.
+export function fit(text: string, width: number): string {
+  if (displayWidth(text) <= width) return text
+  let out = ''
+  let used = 0
+  for (const char of text) {
+    const w = charWidth(char.codePointAt(0) ?? 0)
+    if (used + w > width - 1) break
+    out += char
+    used += w
+  }
+  return `${out}…`
+}
+
+// The longest head of a text that fits `width` cells, and the rest.
+function cutCells(text: string, width: number): [string, string] {
+  let head = ''
+  let used = 0
+  let index = 0
+  for (const char of text) {
+    const w = charWidth(char.codePointAt(0) ?? 0)
+    if (used + w > width) break
+    head += char
+    used += w
+    index += char.length
+  }
+  return [head, text.slice(index)]
+}
+
+// Word-wraps a text to a width in cells, as a table cell shows it: whole words where they fit, a word longer
+// than the width cut into pieces. The table draws each line itself, so it knows how tall a row is.
 export function wrapWords(text: string, width: number): string[] {
   const lines: string[] = []
   let current = ''
   for (const word of text.split(/\s+/).filter(Boolean)) {
     let rest = word
-    while (rest.length > width) {
+    while (displayWidth(rest) > width) {
       if (current) {
         lines.push(current)
         current = ''
       }
-      lines.push(rest.slice(0, width))
-      rest = rest.slice(width)
+      const [head, tail] = cutCells(rest, width)
+      if (!head) break
+      lines.push(head)
+      rest = tail
     }
     if (!rest) continue
     if (!current) current = rest
-    else if (current.length + 1 + rest.length <= width) current = `${current} ${rest}`
+    else if (displayWidth(current) + 1 + displayWidth(rest) <= width) current = `${current} ${rest}`
     else {
       lines.push(current)
       current = rest

@@ -15,7 +15,7 @@ factory works the same without it, in Claude Code, Codex or OpenCode.
 | 2 Backlog | every epic — also before its first story — with goal, outcome event, its stories with state, passes, time, tokens, cost | `/factory-backlog <words>`, `stories <epic>` (✦ suggest stories: Claude drafts them as `status: draft`), `release <story> …`, `/factory-run <wish>` |
 | 3 Run | the worker, the running stories with their stage, since when and the stage's last activity, the worker's output | starts `factory.sh run` / `run --watch` as a child of the session, stops it |
 | 4 Decide | open questions and acceptances, answered records as Markdown | `/factory-decisions <story>` |
-| 5 Delivered | delivered stories, epics with their outcome events, unguarded journeys | `/factory-verify <story>` |
+| 5 Delivered | delivered stories, epics with their outcome events, unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
 
 A story opens with its pipeline, the factory's numbers per stage, its passes, its history by day, its hand-overs and
 decision records.
@@ -35,7 +35,13 @@ others only show or open something, or start the worker (▶).
 A press sends the matching slash command into the session through `$.command.run`, as if the person typed it
 (Claude Code refuses a plugin prompt that begins with `/`); a press on Run starts `factory.sh run` with
 `FACTORY_ALLOW_NESTED=1`, the runner's own switch for a deliberate start inside a session. Ending the session or
-reloading the plugin stops that worker; the runner gives its claim on the workspace back.
+reloading the plugin stops that worker; the runner gives its claim on the workspace back. One worker at a time:
+a second press while one starts does nothing.
+
+The cockpit reads the factory every 20 s, after every turn and after every write under `project/` — in the
+background, so no tool result and no turn waits for it. One reading runs at a time; one asked for meanwhile is
+served right after it. With the pane closed only the status is read, for the status line; a story's journal and
+hand-overs are read again only when its row changed or a stage of it runs.
 
 ## Install and use
 

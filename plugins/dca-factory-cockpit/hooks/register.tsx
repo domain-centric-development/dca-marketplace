@@ -2,8 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StoryView, Tab, Topic, Worker } from '../types'
-import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, fmt, type Cell } from './components'
-import { appendLines, clock, day, moment, parseJournal, stagesOf, touchesFactory } from './parse'
+import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
+import { appendLines, clock, createLatch, day, exitWord, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, type RefreshWish } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -27,15 +27,6 @@ const TABS: { id: Tab; label: string; key: string }[] = [
   { id: 'decide', label: 'Decide', key: '4' },
   { id: 'delivered', label: 'Delivered', key: '5' },
 ]
-
-// What `factory.sh run` says with its exit code (factory.sh's header).
-const EXIT_WORDS: Record<number, string> = {
-  0: 'ran through',
-  3: 'stopped for a decision — see Decide',
-  4: 'stopped at --max-stages',
-  5: 'another worker holds the checkout',
-  6: 'refused: inside an agent session',
-}
 
 // ---------------------------------------------------------------- reading the factory
 
@@ -68,9 +59,35 @@ async function handovers($: EngineInterface, root: string, story: string): Promi
     .map(entry => entry.name)
 }
 
-async function loadCockpit($: EngineInterface): Promise<Cockpit | null> {
+// A story's journal and hand-overs are read again only when its row changed — state, stage, pass, delivery — or
+// while a stage of it runs; the rest comes from here.
+const perStory = new Map<string, { signature: string; journal: JournalEvent[]; handovers: string[] }>()
+
+async function loadStories($: EngineInterface, root: string, status: FactoryStatus): Promise<Pick<Cockpit, 'journals' | 'handovers'>> {
+  const moving = new Set(status.running.map(running => running.story))
+  const stale = status.rows.filter(row => moving.has(row.story) || perStory.get(row.story)?.signature !== rowSignature(row))
+  const fresh = await Promise.all(
+    stale.map(async row => [row, await loadJournal($, root, row.story), await handovers($, root, row.story)] as const),
+  )
+  for (const [row, journal, files] of fresh) perStory.set(row.story, { signature: rowSignature(row), journal, handovers: files })
+  for (const id of [...perStory.keys()]) if (!status.rows.some(row => row.story === id)) perStory.delete(id)
+  return {
+    journals: Object.fromEntries(status.rows.map(row => [row.story, perStory.get(row.story)?.journal ?? []])),
+    handovers: Object.fromEntries(status.rows.map(row => [row.story, perStory.get(row.story)?.handovers ?? []])),
+  }
+}
+
+// The whole cockpit: status, decisions, discovery and the stories. With the pane closed only the status is read
+// — it feeds the status line — and the rest stands as it was.
+async function loadCockpit($: EngineInterface, before: Cockpit | null, isPaneOpen: boolean): Promise<Cockpit | null> {
   const root = await $.session.root()
   if (!(await $.fs.exists(`${root}/${RUNNER}`))) return null
+
+  if (before && !isPaneOpen) {
+    const status = await factoryJson<FactoryStatus>($, root, ['status', '--format', 'json', '--live'])
+    if (!status) return before
+    return { ...before, status, project: status.project, ...(await loadStories($, root, status)), updatedAt: await $.clock.now() }
+  }
 
   const [status, decisions, discovery] = await Promise.all([
     factoryJson<FactoryStatus>($, root, ['status', '--format', 'json', '--live']),
@@ -79,12 +96,6 @@ async function loadCockpit($: EngineInterface): Promise<Cockpit | null> {
   ])
   if (!status) return null
 
-  const ids = status.rows.map(row => row.story)
-  const [journals, files] = await Promise.all([
-    Promise.all(ids.map(id => loadJournal($, root, id))),
-    Promise.all(ids.map(id => handovers($, root, id))),
-  ])
-
   return {
     root,
     project: status.project,
@@ -92,10 +103,16 @@ async function loadCockpit($: EngineInterface): Promise<Cockpit | null> {
     decisions: decisions?.records ?? [],
     topics: discovery?.topics ?? [],
     isBehind: !status.description || !discovery,
-    journals: Object.fromEntries(ids.map((id, index) => [id, journals[index] ?? []])),
-    handovers: Object.fromEntries(ids.map((id, index) => [id, files[index] ?? []])),
+    ...(await loadStories($, root, status)),
     updatedAt: await $.clock.now(),
   }
+}
+
+async function paneIsOpen($: EngineInterface): Promise<boolean> {
+  return $.ui
+    .panes()
+    .then(panes => panes.some(pane => pane.id === PANE))
+    .catch(() => true)
 }
 
 // While a stage runs only what moves is read again: the status and the running stories' journals.
@@ -126,30 +143,42 @@ const worker = atom({ plugin: 'dca-factory-cockpit', key: 'worker' } as const, {
   label: '',
   startedAt: 0,
   code: null,
+  isStopped: false,
   lines: [],
 } as Worker)
 
 const KEEP_LINES = 200
+// The latch is taken before the first await, so two presses in one breath start one worker, never two.
+const starting = createLatch()
 let child: HookStream<ProcessSpawnChunk, ProcessSpawnResult> | null = null
+let isStopping = false
 
 function isRunning(): boolean {
-  return child !== null
+  return starting.isHeld()
 }
 
 async function startWorker($: EngineInterface, label: string, args: string[], onEnd: () => void): Promise<void> {
-  if (child) return
+  if (!starting.take()) return
+  isStopping = false
 
-  const root = await $.session.root()
-  const startedAt = await $.clock.now()
-  await update($, worker, (): Worker => ({ state: 'running', label, startedAt, code: null, lines: [`$ factory.sh ${args.join(' ')}`] }))
+  try {
+    const root = await $.session.root()
+    const startedAt = await $.clock.now()
+    await update($, worker, (): Worker => ({ state: 'running', label, startedAt, code: null, isStopped: false, lines: [`$ factory.sh ${args.join(' ')}`] }))
 
-  // The runner refuses to start inside an agent session unless told it is deliberate; a press is.
-  const stream = $.process.spawn({
-    argv: ['bash', `${root}/${RUNNER}`, ...args],
-    cwd: root,
-    env: { FACTORY_ALLOW_NESTED: '1' },
-  })
-  child = stream
+    // The runner refuses to start inside an agent session unless told it is deliberate; a press is.
+    child = $.process.spawn({
+      argv: ['bash', `${root}/${RUNNER}`, ...args],
+      cwd: root,
+      env: { FACTORY_ALLOW_NESTED: '1' },
+    })
+  } catch (error) {
+    starting.release()
+    child = null
+    await update($, worker, (now): Worker => ({ ...now, state: 'ended', code: null, lines: appendLines(now.lines, `\n${String(error)}`, KEEP_LINES) }))
+    return
+  }
+  const stream = child
 
   void (async () => {
     let code: number | null = null
@@ -157,12 +186,14 @@ async function startWorker($: EngineInterface, label: string, args: string[], on
       for await (const piece of stream) {
         await update($, worker, now => ({ ...now, lines: appendLines(now.lines, piece.text, KEEP_LINES) }))
       }
-      code = (await stream.result).code
+      // a stream the cockpit closed has no result to wait for
+      if (!isStopping) code = (await stream.result).code
     } catch (error) {
-      await update($, worker, now => ({ ...now, lines: appendLines(now.lines, `\n${String(error)}`, KEEP_LINES) }))
+      if (!isStopping) await update($, worker, now => ({ ...now, lines: appendLines(now.lines, `\n${String(error)}`, KEEP_LINES) }))
     } finally {
       child = null
-      await update($, worker, (now): Worker => ({ ...now, state: 'ended', code }))
+      starting.release()
+      await update($, worker, (now): Worker => ({ ...now, state: 'ended', code, isStopped: isStopping }))
       onEnd()
     }
   })()
@@ -171,44 +202,61 @@ async function startWorker($: EngineInterface, label: string, args: string[], on
 async function stopWorker($: EngineInterface): Promise<void> {
   const running = child
   if (!running) return
+  isStopping = true
   await update($, worker, now => ({ ...now, lines: appendLines(now.lines, '\n— stopped from the cockpit —', KEEP_LINES) }))
-  await running.return(undefined as never)
+  await running.return(undefined as never).catch(() => undefined)
 }
 
 // ---------------------------------------------------------------- loading and acting
 
+// One refresh runs at a time; one that arrives meanwhile is kept and served once after it, so what a skill wrote
+// during a poll shows at the poll's end, not at the next one.
 let isLoading = false
+let pending: RefreshWish | null = null
 
 async function refresh($: EngineInterface, isQuiet = false, isLive = false): Promise<void> {
-  if (isLoading) return
+  if (isLoading) {
+    pending = keepRefresh(pending, isQuiet, isLive)
+    return
+  }
   isLoading = true
   try {
-    const before = await read($, cockpit)
-    const now = isLive && before ? await loadLive($, before).catch(() => before) : await loadCockpit($).catch(() => before)
-    await update($, cockpit, () => now)
-    const open = await read($, detail)
-    if (now && open?.kind === 'story') {
-      const view = await loadStory($, now.root, open.id).catch(() => null)
-      await update($, storyView, () => view)
+    await load($, isQuiet, isLive)
+    while (pending) {
+      const next = pending
+      pending = null
+      await load($, next.isQuiet, next.isLive)
     }
-    if (open?.kind === 'file') await readFile($, open.path)
-    if (!now) {
-      $.ui.status(undefined)
-      return
-    }
-    if (!isQuiet && before) announce($, before, now)
-    const running = now.status.running[0]
-    const waiting = now.status.waiting[0]
-    $.ui.status(
-      waiting
-        ? `factory: waits for you — ${waiting.story} ${waiting.what}`
-        : running
-          ? `factory: ${running.story} · ${running.stage}`
-          : `factory: ${now.status.next.text}`,
-    )
   } finally {
     isLoading = false
   }
+}
+
+async function load($: EngineInterface, isQuiet: boolean, isLive: boolean): Promise<void> {
+  const before = await read($, cockpit)
+  const now =
+    isLive && before ? await loadLive($, before).catch(() => before) : await loadCockpit($, before, await paneIsOpen($)).catch(() => before)
+  await update($, cockpit, () => now)
+  const open = await read($, detail)
+  if (now && open?.kind === 'story') {
+    const view = await loadStory($, now.root, open.id).catch(() => null)
+    await update($, storyView, () => view)
+  }
+  if (open?.kind === 'file') await readFile($, open.path)
+  if (!now) {
+    $.ui.status(undefined)
+    return
+  }
+  if (!isQuiet && before) announce($, before, now)
+  const running = now.status.running[0]
+  const waiting = now.status.waiting[0]
+  $.ui.status(
+    waiting
+      ? `factory: waits for you — ${waiting.story} ${waiting.what}`
+      : running
+        ? `factory: ${running.story} · ${running.stage}`
+        : `factory: ${now.status.next.text}`,
+  )
 }
 
 // What changed since the last look: a stage started, a gate refused, a story delivered, a new question.
@@ -304,7 +352,7 @@ async function runWorker($: EngineInterface, label: string, args: string[]): Pro
   await startWorker($, label, args, () => {
     void (async () => {
       const ended = await read($, worker)
-      $.ui.toast(`factory: worker ${EXIT_WORDS[ended.code ?? -1] ?? `ended (${ended.code ?? 'signal'})`}`)
+      $.ui.toast(`factory: worker ${exitWord(ended.code, ended.isStopped)}`)
       await refresh($, true)
     })()
   })
@@ -315,7 +363,7 @@ async function runWorker($: EngineInterface, label: string, args: string[]): Pro
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'factory-cockpit', description: 'The product flow as a cockpit: describe beside the cycle discover, backlog, run, decide, delivered — `close` closes it' })
-    await refresh($, true)
+    // the timers first, the first reading in the background: the session's start waits for neither
     $.clock.every(STATUS_MS, () => void refresh($))
     $.clock.every(LIVE_MS, () => {
       void (async () => {
@@ -323,6 +371,7 @@ export const register: Register = on => {
         if (isRunning() || (now && now.status.running.length > 0)) await refresh($, false, true)
       })()
     })
+    void refresh($, true)
     return next(e)
   })
 
@@ -331,7 +380,10 @@ export const register: Register = on => {
       await $.ui.close({ id: PANE })
       return { text: 'Factory cockpit closed — /factory-cockpit opens it again.' }
     }
-    await refresh($, true)
+    // with a cockpit read before, the pane opens on it at once and a fresh reading follows; without one, the
+    // first reading decides whether there is a factory at all
+    if (await read($, cockpit)) void refresh($, true)
+    else await refresh($, true)
     if (!(await read($, cockpit))) {
       return { text: 'No factory in this project (.agents/factory/factory.sh is missing) — /factory-setup installs it.' }
     }
@@ -340,9 +392,10 @@ export const register: Register = on => {
     return { text: 'Factory cockpit opened.' }
   })
 
+  // The tool's result goes back at once; what the call wrote is read behind it.
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
-    if (touchesFactory(e)) await refresh($)
+    if (touchesFactory(e)) void refresh($)
     return ran
   })
 
@@ -389,6 +442,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   const recordCell = (record: DecisionRecord, back: Detail | null): Cell => ({
     node: ui.link(`record-${record.id}`, record.id, () => void openFile($, `${now.root}/${record.path}`, record.id, back)),
   })
+  // An unguarded epic's own act, beside its hint — the epic's name opens the epic, this writes its journey.
+  const guardCell = (hint: FactoryStatus['journeys'][number]): Cell => ({
+    node: ui.button(`guard-${hint.epic}`, 'add guard', () => send($, hint.action.skill || `/factory-backlog journey ${hint.epic}`), { byClaude: true }),
+  })
   const ask = (key: string, label: string, placeholder: string, command: string) =>
     ui.ask(key, label, placeholder, value => send($, `${command} ${value}`.trim()), () => void $.prompt.fill({ text: `${command} ` }))
   const idWidth = Math.max(8, ...status.rows.map(row => row.story.length)) + 4
@@ -396,7 +453,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     ui.table(
       [COL.mark, { name: 'state', width: 9 }, COL.record, COL.asked, COL.what],
       list.map(record => [
-        { text: record.kind === 'acceptance' ? '!' : '?', color: record.kind === 'acceptance' ? C.info : C.wait, bold: true },
+        ui.mark(record.kind === 'acceptance' ? 'acceptance' : 'question'),
         { text: record.state, color: record.state === 'open' ? C.wait : C.muted },
         recordCell(record, back),
         { text: fmt.when(record.asked), color: C.muted },
@@ -642,7 +699,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             const name = part.path.split('/').pop() ?? part.part
             const gaps = [...part.missing.map(h => `missing ${h}`), ...part.empty.map(h => `empty ${h}`)]
             return [
-              { text: !part.present ? '✗' : gaps.length > 0 ? '!' : '✓', color: !part.present ? C.fail : gaps.length > 0 ? C.wait : C.done, bold: true },
+              ui.mark(!part.present ? 'missing' : gaps.length > 0 ? 'look' : 'done'),
               part.present ? { node: ui.link(`doc-${part.part}`, name, () => void openFile($, path, name, null)) } : { text: name, color: C.fail },
               { text: part.present ? part.sections.join(' · ') : 'missing — Describe writes it', color: C.muted },
               { text: gaps.join(' · ') || '—', color: gaps.length > 0 ? C.wait : C.muted },
@@ -651,9 +708,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           }),
           'No description view — update the pipeline.',
         ),
-        <Box marginTop={1} flexDirection="column">
-          {ask('change', 'Change the description', 'what should change? e.g. "the shop also sells gift cards"', '/dca-describe')}
-        </Box>,
+        ask('change', 'Change the description', 'what should change? e.g. "the shop also sells gift cards"', '/dca-describe'),
         ui.actions([ui.button('describe', 'describe / complete the project', () => send($, '/dca-describe'), { isPrimary: true, byClaude: true })]),
       ],
       'Enter on a file opens it · ✎ edit opens it in your editor · type a change, Enter sends it',
@@ -679,12 +734,12 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       {ui.table(
         [COL.mark, { name: 'proposal', width: 18 }, COL.outcome, { name: 'goal', width: 24, isWide: true }, COL.action(16)],
         topic.proposals.map(proposal => [
-          { text: proposal.epic ? '✓' : '○', color: proposal.epic ? C.done : C.info, bold: true },
+          ui.mark(proposal.epic ? 'done' : 'proposed'),
           { text: proposal.id, bold: true },
           { text: proposal.metric, color: C.info },
           { text: proposal.goal, color: C.muted },
           proposal.epic
-            ? { node: ui.link(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic })) }
+            ? { node: ui.link(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic, back: open })) }
             : { node: ui.button(`release-${topic.topic}-${proposal.id}`, 'make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true, byClaude: true }) },
         ]),
         'No proposed work in the report yet.',
@@ -701,15 +756,16 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     </Box>
   )
   const epicBody = (epic: Epic) => {
-    const drafts = epic.rows.filter(row => /draft/.test(row.state))
+    const cells = epicCells(epic)
+    const drafts = cells.draftRows
     return (
       <Box flexDirection="column">
         {ui.card(
           {
             title: epic.title || epic.epic,
-            color: epic.total > 0 && epic.delivered === epic.total ? C.done : undefined,
+            color: cells.isDone ? C.done : undefined,
             progress: { done: epic.delivered, total: epic.total },
-            meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${fmt.tokens(epic.tokens)} tokens` : ''}`,
+            meta: cells.meta,
           },
           [
             ui.button(`stories-${epic.epic}`, 'suggest stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0, byClaude: true }),
@@ -736,21 +792,22 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ? [
           ui.section('Journeys'),
           ui.table(
-            [COL.mark, COL.epic, { name: 'journey', width: 30, isWide: true }],
-            status.journeys.map(hint => [{ text: '◇', color: C.wait }, { text: hint.epic }, { text: hint.text, color: C.wait }]),
+            [COL.mark, COL.epic, { name: 'journey', width: 30, isWide: true }, COL.action(13)],
+            status.journeys.map(hint => [ui.mark('journey'), { text: hint.epic }, { text: hint.text, color: C.wait }, guardCell(hint)]),
           ),
         ]
       : []
-  const back = ui.actions([ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' })])
+  // back goes where the view came from — a topic that opened an epic — or to the tab's overview
+  const back = (to: Detail | null | undefined) => ui.actions([ui.button('back', '← back', () => void update($, detail, () => to ?? null), { hotkey: 'b' })])
 
   // ---- one topic, one epic
   if (open?.kind === 'topic') {
     const topic = now.topics.find(one => one.topic === open.topic)
-    return page([back, topic ? topicBody(topic) : <Text color={C.muted}>No such topic.</Text>], 'b back · ✦ make epic: Claude writes the proposal as an epic')
+    return page([back(open.back), topic ? topicBody(topic) : <Text color={C.muted}>No such topic.</Text>], 'b back · ✦ make epic: Claude writes the proposal as an epic')
   }
   if (open?.kind === 'epic') {
     const epic = status.epics.find(one => one.epic === open.epic)
-    return page([back, epic ? epicBody(epic) : <Text color={C.muted}>No such epic.</Text>], 'b back · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it')
+    return page([back(open.back), epic ? epicBody(epic) : <Text color={C.muted}>No such epic.</Text>], 'b back · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it')
   }
 
   if (current === 'discover') {
@@ -762,7 +819,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               now.topics.map(topic => {
                 const held = topic.proposals.filter(p => p.epic).length
                 return [
-                  { text: held === topic.proposals.length && held > 0 ? '✓' : '◆', color: held === topic.proposals.length && held > 0 ? C.done : C.info, bold: true },
+                  ui.mark(held === topic.proposals.length && held > 0 ? 'done' : 'partial'),
                   { node: ui.link(`topic-${topic.topic}`, topic.topic, () => void showDetail($, { kind: 'topic', topic: topic.topic })) },
                   { text: topic.title, color: C.muted },
                   { text: String(topic.proposals.length) },
@@ -772,9 +829,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               }),
               'No discovery yet.',
             ),
-        <Box marginTop={1} flexDirection="column">
-          {ask('discover', 'New topic', 'a problem or a wished deliverable', '/factory-discover')}
-        </Box>,
+        ask('discover', 'New topic', 'a problem or a wished deliverable', '/factory-discover'),
       ],
       'Enter on a topic opens it · type a topic, Enter sends it',
     )
@@ -783,26 +838,23 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   if (current === 'backlog') {
     return page(
       [
-        <Box flexDirection="column" gap={1}>
-          {ask('story', 'Write a story', 'what should the product do next?', '/factory-backlog')}
-          {ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run')}
-        </Box>,
+        ask('story', 'Write a story', 'what should the product do next?', '/factory-backlog'),
+        ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run'),
         ui.table(
-              [COL.mark, { name: 'epic', width: 26 }, { name: 'progress', width: 10 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'drafts', width: 6, isNumber: true }, COL.outcome],
-              status.epics.map(epic => {
-                const isDone = epic.total > 0 && epic.delivered === epic.total
-                const drafts = epic.rows.filter(row => /draft/.test(row.state)).length
-                return [
-                  { text: isDone ? '✓' : epic.total === 0 ? '○' : '·', color: isDone ? C.done : epic.total === 0 ? C.wait : C.muted, bold: true },
-                  { node: ui.link(`epic-${epic.epic}`, epic.title || epic.epic, () => void showDetail($, { kind: 'epic', epic: epic.epic })) },
-                  { node: ui.progress(epic.delivered, epic.total, 10) },
-                  { text: `${epic.delivered} of ${epic.total}`, color: C.muted },
-                  { text: drafts > 0 ? String(drafts) : '—', color: drafts > 0 ? C.wait : C.muted },
-                  { text: epic.metric || '—', color: C.info },
-                ]
-              }),
-              'The backlog is empty.',
-            ),
+          [COL.mark, { name: 'epic', width: 26 }, { name: 'progress', width: 10 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'drafts', width: 6, isNumber: true }, COL.outcome],
+          status.epics.map(epic => {
+            const cells = epicCells(epic)
+            return [
+              cells.mark,
+              { node: ui.link(`epic-${epic.epic}`, epic.title || epic.epic, () => void showDetail($, { kind: 'epic', epic: epic.epic })) },
+              { node: ui.progress(epic.delivered, epic.total, 10) },
+              cells.count,
+              cells.drafts,
+              cells.outcome,
+            ]
+          }),
+          'The backlog is empty.',
+        ),
         ...journeys(),
       ],
       'Enter on an epic opens it',
@@ -825,7 +877,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               job.state === 'running'
                 ? `▶ ${job.label} · ${fmt.time((at - job.startedAt) / 1000)}`
                 : job.state === 'ended'
-                  ? `■ ${job.label} — ${EXIT_WORDS[job.code ?? -1] ?? `ended (${job.code ?? 'signal'})`}`
+                  ? `■ ${job.label} — ${exitWord(job.code, job.isStopped)}`
                   : 'no worker started from here',
             color: job.state === 'running' ? C.accent : job.code === 0 ? C.done : job.state === 'ended' ? C.wait : C.muted,
           },
@@ -844,15 +896,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ),
         ...status.running.map(running => ui.chips(stagesOf(now.journals[running.story] ?? []), at, running.story)),
         ui.section('Output', job.lines.length > 0 ? `last ${log.length} lines` : undefined),
-        ui.framed(
-          log.length === 0
-            ? [<Text color={C.muted}>Nothing yet. A worker started here writes its output into this box.</Text>]
-            : log.map(text => (
-                <Text wrap="truncate" color={/refus|fail|error|✗/i.test(text) ? C.fail : /✓|pass|delivered/i.test(text) ? C.done : undefined}>
-                  {text || ' '}
-                </Text>
-              )),
-        ),
+        ui.log(log, 'Nothing yet. A worker started here writes its output into this box.'),
         <Text color={C.muted}>The worker is a child of this session: ending the session or reloading the mod stops it.</Text>,
       ],
       isRunning() ? 'x stop' : 'r run the backlog · w run & watch',
@@ -872,7 +916,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               ui.table(
                 [COL.mark, COL.story(idWidth), { name: 'what', width: 24, isWide: true }, COL.action(20)],
                 status.waiting.map(wait => [
-                  { text: MARK_GLYPH[wait.mark] ?? '?', color: C.wait, bold: true },
+                  ui.mark(wait.mark),
                   { text: wait.story, bold: true },
                   { text: wait.what, color: C.muted },
                   { node: ui.button(`answer-${wait.story}`, 'answer', () => send($, `/factory-decisions ${wait.story}`), { isPrimary: true, byClaude: true }) },
@@ -905,17 +949,11 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ),
       ui.section('Epics'),
       ui.table(
-        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }],
+        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }, COL.action(13)],
         status.epics.map(epic => {
           const unguarded = status.journeys.find(hint => hint.epic === epic.epic)
-          const isDone = epic.total > 0 && epic.delivered === epic.total
-          return [
-            { text: isDone ? '✓' : '·', color: isDone ? C.done : C.muted, bold: true },
-            { text: epic.title || epic.epic, bold: true },
-            { text: `${epic.delivered} of ${epic.total}`, color: C.muted },
-            { text: epic.metric || '—', color: C.info },
-            { text: unguarded ? `◇ ${unguarded.text}` : '—', color: unguarded ? C.wait : C.muted },
-          ]
+          const cells = epicCells(epic, unguarded)
+          return [cells.mark, cells.title, cells.count, cells.outcome, cells.journey, unguarded ? guardCell(unguarded) : {}]
         }),
       ),
     ],

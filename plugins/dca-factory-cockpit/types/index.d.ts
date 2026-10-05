@@ -115,10 +115,11 @@ export type Cockpit = {
 
 export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'delivered'
 
+// `back`: where the view returns to — a topic that opened an epic, a story that opened a hand-over.
 export type Detail =
   | { kind: 'story'; id: string }
-  | { kind: 'epic'; epic: string }
-  | { kind: 'topic'; topic: string }
+  | { kind: 'epic'; epic: string; back?: Detail | null }
+  | { kind: 'topic'; topic: string; back?: Detail | null }
   | { kind: 'file'; path: string; title: string; back: Detail | null }
 
 export type Worker = {
@@ -126,6 +127,8 @@ export type Worker = {
   label: string
   startedAt: number
   code: number | null
+  // the person stopped it from the cockpit; the exit code then says nothing
+  isStopped: boolean
   lines: string[]
 }
 

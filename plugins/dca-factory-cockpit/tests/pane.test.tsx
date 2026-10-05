@@ -138,6 +138,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'topic-forgetting' })
     expect(await pane.find({ text: 'epic reminders' })).toBeDefined()
     expect(await pane.find({ text: 'GoalSet' })).toBeDefined()
+    // an epic opened from the topic returns to the topic, not to the overview
+    await pane.press({ key: 'epic-of-reminders' })
+    expect(await pane.find({ text: /no stories yet/ })).toBeDefined()
+    await pane.press({ key: 'back' })
+    expect(await pane.find({ text: 'epic reminders' })).toBeDefined()
     await pane.press({ key: 'release-forgetting-reading-goals' })
     expect(sent.at(-1)).toBe('/dca-factory:factory-backlog epic reading-goals --from project/discovery/forgetting/discovery.md')
     await pane.press({ key: 'describe-forgetting-0' })
@@ -169,8 +174,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /first delivery/ })).toBeDefined()
     expect(await pane.find({ text: /claude-opus-5-5/ })).toBeDefined()
 
-    // the worker: started by the press, its output and its exit code in the run tab
-    await pane.press({ key: 'run' })
+    // the worker: started by the press, its output and its exit code in the run tab; a second press in the same
+    // breath starts nothing
+    await Promise.all([pane.press({ key: 'run' }), pane.press({ key: 'run' })])
     expect(spawned).toEqual([['run', '--story', 'add-book']])
     expect(await pane.find({ text: /factory: add-book — plan/ })).toBeDefined()
     expect(await pane.find({ text: /stopped for a decision/ })).toBeDefined()
