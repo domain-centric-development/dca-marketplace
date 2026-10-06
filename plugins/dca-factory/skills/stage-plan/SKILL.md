@@ -116,7 +116,9 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    saying so — write **one** decision record (`stage: plan`) listing every one of them, with the
    expectation each holds today and what the story would need instead, and stop. Once answered,
    plan again and cite the id in each row. A test the story does not contradict is not listed; the
-   gate lets the later stages change only what is listed and backed.
+   gate lets the later stages change only what is listed and backed. A test that only has to follow a
+   changed shape — a type it builds gains a field, its assertions and expected values stay — is not
+   contradicted: it is neither listed nor asked about.
 10. Name business terms **and operations** in the criteria that are not in the glossary yet, as
    proposals with a one-line definition — an operation as `<domain word> (<code word>): <what it does
    to which term>`. Name use cases, commands and events from the operation's code word. The code word

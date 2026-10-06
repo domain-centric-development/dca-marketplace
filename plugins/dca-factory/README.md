@@ -495,7 +495,7 @@ python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy
 | `build` | every mapped test **green**, and the same version of it the test stage saw fail (`red-proof`); the required suites whole; the profile's `architecture:` and `format:` commands succeed |
 | `tidy` | the build gate's checks again — the tidy stage's whole claim is that it changed no behaviour |
 | `document` | every file, path and identifier the document stage claims **exists**; every claim names how it was checked; every term the plan proposed has landed in a glossary or is named as open |
-| test, build, tidy | a test that existed before the story still expects what it did — added cases pass; a changed or removed line passes only when the plan lists it under `## Changed tests`, backed by the story's `## Changed expectations` or by an answered decision (`tests-kept`, from the plan gate's git baseline) |
+| test, build, tidy | a test that existed before the story still expects what it did — added cases pass, and so does a change around its assertions that keeps every assertion with its words and literals in order (a type the test builds gained a field; a note); any other changed or removed line passes only when the plan lists it under `## Changed tests`, backed by the story's `## Changed expectations` or by an answered decision (`tests-kept`, from the plan gate's git baseline) |
 | every stage | the story's **decision records** (`<story>.decisions/` beside each story): a `## needs-human` names one; an open one blocks the story and says where to answer; an answered one is applied by the stage that asked and stamped `## Applied` |
 
 A command the stack profile does not declare is skipped and named in the report — never failed,

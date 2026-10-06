@@ -6009,6 +6009,38 @@ def run_groups(args):
             expectations.append((f"tests-kept: {label.replace('change: ', '')}", baseline and verdict == expected,
                                  f"baseline {baseline}, verdict {verdict}; "
                                  + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    # around the assertions: a type the test builds gained a field — the arrangement and the expected value's
+    # constructor gain the argument, every assertion stays (a Sonnet run stopped on a question the rule demanded)
+    page = os.path.join("src", "test", "java", "com", "example", "WidgetPageTest.java")
+    page_test = ("class WidgetPageTest {\n  void showsTheWidget() {\n    Widget widget = new Widget(\"w-1\");\n"
+                 "    when(widgets.find()).thenReturn(widget);\n    mvc.perform(get(\"/\"))\n"
+                 "        .andExpect(status().isOk())\n"
+                 "        .andExpect(model().attribute(\"widget\", new WidgetView(\"Lamp\")));\n  }\n}\n")
+    grown = lambda t: t.replace('new Widget("w-1")', 'new Widget("w-1", true)').replace(
+        'new WidgetView("Lamp")', 'new WidgetView(\n            "w-1", "Lamp", true)')
+    for label, change, expected in (
+            ("a type the test builds gained a field — arrangement and expected value gain the argument, every "
+             "assertion stays: passes with a note", grown, "pass"),
+            ("around the assertions, but the expected value changed — refused",
+             lambda t: grown(t).replace('"Lamp"', '"Bulb"'), "fail"),
+            ("around the assertions, but a weaker matcher — refused",
+             lambda t: grown(t).replace("isOk()", "is2xxSuccessful()"), "fail"),
+            ("around the assertions, but an assertion removed — refused",
+             lambda t: grown(t).replace("        .andExpect(status().isOk())\n", ""), "fail")):
+        with tmpdir() as root:
+            build_project(root, extra_sources=((page, page_test),))
+            for command in (["init", "-q"], ["add", "-A"],
+                            ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+                subprocess.run(["git", *command], cwd=root, capture_output=True)
+            subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+            with open(os.path.join(root, page), "w", encoding="utf-8") as handle:
+                handle.write(change(page_test))
+            verdict, output = kept_verdict(root)
+            noted = "gate:note tests-kept" in output and "around its assertions" in output
+            expectations.append((f"tests-kept: {label}", verdict == expected and (noted or expected == "fail"),
+                                 f"verdict {verdict}, noted {noted}; "
+                                 + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
     with tmpdir() as root:
         build_project(root, extra_sources=((unit, old_test),))
         for command in (["init", "-q"], ["add", "-A"],

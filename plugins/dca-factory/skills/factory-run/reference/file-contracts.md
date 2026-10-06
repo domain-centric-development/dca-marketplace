@@ -272,7 +272,11 @@ The plan gate runs before any stage of a story touches a test. In a git reposito
 test file — found by name: `test_*.py`, `*Test.java`, `*Tests.cs`, `*IT.java`, `*.spec.ts`,
 `*_spec.rb` and the like — as a git blob, once per story. The test, build and tidy gates compare
 against it: a file that still holds every line it had, in order and outside a comment, has only
-gained cases and passes; a changed or removed line — or an added line that switches a test off, such
+gained cases and passes. A file whose lines changed only around its assertions passes with a note: every
+assertion statement it had — an `assert…`, `expect…`, `verify…` or `should…` call with its chain — is still
+there, its words and literals in the same order, at most with more arguments (a type the test builds
+gained a field). A changed expected value, a weaker matcher or a removed assertion is no such change. Any
+other changed or removed line — or an added line that switches a test off, such
 as `@Disabled`, `[Fact(Skip = …)]`, `@pytest.mark.skip`, `it.skip(` or `.only(` — fails `tests-kept`
 unless it is **authorised**:
 

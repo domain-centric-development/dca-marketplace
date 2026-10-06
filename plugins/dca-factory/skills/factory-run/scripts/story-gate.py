@@ -219,7 +219,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 14
 
 
-VERSION = "0.65.3"
+VERSION = "0.65.4"
 
 
 def read_front_matter(path):
@@ -3441,6 +3441,70 @@ def meaningful_lines(text, path):
     return [line.rstrip() for line in lines if line.strip()]
 
 
+#: A statement that checks: an assertion library's call, a framework's expectation, a mock's verification.
+ASSERTION_STATEMENT = re.compile(r"\b(?:assert\w*|expect\w*|andExpect\w*|verify\w*|should\w*)\b", re.IGNORECASE)
+TOKEN = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|\w+")
+
+
+def statements(text):
+    """The statements of a test source, each as its word and literal tokens: split at `;`, at a brace, and at a line
+    end outside brackets unless the next line goes on with `.` (a call chain) — the shapes Java, C#, Kotlin, JS and
+    Python test files are written in."""
+    out, current, depth, quote, escaped = [], [], 0, "", False
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        for char in line:
+            if quote:
+                current.append(char)
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = ""
+                continue
+            if char in "\"'":
+                quote = char
+            elif char in "([":
+                depth += 1
+            elif char in ")]":
+                depth = max(depth - 1, 0)
+            if char in ";{}" and depth == 0:
+                out.append("".join(current))
+                current = []
+                continue
+            current.append(char)
+        following = next((l.strip() for l in lines[index + 1:] if l.strip()), "")
+        if depth == 0 and not following.startswith(".") and not line.rstrip().endswith((".", ",", "+", "&&", "||")):
+            out.append("".join(current))
+            current = []
+        else:
+            current.append("\n")
+    out.append("".join(current))
+    return [TOKEN.findall(statement) for statement in out if statement.strip()]
+
+
+def assertions_kept(before, now):
+    """Whether every assertion the old test made is still made: each old assertion statement's tokens appear, in
+    order, in a statement of the new version that is an assertion too — more arguments, never fewer, never another
+    expected value. A changed arrangement (a constructor that gained a field, a renamed local) passes; a changed
+    expectation, a removed assertion or a weaker matcher does not."""
+    old = [tokens for tokens in statements(before) if ASSERTION_STATEMENT.search(" ".join(tokens))]
+    new = [tokens for tokens in statements(now) if ASSERTION_STATEMENT.search(" ".join(tokens))]
+    if not old:
+        return False
+    def within(small, large):
+        rest = iter(large)
+        return all(any(token == other for other in rest) for token in small)
+    used = set()
+    for tokens in old:
+        match = next((i for i, candidate in enumerate(new) if i not in used and within(tokens, candidate)), None)
+        if match is None:
+            return False
+        used.add(match)
+    return True
+
+
 def switched_off(before, now):
     """Whether the new version carries more skip markers than the old one."""
     count = lambda lines: sum(1 for line in lines if SKIP_MARKER.search(line))
@@ -3502,7 +3566,7 @@ def check_existing_tests(result, cwd, runs, story_id, story_body=""):
         result.skip("tests-kept", "no baseline of the tests that existed before this story "
                                   "(the plan gate records one in a git repository)")
         return
-    changed, lost = [], []
+    changed, lost, arranged = [], [], []
     for line in read_text(path).splitlines():
         if "  " not in line:
             continue
@@ -3527,13 +3591,20 @@ def check_existing_tests(result, cwd, runs, story_id, story_body=""):
         # Additions only: every line the test had is still there, in the same order, outside a comment
         # — and no added line switches it off.
         remaining = iter(now)
-        if not all(any(old == new for new in remaining) for old in was):
-            changed.append(rel)
-        elif switched_off(was, now):
+        if switched_off(was, now):
             changed.append(f"{rel} (switched off)")
+        elif all(any(old == new for new in remaining) for old in was):
+            pass
+        elif assertions_kept("\n".join(was), "\n".join(now)):
+            arranged.append(rel)
+        else:
+            changed.append(rel)
     if lost:
         result.skip("tests-kept", f"the baseline of {', '.join(lost)} is gone from the object store (pruned by "
                                   f"`git gc`?) — not compared")
+    if arranged:
+        result.note("tests-kept", f"{', '.join(arranged)} changed only around its assertions — every assertion it had "
+                                  f"is still there, at most with more arguments (a type the test builds gained a field)")
     if not changed:
         result.ok("tests-kept", "no test that existed before this story changed what it expects")
         return
