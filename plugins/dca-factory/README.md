@@ -337,13 +337,17 @@ every story where the separate stages stopped one on its third round.
 bash .agents/factory/factory.sh follow                   # the stage in flight, one line per tool call, as it happens
 bash .agents/factory/factory.sh follow --story STORY-3   # that story's stages
 bash .agents/factory/factory.sh follow --once --format json   # the last lines, for a view such as the cockpit
+bash .agents/factory/factory.sh follow --story STORY-3 --process builder --once   # one process, also long after
+bash .agents/factory/factory.sh follow --story STORY-3 --all  # every process of the story, in the order they began
 ```
 
 Every stage writes its tool's output as it happens — Claude's `stream-json`, Codex's `exec --json`,
 OpenCode's `run --format json` — to `.dca-factory/runs/<story>/.verify/<stage>.<time>.out`. `follow` reads
 the newest of them and prints what the stage reads, edits and runs, its answers and, at the end, its turns
 and cost. It works for any run, whoever started it — a session, a shell, a worker, a scheduled job — and
-starts nothing. The cost per stage is read from the same file's last event.
+starts nothing. The cost per stage is read from the same file's last event. The outputs stay beside the story,
+so a delivered story's processes can be read afterwards; in a shared builder or verifier each stage it begins is a
+heading (`── test`).
 
 ## What a stage is told
 

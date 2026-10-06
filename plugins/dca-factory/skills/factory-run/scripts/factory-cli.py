@@ -3270,6 +3270,10 @@ def follow_render(event):
                 continue
             if part.get("type") == "tool_use":
                 given = part.get("input") or {}
+                stage = PART_SKILL.search(str(given.get("skill", ""))) if part.get("name") == "Skill" and isinstance(given, dict) else None
+                if stage:
+                    lines.append(f"── {stage.group(1)}")            # a shared process begins this stage
+                    continue
                 arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
                 lines.append(f"▸ {part.get('name', 'tool')} {_short(arg, 100)}".rstrip())
             elif part.get("type") == "text" and str(part.get("text", "")).strip():
@@ -3321,9 +3325,17 @@ def follow_lines(text):
     return lines, ended
 
 
-def follow_newest(runs, story=None):
+def follow_outputs(runs, story, process=None):
+    """[(stage, path)] of one story's stage outputs in the order they began, or of one process (`builder`,
+    `review-ddd`, `plan`, …) alone."""
+    pattern = os.path.join(runs, story, ".verify", f"{process}.*.out" if process else "*.out")
+    outs = [p for p in glob.glob(pattern) if os.path.isfile(p)]
+    return [(os.path.basename(p).split(".")[0], p) for p in sorted(outs, key=lambda p: (os.path.getmtime(p), p))]
+
+
+def follow_newest(runs, story=None, process=None):
     """(story, stage, path) of the newest stage output, of one story or of every story — None if none."""
-    pattern = os.path.join(runs, story or "*", ".verify", "*.out")
+    pattern = os.path.join(runs, story or "*", ".verify", f"{process}.*.out" if process else "*.out")
     outs = [p for p in glob.glob(pattern) if os.path.isfile(p)]
     if not outs:
         return None
@@ -3332,8 +3344,27 @@ def follow_newest(runs, story=None):
             os.path.basename(path).split(".")[0], path)
 
 
-def follow(runs, story, once, fmt, width):
-    found = follow_newest(runs, story)
+def follow(runs, story, once, fmt, width, process=None, every=False):
+    if every:
+        if not story:
+            print("factory: follow --all names a story (--story <id>)", file=sys.stderr)
+            return 2
+        shown = []
+        for stage, path in follow_outputs(runs, story, process):
+            lines, ended = follow_lines(open(path, encoding="utf-8", errors="replace").read())
+            shown.append(dict(stage=stage, file=os.path.relpath(path), running=not ended, lines=lines))
+        if fmt == "json":
+            print(json.dumps({"story": story, "processes": shown}, ensure_ascii=False))
+        else:
+            if not shown:
+                print(f"factory: no stage output yet for {story}")
+            for entry in shown:
+                print(f"══ {story} · {entry['stage']}{'' if not entry['running'] else ' (running)'}")
+                for line in entry["lines"]:
+                    print(line)
+                print()
+        return 0
+    found = follow_newest(runs, story, process)
     if once:
         if not found:
             if fmt == "json":
@@ -3348,18 +3379,18 @@ def follow(runs, story, once, fmt, width):
             print(json.dumps({"story": name, "stage": stage, "file": os.path.relpath(path),
                               "running": not ended, "lines": lines}, ensure_ascii=False))
         else:
-            print(f"── {name} · {stage}{'' if ended else ' (running)'}")
+            print(f"══ {name} · {stage}{'' if ended else ' (running)'}")
             for line in lines:
                 print(line)
         return 0
     current, offset, pending = None, 0, ""
     try:
         while True:
-            found = follow_newest(runs, story)
+            found = follow_newest(runs, story, process)
             if found and found[2] != current:
                 name, stage, current = found
                 offset, pending = 0, ""
-                print(f"── {name} · {stage}", flush=True)
+                print(f"══ {name} · {stage}", flush=True)
             if current:
                 try:
                     with open(current, encoding="utf-8", errors="replace") as handle:
@@ -3387,6 +3418,9 @@ def main(argv):
     parser.add_argument("--follow", action="store_true",
                         help="print what the stage in flight does, one line per tool call, as it happens (--once: the last lines and exit)")
     parser.add_argument("--once", action="store_true", help="with --follow: print the newest output's last lines and exit")
+    parser.add_argument("--process", help="with --follow: only that process's output — builder, verifier, review-ddd, plan, …")
+    parser.add_argument("--all", dest="every", action="store_true",
+                        help="with --follow --story: every process of the story, in the order they began, and exit")
     parser.add_argument("--lines", type=int, default=30, help="with --follow --once: how many lines (0: all)")
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
@@ -3572,7 +3606,7 @@ def main(argv):
         print("\n".join(open_decision_files(cwd, args.open_decisions)))
         return 0
     if args.follow:
-        return follow(args.runs, args.story, args.once, args.format, args.lines)
+        return follow(args.runs, args.story, args.once, args.format, args.lines, args.process, args.every)
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
     if args.discover_list:

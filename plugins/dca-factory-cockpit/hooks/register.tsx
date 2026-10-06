@@ -18,6 +18,7 @@ const storyView = atom({ plugin: 'dca-factory-cockpit', key: 'story' } as const,
 const tab = atom({ plugin: 'dca-factory-cockpit', key: 'tab' } as const, 'backlog' as Tab)
 const detail = atom({ plugin: 'dca-factory-cockpit', key: 'detail' } as const, null as Detail | null)
 const fileText = atom({ plugin: 'dca-factory-cockpit', key: 'fileText' } as const, '')
+const outputLines = atom({ plugin: 'dca-factory-cockpit', key: 'outputLines' } as const, [] as string[])
 
 // The recurring cycle; Describe sits beside it with set up and update — written once, changed when things move.
 const TABS: { id: Tab; label: string; key: string }[] = [
@@ -66,21 +67,30 @@ async function handovers($: EngineInterface, root: string, story: string): Promi
     .map(entry => entry.name)
 }
 
+// The processes a story ran, from the names of their outputs (`builder.085007.out` → builder), oldest first.
+async function outputs($: EngineInterface, root: string, story: string): Promise<string[]> {
+  const entries = (await $.fs.list(`${root}/${RUNS}/${story}/.verify`).catch(() => []))
+    .filter(entry => entry.kind === 'file' && entry.name.endsWith('.out'))
+    .sort((a, b) => a.mtimeMs - b.mtimeMs)
+  return [...new Set(entries.map(entry => entry.name.split('.')[0] ?? entry.name))]
+}
+
 // A story's journal and hand-overs are read again only when its row changed — state, stage, pass, delivery — or
 // while a stage of it runs; the rest comes from here.
-const perStory = new Map<string, { signature: string; journal: JournalEvent[]; handovers: string[] }>()
+const perStory = new Map<string, { signature: string; journal: JournalEvent[]; handovers: string[]; outputs: string[] }>()
 
-async function loadStories($: EngineInterface, root: string, status: FactoryStatus): Promise<Pick<Cockpit, 'journals' | 'handovers'>> {
+async function loadStories($: EngineInterface, root: string, status: FactoryStatus): Promise<Pick<Cockpit, 'journals' | 'handovers' | 'outputs'>> {
   const moving = new Set(status.running.map(running => running.story))
   const stale = status.rows.filter(row => moving.has(row.story) || perStory.get(row.story)?.signature !== rowSignature(row))
   const fresh = await Promise.all(
-    stale.map(async row => [row, await loadJournal($, root, row.story), await handovers($, root, row.story)] as const),
+    stale.map(async row => [row, await loadJournal($, root, row.story), await handovers($, root, row.story), await outputs($, root, row.story)] as const),
   )
-  for (const [row, journal, files] of fresh) perStory.set(row.story, { signature: rowSignature(row), journal, handovers: files })
+  for (const [row, journal, files, ran] of fresh) perStory.set(row.story, { signature: rowSignature(row), journal, handovers: files, outputs: ran })
   for (const id of [...perStory.keys()]) if (!status.rows.some(row => row.story === id)) perStory.delete(id)
   return {
     journals: Object.fromEntries(status.rows.map(row => [row.story, perStory.get(row.story)?.journal ?? []])),
     handovers: Object.fromEntries(status.rows.map(row => [row.story, perStory.get(row.story)?.handovers ?? []])),
+    outputs: Object.fromEntries(status.rows.map(row => [row.story, perStory.get(row.story)?.outputs ?? []])),
   }
 }
 
@@ -252,6 +262,7 @@ async function load($: EngineInterface, isQuiet: boolean, isLive: boolean): Prom
     await update($, storyView, () => view)
   }
   if (open?.kind === 'file') await readFile($, open.path)
+  if (now && open?.kind === 'output') await readOutput($, now.root, open.story, open.process)
   if (!now) {
     $.ui.status(undefined)
     return
@@ -348,6 +359,18 @@ async function openStory($: EngineInterface, id: string): Promise<void> {
 async function readFile($: EngineInterface, path: string): Promise<void> {
   const text = await $.fs.read(path).catch(() => '(not readable)')
   await update($, fileText, () => (text.length > 30_000 ? `${text.slice(0, 30_000)}\n\n…` : text))
+}
+
+// One process's output as `factory.sh follow` renders it — read when it opens and on every refresh, so a running
+// stage keeps growing here.
+async function readOutput($: EngineInterface, root: string, story: string, process: string): Promise<void> {
+  const shown = await factoryJson<{ lines?: string[] }>($, root, ['follow', '--story', story, '--process', process, '--once', '--lines', '0', '--format', 'json'])
+  await update($, outputLines, () => shown?.lines ?? ['This project\'s pipeline cannot show one process yet — `factory.sh follow --process` came with dca-factory 0.64.2; /factory-update brings it.'])
+}
+
+async function openOutput($: EngineInterface, root: string, story: string, process: string, back: Detail | null): Promise<void> {
+  await readOutput($, root, story, process)
+  await update($, detail, () => ({ kind: 'output', story, process, back }) as Detail)
 }
 
 async function openFile($: EngineInterface, path: string, title: string, back: Detail | null): Promise<void> {
@@ -559,6 +582,25 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     </Box>
   )
 
+  // ---- one process's output: what it read, edited and ran, a shared one's stages as headings
+  if (open?.kind === 'output') {
+    const lines = await read($, outputLines)
+    return page(
+      [
+        <Box gap={1}>
+          <Text bold color={C.bright}>
+            {open.story} / {open.process}
+          </Text>
+        </Box>,
+        ui.actions([
+          ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back)), { hotkey: 'b' }),
+        ]),
+        ui.framed(ui.log(lines.slice(-Math.max(10, rows - 12)), 'This process wrote nothing.')),
+      ],
+      'b back',
+    )
+  }
+
   // ---- a file: a description, a discovery report, a hand-over, a decision record
   if (open?.kind === 'file') {
     return page(
@@ -688,6 +730,14 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             { node: ui.link(`file-${file}`, file, () => void openFile($, `${now.root}/.dca-factory/runs/${open.id}/${file}`, `${open.id} / ${file}`, open)) },
           ]),
           'No hand-over yet.',
+        ),
+        ui.section('Output', 'what each process read, edited and ran'),
+        ui.table(
+          [{ name: 'process', width: 20 }],
+          (now.outputs[open.id] ?? []).map(process => [
+            { node: ui.link(`output-${process}`, process, () => void openOutput($, now.root, open.id, process, open)) },
+          ]),
+          'No stage has run yet.',
         ),
         ui.section('Decisions'),
         recordTable(records, open),

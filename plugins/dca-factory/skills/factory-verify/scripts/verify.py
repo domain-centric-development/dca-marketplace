@@ -5346,7 +5346,24 @@ def run_groups(args):
              and running.get("lines", [None])[1:] == ["▸ Read plan.md", "  the plan is written"], running),
             ("follow: the result event ends the stage, with its turns and cost",
              done.get("running") is False and str(done.get("lines", [""])[-1]).startswith("■ done")
-             and text.startswith("── STORY-1 · builder"), (done, text[:200])),
+             and text.startswith("══ STORY-1 · builder"), (done, text[:200])),
+        ]
+        # one process of a delivered story, and all of them in order, the stages of a shared one as headings
+        with open(os.path.join(verify_dir, "verifier.000002.out"), "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(e) for e in [
+                {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill",
+                                                               "input": {"skill": "stage-judge"}}]}},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "verdict: pass"}]}},
+                stream_events[-1]]) + "\n")
+        os.utime(os.path.join(verify_dir, "verifier.000002.out"), (time.time() + 5, time.time() + 5))
+        builder_only = json.loads(follow("--story", "STORY-1", "--process", "builder", "--format", "json") or "{}")
+        every = json.loads(follow("--story", "STORY-1", "--all", "--format", "json") or "{}")
+        expectations += [
+            ("follow: --process shows one process of a story, though a later one wrote last",
+             builder_only.get("stage") == "builder", builder_only),
+            ("follow: --all shows every process of a story in the order they began; a shared one's stages are headings",
+             [p.get("stage") for p in every.get("processes", [])] == ["builder", "verifier"]
+             and "── judge" in every["processes"][1]["lines"], every),
         ]
         # the parts of a shared builder: split where it loads a stage's skill; input and cache tokens per answer,
         # the process's output and cost shared out — the parts add up to what the process reported

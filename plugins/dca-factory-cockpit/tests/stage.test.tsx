@@ -36,11 +36,15 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const asked: string[][] = []
     on('session.root', async () => ({ value: ROOT }))
     on('fs.exists', async () => ({ value: true }))
-    on('fs.list', async () => ({ value: [] }))
+    on('fs.list', async (_: unknown, e: { path: string }) => ({
+      value: e.path.endsWith('/add-book/.verify')
+        ? [{ name: 'verifier.090000.out', kind: 'file', size: 0, mtimeMs: 2, isLink: false }, { name: 'builder.085007.out', kind: 'file', size: 0, mtimeMs: 1, isLink: false }]
+        : [],
+    }) as never)
     on('fs.read', async () => ({ deny: 'missing' }))
     on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
       asked.push([...e.argv.slice(2)])
-      const out = e.argv.includes('follow') ? FOLLOW : e.argv.includes('--story') ? STORY : e.argv.includes('decisions') ? { records: [] } : e.argv.includes('--list') ? { topics: [] } : STATUS
+      const out = e.argv.includes('--process') ? { story: 'add-book', stage: 'builder', running: false, lines: ['── plan', '▸ Write plan.md'] } : e.argv.includes('follow') ? FOLLOW : e.argv.includes('--story') ? STORY : e.argv.includes('decisions') ? { records: [] } : e.argv.includes('--list') ? { topics: [] } : STATUS
       return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     })
     on('clock.now', async () => ({ value: Date.parse('2026-10-06T08:01:00Z') }))
@@ -63,5 +67,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'running-add-book' })
     expect(await pane.find({ text: /· test/ })).toBeDefined()
     expect(await pane.find({ text: /≈/ })).toBeDefined()
+    // a delivered stage's output stays readable: one link per process, oldest first, and its lines on a press
+    expect(await pane.find({ text: 'verifier' })).toBeDefined()
+    await pane.press({ key: 'output-builder' })
+    expect(asked.some(argv => argv.includes('--process') && argv.includes('builder'))).toBe(true)
+    expect(await pane.find({ text: /── plan/ })).toBeDefined()
+    expect(await pane.find({ text: /Write plan\.md/ })).toBeDefined()
   })
 }

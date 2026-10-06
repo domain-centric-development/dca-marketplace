@@ -425,7 +425,8 @@ does run reads a report of now.
 per line, in `.dca-factory/runs/<story>/.verify/<stage>.<time>.out`. When the person asks what a stage is
 doing, run `bash .agents/factory/factory.sh follow --once` (or `--story <id>`) and show its lines — what
 the stage reads, edits and runs, its answers, its turns and cost at the end; `follow` without `--once`
-keeps printing for a person at a terminal. It starts nothing.
+keeps printing for a person at a terminal; `--process builder` (or `verifier`, `review-ddd`, …) one process,
+`--all` every process of a story — also of a delivered one. It starts nothing.
 
 **Inside a shared process.** `factory.sh status --story <id>` shows a shared builder's or verifier's
 stages beneath it, split where it loaded each stage's skill: time and tokens from its stream, output and

@@ -110,6 +110,8 @@ export type Cockpit = {
   isBehind: boolean
   journals: Record<string, JournalEvent[]>
   handovers: Record<string, string[]>
+  // the processes that ran for a story — builder, review-ddd, verifier, … — in the order they began
+  outputs: Record<string, string[]>
   // what the newest stage does, from `factory.sh follow --once` — whoever started it; null on an older pipeline
   stage: StageOutput | null
   updatedAt: number
@@ -125,6 +127,7 @@ export type Detail =
   | { kind: 'epic'; epic: string; back?: Detail | null }
   | { kind: 'topic'; topic: string; back?: Detail | null }
   | { kind: 'file'; path: string; title: string; back: Detail | null }
+  | { kind: 'output'; story: string; process: string; back: Detail | null }
 
 export type Worker = {
   state: 'idle' | 'running' | 'ended'
@@ -144,6 +147,7 @@ declare module 'claude-code' {
       tab: Tab
       detail: Detail | null
       fileText: string
+      outputLines: string[]
       worker: Worker
     }
   }

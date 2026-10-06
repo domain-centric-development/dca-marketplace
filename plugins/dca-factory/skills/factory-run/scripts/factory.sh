@@ -15,8 +15,9 @@
 #                    count of rounds), or without --story the whole backlog in the schedule's order
 #   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
 #   factory.sh decisions [--story <id>]      the decision inbox
-#   factory.sh follow [--story <id>] [--once [--lines <n>] [--format text|json]]   what the stage in flight
-#                                            does, one line per tool call, as it happens; starts nothing
+#   factory.sh follow [--story <id>] [--process <name>] [--once [--lines <n>]] [--all] [--format text|json]
+#                    what the stage in flight does, one line per tool call, as it happens; --process one
+#                    process (builder, verifier, review-ddd, …), --all every process of a story; starts nothing
 #   factory.sh discover --check <topic>      the discovery report of one topic against its contract
 #   factory.sh discover --list [--format text|md|json]   every topic, its proposed epics and which are epics
 #   factory.sh help [--format text|md|json]  the factory explained: the flow and where this project stands,

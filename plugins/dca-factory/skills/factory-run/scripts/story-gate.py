@@ -219,7 +219,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 14
 
 
-VERSION = "0.64.1"
+VERSION = "0.64.2"
 
 
 def read_front_matter(path):
