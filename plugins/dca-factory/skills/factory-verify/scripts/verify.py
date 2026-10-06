@@ -2205,8 +2205,16 @@ exit 0
                                                           "FACTORY_STORY": "STORY-1"})
         check("priming: a stage the runner started is told at session start that the claim is its own, not a second writer's",
               code == 0 and "stage plan of story STORY-1" in output and "runner:host:1" in output
-              and "claim is this session's own" in output and "At the person's first message" not in output,
+              and "this session's own" in output and "At the person's first message" not in output,
               output.strip().splitlines()[-2:])
+        # a shared builder is named by the stages it carries out — told "stage builder", a model took itself for the
+        # build stage alone and refused the plan its prompt asked for
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief",
+                                  "--session-start", env={"FACTORY_WORKER": "runner:host:1", "FACTORY_STAGE": "builder",
+                                                          "FACTORY_STORY": "STORY-1"})
+        check("priming: a shared builder is told it carries out plan, test, build and tidy, all in this session",
+              code == 0 and "the shared builder of story STORY-1" in output and "plan, test, build, tidy" in output
+              and "stage builder" not in output, output.strip().splitlines()[-1:])
         subprocess.run([sys.executable, cli_in(root), "--release"], cwd=root, capture_output=True)
 
     # 1e2. a stage the runner starts is told which worker started it, for the hook and the prompt alike

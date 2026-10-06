@@ -998,11 +998,17 @@ def status_brief(cwd, epics, runs, session_start=False):
     if session_start and os.environ.get("FACTORY_WORKER"):
         # A stage the runner started: the hook runs in its session too, and the claim it names is the
         # runner's — this session's own. Said plainly, or a careful model takes itself for a second writer.
-        print(f"dca-factory: this session is stage {os.environ.get('FACTORY_STAGE') or '?'} of story "
-              f"{os.environ.get('FACTORY_STORY') or '?'}, started by the worker {os.environ['FACTORY_WORKER']} "
-              "that holds the checkout — the claim is this session's own, not a second writer's. Carry out the "
-              "stage as the prompt says, write its file under the run folder, and ask nothing: the runner reads "
-              "the file when this session ends.")
+        # A shared builder or verifier is named by what it carries out: told it is "stage builder", a model read
+        # that as the build stage alone and refused the plan, test and tidy its prompt asked for.
+        stage = os.environ.get("FACTORY_STAGE") or "?"
+        covered = SHARED_WINDOWS.get(stage)
+        what = (f"the shared {stage} of story {os.environ.get('FACTORY_STORY') or '?'} — it carries out the stages "
+                f"{', '.join(covered)} one after another, all of them in this session" if covered else
+                f"stage {stage} of story {os.environ.get('FACTORY_STORY') or '?'}")
+        print(f"dca-factory: this session is {what}, started by the worker {os.environ['FACTORY_WORKER']} "
+              "that holds the checkout — the claim and the story's `running` state are this session's own, not a "
+              "second writer's. Carry out what the prompt says, write each stage's file under the run folder, and "
+              "ask nothing: the runner reads the files when this session ends.")
     elif session_start:
         print("dca-factory: this project delivers stories through the factory. At the person's first message, "
               "unless they already name a task, show the two lines above and ask what they want to do: write or "
