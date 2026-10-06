@@ -96,7 +96,11 @@ Ask in the grammar of Event Storming, without the workshop:
 2. **The command** that caused it — the operation, with its code word.
 3. **The aggregate** that accepts the command and holds the rules — the term the operation is entered on.
    The effect decides it: "What exists before this step and after it, and whose state changes?"
-4. **The read model** a person looks at to decide — a term of its own.
+4. **The read model** a person looks at to decide — a term of its own, **and the verb for looking at
+   it**. A read changes nothing, so no event names it and step 1 never reaches its verb: ask it
+   directly — "What do you call looking at this?" — and enter it like any operation, with its code
+   word (`anzeigen (list)` or `anzeigen (show)`, not both). Two writers who translate a read alone
+   pick different verbs for it.
 5. **Policies** ("whenever this happens, do that") — an operation that an event triggers.
 6. **Hot spots** — what nobody can answer yet. A hot spot stays an open question; it is not entered.
 
