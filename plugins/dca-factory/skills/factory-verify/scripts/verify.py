@@ -2970,6 +2970,21 @@ def verify_setup(runner, verbose=False):
         check("carriers: with the method plugins beside it, a line for every installed carrier, and the first run "
               "passes the carrier check", wanted and all(w in lines for w in wanted) and code == 0,
               f"want {wanted}; got {[l for l in lines if 'carrier' in l or 'review' in l]}; exit {code}")
+        # a carrier line `setup --write` adds brings its skill along — the next run does not stop on it
+        if "product-discovery" in installed:
+            path = profile_of(root)
+            kept = [l for l in open(path, encoding="utf-8").read().splitlines(True) if not l.startswith("carrier.discover:")]
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("".join(kept))
+            shutil.rmtree(os.path.join(root, ".claude", "skills", "product-discovery"), ignore_errors=True)
+            if os.path.islink(os.path.join(root, ".claude", "skills", "product-discovery")):
+                os.remove(os.path.join(root, ".claude", "skills", "product-discovery"))
+            written = run_runner(runner, root, "setup", "--write", env={"FACTORY_PLUGIN_DIR": source})[1]
+            again, after = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+            check("carriers: `setup --write` puts the skill of a carrier line it adds into the project, and the next run passes",
+                  "carrier.discover: product-discovery" in (active_lines(profile_of(root)) or [])
+                  and os.path.isfile(os.path.join(root, ".claude", "skills", "product-discovery", "SKILL.md")) and again == 0,
+                  f"exit {again}; {written.strip()[-200:]} {after.strip()[-200:]}")
         check("carriers: the method's audit skill is not written as a judge perspective — no `review.dca:`, no `reviews:` "
               "from the setup; an adoption opts in by hand",
               not any(l.startswith(("review.dca", "reviews:")) for l in lines),

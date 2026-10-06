@@ -2607,6 +2607,19 @@ setup_write() {                             # setup_write [<key>]
   dir=$(presets_dir) || dir=""
   [ -n "$dir" ] || { echo "factory: no presets found — nothing to write from (FACTORY_PLUGIN_DIR names a pipeline)" >&2; return 2; }
   presets "$dir" write "$PROFILE" ${1:+"$1"} || return $?
+  # A carrier line just written names a skill the stage processes must find in the project: put it there the
+  # way `update` does — a profile that names a carrier the project does not hold stops the next run.
+  local source_abs target mode
+  source_abs=$(cd "$dir/../../.." 2>/dev/null && pwd)
+  if [ -n "$source_abs" ] && [ -f "$source_abs/factory-run/scripts/story-gate.py" ]; then
+    for target in .claude/skills .codex/skills .opencode/skills; do
+      [ -d "$target" ] && [ ! -L "$target" ] || continue
+      mode=$(skills_mode "$target")
+      if [ "$target" = ".claude/skills" ] || [ "$mode" = copy ]; then
+        install_named_carriers "$target" "$source_abs" "$([ "$mode" = copy ] && echo 1)"
+      fi
+    done
+  fi
   [ -d .claude ] && write_claude_permissions
   return 0
 }
