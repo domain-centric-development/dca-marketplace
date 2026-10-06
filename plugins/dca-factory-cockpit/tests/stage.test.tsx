@@ -24,7 +24,7 @@ const STATUS = {
 const STORY = {
   story: 'add-book', context: 'reading', criteria: 2, accepted_by: '',
   passes: [],
-  stages: { builder: { runs: 1, seconds: 480, tokens: 4_800_000, cost: 3.02, models: ['some-model'], parts: [
+  stages: { builder: { runs: 1, seconds: 480, tokens: 4_800_000, cost: 3.02, models: ['some-model'], input: 108, output: 46_433, cache_write: 137_058, cache_read: 4_616_401, parts: [
     { stage: 'plan', runs: 1, seconds: 72, tokens: 668_330, cost: 0.67 },
     { stage: 'test', runs: 1, seconds: 238, tokens: 2_302_460, cost: 1.41, denied: 1 },
   ], denied: 1, denials: [{ stage: 'test', tool: 'Bash', command: 'for f in src/*.java; do cat $f; done' }] } },
@@ -67,6 +67,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'running-add-book' })
     expect(await pane.find({ text: /· test/ })).toBeDefined()
     expect(await pane.find({ text: /≈/ })).toBeDefined()
+    // the tokens by class, not only their sum
+    expect(await pane.find({ text: 'TOKENS PER STAGE' })).toBeDefined()
+    expect(await pane.find({ text: 'cache read' })).toBeDefined()
     // a call the stage was denied is listed with the stage it fell in
     expect(await pane.find({ text: /builder · test/ })).toBeDefined()
     expect(await pane.find({ text: /for f in src/ })).toBeDefined()

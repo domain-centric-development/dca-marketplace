@@ -698,6 +698,30 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           'Not run yet.',
         ),
         // the calls a stage was denied — a headless stage has nobody to grant one, and spends a turn on another way
+        // the same stages by the four token classes the tool reports — what the sum hides
+        ui.section('Tokens per stage', 'cache read ≈ a tenth of input, output five times; a part\'s output ≈'),
+        ui.table(
+          [COL.stage, { name: 'input', width: 8, isNumber: true }, { name: 'output', width: 9, isNumber: true }, { name: 'cache write', width: 11, isNumber: true }, { name: 'cache read', width: 10, isNumber: true }, COL.tokens],
+          perStage.flatMap(([name, one]) => [
+            [
+              { text: name, bold: true },
+              { text: fmt.tokens(one.input ?? 0) },
+              { text: fmt.tokens(one.output ?? 0) },
+              { text: fmt.tokens(one.cache_write ?? 0) },
+              { text: fmt.tokens(one.cache_read ?? 0) },
+              { text: fmt.tokens(one.tokens), bold: true },
+            ],
+            ...(one.parts ?? []).map(part => [
+              { text: `  · ${part.stage}`, color: C.muted },
+              { text: fmt.tokens(part.input ?? 0), color: C.muted },
+              { text: (part.output ?? 0) > 0 ? `≈${fmt.tokens(part.output ?? 0)}` : '—', color: C.muted },
+              { text: fmt.tokens(part.cache_write ?? 0), color: C.muted },
+              { text: fmt.tokens(part.cache_read ?? 0), color: C.muted },
+              { text: fmt.tokens(part.tokens), color: C.muted },
+            ]),
+          ]),
+          'Not run yet.',
+        ),
         ...(denials.length > 0
           ? [
               ui.section('Denied', 'calls refused without asking — each a turn spent'),
