@@ -1468,6 +1468,11 @@ elif mode == "check":
     # Every scenario but a story's happy path runs at the integration level (contract 9), so a profile
     # without one stops the first plan. Nothing detects a decision, so it is named until it is taken.
     no_level = not any(k.startswith("test.") for k in list(profile) + list(values)) and "integration" not in profile
+    # A browser suite outside `required:` never runs whole at a gate: each story runs its own tests, so a test that
+    # depends on another's data or on the order passes every gate and fails the first full run.
+    browser = str(profile.get("e2eTest", "")).strip()
+    required = profile.get("required", "").split()
+    browser_out = bool(browser) and browser != "none" and bool(required) and "e2eTest" not in required
     if rest[1:] == ["brief"]:
         if missing:
             print(f"factory: profile — detection finds {', '.join(k for k, _ in missing)} the profile does not declare "
@@ -1475,6 +1480,9 @@ elif mode == "check":
         if no_level:
             print("factory: profile — no integration level (`test.<name>:`, or `integration: none`); the first "
                   "story's plan stops on it (/factory-setup)")
+        if browser_out:
+            print("factory: profile — the browser suite (e2eTest) is not in `required:`, so no gate runs it whole "
+                  "(factory.sh setup --check)")
         raise SystemExit(0)
     # The same view as the status: a table, marks, and what to do in an agent and in a shell.
     import os, shutil, textwrap
@@ -1498,6 +1506,11 @@ elif mode == "check":
         print(f"        {label('set one up')}   the method's integration-test capability (in a DCA project "
               f"`dca-add integration-tests`), then setup --write")
         print(f"        {label('or decide')}   `integration: none` in the profile — the scenarios then take the next level the project has\n")
+    if browser_out:
+        print("    " + paint("? e2eTest in required", "33") + "   the browser suite runs only story by story — no gate runs it whole")
+        print(f"        {label('why')}   a test that depends on another's data or on the order passes every gate and fails the first full run")
+        print(f"        {label('to add it')}   `required: {' '.join(required + ['e2eTest'])}` — where the suite starts the application itself;")
+        print(f"        {label('')}   one that needs a system started by hand stays out and runs in CI\n")
     if not missing and not differing:
         print("    The profile declares everything detection finds.\n")
     print("─" * 72)

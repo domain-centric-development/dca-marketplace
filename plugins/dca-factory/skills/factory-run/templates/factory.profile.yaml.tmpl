@@ -81,8 +81,10 @@
 #              inside a session are then recorded as unknown. Default on; FACTORY_SESSION_USAGE=off
 #              switches it off for one person
 # required     the checks that must hold for any change: `compile`, `architecture`, `format` and
-#              each test command by its own key (`test`, `test.<name>`, `e2eTest`) — an end-user
-#              suite that needs a running system can stay out of it. `story-gate.py --change` (the commit hook, CI, a direct edit) then fails
+#              each test command by its own key (`test`, `test.<name>`, `e2eTest`). A browser suite that
+#              starts the application itself belongs in it: only then does a gate run it whole, so a test
+#              that depends on another's data or on the order is caught before it is delivered; one that
+#              needs a system started by hand can stay out and run in CI. `story-gate.py --change` (the commit hook, CI, a direct edit) then fails
 #              a required check that is not declared, not run in its scope, or ran no test at all.
 #              Absent: nothing is mandatory — a declared check that runs red fails, an undeclared one is named.
 #              The build and tidy gates also run the required test commands whole, so a story

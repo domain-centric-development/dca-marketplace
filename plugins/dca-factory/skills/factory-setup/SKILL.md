@@ -66,6 +66,11 @@ docs/                      what exists and why — written after the code, some 
    DCA project `dca-add integration-tests`), then `setup --write` takes the detected `test.integration:`
    line; or `integration: none`, written on the person's word, and the scenarios take the next level the
    project has.
+4a''. **The browser suite in `required:`.** Where the profile declares `e2eTest:` and a `required:` line without
+   it, `setup --check` names *e2eTest in required*: no gate runs the suite whole, so a test that depends on
+   another's data or on the order passes every story and fails the first full run. Propose adding `e2eTest`
+   to `required:` where the suite starts the application itself; write it on the person's word — `required:`
+   is theirs. A suite that needs a system started by hand stays out and runs in CI.
 4b. **Acceptance.** Where the product description's `## Surfaces` names web pages and the profile
    has no `acceptance:`, propose `acceptance: pages` — a story with something to see then waits for a
    human's look before it is delivered — and a `run:` line with how a person starts the application.

@@ -102,6 +102,14 @@ form and the list" is three tests, and "test every button on this page" is a uni
 
 If you cannot summarise a test in one sentence, split it.
 
+**Each test brings its own state.** A test passes alone, first, last and in any order. It starts from
+a state it sets up itself — an empty store through the application's own reset, or data unique to
+the test (its own titles, its own user) and assertions only about that data — never from what an
+earlier test left behind. A suite that shares one running application and one store across tests
+is where this breaks: "expected 2 rows, got 4" after another test ran first. Before handing over,
+run the **whole** suite once, not only the tests you wrote; a test that passes alone and fails in the
+suite is not done.
+
 ## 3. Page Object Pattern
 
 Hide the DOM behind classes that represent pages or significant fragments. Tests talk to Page

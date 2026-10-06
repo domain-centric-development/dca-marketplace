@@ -2657,6 +2657,23 @@ def verify_setup(runner, verbose=False):
             check(f"setup: --check {'names' if want else 'does not name'} a missing integration level ({name})",
                   ("no integration level" in checked or "? integration level" in checked) == want, checked.strip()[-400:])
 
+    # a browser suite outside `required:` is named: no gate would run it whole
+    for extra, want in (("e2eTest: ./gradlew test-e2e --rerun\nrequired: compile test\n", True),
+                        ("e2eTest: ./gradlew test-e2e --rerun\nrequired: compile test e2eTest\n", False),
+                        ("e2eTest: none\nrequired: compile test\n", False)):
+        with tmpdir() as root:
+            fixture(root, PRESET_FIXTURES["gradle"])
+            run_setup(runner, root, "--tool", "none", "--from", lone)
+            path = os.path.join(root, "dca-factory.profile.yaml")
+            kept = [l for l in open(path, encoding="utf-8").read().splitlines(True)
+                    if not l.startswith(("e2eTest:", "required:"))]
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("".join(kept) + extra)
+            checked = run_setup(runner, root, "--check")[1]
+            check(f"setup: --check {'names' if want else 'does not name'} a browser suite outside required "
+                  f"({extra.splitlines()[0]} · {extra.splitlines()[1]})",
+                  ("? e2eTest in required" in checked) == want, checked.strip()[-400:])
+
     # item 4: a new stack is one file — a made-up one in FACTORY_STACKS_DIR, no change to the script
     with tmpdir() as root, tmpdir() as stacks:
         write_file(stacks, "cargo.preset", "kind: stack\norder: 10\ndetect.exists: Cargo.toml\n"
