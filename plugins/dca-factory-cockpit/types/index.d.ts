@@ -110,8 +110,12 @@ export type Cockpit = {
   isBehind: boolean
   journals: Record<string, JournalEvent[]>
   handovers: Record<string, string[]>
+  // what the newest stage does, from `factory.sh follow --once` — whoever started it; null on an older pipeline
+  stage: StageOutput | null
   updatedAt: number
 }
+
+export type StageOutput = { story: string; stage: string; running: boolean; lines: string[] }
 
 export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'delivered'
 

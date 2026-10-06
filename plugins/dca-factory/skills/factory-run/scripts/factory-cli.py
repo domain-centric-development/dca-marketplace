@@ -235,9 +235,32 @@ def parse_usage(fmt, path):
     except OSError:
         return None, ""
     if fmt == "claude-json":
+        # `--output-format stream-json` writes one event per line and ends with a `result` event; the
+        # older `--output-format json` wrote that event alone. Either way the result event is read.
+        data = None
         try:
             data = json.loads(raw)
         except ValueError:
+            text, events = "", 0
+            for line in raw.splitlines():
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                events += 1
+                if event.get("type") == "result":
+                    data = event
+                elif event.get("type") == "assistant":
+                    parts = (event.get("message") or {}).get("content") or []
+                    said = "".join(str(p.get("text", "")) for p in parts if isinstance(p, dict) and p.get("type") == "text")
+                    text = said or text
+            if data is None:
+                # a stream cut off before its result: its last answer, never the stream itself on screen;
+                # output that is no stream at all (a tool that failed to start) is shown as it is
+                return None, text if events else raw
+        if not isinstance(data, dict):
             return None, raw
         models = data.get("modelUsage") or {}
         if not models:
@@ -1122,6 +1145,8 @@ HELP_COMMANDS = (
     ("where it stands", "what runs, what waits for you, every story with its times and tokens",
      "/factory-status", "status"),
     ("one story", "its stages, passes and tokens", "/factory-status <story>", "status --story <story>"),
+    ("follow a stage", "what the running stage reads, edits and runs, as it happens — whoever started it", "",
+     "follow"),
     ("find the problem", "a problem or a wished deliverable → a report with sources and proposed epics, each with "
                          "its outcome event", "/factory-discover <topic>", "discover --check <topic>"),
     ("the discoveries", "every topic, its proposed epics and which are epics already, its proposed description changes",
@@ -3061,12 +3086,155 @@ def document_skeleton(runs, story_id, cwd="."):
     return 0
 
 
+# --- follow: a stage you can watch --------------------------------------------------------------------
+# Every stage writes its tool's output to `.verify/<stage>.<HHMMSS>.out` as the tool writes it: Claude's
+# `stream-json`, Codex's `exec --json`, OpenCode's `run --format json` — one event per line. `follow`
+# reads the newest of them and prints one line per thing the tool did, so a person can see what a stage
+# does while it runs, whoever started it (a session, a shell, a worker, a bench). It starts nothing.
+
+FOLLOW_ARGS = ("file_path", "notebook_path", "pattern", "command", "skill", "url", "path", "description", "prompt")
+
+
+def _short(text, width=110):
+    text = " ".join(str(text).split())
+    here = os.getcwd() + os.sep
+    text = text.replace(here, "")                     # a path inside the project, as the project names it
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def follow_render(event):
+    """The lines one event of a tool's stream stands for — [] for an event that shows nothing."""
+    if not isinstance(event, dict):
+        return []
+    kind = event.get("type")
+    # Claude: system / assistant / user / result
+    if kind == "system" and event.get("subtype") == "init":
+        return [f"· session started{(' — ' + str(event['model'])) if event.get('model') else ''}"]
+    if kind == "assistant":
+        lines = []
+        for part in (event.get("message") or {}).get("content") or []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "tool_use":
+                given = part.get("input") or {}
+                arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
+                lines.append(f"▸ {part.get('name', 'tool')} {_short(arg, 100)}".rstrip())
+            elif part.get("type") == "text" and str(part.get("text", "")).strip():
+                lines.append(f"  {_short(part['text'])}")
+        return lines
+    if kind == "result":
+        bits = [f"{event['num_turns']} turns" if event.get("num_turns") is not None else "",
+                f"${float(event['total_cost_usd']):.2f}" if event.get("total_cost_usd") is not None else "",
+                f"{int(event['duration_ms']) // 1000}s" if event.get("duration_ms") else ""]
+        state = "stopped: " + str(event.get("subtype")) if event.get("is_error") else "done"
+        return [f"■ {state}" + (" — " + ", ".join(b for b in bits if b) if any(bits) else "")]
+    # Codex: item events
+    item = event.get("item") or {}
+    if kind in ("item.started", "item.completed") and isinstance(item, dict):
+        if item.get("type") == "command_execution" and kind == "item.started":
+            return [f"▸ Bash {_short(item.get('command', ''), 100)}"]
+        if item.get("type") in ("agent_message", "assistant_message") and kind == "item.completed":
+            return [f"  {_short(item.get('text', ''))}"]
+        if item.get("type") == "file_change" and kind == "item.completed":
+            names = [c.get("path", "") for c in item.get("changes") or [] if isinstance(c, dict)]
+            return [f"▸ Edit {_short(', '.join(names), 100)}"]
+        return []
+    if kind == "turn.completed":
+        return ["■ turn done"]
+    # OpenCode: parts
+    part = event.get("part") or {}
+    if kind == "tool_use" or (isinstance(part, dict) and part.get("type") == "tool"):
+        state = part.get("state") or {}
+        given = state.get("input") or {}
+        arg = next((given[k] for k in ("filePath",) + FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
+        return [f"▸ {part.get('tool', 'tool')} {_short(arg, 100)}".rstrip()]
+    if kind == "text" and isinstance(part, dict) and str(part.get("text", "")).strip():
+        return [f"  {_short(part['text'])}"]
+    if kind == "step_finish":
+        return []
+    return []
+
+
+def follow_lines(text):
+    lines, ended = [], False
+    for raw_line in text.splitlines():
+        try:
+            event = json.loads(raw_line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "result":
+            ended = True
+        lines += follow_render(event)
+    return lines, ended
+
+
+def follow_newest(runs, story=None):
+    """(story, stage, path) of the newest stage output, of one story or of every story — None if none."""
+    pattern = os.path.join(runs, story or "*", ".verify", "*.out")
+    outs = [p for p in glob.glob(pattern) if os.path.isfile(p)]
+    if not outs:
+        return None
+    path = max(outs, key=lambda p: (os.path.getmtime(p), p))
+    return (os.path.basename(os.path.dirname(os.path.dirname(path))),
+            os.path.basename(path).split(".")[0], path)
+
+
+def follow(runs, story, once, fmt, width):
+    found = follow_newest(runs, story)
+    if once:
+        if not found:
+            if fmt == "json":
+                print(json.dumps({"story": story or "", "stage": "", "file": "", "running": False, "lines": []}))
+            else:
+                print("factory: no stage output yet" + (f" for {story}" if story else ""))
+            return 0
+        name, stage, path = found
+        lines, ended = follow_lines(open(path, encoding="utf-8", errors="replace").read())
+        lines = lines[-width:] if width > 0 else lines
+        if fmt == "json":
+            print(json.dumps({"story": name, "stage": stage, "file": os.path.relpath(path),
+                              "running": not ended, "lines": lines}, ensure_ascii=False))
+        else:
+            print(f"── {name} · {stage}{'' if ended else ' (running)'}")
+            for line in lines:
+                print(line)
+        return 0
+    current, offset, pending = None, 0, ""
+    try:
+        while True:
+            found = follow_newest(runs, story)
+            if found and found[2] != current:
+                name, stage, current = found
+                offset, pending = 0, ""
+                print(f"── {name} · {stage}", flush=True)
+            if current:
+                try:
+                    with open(current, encoding="utf-8", errors="replace") as handle:
+                        handle.seek(offset)
+                        chunk = handle.read()
+                        offset = handle.tell()
+                except OSError:
+                    chunk = ""
+                if chunk:
+                    pending += chunk
+                    complete, _, pending = pending.rpartition("\n")
+                    for line in follow_lines(complete)[0]:
+                        print(line, flush=True)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        return 0
+
+
 def main(argv):
     parser = argparse.ArgumentParser(add_help=True, description="factory cli")
     parser.add_argument("--version", action="version", version=f"factory-cli {VERSION} (file contract {CONTRACT})")
     parser.add_argument("--story")
     parser.add_argument("--discover-list", action="store_true",
                         help="every discovery topic, its proposed epics (and which are epics) and its proposed description changes")
+    parser.add_argument("--follow", action="store_true",
+                        help="print what the stage in flight does, one line per tool call, as it happens (--once: the last lines and exit)")
+    parser.add_argument("--once", action="store_true", help="with --follow: print the newest output's last lines and exit")
+    parser.add_argument("--lines", type=int, default=30, help="with --follow --once: how many lines (0: all)")
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
     parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
@@ -3250,6 +3418,8 @@ def main(argv):
     if args.open_decisions:
         print("\n".join(open_decision_files(cwd, args.open_decisions)))
         return 0
+    if args.follow:
+        return follow(args.runs, args.story, args.once, args.format, args.lines)
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
     if args.discover_list:

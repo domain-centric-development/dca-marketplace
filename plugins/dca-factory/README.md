@@ -310,32 +310,40 @@ gets it as `FACTORY_MODEL`. In a session, a subagent can run on it; the session'
 `factory.sh status --story <story>` names the model the stages ran on — per stage where they differ — and marks a
 request that did not reach a stage. The pipeline names no model: which stages can run cheaper is the project's to measure.
 
-## Plan to tidy in one context
+## Two contexts per story: one builds, one checks
+
+By default `factory.sh run` starts a story in two processes. The **builder** carries plan, test, build and
+tidy and runs each stage's gate itself; the runner then checks that the red proof exists and runs the
+build and tidy gates again, so a process that skipped a gate is stopped, not trusted. The **verifier**
+carries the judge and — only on `verdict: pass` — the document stage, which starts on what the judge has
+just read; it runs the document gate itself and the runner runs it again. The builder and the verifier
+are never one process: the judge's independence from the builder is the point of the split. An
+adoption's verifier is the judge alone. Per-stage model keys do not apply to a shared process;
+`model.<tool>` does.
 
 ```
-bash .agents/factory/factory.sh run --story STORY-3 --shared-builder     # or FACTORY_SHARED_BUILDER=1
+stages: separate                                                        # in dca-factory.profile.yaml: one process per stage
+bash .agents/factory/factory.sh run --story STORY-3 --separate-stages   # the same, for one run
 ```
 
-Off unless you ask for it, per run; leave the flag out (or set `FACTORY_SHARED_BUILDER=0`) and every
-stage has its own process again. With it, one process carries plan, test, build and tidy and runs each
-stage's gate itself; the runner then checks that the red proof exists and runs the build and tidy gates
-again, so a process that skipped a gate is stopped, not trusted. The judge still runs in a process of
-its own, so the review keeps its fresh look. Measured on one story: −31 % cost at the same verdict. In a
-second story, the shared process stopped with a question the separate run did not have. Per-stage model
-keys do not apply to the shared process; `model.<tool>` does.
+One process per stage is the profile's `stages: separate` or `--separate-stages` for a run;
+`FACTORY_SHARED_BUILDER=0` or `FACTORY_SHARED_VERIFIER=0` separates one half. Measured: the shared builder
+cost 31 % less on one story at the same verdict, and on a smaller model it was the variant that delivered
+every story where the separate stages stopped one on its third round.
 
-## Judge and document in one context
+## Following a running stage
 
 ```
-bash .agents/factory/factory.sh run --story STORY-3 --shared-verifier    # or FACTORY_SHARED_VERIFIER=1
+bash .agents/factory/factory.sh follow                   # the stage in flight, one line per tool call, as it happens
+bash .agents/factory/factory.sh follow --story STORY-3   # that story's stages
+bash .agents/factory/factory.sh follow --once --format json   # the last lines, for a view such as the cockpit
 ```
 
-The twin of the shared builder, off unless asked for: one process carries the judge and — only on
-`verdict: pass` — the document stage, which starts on what the judge has just read instead of reading it
-again; the process runs the document gate itself and the runner runs it again. The builder and the
-verifier are never one process: the judge's independence from the builder is the point of the split.
-With both flags a story runs in two contexts, one that builds and one that checks. An adoption's
-verifier is the judge alone.
+Every stage writes its tool's output as it happens — Claude's `stream-json`, Codex's `exec --json`,
+OpenCode's `run --format json` — to `.dca-factory/runs/<story>/.verify/<stage>.<time>.out`. `follow` reads
+the newest of them and prints what the stage reads, edits and runs, its answers and, at the end, its turns
+and cost. It works for any run, whoever started it — a session, a shell, a worker, a scheduled job — and
+starts nothing. The cost per stage is read from the same file's last event.
 
 ## What a stage is told
 

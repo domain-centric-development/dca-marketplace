@@ -183,9 +183,9 @@ tier ran.
   sandbox) come from the environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`,
   `FACTORY_OPENCODE_ARGS` — because they are the tool's configuration and never the process's.
 
-**Plan to tidy in one context — only when asked.** The person may ask for the builder stages to share
-a context ("shared builder", `factory.sh run --shared-builder`, `FACTORY_SHARED_BUILDER=1`); it is off
-otherwise, every run. In the runner, one process then carries plan, test, build and tidy and runs each
+**Plan to tidy in one context — the default.** The builder stages share a context ("shared builder")
+unless the profile says `stages: separate`, the person asks for separate stages (`factory.sh run
+--separate-stages`) or `FACTORY_SHARED_BUILDER=0` is set. In the runner, one process carries plan, test, build and tidy and runs each
 stage's gate itself; the runner checks that the red proof exists and runs the build and tidy gates
 again. In a session, the same variant is one subagent for plan to tidy, running the gate after each
 stage and stopping on a refusal it cannot fix in three attempts; its window is marked as one stage,
@@ -196,15 +196,16 @@ journey's or an adoption's test gate runs again instead), then run the build and
 they now check the hand-overs against `changed-builder.txt`. In both, the judge keeps a fresh context
 of its own, and every stage still writes its own file, so the story can be resumed stage by stage. It
 costs less — the stages build on what the one before read — and it gives up one thing: build knows how
-the tests were written. Say in the report which variant ran.
+the tests were written. With separate stages each of the four runs in a context of its own, as below.
+Say in the report which variant ran.
 
-**Judge and document in one context — only when asked.** The twin of the shared builder: "shared
-verifier", `factory.sh run --shared-verifier`, `FACTORY_SHARED_VERIFIER=1`; off otherwise. One process
-then carries the judge and, only on `verdict: pass`, the document stage, which starts on what the judge
+**Judge and document in one context — the default.** The twin of the shared builder: "shared
+verifier", separated by the same profile line, `--separate-stages` or `FACTORY_SHARED_VERIFIER=0`. One process
+carries the judge and, only on `verdict: pass`, the document stage, which starts on what the judge
 has just read instead of reading it again; the process runs the document gate itself and the runner
 runs it again. The builder and the verifier are never one process — the judge's independence from the
 builder is the point of the split; the verifier shares a context only with the stage after the verdict,
-which writes no code. With both flags a story runs in two contexts: one that builds, one that checks.
+which writes no code. So a story runs in two contexts: one that builds, one that checks.
 In a session the same variant is one subagent for judge and document, its window marked `verifier`
 (`--stage-start verifier` … `--stage-end verifier`); after the end mark read the verdict as the runner
 does and run the document gate yourself. An adoption's verifier is the judge alone.
@@ -419,6 +420,12 @@ to run it anyway, and starts a new count of rounds. An accepted story starts at 
 and is delivered without a stage invocation. Resumed at a gated stage whose file exists, the runner
 lets the gate decide first on today's tree: a file that holds costs no invocation, and a stage that
 does run reads a report of now.
+
+**What a running stage does.** The runner keeps each stage's tool output as the tool writes it, one event
+per line, in `.dca-factory/runs/<story>/.verify/<stage>.<time>.out`. When the person asks what a stage is
+doing, run `bash .agents/factory/factory.sh follow --once` (or `--story <id>`) and show its lines — what
+the stage reads, edits and runs, its answers, its turns and cost at the end; `follow` without `--once`
+keeps printing for a person at a terminal. It starts nothing.
 
 **What a story cost.** The runner asks Claude Code and Codex for their machine-readable output and
 records each invocation's tokens — input, cache read, cache write, output, and Claude's cost — as a

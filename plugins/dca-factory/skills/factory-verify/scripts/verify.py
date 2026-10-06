@@ -1005,6 +1005,36 @@ def verify_runner(runner, verbose=False):
               and "sent it back to stage build" in shared[0],
               [l[:200] for l in output.splitlines() if "Carry out" in l][:1])
 
+    # 1a'. shared stages are the default; the profile's `stages: separate` or --separate-stages start one process each
+    with tmpdir() as root:
+        build_project(root)
+        copy_scripts(runner, root)
+        plain_env = {k: v for k, v in os.environ.items() if not k.startswith("FACTORY_SHARED_")}
+        def stages_of(*extra, profile_line=None):
+            if profile_line is not None:
+                path = os.path.join(root, "dca-factory.profile.yaml")
+                kept = [l for l in open(path, encoding="utf-8").read().splitlines(True) if not l.startswith("stages:")]
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("".join(kept) + profile_line)
+            result = subprocess.run([BASH, runner, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run", *extra],
+                                    cwd=root, capture_output=True, text=True, env=plain_env, encoding="utf-8",
+                                    errors="replace")
+            out = result.stdout + result.stderr
+            return result.returncode, out, any("Carry out these stages" in l for l in out.splitlines() if "would run" in l)
+        _, out_default, shared_default = stages_of()
+        _, out_flag, shared_flag = stages_of("--separate-stages")
+        _, out_old, shared_old = stages_of("--shared-builder", "--shared-verifier")
+        _, out_profile, shared_profile = stages_of(profile_line="stages: separate\n")
+        code_bad, out_bad, _ = stages_of(profile_line="stages: sometimes\n")
+        check("stages: without a flag or a profile line the builder and the verifier are shared",
+              shared_default and "one shared context" in out_default, out_default[-300:])
+        check("stages: --separate-stages starts one process per stage", not shared_flag and "── stage plan" in out_flag,
+              out_flag[-300:])
+        check("stages: the old --shared-builder and --shared-verifier are still accepted", shared_old, out_old[-200:])
+        check("stages: the profile's `stages: separate` starts one process per stage", not shared_profile, out_profile[-300:])
+        check("stages: a profile `stages:` that is neither shared nor separate stops the run",
+              code_bad == 2 and "neither shared nor separate" in out_bad, out_bad[-200:])
+
     # 1a. the stage process sees only the project: the isolation flags, one prefix for every stage
     with tmpdir() as root:
         build_project(root)
@@ -3520,6 +3550,10 @@ def main(argv=None):
     parser.add_argument("--junit", metavar="FILE", help="write every case as a JUnit XML report")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
+    # The runner's cases describe the stages one by one; shared stages are the default since 0.64, so the
+    # suite runs separate stages unless a case asks for shared ones (`--shared-builder`) or clears these.
+    os.environ.setdefault("FACTORY_SHARED_BUILDER", "0")
+    os.environ.setdefault("FACTORY_SHARED_VERIFIER", "0")
     # Every case runs in a throwaway directory, so a path given relative to the caller's directory
     # would resolve to nothing there — and the whole suite would fail with the gate merely missing.
     args.gate = os.path.abspath(args.gate)
@@ -5261,16 +5295,58 @@ def run_groups(args):
                          '{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n'
                          '{"type":"turn.completed","usage":{"input_tokens":12850,"cached_input_tokens":9984,'
                          '"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}\n')
+        # what `--output-format stream-json --verbose` writes: events as they happen, the result event last
+        stream_events = [
+            {"type": "system", "subtype": "init", "model": "claude-haiku-4-5"},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read",
+                                                           "input": {"file_path": "plan.md"}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "content": "…"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "the plan is written"}]}},
+            json.loads(open(claude_out, encoding="utf-8").read())]
+        stream_out = os.path.join(root, "claude-stream.jsonl")
+        with open(stream_out, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(e) for e in stream_events) + "\n")
+        cut_out = os.path.join(root, "claude-stream-cut.jsonl")
+        with open(cut_out, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(e) for e in stream_events[:-1]) + "\n")
+        error_out = os.path.join(root, "claude-stream-error.jsonl")
+        with open(error_out, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(e) for e in stream_events[:-1] + [dict(
+                stream_events[-1], subtype="error_max_turns", is_error=True, result="")]) + "\n")
         read = lambda *a: subprocess.run([sys.executable, args.cli, "--usage-from", *a], capture_output=True,
                                          text=True, encoding="utf-8").stdout
         c, x, n = read("claude-json", claude_out), read("codex-jsonl", codex_out, "--usage-model", "gpt-x"), \
             read("none", codex_out)
+        st, cut, err = read("claude-json", stream_out), read("claude-json", cut_out), read("claude-json", error_out)
         expectations = [
             ("usage: Claude's JSON result is read per model, with its cost",
              c.startswith("model=claude-haiku-4-5\tinput=10\tcache_read=14220\tcache_write=10940\toutput=79\tcost=0.0237"), c),
             ("usage: Codex's JSONL is read from its turn events, cached input apart",
              x.startswith("model=gpt-x\tinput=2866\tcache_read=9984\tcache_write=0\toutput=5") and "ok" in x, x),
             ("usage: an unknown format reads as unknown", n.startswith("unknown"), n[:40]),
+            ("usage: Claude's stream is read from its result event, the same figures as the single object",
+             st.splitlines()[:1] == c.splitlines()[:1] and "ok" in st, st),
+            ("usage: a Claude stream cut off before its result reads as unknown, its last answer is shown",
+             cut.startswith("unknown") and "the plan is written" in cut, cut),
+            ("usage: a Claude stream that ended in an error still has its usage read",
+             err.splitlines()[:1] == c.splitlines()[:1], err),
+        ]
+        # follow: the stage in flight, one line per tool call — a cut stream is running, a result ends it
+        verify_dir = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify")
+        os.makedirs(verify_dir)
+        shutil.copy(cut_out, os.path.join(verify_dir, "builder.000001.out"))
+        follow = lambda *a: subprocess.run([sys.executable, args.cli, "--follow", "--once", *a], cwd=root,
+                                           capture_output=True, text=True, encoding="utf-8").stdout
+        running = json.loads(follow("--format", "json") or "{}")
+        shutil.copy(stream_out, os.path.join(verify_dir, "builder.000001.out"))
+        done, text = json.loads(follow("--format", "json") or "{}"), follow()
+        expectations += [
+            ("follow: a stage's stream reads as one line per tool call and answer, and runs until its result",
+             running.get("story") == "STORY-1" and running.get("stage") == "builder" and running.get("running") is True
+             and running.get("lines", [None])[1:] == ["▸ Read plan.md", "  the plan is written"], running),
+            ("follow: the result event ends the stage, with its turns and cost",
+             done.get("running") is False and str(done.get("lines", [""])[-1]).startswith("■ done")
+             and text.startswith("── STORY-1 · builder"), (done, text[:200])),
         ]
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
@@ -6768,7 +6844,7 @@ def run_groups(args):
     expectations.append(("vocabulary: no skill, reference or template names a sample's domain",
                          not hits, ", ".join(hits[:5])))
     # the skills call only the runner's verbs, which mirror them (WP-62 item 11)
-    verbs = {"setup", "backlog", "run", "status", "decisions", "discover", "help", "update", "verify", "check"}
+    verbs = {"setup", "backlog", "run", "status", "decisions", "discover", "follow", "help", "update", "verify", "check"}
     called = []
     for folder, _, names in os.walk(skills_root):
         for name in names:

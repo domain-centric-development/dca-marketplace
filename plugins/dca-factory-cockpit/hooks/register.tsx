@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
-import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StoryView, Tab, Topic, Worker } from '../types'
+import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
 import { appendLines, clock, createLatch, day, exitWord, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, type RefreshWish } from './parse'
 
@@ -45,6 +45,13 @@ async function factoryJson<T>($: EngineInterface, root: string, args: string[]):
   }
 }
 
+// The newest stage's output, one line per tool call: `factory.sh follow` renders it, the cockpit only shows it.
+async function loadStage($: EngineInterface, root: string, status: FactoryStatus): Promise<StageOutput | null> {
+  if (status.running.length === 0) return null
+  const stage = await factoryJson<StageOutput>($, root, ['follow', '--once', '--format', 'json', '--lines', '60'])
+  return stage && Array.isArray(stage.lines) && stage.stage ? stage : null
+}
+
 async function readText($: EngineInterface, path: string): Promise<string> {
   return $.fs.read(path).catch(() => '')
 }
@@ -86,7 +93,7 @@ async function loadCockpit($: EngineInterface, before: Cockpit | null, isPaneOpe
   if (before && !isPaneOpen) {
     const status = await factoryJson<FactoryStatus>($, root, ['status', '--format', 'json', '--live'])
     if (!status) return before
-    return { ...before, status, project: status.project, ...(await loadStories($, root, status)), updatedAt: await $.clock.now() }
+    return { ...before, status, project: status.project, ...(await loadStories($, root, status)), stage: null, updatedAt: await $.clock.now() }
   }
 
   const [status, decisions, discovery] = await Promise.all([
@@ -104,6 +111,7 @@ async function loadCockpit($: EngineInterface, before: Cockpit | null, isPaneOpe
     topics: discovery?.topics ?? [],
     isBehind: !status.description || !discovery,
     ...(await loadStories($, root, status)),
+    stage: await loadStage($, root, status),
     updatedAt: await $.clock.now(),
   }
 }
@@ -125,6 +133,7 @@ async function loadLive($: EngineInterface, before: Cockpit): Promise<Cockpit> {
     ...before,
     status,
     journals: { ...before.journals, ...Object.fromEntries(moving.map((id, index) => [id, journals[index] ?? []])) },
+    stage: await loadStage($, before.root, status),
     updatedAt: await $.clock.now(),
   }
 }
@@ -895,8 +904,11 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           'No stage is running.',
         ),
         ...status.running.map(running => ui.chips(stagesOf(now.journals[running.story] ?? []), at, running.story)),
-        ui.section('Output', job.lines.length > 0 ? `last ${log.length} lines` : undefined),
-        ui.log(log, 'Nothing yet. A worker started here writes its output into this box.'),
+        ...(job.lines.length > 0 || !now.stage
+          ? [ui.section('Output', job.lines.length > 0 ? `last ${log.length} lines` : undefined),
+             ui.log(log, 'Nothing yet. A worker started here, or any stage that runs, writes its output into this box.')]
+          : [ui.section('Output', `${now.stage.story} · ${now.stage.stage}${now.stage.running ? ' — running' : ''}`),
+             ui.log(now.stage.lines.slice(-Math.max(6, rows - 30)), 'The stage has written nothing yet.')]),
         <Text color={C.muted}>The worker is a child of this session: ending the session or reloading the mod stops it.</Text>,
       ],
       isRunning() ? 'x stop' : 'r run the backlog · w run & watch',

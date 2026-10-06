@@ -116,6 +116,10 @@
 #              again from plan. /factory-setup writes `pages` where the product has web pages
 # run          how a person starts the application to look at it (`./gradlew bootRun`,
 #              `dotnet run --project src/App.Web`) — named in the acceptance record
+# stages       `shared` (default) or `separate`: how the runner starts the stages. `shared` runs plan,
+#              test, build and tidy in one builder process and judge and document in one verifier
+#              process — never the builder's; `separate` starts one process per stage. The gates are the
+#              same either way; `factory.sh run --separate-stages` overrides the line for one run
 # reviews      perspectives the judge stage covers *in addition to* its built-in ones
 # review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
 #              tool; a review *agent* only in a tool that has agents — where it is missing, the
@@ -136,6 +140,7 @@ format: {{FORMAT_COMMAND}}
 formatFix: {{FORMAT_FIX_COMMAND}}
 #required: compile test architecture
 #acceptance: pages
+#stages: separate
 #run: <how a person starts the application>
 #knowledge: <the catalog skill a stage cites>
 #carrier.plan: <the skill that knows where this project's types go and what they are called>

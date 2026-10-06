@@ -13,7 +13,7 @@ factory works the same without it, in Claude Code, Codex or OpenCode.
 | 0 Describe | the project description, each part present or missing, its missing and empty headings | `/dca-describe`, `/dca-describe <change>`, opens a file in the system's editor |
 | 1 Discover | every discovery topic, its proposed epics (which are epics already), its proposed description changes | `/factory-discover <topic>`, `/factory-backlog epic <id> --from <report>`, `/dca-describe <file> — <section>: <change>` |
 | 2 Backlog | every epic — also before its first story — with goal, outcome event, its stories with state, passes, time, tokens, cost | `/factory-backlog <words>`, `stories <epic>` (✦ suggest stories: Claude drafts them as `status: draft`), `release <story> …`, `/factory-run <wish>` |
-| 3 Run | the worker, the running stories with their stage, since when and the stage's last activity, the worker's output | starts `factory.sh run` / `run --watch` as a child of the session, stops it |
+| 3 Run | the worker, the running stories with their stage, since when and the stage's last activity; the output of the worker started here, or else what the running stage reads, edits and runs (`factory.sh follow`) — whoever started it | starts `factory.sh run` / `run --watch` as a child of the session, stops it |
 | 4 Decide | open questions and acceptances, answered records as Markdown | `/factory-decisions <story>` |
 | 5 Delivered | delivered stories, epics with their outcome events, unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
 
@@ -23,7 +23,7 @@ decision records.
 ## What it reads
 
 `factory.sh status --format json --live`, `status --story <id> --format json --live`, `decisions --format json`,
-`discover --list --format json` — and the append-only journals and hand-over files under `.dca-factory/runs/`. A
+`discover --list --format json`, `follow --once --format json` — and the append-only journals and hand-over files under `.dca-factory/runs/`. A
 project whose pipeline is older than these views gets a line saying so and a button for `/factory-update`.
 
 ## How it acts

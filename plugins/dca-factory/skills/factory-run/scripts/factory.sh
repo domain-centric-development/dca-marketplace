@@ -10,11 +10,13 @@
 #   factory.sh setup --write [--replace <key>]   adds the detected keys the profile lacks
 #   factory.sh backlog [--check]             every story's state and the next one; --check the backlog
 #   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch] [--interval <s>]
-#                  [--max-stages <n>] [--story-budget <tokens>] [--shared-builder] [--shared-verifier] [--dry-run]
+#                  [--max-stages <n>] [--story-budget <tokens>] [--separate-stages] [--dry-run]
 #                    one story from where its files say (--from names the stage and starts a new
 #                    count of rounds), or without --story the whole backlog in the schedule's order
 #   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
 #   factory.sh decisions [--story <id>]      the decision inbox
+#   factory.sh follow [--story <id>] [--once [--lines <n>] [--format text|json]]   what the stage in flight
+#                                            does, one line per tool call, as it happens; starts nothing
 #   factory.sh discover --check <topic>      the discovery report of one topic against its contract
 #   factory.sh discover --list [--format text|md|json]   every topic, its proposed epics and which are epics
 #   factory.sh help [--format text|md|json]  the factory explained: the flow and where this project stands,
@@ -65,10 +67,17 @@ NESTED_CODE=0                                # the result of a story run a share
 GATE_FIRST=""                                # set for the first stage of an explicit story run: its gate decides first
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
-SHARED_BUILDER="${FACTORY_SHARED_BUILDER:-}"  # --shared-builder: plan to tidy in one process (off by default)
+# Shared stages are the default: plan to tidy in one builder process, judge and document in one verifier
+# process (never the builder's). The profile's `stages: separate` starts one process per stage instead;
+# for one run, --separate-stages does the same, and FACTORY_SHARED_BUILDER / FACTORY_SHARED_VERIFIER set
+# to 0 or 1 decide each half. --shared-builder and --shared-verifier are accepted and change nothing.
+SHARED_BUILDER="${FACTORY_SHARED_BUILDER:-}"
 case "$(printf '%s' "$SHARED_BUILDER" | tr '[:upper:]' '[:lower:]')" in 0|off|no|false) SHARED_BUILDER="" ;; esac
-SHARED_VERIFIER="${FACTORY_SHARED_VERIFIER:-}"  # --shared-verifier: judge and document in one process (off by default)
+SHARED_VERIFIER="${FACTORY_SHARED_VERIFIER:-}"
 case "$(printf '%s' "$SHARED_VERIFIER" | tr '[:upper:]' '[:lower:]')" in 0|off|no|false) SHARED_VERIFIER="" ;; esac
+SHARED_BUILDER_SET="${FACTORY_SHARED_BUILDER:+set}"
+SHARED_VERIFIER_SET="${FACTORY_SHARED_VERIFIER:+set}"
+SEPARATE_STAGES=""                           # --separate-stages: one process per stage for this run
 WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
 # The key the runner's own gate runs sign their suite record with (.verify/suites.tsv): a gate on an
 # unchanged tree reuses only rows this key confirms. Handed to the gate process alone, never exported —
@@ -632,7 +641,9 @@ invoke() {                                  # invoke <tool> <prompt>
   # and not a second writer's — without this a careful model refuses to write beside "the one writer".
   export FACTORY_WORKER="$WORKER" FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}"
   case "$tool" in
-    claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format json \
+    # stream-json: one event per line as it happens, so a stage can be followed while it runs
+    # (`factory.sh follow`); the last line, `"type":"result"`, carries the usage the single object did.
+    claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format stream-json --verbose \
                 --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
                 $(isolation_flags claude) $model_args ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
     # stdin closed: `codex exec` also reads a prompt from stdin, and an unattended run has none.
@@ -2594,6 +2605,22 @@ story=""; tool=""; from=""; dry=""; source_dir=""; copy_mode=""; LINK_MODE=""; w
 setup_mode=""; replace_key=""; want_usage=""; want_brief=""; session_start=""; live=""; view=()
 
 # The reading commands are the CLI's; the runner passes them on, so a project calls one script.
+# Whether this run shares its stages: --separate-stages, else an explicit FACTORY_SHARED_* or flag per half,
+# else the profile's `stages:` line, else shared.
+resolve_stages() {
+  if [ -n "$SEPARATE_STAGES" ]; then SHARED_BUILDER=""; SHARED_VERIFIER=""; return 0; fi
+  local mode default
+  mode=$(cli --get stages 2>/dev/null | awk '{print $1}')
+  case "$mode" in
+    ""|shared) default=1 ;;
+    separate) default="" ;;
+    *) echo "factory: the profile's stages: '$mode' is neither shared nor separate" >&2; return 1 ;;
+  esac
+  [ -n "$SHARED_BUILDER_SET" ] || SHARED_BUILDER=$default
+  [ -n "$SHARED_VERIFIER_SET" ] || SHARED_VERIFIER=$default
+  return 0
+}
+
 read_command() {                            # read_command <cli flags…>
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup' from the plugin" >&2; exit 2; }
   exec "$PY" "$CLI" "$@"
@@ -2632,6 +2659,7 @@ case "$command" in
       *) read_command --status --part backlog "$@" ;;
     esac ;;
   decisions) read_command --list-decisions "$@" ;;
+  follow) read_command --follow "$@" ;;
   discover)
     # The discovery report's check; the report itself is written in a session, by `factory-discover`.
     case "${1:-}" in
@@ -2680,8 +2708,9 @@ while [ $# -gt 0 ]; do
     --interval) interval=$2; shift 2 ;;
     --max-stages) MAX_STAGES=$2; shift 2 ;;
     --story-budget) STORY_BUDGET=$2; shift 2 ;;
-    --shared-builder) SHARED_BUILDER=1; shift ;;
-    --shared-verifier) SHARED_VERIFIER=1; shift ;;
+    --shared-builder) SHARED_BUILDER=1; SHARED_BUILDER_SET=set; shift ;;
+    --shared-verifier) SHARED_VERIFIER=1; SHARED_VERIFIER_SET=set; shift ;;
+    --separate-stages) SEPARATE_STAGES=1; shift ;;
     *) usage ;;
   esac
 done
@@ -2723,6 +2752,7 @@ case "$command" in
     [ -n "$tool" ] || [ -n "${FACTORY_TOOL_CMD:-}" ] || { echo "factory: no agent tool found on PATH." >&2; exit 2; }
     case "$MAX_STAGES" in *[!0-9]*) echo "factory: --max-stages takes a number" >&2; exit 2 ;; esac
     case "$STORY_BUDGET" in *[!0-9]*) echo "factory: --story-budget takes a number of tokens" >&2; exit 2 ;; esac
+    resolve_stages || exit 2
     if [ -n "$story" ]; then
       [ -z "$watch" ] || { echo "factory: --watch works the backlog off — it takes no --story" >&2; exit 2; }
       tool=${tool:-stand-in}
