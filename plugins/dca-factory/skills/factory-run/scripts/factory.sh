@@ -1247,6 +1247,7 @@ LOCATIONS = {"product": "project/product.md", "tech": "project/tech.md", "domain
 #: Which check or stage a profile key switches on — what `--check` says beside a proposed line.
 SWITCHES = {
     "knowledge": "every stage cites that catalog instead of recalling",
+    "knowledge.read": "a stage reads these catalog nodes once before it writes code",
     "compile": "the test, build and tidy gates compile the tests",
     "test": "single tests and the required suites run with it",
     "e2eTest": "the criteria's end-user tests run with it",
@@ -1373,6 +1374,12 @@ def detect():
             # the three built-in perspectives always run; `reviews:` lists only those added to them
             if key.startswith("review.") and key not in ("review.ddd", "review.hexagonal", "review.clean-code"):
                 values["reviews"] = ", ".join(filter(None, [values.get("reviews", ""), key[len("review."):]]))
+    # What a stage reads once before it writes code, from the method's conventions file (its API node) — the file
+    # is the source, the profile the factory's view of it; the runner reads only the profile.
+    if values.get("knowledge") and conventions and os.path.isfile(conventions):
+        found = re.search(r"^building_blocks_api:[^`\n]*`([^`\n]+)`", open(conventions, encoding="utf-8").read(), re.M)
+        if found:
+            values["knowledge.read"] = found.group(1)
     # Where the project description is, from the method's line in AGENTS.md — the line is the source,
     # the profile the factory's view of it. A default location needs no key.
     if os.path.isfile("AGENTS.md"):
@@ -2076,12 +2083,24 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
     for dir in "${dir:-.claude/skills}" .claude/skills .codex/skills .opencode/skills .agents/skills; do
       [ -d "$dir/$knowledge/catalog" ] && { catalog="$dir/$knowledge/catalog/"; break; }
     done
+    local at=$catalog
     [ -n "$catalog" ] && catalog=" The $knowledge skill's catalog is at $catalog (its index.md first)."
+    # The nodes the profile names to read once before writing code (`knowledge.read`), as paths: told only "the
+    # catalog", a stage read seven templates, reached for a jar and grepped six nodes for what one lists
+    # (bench 2026-10-06).
+    local read="" path
+    if [ -n "$at" ]; then
+      for path in $(cli --get knowledge.read 2>/dev/null | tr ',' ' '); do
+        [ -f "$at$path" ] && read="${read:+$read, }$at$path"
+      done
+      [ -n "$read" ] && catalog="$catalog Before you write code, read once: $read — what you would otherwise look \
+up in a dependency's sources or a package cache, which is never the place."
+    fi
   fi
   local cli_path=${CLI#"$PWD/"}             # the project's own copy, named as the gate is: relative to the root
   printf '%s' "Where things are: the stack profile is $PROFILE; this story's run folder is $RUNS/$story/; \
 what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
-source; the building blocks' API is in the project's conventions file and the catalog, never in a jar.$catalog \
+source.$catalog \
 The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL. Change a file \
 with the editor tools; a script fed on stdin (python3 -) is refused and costs a turn. Every command is checked part \
 by part before it runs, and nobody is there to grant one: a loop, a variable or \$(…), a part outside that list and \

@@ -651,6 +651,9 @@ A stage may treat a knowledge skill as an authority only when the profile names 
 installed is never adopted: a vendored copy of an older release names rules and markers that no
 longer exist, and a citation would make that wrongness look verified. Unnamed, the stages work from
 the project's own rules, markers, glossary and documents, which is what the gate checks anyway.
+`knowledge.read: <path>, …` names nodes inside that catalog a stage reads once before it writes code — the node
+that lists the API the code implements, a design system's component list; the prompt gives them as paths.
+`factory.sh setup` takes it from the method's conventions file where the method names one.
 
 A stage's *craft* — how this project writes end-user tests, how it implements, which review
 perspectives it adds — is bound in the profile too: `carrier.<stage>:` and

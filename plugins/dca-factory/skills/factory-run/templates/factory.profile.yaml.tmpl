@@ -70,6 +70,10 @@
 #              any other source only when the project vouches for it being current: a vendored catalog from
 #              an older release names rules and markers that no longer exist, and a citation makes that
 #              look verified. Unnamed means the stages work from the project's own rules, markers and documents
+# knowledge.read  paths inside that catalog a stage reads once before it writes code, comma-separated — the
+#              node that lists the API a project's code implements, the component list of a design system.
+#              The prompt names them as paths; otherwise a stage searches templates or a dependency's jar
+#              for what one node lists. `factory.sh setup` takes it from the method's conventions file
 # model.<tool>.<stage>  the model <tool> (claude, codex, opencode) runs <stage> on (plan, test,
 #              build, tidy, judge, document); model.<tool> is that tool's default for every stage
 #              without a key of its own. Values are the tool's own model names or aliases. Always
@@ -145,6 +149,7 @@ formatFix: {{FORMAT_FIX_COMMAND}}
 #stages: separate
 #run: <how a person starts the application>
 #knowledge: <the catalog skill a stage cites>
+#knowledge.read: <paths inside that catalog a stage reads once before it writes code, comma-separated>
 #carrier.plan: <the skill that knows where this project's types go and what they are called>
 #carrier.test: <the skill that carries this project's end-user testing craft>
 #carrier.build: <the skill that carries this project's implementation craft>

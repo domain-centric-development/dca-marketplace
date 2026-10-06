@@ -1449,6 +1449,25 @@ def verify_runner(runner, verbose=False):
               bool(prompts) and "into one turn" in prompts[0] and "one plain command per call" in prompts[0],
               [p[-400:] for p in prompts[:1]])
 
+    # 1b-api. the catalog nodes the profile names (`knowledge.read`) are in the prompt as paths; without the key the
+    # prompt names none and says nothing about a method's API
+    for read, expected in (("guide/language-mappings/building-blocks.md", True), (None, False)):
+        with tmpdir() as root:
+            build_project(root, profile=PROFILE + "knowledge: dca-knowledge\n"
+                          + (f"knowledge.read: {read}\n" if read else ""))
+            copy_scripts(runner, root)
+            write_file(root, ".claude/skills/dca-knowledge/catalog/index.md", "# catalog\n")
+            write_file(root, ".claude/skills/dca-knowledge/catalog/guide/language-mappings/building-blocks.md", "# markers\n")
+            in_git(root)
+            run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
+                       env={"FACTORY_TOOL_CMD": 'printf "%s\\n" "$FACTORY_PROMPT" >> api-prompts.txt; exit 1'})
+            said = open(os.path.join(root, "api-prompts.txt"), encoding="utf-8").read() \
+                if os.path.isfile(os.path.join(root, "api-prompts.txt")) else ""
+            named = "read once: .claude/skills/dca-knowledge/catalog/guide/language-mappings/building-blocks.md" in said
+            check("prompt: the catalog nodes `knowledge.read` names are in the stage prompt as paths" if expected else
+                  "prompt: without `knowledge.read` the prompt names no node and no method's API",
+                  bool(said) and named == expected and "building blocks" not in said, said[-500:])
+
     # 1b-buildback. the build stage finds a defect in a test's own code (not in what it asserts): it writes
     # `back: test`, and the round goes to the test stage — no human asked, the break proves the repair
     buildback_cmd = ('if [ "$FACTORY_STAGE" = build ] && [ ! -f sent-back ]; then : > sent-back; '
@@ -2999,8 +3018,14 @@ def verify_setup(runner, verbose=False):
         build_project(root)
         os.remove(profile_of(root))
         fixture(root, governed)
+        write_file(root, ".agents/dca/conventions.md", "# conventions\n\nbuilding_blocks_api: the catalog's "
+                   "`guide/language-mappings/building-blocks.md` (the markers) — never a jar\n")
         run_setup(runner, root, "--tool", "claude", "--from", source)
         lines = active_lines(profile_of(root)) or []
+        if "dca-knowledge" in installed:
+            check("knowledge.read: setup takes the API node from the method's conventions file into the profile",
+                  "knowledge.read: guide/language-mappings/building-blocks.md" in lines,
+                  [l for l in lines if l.startswith("knowledge")])
         wanted = [f"{key}: {skill}" for key, skill in (("carrier.guard", "dca-discipline"),
                                                          ("knowledge", "dca-knowledge"), ("carrier.plan", "dca-modelling"),
                                                          ("carrier.build", "dca-modelling"),
