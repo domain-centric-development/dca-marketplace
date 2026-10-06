@@ -838,6 +838,21 @@ def tests_rewritten_after_build(passes):
     return prepare
 
 
+def plan_corrected_after_tests(passes):
+    """A shared builder whose own test gate refused a plan row: it corrected plan.md after writing tests.md and had
+    the test gate pass again, in its session. `passes` writes that session's journal line, or none (bench 2026-10-06:
+    the judge passed the story, the document gate sent it back to test twice)."""
+    def prepare(root, _args):
+        folder = os.path.join(root, ".dca-factory", "runs", "STORY-1")
+        for name, at in (("tests.md", 1300), ("plan.md", 1306), ("build.md", 1400), ("tidy.md", 1450),
+                         ("judge.md", 1500), ("document.md", 1600)):
+            os.utime(os.path.join(folder, name), (at, at))
+        lines = "".join(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(at))}\tgate\t{stage}\texit=0\tby=builder\n"
+                        for stage, at in passes)
+        write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv", lines)
+    return prepare
+
+
 def run_gate(gate, root, stage):
     result = subprocess.run(
         [sys.executable, gate, "--story", "STORY-1", "--stage", stage],
@@ -2215,6 +2230,24 @@ exit 0
         check("priming: a shared builder is told it carries out plan, test, build and tidy, all in this session",
               code == 0 and "the shared builder of story STORY-1" in output and "plan, test, build, tidy" in output
               and "stage builder" not in output, output.strip().splitlines()[-1:])
+        # a gate a stage session runs itself and passes is on record, so a later gate can tell this pass's files;
+        # the same gate run by a person or the runner leaves the journal to the runner
+        gate_at = os.path.join(root, ".agents", "factory", "story-gate.py")
+        journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+        def gate_lines():
+            return [l for l in (open(journal, encoding="utf-8").read().splitlines() if os.path.isfile(journal) else [])
+                    if "\tgate\tplan\t" in l]
+        plain = subprocess.run([sys.executable, gate_at, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8")
+        before = gate_lines()
+        staged = subprocess.run([sys.executable, gate_at, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                                capture_output=True, text=True, encoding="utf-8",
+                                env=dict(os.environ, FACTORY_WORKER="runner:host:1", FACTORY_STAGE="builder"))
+        after = gate_lines()
+        check("journal: a gate a stage session ran and passed is recorded (`by=builder`); one a person ran is not",
+              plain.returncode == 0 and staged.returncode == 0 and not before
+              and len(after) == 1 and after[0].endswith("\texit=0\tby=builder"),
+              (plain.returncode, staged.returncode, before, after, staged.stdout[-300:]))
         subprocess.run([sys.executable, cli_in(root), "--release"], cwd=root, capture_output=True)
 
     # 1e2. a stage the runner starts is told which worker started it, for the hook and the prompt alike
@@ -4341,6 +4374,12 @@ def run_groups(args):
         (Case("document: a build older than the tests, its gate not run since, is an earlier pass's", "document", 1,
               must_fail=("story-pass",), text=("build.md (written for an earlier pass)",)),
          dict(document=DOCUMENT, prepare=tests_rewritten_after_build((("build", 1210),)))),
+        (Case("document: tests written before a plan correction hold when the session's own test gate passed after it",
+              "document", 0, must_pass=("story-pass",), absent=("written for an earlier pass",)),
+         dict(document=DOCUMENT, prepare=plan_corrected_after_tests((("test", 1310),)))),
+        (Case("document: tests older than the plan, no test gate passed since, are an earlier pass's", "document", 1,
+              must_fail=("story-pass",), text=("tests.md (written for an earlier pass)",)),
+         dict(document=DOCUMENT, prepare=plan_corrected_after_tests(()))),
         (Case("test: a test recorded red before may be green when its expectation changed on a decision",
               "test", 0, must_pass=("tests-red", "decisions"), text=("expectation changed on decision STORY-1-01",)),
          dict(tests=TESTS_ON_DECISION, green=both_green, ledger=both_green,

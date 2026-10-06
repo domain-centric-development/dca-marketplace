@@ -219,7 +219,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 14
 
 
-VERSION = "0.65.1"
+VERSION = "0.65.2"
 
 
 def read_front_matter(path):
@@ -4323,7 +4323,8 @@ STALE_AFTER_SECONDS = 2.0
 
 
 def gate_passes(folder):
-    """{stage: epoch} of the last passed gate per stage, from the runner's journal lines (`gate <stage> exit=0`)."""
+    """{stage: epoch} of the last passed gate per stage, from the journal's `gate <stage> exit=0` lines — the runner's, and a
+    stage session's own gate run that passed (`by=<stage>`)."""
     journal = os.path.join(folder, ".verify", "journal.tsv")
     passes = {}
     if not os.path.isfile(journal):
@@ -4851,7 +4852,22 @@ def main(argv):
         stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         write_story_fields(story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built
         result.ok("delivered", f"{shown(story_path)} carries `delivered: {stamp}` — adopted")
+    if not result.failed and args.stage in ("plan", "test", "build", "tidy") and os.environ.get("FACTORY_WORKER"):
+        record_stage_pass(args.runs, story_id, args.stage)
     return result.report(story_id, args.stage, args.json, args.brief)
+
+
+def record_stage_pass(runs, story_id, stage):
+    """A gate a stage the runner started ran itself and passed, in the run's journal beside the runner's own lines.
+    A shared builder that corrected the plan after the test gate refused it, and had the test gate pass again, holds
+    a tests.md older than the plan: without the pass on record the document gate read tests.md as an earlier pass's
+    and sent a story the judge had passed back to its test stage, twice."""
+    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    with contextlib.suppress(OSError):
+        os.makedirs(os.path.dirname(journal), exist_ok=True)
+        with open(journal, "a", encoding="utf-8") as handle:
+            handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\tgate\t{stage}\texit=0\t"
+                         f"by={os.environ.get('FACTORY_STAGE') or 'stage'}\n")
 
 
 if __name__ == "__main__":
