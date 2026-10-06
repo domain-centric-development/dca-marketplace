@@ -628,6 +628,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const view = stored?.story === open.id ? stored : null
     const perStage = view ? Object.entries(view.stages) : []
     const longest = Math.max(1, ...perStage.map(([, one]) => one.seconds))
+    const denials = perStage.flatMap(([name, one]) =>
+      (one.denials ?? []).map(d => ({ where: d.stage && d.stage !== name ? `${name} · ${d.stage}` : name, tool: d.tool, command: d.command })),
+    )
     const records = now.decisions.filter(record => record.story === open.id)
     const waits = status.waiting.some(wait => wait.story === open.id)
     const shown = events.filter(event => event.kind !== 'usage').slice(-Math.max(4, rows - 34))
@@ -668,7 +671,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.chips(stagesOf(events), at),
         ui.section('Time per stage', "the factory's own numbers"),
         ui.table(
-          [COL.stage, { name: 'share', width: 20 }, COL.time, COL.runs, COL.tokens, COL.cost, { name: 'model', width: 18 }],
+          [COL.stage, { name: 'share', width: 20 }, COL.time, COL.runs, COL.tokens, COL.cost, { name: 'denied', width: 6, isNumber: true }, { name: 'model', width: 18 }],
           perStage.flatMap(([name, one]) => [
             [
               { text: name, bold: true },
@@ -677,6 +680,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               { text: String(one.runs), color: one.runs > 1 ? C.wait : C.muted },
               { text: fmt.tokens(one.tokens) },
               { text: fmt.cost(one.cost) },
+              { text: one.denied ? String(one.denied) : '', color: C.wait },
               { text: one.models.join(', ') || '—', color: C.muted },
             ],
             // the stages inside a shared builder or verifier: time and tokens from its stream, the cost an estimate
@@ -687,11 +691,23 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               { text: '' },
               { text: fmt.tokens(part.tokens), color: C.muted },
               { text: part.cost === null ? '—' : `≈${fmt.cost(part.cost)}`, color: C.muted },
+              { text: part.denied ? String(part.denied) : '', color: C.wait },
               { text: '' },
             ]),
           ]),
           'Not run yet.',
         ),
+        // the calls a stage was denied — a headless stage has nobody to grant one, and spends a turn on another way
+        ...(denials.length > 0
+          ? [
+              ui.section('Denied', 'calls refused without asking — each a turn spent'),
+              ui.table(
+                [{ name: 'stage', width: 20 }, { name: 'tool', width: 6 }, { name: 'call', width: 30, isWide: true }],
+                denials.map(one => [{ text: one.where, color: C.muted }, { text: one.tool, color: C.muted }, { text: one.command, color: C.wait }]),
+                '',
+              ),
+            ]
+          : []),
         ui.section('Passes'),
         ui.table(
           [{ name: '#', width: 2, isNumber: true }, { name: 'pass', width: 16 }, COL.started, COL.time, { name: 'waited', width: 10, isNumber: true }, COL.tokens, { name: 'stages', width: 20, isWide: true }],

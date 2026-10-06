@@ -426,7 +426,8 @@ detect_tool() {
 # reading and text tools, and the three git verbs that look without changing anything (`git apply --check` is
 # how a stage tries a break patch). Measured on the bench: without them a stage hit the allow-list about three
 # times per story — `sed`, `xargs`, `git apply --check`, a `grep` after `git ls-files`, then `cd <folder> && …` chains
-# once those were allowed — each a wasted turn.
+# once those were allowed — each a wasted turn. What stays refused — a loop, a variable, `$(…)`, a path outside the
+# project — cost a 0.64.0 bench run about twenty denied calls (`status --story` lists them); the prompt says so.
 # A script fed on stdin (`python3 -`) stays out on purpose: a file is changed with the editor tools, and a
 # stage that reaches for a script instead is told so in its prompt.
 STAGE_SHELL="cd, ls, cat, head, tail, wc, sort, grep, find, xargs, sed, diff, echo, printf, pwd, mkdir, and git status, git diff, git log, git ls-files, git apply --check"
@@ -2079,7 +2080,10 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
 what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
 source; the building blocks' API is in the project's conventions file and the catalog, never in a jar.$catalog \
 The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL. Change a file \
-with the editor tools; a script fed on stdin (python3 -) is refused and costs a turn."
+with the editor tools; a script fed on stdin (python3 -) is refused and costs a turn. Every command is checked part \
+by part before it runs, and nobody is there to grant one: a loop, a variable or \$(…), a part outside that list and \
+a path outside the project are refused, each a turn spent. Run one plain command per call from the project root, \
+never a cd to an absolute path; read files with Read — several in parallel calls, never a loop over them."
 }
 
 start_stage() {                             # start_stage <story> -> the stage the story's files say it runs from

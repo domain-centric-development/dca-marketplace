@@ -347,7 +347,8 @@ the newest of them and prints what the stage reads, edits and runs, its answers 
 and cost. It works for any run, whoever started it — a session, a shell, a worker, a scheduled job — and
 starts nothing. The cost per stage is read from the same file's last event. The outputs stay beside the story,
 so a delivered story's processes can be read afterwards; in a shared builder or verifier each stage it begins is a
-heading (`── test`).
+heading (`── test`). A call that failed is `✗ <reason>`; one the tool denied because nobody could grant it is
+`✗ denied: …` once the process ended, and the result line counts them (`3 denied`).
 
 ## What a stage is told
 
@@ -388,6 +389,9 @@ starts fresh and reads the skill, the story and its predecessor's file again.
   input and cache tokens as the stream recorded them, output and cost shared out (`≈`) by what each
   stage wrote and by the tokens' relative prices. The parts add up to the process's line;
   `status` names the stage a running builder is in (`builder · test`).
+- A Claude stage runs headless: a call its allow-list does not cover — a loop, a variable, `$(…)`, a path
+  outside the project — is denied, and the stage spends a turn on another way. `status --story` counts
+  them per stage and per part (`notes`) and lists each call under *Denied*; the stage prompt names what stays refused.
 - `runs` counts invocations, repeat rounds included; `measured` those the tool reported on. The
   difference is shown as "without a usage report" — unknown, not zero.
 - Leave out `--story` for every story. `factory.sh backlog` shows each story's total in one line.

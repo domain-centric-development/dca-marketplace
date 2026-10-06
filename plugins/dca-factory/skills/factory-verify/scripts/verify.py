@@ -5432,6 +5432,40 @@ def run_groups(args):
             ("parts: the process's output is shared out by what each part wrote and adds up to what it reported",
              sum(p["output"] for p in got) == 800 and got and got[1]["output"] > got[0]["output"], shared),
         ]
+        # a call the tool denied: named after the process ended, with the stage it fell in; a failed command beside it
+        # stays a failure, and the result line counts the denials
+        denied_events = [
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill", "id": "u1",
+                                                           "input": {"skill": "stage-test"}}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "id": "u2",
+                                                           "input": {"command": "for f in src/*; do cat $f; done"}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "u2", "is_error": True,
+                                                      "content": "A variable in this command can't be checked before it runs"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "id": "u3",
+                                                           "input": {"command": "./gradlew test"}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "u3", "is_error": True,
+                                                      "content": "Exit code 1\nFAILED: TaskTest"}]}},
+            {"type": "result", "num_turns": 4, "permission_denials": [
+                {"tool_name": "Bash", "tool_use_id": "u2", "tool_input": {"command": "for f in src/*; do cat $f; done"}}]}]
+        denied_out = os.path.join(root, "builder-denied.jsonl")
+        with open(denied_out, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(e) for e in denied_events) + "\n")
+        probe = ("import importlib.util, json, sys\n"
+                 "spec = importlib.util.spec_from_file_location('cli', sys.argv[1]); cli = importlib.util.module_from_spec(spec)\n"
+                 "spec.loader.exec_module(cli)\n"
+                 "print(json.dumps({'denied': cli.stream_denials(sys.argv[2]),"
+                 " 'lines': cli.follow_lines(open(sys.argv[2]).read())[0]}))\n")
+        seen = json.loads(subprocess.run([sys.executable, "-c", probe, args.cli, denied_out], capture_output=True,
+                                         text=True, encoding="utf-8").stdout or "{}")
+        lines = seen.get("lines", [])
+        expectations += [
+            ("denied: a call the result names as denied is listed with the shared stage it fell in",
+             seen.get("denied") == [{"stage": "test", "tool": "Bash", "command": "for f in src/*; do cat $f; done"}], seen),
+            ("denied: follow marks the denied call, keeps a failed command a failure and counts denials in the result",
+             "✗ denied: A variable in this command can't be checked before it runs" in lines
+             and "✗ Exit code 1 — FAILED: TaskTest" in lines and any(l.startswith("■ done") and "1 denied" in l for l in lines),
+             lines),
+        ]
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)

@@ -26,8 +26,8 @@ const STORY = {
   passes: [],
   stages: { builder: { runs: 1, seconds: 480, tokens: 4_800_000, cost: 3.02, models: ['some-model'], parts: [
     { stage: 'plan', runs: 1, seconds: 72, tokens: 668_330, cost: 0.67 },
-    { stage: 'test', runs: 1, seconds: 238, tokens: 2_302_460, cost: 1.41 },
-  ] } },
+    { stage: 'test', runs: 1, seconds: 238, tokens: 2_302_460, cost: 1.41, denied: 1 },
+  ], denied: 1, denials: [{ stage: 'test', tool: 'Bash', command: 'for f in src/*.java; do cat $f; done' }] } },
 }
 const FOLLOW = { story: 'add-book', stage: 'builder', running: true, lines: ['· session started — some-model', '▸ Read plan.md', '  writing the first test'] }
 
@@ -67,6 +67,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'running-add-book' })
     expect(await pane.find({ text: /· test/ })).toBeDefined()
     expect(await pane.find({ text: /≈/ })).toBeDefined()
+    // a call the stage was denied is listed with the stage it fell in
+    expect(await pane.find({ text: /builder · test/ })).toBeDefined()
+    expect(await pane.find({ text: /for f in src/ })).toBeDefined()
     // a delivered stage's output stays readable: one link per process, oldest first, and its lines on a press
     expect(await pane.find({ text: 'verifier' })).toBeDefined()
     await pane.press({ key: 'output-builder' })

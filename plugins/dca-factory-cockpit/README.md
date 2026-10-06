@@ -18,7 +18,7 @@ factory works the same without it, in Claude Code, Codex or OpenCode.
 | 5 Delivered | delivered stories, epics with their outcome events, unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
 
 A story opens with its pipeline, the factory's numbers per stage — a shared builder's and verifier's stages beneath
-them, with their share of the cost — its passes, its history by day, its hand-overs, the output of every process it ran
+them, with their share of the cost, and the calls each was denied (a headless stage has nobody to grant one) — its passes, its history by day, its hand-overs, the output of every process it ran
 (what each read, edited and ran, through `factory.sh follow --process`) and its decision records.
 
 ## What it reads

@@ -97,7 +97,7 @@ export type StoryView = {
   criteria: number
   accepted_by: string
   passes: { label: string; start: string; end: string; seconds: number; tokens: number; stages: string[]; waited: number }[]
-  stages: Record<string, { runs: number; seconds: number; tokens: number; cost: number; models: string[]; parts?: StagePart[] }>
+  stages: Record<string, { runs: number; seconds: number; tokens: number; cost: number; models: string[]; parts?: StagePart[]; denied?: number; denials?: Denial[] }>
 }
 
 export type Cockpit = {
@@ -155,4 +155,7 @@ declare module 'claude-code' {
 
 // One stage inside a shared builder or verifier: its time and tokens read from the process's stream, its output and
 // cost an estimate (the process reports them once) — `factory.sh status --story` shows them as `≈`
-export type StagePart = { stage: string; runs: number; seconds: number; tokens: number; cost: number | null }
+export type StagePart = { stage: string; runs: number; seconds: number; tokens: number; cost: number | null; denied?: number }
+
+// A call the tool refused because nobody could grant it in a headless stage — each a turn spent on another way
+export type Denial = { stage: string; tool: string; command: string }

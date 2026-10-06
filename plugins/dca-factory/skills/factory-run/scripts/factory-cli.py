@@ -2115,18 +2115,61 @@ def stream_parts(path):
     return parts, cost
 
 
+def stream_denials(path):
+    """[{stage, tool, command}] — the calls a Claude stream's result names as denied permission, in the order they
+    were made, each with the shared stage it fell in ('' outside one). A headless stage has nobody to grant a
+    permission: the tool refuses the call, and the stage spends a turn on another way."""
+    try:
+        text = read_text(path)
+    except OSError:
+        return []
+    events = []
+    try:
+        whole = json.loads(text)                   # `--output-format json`: the result event alone
+        events = [whole] if isinstance(whole, dict) else []
+    except ValueError:
+        for raw in text.splitlines():
+            try:
+                event = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(event, dict):
+                events.append(event)
+    where, current, denied = {}, "", []
+    for event in events:
+        if event.get("type") == "assistant":
+            for block in (event.get("message") or {}).get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    found = PART_SKILL.search(str((block.get("input") or {}).get("skill", ""))) \
+                        if block.get("name") == "Skill" and isinstance(block.get("input"), dict) else None
+                    if found:
+                        current = found.group(1)
+                    where[block.get("id")] = current
+        elif event.get("type") == "result":
+            for one in event.get("permission_denials") or []:
+                if not isinstance(one, dict):
+                    continue
+                given = one.get("tool_input") or {}
+                arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
+                denied.append(dict(stage=where.get(one.get("tool_use_id"), ""), tool=str(one.get("tool_name", "")),
+                                   command=_short(str(arg), 160)))
+    return denied
+
+
 def window_parts(runs, story_id, window):
     """The parts of every run of one shared window of a story, summed per stage, in the stages' order:
-    [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or None)}]."""
+    [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or None), denied}]."""
     order = SHARED_WINDOWS.get(window, ())
     total = {}
     for path in sorted(glob.glob(os.path.join(runs, story_id, ".verify", f"{window}.*.out"))):
         parts, cost = stream_parts(path)
         weight = sum(p["weight"] for p in parts)
+        denied = [d["stage"] for d in stream_denials(path)]
         for part in parts:
             entry = total.setdefault(part["stage"], dict(stage=part["stage"], runs=0, seconds=0.0, input=0,
                                                          cache_read=0, cache_write=0, output=0, cost=0.0,
-                                                         priced=True))
+                                                         priced=True, denied=0))
+            entry["denied"] += denied.count(part["stage"])
             entry["runs"] += 1
             if part["start"] and part["end"]:
                 entry["seconds"] += max((part["end"] - part["start"]).total_seconds(), 0)
@@ -2204,6 +2247,13 @@ def story_model(cwd, epics, runs, story_id, live=False):
     for window in SHARED_WINDOWS:
         if window in facts["stages"]:
             facts["stages"][window]["parts"] = window_parts(runs, story_id, window)
+    # the calls a stage was denied: each a turn spent on another way
+    for stage, entry in facts["stages"].items():
+        entry["denials"] = [d for path in sorted(glob.glob(os.path.join(runs, story_id, ".verify", f"{stage}.*.out")))
+                            for d in stream_denials(path)]
+        entry["denied"] = len(entry["denials"])
+        if entry["denied"]:
+            entry["why"] = " · ".join(w for w in (entry.get("why", ""), f"{entry['denied']} denied") if w)
     models = sorted({m for e in facts["stages"].values() for m in e["models"]})
     not_applied = sorted({r for e in facts["stages"].values() if e["not_applied"] for r in e["requested"]})
     return dict(row=row, story=story_id, title=data.get("title", ""), epic=data.get("epic", ""),
@@ -2249,7 +2299,7 @@ def stage_cells(model):
             if per_stage:
                 sub.append("")
             if any_why:
-                sub.append("")
+                sub.append(f"{part['denied']} denied" if part.get("denied") else "")
             rows.append(sub)
     total = {k: sum(e.get(k, 0) for e in model["stages"].values())
              for k in ("runs", "seconds", "tokens", "measured", "cost") + USAGE_FIELDS}
@@ -2329,6 +2379,10 @@ def render_story_text(model, colour=False):
         headers, rows, right = stage_cells(model)
         out += section(stage_caption(model), colour) + table_text(headers, rows, right, total=True, colour=colour,
                                                                     first_bold=True)
+    denials = denial_rows(model)
+    if denials:
+        out += section("Denied — calls the tool refused without asking, each a turn spent", colour)
+        out += table_text(["stage", "tool", "call"], denials, colour=colour, first_bold=True)
     if model["decisions"]:
         out += section("Decisions", colour)
         out += table_text(["record", "state", "answer or question"],
@@ -2336,6 +2390,12 @@ def render_story_text(model, colour=False):
                           marks=[decision_mark(d) for d in model["decisions"]], first_bold=True)
     out += ["", "─" * 72] + next_text(model, colour) + [""]
     return "\n".join(out)
+
+
+def denial_rows(model):
+    """[stage, tool, call] for every call a stage was denied — a shared process's named with its stage inside."""
+    return [[f"{stage} · {d['stage']}" if d["stage"] and d["stage"] != stage else stage, d["tool"], d["command"]]
+            for stage in sorted(model["stages"], key=stage_rank) for d in model["stages"][stage].get("denials") or []]
 
 
 def render_story_md(model):
@@ -2355,6 +2415,10 @@ def render_story_md(model):
         headers, rows, right = stage_cells(model)
         rows = rows[:-1] + [[f"**{c}**" if str(c) else c for c in rows[-1]]]
         out += ["", f"**{stage_caption(model)}**", ""] + table_md(headers, rows, right, first_bold=True)
+    denials = denial_rows(model)
+    if denials:
+        out += ["", "**Denied** — calls the tool refused without asking, each a turn spent", ""]
+        out += table_md(["stage", "tool", "call"], [[a, b, f"`{c}`"] for a, b, c in denials], first_bold=True)
     if model["decisions"]:
         out += ["", "**Decisions**", ""]
         out += table_md(["", "record", "state", "answer or question"],
@@ -3255,11 +3319,24 @@ def _short(text, width=110):
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
-def follow_render(event):
-    """The lines one event of a tool's stream stands for — [] for an event that shows nothing."""
+def follow_render(event, denied=frozenset()):
+    """The lines one event of a tool's stream stands for — [] for an event that shows nothing. `denied` holds the
+    ids of the calls the stream's result names as denied permission: known once the process ended, so a running
+    one shows such a call as any failed call, by the reason the tool gave."""
     if not isinstance(event, dict):
         return []
     kind = event.get("type")
+    if kind == "user":
+        lines = []
+        for part in (event.get("message") or {}).get("content") or []:
+            if not (isinstance(part, dict) and part.get("type") == "tool_result" and part.get("is_error")):
+                continue
+            said = part.get("content")
+            if isinstance(said, list):
+                said = " ".join(str(p.get("text", "")) for p in said if isinstance(p, dict))
+            said = " — ".join([line.strip() for line in str(said or "").splitlines() if line.strip()][:2]) or "failed"
+            lines.append(f"✗ {'denied: ' if part.get('tool_use_id') in denied else ''}{_short(said, 120)}")
+        return lines
     # Claude: system / assistant / user / result
     if kind == "system" and event.get("subtype") == "init":
         return [f"· session started{(' — ' + str(event['model'])) if event.get('model') else ''}"]
@@ -3282,7 +3359,8 @@ def follow_render(event):
     if kind == "result":
         bits = [f"{event['num_turns']} turns" if event.get("num_turns") is not None else "",
                 f"${float(event['total_cost_usd']):.2f}" if event.get("total_cost_usd") is not None else "",
-                f"{int(event['duration_ms']) // 1000}s" if event.get("duration_ms") else ""]
+                f"{int(event['duration_ms']) // 1000}s" if event.get("duration_ms") else "",
+                f"{len(event['permission_denials'])} denied" if event.get("permission_denials") else ""]
         state = "stopped: " + str(event.get("subtype")) if event.get("is_error") else "done"
         return [f"■ {state}" + (" — " + ", ".join(b for b in bits if b) if any(bits) else "")]
     # Codex: item events
@@ -3313,15 +3391,18 @@ def follow_render(event):
 
 
 def follow_lines(text):
-    lines, ended = [], False
+    events, lines, ended, denied = [], [], False, set()
     for raw_line in text.splitlines():
         try:
-            event = json.loads(raw_line)
+            events.append(json.loads(raw_line))
         except ValueError:
             continue
+    for event in events:
         if isinstance(event, dict) and event.get("type") == "result":
             ended = True
-        lines += follow_render(event)
+            denied |= {d.get("tool_use_id") for d in event.get("permission_denials") or [] if isinstance(d, dict)}
+    for event in events:
+        lines += follow_render(event, denied)
     return lines, ended
 
 
