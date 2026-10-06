@@ -5348,6 +5348,41 @@ def run_groups(args):
              done.get("running") is False and str(done.get("lines", [""])[-1]).startswith("■ done")
              and text.startswith("── STORY-1 · builder"), (done, text[:200])),
         ]
+        # the parts of a shared builder: split where it loads a stage's skill; input and cache tokens per answer,
+        # the process's output and cost shared out — the parts add up to what the process reported
+        def answer(mid, stamp, skill=None, text="", read=0, write=0, out=1):
+            content = [{"type": "tool_use", "name": "Skill", "input": {"skill": skill}}] if skill else []
+            content += [{"type": "text", "text": text}] if text else []
+            return {"type": "assistant", "timestamp": stamp, "message": {"id": mid, "content": content, "usage": {
+                "input_tokens": 1, "cache_read_input_tokens": read, "cache_creation_input_tokens": write,
+                "cache_creation": {"ephemeral_1h_input_tokens": write, "ephemeral_5m_input_tokens": 0},
+                "output_tokens": out}}}
+        shared_events = [
+            answer("m1", "2026-10-06T08:00:00Z", skill="stage-plan", read=1000, write=100),
+            answer("m2", "2026-10-06T08:01:00Z", text="p" * 100, read=1000),
+            answer("m2", "2026-10-06T08:01:00Z", text="p" * 100, read=1000),      # one answer, two events
+            answer("m3", "2026-10-06T08:02:00Z", skill="dca-factory:stage-test", read=3000, write=300),
+            answer("m4", "2026-10-06T08:05:00Z", text="t" * 300, read=3000),
+            {"type": "result", "total_cost_usd": 2.0, "modelUsage": {"m": {"outputTokens": 800}}}]
+        parts_out = os.path.join(root, "builder-parts.jsonl")
+        with open(parts_out, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(e) for e in shared_events) + "\n")
+        probe = ("import importlib.util, json, sys\n"
+                 "spec = importlib.util.spec_from_file_location('cli', sys.argv[1]); cli = importlib.util.module_from_spec(spec)\n"
+                 "spec.loader.exec_module(cli)\n"
+                 "parts, cost = cli.stream_parts(sys.argv[2])\n"
+                 "print(json.dumps({'cost': cost, 'parts': [dict(stage=p['stage'], seconds=(p['end'] - p['start']).total_seconds(),"
+                 " read=p['cache_read'], output=p['output'], weight=p['weight']) for p in parts]}))\n")
+        shared = json.loads(subprocess.run([sys.executable, "-c", probe, args.cli, parts_out], capture_output=True,
+                                           text=True, encoding="utf-8").stdout or "{}")
+        got = shared.get("parts", [])
+        expectations += [
+            ("parts: a shared builder's stream splits where it loads a stage's skill, with each part's time and tokens",
+             [p["stage"] for p in got] == ["plan", "test"] and [p["seconds"] for p in got] == [120.0, 180.0]
+             and [p["read"] for p in got] == [2000, 6000], shared),
+            ("parts: the process's output is shared out by what each part wrote and adds up to what it reported",
+             sum(p["output"] for p in got) == 800 and got and got[1]["output"] > got[0]["output"], shared),
+        ]
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)

@@ -1543,6 +1543,8 @@ def status_model(cwd, epics, runs, live=False):
             continue
         interrupted = story_id in stories and stories[story_id]["state"] != "running"
         entry = dict(story=story_id, stage=stage, since=parse_time(started), interrupted=interrupted)
+        if stage in SHARED_WINDOWS and not interrupted:
+            entry["part"] = window_part_now(runs, story_id, stage)
         if live:
             since = parse_time(started)
             entry["ago"] = took_text((now - since).total_seconds()) + " ago" if since else ""
@@ -1891,7 +1893,8 @@ def waiting_running_text(model, colour):
     if model["running"]:
         for r in model["running"]:
             mark = "stopped" if r.get("interrupted") else "running"
-            line = f"{MARKS_TEXT[mark]} {r['story']}   {r['stage']}   since {stamp_text(r['since'])} UTC"
+            stage = f"{r['stage']} · {r['part']}" if r.get("part") else r["stage"]
+            line = f"{MARKS_TEXT[mark]} {r['story']}   {stage}   since {stamp_text(r['since'])} UTC"
             if r.get("interrupted"):
                 line += " · never ended — possibly interrupted"
             if r.get("ago"):
@@ -2015,6 +2018,143 @@ def decision_mark(decision):
     return "running"
 
 
+# --- the parts of a shared window ------------------------------------------------------------------------
+# A shared builder (plan … tidy) or verifier (judge, document) is one process with one usage report. Its
+# stream shows where each stage begins — the process loads the stage's skill — and every answer carries its
+# own tokens, so a part's time and tokens are read, not guessed. The process's cost is reported once; it is
+# split over the parts in the proportion of their tokens priced relative to input (output 5, cache write
+# 1.25 for five minutes or 2 for an hour, cache read 0.1 — the same ratios on every Claude model). The parts
+# add up to the process's cost; each part's share is an estimate and is shown as one.
+
+PART_WEIGHTS = {"input": 1.0, "output": 5.0, "cache_read": 0.1, "cache_write_5m": 1.25, "cache_write_1h": 2.0}
+PART_SKILL = re.compile(r"(?:^|:)stage-(plan|test|build|tidy|judge|document)$")
+
+
+def stream_parts(path):
+    """[{stage, start, end, input, cache_read, cache_write, output, weight}] of one shared process's stream,
+    in the order its stages began, and the process's reported cost (None when the stream has no result).
+
+    An answer's own usage in the stream carries its input and cache tokens, but its output only as counted when
+    the answer began; the final output is the process's alone. So the process's output is split over the parts
+    by what each part wrote — its text, its tool calls' input and its thinking — an estimate, like the cost."""
+    parts, current, answers, cost, output_total = [], None, {}, None, None
+    try:
+        lines = read_text(path).splitlines()
+    except OSError:
+        return [], None
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        moment = parse_time(str(event.get("timestamp", ""))) if event.get("timestamp") else None
+        if event.get("type") == "result":
+            if event.get("total_cost_usd") is not None:
+                cost = float(event["total_cost_usd"])
+            models = event.get("modelUsage") or {}
+            if models:
+                output_total = sum(int(m.get("outputTokens", 0)) for m in models.values() if isinstance(m, dict))
+            elif isinstance(event.get("usage"), dict):
+                output_total = int(event["usage"].get("output_tokens", 0))
+            continue
+        if event.get("type") != "assistant":
+            continue
+        message = event.get("message") or {}
+        for block in message.get("content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill":
+                found = PART_SKILL.search(str((block.get("input") or {}).get("skill", "")))
+                if found and (current is None or current["stage"] != found.group(1)):
+                    if current is not None and moment:
+                        current["end"] = moment          # a part lasts until the next one begins
+                    current = dict(stage=found.group(1), start=moment, end=moment, answers=set())
+                    parts.append(current)
+        if moment and current is not None:
+            current["end"] = moment
+        usage = message.get("usage") or {}
+        key = message.get("id") or f"anon-{len(answers)}"
+        seen = answers.setdefault(key, {"part": current, "usage": {}, "written": 0})
+        for block in message.get("content") or []:
+            if isinstance(block, dict):
+                seen["written"] += len(str(block.get("text", ""))) + len(str(block.get("thinking", ""))) \
+                    + (len(json.dumps(block.get("input"))) if block.get("type") == "tool_use" else 0)
+        for field, value in usage.items():
+            if isinstance(value, (int, float)):
+                seen["usage"][field] = max(seen["usage"].get(field, 0), value)
+        if isinstance(usage.get("cache_creation"), dict):
+            for field, value in usage["cache_creation"].items():
+                if isinstance(value, (int, float)):
+                    seen["usage"][field] = max(seen["usage"].get(field, 0), value)
+    if not parts:
+        return [], cost
+    for part in parts:
+        part.update(input=0, cache_read=0, cache_write=0, output=0, weight=0.0, written=0)
+    for seen in answers.values():
+        part = seen["part"] or parts[0]          # what the process did before it loaded the first stage
+        u = seen["usage"]
+        write = int(u.get("cache_creation_input_tokens", 0))
+        write_1h = int(u.get("ephemeral_1h_input_tokens", 0))
+        write_5m = max(write - write_1h, 0)
+        part["input"] += int(u.get("input_tokens", 0))
+        part["cache_read"] += int(u.get("cache_read_input_tokens", 0))
+        part["cache_write"] += write
+        part["output"] += int(u.get("output_tokens", 0))
+        part["written"] += seen["written"]
+        part["weight"] += (PART_WEIGHTS["input"] * int(u.get("input_tokens", 0))
+                           + PART_WEIGHTS["cache_read"] * int(u.get("cache_read_input_tokens", 0))
+                           + PART_WEIGHTS["cache_write_5m"] * write_5m + PART_WEIGHTS["cache_write_1h"] * write_1h)
+    written = sum(p["written"] for p in parts)
+    reported = output_total if output_total is not None else sum(p["output"] for p in parts)
+    for part in parts:
+        if written and reported >= sum(p["output"] for p in parts):
+            part["output"] = round(reported * part["written"] / written)
+        part["weight"] += PART_WEIGHTS["output"] * part["output"]
+        part.pop("answers", None)
+        part.pop("written", None)
+    return parts, cost
+
+
+def window_parts(runs, story_id, window):
+    """The parts of every run of one shared window of a story, summed per stage, in the stages' order:
+    [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or None)}]."""
+    order = SHARED_WINDOWS.get(window, ())
+    total = {}
+    for path in sorted(glob.glob(os.path.join(runs, story_id, ".verify", f"{window}.*.out"))):
+        parts, cost = stream_parts(path)
+        weight = sum(p["weight"] for p in parts)
+        for part in parts:
+            entry = total.setdefault(part["stage"], dict(stage=part["stage"], runs=0, seconds=0.0, input=0,
+                                                         cache_read=0, cache_write=0, output=0, cost=0.0,
+                                                         priced=True))
+            entry["runs"] += 1
+            if part["start"] and part["end"]:
+                entry["seconds"] += max((part["end"] - part["start"]).total_seconds(), 0)
+            for field in USAGE_FIELDS:
+                entry[field] += part[field]
+            if cost is None or not weight:
+                entry["priced"] = False
+            else:
+                entry["cost"] += cost * part["weight"] / weight
+    rows = []
+    for stage in [s for s in order if s in total] + [s for s in total if s not in order]:
+        entry = total[stage]
+        entry["tokens"] = sum(entry[f] for f in USAGE_FIELDS)
+        if not entry.pop("priced"):
+            entry["cost"] = None
+        rows.append(entry)
+    return rows
+
+
+def window_part_now(runs, story_id, window):
+    """The stage a running shared window is in, from its newest stream — '' when it has not loaded one."""
+    outs = sorted(glob.glob(os.path.join(runs, story_id, ".verify", f"{window}.*.out")))
+    if not outs:
+        return ""
+    parts, _cost = stream_parts(max(outs, key=os.path.getmtime))
+    return parts[-1]["stage"] if parts else ""
+
+
 def story_model(cwd, epics, runs, story_id, live=False):
     overview = status_model(cwd, epics, runs, live)
     row = next((r for r in overview["rows"] if r["story"] == story_id), None)
@@ -2061,6 +2201,9 @@ def story_model(cwd, epics, runs, story_id, live=False):
                 f"{given} — {question}" if given else f"open — {question}")
         decisions.append(dict(id=str(front["id"]).strip(), state=state,
                               kind="acceptance" if is_acceptance(front) else "question", text=text))
+    for window in SHARED_WINDOWS:
+        if window in facts["stages"]:
+            facts["stages"][window]["parts"] = window_parts(runs, story_id, window)
     models = sorted({m for e in facts["stages"].values() for m in e["models"]})
     not_applied = sorted({r for e in facts["stages"].values() if e["not_applied"] for r in e["requested"]})
     return dict(row=row, story=story_id, title=data.get("title", ""), epic=data.get("epic", ""),
@@ -2098,6 +2241,16 @@ def stage_cells(model):
         if any_why:
             cells.append(e.get("why", ""))
         rows.append(cells)
+        for part in e.get("parts") or []:
+            sub = [f"  · {part['stage']}", "", took_text(part["seconds"])] + token_cells(part, True)
+            sub[4] = "≈" + sub[4]                     # the output column: split by what each part wrote
+            if model["priced"]:
+                sub.append(f"≈{part['cost']:.2f}" if part["cost"] is not None else "—")
+            if per_stage:
+                sub.append("")
+            if any_why:
+                sub.append("")
+            rows.append(sub)
     total = {k: sum(e.get(k, 0) for e in model["stages"].values())
              for k in ("runs", "seconds", "tokens", "measured", "cost") + USAGE_FIELDS}
     cells = ["total", total["runs"], took_text(total["seconds"])] + token_cells(total, total["measured"])

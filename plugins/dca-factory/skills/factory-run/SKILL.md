@@ -427,6 +427,10 @@ doing, run `bash .agents/factory/factory.sh follow --once` (or `--story <id>`) a
 the stage reads, edits and runs, its answers, its turns and cost at the end; `follow` without `--once`
 keeps printing for a person at a terminal. It starts nothing.
 
+**Inside a shared process.** `factory.sh status --story <id>` shows a shared builder's or verifier's
+stages beneath it, split where it loaded each stage's skill: time and tokens from its stream, output and
+cost marked `≈` because the process reports them once; `status` names the stage a running builder is in.
+
 **What a story cost.** The runner asks Claude Code and Codex for their machine-readable output and
 records each invocation's tokens — input, cache read, cache write, output, and Claude's cost — as a
 `usage` line in the story's journal. `python3 .agents/factory/factory-cli.py --usage [--story <id>]`

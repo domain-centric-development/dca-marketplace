@@ -263,7 +263,7 @@ async function load($: EngineInterface, isQuiet: boolean, isLive: boolean): Prom
     waiting
       ? `factory: waits for you — ${waiting.story} ${waiting.what}`
       : running
-        ? `factory: ${running.story} · ${running.stage}`
+        ? `factory: ${running.story} · ${running.stage}${running.part ? ` · ${running.part}` : ''}`
         : `factory: ${now.status.next.text}`,
   )
 }
@@ -627,14 +627,26 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.section('Time per stage', "the factory's own numbers"),
         ui.table(
           [COL.stage, { name: 'share', width: 20 }, COL.time, COL.runs, COL.tokens, COL.cost, { name: 'model', width: 18 }],
-          perStage.map(([name, one]) => [
-            { text: name, bold: true },
-            { node: ui.progress(one.seconds, longest, 20, C.accent) },
-            { text: fmt.time(one.seconds) },
-            { text: String(one.runs), color: one.runs > 1 ? C.wait : C.muted },
-            { text: fmt.tokens(one.tokens) },
-            { text: fmt.cost(one.cost) },
-            { text: one.models.join(', ') || '—', color: C.muted },
+          perStage.flatMap(([name, one]) => [
+            [
+              { text: name, bold: true },
+              { node: ui.progress(one.seconds, longest, 20, C.accent) },
+              { text: fmt.time(one.seconds) },
+              { text: String(one.runs), color: one.runs > 1 ? C.wait : C.muted },
+              { text: fmt.tokens(one.tokens) },
+              { text: fmt.cost(one.cost) },
+              { text: one.models.join(', ') || '—', color: C.muted },
+            ],
+            // the stages inside a shared builder or verifier: time and tokens from its stream, the cost an estimate
+            ...(one.parts ?? []).map(part => [
+              { text: `  · ${part.stage}`, color: C.muted },
+              { node: ui.progress(part.seconds, longest, 20, C.line) },
+              { text: fmt.time(part.seconds), color: C.muted },
+              { text: '' },
+              { text: fmt.tokens(part.tokens), color: C.muted },
+              { text: part.cost === null ? '—' : `≈${fmt.cost(part.cost)}`, color: C.muted },
+              { text: '' },
+            ]),
           ]),
           'Not run yet.',
         ),
@@ -894,10 +906,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ]),
         ui.section('Running'),
         ui.table(
-          [COL.story(idWidth), COL.stage, { name: 'since', width: 14 }, { name: 'activity', width: 24, isWide: true }],
+          [COL.story(idWidth), { name: 'stage', width: 16 }, { name: 'since', width: 14 }, { name: 'activity', width: 24, isWide: true }],
           status.running.map(running => [
             { node: ui.link(`running-${running.story}`, running.story, () => void openStory($, running.story)) },
-            { text: running.stage, color: running.interrupted ? C.fail : C.accent, bold: true },
+            { text: running.part ? `${running.stage} · ${running.part}` : running.stage, color: running.interrupted ? C.fail : C.accent, bold: true },
             { text: running.interrupted ? 'interrupted' : running.ago ?? fmt.when(running.since), color: running.interrupted ? C.fail : C.muted },
             { text: running.activity ?? '—', color: C.muted },
           ]),

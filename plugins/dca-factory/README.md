@@ -379,6 +379,11 @@ STORY-1 total               6        6       102     2334744      160221    1483
 A small story on a small library, one round, Sonnet. Almost everything is cache read: every stage
 starts fresh and reads the skill, the story and its predecessor's file again.
 
+- A shared builder or verifier is one process with one report. `status --story` shows its stages
+  beneath it — `· plan`, `· test`, … — split where the process loads each stage's skill: time and
+  input and cache tokens as the stream recorded them, output and cost shared out (`≈`) by what each
+  stage wrote and by the tokens' relative prices. The parts add up to the process's line;
+  `status` names the stage a running builder is in (`builder · test`).
 - `runs` counts invocations, repeat rounds included; `measured` those the tool reported on. The
   difference is shown as "without a usage report" — unknown, not zero.
 - Leave out `--story` for every story. `factory.sh backlog` shows each story's total in one line.

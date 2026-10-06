@@ -22,7 +22,7 @@ export type Row = {
 export type FactoryStatus = {
   project: string
   waiting: { mark: string; story: string; what: string; action: Action }[]
-  running: { story: string; stage: string; since: string | null; interrupted: boolean; ago?: string; activity?: string }[]
+  running: { story: string; stage: string; since: string | null; interrupted: boolean; ago?: string; activity?: string; part?: string }[]
   epics: {
     epic: string
     rows: Row[]
@@ -97,7 +97,7 @@ export type StoryView = {
   criteria: number
   accepted_by: string
   passes: { label: string; start: string; end: string; seconds: number; tokens: number; stages: string[]; waited: number }[]
-  stages: Record<string, { runs: number; seconds: number; tokens: number; cost: number; models: string[] }>
+  stages: Record<string, { runs: number; seconds: number; tokens: number; cost: number; models: string[]; parts?: StagePart[] }>
 }
 
 export type Cockpit = {
@@ -148,3 +148,7 @@ declare module 'claude-code' {
     }
   }
 }
+
+// One stage inside a shared builder or verifier: its time and tokens read from the process's stream, its output and
+// cost an estimate (the process reports them once) — `factory.sh status --story` shows them as `≈`
+export type StagePart = { stage: string; runs: number; seconds: number; tokens: number; cost: number | null }
