@@ -1445,6 +1445,9 @@ def verify_runner(runner, verbose=False):
               and output.count("── gate build  (re-checked by the runner)") == 2
               and output.count("ran through") == 1,
               f"exit {code}; starts {starts}; prompts {[p[-120:] for p in prompts]}; {output.strip().splitlines()[-4:]}")
+        check("prompt: a stage is asked for independent calls in one turn and for plain commands the allow-list covers",
+              bool(prompts) and "into one turn" in prompts[0] and "one plain command per call" in prompts[0],
+              [p[-400:] for p in prompts[:1]])
 
     # 1b-buildback. the build stage finds a defect in a test's own code (not in what it asserts): it writes
     # `back: test`, and the round goes to the test stage — no human asked, the break proves the repair

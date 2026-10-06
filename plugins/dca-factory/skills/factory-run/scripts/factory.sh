@@ -428,6 +428,9 @@ detect_tool() {
 # times per story — `sed`, `xargs`, `git apply --check`, a `grep` after `git ls-files`, then `cd <folder> && …` chains
 # once those were allowed — each a wasted turn. What stays refused — a loop, a variable, `$(…)`, a path outside the
 # project — cost a 0.64.0 bench run about twenty denied calls (`status --story` lists them); the prompt says so.
+# Calls per turn: a 0.65.2 bench stage made 69 calls in 67 turns — one file written per turn, each turn resending
+# ≈170k of context; the same stage on another model made 41 calls in 19 turns. Across a whole run 75–85 % of the
+# turns held a single call. The prompt asks for independent calls in one turn.
 # A script fed on stdin (`python3 -`) stays out on purpose: a file is changed with the editor tools, and a
 # stage that reaches for a script instead is told so in its prompt.
 STAGE_SHELL="cd, ls, cat, head, tail, wc, sort, grep, find, xargs, sed, diff, echo, printf, pwd, mkdir, and git status, git diff, git log, git ls-files, git apply --check"
@@ -2083,7 +2086,9 @@ The shell you have without asking: the gate, the cli, the profile's commands, an
 with the editor tools; a script fed on stdin (python3 -) is refused and costs a turn. Every command is checked part \
 by part before it runs, and nobody is there to grant one: a loop, a variable or \$(…), a part outside that list and \
 a path outside the project are refused, each a turn spent. Run one plain command per call from the project root, \
-never a cd to an absolute path; read files with Read — several in parallel calls, never a loop over them."
+never a cd to an absolute path; read files with Read — several in parallel calls, never a loop over them. \
+Every turn sends this whole session again, so put the calls that do not wait for each other's result into one turn: \
+the files you read, the searches you run, the files you write that do not depend on one another."
 }
 
 start_stage() {                             # start_stage <story> -> the stage the story's files say it runs from
