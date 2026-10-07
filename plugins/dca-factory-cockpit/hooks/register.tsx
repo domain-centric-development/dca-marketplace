@@ -681,11 +681,11 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.chips(stagesOf(events), at),
         ui.section('Time per stage', "the factory's own numbers"),
         ui.table(
-          [COL.stage, { name: 'share', width: 20 }, COL.time, COL.runs, COL.tokens, COL.cost, { name: 'denied', width: 6, isNumber: true }, { name: 'model', width: 18 }],
+          [COL.stage, { name: 'share', width: 20, isElastic: true }, COL.time, COL.runs, COL.tokens, COL.cost, { name: 'denied', width: 6, isNumber: true }, { name: 'model', width: 18 }],
           perStage.flatMap(([name, one]) => [
             [
               { text: name, bold: true },
-              { node: ui.progress(one.seconds, longest, 20, C.accent) },
+              { node: ui.progress(one.seconds, longest, 20, C.accent, true) },
               { text: fmt.time(one.seconds) },
               { text: String(one.runs), color: one.runs > 1 ? C.wait : C.muted },
               { text: fmt.tokens(one.tokens) },
@@ -696,7 +696,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             // the stages inside a shared builder or verifier: time and tokens from its stream, the cost an estimate
             ...(one.parts ?? []).map(part => [
               { text: `  · ${part.stage}`, color: C.muted },
-              { node: ui.progress(part.seconds, longest, 20, C.line) },
+              { node: ui.progress(part.seconds, longest, 20, C.line, true) },
               { text: fmt.time(part.seconds), color: C.muted },
               { text: '' },
               { text: fmt.tokens(part.tokens), color: C.muted },
@@ -962,13 +962,13 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ask('story', 'Write a story', 'what should the product do next?', '/factory-backlog'),
         ask('wish', 'Wish', 'a wish in your words — it becomes a story and runs', '/factory-run'),
         ui.table(
-          [COL.mark, { name: 'epic', width: 26 }, { name: 'progress', width: 10 }, { name: 'delivered', width: 9, isNumber: true }, { name: 'drafts', width: 6, isNumber: true }, COL.outcome],
+          [COL.mark, { name: 'epic', width: 26 }, { name: 'progress', width: 10, isElastic: true }, { name: 'delivered', width: 9, isNumber: true }, { name: 'drafts', width: 6, isNumber: true }, COL.outcome],
           status.epics.map(epic => {
             const cells = epicCells(epic)
             return [
               cells.mark,
               { node: ui.link(`epic-${epic.epic}`, epic.title || epic.epic, () => void showDetail($, { kind: 'epic', epic: epic.epic })) },
-              { node: ui.progress(epic.delivered, epic.total, 10) },
+              { node: ui.progress(epic.delivered, epic.total, 10, C.done, true) },
               cells.count,
               cells.drafts,
               cells.outcome,

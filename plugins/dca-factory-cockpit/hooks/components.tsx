@@ -125,7 +125,7 @@ export type Field = { label: string; text: string; color?: string; bold?: boolea
 
 // `isWide`: the column takes what is left of the table's width and wraps its text instead of cutting it; `width` is
 // then its least width. Long text — an outcome, a goal, a question — goes in a wide column.
-export type Column = { name: string; width: number; isNumber?: boolean; isWide?: boolean }
+export type Column = { name: string; width: number; isNumber?: boolean; isWide?: boolean; isElastic?: boolean }
 export type Cell = { text?: string; color?: string; bold?: boolean; node?: RenderElement }
 
 // The columns every table shares, one width and one alignment each.
@@ -172,19 +172,33 @@ export function stageColor(run: StageRun): string {
   return C.done
 }
 
-// Every cell has a fixed width, so every row lines up: a wide column gets its share of what the pane has left after
-// the fixed columns, the bars between them (3 cells each), the frame (4) and the page's gutter (2) — never less than
-// its own width.
 // The widest a column of text grows to fit its entries.
 export const FIT_MAX = 40
+// The narrowest a wide column and any other column shrink to before the table is cut at the pane's edge.
+const MIN_WIDE = 12
+const MIN_COLUMN = 6
 
+// Wide columns share what the pane leaves — the fixed columns, the bars between them (3 cells each), the frame (4)
+// and the page's gutter (2) — down to MIN_WIDE. Where the table is still wider than the pane, the widest other
+// column gives a cell at a time — an elastic one first — down to MIN_COLUMN, so a narrow pane cuts long entries
+// instead of the table.
 export function sizeColumns(columns: Column[], width: number): Column[] {
-  const wide = columns.filter(column => column.isWide)
-  if (wide.length === 0) return columns
-  const fixed = columns.filter(column => !column.isWide).reduce((sum, column) => sum + column.width, 0)
   const chrome = (columns.length - 1) * 3 + 4 + 2
-  const share = Math.floor((width - fixed - chrome) / wide.length)
-  return columns.map(column => (column.isWide ? { ...column, width: Math.max(column.width, share) } : column))
+  const fixed = columns.filter(column => !column.isWide).reduce((sum, column) => sum + column.width, 0)
+  const wide = columns.filter(column => column.isWide).length
+  const share = wide > 0 ? Math.floor((width - fixed - chrome) / wide) : 0
+  const out = columns.map(column => (column.isWide ? { ...column, width: Math.max(MIN_WIDE, share) } : { ...column }))
+  let excess = out.reduce((sum, column) => sum + column.width, 0) + chrome - width
+  while (excess > 0) {
+    // an elastic column (a bar that scales to its cell) gives first, then the widest other
+    const widest = out
+      .filter(column => !column.isWide && column.width > MIN_COLUMN)
+      .sort((a, b) => Number(Boolean(b.isElastic)) - Number(Boolean(a.isElastic)) || b.width - a.width)[0]
+    if (!widest) break
+    widest.width -= 1
+    excess -= 1
+  }
+  return out
 }
 
 // A labelled pair takes PAIR cells when several share a row; the page's gutter (2) and a gap of 3 between pairs.
@@ -316,20 +330,23 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
 
   // A progress line: the filled part as a heavy line in its colour, the rest as a light line in the line colour. A line
   // sits in the middle of its cell, so two bars in rows one above the other never touch.
-  const progress = (part: number, whole: number, width: number, color: string = C.done) => {
+  // `inCell`: in a table's cell, where the bar takes the cell's width — a column that gives shrinks it.
+  const progress = (part: number, whole: number, width: number, color: string = C.done, inCell = false) => {
     const filled = filledCells(part, whole, width)
     // where the surface draws vectors, a bar as wide as its cells: a thin track, the part filled in its colour
     if (Svg && !isGrid) {
-      const pixels = width * 8
+      // drawn wider than any cell and scaled down to the one it is in, so a column that gives in a narrow pane
+      // shrinks the bar instead of cutting it
+      const pixels = 1000
       const share = whole > 0 ? Math.max(0, Math.min(1, part / whole)) : 0
       const source =
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${pixels}" height="8" viewBox="0 0 ${pixels} 8">` +
-        `<rect x="0" y="3" width="${pixels}" height="2" rx="1" fill="${C.line}"/>` +
-        (share > 0 ? `<rect x="0" y="2" width="${Math.max(2, Math.round(pixels * share))}" height="4" rx="2" fill="${color}"/>` : '') +
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${pixels}" height="8" viewBox="0 0 ${pixels} 8" preserveAspectRatio="none">` +
+        `<rect x="0" y="3" width="${pixels}" height="2" fill="${C.line}"/>` +
+        (share > 0 ? `<rect x="0" y="2" width="${Math.max(8, Math.round(pixels * share))}" height="4" fill="${color}"/>` : '') +
         `</svg>`
       return (
-        <Box width={width} flexShrink={0} height={1} alignItems="center">
-          <Svg source={source} alt={`${part} of ${whole}`} width={pixels} height={8} />
+        <Box width={inCell ? '100%' : width} flexShrink={0} height={1} alignItems="center" overflow="hidden">
+          <Svg source={source} alt={`${part} of ${whole}`} height={8} />
         </Box>
       )
     }
@@ -429,7 +446,7 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
 
     // A row of buttons with room above it.
     actions: (buttons: (RenderElement | false | null | undefined)[]) => (
-      <Box gap={1} marginTop={1} flexWrap="wrap">
+      <Box columnGap={1} rowGap={1} marginTop={1} flexWrap="wrap">
         {buttons.filter((button): button is RenderElement => Boolean(button))}
       </Box>
     ),
@@ -561,7 +578,7 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
         </Box>
       )
       return (
-        <Box flexWrap="wrap" alignItems="center" columnGap={1}>
+        <Box flexWrap="wrap" alignItems="center" columnGap={1} rowGap={1}>
           <Text color={C.accent}>ONCE</Text>
           {foundation.map(step)}
           <Text color={C.line}> ┃ </Text>
