@@ -221,18 +221,15 @@ export function components({ Box, Text, Button, Input, width, isGrid = true }: E
   )
 
   // The rules between columns sit in boxes of fixed width, one glyph per line, never in a padded text. Only a
-  // monospace grid joins line glyphs into rules: a surface that draws a proportional font (Desktop) leaves gaps
-  // between them, so there the columns are kept apart by the same width, empty, and the header by its colour.
-  const bar = (height: number, glyph = '│') =>
-    isGrid ? (
-      <Box width={3} flexShrink={0} flexDirection="column" alignItems="center" overflow="hidden">
-        {Array.from({ length: height }, () => (
-          <Text color={C.line}>{glyph}</Text>
-        ))}
-      </Box>
-    ) : (
-      <Box width={3} flexShrink={0} />
-    )
+  // monospace grid joins horizontal line glyphs into a rule: a surface that draws a proportional font (Desktop)
+  // draws them narrower than a cell, so there the header goes without its rule and stands apart by its colour.
+  const bar = (height: number, glyph = '│') => (
+    <Box width={3} flexShrink={0} flexDirection="column" alignItems="center" overflow="hidden">
+      {Array.from({ length: height }, () => (
+        <Text color={C.line}>{glyph}</Text>
+      ))}
+    </Box>
+  )
 
   const line = (columns: Column[], row: Cell[]) => {
     const lines = columns.map((column, index) => cellLines(column, row[index] ?? {}))

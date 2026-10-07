@@ -74,14 +74,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     // which a proportional font (Desktop) would shift off its column
     expect(await pane.find({ type: 'Text', text: /─┼─.*─┼─|┼──/ })).toBeUndefined()
     expect(await pane.find({ type: 'Text', text: / │ / })).toBeUndefined()
-    // line glyphs join into rules only on the terminal's grid; elsewhere the columns are kept apart by space alone
-    // (one bar stays on every surface: the one between the wordmark and the title in the head)
-    const bars = (await pane.findAll({ type: 'Text', text: '│' })).length
-    if (surface === 'terminal') expect(bars).toBeGreaterThan(1)
-    else {
-      expect(bars).toBe(1)
-      expect(await pane.find({ type: 'Text', text: /┼/ })).toBeUndefined()
-    }
+    // the bars between columns on every surface; the header's rule only on the terminal's grid
+    expect((await pane.findAll({ type: 'Text', text: '│' })).length).toBeGreaterThan(1)
+    if (surface === 'terminal') expect(await pane.find({ type: 'Text', text: /┼/ })).toBeDefined()
+    else expect(await pane.find({ type: 'Text', text: /┼/ })).toBeUndefined()
     // a call the stage was denied is listed with the stage it fell in
     expect(await pane.find({ text: /builder · test/ })).toBeDefined()
     expect(await pane.find({ text: /for f in src/ })).toBeDefined()
