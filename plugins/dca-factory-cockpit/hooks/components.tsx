@@ -175,6 +175,9 @@ export function stageColor(run: StageRun): string {
 // Every cell has a fixed width, so every row lines up: a wide column gets its share of what the pane has left after
 // the fixed columns, the bars between them (3 cells each), the frame (4) and the page's gutter (2) — never less than
 // its own width.
+// The widest a column of text grows to fit its entries.
+export const FIT_MAX = 40
+
 export function sizeColumns(columns: Column[], width: number): Column[] {
   const wide = columns.filter(column => column.isWide)
   if (wide.length === 0) return columns
@@ -211,13 +214,21 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
   // A mark is one cell on the terminal's grid; a proportional font draws ✓ and ◇ wider, so elsewhere it gets two.
   // A header is bold capitals, which a proportional font draws wider than a cell each: off the grid a column is at
   // least a third wider than its name, so no header is cut where its column has the room.
-  const sized = (columns: Column[]) =>
+  // A column of text is as wide as its longest entry or its name, up to FIT_MAX cells — its declared width is the
+  // floor only where it holds links or buttons, whose width the table cannot read. A wide column keeps sharing
+  // what is left of the pane.
+  const fitted = (columns: Column[], rows: Cell[][]) =>
+    columns.map((column, index) => {
+      if (column.isWide || column.width === 1) return column
+      const cells = rows.map(row => row[index] ?? {})
+      if (cells.some(cell => cell.node)) return column
+      const longest = Math.max(0, ...cells.map(cell => displayWidth(cell.text ?? '')))
+      const name = Math.ceil(displayWidth(column.name) * (isGrid ? 1 : 1.35))
+      return { ...column, width: Math.min(FIT_MAX, Math.max(longest, name, 1)) }
+    })
+  const sized = (columns: Column[], rows: Cell[][] = []) =>
     sizeColumns(
-      isGrid
-        ? columns
-        : columns.map(column =>
-            column.width === 1 ? { ...column, width: 2 } : { ...column, width: Math.max(column.width, Math.ceil(displayWidth(column.name) * 1.35)) },
-          ),
+      fitted(columns, rows).map(column => (!isGrid && column.width === 1 ? { ...column, width: 2 } : column)),
       width,
     )
 
@@ -362,7 +373,7 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
 
     // A table drawn as one: a frame, a bold header, a rule under it, a thin bar between the columns.
     table: (given: Column[], rows: Cell[][], empty = 'Nothing yet.') => {
-      const columns = sized(given)
+      const columns = sized(given, rows)
       return rows.length === 0 ? (
         <Box marginTop={1}>
           <Text color={C.muted}>{empty}</Text>

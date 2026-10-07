@@ -27,7 +27,8 @@ const STORY = {
   stages: { builder: { runs: 1, seconds: 480, tokens: 4_800_000, cost: 3.02, models: ['some-model'], input: 108, output: 46_433, cache_write: 137_058, cache_read: 4_616_401, parts: [
     { stage: 'plan', runs: 1, seconds: 72, tokens: 668_330, cost: 0.67 },
     { stage: 'test', runs: 1, seconds: 238, tokens: 2_302_460, cost: 1.41, denied: 1 },
-  ], denied: 1, denials: [{ stage: 'test', tool: 'Bash', command: 'for f in src/*.java; do cat $f; done' }] } },
+  ], denied: 1, denials: [{ stage: 'test', tool: 'Bash', command: 'for f in src/*.java; do cat $f; done' }] },
+    'review:hexagonal': { runs: 1, seconds: 70, tokens: 250_000, cost: 0.58, models: ['some-model'], input: 12, output: 5_400, cache_write: 54_000, cache_read: 190_500 } },
 }
 const FOLLOW = { story: 'add-book', stage: 'builder', running: true, lines: ['· session started — some-model', '▸ Read plan.md', '  writing the first test'] }
 
@@ -71,6 +72,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /≈/ })).toBeDefined()
     // the tokens by class, not only their sum
     expect(await pane.find({ text: 'TOKENS PER STAGE' })).toBeDefined()
+    // a column of text is as wide as its longest entry: a reviewer's stage name is not cut
+    expect(await pane.find({ type: 'Text', text: 'review:hexagonal' })).toBeDefined()
     expect(await pane.find({ text: 'cache read' })).toBeDefined()
     // a table's rules sit in boxes of their own: no text runs a rule across columns or pads a bar with spaces,
     // which a proportional font (Desktop) would shift off its column
