@@ -460,6 +460,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     Button,
     Input: 'Input' in rest ? rest.Input : null,
     width: e.props.bodyColumns ?? e.viewport?.columns ?? 100,
+    isGrid: e.surface === 'terminal',
   })
   const at = await $.clock.now()
   const current = await read($, tab)

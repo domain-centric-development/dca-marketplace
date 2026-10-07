@@ -197,9 +197,11 @@ export type Elements = {
   Input: ElementConstructor<InputProps> | null
   // the cells across the pane's body, for the widths of wide columns
   width: number
+  // whether the surface draws a monospace grid (the terminal): only there do line glyphs join into rules
+  isGrid?: boolean
 }
 
-export function components({ Box, Text, Button, Input, width }: Elements) {
+export function components({ Box, Text, Button, Input, width, isGrid = true }: Elements) {
 
   const sized = (columns: Column[]) => sizeColumns(columns, width)
 
@@ -218,16 +220,19 @@ export function components({ Box, Text, Button, Input, width }: Elements) {
     </Box>
   )
 
-  // The rules between columns sit in boxes of fixed width, one glyph per line, never in a padded text: a surface
-  // that draws a proportional font (Desktop) narrows the spaces and widens the line glyphs, and a rule drawn as text
-  // then drifts away from its column or wraps.
-  const bar = (height: number, glyph = '│') => (
-    <Box width={3} flexShrink={0} flexDirection="column" alignItems="center" overflow="hidden">
-      {Array.from({ length: height }, () => (
-        <Text color={C.line}>{glyph}</Text>
-      ))}
-    </Box>
-  )
+  // The rules between columns sit in boxes of fixed width, one glyph per line, never in a padded text. Only a
+  // monospace grid joins line glyphs into rules: a surface that draws a proportional font (Desktop) leaves gaps
+  // between them, so there the columns are kept apart by the same width, empty, and the header by its colour.
+  const bar = (height: number, glyph = '│') =>
+    isGrid ? (
+      <Box width={3} flexShrink={0} flexDirection="column" alignItems="center" overflow="hidden">
+        {Array.from({ length: height }, () => (
+          <Text color={C.line}>{glyph}</Text>
+        ))}
+      </Box>
+    ) : (
+      <Box width={3} flexShrink={0} />
+    )
 
   const line = (columns: Column[], row: Cell[]) => {
     const lines = columns.map((column, index) => cellLines(column, row[index] ?? {}))
@@ -236,7 +241,7 @@ export function components({ Box, Text, Button, Input, width }: Elements) {
   }
 
   // The rule under a header: per column a box of the column's width that clips its line to one row.
-  const rule = (columns: Column[]) => (
+  const rule = (columns: Column[]) => !isGrid ? null : (
     <Box>
       {columns.flatMap((column, index) => [
         ...(index > 0 ? [bar(1, '─┼─')] : []),
