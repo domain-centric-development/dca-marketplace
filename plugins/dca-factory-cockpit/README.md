@@ -54,6 +54,14 @@ hand-overs are read again only when its row changed or a stage of it runs.
 `0` opens Describe, `1`–`5` the cycle, ↑↓, Tab and Shift+Tab move, `b` goes back, `q` or `ctrl+x x` closes the pane (`/factory-cockpit close` from the prompt), `Esc` returns to the prompt. ← and → are Claude Code's own — a mod receives no left or right arrow. The pane has the keyboard after
 `/factory-cockpit`, a click into it, or `ctrl+x tab` — the last two only while the prompt is empty.
 
+## Terminal and Desktop
+
+The same data and actions on every surface; each draws what it draws best (`e.surface`). The terminal keeps its
+monospace grid: rules under table headers, bars and the wordmark as text. The Code tab of the Desktop app (and the
+editor and the mobile app) draws a proportional font: the tables keep their column bars but no header rule, a mark
+gets two cells, the Hex Graph stands before the wordmark and progress shows as a vector bar. A Markdown file opens in
+the surface's own renderer there; a story's diff opens in the highlighter's diff view everywhere.
+
 ## Early access
 
 Function hooks are an early-access surface of Claude Code and may change between releases; this plugin keeps its

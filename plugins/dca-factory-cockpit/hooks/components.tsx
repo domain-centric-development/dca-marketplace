@@ -1,4 +1,4 @@
-import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, SvgProps, TextProps } from 'claude-code'
+import type { BoxProps, ButtonProps, CodeProps, ElementConstructor, InputProps, MarkdownProps, RenderElement, SvgProps, TextProps } from 'claude-code'
 
 import type { StageRun } from '../types'
 import { duration, filledCells, fit, rounds, short, tokens, wrapWords } from './parse'
@@ -197,13 +197,16 @@ export type Elements = {
   Input: ElementConstructor<InputProps> | null
   // the vector leaf of the remote surfaces (Desktop, the editor, mobile); the terminal has none
   Svg?: ElementConstructor<SvgProps> | null
+  // every surface's own markdown and highlighter
+  Markdown?: ElementConstructor<MarkdownProps> | null
+  Code?: ElementConstructor<CodeProps> | null
   // the cells across the pane's body, for the widths of wide columns
   width: number
   // whether the surface draws a monospace grid (the terminal): only there do line glyphs join into rules
   isGrid?: boolean
 }
 
-export function components({ Box, Text, Button, Input, Svg = null, width, isGrid = true }: Elements) {
+export function components({ Box, Text, Button, Input, Svg = null, Markdown = null, Code = null, width, isGrid = true }: Elements) {
 
   // A mark is one cell on the terminal's grid; a proportional font draws ✓ and ◇ wider, so elsewhere it gets two.
   const sized = (columns: Column[]) =>
@@ -295,6 +298,21 @@ export function components({ Box, Text, Button, Input, Svg = null, width, isGrid
   // sits in the middle of its cell, so two bars in rows one above the other never touch.
   const progress = (part: number, whole: number, width: number, color: string = C.done) => {
     const filled = filledCells(part, whole, width)
+    // where the surface draws vectors, a bar as wide as its cells: a thin track, the part filled in its colour
+    if (Svg && !isGrid) {
+      const pixels = width * 8
+      const share = whole > 0 ? Math.max(0, Math.min(1, part / whole)) : 0
+      const source =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${pixels}" height="8" viewBox="0 0 ${pixels} 8">` +
+        `<rect x="0" y="3" width="${pixels}" height="2" rx="1" fill="${C.line}"/>` +
+        (share > 0 ? `<rect x="0" y="2" width="${Math.max(2, Math.round(pixels * share))}" height="4" rx="2" fill="${color}"/>` : '') +
+        `</svg>`
+      return (
+        <Box width={width} flexShrink={0} height={1} alignItems="center">
+          <Svg source={source} alt={`${part} of ${whole}`} width={pixels} height={8} />
+        </Box>
+      )
+    }
     // clipped to its cells and one row: a proportional font draws the line glyphs wider, and the line would wrap
     return (
       <Box width={width} flexShrink={0} height={1} overflow="hidden">
@@ -411,6 +429,16 @@ export function components({ Box, Text, Button, Input, Svg = null, width, isGrid
 
     // A Markdown file drawn line by line in the palette's colours — the surface's own Markdown takes the terminal's
     // text colour, which the painted background would swallow.
+    // A file as the surface draws it best: a diff in the highlighter's diff view everywhere; Markdown in the
+    // surface's own renderer where it draws in its own font and colours (off the terminal's painted grid); any other
+    // file as code. On the terminal a Markdown file is drawn line by line in the palette's colours.
+    file: (text: string, path: string) => {
+      if (Code && path.endsWith('.diff')) return [<Code source={text} format="diff" />]
+      if (Markdown && !isGrid && path.endsWith('.md')) return [<Markdown text={text} />]
+      if (Code && !path.endsWith('.md')) return [<Code source={text} path={path} />]
+      return null
+    },
+
     doc: (text: string) => {
       let isCode = false
       return text.split('\n').map(raw => {

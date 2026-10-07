@@ -61,10 +61,13 @@ async function loadJournal($: EngineInterface, root: string, story: string): Pro
   return parseJournal(await readText($, `${root}/${RUNS}/${story}/.verify/journal.tsv`))
 }
 
+// The hand-overs, and the story's diff once the gate has produced it.
 async function handovers($: EngineInterface, root: string, story: string): Promise<string[]> {
-  return (await $.fs.list(`${root}/${RUNS}/${story}`).catch(() => []))
+  const files = (await $.fs.list(`${root}/${RUNS}/${story}`).catch(() => []))
     .filter(entry => entry.kind === 'file' && entry.name.endsWith('.md') && !entry.name.startsWith('.'))
     .map(entry => entry.name)
+  const hasDiff = await $.fs.exists(`${root}/${RUNS}/${story}/.verify/story.diff`).catch(() => false)
+  return hasDiff ? [...files, '.verify/story.diff'] : files
 }
 
 // The processes a story ran, from the names of their outputs (`builder.085007.out` → builder), oldest first.
@@ -460,6 +463,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     Button,
     Input: 'Input' in rest ? rest.Input : null,
     Svg: 'Svg' in rest ? rest.Svg : null,
+    Markdown: 'Markdown' in rest ? rest.Markdown : null,
+    Code: 'Code' in rest ? rest.Code : null,
     width: e.props.bodyColumns ?? e.viewport?.columns ?? 100,
     isGrid: e.surface === 'terminal',
   })
@@ -619,7 +624,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back)), { hotkey: 'b' }),
           ui.button('edit', '✎ edit', () => void editFile($, open.path), { hotkey: 'e' }),
         ]),
-        ui.framed(ui.doc(await read($, fileText))),
+        ui.framed(await (async () => { const text = await read($, fileText); return ui.file(text, open.path) ?? ui.doc(text) })()),
       ],
       'b back · e edit in your editor',
     )
@@ -772,7 +777,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.table(
           [{ name: 'file', width: 20 }],
           (now.handovers[open.id] ?? []).map(file => [
-            { node: ui.link(`file-${file}`, file, () => void openFile($, `${now.root}/.dca-factory/runs/${open.id}/${file}`, `${open.id} / ${file}`, open)) },
+            { node: ui.link(`file-${file.replace('.verify/', '')}`, file.replace('.verify/', ''), () => void openFile($, `${now.root}/.dca-factory/runs/${open.id}/${file}`, `${open.id} / ${file.replace('.verify/', '')}`, open)) },
           ]),
           'No hand-over yet.',
         ),

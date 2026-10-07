@@ -41,7 +41,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
         ? [{ name: 'verifier.090000.out', kind: 'file', size: 0, mtimeMs: 2, isLink: false }, { name: 'builder.085007.out', kind: 'file', size: 0, mtimeMs: 1, isLink: false }]
         : [],
     }) as never)
-    on('fs.read', async () => ({ deny: 'missing' }))
+    on('fs.read', async (_: unknown, e: { path: string }) =>
+      e.path.endsWith('/story.diff') ? { value: '--- a/A.java\n+++ b/A.java\n@@ -1,1 +1,1 @@\n-old\n+new\n' } : { deny: 'missing' },
+    )
     on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
       asked.push([...e.argv.slice(2)])
       const out = e.argv.includes('--process') ? { story: 'add-book', stage: 'builder', running: false, lines: ['── plan', '▸ Write plan.md'] } : e.argv.includes('follow') ? FOLLOW : e.argv.includes('--story') ? STORY : e.argv.includes('decisions') ? { records: [] } : e.argv.includes('--list') ? { topics: [] } : STATUS
@@ -75,8 +77,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ type: 'Text', text: /─┼─.*─┼─|┼──/ })).toBeUndefined()
     expect(await pane.find({ type: 'Text', text: / │ / })).toBeUndefined()
     // the Hex Graph before the wordmark where the surface draws vectors, nothing on the terminal
+    // and the stages' shares as vector bars there, beside the mark
     if (surface === 'terminal') expect(await pane.find({ type: 'Svg' })).toBeUndefined()
-    else expect(await pane.find({ type: 'Svg' })).toBeDefined()
+    else expect((await pane.findAll({ type: 'Svg' })).length).toBeGreaterThan(1)
     // the bars between columns on every surface; the header's rule only on the terminal's grid
     expect((await pane.findAll({ type: 'Text', text: '│' })).length).toBeGreaterThan(1)
     if (surface === 'terminal') expect(await pane.find({ type: 'Text', text: /┼/ })).toBeDefined()
@@ -86,6 +89,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /for f in src/ })).toBeDefined()
     // a delivered stage's output stays readable: one link per process, oldest first, and its lines on a press
     expect(await pane.find({ text: 'verifier' })).toBeDefined()
+    // the story's diff opens in the highlighter's diff view, on every surface
+    expect(await pane.find({ text: 'story.diff' })).toBeDefined()
+    await pane.press({ key: 'file-story.diff' })
+    expect(await pane.find({ type: 'Code' })).toBeDefined()
+    await pane.press({ key: 'back' })
     await pane.press({ key: 'output-builder' })
     expect(asked.some(argv => argv.includes('--process') && argv.includes('builder'))).toBe(true)
     expect(await pane.find({ text: /── plan/ })).toBeDefined()
