@@ -70,6 +70,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     // the tokens by class, not only their sum
     expect(await pane.find({ text: 'TOKENS PER STAGE' })).toBeDefined()
     expect(await pane.find({ text: 'cache read' })).toBeDefined()
+    // a table's rules sit in boxes of their own: no text runs a rule across columns or pads a bar with spaces,
+    // which a proportional font (Desktop) would shift off its column
+    expect(await pane.find({ type: 'Text', text: /─┼─.*─┼─|┼──/ })).toBeUndefined()
+    expect(await pane.find({ type: 'Text', text: / │ / })).toBeUndefined()
     // a call the stage was denied is listed with the stage it fell in
     expect(await pane.find({ text: /builder · test/ })).toBeDefined()
     expect(await pane.find({ text: /for f in src/ })).toBeDefined()

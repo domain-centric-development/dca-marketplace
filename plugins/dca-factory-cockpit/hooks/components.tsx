@@ -218,12 +218,34 @@ export function components({ Box, Text, Button, Input, width }: Elements) {
     </Box>
   )
 
+  // The rules between columns sit in boxes of fixed width, one glyph per line, never in a padded text: a surface
+  // that draws a proportional font (Desktop) narrows the spaces and widens the line glyphs, and a rule drawn as text
+  // then drifts away from its column or wraps.
+  const bar = (height: number, glyph = '│') => (
+    <Box width={3} flexShrink={0} flexDirection="column" alignItems="center" overflow="hidden">
+      {Array.from({ length: height }, () => (
+        <Text color={C.line}>{glyph}</Text>
+      ))}
+    </Box>
+  )
+
   const line = (columns: Column[], row: Cell[]) => {
     const lines = columns.map((column, index) => cellLines(column, row[index] ?? {}))
     const height = Math.max(1, ...lines.map(one => one.length))
-    const bar = <Text color={C.line}>{Array.from({ length: height }, () => ' │ ').join('\n')}</Text>
-    return <Box>{columns.flatMap((column, index) => [...(index > 0 ? [bar] : []), tableCell(column, row[index] ?? {}, lines[index] ?? [''])])}</Box>
+    return <Box>{columns.flatMap((column, index) => [...(index > 0 ? [bar(height)] : []), tableCell(column, row[index] ?? {}, lines[index] ?? [''])])}</Box>
   }
+
+  // The rule under a header: per column a box of the column's width that clips its line to one row.
+  const rule = (columns: Column[]) => (
+    <Box>
+      {columns.flatMap((column, index) => [
+        ...(index > 0 ? [bar(1, '─┼─')] : []),
+        <Box width={column.width} flexShrink={0} height={1} overflow="hidden">
+          <Text color={C.line}>{'─'.repeat(column.width)}</Text>
+        </Box>,
+      ])}
+    </Box>
+  )
 
   // Labelled values: the label as a kicker in a fixed column, the value beside it; `wanted` pairs side by side at
   // most — as many as the pane's width holds (PAIR cells each, a gap between). Empty values are left out.
@@ -267,8 +289,9 @@ export function components({ Box, Text, Button, Input, width }: Elements) {
   // sits in the middle of its cell, so two bars in rows one above the other never touch.
   const progress = (part: number, whole: number, width: number, color: string = C.done) => {
     const filled = filledCells(part, whole, width)
+    // clipped to its cells and one row: a proportional font draws the line glyphs wider, and the line would wrap
     return (
-      <Box>
+      <Box width={width} flexShrink={0} height={1} overflow="hidden">
         <Text color={color}>{'━'.repeat(filled)}</Text>
         <Text color={C.line}>{'─'.repeat(width - filled)}</Text>
       </Box>
@@ -299,7 +322,7 @@ export function components({ Box, Text, Button, Input, width }: Elements) {
       ) : (
         <Box flexDirection="column" borderStyle="round" borderColor={C.line} paddingX={1} marginTop={1}>
           {line(columns, columns.map(column => ({ text: column.name.toUpperCase(), bold: true, color: C.accent })))}
-          <Text color={C.line}>{columns.map(column => '─'.repeat(column.width)).join('─┼─')}</Text>
+          {rule(columns)}
           {rows.map(row => line(columns, row))}
         </Box>
       )
