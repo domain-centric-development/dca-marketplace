@@ -203,14 +203,16 @@ export type Elements = {
 
 export function components({ Box, Text, Button, Input, width, isGrid = true }: Elements) {
 
-  const sized = (columns: Column[]) => sizeColumns(columns, width)
+  // A mark is one cell on the terminal's grid; a proportional font draws ✓ and ◇ wider, so elsewhere it gets two.
+  const sized = (columns: Column[]) =>
+    sizeColumns(isGrid ? columns : columns.map(column => (column.width === 1 ? { ...column, width: 2 } : column)), width)
 
   // A wide cell is wrapped here, line by line, so the row knows its height and the bars run the whole of it.
   const cellLines = (column: Column, value: Cell): string[] =>
     value.node ? [''] : column.isWide ? wrapWords(value.text ?? '', column.width) : [value.text ?? '']
 
   const tableCell = (column: Column, value: Cell, lines: string[]) => (
-    <Box width={column.width} flexShrink={0} flexDirection="column" alignItems={column.isNumber ? 'flex-end' : 'flex-start'}>
+    <Box width={column.width} flexShrink={0} flexDirection="column" alignItems={column.isNumber ? 'flex-end' : 'flex-start'} overflow="hidden">
       {value.node ??
         lines.map(text => (
           <Text color={value.color ?? C.text} bold={value.bold} wrap="truncate">
@@ -431,7 +433,7 @@ export function components({ Box, Text, Button, Input, width, isGrid = true }: E
     // A field that sends what is typed; where the surface has none (mobile), a button that fills the prompt. It
     // carries its own room above, the same in every tab.
     ask: (key: string, label: string, placeholder: string, onSend: (value: string) => void, onFill: () => void) => (
-      <Box marginTop={1} flexDirection="column">
+      <Box marginTop={1} flexDirection="column" width="100%">
         {Input ? (
           <Input key={key} label={`${BY_CLAUDE} ${label}`} placeholder={placeholder} submitLabel="send to Claude" onSubmit={(value: string) => onSend(value)} />
         ) : (
