@@ -216,10 +216,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 14
+CONTRACT = 15
 
 
-VERSION = "0.65.5"
+VERSION = "0.66.0"
 
 
 def read_front_matter(path):
@@ -873,6 +873,126 @@ def check_invariants(result, profile, cwd, runs, story_id, front, mapping):
     else:
         result.ok("invariants", f"every rule the plan names has a unit test of its own "
                                 f"({sum(len(r) for r in named.values())} rules, {len(rows)} rows)")
+
+
+CLAUSES_MARKER = "<!-- gate:clauses -->"
+CLAUSE_LEVELS = ("unit", "port", "adapter", "e2e")
+#: Words that make a clause a statement about what is stored — it holds through the input port with the real store,
+#: never in an adapter test whose input ports are stubs, where the assertion only reads back the stub's answer.
+STATE_WORDS = re.compile(r"\b(bleibt|bleiben|unverändert|weiterhin|danach|gespeichert|gelöscht|remains?|stays?|"
+                         r"unchanged|still|afterwards|stored|persisted|deleted)\b", re.IGNORECASE)
+
+
+def scenario_clauses(body):
+    """{scenario key: [(n, "Then …" / "And …")]} — what each scenario says is observed: its `Then` and every `And` or
+    `But` after it, numbered from 1. The `Given` and `When` steps are the arrangement, not an expectation."""
+    clauses, key, phase, collecting = {}, None, None, False
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("## acceptance criteria"):
+            collecting = True
+            continue
+        if collecting and line.startswith("## "):
+            break
+        if not collecting:
+            continue
+        if line.startswith("#### "):
+            key, phase = re.sub(r"\s*\(happy path\)$", "", line[5:].strip()), None
+            continue
+        step = STEP.match(stripped)
+        if not step or key is None:
+            continue
+        word, text = step.groups()
+        if word in ("Given", "When", "Then"):
+            phase = word
+        if phase == "Then" and word in ("Then", "And", "But"):
+            entries = clauses.setdefault(key, [])
+            entries.append((len(entries) + 1, f"{word} {text}".strip()))
+    return clauses
+
+
+def read_clause_rows(text):
+    """The `gate:clauses` table of tests.md: [(key, n, location, level)] — `| <key> | <n> | <clause> | <File>:<line> |
+    <level> |`. None when the table is absent."""
+    if CLAUSES_MARKER not in text:
+        return None
+    rows = []
+    for line in text.split(CLAUSES_MARKER, 1)[1].splitlines():
+        stripped = line.strip()
+        if stripped.startswith("##"):
+            break
+        cells = [c.strip().strip("`") for c in stripped.strip("|").split("|")] if stripped.startswith("|") else []
+        if len(cells) < 5 or cells[0].lower() == "criterion" or set(cells[0]) <= set("-: "):
+            continue
+        number = re.match(r"\d+", cells[1])
+        rows.append((cells[0], int(number.group()) if number else 0, cells[3], cells[4].lower()))
+    return rows
+
+
+def asserts_at(path, number):
+    """Whether the statement at line `number` of `path` asserts: the line or the three before it (a call chain's
+    start) carry an assertion library's call, a framework's expectation or a mock's verification."""
+    try:
+        lines = read_text(path).splitlines()
+    except OSError:
+        return False
+    if not 1 <= number <= len(lines):
+        return False
+    return bool(ASSERTION_STATEMENT.search(" ".join(lines[max(number - 4, 0):number])))
+
+
+def check_clauses(result, profile, cwd, runs, story_id, front, body, mapping, located):
+    """Contract 15: every expectation of every scenario — its `Then` and each `And` after it — names the line of the
+    test that asserts it, in tests.md's `gate:clauses` table, with the level it runs at. A clause without a line is
+    an expectation nobody asserted; a clause about what is stored, asserted in an adapter test against stubbed input
+    ports, asserts only the stub. Both reached the judge as majors, run after run."""
+    if story_kind(front) != "story" or contract_of(profile) < 15:
+        return
+    wanted = scenario_clauses(body)
+    if not wanted:
+        return
+    tests_path = os.path.join(runs, story_id, "tests.md")
+    rows = read_clause_rows(read_text(tests_path)) if os.path.isfile(tests_path) else None
+    if rows is None:
+        result.fail("clauses", f"tests.md has no `{CLAUSES_MARKER}` table under `## Clauses` — `factory-cli.py "
+                               "--files-skeleton <story> test` writes one row per `Then`/`And`; fill in each row's "
+                               "`<File>:<line>` and level")
+        return
+    given = {(key, n): (location, level) for key, n, location, level in rows}
+    problems, state_on_stub, counted = [], [], 0
+    for key, clauses in wanted.items():
+        own = {os.path.normpath(located[s]) for s in mapping.get(key, []) if located.get(s)}
+        for n, clause in clauses:
+            location, level = given.get((key, n), ("", ""))
+            if not location:
+                problems.append(f"{key} {n} ({clause[:50]}) has no assertion line")
+                continue
+            found = re.match(r"(.+?):L?(\d+)", location)
+            path = os.path.join(cwd, found.group(1)) if found else ""
+            if not found or not os.path.isfile(path):
+                problems.append(f"{key} {n}: `{location}` is no `<File>:<line>` in the project")
+                continue
+            if not asserts_at(path, int(found.group(2))):
+                problems.append(f"{key} {n}: `{location}` asserts nothing — no assertion at or just above that line")
+                continue
+            if own and os.path.normpath(path) not in own and not re.search(r"(^|/)tests?[^/]*/", found.group(1)):
+                problems.append(f"{key} {n}: `{location}` is in no test of {key} and no test source")
+                continue
+            if level not in CLAUSE_LEVELS:
+                problems.append(f"{key} {n}: level `{level or '—'}` is none of {', '.join(CLAUSE_LEVELS)}")
+                continue
+            if level == "adapter" and STATE_WORDS.search(clause):
+                state_on_stub.append(f"{key} {n} ({clause[:60]})")
+                continue
+            counted += 1
+    if problems:
+        result.fail("clauses", "the `gate:clauses` table: " + "; ".join(problems[:6]) + (" …" if len(problems) > 6 else ""))
+    elif state_on_stub:
+        result.fail("clauses", "clauses about what is stored, asserted at the adapter level: " + "; ".join(state_on_stub[:6])
+                               + " — an adapter test's input ports are stubs, so the assertion reads back the stub; "
+                               "assert the clause through the input port with the real store (`port`), or end to end")
+    else:
+        result.ok("clauses", f"every expectation of every scenario names its assertion ({counted} clause(s))")
 
 
 def check_levels(result, profile, runs, story_id, front, body, mapping, located):
@@ -4830,6 +4950,7 @@ def main(argv):
                 check_plan_levels(result, args.runs, story_id)
                 check_invariants(result, profile, cwd, args.runs, story_id, front, mapping)
                 check_levels(result, profile, args.runs, story_id, front, body, mapping, located)
+                check_clauses(result, profile, cwd, args.runs, story_id, front, body, mapping, located)
                 check_titles(result, profile, cwd, front, body, mapping, located)
             # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
             expected = "red" if args.stage == "test" and story_kind(front) == "story" else "green"

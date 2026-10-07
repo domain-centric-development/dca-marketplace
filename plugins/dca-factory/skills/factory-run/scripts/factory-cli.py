@@ -3016,6 +3016,8 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   writes it from the tree, and the invariant rows below: run it, add the rest
 - `## Invariants`: `<!-- gate:invariants -->`, a row per plan rule `| <Element> | <n> | <rule> | <Class>#<method> |`:
   each its own test, not a criterion's (`invariants`)
+- `## Clauses` (contract 15): `<!-- gate:clauses -->`, per `Then`/`And` `| <key> | <n> | <clause> | <File>:<line> | <level> |`
+  — the line asserting it, level `unit|port|adapter|e2e`; a stored-state clause never `adapter` (`clauses`)
 - `## Notes`: `- uncovered: <key> — <why>` only when unavoidable — not what a test fails on: the red run records it
 - stubs: a type with nothing a criterion observes (a record and its fields, an enum, an interface, an exception type) is
   written whole here; a method whose outcome a criterion asserts throws — whatever a criterion observes, throws"""
@@ -3198,7 +3200,45 @@ def files_skeleton(runs, story_id, stage, cwd="."):
     code = _files_skeleton(runs, story_id, stage, cwd)
     if code == 0 and stage == "test":
         invariants_skeleton(runs, story_id)
+        clauses_skeleton(runs, story_id, cwd)
     return code
+
+
+def clauses_skeleton(runs, story_id, cwd="."):
+    """Contract 15: tests.md's `## Clauses` table from the story's scenarios — one row per `Then` and each `And` after
+    it, the clause's text written by the pipeline; the stage fills in only `<File>:<line>` and the level. Rows already
+    there are kept, missing ones added."""
+    if _gate.contract_of(read_profile(resolve_profile(None, cwd))) < 15:
+        return
+    target = os.path.join(runs, story_id, "tests.md")
+    try:
+        story_path = find_story(place("epics"), story_id)
+        wanted = _gate.scenario_clauses(read_front_matter(story_path)[1])
+    except GateError:
+        return
+    if not wanted or not os.path.isfile(target):
+        return
+    text = read_text(target)
+    present = {(key, n) for key, n, _loc, _lvl in (_gate.read_clause_rows(text) or [])}
+    rows = [f"| {key} | {n} | {clause.replace('|', '/')} | | |" for key, clauses in wanted.items()
+            for n, clause in clauses if (key, n) not in present]
+    if not rows:
+        return
+    if _gate.CLAUSES_MARKER not in text:
+        text = text.rstrip("\n") + "\n\n## Clauses\n" + _gate.CLAUSES_MARKER + \
+            "\n| criterion | n | clause | assertion | level |\n| --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n"
+    else:
+        lines = text.splitlines()
+        at = next(i for i, line in enumerate(lines) if _gate.CLAUSES_MARKER in line)
+        end = next((i for i in range(at + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+        while end > at + 1 and not lines[end - 1].strip():
+            end -= 1
+        lines = lines[:end] + rows + lines[end:]
+        text = "\n".join(lines).rstrip("\n") + "\n"
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    print(f"factory: {runs}/{story_id}/tests.md — {len(rows)} clause row(s) under `## Clauses`; fill in each "
+          "`<File>:<line>` and level (unit, port, adapter, e2e)")
 
 
 def invariants_skeleton(runs, story_id):

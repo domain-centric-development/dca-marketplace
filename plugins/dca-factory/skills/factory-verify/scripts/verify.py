@@ -3793,7 +3793,7 @@ def run_groups(args):
          dict(story=STORY_SCENARIOS)),
         (Case("test: a scenario's key is what the test stage binds", "test", 0,
               must_pass=("tests-mapped", "tests-red")),
-         dict(story=STORY_SCENARIOS)),
+         dict(story=STORY_SCENARIOS, profile=PROFILE + "contract: 14\n")),
         (Case("plan: a rule without a scenario is refused", "plan", 1, must_fail=("gate",),
               text=("has no scenario",)),
          dict(story=STORY_SCENARIOS.replace("### Rule: An empty record is not an error\n",
@@ -3838,14 +3838,14 @@ def run_groups(args):
                               "class WidgetPageTest { void showsTheThing() {} }\n"),))),
         (Case("test: a scenario's `Title:` line is the title its end-user test carries", "test", 0,
               must_pass=("test-titles",)),
-         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:") + "contract: 14\n",
               story=STORY_SCENARIOS.replace("#### shows-the-thing\n", "#### shows-the-thing (happy path)\nTitle: The list shows what is recorded\n")
               .replace("#### shows-nothing-when-empty (happy path)", "#### shows-nothing-when-empty"),
               extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
                               "class WidgetPageTest { @DisplayName(\"The list shows what is recorded\") void showsTheThing() {} }\n"),))),
         (Case("test: a `Title:` with a quote matches the escaped literal its end-user test carries", "test", 0,
               must_pass=("test-titles",)),
-         dict(profile=PROFILE.replace("test.pages:", "e2eTest:"),
+         dict(profile=PROFILE.replace("test.pages:", "e2eTest:") + "contract: 14\n",
               story=STORY_SCENARIOS.replace("#### shows-the-thing\n", "#### shows-the-thing (happy path)\nTitle: The list shows a \"Recorded\" heading\n")
               .replace("#### shows-nothing-when-empty (happy path)", "#### shows-nothing-when-empty"),
               extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
@@ -5299,7 +5299,7 @@ def run_groups(args):
         expectations.append(("contract: --contract test prints the table marker, the selector pattern the gate matches and the "
                              "Files section", code_t == 0 and "<!-- gate:tests -->" in text_t
                              and repr(gate_names.SELECTOR.pattern) in text_t and repr(gate_names.MAPPING_ROW.pattern) in text_t
-                             and "## Files" in text_t and ".tests-red" in text_t and len(text_t) < 3000,
+                             and "## Files" in text_t and ".tests-red" in text_t and len(text_t) < 3300,   # contract 15's clauses row
                              text_t[:300]))
         expectations.append(("contract: plan, judge and document print their shapes; an unknown stage is refused",
                              code_p == 0 and "level: e2e | integration | browser-only" in text_p
@@ -5934,6 +5934,57 @@ def run_groups(args):
         expectations.append(("claim: a session's stage mark is refused while another worker holds the checkout",
                              out.returncode == 3 and not os.path.exists(
                                  os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")), out.stdout))
+    for name, ok, detail in expectations:
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
+        if not ok:
+            print(f"          {detail}")
+            failures.append((name, [], ""))
+
+    # --- contract 15: every Then and And names the line that asserts it; a stored-state clause never on a stub ----
+    print()
+    expectations = []
+    probe = ("import importlib.util, json, sys\n"
+             "spec = importlib.util.spec_from_file_location('gate', sys.argv[1]); g = importlib.util.module_from_spec(spec)\n"
+             "spec.loader.exec_module(g)\n"
+             "root, contract = sys.argv[2], sys.argv[3]\n"
+             "body = open(root + '/story.md', encoding='utf-8').read()\n"
+             "r = g.Result()\n"
+             "test = 'src/test/java/com/example/WidgetPageTest.java'\n"
+             "g.check_clauses(r, {'contract': contract}, root, root + '/runs', 'S-1', {}, body,\n"
+             "                {'shows-widget': ['com.example.WidgetPageTest#shows'], 'refuses-get': ['com.example.WidgetPageTest#refuses']},\n"
+             "                {'com.example.WidgetPageTest#shows': root + '/' + test, 'com.example.WidgetPageTest#refuses': root + '/' + test})\n"
+             "print(json.dumps({'entries': r.entries, 'clauses': g.scenario_clauses(body)}))\n")
+    clause_story = ("## Acceptance criteria\n\n#### shows-widget (happy path)\n- Given a widget\n- When the page opens\n"
+                    "- Then the page shows its name\n- And the name is bold\n\n#### refuses-get\n- Given a widget\n"
+                    "- When a GET reaches the action\n- Then the answer is 405\n- And the widget stays unchanged\n\n## Notes\n")
+    clause_test = ("class WidgetPageTest {\n  void shows() {\n    page.open();\n    assertThat(page.name()).isEqualTo(\"Lamp\");\n"
+                   "    assertThat(page.isBold()).isTrue();\n  }\n  void refuses() {\n    mvc.perform(get(\"/act\"))\n"
+                   "        .andExpect(status().isMethodNotAllowed());\n    verify(widgets).find();\n  }\n}\n")
+    test_rel = "src/test/java/com/example/WidgetPageTest.java"
+    full = ("| shows-widget | 1 | Then … | " + test_rel + ":4 | e2e |\n| shows-widget | 2 | And … | " + test_rel + ":5 | e2e |\n"
+            "| refuses-get | 1 | Then … | " + test_rel + ":9 | adapter |\n| refuses-get | 2 | And … | " + test_rel + ":10 | port |\n")
+    for label, table, contract, verdict, text in (
+            ("every clause names an asserting line, the stored-state clause at the port: passes", full, "15", "pass", ""),
+            ("the scenario's forgotten `And` has no row: refused", full.replace("| refuses-get | 2 | And … | " + test_rel + ":10 | port |\n", ""),
+             "15", "fail", "refuses-get 2"),
+            ("a line where nothing is asserted: refused", full.replace(test_rel + ":5 |", test_rel + ":3 |"), "15", "fail", "asserts nothing"),
+            ("a clause about what is stored, at the adapter level: refused", full.replace(":10 | port |", ":10 | adapter |"), "15",
+             "fail", "what is stored"),
+            ("a contract 14 profile is not asked for clauses", "", "14", None, "")):
+        with tmpdir() as root:
+            write_file(root, "story.md", clause_story)
+            write_file(root, test_rel, clause_test)
+            write_file(root, "runs/S-1/tests.md", "# Tests\n\n## Clauses\n<!-- gate:clauses -->\n| criterion | n | clause | "
+                       "assertion | level |\n| --- | --- | --- | --- | --- |\n" + table)
+            out = subprocess.run([sys.executable, "-c", probe, args.gate, root, contract], capture_output=True, text=True,
+                                 encoding="utf-8").stdout
+            seen = json.loads(out or "{}")
+            mine = [e for e in seen.get("entries", []) if e[1] == "clauses"]
+            ok = (not mine) if verdict is None else (len(mine) == 1 and mine[0][0] == verdict and text in mine[0][2])
+            if verdict == "pass":
+                ok = ok and seen.get("clauses", {}).get("refuses-get") == [[1, "Then the answer is 405"], [2, "And the widget stays unchanged"]]
+            expectations.append((f"clauses: {label}", ok, seen))
     for name, ok, detail in expectations:
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)

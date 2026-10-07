@@ -38,7 +38,10 @@ files written. You write **no** production behaviour.
    <Adapter>)`: that incoming adapter's translation — the request it turns into a command, the page,
    status or payload it makes of the result and of each refusal — against a stubbed input port that
    answers with the outcome; stubbing the input port here is right, the use case behind it has its own
-   test. A plan line with the bare `integration` of an older plan is the port shape. An external system
+   test. **A clause about what is stored** — the list stays unchanged, the task remains open, it is done
+   afterwards — is never asserted here: the stub answers what you told it, so the assertion holds whatever
+   the code does. Assert it through the input port with the real store (`integration (port)`), or end to end;
+   the adapter test asserts only the adapter's part (the status, the page, that the use case was not called). A plan line with the bare `integration` of an older plan is the port shape. An external system
    is stubbed **at the protocol**, with the stub the profile names (`http.stub:` — WireMock,
    WireMock.Net): the stub's answer is the test's arrangement, and allowed. Never a mock of the port
    whose adapter the plan changes — that tests everything except the translation — and never a
@@ -130,11 +133,23 @@ nothing else from the file:
 | --- | --- | --- | --- |
 | <Element> | <n> | <the rule, from the plan> | <fully.qualified.Class>#<method> |
 
+## Clauses                        (contract 15; written by --files-skeleton, one row per Then and each And after it)
+<!-- gate:clauses -->
+| criterion | n | clause | assertion | level |
+| --- | --- | --- | --- | --- |
+| <criterion key> | <n> | <the clause, from the story> | <path/to/Test.java>:<line> | unit / port / adapter / e2e |
+
 ## Notes
 - uncovered: <criterion key> — <why no test was possible>   (only when unavoidable)
 ```
 
 What each test fails on is not written here: the gate's red run records it, assertion by assertion.
+
+`## Clauses` (contract 15) holds every expectation of every scenario — its `Then` and each `And` after it — with the
+line that asserts it, in a test mapped to that criterion, and the level the assertion runs at. Fill it in after the
+tests are written and formatted: the test gate refuses a clause without a line, a line where nothing is asserted, and
+a clause about what is stored at the `adapter` level. A scenario whose third `And` has no row is the test that
+forgot it — write the assertion, then the row.
 
 The `## Files` list is the pipeline's to write: run `factory-cli.py --files-skeleton <story> test` when your
 changes are done — it creates the file with every changed file listed, or adds the missing paths to a file you
