@@ -1,7 +1,7 @@
 import type { BoxProps, ButtonProps, CodeProps, ElementConstructor, InputProps, MarkdownProps, RenderElement, SvgProps, TextProps } from 'claude-code'
 
 import type { StageRun } from '../types'
-import { duration, filledCells, fit, rounds, short, tokens, wrapWords } from './parse'
+import { displayWidth, duration, filledCells, fit, rounds, short, tokens, wrapWords } from './parse'
 
 // The cockpit's building blocks. Every view is drawn from these, so a change to a table, a link, a chip or the
 // spacing reaches every tab and every detail at once. They take the surface's elements and ready callbacks —
@@ -133,7 +133,7 @@ export const COL = {
   mark: { name: '', width: 1 },
   story: (width: number): Column => ({ name: 'story', width }),
   state: { name: 'state', width: 20 },
-  stage: { name: 'stage', width: 10 },
+  stage: { name: 'stage', width: 17 },
   passes: { name: 'passes', width: 6, isNumber: true },
   runs: { name: 'runs', width: 4, isNumber: true },
   started: { name: 'started UTC', width: 12 },
@@ -209,8 +209,17 @@ export type Elements = {
 export function components({ Box, Text, Button, Input, Svg = null, Markdown = null, Code = null, width, isGrid = true }: Elements) {
 
   // A mark is one cell on the terminal's grid; a proportional font draws ✓ and ◇ wider, so elsewhere it gets two.
+  // A header is bold capitals, which a proportional font draws wider than a cell each: off the grid a column is at
+  // least a third wider than its name, so no header is cut where its column has the room.
   const sized = (columns: Column[]) =>
-    sizeColumns(isGrid ? columns : columns.map(column => (column.width === 1 ? { ...column, width: 2 } : column)), width)
+    sizeColumns(
+      isGrid
+        ? columns
+        : columns.map(column =>
+            column.width === 1 ? { ...column, width: 2 } : { ...column, width: Math.max(column.width, Math.ceil(displayWidth(column.name) * 1.35)) },
+          ),
+      width,
+    )
 
   // A wide cell is wrapped here, line by line, so the row knows its height and the bars run the whole of it.
   const cellLines = (column: Column, value: Cell): string[] =>
