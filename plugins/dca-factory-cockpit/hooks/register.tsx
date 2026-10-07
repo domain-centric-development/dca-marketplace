@@ -459,6 +459,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     Text,
     Button,
     Input: 'Input' in rest ? rest.Input : null,
+    Svg: 'Svg' in rest ? rest.Svg : null,
     width: e.props.bodyColumns ?? e.viewport?.columns ?? 100,
     isGrid: e.surface === 'terminal',
   })
@@ -502,13 +503,16 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           <Box justifyContent="space-between">
             <Box gap={2}>
               {/* side by side, not nested: a Text inside a Text takes the outer colour */}
-              <Box>
-                <Text bold color={C.bright}>
-                  domaincentric
-                </Text>
-                <Text bold color={C.accent}>
-                  .dev
-                </Text>
+              <Box gap={1} alignItems="center">
+                {ui.brandMark()}
+                <Box>
+                  <Text bold color={C.bright}>
+                    domaincentric
+                  </Text>
+                  <Text bold color={C.accent}>
+                    .dev
+                  </Text>
+                </Box>
               </Box>
               <Text color={C.line}>│</Text>
               <Text bold color={C.accent}>

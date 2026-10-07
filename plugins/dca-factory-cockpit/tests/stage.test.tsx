@@ -74,6 +74,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     // which a proportional font (Desktop) would shift off its column
     expect(await pane.find({ type: 'Text', text: /─┼─.*─┼─|┼──/ })).toBeUndefined()
     expect(await pane.find({ type: 'Text', text: / │ / })).toBeUndefined()
+    // the Hex Graph before the wordmark where the surface draws vectors, nothing on the terminal
+    if (surface === 'terminal') expect(await pane.find({ type: 'Svg' })).toBeUndefined()
+    else expect(await pane.find({ type: 'Svg' })).toBeDefined()
     // the bars between columns on every surface; the header's rule only on the terminal's grid
     expect((await pane.findAll({ type: 'Text', text: '│' })).length).toBeGreaterThan(1)
     if (surface === 'terminal') expect(await pane.find({ type: 'Text', text: /┼/ })).toBeDefined()

@@ -1,4 +1,4 @@
-import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, TextProps } from 'claude-code'
+import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, SvgProps, TextProps } from 'claude-code'
 
 import type { StageRun } from '../types'
 import { duration, filledCells, fit, rounds, short, tokens, wrapWords } from './parse'
@@ -195,13 +195,15 @@ export type Elements = {
   Text: ElementConstructor<TextProps>
   Button: ElementConstructor<ButtonProps>
   Input: ElementConstructor<InputProps> | null
+  // the vector leaf of the remote surfaces (Desktop, the editor, mobile); the terminal has none
+  Svg?: ElementConstructor<SvgProps> | null
   // the cells across the pane's body, for the widths of wide columns
   width: number
   // whether the surface draws a monospace grid (the terminal): only there do line glyphs join into rules
   isGrid?: boolean
 }
 
-export function components({ Box, Text, Button, Input, width, isGrid = true }: Elements) {
+export function components({ Box, Text, Button, Input, Svg = null, width, isGrid = true }: Elements) {
 
   // A mark is one cell on the terminal's grid; a proportional font draws ✓ and ◇ wider, so elsewhere it gets two.
   const sized = (columns: Column[]) =>
@@ -304,6 +306,21 @@ export function components({ Box, Text, Button, Input, width, isGrid = true }: E
 
   return {
     progress,
+
+    // The Hex Graph before the wordmark, where the surface draws vectors: the text cut of branding/ (under 44 px),
+    // light ink on the deep plates, ink on paper; the boundary 10 % heavier on paper. Nothing on the terminal.
+    brandMark: () => {
+      if (!Svg) return null
+      const isPaper = C.bg === PAPER.bg
+      const ink = isPaper ? PAPER.text : DEEP.text
+      const ports = [[60, 20], [94.6, 40], [94.6, 80], [60, 100], [25.4, 80], [25.4, 40]]
+      const source =
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="17.4 12 85.2 96" fill="none">` +
+        `<polygon points="60,20 94.6,40 94.6,80 60,100 25.4,80 25.4,40" stroke="${ink}" stroke-width="${isPaper ? 7.7 : 7}" stroke-linejoin="round"/>` +
+        ports.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="8" fill="${ink}"/>`).join('') +
+        `<circle cx="60" cy="60" r="12" fill="${DEEP.accent}"/></svg>`
+      return <Svg source={source} alt="domaincentric.dev" width={16} height={18} />
+    },
 
     // A heading as the site's kicker — upper case, teal — with a hint beside it; the space above it is the one
     // rhythm between parts.
