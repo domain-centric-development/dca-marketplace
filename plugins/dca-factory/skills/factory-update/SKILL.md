@@ -45,7 +45,7 @@ a report of what changed. You commit nothing; the human reviews and commits.
    whether to take it over; on the person's yes run the update again with `--adopt <skill>,…` (or `--adopt
    all`). From then on every update refreshes it. A copy byte for byte the plugin's is taken over without a
    question; one the person edited on purpose stays theirs.
-5. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, the
+5. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, `.gitignore`, the
    `AGENTS.md` section, `.dca-factory-skills` in each skill folder, the skill copies where the
    project keeps copies — and after a migration the moved files: the profile at the root, `project/epics/`
    with the records beside the stories, and `.dca-factory/runs/` where the project commits its history.

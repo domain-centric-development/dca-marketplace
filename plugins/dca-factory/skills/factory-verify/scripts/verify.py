@@ -2484,6 +2484,19 @@ exit 0
               f"{shells[0]}: exit {completed.returncode}; {(completed.stderr or completed.stdout).strip()[-200:]}")
     with tmpdir() as root:
         build_project(root)
+        in_git(root)
+        with open(os.path.join(root, ".gitignore"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("build/")                                 # no newline at the end
+        run_setup(runner, root, "--tool", "none")
+        code, output = run_setup(runner, root, "--tool", "none")
+        ignores = open(os.path.join(root, ".gitignore"), encoding="utf-8").read().splitlines()
+        write_file(root, "src/.DS_Store", "finder")
+        ignored = subprocess.run(["git", "check-ignore", "-q", "src/.DS_Store"], cwd=root).returncode == 0
+        check("install: `.gitignore` keeps the files a file manager drops out of git — once, the last line whole",
+              ignores[:1] == ["build/"] and ignores.count(".DS_Store") == 1 and ignores.count("Thumbs.db") == 1
+              and ignored and "file manager" not in output, f"{ignores} | src/.DS_Store ignored: {ignored}")
+    with tmpdir() as root:
+        build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         subprocess.run(["git", "config", "core.hooksPath", ".husky"], cwd=root, capture_output=True)
         with open(os.path.join(root, ".gitattributes"), "w", encoding="utf-8", newline="\n") as handle:
@@ -3300,9 +3313,10 @@ def verify_setup(runner, verbose=False):
             code, output = run_setup(runner, root, "--tool", "claude", "--from", cached, env={"HOME": home})
             skills = os.path.join(root, ".claude", "skills")
             plan = os.path.join(skills, "stage-plan")
-            check("install: from a plugin cache the skills are copies, listed as such, and nothing is ignored",
+            check("install: from a plugin cache the skills are copies, listed as such, and no skill is ignored",
                   code == 0 and os.path.isdir(plan) and not os.path.islink(plan) and "mode: copy" in manifest_of(root)
-                  and "source: cache" in manifest_of(root) and "plugin cache" in output and not ignore_lines(root),
+                  and "source: cache" in manifest_of(root) and "plugin cache" in output
+                  and not any(line.startswith(".claude/") for line in ignore_lines(root)),
                   f"exit {code}; {manifest_of(root)[:3]}; {output.strip()[-200:]}")
             code, output = run_runner(project_runner(root), root, "update", "--from", source, "--link", env={"HOME": home})
             check("update: --link switches the project's copies to links into a checkout, listed and ignored",

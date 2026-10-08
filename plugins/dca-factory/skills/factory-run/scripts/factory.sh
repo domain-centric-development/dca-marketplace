@@ -1138,6 +1138,16 @@ install_project() {                         # install_project <tool> <skill fold
     printf '%s\n' "$RUNS/**/.verify/journal.tsv merge=union" >> .gitattributes
     echo "factory: .gitattributes merges the story journals by keeping both sides (merge=union)"
   fi
+  # What a file manager drops into any folder it shows: no one's work, but a changed file to the gate's
+  # files-listed check and the schedule's unclaimed-changes check — one would stop a run.
+  local os_file os_added=""
+  for os_file in .DS_Store Thumbs.db; do
+    grep -qsxF "$os_file" .gitignore && continue
+    [ -s .gitignore ] && [ -n "$(tail -c 1 .gitignore)" ] && printf '\n' >> .gitignore
+    printf '%s\n' "$os_file" >> .gitignore
+    os_added="$os_added $os_file"
+  done
+  [ -n "$os_added" ] && echo "factory: .gitignore keeps the files a file manager drops out of git:$os_added"
   write_agents_block
   if [ -n "$copy_mode" ]; then
     echo "factory: the skills are copies — commit .claude/.codex/.opencode skills with the project, and"

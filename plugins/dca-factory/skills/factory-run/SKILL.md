@@ -42,7 +42,8 @@ pipeline, say so and hand over to it. What it runs:
    `bash <this skill's folder>/scripts/factory.sh setup --tool <claude|codex|opencode>`, and report
    what it printed. It starts no tool, and it stops with one line where the directory is not a git
    repository. It puts the gate, the runner and the observer under `.agents/factory/`, the commit
-   hook under `.githooks/`, `.gitattributes`, the pipeline's section in `AGENTS.md` and, for Claude
+   hook under `.githooks/`, `.gitattributes`, the `.gitignore` lines for `.DS_Store` and `Thumbs.db`
+   (a file manager's drop would otherwise stop a run as an unclaimed change), the pipeline's section in `AGENTS.md` and, for Claude
    Code, the gate's permission and a SessionStart hook; it writes the stack profile first, from what
    it detects. The hook runs `factory.sh check --staged`: tool hooks and deny rules do not port
    between agent tools, but every tool commits through git, so that is where the guard belongs.
