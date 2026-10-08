@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filledCells, duration, moment, parseJournal, rounds, stagesOf, touchesFactory, wrapWords } from '../hooks/parse'
+import { filledCells, duration, moment, parseJournal, recommendedOption, recordOptions, rounds, stagesOf, touchesFactory, wrapWords } from '../hooks/parse'
 
 test('a factory command or skill refreshes the view, other calls do not', () => {
   expect(touchesFactory({ tool: 'Bash', command: 'bash .agents/factory/factory.sh run' } as { tool: string })).toBe(true)
@@ -55,4 +55,13 @@ test('a wide cell wraps by words, and a word longer than the cell is cut', () =>
   expect(wrapWords('BookAdded — each added book is the evidence', 16)).toEqual(['BookAdded — each', 'added book is', 'the evidence'])
   expect(wrapWords('averyveryverylongword', 8)).toEqual(['averyver', 'yverylon', 'gword'])
   expect(wrapWords('', 8)).toEqual([''])
+})
+
+test('reads a decision record\'s options and the one its recommendation names', () => {
+  const record = ['# Q', '', '## Options', '- a: one way', '- b: another,', '  on two lines', '', '## Recommendation', 'b — because', '', '## Answer'].join('\n')
+  const options = recordOptions(record)
+  expect(options).toEqual([{ key: 'a', text: 'one way' }, { key: 'b', text: 'another, on two lines' }])
+  expect(recommendedOption(record, options)).toBe('b')
+  expect(recommendedOption('## Recommendation\nnone of them', options)).toBe(null)
+  expect(recordOptions('# no options here')).toEqual([])
 })

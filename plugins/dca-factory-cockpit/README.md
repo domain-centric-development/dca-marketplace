@@ -14,7 +14,7 @@ factory works the same without it, in Claude Code, Codex or OpenCode.
 | 1 Discover | every discovery topic, its proposed epics (which are epics already), its proposed description changes | `/factory-discover <topic>`, `/factory-backlog epic <id> --from <report>`, `/dca-describe <file> — <section>: <change>` |
 | 2 Backlog | every epic — also before its first story — with goal, outcome event, its stories with state, passes, time, tokens, cost | `/factory-backlog <words>`, `stories <epic>` (✦ suggest stories: Claude drafts them as `status: draft`), `release <story> …`, `/factory-run <wish>` |
 | 3 Run | the worker, the running stories with their stage, since when and the stage's last activity; a shared builder named with its stage (`builder · test`); the output of the worker started here, or else what the running stage reads, edits and runs (`factory.sh follow`) — whoever started it | starts `factory.sh run` / `run --watch` as a child of the session, stops it |
-| 4 Decide | open questions and acceptances, answered records as Markdown | `/factory-decisions <story>` |
+| 4 Decide | open questions and acceptances, answered records as Markdown; an open record with its options as choices | `/factory-decisions <story>`, `/factory-decisions <story> <record>: answer <option \| your words>` (✦ one button per option, the recommended one marked; accept or correct an acceptance) |
 | 5 Delivered | delivered stories, epics with their outcome events, unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
 
 A story opens with its pipeline, the factory's numbers per stage — a shared builder's and verifier's stages beneath

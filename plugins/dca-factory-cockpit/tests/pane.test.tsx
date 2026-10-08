@@ -46,6 +46,12 @@ const STORY = {
   stages: { plan: { runs: 1, seconds: 120, tokens: 1_500_000, cost: 1.25, models: ['claude-opus-5-5'] } },
 }
 const FILES: Record<string, string> = {
+  [`${ROOT}/project/epics/books/add-book.decisions/01.md`]: [
+    '---', 'id: add-book-01', 'story: add-book', 'stage: plan', 'asked: 2026-09-23T17:27:00Z', '---', '',
+    '# Which list?', '', '## Question', 'Which list takes a new book?', '',
+    '## Options', '- a: the reading list', '- b: the shelf,', '  read or not', '',
+    '## Recommendation', 'b — a book is owned before it is read', '',
+  ].join('\n'),
   [`${ROOT}/project/product.md`]: '# Product\n\n## What\n\n## For whom\n',
   [`${ROOT}/project/epics/books/epic.md`]: '---\ntitle: Keep track of books\ngoal: one list\nmetric: BookAdded\n---\n',
   [`${ROOT}/project/epics/reminders/epic.md`]: '---\nid: reminders\ntitle: Remind the reader\ndiscovery: project/discovery/forgetting/discovery.md\n---\n',
@@ -162,6 +168,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /Which list\?/ })).toBeDefined()
     await pane.press({ key: 'answer-add-book' })
     expect(sent.at(-1)).toBe('/dca-factory:factory-decisions add-book')
+    // the open record offers its options as choices; a press hands the answer to the decisions skill
+    await pane.press({ key: 'record-add-book-01' })
+    expect(await pane.find({ text: /the stage recommends b/ })).toBeDefined()
+    expect(await pane.find({ text: /the shelf, read or not/ })).toBeDefined()
+    await pane.press({ key: 'option-add-book-01-b' })
+    expect(sent.at(-1)).toBe('/dca-factory:factory-decisions add-book add-book-01: answer b')
+    await pane.press({ key: 'back' })
 
     // a story: pipeline and history from the journal
     await pane.press({ key: 'tab-backlog' })

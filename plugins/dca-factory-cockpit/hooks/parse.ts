@@ -249,3 +249,28 @@ export function wrapWords(text: string, width: number): string[] {
   if (current) lines.push(current)
   return lines.length > 0 ? lines : ['']
 }
+
+// The options of a decision record — `- <key>: <text>` under `## Options` — and the key its `## Recommendation`
+// opens with, when it names one of them. The record's own words; the view only offers them as choices.
+export type RecordOption = { key: string; text: string }
+
+function section(text: string, heading: string): string {
+  const match = new RegExp(`^## ${heading}\\s*$([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, 'm').exec(text)
+  return match?.[1] ?? ''
+}
+
+export function recordOptions(text: string): RecordOption[] {
+  const options: RecordOption[] = []
+  for (const raw of section(text, 'Options').split('\n')) {
+    const option = /^\s*[-*]\s+\**([A-Za-z0-9]{1,3})\**\s*[:)]\s*(.*)$/.exec(raw)
+    if (option) options.push({ key: option[1] ?? '', text: (option[2] ?? '').trim() })
+    else if (options.length > 0 && raw.trim()) options[options.length - 1]!.text += ` ${raw.trim()}`
+  }
+  return options
+}
+
+export function recommendedOption(text: string, options: RecordOption[]): string | null {
+  const first = /^\s*\**`?([A-Za-z0-9]{1,3})\b/.exec(section(text, 'Recommendation').trim())
+  const key = first?.[1] ?? ''
+  return options.some(option => option.key === key) ? key : null
+}

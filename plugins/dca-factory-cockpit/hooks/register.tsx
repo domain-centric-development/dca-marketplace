@@ -3,7 +3,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
-import { appendLines, clock, createLatch, day, exitWord, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, type RefreshWish } from './parse'
+import { appendLines, clock, createLatch, day, exitWord, keepRefresh, moment, parseJournal, recommendedOption, recordOptions, rowSignature, stagesOf, touchesFactory, type RefreshWish } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -485,6 +485,36 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   const guardCell = (hint: FactoryStatus['journeys'][number]): Cell => ({
     node: ui.button(`guard-${hint.epic}`, 'add guard', () => send($, hint.action.skill || `/factory-backlog journey ${hint.epic}`), { byClaude: true }),
   })
+  // An open record's answers as choices: one button per option, the recommended one first in weight, and a field for
+  // the person's own words; an acceptance is accepted or corrected. Each press hands the answer to /factory-decisions,
+  // which writes it into the record — the view writes nothing.
+  const choices = (record: DecisionRecord, text: string): RenderElement[] => {
+    const answer = (words: string) => send($, `/factory-decisions ${record.story} ${record.id}: answer ${words}`)
+    if (record.kind === 'acceptance') {
+      return [
+        ui.section('Your answer'),
+        ui.actions([ui.button(`accept-${record.id}`, 'accept', () => answer('accepted'), { isPrimary: true, byClaude: true })]),
+        ask(`correct-${record.id}`, 'correction', 'what should be different', `/factory-decisions ${record.story} ${record.id}: answer correction:`),
+      ]
+    }
+    const options = recordOptions(text)
+    const recommended = recommendedOption(text, options)
+    return [
+      ui.section('Your answer', recommended ? `the stage recommends ${recommended}` : 'choose an option or answer in your words'),
+      ...(options.length > 0
+        ? [
+            ui.table(
+              [COL.action(16), { name: 'option', width: 40, isWide: true }],
+              options.map(option => [
+                { node: ui.button(`option-${record.id}-${option.key}`, option.key === recommended ? `${option.key} · recommended` : option.key, () => answer(option.key), { isPrimary: option.key === recommended, byClaude: true }) },
+                { text: option.text, color: C.muted },
+              ]),
+            ),
+          ]
+        : []),
+      ask(`own-${record.id}`, 'own answer', 'your words — or an option with a reason: b, because …', `/factory-decisions ${record.story} ${record.id}: answer`),
+    ]
+  }
   const ask = (key: string, label: string, placeholder: string, command: string) =>
     ui.ask(key, label, placeholder, value => send($, `${command} ${value}`.trim()), () => void $.prompt.fill({ text: `${command} ` }))
   const idWidth = Math.max(8, ...status.rows.map(row => row.story.length)) + 4
@@ -613,6 +643,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
 
   // ---- a file: a description, a discovery report, a hand-over, a decision record
   if (open?.kind === 'file') {
+    const text = await read($, fileText)
+    const record = now.decisions.find(one => `${now.root}/${one.path}` === open.path && (one.state === 'open' || one.state === 'draft'))
     return page(
       [
         <Box gap={1}>
@@ -624,9 +656,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back)), { hotkey: 'b' }),
           ui.button('edit', '✎ edit', () => void editFile($, open.path), { hotkey: 'e' }),
         ]),
-        ui.framed(await (async () => { const text = await read($, fileText); return ui.file(text, open.path) ?? ui.doc(text) })()),
+        ...(record ? choices(record, text) : []),
+        ui.framed(ui.file(text, open.path) ?? ui.doc(text)),
       ],
-      'b back · e edit in your editor',
+      record ? 'b back · e edit in your editor · an answer goes to /factory-decisions' : 'b back · e edit in your editor',
     )
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "dca-factory-cockpit",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "description": "Claude Code only, optional: the dca-factory cycle as a cockpit in a pane — the foundation (describe, set up) beside the cycle discover, backlog, run, decide, delivered — live, with a background worker. Draws what factory.sh prints; the factory works the same without it.",
   "author": {
     "name": "Christoph Bloemer"
