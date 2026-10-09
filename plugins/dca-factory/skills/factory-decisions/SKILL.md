@@ -8,7 +8,7 @@ description: The decision inbox of a delivery run, questions and acceptances ali
 `/factory-decisions` lists what waits; `/factory-decisions <story>` explains that story's open record and takes
 the answer. The same words from a person, a view that sends them, or another tool.
 
-Input: the records under `<story>.decisions/` beside each story, the story and the stage file each one
+Input: the records under `<story>/decisions/` in each story's folder, the story and the stage file each one
 names, and what the human says. Output: at most one `## Answer` section per record, in the human's
 words, on their say-so. You write no plan, no test and no code, and you never write an answer that
 was not given to you.
@@ -155,7 +155,7 @@ inside one anyway.
 $ python3 .agents/factory/factory-cli.py --list-decisions
 US-3-01  open      US-3/plan  asked 2026-09-22T20:40:00Z  Does an archived entry count?
 US-2-01  applied   US-2/plan  asked 2026-09-21T09:12:00Z  Which currency does the total carry?  → b by the-expert
-decisions: 2 record(s), 1 waiting for an answer — beside each story (<story>.decisions/)
+decisions: 2 record(s), 1 waiting for an answer — in each story's folder (<story>/decisions/)
 ```
 
 Explained: "US-3 (plan stage) asks whether archived entries count as 'the thing' the reader
@@ -175,6 +175,6 @@ at: 2026-09-22T21:04:00Z
 rationale: archived is history, not inventory.
 ```
 
-"Written to `project/epics/<epic>/US-3.decisions/01.md`. The plan stage asked; a running worker picks it
+"Written to `project/epics/<epic>/US-3/decisions/01.md`. The plan stage asked; a running worker picks it
 up by itself, otherwise `/factory-run US-3` resumes it at the plan stage — it re-plans with the
 answer, and the gate stamps the record applied."

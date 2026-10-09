@@ -38,7 +38,7 @@ const DISCOVERY = {
   }],
 }
 const DECISIONS = {
-  records: [{ id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'project/epics/books/add-book.decisions/01.md' }],
+  records: [{ id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'project/epics/books/add-book/decisions/01.md' }],
 }
 const STORY = {
   story: 'add-book', context: 'reading', criteria: 3, accepted_by: '',
@@ -46,7 +46,7 @@ const STORY = {
   stages: { plan: { runs: 1, seconds: 120, tokens: 1_500_000, cost: 1.25, models: ['claude-opus-5-5'] } },
 }
 const FILES: Record<string, string> = {
-  [`${ROOT}/project/epics/books/add-book.decisions/01.md`]: [
+  [`${ROOT}/project/epics/books/add-book/decisions/01.md`]: [
     '---', 'id: add-book-01', 'story: add-book', 'stage: plan', 'asked: 2026-09-23T17:27:00Z', '---', '',
     '# Which list?', '', '## Question', 'Which list takes a new book?', '',
     '## Options', '- a: the reading list', '- b: the shelf,', '  read or not', '',

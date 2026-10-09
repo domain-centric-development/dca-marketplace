@@ -15,7 +15,7 @@ them apart is what makes a run reproducible.
 | Thing | Where | Missing? |
 |---|---|---|
 | the project description | `project/product.md`, `project/tech.md` (and the optional designed map `project/domain.md`), or where the profile points | `/factory-setup` writes it with the person, through the project's description skill; stop and say so |
-| the story | `project/epics/<epic>/<story>.md`, or under the profile's `epics:` | offer to write one (`/factory-backlog`) and stop |
+| the story | `project/epics/<epic>/<story>/story.md`, or under the profile's `epics:` | offer to write one (`/factory-backlog`) and stop |
 | the epic | `project/epics/<epic>/epic.md` | same |
 | the stack profile | `dca-factory.profile.yaml` | create it from the template by detecting the build (see below) |
 | an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with the method's setup skill (in a DCA project `/dca-init`), and the factory never calls a skill that writes code. Without one, the build gate skips the architecture check and names it |
@@ -124,7 +124,7 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    and every open assumption from the story. A run that skipped a check must not read as a
    complete verification. The run commits nothing — and a story waiting for acceptance is not
    ready to commit; say what the story's commit holds — the code
-   and tests the stages changed, the story (its `status: delivered` line) and its `.decisions/`, and —
+   and tests the stages changed, the story (its `status: delivered` line) and its `decisions/`, and —
    where the project commits its run history — `.dca-factory/runs/<story>/` with its hidden files (the
    red ledger, the story digest, the journal under `.verify/`). The commit hook checks the index against
    the working tree, so a commit that leaves any of them behind untracked is refused.
@@ -153,7 +153,7 @@ correctly after an interruption, in another session or in another tool:
 | `judge.md` with `pass`, no `document.md` | gate `document` is next after `stage-document` |
 | `document.md`, gate `document` passing | report and stop |
 | `.rounds` at 3 | stop, escalate to the human |
-| any stage file with a `## needs-human` section | stop; the section names a decision record under `<story>.decisions/` beside each story — say which file and what to write into it |
+| any stage file with a `## needs-human` section | stop; the section names a decision record under `<story>/decisions/` in the story's folder — say which file and what to write into it |
 | a decision record for the story is open (no `## Answer`, or one without `by:` and `at:`) | stop — no stage runs while the story waits |
 | a decision record is answered and the stage it resumes at (the earlier of `stage:` and the answer's `applies:`) has not cited it | run that stage again; it applies the answer and cites the id (at the plan stage, the plan gate lets exactly this through) |
 
@@ -304,7 +304,7 @@ Stop the run and hand back to the human when:
 Name the decision, the file it belongs in, and who is asked. Do not decide it yourself.
 
 A question is a **file**, not a sentence in a report: the stage writes
-`<story>.decisions/<nn>.md` beside the story from `templates/decision.md.tmpl` — the question, the
+`<story>/decisions/<nn>.md` in the story's folder from `templates/decision.md.tmpl` — the question, the
 options, its recommendation, never an answer — and names it in its `## needs-human` as
 `decision: <id>`. That is what makes the question survive the session and reach whoever answers
 it, in this session or another (see `reference/file-contracts.md`, *Decision records*). When you

@@ -49,12 +49,12 @@ Checks by stage:
            makes checks mandatory: a required check that is not declared, not run or ran nothing fails
     test, build, tidy  a test file that existed before the story (recorded by the plan gate) still
            holds every line it had; a changed or removed one needs an answered decision of stage test
-    every stage  the story's decision records beside it (`<story>.decisions/`): a `## needs-human`
+    every stage  the story's decision records in its folder (`<story>/decisions/`): a `## needs-human`
            section names one, an open one stops the story, an answered one is applied by the
            stage that asked and then stamped `## Applied` here
 
 Where things are — one owner per place: `project/` is the people's (the description, the epics with
-their stories and, beside each story, its decisions), `.agents/factory/` is the installed pipeline,
+their stories, each story a folder with its decisions), `.agents/factory/` is the installed pipeline,
 the profile at the root is the person's, and `.dca-factory/` is the run's protocol (hand-overs, marks,
 the journal), disposable at any time: what is delivered stands in the story itself (`status:
 delivered`, written by the gate alone), so deleting the run folder loses history, never state.
@@ -216,10 +216,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 15
+CONTRACT = 16
 
 
-VERSION = "0.66.1"
+VERSION = "0.67.0"
 
 
 def read_front_matter(path):
@@ -281,16 +281,55 @@ class GateError(Exception):
     pass
 
 
+#: A story is a folder of its own under its epic, `<epics>/<epic>/<story>/`, with everything that belongs to it
+#: inside: the story itself, its decision records and acceptances, the judge's findings that did not block.
+#: The epic is `<epics>/<epic>/epic.md` beside its story folders — one shape for both, a folder and its file.
+STORY_FILE = "story.md"
+EPIC_FILE = "epic.md"
+DECISIONS_DIR = "decisions"
+FINDINGS_FILE = "findings.md"
+
+
 def story_files(epics):
-    """Every story file under the epics, sorted: `<epics>/<epic>/<story>.md`, never `epic.md`, and nothing
-    inside a story's `.decisions/` folder."""
+    """Every story under the epics, sorted: `<epics>/<epic>/<story>/story.md`. A file beside the epics (a
+    README) or beside the story folders (`epic.md`) is not a story; a story file of the older flat layout
+    (`<epic>/<story>.md`) is not read — `layout_hint` names it and `factory.sh update` moves it."""
     found = []
-    for root, dirs, files in os.walk(epics):
-        dirs[:] = sorted(d for d in dirs if not d.endswith(".decisions"))
-        if os.path.normpath(root) == os.path.normpath(epics):
-            continue                                    # a file beside the epics — a README — is not a story
-        found += [os.path.join(root, name) for name in sorted(files)
-                  if name.endswith(".md") and name != "epic.md" and not name.endswith(".findings.md")]
+    if not os.path.isdir(epics):
+        return found
+    for epic in sorted(os.listdir(epics)):
+        folder = os.path.join(epics, epic)
+        if not os.path.isdir(folder):
+            continue
+        for name in sorted(os.listdir(folder)):
+            path = os.path.join(folder, name, STORY_FILE)
+            if os.path.isfile(path):
+                found.append(path)
+    return found
+
+
+def story_folder(story_path):
+    """The story's own folder: where its decisions and findings live, and the name its id defaults to."""
+    return os.path.dirname(story_path)
+
+
+def epic_folder(story_path):
+    """The folder of the epic a story lies in: the parent of the story's folder."""
+    return os.path.dirname(story_folder(story_path))
+
+
+def flat_stories(epics):
+    """Story files of the older flat layout — `<epics>/<epic>/<story>.md` beside `epic.md` — which this gate
+    no longer reads."""
+    found = []
+    if not os.path.isdir(epics):
+        return found
+    for epic in sorted(os.listdir(epics)):
+        folder = os.path.join(epics, epic)
+        if os.path.isdir(folder):
+            found += [os.path.join(folder, name) for name in sorted(os.listdir(folder))
+                      if name.endswith(".md") and name != EPIC_FILE and not name.endswith(".findings.md")
+                      and os.path.isfile(os.path.join(folder, name))]
     return found
 
 
@@ -298,8 +337,8 @@ FINDINGS_HEADER = "| # | Perspective | File:line | Severity | Defect | Fix | Sta
 
 
 def findings_path(story_path):
-    """The judge's confirmed findings, kept beside the story like its decisions: `<story>.findings.md`."""
-    return story_path[:-3] + ".findings.md" if story_path.endswith(".md") else story_path + ".findings.md"
+    """The judge's confirmed findings, kept in the story's folder like its decisions: `<story>/findings.md`."""
+    return os.path.join(story_folder(story_path), FINDINGS_FILE)
 
 
 def confirmed_defects(judge_text):
@@ -333,7 +372,7 @@ def findings_rows(path):
 
 
 def record_findings(story_path, story_id, front, runs):
-    """Keep the judge's confirmed defects beside the story, as `<story>.findings.md`, when the story is delivered:
+    """Keep the judge's confirmed defects in the story's folder, as `<story>/findings.md`, when the story is delivered:
     a finding that did not block (a minor) would otherwise live in the run folder alone, which is protocol and
     disposable. One row per finding, `open` until a person or a later story closes it; a row already there
     (same file:line and defect) is not written twice. Returns (added, open)."""
@@ -367,23 +406,20 @@ def record_findings(story_path, story_id, front, runs):
 def open_findings(epics):
     """Every open finding under the epics: (story id, file:line, severity, defect), read from the findings files."""
     out = []
-    for root, dirs, files in os.walk(epics):
-        dirs[:] = sorted(d for d in dirs if not d.endswith(".decisions"))
-        for name in sorted(files):
-            if name.endswith(".findings.md"):
-                story = name[:-len(".findings.md")]
-                out += [(story, r[2], r[3], r[4]) for r in findings_rows(os.path.join(root, name)) if r[6] == "open"]
+    for story_path in story_files(epics):
+        story = story_id_of(story_path)
+        out += [(story, r[2], r[3], r[4]) for r in findings_rows(findings_path(story_path)) if r[6] == "open"]
     return out
 
 
 def story_id_of(path, front=None):
-    """A story's id: its front matter's `id:`, else its file name."""
+    """A story's id: its front matter's `id:`, else its folder's name."""
     if front is None:
         try:
             front, _ = read_front_matter(path)
         except GateError:
             front = {}
-    return str(front.get("id", "")).strip() or os.path.splitext(os.path.basename(path))[0]
+    return str(front.get("id", "")).strip() or os.path.basename(story_folder(path))
 
 
 def find_story(epics, story_id):
@@ -392,16 +428,20 @@ def find_story(epics, story_id):
     replace the first."""
     wanted, matches = story_id.lower(), []
     for path in story_files(epics):
-        if os.path.splitext(os.path.basename(path))[0].lower() == wanted or story_id_of(path).lower() == wanted:
+        if os.path.basename(story_folder(path)).lower() == wanted or story_id_of(path).lower() == wanted:
             matches.append(path)
     if len(matches) > 1:
         raise GateError(f"story id {story_id!r} is not unique — {' and '.join(shown(m) for m in matches)}; "
                         f"an id names one story in the whole project, give one of them another")
     if matches:
         return matches[0]
+    flat = [p for p in flat_stories(epics) if os.path.splitext(os.path.basename(p))[0].lower() == wanted]
+    if flat:
+        raise GateError(f"{shown(flat[0])} is in the older flat layout — a story is a folder now, "
+                        f"{epics}/<epic>/<story>/{STORY_FILE}; `factory.sh update` moves it")
     raise GateError(
-        f"no story {story_id!r} under {epics}/ — a story is one markdown file "
-        f"{epics}/<epic>/<story>.md with front matter (see the backlog contract)"
+        f"no story {story_id!r} under {epics}/ — a story is a folder {epics}/<epic>/<story>/ with its "
+        f"{STORY_FILE} (front matter, see the backlog contract)"
     )
 
 
@@ -1160,8 +1200,8 @@ def epic_of(story_path, front, epics):
     if isinstance(named, list) or not named:
         raise GateError(f"{story_path}: front matter has no `epic:`")
     for candidate in (
-        os.path.join(os.path.dirname(story_path), "epic.md"),
-        os.path.join(epics, str(named), "epic.md"),
+        os.path.join(epic_folder(story_path), EPIC_FILE),
+        os.path.join(epics, str(named), EPIC_FILE),
     ):
         if os.path.isfile(candidate):
             return candidate, str(named)
@@ -1360,7 +1400,12 @@ def layout_hint(cwd, profile):
             and not os.path.isfile(os.path.join(cwd, PROFILE_FILE)):
         old.append(f".agents/factory/factory.profile.yaml is now {PROFILE_FILE} at the project root")
     if os.path.isdir(os.path.join(cwd, ".agents", "factory", "decisions")):
-        old.append(".agents/factory/decisions/ now lives beside each story, as <story>.decisions/")
+        old.append(f".agents/factory/decisions/ now lives in each story's folder, as <story>/{DECISIONS_DIR}/")
+    flat = flat_stories(os.path.join(cwd, place("epics")))
+    if flat:
+        old.append(f"{len(flat)} story file(s) in the flat layout ({shown(flat[0])}{', …' if len(flat) > 1 else ''}) — "
+                   f"a story is a folder now, <epic>/<story>/{STORY_FILE} with its {DECISIONS_DIR}/ and "
+                   f"{FINDINGS_FILE} inside")
     tasks = os.path.join(cwd, "tasks")
     if os.path.isdir(tasks) and any(os.path.isdir(os.path.join(tasks, d, ".verify")) or os.path.isfile(os.path.join(tasks, d, ".story-digest"))
                                     for d in os.listdir(tasks)):
@@ -1580,12 +1625,12 @@ def check_backlog(cwd, epics, profile, only=None):
               f"an id names one story in the whole project, give one of them another")
         refused.append(sid)
     for path in story_files(epics):
-        name = os.path.basename(path)
-        result, label = Result(), name[:-3]
+        name = os.path.basename(story_folder(path))
+        result, label = Result(), name
         try:
             front, body = read_front_matter(path)
             label = str(front.get("id") or label).strip()
-            if only and only not in (label, name[:-3]):
+            if only and only not in (label, name):
                 continue
             if label.lower() in twice:
                 continue                            # refused above, once for both
@@ -3098,18 +3143,15 @@ def tail(output, limit=1200):
 # --- decisions: the question a stage may not answer, kept where the answer can land ------------
 #
 # A stage that cannot decide writes `## needs-human` and the run stops. The question itself lives
-# in a record of its own beside the story, `<story>.decisions/<nn>.md` with `id: <story>-<nn>` —
+# in a record of its own in the story's folder, `<story>/decisions/<nn>.md` with `id: <story>-<nn>` —
 # markdown with front matter, committed with the project, in the people's place because the answer
 # is a person's — since the stage file has no place for an answer and no second session would find
 # one there. State is read from the record, never stored in it: no `## Answer` is open; an
 # `## Answer` with `answer:`, `by:` and `at:` is answered; a gate-written `## Applied` is applied.
 # A draft that lacks the actor or the time is not an answer — an unconfirmed draft unblocks nothing.
-DECISIONS_SUFFIX = ".decisions"
-
-
 def decisions_store(story_path):
-    """The records beside the story: `<story>.decisions/` next to `<story>.md`."""
-    return os.path.splitext(story_path)[0] + DECISIONS_SUFFIX
+    """The records in the story's folder: `<story>/decisions/` beside its `story.md`."""
+    return os.path.join(story_folder(story_path), DECISIONS_DIR)
 
 
 def records_of(story_id, story_path=None, cwd=None):
@@ -3122,7 +3164,7 @@ def records_of(story_id, story_path=None, cwd=None):
 
 
 def record_path(story_id, rid, story_path=None):
-    """Where a record with this id lives (or would): `<story>.decisions/<nn>.md` for `id: <story>-<nn>`."""
+    """Where a record with this id lives (or would): `<story>/decisions/<nn>.md` for `id: <story>-<nn>`."""
     store = decisions_store(story_path or find_story(place("epics"), story_id))
     return os.path.join(store, rid[len(story_id) + 1:] + ".md") if rid.startswith(story_id + "-") else os.path.join(store, rid + ".md")
 
@@ -3192,11 +3234,11 @@ def read_decisions(store, story_id):
         if str(front.get("story", "")).strip() != story_id:
             raise GateError(
                 f"{shown(path)}: names story {front.get('story')!r}, but it lies beside {story_id} — a record "
-                f"lives in its own story's `{DECISIONS_SUFFIX}/` folder")
+                f"lives in its own story's `{DECISIONS_DIR}/` folder")
         if str(front.get("id", "")).strip() != f"{story_id}-{name[:-3]}":
             raise GateError(
                 f"{shown(path)}: `id:` is {front.get('id')!r}, the file is named {name[:-3]!r} — a "
-                f"record is found by its file name: `<story>{DECISIONS_SUFFIX}/<nn>.md` carries `id: <story>-<nn>`")
+                f"record is found by its file name: `<story>/{DECISIONS_DIR}/<nn>.md` carries `id: <story>-<nn>`")
         state, answer = decision_state(body)
         records.append((path, front, body, state, answer))
     return records
@@ -4012,8 +4054,10 @@ CHANGE_EXCLUDED = (".agents/factory/",)
 
 def run_owned(path, runs):
     """A path the pipeline writes itself and no stage answers for: the installed pipeline, the run folder,
-    a story's decision records (a stage's question, written beside the story)."""
-    return path.startswith(CHANGE_EXCLUDED + (runs.rstrip("/") + "/",)) or DECISIONS_SUFFIX + "/" in path
+    a story's decision records (a stage's question, written into the story's folder)."""
+    epics = place("epics").rstrip("/") + "/"
+    return path.startswith(CHANGE_EXCLUDED + (runs.rstrip("/") + "/",)) \
+        or (path.startswith(epics) and f"/{DECISIONS_DIR}/" in path[len(epics):])
 
 
 DELETED = "deleted"
@@ -4594,7 +4638,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     refusal = os.path.join(folder, ".gate-plan.txt")
     if os.path.isfile(refusal):
         # Repaired since: the story or its epic is newer than the refusal, so the plan gate asks again.
-        sources = [p for p in (story_path, story_path and os.path.join(os.path.dirname(story_path), "epic.md"))
+        sources = [p for p in (story_path, story_path and os.path.join(epic_folder(story_path), EPIC_FILE))
                    if p and os.path.isfile(p)]
         if not any(os.path.getmtime(p) > os.path.getmtime(refusal) for p in sources):
             return "stopped", None, "the plan gate refused the story — the backlog needs a fix"
@@ -4889,7 +4933,7 @@ def main(argv):
     try:
         story_path = find_story(args.epics, args.story)
         front, body = read_front_matter(story_path)
-        story_id = str(front.get("id") or os.path.splitext(os.path.basename(story_path))[0])
+        story_id = str(front.get("id") or os.path.basename(story_folder(story_path)))
         criteria = criteria_of(story_path, body)
         if not str(front.get("context", "")).strip():
             result.fail(

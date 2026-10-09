@@ -1710,7 +1710,7 @@ stopped_for_human() {                       # stopped_for_human <artefact> <stag
   ids=$(printf '%s\n' "$lines" | awk -F'\t' 'NF {print $1}')
   if [ -z "$ids" ]; then
     echo "factory:   the section names no 'decision: <id>' — the stage has to write the question as" >&2
-    echo "factory:   <story>.decisions/<nn>.md beside the story; the next gate refuses a question nobody was asked." >&2
+    echo "factory:   <story>/decisions/<nn>.md in the story's folder; the next gate refuses a question nobody was asked." >&2
   fi
   for id in $ids; do
     record=$(printf '%s\n' "$lines" | awk -F'\t' -v i="$id" '$1 == i {print $3}' | head -1)

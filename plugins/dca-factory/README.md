@@ -11,14 +11,14 @@ project/                   what is to be built (a person writes it)
   product.md               what, for whom, surfaces, qualities, what it is not
   tech.md                  stack, frontend approach, persistence, runtime, integrations, version policy
   domain.md                the designed cut: contexts, subdomain types, relationship patterns and why
-  epics/<epic>/epic.md · <story>.md · <story>.decisions/<nn>.md
+  epics/<epic>/epic.md · <story>/story.md · <story>/decisions/<nn>.md · <story>/findings.md
 .agents/factory/           the installed pipeline (gate, cli, runner, hook) — factory-update owns it whole
 .dca-factory/runs/<story>/ the run's protocol: hand-overs, marks, journal — disposable
 docs/                      what exists and why — written after the code; generated maps live here
 ```
 
 One owner per place. `project/` is the people's: the description, the epics with their stories and,
-beside each story, its decisions (questions a stage asked, a human's answers, acceptances). A story
+in each story's folder, its decisions (questions a stage asked, a human's answers, acceptances). A story
 carries its own state — `status: draft | approved | adopted | superseded` is the person's line,
 `status: delivered` and `delivered:` are the gate's, written by nothing else. `.dca-factory/` is
 protocol: delete it at any time and the factory still knows what is delivered and what was decided;
@@ -464,9 +464,9 @@ what must be true before the next one starts.
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
 | `factory-discover` | before the backlog: a problem or a wished deliverable becomes `project/discovery/<topic>/discovery.md` — problem, users and evidence, options, outcome, risks, proposed epics each with its outcome event — from a fixed question catalogue, with every claim citing a source (web with the date read, a project file, an anonymised excerpt under `sources/`; the originals stay in a git-ignored `originals/`). Applies the `product-discovery` craft (`carrier.discover:`); `factory.sh discover --check <topic>` checks the report; writes an epic only once the person releases a proposal, through `factory-backlog`, linked by `discovery:` |
 | `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
-| — `<story>.findings.md` | the judge's confirmed minors, kept beside the story when it is delivered (the run folder is disposable, these are not): one row per finding with file, line, fix and `Status`; `factory-cli.py --findings` lists the open ones, the status brief counts them |
-| — `decisions/` | the questions a run may not answer, one file each under `<story>.decisions/<nn>.md` beside the story, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
-| `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies; migrates an older layout once (profile to the root, `project/backlog/` → `project/epics/`, records beside their stories, run artefacts out of `tasks/`, the delivery mark into the story) and prints every move. Reports the versions and the profile's contract line; commits nothing |
+| — `<story>/findings.md` | the judge's confirmed minors, kept in the story's folder when it is delivered (the run folder is disposable, these are not): one row per finding with file, line, fix and `Status`; `factory-cli.py --findings` lists the open ones, the status brief counts them |
+| — `decisions/` | the questions a run may not answer, one file each under `<story>/decisions/<nn>.md` in the story's folder, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
+| `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies; migrates an older layout once (profile to the root, `project/backlog/` → `project/epics/`, each story into a folder of its own, records into their stories' folders, run artefacts out of `tasks/`, the delivery mark into the story) and prints every move. Reports the versions and the profile's contract line; commits nothing |
 | `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`factory.sh status [--story <id>]`). Reads files; changes and starts nothing |
 | `factory-decisions` | the inbox for those records: lists what waits on a human (`factory.sh decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer. A structural answer — a new bounded context, a new relationship, a surface an actor lacks — also brings `project/domain.md` and the product description in line |
 | `factory-help` | the factory explained in one fixed view (`factory.sh help`): the flow from describing the project to accepting a story with this project's place in it, every command for agent and shell, the marks, the files, what to do next. Reads files; changes and starts nothing |
@@ -496,7 +496,7 @@ python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy
 | `tidy` | the build gate's checks again — the tidy stage's whole claim is that it changed no behaviour |
 | `document` | every file, path and identifier the document stage claims **exists**; every claim names how it was checked; every term the plan proposed has landed in a glossary or is named as open |
 | test, build, tidy | a test that existed before the story still expects what it did — added cases pass, and so does a change around its assertions that keeps every assertion with its words and literals in order (a type the test builds gained a field; a note); any other changed or removed line passes only when the plan lists it under `## Changed tests`, backed by the story's `## Changed expectations` or by an answered decision (`tests-kept`, from the plan gate's git baseline) |
-| every stage | the story's **decision records** (`<story>.decisions/` beside each story): a `## needs-human` names one; an open one blocks the story and says where to answer; an answered one is applied by the stage that asked and stamped `## Applied` |
+| every stage | the story's **decision records** (`<story>/decisions/` in each story's folder): a `## needs-human` names one; an open one blocks the story and says where to answer; an answered one is applied by the stage that asked and stamped `## Applied` |
 
 A command the stack profile does not declare is skipped and named in the report — never failed,
 unless the profile's `required:` names it (below).

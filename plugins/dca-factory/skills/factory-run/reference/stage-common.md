@@ -42,7 +42,7 @@ describes them and say so in your file. An absent key is skipped and named like 
 ## A question is a decision record
 
 A stage that cannot go on writes its file anyway, with a `## needs-human` section naming a
-**decision record**: `decision: <story>-<nn>`, the record at `<story>.decisions/<nn>.md` beside the
+**decision record**: `decision: <story>-<nn>`, the record at `<story>/decisions/<nn>.md` in the
 story (`nn` — the next two-digit number among this story's records) with the question, the options
 you see, the evidence you read and your recommendation — never an answer. The full shape is
 `factory-run/templates/decision.md.tmpl`, beside this file; the gate reads exactly this front matter,

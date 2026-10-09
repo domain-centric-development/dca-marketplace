@@ -187,7 +187,7 @@ line that shows it, or withdrawn, with the reason — and a withdrawal that cont
 the previous round cited (a glossary line, a criterion) is a `story-conflict`, not a `pass`.
 
 A `minor` you confirm is not lost with the run folder: when the story is delivered, the pipeline copies every
-row of `## Confirmed defects` into `<story>.findings.md` beside the story (`| # | Perspective | File:line |
+row of `## Confirmed defects` into `<story>/findings.md` in the story's folder (`| # | Perspective | File:line |
 Severity | Defect | Fix | Status |`, `open` until a person or a later story closes it). So a row you write
 here is a row somebody will read later — file and line exact, the fix one sentence.
 

@@ -1,6 +1,6 @@
 # Backlog contract
 
-The backlog is markdown with front matter, one file per item, readable and reviewable
+The backlog is markdown with front matter, one file per item — an epic's `epic.md`, a story's `story.md` in a folder of its own — readable and reviewable
 without any tooling. No database, no JSON as the source. A generated `index.json` may exist for
 tools; it is derived and gitignored.
 
@@ -17,8 +17,10 @@ project/
   epics/
     <epic>/
       epic.md              the epic
-      <story>.md           one story — with its state: draft | approved | delivered | adopted | superseded
-      <story>.decisions/   its questions (<nn>.md) and acceptances (accept-<n>.md)
+      <story>/             one story, a folder named after its id
+        story.md           the story — with its state: draft | approved | delivered | adopted | superseded
+        decisions/         its questions (<nn>.md) and acceptances (accept-<n>.md)
+        findings.md        the judge's confirmed minors, written when it is delivered
 ```
 
 Stories stay with their epic for life; they never move between folders. *Backlog* is a view:

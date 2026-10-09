@@ -108,7 +108,7 @@
 #              another place. A key that names no file fails the gate
 # epics        where the epics and stories are (default: project/epics). A story carries its own state:
 #              `status: draft | approved | adopted | superseded` is the person's, `status: delivered` and
-#              `delivered:` are written by the gate alone. Beside each story, `<story>.decisions/` holds
+#              `delivered:` are written by the gate alone. In each story's folder, `<story>/decisions/` holds
 #              its questions and acceptances
 # runs         where a run keeps its protocol — hand-overs, marks, the journal (default: .dca-factory/runs).
 #              Disposable: deleting it loses history, never what is delivered or decided
@@ -134,7 +134,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 15
+contract: 16
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}

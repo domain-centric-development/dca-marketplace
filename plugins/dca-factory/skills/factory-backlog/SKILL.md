@@ -7,7 +7,7 @@ description: Writes and checks the backlog a delivery run reads — an epic with
 
 Input: what the human tells you, plus the project description — the product, the technical
 decisions and the designed domain — and the glossaries. Output: `<backlog>/<epic>/epic.md`,
-`<backlog>/<epic>/<story>.md`, or a correction to one of them. The places are the stack profile's
+`<backlog>/<epic>/<story>/story.md` (a folder per story, named after its id), or a correction to one of them. The places are the stack profile's
 `product:`, `tech:`, `domain:` and `backlog:`, by default `project/product.md`, `project/tech.md`,
 `project/domain.md` and `project/epics`.
 You write no plan, no test and no code. Run the pipeline separately once the item stands.

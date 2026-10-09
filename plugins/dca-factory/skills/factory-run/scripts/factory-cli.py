@@ -93,7 +93,7 @@ def resolve(epics, argument):
               + ". A wish takes more than one word.")
         return 2
     front, _ = read_front_matter(path)
-    print(f"story {str(front.get('id', '')).strip() or os.path.splitext(os.path.basename(path))[0]}")
+    print(f"story {story_id_of(path, front)}")
     return 0
 
 
@@ -168,7 +168,7 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     records.sort(key=lambda r: (r["rank"], r["id"]))
     waiting = [r for r in records if r["state"] in ("open", "draft", "unreadable")]
     model = dict(project=os.path.basename(os.path.abspath(cwd)), story=story_id, records=records,
-                 waiting=len(waiting), store=f"{place('epics')}/<epic>/<story>{DECISIONS_SUFFIX}/")
+                 waiting=len(waiting), store=f"{place('epics')}/<epic>/<story>/{DECISIONS_DIR}/")
     mark = lambda r: "look" if r["kind"] == "acceptance" and r["state"] in ("open", "draft") else \
         "stopped" if r["state"] == "unreadable" else decision_mark(r)
     headers = ["record", "state", "story / stage", "asked (UTC)", "question → answer"]
@@ -976,7 +976,7 @@ def status_brief(cwd, epics, runs, session_start=False):
     if findings:
         stories = sorted({f[0] for f in findings})
         print(f"factory: {len(findings)} open finding(s) from the judge in {len(stories)} story file(s) "
-              f"(<story>.findings.md beside the story) — `factory-cli.py --findings` lists them")
+              f"(<story>/{FINDINGS_FILE} in the story's folder) — `factory-cli.py --findings` lists them")
     # A skill link that points nowhere — its plugin version pruned from the cache, a checkout moved: the
     # skills are then missing for a session and a runner stage alike, and only the update relinks them.
     dangling = dangling_skill_links(cwd)
@@ -1265,11 +1265,11 @@ def help_model(cwd, epics, runs):
         nxt = status_view["next"]
     files = [("description", ", ".join(location(profile, k) for k in ("product", "tech", "domain")),
               "what is built, on which stack, in which contexts"),
-             ("epics", epics.replace(os.sep, "/") + "/", "one file per epic and per story; a delivered story says so itself"),
+             ("epics", epics.replace(os.sep, "/") + "/", "an epic.md per epic, a folder per story with its story.md; a delivered story says so itself"),
              ("stack profile", (profile_path or PROFILE_FILE).replace(os.sep, "/"),
               "the project's commands and the skills each stage uses"),
-             ("decisions", f"{epics.replace(os.sep, '/')}/<epic>/<story>{DECISIONS_SUFFIX}/",
-              "one record per question or acceptance, beside its story"),
+             ("decisions", f"{epics.replace(os.sep, '/')}/<epic>/<story>/{DECISIONS_DIR}/",
+              "one record per question or acceptance, in its story's folder"),
              ("a story's run", f"{runs}/<story>/", "hand-overs, marks, the journal — protocol, disposable")]
     return dict(project=status_view["project"], flow=flow, commands=[dict(zip(("name", "what", "skill", "shell"), c))
                                                                     for c in HELP_COMMANDS],
@@ -1672,8 +1672,8 @@ def journey_hints(stories, epics):
         built = [r for r, k in zip(epic["rows"], kinds) if k == "story"]
         if not built or any(r["state"] != "delivered" for r in built) or "journey" in kinds or not paths[0]:
             continue
-        text = read_text(os.path.join(os.path.dirname(paths[0]), "epic.md")) \
-            if os.path.isfile(os.path.join(os.path.dirname(paths[0]), "epic.md")) else ""
+        epic_md = os.path.join(epic_folder(paths[0]), EPIC_FILE)
+        text = read_text(epic_md) if os.path.isfile(epic_md) else ""
         heading = re.search(r"^## Journey\s*$", text, re.M)
         section = text[heading.end():].split("\n## ", 1)[0] if heading else None
         if section is not None and re.search(r"^\s*-\s*none:", section, re.M):
@@ -2457,22 +2457,16 @@ def checkout_holders(cwd, epics, runs, exclude=None):
     """The stories with unfinished code in the checkout — past their test stage, not delivered — as
     the schedule counts them."""
     holders = []
-    for root, _dirs, files in os.walk(epics):
-        if os.path.normpath(root) == os.path.normpath(epics):
+    for path in story_files(epics):
+        try:
+            front, _body = read_front_matter(path)
+        except GateError:
             continue
-        for name in sorted(files):
-            if not name.endswith(".md") or name == "epic.md":
-                continue
-            path = os.path.join(root, name)
-            try:
-                front, _body = read_front_matter(path)
-            except GateError:
-                continue
-            story_id = str(front.get("id") or name[:-3]).strip()
-            if story_id == exclude or not os.path.isfile(os.path.join(runs, story_id, STAGE_FILES["test"])):
-                continue
-            if story_state(cwd, runs, story_id, front, path)[0] not in ("delivered", "superseded"):
-                holders.append(story_id)
+        story_id = story_id_of(path, front)
+        if story_id == exclude or not os.path.isfile(os.path.join(runs, story_id, STAGE_FILES["test"])):
+            continue
+        if story_state(cwd, runs, story_id, front, path)[0] not in ("delivered", "superseded"):
+            holders.append(story_id)
     return sorted(holders)
 
 
@@ -2554,15 +2548,15 @@ def schedule_data(cwd, epics, runs):
     hint = layout_hint(cwd, read_profile(resolve_profile(None, cwd)))
     twice = duplicate_ids(epics)
     for path in story_files(epics):
-        name = os.path.basename(path)
-        epic = os.path.basename(os.path.dirname(path))
+        name = os.path.basename(story_folder(path))
+        epic = os.path.basename(epic_folder(path))
         try:
             front, story_body = read_front_matter(path)
         except GateError as error:
-            stories[name[:-3]] = dict(state="stopped", start=None, detail=str(error), deps=[], path=path,
+            stories[name] = dict(state="stopped", start=None, detail=str(error), deps=[], path=path,
                                       epic=epic, title="", front={}, body="")
             continue
-        story_id = str(front.get("id") or name[:-3]).strip()
+        story_id = str(front.get("id") or name).strip()
         if story_id.lower() in twice:
             # Two stories under one id would share a run folder and a row here: both stop, both are named.
             others = [shown(p) for p in twice[story_id.lower()] if os.path.normpath(p) != os.path.normpath(path)]
@@ -2835,7 +2829,8 @@ def adopted_on(run_folder, delivered_file):
 
 def migrate_layout(cwd):
     """`factory.sh update`'s one move to the layout with one owner per place: the profile to the root
-    (`backlog:` → `epics:`), `project/backlog/` → `project/epics/`, each decision record beside its story,
+    (`backlog:` → `epics:`), `project/backlog/` → `project/epics/`, each story into a folder of its own with its
+    decisions and findings inside, each decision record of the old central store into its story's folder,
     each `tasks/<story>/` that carries factory marks to the run folder, and the delivery mark into the story
     as `status: delivered` + `delivered:`. Idempotent — what is where it belongs is left alone — and every
     move is printed. Anything else under `tasks/` is the project's and is not touched."""
@@ -2876,6 +2871,29 @@ def migrate_layout(cwd):
     old_epics = os.path.join("project", "backlog")
     if os.path.isdir(old_epics) and not os.path.isdir(epics) and epics == DEFAULTS["epics"]:
         say(f"project/backlog/ → {epics}/ ({move_path(cwd, old_epics, epics)})")
+    # A story is a folder (contract 16): `<epic>/<story>.md` → `<epic>/<story>/story.md`, its `.decisions/`
+    # folder → `<story>/decisions/`, its `.findings.md` → `<story>/findings.md`. The folder takes the story's id.
+    for src in flat_stories(epics):
+        try:
+            front, _body = read_front_matter(src)
+        except GateError:
+            front = {}
+        stem = os.path.splitext(os.path.basename(src))[0]
+        folder = os.path.join(os.path.dirname(src), str(front.get("id") or "").strip() or stem)
+        dst = os.path.join(folder, STORY_FILE)
+        if os.path.exists(dst):
+            print(f"migrate: kept {shown(src)} — {shown(dst)} exists already")
+            continue
+        say(f"{shown(src)} → {shown(dst)} ({move_path(cwd, src, dst)})")
+        for old_name, new_name in ((stem + ".decisions", DECISIONS_DIR), (stem + ".findings.md", FINDINGS_FILE)):
+            old_part = os.path.join(os.path.dirname(src), old_name)
+            new_part = os.path.join(folder, new_name)
+            if not os.path.exists(old_part):
+                continue
+            if os.path.exists(new_part):
+                print(f"migrate: kept {shown(old_part)} — {shown(new_part)} exists already")
+                continue
+            say(f"{shown(old_part)} → {shown(new_part)} ({move_path(cwd, old_part, new_part)})")
     store = os.path.join(".agents", "factory", "decisions")
     if os.path.isdir(store):
         for name in sorted(os.listdir(store)):
@@ -2987,7 +3005,7 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
 - `## Changed tests` (only when the story contradicts an existing test): `| <path from the project root> | <backing line or decision id> |`
 - `## Files`: `- <path from the project root> — <changes|read>: <why>` (the path in backticks) — the next stages open these first
 - `## Glossary proposals`: `- <term>: <definition>` — the document gate checks each term landed in a glossary or is named open
-- `## needs-human` only to stop: `decision: <story>-<nn>`, with the record `<story>.decisions/<nn>.md` beside the story
+- `## needs-human` only to stop: `decision: <story>-<nn>`, with the record `<story>/decisions/<nn>.md` in the story's folder
   (`id:`, `story:`, `stage: plan`, `asked:`; `## Question`, `## Options`, `## Recommendation`)
 - A citation is a path from the project root, `src/main/java/…/Thing.java:12`; a bare `Thing.java:12` resolves to nothing.
   A catalog node is cited by its path inside the catalog (`recipe/add-an-aggregate.md`), as the knowledge skill cites it —
@@ -3601,7 +3619,7 @@ def main(argv):
     parser.add_argument("--command-heads", action="store_true",
                         help="the first word of every command the profile declares, one per line")
     parser.add_argument("--findings", action="store_true",
-                        help="the judge's confirmed findings that did not block, open ones first, from <story>.findings.md")
+                        help="the judge's confirmed findings that did not block, open ones first, from <story>/findings.md")
     parser.add_argument("--perspectives", action="store_true",
                         help="the judge's perspectives with their carriers, one `<name>\t<carrier>` per line")
     parser.add_argument("--carriers", action="store_true",
@@ -3696,7 +3714,7 @@ def main(argv):
             return 0
         for story, where, severity, defect in rows:
             print(f"{story}\t{severity}\t{where}\t{defect}")
-        print(f"factory: {len(rows)} open finding(s); set Status to done or wont-fix in the story's .findings.md")
+        print(f"factory: {len(rows)} open finding(s); set Status to done or wont-fix in the story's {FINDINGS_FILE}")
         return 0
     if args.perspectives:
         for name, carrier in _gate.perspectives_of(read_profile(resolve_profile(None, cwd))):

@@ -26,7 +26,7 @@ a report of what changed. You commit nothing; the human reviews and commits.
    place is moved once, and every move is printed (`factory: migrated …`): the stack profile from
    `.agents/factory/` to `dca-factory.profile.yaml` at the root, its `backlog:` line to `epics:`,
    `project/backlog/` to `project/epics/`, each decision record from `.agents/factory/decisions/` to
-   `<story>.decisions/` beside its story, each `tasks/<story>/` that carries factory marks to
+   `<story>/decisions/` in its story's folder, each flat story file into a folder of its own, each `tasks/<story>/` that carries factory marks to
    `.dca-factory/runs/<story>/` — anything else under `tasks/` is the project's and stays — and the
    delivery mark into the story as `status: delivered` and `delivered:`. Show the moves; a second run
    moves nothing. A `backlog/` at the project root from before `project/` is named, not moved.

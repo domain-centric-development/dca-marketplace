@@ -37,7 +37,7 @@ as `deleted`). After the stage the gate writes `changed-<stage>.txt` (`added` / 
 against a tree object recorded at the story's first stage — written once, without committing, so a
 repository without a commit gets a diff as well and a stage run again does not move the story's
 starting point. Paths are the project's, also where the project is a directory inside a larger
-repository. The run folder, the installed pipeline (`.agents/factory/`), a story's `.decisions/` records and gitignored files are left out. Without
+repository. The run folder, the installed pipeline (`.agents/factory/`), a story's `decisions/` records and gitignored files are left out. Without
 git the tree cannot be compared: the snapshots and the records then carry one line, `# not observed:`
 and the reason, `story.diff` says there is no diff, and the gate skips the files check and names the
 reason — never "0 files changed".
@@ -167,12 +167,12 @@ perspective under `## Perspectives covered`. The document gate reads them as `re
 is a note (the judge ran that pass itself and says so), a file without a findings section is refused.
 A repeat round writes new files; the old ones are not kept. `--contract review` prints the shape.
 
-## Findings — `<story>.findings.md`, beside the story
+## Findings — `<story>/findings.md`, in the story's folder
 
 The judge's confirmed defects that did not block the story — its minors — written by the document gate when it
 delivers the story, from `judge.md`'s `## Confirmed defects` table: one row per finding, `| # | Perspective |
 File:line | Severity | Defect | Fix | Status |`, `Status` `open`; a row already there (same file:line and defect)
-is not written twice. The file lives beside the story like its `.decisions/` folder, is committed with the project
+is not written twice. The file lives in the story's folder beside its `decisions/`, is committed with the project
 and is no story to the backlog. A person sets `done` or `wont-fix`; a later story may take the open rows as its
 brief. `factory-cli.py --findings` lists the open rows, and the status brief counts them.
 
@@ -187,11 +187,11 @@ orchestrator stops the run at that point. Two situations always escalate rather 
 The section names the question as a **decision record** (below): `decision: <id>` on its own
 line. A `## needs-human` without one has asked nobody, and the next gate refuses it.
 
-## Decision records — `<story>.decisions/<nn>.md`, beside the story
+## Decision records — `<story>/decisions/<nn>.md`, in the story's folder
 
 The question a stage may not answer, kept as a file of its own so the answer has a place to land
 and a second session — or the same one tomorrow, or another tool — finds it without any
-transcript. It lives beside the story it belongs to, `project/epics/<epic>/<story>.decisions/<nn>.md`
+transcript. It lives in the folder of the story it belongs to, `project/epics/<epic>/<story>/decisions/<nn>.md`
 (an acceptance as `accept-<n>.md`), because a human's answer is human-written state and belongs in
 the people's place; committed with the story. The record's `id:` is `<story>-<nn>` (`<story>-accept-<n>`),
 which is how stages, the gate and the inbox cite it, and the file is found by that name: a record
