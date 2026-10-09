@@ -48,7 +48,7 @@ dca-marketplace/
 │   └── skills/{dca-modelling,dca-discipline,dca-audit}/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
 │   ├── skills/factory-run/                # orchestrator + scripts/{story-gate.py (decides), factory-cli.py (shows, coordinates), factory.sh} + templates (profile, backlog, decision record, hook) + reference
-│   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document}/
+│   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document,stage-integrate}/
 │   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-help,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; the factory explained; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
 ├── plugins/dca-factory-cockpit/           # Claude Code only, optional: the factory cycle as a cockpit (function hooks)
@@ -72,7 +72,7 @@ dca-marketplace/
   `dca-core` may use a `dca-craft` skill; the other direction is what `scripts/check-skills.py` forbids.
 - **dca-factory** — the *delivery* layer, kept apart from the method on purpose (three layers, three owners:
   methodology → `dca-core`, stack profile → the project, pipeline → here). `factory-run` runs one backlog story
-  through `stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stage-judge` and `stage-document`;
+  through `stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stage-judge` and `stage-document` — in a worktree of its own when the runner runs it, integrated into the checkout's branch afterwards (`stage-integrate` where two stories met);
   `factory-setup` sets the factory up — project description (through `dca-core`'s `dca-describe`), git,
   runner, profile — `factory-backlog` writes the backlog it reads, and `factory-decisions` takes the
   answers a run may not give itself — a new bounded context, a new relationship between contexts, a

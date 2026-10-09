@@ -154,6 +154,33 @@ the file:
 - Never write a criterion key into a test name, a display name or a comment. The test names the
   behaviour; the table holds the link.
 
+## A story's worktree — `.dca-factory/worktrees/<story>/`
+
+The runner gives every story a git worktree of its own, on a branch `story/<id>` made from the main
+checkout's branch, which `.dca-factory/runs/<story>/.verify/target` records. Every stage runs there and
+changes code there alone. What is state stays in the main checkout, and the worktree sees it through links
+(on Windows junctions): the epics with the stories and their records, the run folder, the discovery
+reports, the installed pipeline and the tools' skill folders; the product, technical and domain description
+and the profile are copies, read alone. `FACTORY_HOME` names the main checkout to every process in the
+worktree, so the gate and the cli read each place from there and leave those paths out of the story's
+changes. `.dca-factory/worktrees/` is kept out of the main checkout's status in `.git/info/exclude`.
+
+**The integrate step.** When every gate passed — the document gate, or the adopt gate — the story is not
+delivered yet: the gate says `integrate` and the runner integrates it, one story at a time under
+`.dca-factory/integrate.lock`. It commits the story's code on its branch, merges the target in and squashes
+the whole to one commit, `feat(<context>): <title>` (`test(…)` for an adoption or a journey) with `Story:
+<id>` in its body; factory commits carry `--no-verify`, because the integrate gate holds the tree to more than
+the hook does. Where the merge stops, the conflicted files are listed in `.verify/conflicts` and the
+`stage-integrate` agent resolves them in the worktree, writing `.dca-factory/runs/<story>/integrate.md` (`| File |
+The story changed | The main line changed | How both hold |`); the runner commits the resolution. The
+integrate gate (`--stage integrate`) then checks the tree as it now is — no unmerged path, no conflict marker
+in a file the story's commit changes, the commit on the target's tip (`moved` otherwise, and the step merges
+again), the story's tests green, the required suites, `architecture` and `format` — and fast-forwards the main
+checkout's branch to the commit. Only then does it write `status: delivered`; a main checkout on another branch,
+or with a change of its own in a file the commit touches, is refused (`checkout`) and the story stops until
+`factory.sh run --story <id> --from integrate`. A refusal of the checks goes back to the build stage as a round.
+Delivered, the worktree and the branch go.
+
 ## Review files — `.dca-factory/runs/<story>/reviews/<perspective>.md`
 
 One file per perspective the judge covers: `ddd`, `hexagonal`, `clean-code` and whatever the profile's

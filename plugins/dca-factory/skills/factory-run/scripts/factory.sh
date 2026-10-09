@@ -10,9 +10,11 @@
 #   factory.sh setup --write [--replace <key>]   adds the detected keys the profile lacks
 #   factory.sh backlog [--check]             every story's state and the next one; --check the backlog
 #   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch] [--interval <s>]
-#                  [--max-stages <n>] [--story-budget <tokens>] [--separate-stages] [--dry-run]
+#                  [--max-stages <n>] [--story-budget <tokens>] [--separate-stages] [--parallel <n>] [--dry-run]
 #                    one story from where its files say (--from names the stage and starts a new
-#                    count of rounds), or without --story the whole backlog in the schedule's order
+#                    count of rounds), or without --story the whole backlog in the schedule's order;
+#                    every story in a worktree of its own, integrated into the checkout's branch when
+#                    every gate passed; --parallel runs up to <n> stories at once
 #   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh follow [--story <id>] [--process <name>] [--once [--lines <n>]] [--all] [--format text|json]
@@ -54,6 +56,7 @@ STAGES=(plan test build tidy judge document)
 PRE_GATED=(plan)
 POST_GATED=(test build tidy document)
 GATE=".agents/factory/story-gate.py"
+GATE_REL=$GATE
 # What shows and coordinates, beside the gate that decides: the file next to this script (the project's
 # copy beside the project's runner, the plugin's beside the plugin's). It imports the gate beside *it*,
 # and it is the one reader the runner asks a project file's content from — the profile, a verdict, a
@@ -134,6 +137,18 @@ export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
 # place — the runner hard-codes no path of the project's. The stop file lives beside the runs.
 RUNS=$(cli --place runs 2>/dev/null); RUNS=${RUNS:-.dca-factory/runs}
 STOP_FILE="$(dirname "$RUNS")/stop"
+# Every story runs in a worktree of its own (WP-92): the runner works from the main checkout, HOME_DIR, and
+# enters a story's worktree for its stages. What is state stays here — the run folder is named absolutely
+# while a story works in its worktree, and the stop file and the integration lock are this checkout's.
+# Git Bash names the directory as Windows does (`pwd -W`), so the Python beside it reads the same path.
+HOME_DIR=${FACTORY_HOME:-$(pwd -W 2>/dev/null || pwd -P)}
+RUNS_REL=$RUNS
+case "$RUNS" in
+  /*|?:*) STOP_FILE="$(dirname "$RUNS")/stop"; LOCK_DIR="$(dirname "$RUNS")/integrate.lock" ;;   # read from a worktree
+  *)      STOP_FILE="$HOME_DIR/$STOP_FILE"; LOCK_DIR="$HOME_DIR/$(dirname "$RUNS")/integrate.lock" ;;
+esac
+PARALLEL="${FACTORY_PARALLEL:-}"             # --parallel / FACTORY_PARALLEL / the profile's `parallel:`; 1 by default
+ADD_DIRS=()                                  # what a stage in a worktree may write in the main checkout
 
 # Whether `ln -s` in this shell makes a symlink. On Windows (Git Bash, MSYS2) it needs developer
 # mode or an administrator *and* `MSYS=winsymlinks:nativestrict`; without those it silently makes
@@ -228,7 +243,7 @@ plugin_skills() {
 # (names only) is read as a copy install.
 MANIFEST_NAME=".dca-factory-skills"
 # The pipeline's own skill names, for the one guess that remains: an install from before the list.
-PIPELINE_SKILLS="factory-backlog factory-decisions factory-help factory-run factory-setup factory-status factory-update factory-verify stage-build stage-document stage-judge stage-plan stage-test stage-tidy"
+PIPELINE_SKILLS="factory-backlog factory-decisions factory-help factory-run factory-setup factory-status factory-update factory-verify stage-build stage-document stage-integrate stage-judge stage-plan stage-test stage-tidy"
 manifest_field() {                          # manifest_field <target> <mode|source>
   sed -n "s/^$2:[[:space:]]*//p" "$1/$MANIFEST_NAME" 2>/dev/null | head -1
 }
@@ -617,6 +632,13 @@ model_choice() {                            # model_choice <tool> <stage>
   esac
 }
 
+# A stage in a story's worktree writes into the main checkout's run folder and the story's records: both are
+# linked into the worktree, and named to the tool as directories it may write besides its own.
+add_dir_flags() {
+  local dir
+  for dir in ${ADD_DIRS[@]+"${ADD_DIRS[@]}"}; do printf -- '--add-dir %s ' "$dir"; done
+}
+
 invoke() {                                  # invoke <tool> <prompt>
   local tool=$1 prompt=$2
   # Which model, which effort, which sandbox a tool runs with is the tool's configuration and not
@@ -650,9 +672,9 @@ invoke() {                                  # invoke <tool> <prompt>
     # (`factory.sh follow`); the last line, `"type":"result"`, carries the usage the single object did.
     claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format stream-json --verbose \
                 --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
-                $(isolation_flags claude) $model_args ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
+                $(add_dir_flags) $(isolation_flags claude) $model_args ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
     # stdin closed: `codex exec` also reads a prompt from stdin, and an unattended run has none.
-    codex)    codex exec --json -s workspace-write $(isolation_flags codex) $model_args \
+    codex)    codex exec --json -s workspace-write $(add_dir_flags) $(isolation_flags codex) $model_args \
                 -c sandbox_workspace_write.network_access=true \
                 ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" < /dev/null > "$raw" ;;
     opencode) opencode run --format json $(isolation_flags opencode) $model_args \
@@ -1830,7 +1852,7 @@ that are its own (a test that asserts too little is the test stage's, with its b
       return 1
     fi
     echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the test stage." >&2
-    run_story "$story" "$tool" test "$dry"
+    run_stages "$story" "$tool" test "$dry"
     NESTED_CODE=$?
     return 99
   fi
@@ -1862,7 +1884,7 @@ that are its own (a test that asserts too little is the test stage's, with its b
         return 1
       fi
       echo "factory: the runner's re-check of gate '$st' refused — round $refused_rounds runs the shared stages again from '$st' with the gate's report." >&2
-      run_story "$story" "$tool" "$st" "$dry"
+      run_stages "$story" "$tool" "$st" "$dry"
       NESTED_CODE=$?
       return 99
     fi
@@ -2006,7 +2028,7 @@ second writer. $(where_things_are "$tool" verifier "$story")"
       local back; back=$(cli --back-to "$story" 2>/dev/null || echo build)
       { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
       echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
-      run_story "$story" "$tool" "$back" "$dry"; return $? ;;
+      run_stages "$story" "$tool" "$back" "$dry"; return $? ;;
     story-conflict)
       echo "factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes back to the build stage. needs-human: read $RUNS/$story/judge.md." >&2
       return 1 ;;
@@ -2034,7 +2056,7 @@ second writer. $(where_things_are "$tool" verifier "$story")"
     fi
     local again; again=$(refused_from "$story" document)
     echo "factory: gate 'document' refused — round $refused_rounds runs stage '$again' again with the gate's report." >&2
-    run_story "$story" "$tool" "$again" "$dry"; return $?
+    run_stages "$story" "$tool" "$again" "$dry"; return $?
   fi
   return 0
 }
@@ -2136,6 +2158,13 @@ later_refusals() {                          # later_refusals <story> <stage> <wh
   return 0
 }
 
+worktree_sentence() {
+  [ -n "${FACTORY_HOME:-}" ] || return 0
+  printf ' %s' "You work in this story's own worktree, $PWD, on its branch: change the code here, never in the main \
+checkout ($FACTORY_HOME). The story with its decisions, the run folder, the pipeline and the skills are linked from \
+the main checkout; write a decision record or a hand-over at the path you are given."
+}
+
 prompt_for() {                              # prompt_for <stage> <story>
   local stage=$1 story=$2 repeat=""
   # A repeat round that cannot see why the gate refused works blind, and every stage skill says to
@@ -2174,7 +2203,7 @@ cite paths from its \`## Paths\` section in exactly that form."
 Read only the story and the files the skill names as its input, and write its output file under \
 $RUNS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages. \
 This session was started by the pipeline's runner, which holds the checkout for it: the worker named at \
-session start is the one that started you, not a second writer. $(where_things_are "$TOOL_IN_FLIGHT" "$stage" "$story")$skeleton$guard$repeat"
+session start is the one that started you, not a second writer.$(worktree_sentence) $(where_things_are "$TOOL_IN_FLIGHT" "$stage" "$story")$skeleton$guard$repeat"
 }
 
 gate() {                                    # gate <stage> <story>
@@ -2271,6 +2300,10 @@ adopt_gate() {                              # adopt_gate <story> <tool> <dry>
   echo "── gate adopt"
   [ -n "$3" ] && return 0
   if gate adopt "$1"; then
+    if [ -n "${FACTORY_HOME:-}" ]; then
+      integrate_story "$1" "$2" "$3"
+      return $?
+    fi
     echo "factory: story $1 is adopted."
     return 0
   fi
@@ -2281,10 +2314,10 @@ adopt_gate() {                              # adopt_gate <story> <tool> <dry>
     return 1
   fi
   echo "factory: gate 'adopt' refused — round $rounds runs the test stage again with the gate's report." >&2
-  run_story "$1" "$2" test "$3"
+  run_stages "$1" "$2" test "$3"
 }
 
-run_story() {
+run_stages() {                              # run_stages <story> <tool> <from> <dry> — in the checkout it is called in
   local story=$1 tool=$2 from=${3:-plan} dry=${4:-}
   local started=0 ran="" waiting built=""
   waiting=$(open_decisions "$story")
@@ -2295,6 +2328,11 @@ run_story() {
     return 3
   fi
   local kind; kind=$(cli --story "$story" --kind 2>/dev/null || echo story)
+  # Every gate passed in the story's worktree: only the integration is left, and it delivers the story.
+  if [ "$from" = integrate ]; then
+    integrate_story "$story" "$tool" "$dry"
+    return $?
+  fi
   # An adopted story whose judge passed: only the adopt gate is left, and it delivers the story.
   if [ "$from" = adopt ]; then
     adopt_gate "$story" "$tool" "$dry"
@@ -2454,7 +2492,7 @@ run_story() {
           return 1
         fi
         echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the test stage." >&2
-        run_story "$story" "$tool" test "$dry"
+        run_stages "$story" "$tool" test "$dry"
         return $?
       fi
       if asks_human "$artefact"; then
@@ -2483,7 +2521,7 @@ run_story() {
         fi
         local again; again=$(refused_from "$story" "$stage")
         echo "factory: gate '$stage' refused — round $refused_rounds runs stage '$again' again with the gate's report." >&2
-        run_story "$story" "$tool" "$again" "$dry"
+        run_stages "$story" "$tool" "$again" "$dry"
         return $?
       fi
     fi
@@ -2510,7 +2548,7 @@ run_story() {
           local back; back=$(cli --back-to "$story" 2>/dev/null || echo build)
           { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
           echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
-          run_story "$story" "$tool" "$back" "$dry"
+          run_stages "$story" "$tool" "$back" "$dry"
           return $?
           ;;
         story-conflict)
@@ -2531,6 +2569,137 @@ run_story() {
   # What ran, not what the script knows how to run: a message that names six stages after one of
   # them is exactly the self-report the gates exist to replace.
   echo "factory: story $story ran through ${ran:-nothing}."
+  # In its worktree the story is delivered once it is on the main line — when the files say every gate passed.
+  if [ -n "${FACTORY_HOME:-}" ] && [ -z "$dry" ] && [ "$(start_stage "$story")" = integrate ]; then
+    integrate_story "$story" "$tool" "$dry"
+    return $?
+  fi
+}
+
+# --- a story in its worktree (WP-92) -----------------------------------------------------------------
+# Every story runs in a worktree of its own, `story/<id>`, made from the main checkout's branch: a story that
+# waits — for an answer, for an acceptance — holds no checkout, and with --parallel several run at once. The
+# worktree links what is state to the main checkout (the epics with their records, the run folder, the
+# pipeline, the skills), so every reader sees one source. Delivered is the integration: the main line merged
+# into the story (a stage-integrate agent where git stops on a conflict), the story squashed to one commit,
+# the gate once more on that tree, and the main checkout's branch fast-forwarded to it. One integration at a
+# time: the git work in the main checkout runs under a lock beside the run folder.
+take_lock() {
+  local age
+  mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null
+  until mkdir "$LOCK_DIR" 2>/dev/null; do
+    [ -d "$(dirname "$LOCK_DIR")" ] || { echo "factory: no place for the lock at $LOCK_DIR" >&2; return 1; }
+    age=$("$PY" -c 'import os,sys,time; print(int(time.time() - os.path.getmtime(sys.argv[1])))' "$LOCK_DIR" 2>/dev/null || echo 0)
+    if [ "${age:-0}" -gt "${FACTORY_STALE_AFTER:-7200}" ]; then
+      echo "factory: $LOCK_DIR is ${age}s old — its holder ended without giving it back; taken over." >&2
+      rmdir "$LOCK_DIR" 2>/dev/null
+      continue
+    fi
+    sleep 2
+  done
+}
+drop_lock() { rmdir "$LOCK_DIR" 2>/dev/null; return 0; }
+
+integrate_story() {                         # integrate_story <story> <tool> <dry> — in the story's worktree
+  local story=$1 tool=$2 dry=$3 attempt code out conflicts report
+  echo "── integrate"
+  if [ -n "$dry" ]; then echo "   would merge $story's branch with the main line and fast-forward the main checkout"; return 0; fi
+  for attempt in 1 2 3; do
+    take_lock
+    out=$( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --integrate-prepare "$story" 2>&1 ); code=$?
+    printf '%s\n' "$out"
+    if [ "$code" = 3 ]; then
+      conflicts=$(printf '%s\n' "$out" | sed -n 's/^conflict: //p' | tr '\n' ' ')
+      echo "── stage integrate  (tool: $tool, fresh context — the merge stopped on: $conflicts)"
+      # the agent works in the worktree as every stage does: with the story, the run folder and the skills linked
+      ( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --worktree-link "$story" )
+      TOOL_IN_FLIGHT=$tool
+      local raw_out; raw_out="$RUNS/$story/.verify/integrate.$(date -u +%H%M%S).out"
+      local began; began=$(date +%s)
+      printf '%s\tstage-start\tintegrate\ttool=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" >> "$RUNS/$story/.verify/journal.tsv"
+      invocation_raw="$raw_out" stage_in_flight=integrate story_in_flight="$story" \
+        invoke "$tool" "$(integrate_prompt "$story" "$conflicts")"; code=$?
+      record_usage "$story" integrate "$tool" "$raw_out" "$(( $(date +%s) - began ))"
+      printf '%s\tstage-end\tintegrate\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$code" = 0 ] && echo 0 || echo nonzero)" >> "$RUNS/$story/.verify/journal.tsv"
+      if [ -f "$RUNS/$story/integrate.md" ] && asks_human "$RUNS/$story/integrate.md"; then
+        drop_lock; stopped_for_human "$RUNS/$story/integrate.md" integrate "$story"; return $?
+      fi
+      out=$( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --integrate-finish "$story" 2>&1 ); code=$?
+      printf '%s\n' "$out"
+      if [ "$code" != 0 ]; then
+        drop_lock
+        echo "factory: the conflicts of $story are not resolved — needs-human: the worktree $PWD holds the merge." >&2
+        return 1
+      fi
+    elif [ "$code" != 0 ]; then
+      drop_lock
+      echo "factory: $story could not be merged with the main line — the worktree $PWD keeps it as it was." >&2
+      return 1
+    fi
+    echo "── gate integrate"
+    code=0; GATE="$FACTORY_HOME/$GATE_REL" gate integrate "$story" || code=$?
+    drop_lock
+    [ "$code" = 0 ] && { echo "factory: story $story is integrated and delivered."; return 0; }
+    report="$RUNS/$story/.gate-integrate.txt"
+    if grep -q '^gate:fail moved' "$report" 2>/dev/null && ! grep -v '^gate:fail moved' "$report" | grep -q '^gate:fail '; then
+      echo "factory: the main line moved on while $story was merged — merged again (attempt $((attempt + 1)))."
+      continue
+    fi
+    if grep -q '^gate:fail checkout' "$report" 2>/dev/null; then
+      echo "factory: the main checkout could not take $story — see $report; then: factory.sh run --story $story --from integrate" >&2
+      return 1
+    fi
+    environment_refused integrate "$story" && return 1
+    local rounds; rounds=$(bump_rounds "$story")
+    if [ "$rounds" -ge 3 ]; then
+      echo "factory: gate 'integrate' refused in round $rounds — three rounds did not converge. needs-human." >&2
+      return 1
+    fi
+    echo "factory: gate 'integrate' refused the story on the main line — round $rounds runs the build stage again with the gate's report." >&2
+    # the integration took the links down; the build stage works with them again
+    take_lock; ( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --worktree-link "$story" ); drop_lock
+    run_stages "$story" "$tool" build "$dry"
+    return $?
+  done
+  echo "factory: the main line moved on three times while $story was integrated — run it again." >&2
+  return 1
+}
+
+integrate_prompt() {                        # integrate_prompt <story> <conflicted files>
+  printf '%s' "Apply the stage-integrate skill for backlog story $1. Merging the main line into this story's branch \
+stopped on conflicts in: $2. Their list is $RUNS/$1/.verify/conflicts. Resolve them in this worktree so both changes \
+hold, write $RUNS/$1/integrate.md, and run no git add, commit, merge, rebase or checkout: the runner commits. Do the \
+step yourself in this session; do not delegate it.$(worktree_sentence) $(where_things_are "$TOOL_IN_FLIGHT" integrate "$1")"
+}
+
+# Every story in its worktree: made or brought up to date and linked, under the lock; the stages run in it with
+# the run folder named absolutely and FACTORY_HOME naming this checkout; delivered, its worktree goes. Where the
+# project cannot have one (no commit yet, a detached HEAD, a story begun in the checkout before), it runs here.
+run_story() {                               # run_story <story> <tool> <from> <dry>
+  local story=$1 tool=$2 from=$3 dry=$4 wt code=0
+  if [ -n "$dry" ]; then run_stages "$story" "$tool" "$from" "$dry"; return $?; fi
+  take_lock
+  wt=$(cli --worktree-prepare "$story" | tail -1); code=$?
+  drop_lock
+  case "$wt" in
+    none*) echo "factory: $story runs in the checkout — ${wt#none — }"
+           run_stages "$story" "$tool" "$from" "$dry"; return $? ;;
+    "")    echo "factory: no worktree could be made for $story — nothing ran." >&2; return 1 ;;
+  esac
+  echo "factory: $story works in its worktree, ${wt#"$HOME_DIR/"}"
+  ADD_DIRS=("$HOME_DIR/$RUNS_REL" "$HOME_DIR/$(cli --place epics 2>/dev/null || echo project/epics)")
+  cd "$wt" || return 1
+  export FACTORY_HOME="$HOME_DIR"
+  RUNS="$HOME_DIR/$RUNS_REL"
+  run_stages "$story" "$tool" "$from" "$dry" || code=$?
+  cd "$HOME_DIR" || exit 1
+  unset FACTORY_HOME
+  RUNS=$RUNS_REL
+  ADD_DIRS=()
+  if [ "$code" = 0 ] && cli --delivered "$story" >/dev/null 2>&1; then
+    take_lock; cli --worktree-remove "$story"; drop_lock
+  fi
+  return "$code"
 }
 
 # Story after story, in the order the schedule names. The schedule is read off the files every
@@ -2539,8 +2708,13 @@ run_story() {
 # ends the loop — retrying a broken stage spends a run on the same refusal.
 run_backlog() {                             # run_backlog <tool> <watch> <interval> <dry>
   local tool=$1 watch=$2 interval=$3 dry=$4
-  local out previous="" next story from last="" code
+  local out previous="" next story from last="" code slots
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
+  slots=$(parallel_slots) || return 2
+  if [ "$slots" -gt 1 ] && [ -z "$dry" ]; then
+    run_parallel "$tool" "$watch" "$interval" "$slots"
+    return $?
+  fi
   while :; do
     # waiting is working too: the claim is renewed on every look, so a watch that waits for an answer
     # for hours is not mistaken for a crashed one
@@ -2550,9 +2724,9 @@ run_backlog() {                             # run_backlog <tool> <watch> <interv
       echo "factory: $STOP_FILE exists — the backlog run stops here. Remove it to run again."
       return 0
     fi
-    out=$(cli --schedule 2>&1) || {
+    out=$(cli --schedule --slots 1 2>&1) || {
       printf '%s\n' "$out" >&2; echo "factory: the schedule could not be read." >&2; return 1; }
-    next=$(printf '%s\n' "$out" | sed -n 's/^next: //p')
+    next=$(printf '%s\n' "$out" | sed -n 's/^next: //p' | head -1)
     case "$next" in
       none*|"") ;;
       *)
@@ -2591,6 +2765,86 @@ run_backlog() {                             # run_backlog <tool> <watch> <interv
     fi
     last=""
     sleep "$interval"
+  done
+}
+
+# How many stories run at once: --parallel, else FACTORY_PARALLEL, else the profile's `parallel:`, else 1. A slot
+# counts a story with a running stage; one that waits for an answer or an acceptance holds none.
+parallel_slots() {
+  local n=${PARALLEL:-$(cli --get parallel 2>/dev/null | awk '{print $1}')}
+  n=${n:-1}
+  case "$n" in ''|*[!0-9]*|0) echo "factory: parallel takes a whole number of stories, 1 or more — not '$n'" >&2; return 1 ;; esac
+  echo "$n"
+}
+
+prefix() {                                  # prefix <story> — every line of a story's run, named
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do printf '[%s] %s\n' "$1" "$line"; done
+}
+
+# Several stories at once, each in its worktree, each a process of its own whose lines carry its id. The
+# schedule is asked with the stories this runner runs; a story that ends frees its slot for the next. A failure
+# starts nothing more and lets the running ones finish; so does the stop file. --max-stages and --story-budget
+# count per story process here.
+run_parallel() {                            # run_parallel <tool> <watch> <interval> <slots>
+  local tool=$1 watch=$2 interval=$3 slots=$4
+  local children="" still entry story pid from code out next busy failed=0 stopping="" seen="" launched previous=""
+  while :; do
+    if [ -z "$stopping" ] && ! cli --claim "$WORKER" >/dev/null; then
+      echo "factory: another worker took over this checkout — no further story starts." >&2; stopping=5; failed=5
+    fi
+    if [ -z "$stopping" ] && [ -f "$STOP_FILE" ]; then
+      echo "factory: $STOP_FILE exists — no further story starts; the running ones finish."; stopping=stop
+    fi
+    still=""
+    for entry in $children; do
+      story=${entry%%:*}; pid=${entry#*:}; from=${pid#*:}; pid=${pid%%:*}
+      if kill -0 "$pid" 2>/dev/null; then still="$still $entry"; continue; fi
+      wait "$pid" 2>/dev/null
+      code=$(cat "$HOME_DIR/$RUNS_REL/$story/.verify/runner-exit" 2>/dev/null || echo 1)
+      case "$code" in
+        0) seen="$seen $story@$from" ;;
+        3) ;;
+        *) echo "factory: story $story stopped (exit $code) — no further story starts; the running ones finish." >&2
+           stopping=${stopping:-$code}; [ "$failed" = 0 ] && failed=$code ;;
+      esac
+    done
+    children=$still
+    launched=""
+    if [ -z "$stopping" ]; then
+      busy=""; for entry in $children; do busy="$busy${busy:+,}${entry%%:*}"; done
+      out=$(cli --schedule --slots "$slots" --busy "$busy" 2>&1) || {
+        printf '%s\n' "$out" >&2; echo "factory: the schedule could not be read." >&2; stopping=1; failed=1; }
+      for next in $(printf '%s\n' "$out" | sed -n 's/^next: //p' | grep -v '^none' | tr ' ' '@'); do
+        story=${next%%@*}; from=${next#*@}
+        case " $seen " in *" $story@$from "*)
+          echo "factory: $story ran from $from and the schedule names it there again — no progress, not started again." >&2
+          [ "$failed" = 0 ] && failed=1; stopping=${stopping:-1}; continue ;; esac
+        echo "══ story $story from $from  (slots: $slots)"
+        mkdir -p "$HOME_DIR/$RUNS_REL/$story/.verify"
+        rm -f "$HOME_DIR/$RUNS_REL/$story/.verify/runner-exit"
+        ( run_story "$story" "$tool" "$from" ""; echo $? > "$HOME_DIR/$RUNS_REL/$story/.verify/runner-exit" ) 2>&1 \
+          | prefix "$story" &
+        children="$children $story:$!:$from"
+        launched=1
+      done
+    fi
+    if [ -z "$children" ] && [ -z "$launched" ]; then
+      [ -n "$stopping" ] && return "$failed"
+      if [ -z "$watch" ] || ! printf '%s\n' "$out" | grep -q '^wait: yes'; then
+        printf '%s\n' "$out"
+        echo "factory: nothing more can run$([ -n "$watch" ] && echo ", and nothing waits on an answer that would change that")."
+        return "$failed"
+      fi
+      if [ "$out" != "$previous" ]; then
+        printf '%s\n' "$out"
+        echo "factory: waiting for an answer — the schedule is read again every ${interval}s; $STOP_FILE ends the watch."
+        previous=$out
+      fi
+      sleep "$interval"
+      continue
+    fi
+    sleep 2
   done
 }
 
@@ -2776,6 +3030,7 @@ while [ $# -gt 0 ]; do
     --shared-builder) SHARED_BUILDER=1; SHARED_BUILDER_SET=set; shift ;;
     --shared-verifier) SHARED_VERIFIER=1; SHARED_VERIFIER_SET=set; shift ;;
     --separate-stages) SEPARATE_STAGES=1; shift ;;
+    --parallel) [ $# -ge 2 ] || usage; PARALLEL=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -2845,9 +3100,9 @@ case "$command" in
         fi
         echo "factory: story $story starts at $from${local_detail:+ — $local_detail}"
       else
-        case " ${STAGES[*]} adopt " in
+        case " ${STAGES[*]} adopt integrate " in
           *" $from "*) ;;
-          *) echo "factory: --from $from names no stage (${STAGES[*]} adopt) — nothing ran, the rounds are as they were" >&2
+          *) echo "factory: --from $from names no stage (${STAGES[*]} adopt integrate) — nothing ran, the rounds are as they were" >&2
              exit 2 ;;
         esac
         [ -n "$dry" ] || reset_rounds "$story"

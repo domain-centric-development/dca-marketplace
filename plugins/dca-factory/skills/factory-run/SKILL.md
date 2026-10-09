@@ -400,10 +400,22 @@ unknown or on a cycle, or an epic its epic depends on not delivered), `unrelease
 `next: <story> <stage>` or `next: none — <why>`. Order: `depends_on`, ties by the epic's place (its own
 `depends_on:`, then its id), then by id.
 
-**One story with unfinished code at a time.** A story that got past its plan stage (it has
-`tests.md`) and is not delivered holds the checkout: it is next if it can run, and while it waits
-or is stopped no other story starts — the next one would build on its tests and code. A story that
-stopped with a question at its plan stage wrote no code, so independent stories run past it.
+**One story with unfinished code in this checkout at a time.** In a session the stages run here: a story
+that got past its plan stage (it has `tests.md`) and is not delivered holds the checkout — it is next if it
+can run, and while it waits or is stopped no other story starts, because the next one would build on its
+tests and code. A story that stopped with a question at its plan stage wrote no code, so independent
+stories run past it.
+
+**The runner gives every story a worktree of its own** (`.dca-factory/worktrees/<story>/`, branch
+`story/<id>`): its code waits there, so a story waiting for an answer or an acceptance holds nothing and the
+next one starts. The worktree links what is state to this checkout — the stories with their decisions, the
+run folder, the pipeline, the skills — and `FACTORY_HOME` names this checkout to the gate and the cli, so
+both read every place from here. A story is delivered when it is integrated: the integrate step merges the
+main line into its branch (the `stage-integrate` agent where git stops on a conflict), squashes it to one
+commit, runs the integrate gate on that tree — the tidy gate's checks once more, no conflict marker left —
+and fast-forwards this checkout's branch; then its worktree and branch go. `--parallel <n>` runs up to `<n>`
+stories at once. A story the runner started in its worktree is not taken up in a session: run it with
+`factory.sh run --story <id>`.
 
 The runner — the person's, in a shell — does the same loop: `factory.sh run [--tool <t>]` without `--story` runs the next story from the stage the
 schedule names, asks again, and ends when nothing can run. A story that stops for a decision does

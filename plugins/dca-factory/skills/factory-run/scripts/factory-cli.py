@@ -775,6 +775,9 @@ def stale_after():
 
 
 def claim_path(cwd):
+    # One claim per main checkout: a stage in a story's worktree renews the runner's claim there, not one of its own.
+    if in_worktree(cwd):
+        cwd = factory_home()
     code, git_dir = git(cwd, "rev-parse", "--git-dir")
     if code == 0 and git_dir:
         return os.path.join(cwd, git_dir, "dca-factory-worker.lock")
@@ -2536,14 +2539,285 @@ def keep_pass(folder):
     return target
 
 
-def schedule_data(cwd, epics, runs):
+# --- a story's worktree (WP-92) --------------------------------------------------------------------------
+# The runner makes, links, integrates and removes a story's worktree through these; every git call is here,
+# never in the runner, so one reader decides what a worktree is on every platform.
+
+def link_folder(source, link):
+    """Link the worktree's `link` to the main checkout's folder `source`: a symlink, on Windows without the
+    right a junction. Returns how, or None where neither can be made."""
+    try:
+        os.symlink(source, link, target_is_directory=True)
+        return "link"
+    except (OSError, NotImplementedError, AttributeError):
+        pass
+    if os.name == "nt":
+        try:
+            import _winapi
+            _winapi.CreateJunction(source, link)
+            return "junction"
+        except Exception:                        # no junction either: the caller copies and says so
+            pass
+    return None
+
+
+def is_linked(path):
+    """A symlink, or on Windows a junction — something that points elsewhere and goes without its target."""
+    if os.path.islink(path):
+        return True
+    if os.name == "nt" and os.path.isdir(path):
+        with contextlib.suppress(OSError, ValueError):
+            return bool(os.readlink(path))
+    return False
+
+
+def unlink_folder(path):
+    if os.path.islink(path):
+        os.unlink(path)
+    elif is_linked(path):
+        os.rmdir(path)                           # a junction goes, its target stays
+
+
+def git_identity(cwd):
+    """`-c user.name=… -c user.email=…` where the repository names no committer — a factory commit must not
+    fail on a machine that never committed."""
+    if git(cwd, "config", "user.email")[1].strip():
+        return []
+    return ["-c", "user.name=dca-factory", "-c", "user.email=dca-factory@localhost"]
+
+
+def exclude_worktrees(cwd):
+    """The worktrees folder is git's business only: kept out of the main checkout's status in `.git/info/exclude`
+    (local, never committed — the project's `.gitignore` stays the person's)."""
+    code, common = git(cwd, "rev-parse", "--git-common-dir")
+    if code != 0 or not common.strip():
+        return
+    path = os.path.join(cwd, common.strip(), "info", "exclude")
+    line = "/" + worktrees_dir().strip("/") + "/"
+    text = read_text(path) if os.path.isfile(path) else ""
+    if line not in text.splitlines():
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(("" if not text or text.endswith("\n") else "\n") + line + "\n")
+
+
+def restore_places(path):
+    """Before git moves anything in the worktree: the links go, and a place git tracks is as the index has it —
+    the branch's, or in a merge the merged one, so a change the main line made there is not taken back."""
+    folders, files = worktree_places()
+    for rel in folders:
+        full = os.path.join(path, rel)
+        if is_linked(full):
+            unlink_folder(full)
+    tracked = [rel for rel in folders + files if git(path, "ls-files", "--", rel)[1].strip()]
+    if tracked:
+        git(path, "checkout", "--", *tracked)
+    for rel in files:
+        full = os.path.join(path, rel)
+        if rel not in tracked and os.path.isfile(full):
+            os.remove(full)                      # a copy of the main checkout's, made by link_places
+
+
+def link_places(path, home, runs):
+    """The worktree sees what is state through the main checkout: the epics with their records, the run folder,
+    the discovery reports, the pipeline and the skills as links; the description and the profile as copies."""
+    import shutil
+    folders, files = worktree_places()
+    copied = []
+    for rel in folders:
+        source, link = os.path.join(home, rel), os.path.join(path, rel)
+        if os.path.abspath(source) == os.path.abspath(runs):
+            os.makedirs(source, exist_ok=True)
+        if not os.path.isdir(source):
+            continue
+        if is_linked(link) and os.path.realpath(link) == os.path.realpath(source):
+            continue
+        if is_linked(link):
+            unlink_folder(link)
+        elif os.path.isdir(link):
+            shutil.rmtree(link)                  # the branch's copy of a place the main checkout owns
+        os.makedirs(os.path.dirname(link) or path, exist_ok=True)
+        if not link_folder(source, link):
+            shutil.copytree(source, link)
+            copied.append(rel)
+    for rel in files:
+        source, copy = os.path.join(home, rel), os.path.join(path, rel)
+        if os.path.isfile(source) and (not os.path.isfile(copy) or read_text(copy) != read_text(source)):
+            os.makedirs(os.path.dirname(copy) or path, exist_ok=True)
+            shutil.copyfile(source, copy)
+    if copied:
+        print(f"worktree: no link could be made here — {', '.join(copied)} copied; a decision record a stage "
+              f"writes there is not seen by the main checkout", file=sys.stderr)
+
+
+def write_base(runs, story_id, tree):
+    """The tree the story's diff is taken against, once the worktree moved onto another base."""
+    folder = os.path.join(runs, story_id, ".verify")
+    if os.path.isdir(folder) and tree:
+        with open(os.path.join(folder, "base-tree"), "w", encoding="utf-8") as handle:
+            handle.write(tree + "\n")
+
+
+def worktree_prepare(cwd, runs, story_id):
+    """Before a story's stages: its worktree, made where it is not, brought onto the main line where it has no
+    commit of its own and nothing of it is in the way, and linked to the main checkout. Prints the worktree's path
+    as the last line — or `none — <why>` where the project cannot have one, and the story runs in the checkout."""
+    if git(cwd, "rev-parse", "--verify", "--quiet", "HEAD")[0] != 0:
+        print("none — the repository has no commit yet, so a story has no branch to start from")
+        return 0
+    path, branch = worktree_of(story_id, cwd), STORY_BRANCH + story_id
+    target_file = os.path.join(runs, story_id, ".verify", "target")
+    on = git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip()
+    exclude_worktrees(cwd)
+    if not has_worktree(story_id, cwd):
+        known = git(cwd, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")[0] == 0
+        if not known and os.path.isfile(os.path.join(runs, story_id, STAGE_FILES["test"])) and not is_delivered(
+                read_front_matter(find_story(place("epics"), story_id))[0]):
+            print(f"none — {story_id} began in the checkout, its tests are there; it finishes there")
+            return 0
+        if not on:
+            print("none — the checkout is on a detached HEAD, so the story has no branch to integrate into")
+            return 0
+        git(cwd, "worktree", "prune")
+        made = git(cwd, "worktree", "add", "--quiet", path, branch) if known \
+            else git(cwd, "worktree", "add", "--quiet", "-b", branch, path, "HEAD")
+        if made[0] != 0:
+            print(f"factory: the worktree for {story_id} could not be made — {made[1]}", file=sys.stderr)
+            return 1
+        print(f"worktree: {shown(path)} on {branch}, from {on}", file=sys.stderr)
+    if not os.path.isfile(target_file):
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as handle:
+            handle.write((on or git(path, "rev-parse", "HEAD")[1].strip()) + "\n")
+    target = integration_target(runs, story_id)
+    restore_places(path)
+    # Resumed after waiting: a branch with no commit of its own moves onto the main line as it is now — what the
+    # other stories delivered is there for its next stage. Git refuses where the story's changes are in the way;
+    # then it keeps its base, and the integrate step merges.
+    own = git(path, "rev-list", "--count", f"{target}..HEAD")[1].strip()
+    if own == "0" and git(path, "rev-parse", "HEAD")[1].strip() != git(path, "rev-parse", target)[1].strip():
+        if git(path, "merge", "--ff-only", "--quiet", target)[0] == 0:
+            write_base(runs, story_id, git(path, "rev-parse", "HEAD^{tree}")[1].strip())
+            print(f"worktree: {story_id} moved onto {target} as it is now", file=sys.stderr)
+        else:
+            print(f"worktree: {story_id} keeps its base — {target} changed what the story changes; the integrate "
+                  f"step merges", file=sys.stderr)
+    link_places(path, cwd, runs)
+    print(os.path.abspath(path).replace("\\", "/"))
+    return 0
+
+
+def worktree_remove(cwd, story_id):
+    """After the story is integrated: its worktree and its branch go — the commit is on the main line."""
+    import shutil
+    path, branch = worktree_of(story_id, cwd), STORY_BRANCH + story_id
+    if os.path.isdir(path):
+        folders, _files = worktree_places()
+        for rel in folders:
+            if is_linked(os.path.join(path, rel)):
+                unlink_folder(os.path.join(path, rel))
+        git(cwd, "worktree", "remove", "--force", path)
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+    git(cwd, "worktree", "prune")
+    if git(cwd, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")[0] == 0:
+        git(cwd, "branch", "-D", branch)
+    print(f"worktree: {story_id}'s worktree and {branch} removed")
+    return 0
+
+
+def squash_story(path, runs, story_id, target, front, body):
+    """The story as one commit on top of the target: `feat(<context>): <title>`, the story's id in the body."""
+    if git(path, "rev-parse", "HEAD")[1].strip() != git(path, "rev-parse", target)[1].strip():
+        git(path, "reset", "--soft", target)
+    if git(path, "diff", "--cached", "--quiet")[0] != 0:
+        scope = re.sub(r"[^a-z0-9]+", "-", str(front.get("context", "")).lower()).strip("-") or "story"
+        kind = "feat" if story_kind(front) == "story" else "test"
+        message = f"{kind}({scope}): {story_title(front, body) or story_id}\n\nStory: {story_id}\n"
+        done = git(path, *git_identity(path), "commit", "--no-verify", "--quiet", "-m", message)
+        if done[0] != 0:
+            print(f"factory: the story's commit could not be made — {done[1]}", file=sys.stderr)
+            return 1
+    write_base(runs, story_id, git(path, "rev-parse", f"{target}^{{tree}}")[1].strip())
+    head = git(path, "rev-parse", "--short", "HEAD")[1].strip()
+    print(f"integrate: {story_id} is {'one commit, ' + head + ',' if head != git(path, 'rev-parse', '--short', target)[1].strip() else 'no commit'} on top of {target}")
+    return 0
+
+
+CONFLICTS_FILE = "conflicts"
+
+
+def integrate_prepare(cwd, runs, epics, story_id):
+    """The integrate step's git half: the story's code committed on its branch, the main line merged in, the
+    whole squashed to one commit. Exit 3 with `conflict: <path>` lines where the merge needs a hand; 0 when the
+    story is one commit on top of the target."""
+    path = worktree_of(story_id, cwd)
+    if not has_worktree(story_id, cwd):
+        print(f"factory: {story_id} has no worktree to integrate", file=sys.stderr)
+        return 1
+    target = integration_target(runs, story_id)
+    front, body = read_front_matter(find_story(epics, story_id))
+    restore_places(path)
+    git(path, "add", "-A", "--", ".")
+    if git(path, "diff", "--cached", "--quiet")[0] != 0:
+        git(path, *git_identity(path), "commit", "--no-verify", "--quiet", "-m", f"wip({story_id}): before integration")
+    if git(path, "merge-base", "--is-ancestor", target, "HEAD")[0] != 0:
+        done = git(path, *git_identity(path), "merge", "--no-ff", "--no-edit", "--no-verify", "--quiet", target)
+        if done[0] != 0:
+            conflicted = [p for p in git(path, "diff", "--name-only", "--diff-filter=U")[1].split("\n") if p.strip()]
+            if not conflicted:
+                print(f"factory: merging {target} into {story_id} failed — {done[1]}", file=sys.stderr)
+                return 1
+            with open(os.path.join(runs, story_id, ".verify", CONFLICTS_FILE), "w", encoding="utf-8") as handle:
+                handle.write("\n".join(conflicted) + "\n")
+            for conflict in conflicted:
+                print(f"conflict: {conflict}")
+            return 3
+    return squash_story(path, runs, story_id, target, front, body)
+
+
+def integrate_finish(cwd, runs, epics, story_id):
+    """After the conflicts were resolved in the worktree: no marker left in a conflicted file, the merge committed,
+    the story squashed. Exit 1, naming the files, while a marker is left."""
+    path = worktree_of(story_id, cwd)
+    target = integration_target(runs, story_id)
+    listed = os.path.join(runs, story_id, ".verify", CONFLICTS_FILE)
+    files = [line.strip() for line in read_text(listed).splitlines() if line.strip()] if os.path.isfile(listed) else []
+    left = []
+    for rel in files:
+        full = os.path.join(path, rel)
+        with contextlib.suppress(OSError, UnicodeDecodeError):
+            with open(full, encoding="utf-8") as handle:
+                if CONFLICT_MARKER.search(handle.read()):
+                    left.append(rel)
+    if left:
+        print(f"factory: a conflict marker is left in {', '.join(left)} — the merge is not resolved", file=sys.stderr)
+        return 1
+    restore_places(path)
+    git(path, "add", "-A", "--", ".")
+    done = git(path, *git_identity(path), "commit", "--no-verify", "--quiet", "--no-edit")
+    if done[0] != 0 and git(path, "diff", "--name-only", "--diff-filter=U")[1].strip():
+        print(f"factory: the merge could not be committed — {done[1]}", file=sys.stderr)
+        return 1
+    with contextlib.suppress(OSError):
+        os.remove(listed)
+    front, body = read_front_matter(find_story(epics, story_id))
+    return squash_story(path, runs, story_id, target, front, body)
+
+
+def schedule_data(cwd, epics, runs, slots=None, busy=()):
     """Every story's state, the order and the next one to run — read off the files, printed by
     `schedule` for the runner and by `status` for a person.
 
-    One story with unfinished code at a time: a story past its plan stage that is not delivered
-    holds the checkout, because its tests and code are in the working tree and a second story
-    would build on them. Such a story is next if it can run, and nothing else starts while it
-    cannot. A story that stopped at its plan stage wrote no code, so independent work runs past it."""
+    One story with unfinished code in the checkout at a time: a story past its plan stage that is not
+    delivered and has no worktree holds the checkout, because its tests and code are in the working tree
+    and a second story would build on them. Such a story is next if it can run, and nothing else starts
+    while it cannot. A story that stopped at its plan stage wrote no code, so independent work runs past it.
+
+    With `slots` — the runner, which gives every story a worktree of its own — a story's code is in its
+    worktree, so a story that waits holds nothing: up to `slots` stories run at once, `busy` names the ones
+    this runner runs already. A story with a worktree goes first (it has code), then the order; between stories
+    of one epic the one whose context no running story changes."""
     stories, order = {}, []
     hint = layout_hint(cwd, read_profile(resolve_profile(None, cwd)))
     twice = duplicate_ids(epics)
@@ -2569,7 +2843,8 @@ def schedule_data(cwd, epics, runs):
         stories[story_id] = dict(state=state, start=start, detail=detail, deps=depends_on(front),
                                  kind=story_kind(front),
                                  holds=state not in ("delivered", "superseded") and os.path.isfile(
-                                     os.path.join(runs, story_id, STAGE_FILES["test"])),
+                                     os.path.join(runs, story_id, STAGE_FILES["test"]))
+                                 and not has_worktree(story_id, factory_home() or cwd),
                                  path=path, epic=str(front.get("epic") or epic).strip(), front=front,
                                  body=story_body, title=story_title(front, story_body))
 
@@ -2621,6 +2896,8 @@ def schedule_data(cwd, epics, runs):
             stories[story_id]["detail"] = (stories[story_id]["detail"] + " · " if stories[story_id]["detail"] else "") \
                 + f"stage {stage} started {started} and never ended — possibly interrupted"
     holders = [s for s in order if stories[s].get("holds")]
+    if slots:
+        return slotted(stories, order, holders, slots, busy, factory_home() or cwd, hint)
     nxt, reason, wait = None, "", False
     stray = unclaimed_changes(cwd, runs, stories) if not holders else []
     if stray:
@@ -2666,6 +2943,45 @@ def epic_waits(epic, graph, cycle, stories):
     return ""
 
 
+def slotted(stories, order, holders, slots, busy, cwd, hint):
+    """The schedule for a runner with `slots` (WP-92): every story in its worktree, up to `slots` at once."""
+    for story_id in busy:
+        if story_id in stories and stories[story_id]["state"] not in ("delivered", "superseded"):
+            stories[story_id].update(state="running", start=None, detail="in this runner")
+    running = [s for s in order if stories[s]["state"] == "running"]
+    picked, reason = [], ""
+    if holders:
+        # A story that began in the checkout before it had a worktree finishes there, alone — as before.
+        holder = holders[0]
+        if stories[holder]["state"] in RUNNABLE and holder not in busy and not running:
+            picked = [holder]
+        else:
+            reason = (f"{holder} holds unfinished code in the checkout ({stories[holder]['state']}) — "
+                      f"no other story starts until it is delivered")
+    else:
+        context = lambda s: str(stories[s]["front"].get("context", "")).strip()
+        coded = lambda s: 0 if has_worktree(s, cwd) else 1
+        candidates = sorted((s for s in order if stories[s]["state"] in RUNNABLE and s not in busy),
+                            key=lambda s: (coded(s), order.index(s)))
+        changing = {context(s) for s in running}
+        while candidates and len(picked) + len(running) < slots:
+            first = candidates[0]
+            peers = [c for c in candidates if (coded(c), stories[c]["epic"]) == (coded(first), stories[first]["epic"])]
+            choice = next((c for c in peers if context(c) not in changing), first)
+            picked.append(choice)
+            candidates.remove(choice)
+            changing.add(context(choice))
+        if not picked:
+            reason = (f"{len(running)} of {slots} slot(s) busy: {', '.join(running)}" if running and len(running) >= slots
+                      else "nothing can run")
+    counts = {}
+    for story in stories.values():
+        counts[story["state"]] = counts.get(story["state"], 0) + 1
+    wait = any(stories[s]["state"] in ("waiting", "running") for s in order)
+    return dict(stories=stories, order=order, next=picked[0] if picked else None, also=picked[1:], reason=reason,
+                wait=wait, counts=counts, hint=hint)
+
+
 #: What people write and the pipeline installs: a change there is not code a story left behind.
 PEOPLE_OWNED = ("project/", ".agents/", ".claude/", ".codex/", ".opencode/", ".githooks/", "docs/")
 
@@ -2692,10 +3008,11 @@ def unclaimed_changes(cwd, runs, stories):
                   and path not in fixed)
 
 
-def schedule(cwd, epics, runs):
+def schedule(cwd, epics, runs, slots=None, busy=()):
     """Print every story's state and the next one to run; return 0. The runner and the tests read
-    these lines (`schedule:`, `wait:`, `next:`): they are a contract, not the person's view."""
-    data = schedule_data(cwd, epics, runs)
+    these lines (`schedule:`, `wait:`, `next:`): they are a contract, not the person's view. With `slots`,
+    one `next:` line per story that may start now."""
+    data = schedule_data(cwd, epics, runs, slots, busy)
     stories, order, nxt, reason, wait = data["stories"], data["order"], data["next"], data["reason"], data["wait"]
     if data["hint"]:
         print(f"layout: {data['hint']}")
@@ -2717,6 +3034,8 @@ def schedule(cwd, epics, runs):
                           or "no story under " + epics + "/"))
     print(f"wait: {'yes' if wait else 'no'}")
     print(f"next: {nxt} {stories[nxt]['start']}" if nxt else f"next: none — {reason}")
+    for also in data.get("also", []):
+        print(f"next: {also} {stories[also]['start']}")
     return 0
 
 
@@ -3680,6 +3999,20 @@ def main(argv):
     parser.add_argument("--document-skeleton", metavar="STORY",
                         help="write the document stage's file skeleton with every changed path and run file under "
                              "`## Paths`, as they resolve from the project root; an existing file is kept; and exit")
+    parser.add_argument("--slots", type=int, metavar="N",
+                        help="with --schedule: the runner's slots — every story in a worktree, up to N at once, "
+                             "one `next:` line per story that may start now")
+    parser.add_argument("--busy", default="", metavar="IDS",
+                        help="with --schedule --slots: the stories this runner runs already, comma-separated")
+    parser.add_argument("--worktree-prepare", metavar="STORY",
+                        help="make, update and link the story's worktree; print its path (or `none — <why>`)")
+    parser.add_argument("--worktree-remove", metavar="STORY", help="remove the story's worktree and its branch")
+    parser.add_argument("--worktree-link", metavar="STORY",
+                        help="link the main checkout's places into the story's worktree again (an agent works in it)")
+    parser.add_argument("--integrate-prepare", metavar="STORY",
+                        help="commit the story's code, merge the main line in, squash; exit 3 with `conflict:` lines")
+    parser.add_argument("--integrate-finish", metavar="STORY",
+                        help="after the conflicts were resolved: commit the merge and squash; exit 1 while a marker is left")
     parser.add_argument("--migrate-layout", action="store_true",
                         help="move an older layout to one owner per place — what `factory.sh update` runs once — and exit")
     parser.add_argument("--epics", help="where the epics and stories are (default: the profile's `epics:`, else project/epics)")
@@ -3789,7 +4122,22 @@ def main(argv):
     if args.resolve is not None:
         return resolve(args.epics, args.resolve)
     if args.schedule:
-        return schedule(cwd, args.epics, args.runs)
+        return schedule(cwd, args.epics, args.runs, args.slots,
+                        tuple(s.strip() for s in args.busy.split(",") if s.strip()))
+    if args.worktree_prepare:
+        return worktree_prepare(cwd, args.runs, args.worktree_prepare)
+    if args.worktree_remove:
+        return worktree_remove(cwd, args.worktree_remove)
+    if args.worktree_link:
+        if not has_worktree(args.worktree_link, cwd):
+            print(f"factory: {args.worktree_link} has no worktree", file=sys.stderr)
+            return 1
+        link_places(worktree_of(args.worktree_link, cwd), cwd, args.runs)
+        return 0
+    if args.integrate_prepare:
+        return integrate_prepare(cwd, args.runs, args.epics, args.integrate_prepare)
+    if args.integrate_finish:
+        return integrate_finish(cwd, args.runs, args.epics, args.integrate_finish)
     if args.start:
         if not args.story:
             parser.error("--start needs --story")

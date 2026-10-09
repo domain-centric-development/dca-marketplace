@@ -1409,11 +1409,11 @@ def verify_runner(runner, verbose=False):
 
     # 1b-recheck. the runner's re-check of a shared builder refuses: a round with the gate's report, not a stop
     recheck_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
-                   'printf "%s\\n" "$FACTORY_PROMPT" >> builder-prompts.txt; '
+                   'printf "%s\\n" "$FACTORY_PROMPT" >> \"$FIXTURE_HOME/builder-prompts.txt\"; '
                    'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
                    'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
                    'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi ;; esac; done; '
-                   'if [ ! -f built-once ]; then : > built-once; mkdir -p src/main; echo "class Stray {}" > src/main/Stray.java; '
+                   'if [ ! -f \"$FIXTURE_HOME/built-once\" ]; then : > \"$FIXTURE_HOME/built-once\"; mkdir -p src/main; echo "class Stray {}" > src/main/Stray.java; '
                    'else printf -- "- src/main/Stray.java\\n" >> .dca-factory/runs/STORY-1/build.md; fi; '
                    'else sh -c "$FIXTURE_STAND_IN"; fi')
     with tmpdir() as root:
@@ -1429,7 +1429,9 @@ def verify_runner(runner, verbose=False):
         write_file(root, ".gitignore", "build/\nbuilder-prompts.txt\nbuilt-once\n")   # test reports; the fixture's own notes
         subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
         subprocess.run(["git", "-c", "user.name=v", "-c", "user.email=v@v", "commit", "-qm", "base"], cwd=root, capture_output=True)
+        # the stage runs in the story's worktree: the fixture keeps its own notes in the project, by its path
         env = {"FACTORY_TOOL_CMD": recheck_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
+               "FIXTURE_HOME": shell_path(root),
                "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
                                   "--shared-builder", env=env)
@@ -7243,6 +7245,165 @@ def run_groups(args):
     return run_runner_groups(args, failures, "all" if args.group == "all" else "checks")
 
 
+#: A stand-in tool for the worktree cases (WP-92): it logs where each stage ran, writes each stage's file, and
+#: writes code — a file of its own per story and a line in one file every story touches, so two stories meet.
+STAND_IN_WORKTREE = """#!/bin/sh
+echo "$FACTORY_STORY $FACTORY_STAGE $(pwd -P)" >> "$FIXTURE_LOG"
+d=".dca-factory/runs/$FACTORY_STORY"
+rec="project/epics/sample/$FACTORY_STORY/decisions/01.md"
+mkdir -p "$d"
+case "$FACTORY_STAGE" in
+  review:*) mkdir -p "$d/reviews"
+    printf '# Review\\n\\n## Findings\\n\\n### must-fix (0)\\n\\n### should-fix (0)\\n\\n### nits (0)\\n' > "$d/reviews/${FACTORY_STAGE#review:}.md" ;;
+  plan) printf '## Context\\n## Changes\\n## Acceptance criteria\\n' > "$d/plan.md" ;;
+  test) cat "$FIXTURE_DIR/tests.md" > "$d/tests.md" ;;
+  build)
+    mkdir -p src/main
+    printf '%s\\n' "$FACTORY_STORY" > "src/main/$FACTORY_STORY.txt"
+    grep -qx "line from $FACTORY_STORY" src/main/shared.txt 2>/dev/null || printf 'line from %s\\n' "$FACTORY_STORY" >> src/main/shared.txt
+    printf '## Changed\\n\\n## Files\\n- `src/main/%s.txt` — changes\\n- `src/main/shared.txt` — changes\\n' "$FACTORY_STORY" > "$d/build.md"
+    if [ "$FACTORY_STORY" = "${FIXTURE_ASKS:-}" ] && [ ! -f "$rec" ]; then
+      mkdir -p "$(dirname "$rec")"
+      sed "s/STORY-1/$FACTORY_STORY/g; s/stage: plan/stage: build/" "$FIXTURE_DIR/decision.md" > "$rec"
+      printf '\\n## needs-human\\ndecision: %s-01\\n' "$FACTORY_STORY" >> "$d/build.md"
+    elif [ -f "$rec" ]; then
+      printf '\\nDecision %s-01 answered b: archived things are hidden.\\n' "$FACTORY_STORY" >> "$d/build.md"
+    fi ;;
+  tidy) printf '## Moves\\n\\n## Files\\n' > "$d/tidy.md" ;;
+  judge) printf '## Verdict\\nverdict: pass\\n' > "$d/judge.md" ;;
+  document) printf '## Glossary\\n' > "$d/document.md" ;;
+  integrate)
+    for f in $(cat "$d/.verify/conflicts"); do
+      grep -v -e '^<<<<<<< ' -e '^=======$' -e '^>>>>>>> ' "$f" > "$f.resolved"; mv "$f.resolved" "$f"
+    done
+    printf '# Integrate\\n\\n| File | The story changed | The main line changed | How both hold |\\n|---|---|---|---|\\n' > "$d/integrate.md" ;;
+esac
+exit 0
+"""
+
+
+def verify_worktrees(runner, verbose=False):
+    """WP-92: every story in a worktree of its own — a story that waits holds nothing, several run at once, and a
+    story reaches the main line as one commit once every gate passed on the main line as it is."""
+    results = []
+
+    def check(name, ok, detail=""):
+        results.append((name, ok, detail))
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
+        if not ok and detail:
+            print(f"          {detail}")
+
+    def fixture(root, stories, asks=""):
+        backlog_project(root, *stories, extra_sources=(
+            ("fixture/tests.md", TESTS), ("fixture/decision.md", DECISION), (".gitignore", "build/\n")))
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(STAND_IN_WORKTREE)
+        copy_scripts(runner, root)
+        for command in (["init", "-q", "-b", "main"], ["add", "-A"],
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        log = os.path.join(root, ".git", "stand-in.log")
+        return log, {"FACTORY_TOOL_CMD": f"sh '{shell_path(os.path.join(root, 'stand-in.sh'))}'",
+                     "FIXTURE_LOG": shell_path(log), "FIXTURE_DIR": shell_path(os.path.join(root, "fixture")),
+                     "FIXTURE_ASKS": asks, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+
+    def lines(log):
+        return open(log, encoding="utf-8").read().splitlines() if os.path.isfile(log) else []
+
+    def git_out(root, *args):
+        return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace").stdout
+
+    def read(root, rel):
+        path = os.path.join(root, rel)
+        return open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
+
+    # one slot: a story that waits with code in its worktree does not stop the next; answered, it resumes there,
+    # meets the other story's change in a file both touched, and the integrate step makes both hold
+    with tmpdir() as root:
+        log, env = fixture(root, [("STORY-2", [])], asks="STORY-1")
+        code, output = run_runner(runner, root, "run", env=env)
+        ran = lines(log)
+        worktrees = git_out(root, "worktree", "list")
+        subjects = git_out(root, "log", "--format=%s%n%b", "main")
+        rows, _nxt, _w, _listing = schedule_of(os.path.join(root, ".agents", "factory", "story-gate.py"), root)
+        check("worktree: every stage of a story runs in its own worktree under .dca-factory/worktrees/",
+              ran and all(f".dca-factory/worktrees/{l.split()[0]}" in l for l in ran), ran[:3])
+        check("worktree: with one slot, a story that waits for an answer with its code in its worktree does not stop "
+              "the next story — that one is integrated: one commit on main, delivered, its worktree and branch gone",
+              code == 0 and rows.get("STORY-1", ("",))[0] == "waiting" and story_delivered(root, "STORY-2")
+              and not story_delivered(root, "STORY-1")
+              and "feat(widgets): A sample story" in subjects and "Story: STORY-2" in subjects
+              and read(root, "src/main/STORY-2.txt") == "STORY-2\n"
+              and "STORY-1" in worktrees and "STORY-2" not in worktrees
+              and not git_out(root, "branch", "--list", "story/STORY-2").strip()
+              and os.path.isfile(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"))
+              and "src/" not in git_out(root, "status", "--porcelain"),
+              f"exit {code}; {rows}; {worktrees}; {subjects}; {output.strip().splitlines()[-6:]}")
+        with open(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+            handle.write(ANSWER)
+        code, output = run_runner(runner, root, "run", env=env)
+        ran = lines(log)
+        shared = read(root, "src/main/shared.txt")
+        check("worktree: answered, the waiting story resumes in its worktree; the merge with the main line stops on "
+              "the file both stories touched, the integrate stage resolves it, and the story lands as one more commit",
+              code == 0 and story_delivered(root, "STORY-1") and "STORY-1 integrate" in " ".join(ran)
+              and "line from STORY-1" in shared and "line from STORY-2" in shared and "<<<<<<<" not in shared
+              and git_out(root, "log", "--format=%s", "main").count("feat(widgets)") == 2
+              and git_out(root, "worktree", "list").count("\n") == 1
+              and not git_out(root, "branch", "--list", "story/*").strip()
+              and os.path.isfile(os.path.join(root, ".dca-factory/runs/STORY-1/integrate.md")),
+              f"exit {code}; shared {shared!r}; {git_out(root, 'log', '--oneline', 'main')}; "
+              f"{output.strip().splitlines()[-8:]}")
+
+    # two slots: two independent stories at once, each in its worktree, every line named by its story; the one that
+    # depends on another starts once that one is on the main line
+    with tmpdir() as root:
+        log, env = fixture(root, [("STORY-2", []), ("STORY-3", ["STORY-1"])])
+        code, output = run_runner(runner, root, "run", "--parallel", "2", env=env)
+        ran = lines(log)
+        first = lambda story: next((i for i, l in enumerate(ran) if l.startswith(story + " ")), -1)
+        last = lambda story, stage: max((i for i, l in enumerate(ran) if l.startswith(f"{story} {stage}")), default=-1)
+        check("parallel: with --parallel 2 two independent stories run at once, each line of the run named by its "
+              "story; the dependent one starts after the story it needs is integrated; all three on main",
+              code == 0 and all(story_delivered(root, s) for s in ("STORY-1", "STORY-2", "STORY-3"))
+              and first("STORY-2") < last("STORY-1", "document") and first("STORY-1") < last("STORY-2", "document")
+              and first("STORY-3") > last("STORY-1", "document")
+              and "[STORY-1] " in output and "[STORY-2] " in output
+              and git_out(root, "log", "--format=%s", "main").count("feat(widgets)") == 3
+              and "<<<<<<<" not in read(root, "src/main/shared.txt")
+              and git_out(root, "worktree", "list").count("\n") == 1,
+              f"exit {code}; {ran}; {git_out(root, 'log', '--oneline', 'main')}; {output.strip().splitlines()[-6:]}")
+
+    # the schedule with slots: what this runner runs counts, and between stories of one epic the one whose context
+    # no running story changes goes first
+    with tmpdir() as root:
+        backlog_project(root, ("STORY-2", []), ("STORY-4", []))
+        path = os.path.join(root, "project/epics/sample/STORY-4/story.md")
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text.replace("context: Widgets", "context: Gadgets"))
+        cli = cli_of(os.path.join(os.path.dirname(runner), "story-gate.py"))
+        listing = subprocess.run([sys.executable, cli, "--schedule", "--slots", "2", "--busy", "STORY-1"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8").stdout
+        nexts = [l[6:] for l in listing.splitlines() if l.startswith("next: ")]
+        check("schedule: with slots, a story this runner runs takes a slot, and the next is the one whose context no "
+              "running story changes — STORY-4 before STORY-2",
+              nexts == ["STORY-4 plan"] and "STORY-1  running" in listing, listing)
+        listing = subprocess.run([sys.executable, cli, "--schedule", "--slots", "3"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8").stdout
+        nexts = [l[6:] for l in listing.splitlines() if l.startswith("next: ")]
+        check("schedule: with three slots and three ready stories, one `next:` line for each",
+              nexts == ["STORY-1 plan", "STORY-4 plan", "STORY-2 plan"], listing)
+
+    failures = [name for name, ok, _ in results if not ok]
+    print(f"\nverify: {len(results) - len(failures)}/{len(results)} worktree cases behaved as specified")
+    return failures
+
+
 def run_runner_groups(args, failures, group):
     runner_failures = []
     if group == "checks":
@@ -7252,6 +7413,7 @@ def run_runner_groups(args, failures, group):
             print()
             CURRENT_GROUP[0] = "runner"
             runner_failures = verify_runner(args.runner, args.verbose)
+            runner_failures += verify_worktrees(args.runner, args.verbose)
         if group in ("all", "setup"):
             print()
             CURRENT_GROUP[0] = "setup"

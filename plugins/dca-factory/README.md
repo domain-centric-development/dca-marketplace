@@ -14,6 +14,7 @@ project/                   what is to be built (a person writes it)
   epics/<epic>/epic.md · <story>/story.md · <story>/decisions/<nn>.md · <story>/findings.md
 .agents/factory/           the installed pipeline (gate, cli, runner, hook) — factory-update owns it whole
 .dca-factory/runs/<story>/ the run's protocol: hand-overs, marks, journal — disposable
+.dca-factory/worktrees/<story>/  the runner's checkout for one story, on its branch story/<id> — gone once integrated
 docs/                      what exists and why — written after the code; generated maps live here
 ```
 
@@ -149,23 +150,46 @@ stage, outside the session, is the runner, and it runs only when you start it:
 bash .agents/factory/factory.sh run --story STORY-1 --tool claude
 ```
 
+**Every story in a worktree of its own.** The runner gives each story a git worktree under
+`.dca-factory/worktrees/<story>/`, on a branch `story/<id>` made from the checkout's branch. The stages
+change code there and nowhere else; what is state stays in the main checkout and the worktree sees it
+through links — the stories with their decisions, the run folder, the pipeline, the skills — so a
+question a stage writes, an answer you give and the status all read one place. When every gate passed
+(and a person accepted the story, where one is asked), the **integrate step** merges the main line into
+the story's branch, squashes the story to one commit (`feat(<context>): <title>`, the story's id in the
+body), runs the gate once more on that tree, and fast-forwards the checkout's branch to it; only then is
+the story delivered, and its worktree and branch go. Where git stops on a conflict — two stories changed
+the same lines — the `stage-integrate` agent makes both changes hold, and the runner commits. Where the
+checkout cannot take the commit (you changed the same file there, or switched branches), the story stops
+and says so; `factory.sh run --story <id> --from integrate` takes it up again. A repository without a
+commit, a detached HEAD, or a story begun in the checkout before it had a worktree run in the checkout as
+before. An IDE opens a story's worktree as a project of its own.
+
 **A human looks before it counts.** With `acceptance: pages` in the profile (`factory-setup`
 proposes it where the product has web pages; `all` for every story, `none` for none), a story with
 something to see stops after the last gate instead of being delivered: an acceptance record
 `<story>-accept-<n>` lists the criteria with their tests and the profile's `run:` command, the gate
-exits 3 and the story holds the checkout. Answer it through `/factory-decisions`: *accepted*
+exits 3 and the story waits in its worktree, holding no slot — the next story runs meanwhile; its code
+reaches the main line only once you accepted it. Answer it through `/factory-decisions`: *accepted*
 delivers it; a correction goes into **the same story**, which runs again from plan and is asked
 again. A story delivered earlier is taken back for a correction the same way, through
 `/factory-decisions` — not while another story holds the checkout, and after an acceptance only to add what the
 story left unsaid (changing a criterion is a new wish, a new story). Stories name page sizes by the
 table in the product description (`s`, `m`, `l`, `xl`), never in pixels.
 
-Several stories are one command. It runs them in dependency order, runs past a story that waits
-for a decision, and with `--watch` picks that story up again at the stage that asked, once the
-answer is written (`--max-stages` caps the agent invocations, `.dca-factory/stop` ends it):
+Several stories are one command. It runs them in dependency order — and an epic's `depends_on:` before
+its stories — runs past a story that waits for a decision or an acceptance, and with `--watch` picks that
+story up again at the stage that asked, once the answer is written (`--max-stages` caps the agent
+invocations, `.dca-factory/stop` ends it). `--parallel <n>` (or `parallel: <n>` in the profile,
+`FACTORY_PARALLEL`) runs up to `<n>` stories at once, each in its worktree, every line of the run named by
+its story; a slot counts a story with a running stage, so one that waits holds none. Among the stories
+that may start, one with a worktree goes first, then the order, and between stories of one epic the one
+whose context no running story changes. With `--parallel`, `--max-stages` and `--story-budget` count per
+story process:
 
 ```
 bash .agents/factory/factory.sh run --tool claude --watch
+bash .agents/factory/factory.sh run --tool claude --parallel 2
 ```
 
 What each story and stage cost — tokens per invocation from the tool's own report, summed across
@@ -198,7 +222,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh setup [--tool <t>] [--copy\|--link]` | `factory-setup` | installs the pipeline where it is not — copies from a plugin cache, links from a checkout, unless named; on an installed project it only reports |
 | `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
 | `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
-| `factory.sh run [--story <id> [--from <stage>]] [--watch]` | `factory-run` | one story through the six stages, from where its files say · `--from` names the stage and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch` |
+| `factory.sh run [--story <id> [--from <stage>]] [--watch] [--parallel <n>]` | `factory-run` | one story through the six stages in its worktree, from where its files say, then integrated · `--from` names the stage (or `integrate`) and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch`, up to `<n>` at once with `--parallel` |
 | `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |
@@ -461,6 +485,7 @@ what must be true before the next one starts.
 | `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `.dca-factory/runs/<story>/tidy.md`; changes no test and no behaviour |
 | `stage-judge` | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews: dca` with `review.dca: dca-audit` — the method's audit, worth it for adoption work; the setup does not write it) |
 | `stage-document` | the change → `.dca-factory/runs/<story>/document.md`: glossary, context map and reader documentation follow the code |
+| `stage-integrate` | a merge conflict between a story's worktree and the main line → the conflicted files, both changes holding, and `.dca-factory/runs/<story>/integrate.md`; the runner commits, squashes and gates the result |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
 | `factory-discover` | before the backlog: a problem or a wished deliverable becomes `project/discovery/<topic>/discovery.md` — problem, users and evidence, options, outcome, risks, proposed epics each with its outcome event — from a fixed question catalogue, with every claim citing a source (web with the date read, a project file, an anonymised excerpt under `sources/`; the originals stay in a git-ignored `originals/`). Applies the `product-discovery` craft (`carrier.discover:`); `factory.sh discover --check <topic>` checks the report; writes an epic only once the person releases a proposal, through `factory-backlog`, linked by `discovery:` |
 | `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |

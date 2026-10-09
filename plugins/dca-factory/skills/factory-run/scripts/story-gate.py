@@ -160,14 +160,86 @@ PROFILE_FILE = "dca-factory.profile.yaml"
 PLACES = {}
 
 
+#: The places as the profile names them, relative to the project — what a story's worktree links to the main
+#: checkout's, and what the gate leaves out of a worktree's changes.
+PLACES_REL = {}
+
+
 def set_places(profile, **given):
     PLACES.clear()
+    PLACES_REL.clear()
+    home = factory_home() if in_worktree() else None
     for key in DEFAULTS:
-        PLACES[key] = str(given.get(key) or "").strip().replace("\\", "/") or location(profile, key)
+        relative = str(given.get(key) or "").strip().replace("\\", "/") or location(profile, key)
+        PLACES_REL[key] = relative
+        PLACES[key] = os.path.join(home, relative).replace("\\", "/") if home and not os.path.isabs(relative) \
+            else relative
 
 
 def place(key):
     return PLACES.get(key) or DEFAULTS[key]
+
+
+# --- a story in a worktree of its own (WP-92) -------------------------------------------------------------
+# The runner gives every story a git worktree on a branch of its own, `story/<id>`, under the run folder's
+# parent (`.dca-factory/worktrees/<id>`): the story's code lives there until it is integrated, so a story that
+# waits — for an answer, for an acceptance — holds no checkout, and several stories run at once. What is state
+# stays in the main checkout: the stories with their decisions, the run folder, the profile, the installed
+# pipeline and the skills. The worktree sees them through links; a process in the worktree is told the main
+# checkout by FACTORY_HOME, and the gate and the CLI read every place from there. Nothing that is state ever
+# lands on the story's branch, so no answer and no delivery can fork with it.
+HOME_VARIABLE = "FACTORY_HOME"
+
+#: What a worktree links to the main checkout besides the profile's places: the installed pipeline and the
+#: tools' skill folders — a link in a skill folder is git-ignored and would be missing from a fresh checkout.
+WORKTREE_LINKED = (".agents/factory", ".claude/skills", ".codex/skills", ".opencode/skills", ".agents/skills")
+
+#: Where a story's branch begins its name: `story/<id>`.
+STORY_BRANCH = "story/"
+
+
+def factory_home():
+    """The main checkout a process in a story's worktree belongs to, from FACTORY_HOME; None outside one."""
+    value = os.environ.get(HOME_VARIABLE, "").strip()
+    return os.path.abspath(value) if value else None
+
+
+def in_worktree(cwd=None):
+    """Whether this process works in a story's worktree: FACTORY_HOME names a main checkout other than here."""
+    home = factory_home()
+    return bool(home) and os.path.realpath(home) != os.path.realpath(cwd or os.getcwd())
+
+
+def worktree_places():
+    """(folders, files) a worktree takes from the main checkout, relative: the epics, the run folder and the
+    discovery reports as links with the pipeline and the skill folders; the description and the profile as
+    copies, read alone."""
+    rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).rstrip("/")
+    folders = [rel("epics"), rel("runs"), rel("discovery")] + list(WORKTREE_LINKED)
+    files = [rel("product"), rel("tech"), rel("domain"), PROFILE_FILE]
+    return folders, files
+
+
+def worktree_owned(path):
+    """A path in a worktree that is the main checkout's, not the story's: under a linked place, or a copied file."""
+    folders, files = worktree_places()
+    return path in files or any(path == f or path.startswith(f + "/") for f in folders)
+
+
+def worktrees_dir():
+    """Where the stories' worktrees live, relative to the main checkout: beside the run folder."""
+    runs = (PLACES_REL.get("runs") or DEFAULTS["runs"]).rstrip("/")
+    return os.path.join(os.path.dirname(runs) or ".dca-factory", "worktrees").replace("\\", "/")
+
+
+def worktree_of(story_id, home=None):
+    """The story's worktree in the main checkout (here, unless FACTORY_HOME names another)."""
+    return os.path.join(home or factory_home() or os.getcwd(), worktrees_dir(), story_id)
+
+
+def has_worktree(story_id, home=None):
+    """Whether the story has its worktree: a checkout with git's `.git` file in it."""
+    return os.path.isfile(os.path.join(worktree_of(story_id, home), ".git"))
 
 
 #: The product description's headings — what is built, for whom, through which surfaces.
@@ -454,7 +526,13 @@ def duplicate_ids(epics):
 
 
 def shown(path):
-    """A path as a person reads it — relative to the project, with `/` on every platform."""
+    """A path as a person reads it — relative to the project, with `/` on every platform. In a story's worktree a
+    path of the main checkout's is shown from there: the story, its records, the run folder."""
+    home = factory_home()
+    if home and in_worktree():
+        absolute, here = os.path.abspath(path), os.path.abspath(os.getcwd())
+        if absolute.startswith(home + os.sep) and not absolute.startswith(here + os.sep):
+            return os.path.relpath(absolute, home).replace(os.sep, "/")
     return os.path.relpath(path).replace(os.sep, "/")
 
 
@@ -2498,6 +2576,8 @@ STAGE_CHECKS = {
     # the same commands as the build stage, run again after the refactor.
     "tidy": ("architecture", "format"),
     "document": ("architecture",),
+    # The story on the main line as it is now: everything the tidy gate holds the story to, once more.
+    "integrate": ("architecture", "format"),
 }
 
 
@@ -4107,7 +4187,8 @@ def run_owned(path, runs):
     a story's decision records (a stage's question, written into the story's folder)."""
     epics = place("epics").rstrip("/") + "/"
     return path.startswith(CHANGE_EXCLUDED + (runs.rstrip("/") + "/",)) \
-        or (path.startswith(epics) and f"/{DECISIONS_DIR}/" in path[len(epics):])
+        or (path.startswith(epics) and f"/{DECISIONS_DIR}/" in path[len(epics):]) \
+        or (in_worktree() and worktree_owned(path))
 
 
 DELETED = "deleted"
@@ -4622,6 +4703,12 @@ def gate_passes(folder):
     return passes
 
 
+def gate_passed_since(folder, gate, stage):
+    """Whether the gate passed after the stage's file was last written — the runner's or a stage's own run."""
+    path = os.path.join(folder, STAGE_FILES[stage])
+    return os.path.isfile(path) and gate_passes(folder).get(gate, 0) >= os.path.getmtime(path) - STALE_AFTER_SECONDS
+
+
 def current_stage_files(folder, order):
     """{stage: text} for the stage files of the story's current pass. A stage that ran again — a re-plan, a
     build after `changes-requested`, a test stage applying an answer — makes every later file an earlier
@@ -4713,6 +4800,17 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     if story_path and texts and os.path.isfile(planned) and os.path.isfile(os.path.join(folder, "plan.md")) \
             and read_text(planned).strip() != story_digest(story_path):
         return "in-progress", "plan", "the story changed after it was planned — every stage runs again"
+    integrate_refusal = os.path.join(folder, ".gate-integrate.txt")
+    build_file = os.path.join(folder, STAGE_FILES["build"])
+    if os.path.isfile(integrate_refusal) and not (os.path.isfile(build_file)
+                                                   and os.path.getmtime(build_file) > os.path.getmtime(integrate_refusal)):
+        report = read_text(integrate_refusal)
+        if "gate:fail checkout" in report:
+            return "stopped", None, ("the main checkout could not take the story's commit — see .gate-integrate.txt; "
+                                     "then `factory.sh run --story " + story_id + " --from integrate`")
+        if "gate:fail moved" in report:
+            return "in-progress", "integrate", "the main line moved on — the story is merged with it again"
+        return "in-progress", "build", "the integrate gate refused the story on the main line — the build stage runs again"
     refused = [stage for stage in STAGE_ORDER
                if os.path.isfile(os.path.join(folder, f".gate-{stage}.txt"))]
     if refused:
@@ -4729,9 +4827,14 @@ def story_state(cwd, runs, story_id, front, story_path=None):
             return "in-progress", "build", "the document gate found no outcome event in the code — the build adds it"
         return "in-progress", refused[0], f"the {refused[0]} gate refused — the stage runs again"
     adopt = story_kind(front) == "adopt"
+    integrating = has_worktree(story_id, factory_home() or cwd)
     if adopt and verdict_in(texts.get("judge", "")) == "pass":
+        if integrating and gate_passed_since(folder, "adopt", "judge"):
+            return "in-progress", "integrate", "the adopt gate passed — its worktree is integrated next"
         return "in-progress", "adopt", "the judge confirmed the tests — the adopt gate delivers it"
     if "document" in texts:
+        if integrating and gate_passed_since(folder, "document", "document"):
+            return "in-progress", "integrate", "every gate passed — its worktree is integrated next"
         if story_path:
             with contextlib.suppress(GateError, OSError):
                 verdict, rid = acceptance_state(cwd, story_id, story_path)
@@ -4838,6 +4941,10 @@ def resolve_profile(given, cwd):
     path, since every other place is read from it. An older place is not read; `layout_hint` names it."""
     if given:
         return given
+    if in_worktree(cwd):
+        # in a story's worktree the profile is the main checkout's — the person's, as it is now
+        home_profile = os.path.join(factory_home(), PROFILE_FILE)
+        return home_profile if os.path.isfile(home_profile) else None
     return PROFILE_FILE if os.path.isfile(os.path.join(cwd, PROFILE_FILE)) else None
 
 
@@ -4876,7 +4983,7 @@ def main(argv):
     parser.add_argument("--story")
     parser.add_argument(
         "--stage",
-        choices=("plan", "test", "build", "tidy", "document", "adopt"),
+        choices=("plan", "test", "build", "tidy", "document", "adopt", "integrate"),
     )
     parser.add_argument("--change", action="store_true",
                         help="run the profile's checks outside a story and exit")
@@ -5030,16 +5137,22 @@ def main(argv):
             check_stage_commands(result, profile, cwd, args.stage)
         if args.stage == "adopt":
             check_adopt(result, profile, cwd, args.runs, story_id, front, criteria)
-        if args.stage in ("test", "build", "tidy"):
+        if args.stage == "integrate":
+            check_integrated(result, cwd, args.runs, story_id)
+        if args.stage in ("test", "build", "tidy", "integrate"):
             mapping = check_mapping(result, args.runs, story_id, criteria)
             located = check_exists(result, cwd, mapping)
             # The checks that need no process come first, and a refusal among them ends the run before
             # a suite starts: a file list that is wrong is wrong in a millisecond, not after a minute of
             # tests. What did not run is named, so the report says what is still unproven.
-            check_files_listed(result, args.runs, story_id, args.stage, cwd, located)
-            check_existing_tests(result, cwd, args.runs, story_id, body)
-            check_size(result, args.runs, story_id,
-                       ("plan.md", "tests.md") if args.stage == "test" else (STAGE_FILES[args.stage],), len(criteria))
+            # Integrated, the story's diff carries the main line's changes beside its own: the file list, the
+            # tests that existed before and the red proof were the stages' to hold, and they held.
+            if args.stage != "integrate":
+                check_files_listed(result, args.runs, story_id, args.stage, cwd, located)
+                check_existing_tests(result, cwd, args.runs, story_id, body)
+                check_size(result, args.runs, story_id,
+                           ("plan.md", "tests.md") if args.stage == "test" else (STAGE_FILES[args.stage],),
+                           len(criteria))
             if args.stage == "test":
                 check_plan_levels(result, args.runs, story_id)
                 check_invariants(result, profile, cwd, args.runs, story_id, front, mapping)
@@ -5049,13 +5162,13 @@ def main(argv):
             # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
             expected = "red" if args.stage == "test" and story_kind(front) == "story" else "green"
             ledger = red_ledger_path(args.runs, story_id)
-            if expected == "green" and ledger and os.path.isfile(ledger):
+            if expected == "green" and ledger and os.path.isfile(ledger) and args.stage != "integrate":
                 # the red proof compares digests, so it belongs here, before any process
                 check_red_proof(result, cwd, located, read_red_digests(args.runs, story_id), story_id)
             if result.failed:
                 refused = sorted({check for state, check, _m in result.entries if state == "fail"})
                 unrun = ["compiles", f"tests-{expected}"]
-                if args.stage in ("build", "tidy"):
+                if args.stage in ("build", "tidy", "integrate"):
                     unrun.append("suite")
                 unrun += [key for key in STAGE_CHECKS.get(args.stage, ()) if profile.get(key)]
                 for check in unrun:
@@ -5065,7 +5178,7 @@ def main(argv):
                 # At build and tidy the policy's required test commands run whole anyway: that run is the
                 # evidence for the mapped tests as well, so those commands are not started a second time.
                 whole_for = ()
-                if args.stage in ("build", "tidy"):
+                if args.stage in ("build", "tidy", "integrate"):
                     whole_for = tuple(k for k in test_command_keys(profile)
                                       if k in set(split_list(profile.get("required"))) and profile.get(k))
                 whole_runs = check_test_state(
@@ -5081,7 +5194,7 @@ def main(argv):
                     whole_for=whole_for,
                     red_proof=False,
                 )
-                if args.stage in ("build", "tidy"):
+                if args.stage in ("build", "tidy", "integrate"):
                     check_required_suites(result, profile, cwd, whole_runs)
                 check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:
@@ -5124,7 +5237,12 @@ def main(argv):
         except GateError as error:
             result.fail("acceptance", str(error))
             deliver = False
-        if deliver and not result.failed:
+        if deliver and not result.failed and in_worktree():
+            # In its worktree a story is delivered when its code is on the main line: the integrate step merges
+            # it, holds it to the gate once more, and the integrate gate writes the delivery.
+            result.ok("integrate", f"every check passed — {story_id} is delivered once its worktree is integrated "
+                                   f"into the main checkout (the runner's integrate step)")
+        elif deliver and not result.failed:
             # The one write into a story the gate makes: delivered is its verdict, kept where the story is.
             stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             write_story_fields(story_path, status="delivered", delivered=stamp)
@@ -5134,13 +5252,95 @@ def main(argv):
             if added or open_now:
                 result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
                                       f"{open_now} open there")
-    if not result.failed and args.stage == "adopt" and not is_delivered(front):
+    if not result.failed and args.stage == "adopt" and not is_delivered(front) and in_worktree():
+        result.ok("integrate", f"every check passed — {story_id} is adopted once its tests are integrated into the "
+                               f"main checkout (the runner's integrate step)")
+    elif not result.failed and args.stage == "adopt" and not is_delivered(front):
         stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         write_story_fields(story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built
         result.ok("delivered", f"{shown(story_path)} carries `delivered: {stamp}` — adopted")
+    if not result.failed and args.stage == "integrate":
+        integrate_into_home(result, cwd, story_path, story_id, front, args.runs)
     if not result.failed and args.stage in ("plan", "test", "build", "tidy") and os.environ.get("FACTORY_WORKER"):
         record_stage_pass(args.runs, story_id, args.stage)
     return result.report(story_id, args.stage, args.json, args.brief)
+
+
+CONFLICT_MARKER = re.compile(r"^(<{7} |={7}$|>{7} )", re.M)
+
+
+def integration_target(runs, story_id):
+    """The branch of the main checkout the story integrates into — recorded when its worktree was made."""
+    path = os.path.join(runs, story_id, ".verify", "target")
+    return read_text(path).strip() if os.path.isfile(path) else ""
+
+
+def check_integrated(result, cwd, runs, story_id):
+    """The story's branch carries the main line and nothing half-merged: no unmerged path, no conflict marker in
+    a file the story's commit changes, and its commit sits on the target's tip — a target that moved since is
+    integrated again (`moved`), not refused."""
+    if not in_worktree(cwd):
+        result.fail("integrate", f"the integrate gate runs in the story's worktree, with {HOME_VARIABLE} naming the "
+                                 f"main checkout — the runner's integrate step starts it")
+        return
+    target = integration_target(runs, story_id)
+    if not target:
+        result.fail("integrate", f"no target recorded for {story_id} (.verify/target) — the worktree was not made "
+                                 f"by the runner")
+        return
+    code, unmerged = git(cwd, "diff", "--name-only", "--diff-filter=U")
+    if unmerged.strip():
+        result.fail("conflicts", "unmerged: " + ", ".join(unmerged.split()) + " — the merge is not finished")
+        return
+    code, changed = git(cwd, "diff", "--name-only", f"{target}...HEAD")
+    marked = []
+    for rel in changed.split("\n") if code == 0 else []:
+        full = os.path.join(cwd, rel.strip())
+        if rel.strip() and os.path.isfile(full):
+            with contextlib.suppress(OSError, UnicodeDecodeError):
+                with open(full, encoding="utf-8") as handle:
+                    if CONFLICT_MARKER.search(handle.read()):
+                        marked.append(rel.strip())
+    if marked:
+        result.fail("conflicts", "a conflict marker is left in " + ", ".join(marked))
+    else:
+        result.ok("conflicts", "no unmerged path, no conflict marker in the story's files")
+    tip = git(cwd, "rev-parse", target)[1].strip()
+    parent = git(cwd, "rev-parse", "HEAD~1")[1].strip() if git(cwd, "rev-parse", "HEAD")[1].strip() != tip else tip
+    if tip and parent and tip != parent:
+        result.fail("moved", f"{target} moved on since the story was merged with it — the integrate step merges again")
+
+
+def integrate_into_home(result, cwd, story_path, story_id, front, runs):
+    """Every check holds on the integrated tree: the main checkout takes the story's commit — a fast-forward of
+    its branch, nothing else — and the story is delivered. A main checkout on another branch, or with changes
+    of its own in a file the commit touches, does not take it: refused (`checkout`), the person decides."""
+    home, target = factory_home(), integration_target(runs, story_id)
+    on = git(home, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip()
+    if on != target:
+        result.fail("checkout", f"the main checkout is on {on or 'a detached HEAD'}, the story integrates into "
+                                f"{target} — switch back, then `factory.sh run --story {story_id} --from integrate`")
+        return
+    head = git(cwd, "rev-parse", "HEAD")[1].strip()
+    done = subprocess.run(["git", "merge", "--ff-only", "--quiet", head], cwd=home, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+    if done.returncode != 0:
+        result.fail("checkout", f"the main checkout could not take the story's commit: "
+                                f"{(done.stderr or done.stdout).strip().splitlines()[0] if (done.stderr or done.stdout).strip() else 'git refused'}"
+                                f" — commit or stash what is in the way there, then "
+                                f"`factory.sh run --story {story_id} --from integrate`")
+        return
+    result.ok("integrated", f"{target} took the story's commit {head[:12]}")
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if story_kind(front) == "adopt":
+        write_story_fields(story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built
+    else:
+        write_story_fields(story_path, status="delivered", delivered=stamp)
+    result.ok("delivered", f"{shown(story_path)} carries `delivered: {stamp}`")
+    added, open_now = record_findings(story_path, story_id, front, runs)
+    if added or open_now:
+        result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
+                              f"{open_now} open there")
 
 
 def record_stage_pass(runs, story_id, stage):

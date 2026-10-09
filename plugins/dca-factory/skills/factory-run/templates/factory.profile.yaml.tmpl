@@ -126,6 +126,9 @@
 #              test, build and tidy in one builder process and judge and document in one verifier
 #              process — never the builder's; `separate` starts one process per stage. The gates are the
 #              same either way; `factory.sh run --separate-stages` overrides the line for one run
+# parallel     how many stories the runner runs at once, each in its worktree (default 1). A slot counts a
+#              story with a running stage; one that waits for an answer or an acceptance holds none.
+#              `factory.sh run --parallel <n>` and FACTORY_PARALLEL override the line for one run
 # reviews      perspectives the judge stage covers *in addition to* its built-in ones
 # review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
 #              tool; a review *agent* only in a tool that has agents — where it is missing, the
@@ -147,6 +150,7 @@ formatFix: {{FORMAT_FIX_COMMAND}}
 #required: compile test architecture
 #acceptance: pages
 #stages: separate
+#parallel: 2
 #run: <how a person starts the application>
 #knowledge: <the catalog skill a stage cites>
 #knowledge.read: <paths inside that catalog a stage reads once before it writes code, comma-separated>
