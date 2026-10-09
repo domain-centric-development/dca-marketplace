@@ -7249,6 +7249,7 @@ def run_groups(args):
 #: writes code — a file of its own per story and a line in one file every story touches, so two stories meet.
 STAND_IN_WORKTREE = """#!/bin/sh
 echo "$FACTORY_STORY $FACTORY_STAGE $(pwd -P)" >> "$FIXTURE_LOG"
+[ "$FACTORY_STAGE" = plan ] && printf '%s' "$FACTORY_PROMPT" > "$FIXTURE_LOG.prompt"
 d=".dca-factory/runs/$FACTORY_STORY"
 rec="project/epics/sample/$FACTORY_STORY/decisions/01.md"
 mkdir -p "$d"
@@ -7340,6 +7341,11 @@ def verify_worktrees(runner, verbose=False):
         rows, _nxt, _w, _listing = schedule_of(os.path.join(root, ".agents", "factory", "story-gate.py"), root)
         check("worktree: every stage of a story runs in its own worktree under .dca-factory/worktrees/",
               ran and all(f".dca-factory/worktrees/{l.split()[0]}" in l for l in ran), ran[:3])
+        prompt = read(root, ".git/stand-in.log.prompt")
+        check("worktree: the stage's prompt names the cli as the allow-list does — relative, through the worktree's "
+              "link — and says the stage works in its worktree",
+              " .agents/factory/factory-cli.py --contract" in prompt and shell_path(root) + "/.agents" not in prompt
+              and "own worktree" in prompt, prompt[-600:])
         check("worktree: with one slot, a story that waits for an answer with its code in its worktree does not stop "
               "the next story — that one is integrated: one commit on main, delivered, its worktree and branch gone",
               code == 0 and rows.get("STORY-1", ("",))[0] == "waiting" and story_delivered(root, "STORY-2")

@@ -2129,7 +2129,10 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
 up in a dependency's sources or a package cache, which is never the place."
     fi
   fi
-  local cli_path=${CLI#"$PWD/"}             # the project's own copy, named as the gate is: relative to the root
+  # named as the allow-list names it: the project's copy, relative to the root — in a story's worktree the main
+  # checkout's, through the worktree's link. A path the list does not name is a refused call.
+  local cli_path=${CLI#"$PWD/"}
+  [ -f .agents/factory/factory-cli.py ] && cli_path=.agents/factory/factory-cli.py
   printf '%s' "Where things are: the stack profile is $PROFILE; this story's run folder is $RUNS/$story/; \
 what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
 source.$catalog \
@@ -2689,7 +2692,13 @@ run_story() {                               # run_story <story> <tool> <from> <d
     "")    echo "factory: no worktree could be made for $story — nothing ran." >&2; return 1 ;;
   esac
   echo "factory: $story works in its worktree, ${wt#"$HOME_DIR/"}"
-  ADD_DIRS=("$HOME_DIR/$RUNS_REL" "$HOME_DIR/$(cli --place epics 2>/dev/null || echo project/epics)")
+  # every folder the worktree links to this checkout, so a read or a write through the link is the stage's own
+  local linked
+  ADD_DIRS=()
+  for linked in "$RUNS_REL" "$(cli --place epics 2>/dev/null)" "$(cli --place discovery 2>/dev/null)" \
+                .agents/factory .claude/skills .codex/skills .opencode/skills .agents/skills; do
+    [ -n "$linked" ] && [ -d "$HOME_DIR/$linked" ] && ADD_DIRS+=("$HOME_DIR/$linked")
+  done
   cd "$wt" || return 1
   export FACTORY_HOME="$HOME_DIR"
   RUNS="$HOME_DIR/$RUNS_REL"
