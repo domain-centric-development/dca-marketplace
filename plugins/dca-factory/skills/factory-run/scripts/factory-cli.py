@@ -2914,10 +2914,15 @@ def schedule_data(cwd, epics, runs, slots=None, busy=()):
             wait = holder["state"] in ("waiting", "running")
     else:
         busy = [s for s in order if stories[s]["state"] == "running"]
-        nxt = None if busy else next((s for s in order if stories[s]["state"] in RUNNABLE), None)
+        # A story the runner began in its worktree has its code there: a session in this checkout does not take it up.
+        elsewhere = [s for s in order if stories[s]["state"] in RUNNABLE and has_worktree(s, factory_home() or cwd)]
+        nxt = None if busy else next((s for s in order if stories[s]["state"] in RUNNABLE and s not in elsewhere), None)
         wait = any(stories[s]["state"] in ("waiting", "running") for s in order)
         if busy:
             reason = f"{busy[0]} is running ({stories[busy[0]]['detail']}) — one story at a time per checkout"
+        elif nxt is None and elsewhere:
+            reason = (f"{elsewhere[0]} has its code in its worktree — the runner takes it up: "
+                      f"factory.sh run --story {elsewhere[0]}")
         elif nxt is None:
             reason = "nothing can run"
     counts = {}
@@ -3039,7 +3044,7 @@ def schedule(cwd, epics, runs, slots=None, busy=()):
     return 0
 
 
-def start(cwd, epics, runs, story_id):
+def start(cwd, epics, runs, story_id, slots=None):
     """Where `run --story <id>` begins when no stage is named: the schedule's view of that one story.
 
     Prints `state:`, `start:` (a stage, or `none`) and `detail:` — a contract the runner reads. A story
@@ -3051,6 +3056,9 @@ def start(cwd, epics, runs, story_id):
         print(f"factory: no story {story_id} under {epics}/", file=sys.stderr)
         return 2
     state, stage, detail = story["state"], story["start"], story["detail"]
+    if stage and not slots and has_worktree(story_id, factory_home() or cwd):
+        state, stage, detail = "blocked", None, (f"its code is in its worktree — the runner takes it up: "
+                                                 f"factory.sh run --story {story_id}")
     holder = next((s for s in data["order"] if data["stories"][s].get("holds")), None)
     if stage and holder and holder != story_id:
         state, stage, detail = "blocked", None, (f"{holder} holds unfinished code in the checkout "
@@ -4141,7 +4149,7 @@ def main(argv):
     if args.start:
         if not args.story:
             parser.error("--start needs --story")
-        return start(cwd, args.epics, args.runs, args.story)
+        return start(cwd, args.epics, args.runs, args.story, args.slots)
     if args.reopen:
         return reopen(cwd, args.runs, args.epics, args.reopen)
     if args.listening or args.claim or args.release is not None:

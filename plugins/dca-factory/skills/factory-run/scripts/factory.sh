@@ -2066,7 +2066,7 @@ second writer. $(where_things_are "$tool" verifier "$story")"
 # alone cannot fix that (bench 2026-10-02).
 refused_from() {                            # refused_from <story> <refused stage> -> stage
   local start st
-  start=$(cli --story "$1" --start 2>/dev/null | sed -n 's/^start: //p')
+  start=$(cli --story "$1" --start --slots 1 2>/dev/null | sed -n 's/^start: //p')
   for st in "${STAGES[@]}"; do
     [ "$st" = "$2" ] && break
     [ "$st" = "$start" ] && { echo "$start"; return; }
@@ -2143,7 +2143,7 @@ the files you read, the searches you run, the files you write that do not depend
 }
 
 start_stage() {                             # start_stage <story> -> the stage the story's files say it runs from
-  cli --story "$1" --start 2>/dev/null | sed -n 's/^start: //p'
+  cli --story "$1" --start --slots 1 2>/dev/null | sed -n 's/^start: //p'
 }
 
 # The reports of the gates after <stage> that refused the story: a later gate sent it back to <stage>, and that
@@ -2656,8 +2656,10 @@ integrate_story() {                         # integrate_story <story> <tool> <dr
       return 1
     fi
     echo "factory: gate 'integrate' refused the story on the main line — round $rounds runs the build stage again with the gate's report." >&2
-    # the integration took the links down; the build stage works with them again
+    # the integration took the links down; the build stage works with them again — and the document stage writes
+    # its file anew for the story as it now is (the earlier one is kept beside the journal)
     take_lock; ( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --worktree-link "$story" ); drop_lock
+    [ -f "$RUNS/$story/document.md" ] && mv "$RUNS/$story/document.md" "$RUNS/$story/.verify/document.before-integrate.md"
     run_stages "$story" "$tool" build "$dry"
     return $?
   done
@@ -3084,7 +3086,7 @@ case "$command" in
       isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
       if [ -z "$from" ]; then
         # No stage named: the story starts where its files say, as the backlog run would start it.
-        local_start=$(cli --story "$story" --start) || exit $?
+        local_start=$(cli --story "$story" --start --slots 1) || exit $?
         local_state=$(printf '%s\n' "$local_start" | sed -n 's/^state: //p')
         from=$(printf '%s\n' "$local_start" | sed -n 's/^start: //p')
         local_detail=$(printf '%s\n' "$local_start" | sed -n 's/^detail: //p')

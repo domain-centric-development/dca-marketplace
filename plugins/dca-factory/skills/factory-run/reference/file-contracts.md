@@ -178,7 +178,8 @@ in a file the story's commit changes, the commit on the target's tip (`moved` ot
 again), the story's tests green, the required suites, `architecture` and `format` — and fast-forwards the main
 checkout's branch to the commit. Only then does it write `status: delivered`; a main checkout on another branch,
 or with a change of its own in a file the commit touches, is refused (`checkout`) and the story stops until
-`factory.sh run --story <id> --from integrate`. A refusal of the checks goes back to the build stage as a round.
+`factory.sh run --story <id> --from integrate`. A refusal of the checks goes back to the build stage as a round, and
+the document stage writes its file anew (the earlier one stays as `.verify/document.before-integrate.md`).
 Delivered, the worktree and the branch go.
 
 ## Review files — `.dca-factory/runs/<story>/reviews/<perspective>.md`

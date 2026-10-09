@@ -7260,8 +7260,15 @@ case "$FACTORY_STAGE" in
   build)
     mkdir -p src/main
     printf '%s\\n' "$FACTORY_STORY" > "src/main/$FACTORY_STORY.txt"
-    grep -qx "line from $FACTORY_STORY" src/main/shared.txt 2>/dev/null || printf 'line from %s\\n' "$FACTORY_STORY" >> src/main/shared.txt
-    printf '## Changed\\n\\n## Files\\n- `src/main/%s.txt` — changes\\n- `src/main/shared.txt` — changes\\n' "$FACTORY_STORY" > "$d/build.md"
+    if [ "${FIXTURE_SHARED:-1}" = 1 ]; then
+      grep -qx "line from $FACTORY_STORY" src/main/shared.txt 2>/dev/null || printf 'line from %s\\n' "$FACTORY_STORY" >> src/main/shared.txt
+    fi
+    printf '## Changed\\n\\n## Files\\n- `src/main/%s.txt` — changes\\n' "$FACTORY_STORY" > "$d/build.md"
+    [ "${FIXTURE_SHARED:-1}" = 1 ] && printf -- '- `src/main/shared.txt` — changes\\n' >> "$d/build.md"
+    # a later round adapts the story to what the main line brought: the profile's compile wants it
+    if [ -f "$d/.gate-integrate.txt" ] || ls "$d"/.verify/gate-integrate.* >/dev/null 2>&1; then
+      : > src/main/adapted; printf -- '- `src/main/adapted` — changes\\n' >> "$d/build.md"
+    fi
     if [ "$FACTORY_STORY" = "${FIXTURE_ASKS:-}" ] && [ ! -f "$rec" ]; then
       mkdir -p "$(dirname "$rec")"
       sed "s/STORY-1/$FACTORY_STORY/g; s/stage: plan/stage: build/" "$FIXTURE_DIR/decision.md" > "$rec"
@@ -7294,9 +7301,11 @@ def verify_worktrees(runner, verbose=False):
         if not ok and detail:
             print(f"          {detail}")
 
-    def fixture(root, stories, asks=""):
+    def fixture(root, stories, asks="", profile=None, extra=()):
         backlog_project(root, *stories, extra_sources=(
-            ("fixture/tests.md", TESTS), ("fixture/decision.md", DECISION), (".gitignore", "build/\n")))
+            ("fixture/tests.md", TESTS), ("fixture/decision.md", DECISION), (".gitignore", "build/\n")) + tuple(extra))
+        if profile:
+            write_file(root, "dca-factory.profile.yaml", profile)
         with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
             handle.write(STAND_IN_WORKTREE)
         copy_scripts(runner, root)
@@ -7344,6 +7353,19 @@ def verify_worktrees(runner, verbose=False):
               f"exit {code}; {rows}; {worktrees}; {subjects}; {output.strip().splitlines()[-6:]}")
         with open(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
             handle.write(ANSWER)
+        cli = cli_of(os.path.join(root, ".agents", "factory", "story-gate.py"))
+        session = subprocess.run([sys.executable, cli, "--schedule"], cwd=root, capture_output=True, text=True,
+                                 encoding="utf-8").stdout
+        named = subprocess.run([sys.executable, cli, "--story", "STORY-1", "--start"], cwd=root, capture_output=True,
+                               text=True, encoding="utf-8").stdout
+        runner_view = subprocess.run([sys.executable, cli, "--story", "STORY-1", "--start", "--slots", "1"], cwd=root,
+                                     capture_output=True, text=True, encoding="utf-8").stdout
+        check("worktree: a session does not take up a story whose code is in its worktree — the schedule and the "
+              "story's start name the runner; the runner's own view resumes it at the stage that asked",
+              "next: none — STORY-1 has its code in its worktree" in session
+              and "start: none" in named and "factory.sh run --story STORY-1" in named
+              and "start: build" in runner_view,
+              f"{session.strip()[-200:]} | {named.strip()} | {runner_view.strip()}")
         code, output = run_runner(runner, root, "run", env=env)
         ran = lines(log)
         shared = read(root, "src/main/shared.txt")
@@ -7376,6 +7398,64 @@ def verify_worktrees(runner, verbose=False):
               and "<<<<<<<" not in read(root, "src/main/shared.txt")
               and git_out(root, "worktree", "list").count("\n") == 1,
               f"exit {code}; {ran}; {git_out(root, 'log', '--oneline', 'main')}; {output.strip().splitlines()[-6:]}")
+
+    # a story that waits with code nobody else touched moves onto the main line before it resumes: its next stage
+    # sees what the other story delivered, and the integration needs no hand
+    with tmpdir() as root:
+        log, env = fixture(root, [("STORY-2", [])], asks="STORY-1")
+        env["FIXTURE_SHARED"] = "0"
+        run_runner(runner, root, "run", env=env)
+        with open(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+            handle.write(ANSWER)
+        code, output = run_runner(runner, root, "run", env=env)
+        ran = lines(log)
+        check("worktree: a resumed story with nothing in the way moves onto the main line first — the other story's "
+              "code is in its worktree before its next stage, and the integration needs no agent",
+              code == 0 and story_delivered(root, "STORY-1") and "STORY-1 moved onto main as it is now" in output
+              and not any(l.startswith("STORY-1 integrate") for l in ran)
+              and read(root, "src/main/STORY-2.txt") and read(root, "src/main/STORY-1.txt"),
+              f"exit {code}; {output.strip().splitlines()[-6:]}")
+
+    # the integrate gate holds the merged tree to the checks: where the main line's change breaks the story, the gate
+    # refuses, the build stage runs again in the worktree as a round, and the story is integrated after it
+    with tmpdir() as root:
+        check_sh = ("#!/bin/sh\n[ -f src/main/STORY-1.txt ] && grep -qx STORY-2 src/main/STORY-2.txt 2>/dev/null "
+                    "&& [ ! -f src/main/adapted ] && { echo 'STORY-1 does not fit STORY-2 yet'; exit 1; }\nexit 0\n")
+        log, env = fixture(root, [("STORY-2", [])], asks="STORY-1", profile="compile: sh check.sh\n",
+                           extra=(("check.sh", check_sh),))
+        env["FIXTURE_SHARED"] = "0"
+        run_runner(runner, root, "run", env=env)
+        with open(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+            handle.write(ANSWER)
+        # the main line moved while STORY-1 waited, and the story keeps its base: a file of its own is in the way
+        with open(os.path.join(root, ".dca-factory/worktrees/STORY-1/src/main/STORY-2.txt"), "w", encoding="utf-8") as h:
+            h.write("in the way\n")
+        code, output = run_runner(runner, root, "run", env=env)
+        ran = lines(log)
+        builds = [l for l in ran if l.startswith("STORY-1 build")]
+        check("integrate: the gate on the merged tree refuses what the main line broke — the build stage runs again in "
+              "the worktree as a round, and the story is integrated after it",
+              code == 0 and story_delivered(root, "STORY-1") and len(builds) == 3
+              and "gate 'integrate' refused the story on the main line" in output
+              and read(root, ".dca-factory/runs/STORY-1/.rounds").strip() == "1"
+              and os.path.isfile(os.path.join(root, "src/main/adapted")),
+              f"exit {code}; builds {len(builds)}; {output.strip().splitlines()[-8:]}")
+
+    # how many at once: the profile's `parallel:`, FACTORY_PARALLEL over it, and a value that is no number stops the run
+    with tmpdir() as root:
+        log, env = fixture(root, [], profile="compile: true\nparallel: 2\n")
+        _c, out_profile = run_runner(runner, root, "run", env=env)
+    with tmpdir() as root:
+        log, env = fixture(root, [], profile="compile: true\nparallel: 2\n")
+        _c, out_env = run_runner(runner, root, "run", env=dict(env, FACTORY_PARALLEL="3"))
+    with tmpdir() as root:
+        log, env = fixture(root, [], profile="compile: true\nparallel: two\n")
+        code_bad, out_bad = run_runner(runner, root, "run", env=env)
+    check("parallel: the profile's `parallel:` sets the slots, FACTORY_PARALLEL overrides it, and one that is no whole "
+          "number stops the run",
+          "(slots: 2)" in out_profile and "(slots: 3)" in out_env
+          and code_bad == 2 and "parallel takes a whole number" in out_bad,
+          f"{out_profile.strip()[-200:]} | {out_env.strip()[-200:]} | {code_bad}: {out_bad.strip()[-200:]}")
 
     # the schedule with slots: what this runner runs counts, and between stories of one epic the one whose context
     # no running story changes goes first
