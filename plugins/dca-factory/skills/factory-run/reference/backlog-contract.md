@@ -89,6 +89,12 @@ Front matter, every field non-empty; the gate refuses an epic without `intent`, 
 Optional: `discovery` — the report the epic came from (`project/discovery/<topic>/discovery.md`, written by
 `factory-discover`); the gate refuses a link to a report that is not there.
 
+Optional: `depends_on` — the epics that must be delivered before this epic's stories start, by id; `[]` or no
+line for none. An epic is delivered when it has stories and every one of them is delivered or superseded. The
+schedule holds a story of a dependent epic as `blocked` and names the epic it waits for; between epics without
+one, the earlier epic — in this order, then by id — goes first, and where the runner runs more than one story
+they run side by side. The gate refuses an epic that names no epic there is, itself, or a cycle.
+
 An epic missing one of `intent`, `goal`, `metric`, `domain_contact` is refused by the gate at
 the plan stage. The reason is not bureaucracy: a stage that cannot read the intent invents one.
 
@@ -110,7 +116,7 @@ Front matter:
 | `status` | `draft` while it is still being written, `approved` once a human released it for building, `adopted` when it describes behaviour the project already has — adopted, never built (below) — `superseded` when another story replaced it, `delivered` once the document gate passed it. The person writes `draft → approved`; the gate alone writes `→ delivered`, and takes it back on a reopen. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
 | `delivered` | the UTC time the gate delivered the story, written with `status: delivered` (an adopted story keeps `status: adopted` and gains this line). Never written by hand; the story's digest leaves it out |
 | `publishes` | optional (contract 14): the epic's outcome event, on the story after which it can happen — the step that completes the flow. Its name is a word of the epic's `metric:` (the plan gate's `outcome`); at the document gate the production code declares a type of that name and a file the story changed — the aggregate that raises it, or the use case that publishes it — refers to it (`outcome`). One event, or a list |
-| `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by id; an unknown id or a cycle blocks the story and is named |
+| `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by their epic's place (its `depends_on:`, then its id) and then by id; an unknown id or a cycle blocks the story and is named |
 
 Body sections:
 

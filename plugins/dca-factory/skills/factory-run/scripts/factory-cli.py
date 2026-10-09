@@ -2573,8 +2573,12 @@ def schedule_data(cwd, epics, runs):
                                  path=path, epic=str(front.get("epic") or epic).strip(), front=front,
                                  body=story_body, title=story_title(front, story_body))
 
-    # dependency order, ties by id; whatever is left after that sits on a cycle
-    placed, remaining = set(), sorted(stories)
+    # dependency order, ties by the epic's place (an epic's `depends_on:` first, then its id) and then the
+    # story's id; whatever is left after that sits on a cycle
+    graph = epic_graph(epics)
+    ranked, epic_cycle = epic_order(graph)
+    rank = {epic: index for index, epic in enumerate(ranked)}
+    placed, remaining = set(), sorted(stories, key=lambda s: (rank.get(stories[s]["epic"], len(rank)), s))
     while remaining:
         free = [s for s in remaining if all(d in placed or d not in stories for d in stories[s]["deps"])]
         if not free:
@@ -2599,6 +2603,10 @@ def schedule_data(cwd, epics, runs):
             if pending:
                 story.update(state="blocked", start=None, detail="depends on " + ", ".join(
                     f"{d} ({stories[d]['state']})" for d in pending))
+            else:
+                waits = epic_waits(story["epic"], graph, epic_cycle, stories)
+                if waits:
+                    story.update(state="blocked", start=None, detail=waits)
 
     # A stage that started and has not ended is running — unless it has shown no sign of life for longer
     # than a stage may take, then it was interrupted and the story may be picked up again.
@@ -2639,6 +2647,23 @@ def schedule_data(cwd, epics, runs):
     for story in stories.values():
         counts[story["state"]] = counts.get(story["state"], 0) + 1
     return dict(stories=stories, order=order, next=nxt, reason=reason, wait=wait, counts=counts, hint=hint)
+
+
+def epic_waits(epic, graph, cycle, stories):
+    """Why a story of this epic may not start yet because of its epic's `depends_on:`, or "". An epic it depends on
+    is done when it has stories and every one of them is delivered or superseded — an epic without a story has
+    not been built, so what depends on it waits."""
+    if epic in cycle:
+        return f"its epic {epic} is on a dependency cycle between epics: {', '.join(sorted(cycle))}"
+    for needed in graph.get(epic, []):
+        if needed not in graph:
+            return f"its epic {epic} depends on unknown epic {needed}"
+        own = [s for s in stories.values() if s.get("epic") == needed and s.get("state") != "superseded"]
+        done = sum(1 for s in own if s.get("state") == "delivered")
+        if not own or done < len(own):
+            return (f"its epic {epic} depends on epic {needed} ({done} of {len(own)} delivered)" if own
+                    else f"its epic {epic} depends on epic {needed}, which has no story yet")
+    return ""
 
 
 #: What people write and the pipeline installs: a change there is not code a story left behind.

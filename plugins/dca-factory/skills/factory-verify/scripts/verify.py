@@ -3669,6 +3669,50 @@ def verify_places(args):
                              and rows.get("STORY-1", ("",))[0] in ("ready", "resumable", "in-progress") and "STORY-2" in rows,
                              f"plan {planned.stdout.strip()[-200:]} | {first.stdout.strip()[-400:]} | {moved} | {rows}"))
 
+    # epics in order: an epic's `depends_on:` holds its stories until every story of the epic it names is delivered;
+    # without one, the earlier epic's story goes first; an unknown epic or a cycle is refused by the backlog check
+    def epic(name, deps=()):
+        return EPIC.replace("id: sample", f"id: {name}").replace("---\n\n#", f"depends_on: [{', '.join(deps)}]\n---\n\n#", 1)
+
+    def epic_story(sid, name):
+        return story(sid).replace("epic: sample", f"epic: {name}")
+    with tmpdir() as root:
+        backlog_project(root, extra_sources=(
+            ("project/epics/alpha/epic.md", epic("alpha")),
+            ("project/epics/alpha/ZZZ-1/story.md", epic_story("ZZZ-1", "alpha")),
+            ("project/epics/beta/epic.md", epic("beta")),
+            ("project/epics/beta/AAA-1/story.md", epic_story("AAA-1", "beta")),
+            ("project/epics/gamma/epic.md", epic("gamma", ["alpha"])),
+            ("project/epics/gamma/BBB-1/story.md", epic_story("BBB-1", "gamma"))))
+        os.remove(os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md"))
+        os.rmdir(os.path.join(root, "project", "epics", "sample", "STORY-1"))
+        first = schedule_of(args.gate, root)
+        mark_delivered(root, "ZZZ-1", epic="alpha")
+        second = schedule_of(args.gate, root)
+        expectations.append(("epics: an epic's `depends_on:` holds its stories until the epic it names is delivered; "
+                             "between epics without one, the earlier epic's story runs first, whatever the story ids",
+                             first[1] == "ZZZ-1 plan" and first[0].get("BBB-1", ("",))[0] == "blocked"
+                             and "depends on epic alpha (0 of 1 delivered)" in first[3]
+                             and second[1] == "AAA-1 plan" and second[0].get("BBB-1", ("",))[0] == "ready",
+                             f"{first[3].strip()} || {second[3].strip()}"))
+    with tmpdir() as root:
+        backlog_project(root, extra_sources=(
+            ("project/epics/alpha/epic.md", epic("alpha", ["nowhere"])),
+            ("project/epics/alpha/ZZZ-1/story.md", epic_story("ZZZ-1", "alpha")),
+            ("project/epics/beta/epic.md", epic("beta", ["gamma"])),
+            ("project/epics/beta/AAA-1/story.md", epic_story("AAA-1", "beta")),
+            ("project/epics/gamma/epic.md", epic("gamma", ["beta"])),
+            ("project/epics/gamma/BBB-1/story.md", epic_story("BBB-1", "gamma"))))
+        checked = gate_run(root, "--check-backlog")
+        rows, nxt, _w, listing = schedule_of(args.gate, root)
+        expectations.append(("epics: an epic that depends on no epic there is or sits on a cycle is refused by the backlog "
+                             "check and blocks its stories; an epic outside it runs",
+                             checked.returncode == 1 and "'nowhere'" in checked.stdout
+                             and "dependency cycle between epics: beta, gamma" in checked.stdout
+                             and nxt == "STORY-1 plan"
+                             and all(rows.get(sid, ("",))[0] == "blocked" for sid in ("ZZZ-1", "AAA-1", "BBB-1")),
+                             f"{checked.stdout.strip()[-400:]} || {listing.strip()}"))
+
     # one architecture command: the profile's and the conventions' compared, a difference named, never fixed
     with tmpdir() as root:
         build_project(root)

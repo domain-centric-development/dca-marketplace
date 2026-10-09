@@ -1692,6 +1692,56 @@ def check_epic(result, story_path, front, epics):
                             f"not there — the epic links the discovery it came from, or no `discovery:` line")
     else:
         result.ok("epic", f"epic {epic_name!r} complete ({', '.join(EPIC_FIELDS)})")
+    problem = epic_dependency_problem(epics, epic_name)
+    if problem:
+        result.fail("epic", f"{epic_path}: {problem}")
+
+
+def epic_graph(epics):
+    """{epic id: [epic ids it depends on]} for every epic under the epics — `depends_on:` in its `epic.md`, the
+    same two shapes a story's takes. An epic's id is its `id:`, else its folder's name."""
+    graph = {}
+    if not os.path.isdir(epics):
+        return graph
+    for name in sorted(os.listdir(epics)):
+        path = os.path.join(epics, name, EPIC_FILE)
+        if not os.path.isfile(path):
+            continue
+        try:
+            front, _body = read_front_matter(path)
+        except GateError:
+            front = {}
+        graph[str(front.get("id") or name).strip()] = depends_on(front)
+    return graph
+
+
+def epic_order(graph):
+    """The epics in dependency order, ties by id; the ones on a cycle last, in id order. An epic named as a
+    dependency that does not exist is no node and does not hold anything up here — the check names it."""
+    order, placed, remaining = [], set(), sorted(graph)
+    while remaining:
+        free = [e for e in remaining if all(d in placed or d not in graph for d in graph[e])]
+        if not free:
+            break
+        order.append(free[0])
+        placed.add(free[0])
+        remaining.remove(free[0])
+    return order + remaining, set(remaining)
+
+
+def epic_dependency_problem(epics, epic):
+    """Why an epic's `depends_on:` cannot hold — an unknown epic, itself, a cycle — or None."""
+    graph = epic_graph(epics)
+    deps = graph.get(epic, [])
+    unknown = [d for d in deps if d not in graph]
+    if unknown:
+        return f"epic {epic!r} depends on {', '.join(repr(d) for d in unknown)}, which is no epic under {epics}/"
+    if epic in deps:
+        return f"epic {epic!r} depends on itself"
+    _order, cycle = epic_order(graph)
+    if epic in cycle:
+        return f"epic {epic!r} is on a dependency cycle between epics: {', '.join(sorted(cycle))}"
+    return None
 
 
 #: A source file of the project's code: the gate reads no profile key for where the code lives, so it reads every

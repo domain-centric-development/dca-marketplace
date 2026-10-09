@@ -23,6 +23,7 @@ The same words from a person, a view that sends them, or another tool — one me
 | `/factory-backlog stories <epic>` | cut the next stories of that epic, each `status: draft` |
 | `/factory-backlog journey <epic>` | the epic is delivered and unguarded: propose its journey (section *A journey*) — the `## Journey` timeline from the delivered stories' operations and events, ending in the outcome event, and the journey item as `status: draft` — or the `- none: <why>` line, if the person decides against one |
 | `/factory-backlog release <story> [<story> …]` | the person releases these drafts: run the question pass (step 6) for each, set `status: approved` where it leaves nothing open, and say which stay drafts and why |
+| `/factory-backlog release <epic>` | the person releases a whole epic: the same for every draft story of it — an id that names a folder under the epics with an `epic.md` is an epic, one that names a story's folder a story |
 | `/factory-backlog <words>` | anything else: what the person wants, in their words — an epic, a story or a correction |
 
 A form names the person's decision; it never skips a check. A release with open questions stays a draft until
@@ -65,6 +66,11 @@ that smuggles the decision in.
    released): take its `intent`, `goal` and `metric` as the report writes them, add `discovery:` with the
    report's path, and ask only what it leaves `open` — the domain contact, the journey. Where the problem itself
    is unclear and no report exists, offer `/factory-discover <topic>` before writing an epic.
+2b. **Whether the epic waits for another.** An epic may name the epics that must be delivered before its
+   stories start: `depends_on: [<epic id>, …]` in its `epic.md`, `[]` for none. Ask it for a new epic when the
+   backlog has another (WISH-EPIC-AFTER in the catalogue), never assume an order: epics without one run side
+   by side where the runner runs more than one story, and the earlier epic's story first where it runs one. The
+   gate refuses an epic that names no epic there is, itself, or a cycle.
 3. **The metric is an outcome event, not a count.** Ask which domain or integration event the
    project publishes when the epic has actually worked for someone — the event whose appearance in
    production is the evidence. A story count, a burndown or "feature shipped" is not a metric. If

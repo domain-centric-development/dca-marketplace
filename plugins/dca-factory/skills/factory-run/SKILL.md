@@ -396,8 +396,9 @@ prints each story with its state — `delivered` (its document gate passed), `wa
 (answered, with the stage that applies the answer), `in-progress` (with the stage it continues from: a refused
 gate's stage, else the first missing file), `ready`, `stopped` (three rounds, a story conflict, a
 refused plan gate, a `## needs-human` without a record), `blocked` (a dependency not delivered,
-unknown or on a cycle), `unreleased`/`superseded` — and ends with `next: <story> <stage>` or
-`next: none — <why>`. Order: `depends_on`, ties by id.
+unknown or on a cycle, or an epic its epic depends on not delivered), `unreleased`/`superseded` — and ends with
+`next: <story> <stage>` or `next: none — <why>`. Order: `depends_on`, ties by the epic's place (its own
+`depends_on:`, then its id), then by id.
 
 **One story with unfinished code at a time.** A story that got past its plan stage (it has
 `tests.md`) and is not delivered holds the checkout: it is next if it can run, and while it waits

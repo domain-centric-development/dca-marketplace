@@ -58,6 +58,14 @@ their number do not.
 - default: —
 - answer goes to: `domain_contact:` in the new `epic.md`
 
+### WISH-EPIC-AFTER
+- look up: —
+- asked: as WISH-EPIC-INTENT, when the backlog has another epic
+- question: For a new epic: must another epic be delivered before this one starts?
+- options: none — it may run beside the others · the epics under the backlog by their folder name, in the backlog's order
+- default: none — it may run beside the others
+- answer goes to: `depends_on:` in the new `epic.md` (`[]` for none)
+
 ### WISH-CONTEXT
 - look up: the designed map (`project/domain.md`) — one context only means no question
 - asked: when the map carries more than one context
