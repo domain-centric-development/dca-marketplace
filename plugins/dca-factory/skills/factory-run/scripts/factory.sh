@@ -2587,14 +2587,14 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       [ "$stage" = judge ] && [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
       [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
       # The document stage's file starts as the pipeline's skeleton: every path it may cite, root-relative.
-      local had_file=""; [ -f "$RUNS/$story/$(stage_file "$stage")" ] && had_file=1
-      [ "$stage" = document ] && [ -f "$GATE" ] && cli --document-skeleton "$story" >/dev/null 2>&1
-      [ "$stage" = plan ] && [ -f "$GATE" ] && cli --plan-skeleton "$story" >/dev/null 2>&1
+      local had_file="" skeleton=""; [ -f "$RUNS/$story/$(stage_file "$stage")" ] && had_file=1
+      [ "$stage" = document ] && skeleton=1 && [ -f "$GATE" ] && cli --document-skeleton "$story" >/dev/null 2>&1
+      [ "$stage" = plan ] && skeleton=1 && [ -f "$GATE" ] && cli --plan-skeleton "$story" >/dev/null 2>&1
       # A skeleton the pipeline wrote is not the stage's file: kept aside, so a stage that left it untouched
       # is a stage that produced nothing, not a finished one. A file an earlier pass left is no skeleton: the
       # stage brings it up to date or leaves it, and its gate decides.
       rm -f "$(evidence "$story")/$stage.skeleton"
-      [ -z "$had_file" ] && [ -f "$RUNS/$story/$(stage_file "$stage")" ] && { [ "$stage" = plan ] || [ "$stage" = document ]; } \
+      [ -z "$had_file" ] && [ -n "$skeleton" ] && [ -f "$RUNS/$story/$(stage_file "$stage")" ] \
         && cp "$RUNS/$story/$(stage_file "$stage")" "$(evidence "$story")/$stage.skeleton"
       snapshot "$story" "before-$stage"
       local choice requested note model_fields=""
