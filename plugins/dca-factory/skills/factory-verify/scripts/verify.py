@@ -4236,9 +4236,9 @@ def main(argv=None):
     parser.add_argument("--gate", default=DEFAULT_GATE)
     parser.add_argument("--cli", default=DEFAULT_CLI, help="the CLI beside the gate (default: beside --gate)")
     parser.add_argument("--runner", default=DEFAULT_RUNNER)
-    parser.add_argument("--group", choices=("all", "checks", "runner", "worktree", "setup"), default="all",
+    parser.add_argument("--group", choices=("all", "checks", "runner", "worktree", "setup", "unit"), default="all",
                         help="run one group only: the gate's and the schedule's checks, the runner, the worktrees "
-                             "and the parallel run, the install")
+                             "and the parallel run, the install, the package's functions called directly")
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, metavar="N",
                         help=f"processes side by side, the fixtures of every group spread over them "
                              f"(default {DEFAULT_JOBS}: the machine's cores, at most 6; 1 runs in this process, in order)")
@@ -4278,7 +4278,7 @@ def main(argv=None):
             write_junit(args.junit)
 
 
-GROUPS = ("checks", "runner", "worktree", "setup")
+GROUPS = ("checks", "runner", "worktree", "setup", "unit")
 
 
 def run_shards(args):
@@ -4286,7 +4286,7 @@ def run_shards(args):
     A shard's output is shown when it is done; a case every shard runs (one without a fixture) is shown and
     counted once."""
     groups = GROUPS if args.group == "all" else (args.group,)
-    queue = [(group, index) for group in groups for index in range(args.jobs)]
+    queue = [(group, index) for group in groups for index in range(1 if group == "unit" else args.jobs)]
     running, outputs, started = [], {}, time.monotonic()
     common = [sys.executable, os.path.abspath(__file__), "--gate", args.gate, "--cli", args.cli,
               "--runner", args.runner, "--jobs", "1"] + (["-v"] if args.verbose else [])
@@ -4381,7 +4381,7 @@ def write_junit(path):
 
 
 def run_groups(args):
-    if args.group in ("runner", "worktree", "setup"):
+    if args.group in ("runner", "worktree", "setup", "unit"):
         return run_runner_groups(args, [], args.group)
 
     both_green = ["com.example.WidgetPageTest#showsTheThing",
@@ -8213,9 +8213,52 @@ def verify_worktrees(runner, verbose=False):
     return failures
 
 
+UNIT_DIR = os.path.join(HERE, "unit")
+
+
+def verify_unit(verbose):
+    """The package's functions called directly — the contract parsers, the story state on synthetic journals, the
+    schedule, the report readers: `unit/test_*.py`, plain unittest, in this process and in the first shard only.
+    A case marked as a known defect passes while the defect stands and fails once it is gone."""
+    if SHARD[0] != 0:
+        return []
+    import unittest
+    import warnings
+    sys.dont_write_bytecode = True                              # the repository carries no __pycache__
+
+    def cases(suite):
+        for item in suite:
+            yield from cases(item) if isinstance(item, unittest.TestSuite) else (item,)
+
+    failed, count = [], 0
+    for case in cases(unittest.TestLoader().discover(UNIT_DIR, top_level_dir=UNIT_DIR)):
+        count += 1
+        module, _, method = case.id().rpartition(".")
+        name = f"unit: {module.split('.')[0].removeprefix('test_')} — {method.removeprefix('test_').replace('_', ' ')}"
+        result = unittest.TestResult()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
+            case.run(result)
+        problems = [text for _case, text in result.failures + result.errors]
+        problems += ["passes, though marked as a known defect — the defect is gone, drop the mark"
+                     for _case in result.unexpectedSuccesses]
+        detail = "; ".join(p.strip().splitlines()[-1] for p in problems)
+        note_result(name, not problems, detail)
+        if problems:
+            failed.append(name)
+            print(f"  FAIL  {name}\n          {detail}")
+            if verbose:
+                for line in "\n".join(problems).splitlines():
+                    print(f"        {line}")
+        else:
+            print(f"  ok    {name}" + ("  (known defect)" if result.expectedFailures else ""))
+    print(f"\nverify: {count - len(failed)}/{count} unit cases behaved as specified")
+    return failed
+
+
 def run_runner_groups(args, failures, group):
     runner_failures = []
-    if group == "checks":
+    if group in ("checks", "unit"):
         pass
     elif os.path.isfile(args.runner):
         if group in ("all", "runner"):
@@ -8232,6 +8275,10 @@ def run_runner_groups(args, failures, group):
             runner_failures += verify_setup(args.runner, args.verbose)
     else:
         print(f"verify: no runner at {args.runner} — its cases were skipped")
+    if group in ("all", "unit"):
+        print()
+        CURRENT_GROUP[0] = "unit"
+        runner_failures += verify_unit(args.verbose)
 
     if failures or runner_failures:
         print(f"\nverify: FAILED — {len(failures)} gate case(s), {len(runner_failures)} runner case(s)")
