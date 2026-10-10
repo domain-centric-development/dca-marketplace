@@ -5,6 +5,10 @@ description: Tidy stage of a factory run — the refactor step the build stage d
 
 # Tidy one story's code
 
+First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
+runner started, one session that carries several stages, a repeat round, the shell, the gate. The
+runner's prompt names its path and repeats none of it.
+
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/runs/<story>/build.md`, and the code as the build
 stage left it — green: the files `.dca-factory/evidence/<story>/changed.txt` lists, which the pipeline
 recorded from the working tree. Nothing else. Every file you change is a row under `## Moves`; the

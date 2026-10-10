@@ -186,6 +186,12 @@ STAGE_COMMON_SENTENCES = (
     "a stage that runs them first pays twice for one answer",
     "The gate and the commit hook only check `format:`",
     "never a reason to edit your file after the gate ran",
+    "the worker named at session start is the one that started you, not a second writer",
+    "Read that, never the gate's source",
+    "Do it yourself in this session; do not delegate it",
+    "Run one plain command per call from the project root",
+    "put the calls that do not wait for each other's result into one turn",
+    "With any other verdict stop after `judge.md`; write no `document.md`",
 )
 
 
@@ -208,8 +214,8 @@ def check_stage_common(root):
             continue
         with open(path, encoding="utf-8") as handle:
             skill = " ".join(handle.read().split())
-        if "stage-common.md" not in skill:
-            problems.append(f"dca-factory/skills/{name}: does not point at stage-common.md")
+        if "First read `factory-run/reference/stage-common.md`" not in skill:
+            problems.append(f"dca-factory/skills/{name}: does not say to read stage-common.md first")
         for sentence in STAGE_COMMON_SENTENCES:
             if sentence in skill:
                 problems.append(f"dca-factory/skills/{name}: repeats `{sentence}` — it is said once in stage-common.md")

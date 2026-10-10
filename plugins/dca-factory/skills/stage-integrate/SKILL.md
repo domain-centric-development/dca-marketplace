@@ -5,6 +5,10 @@ description: Integrate step of a factory run — resolves the merge conflicts be
 
 # Resolve one story's merge conflicts
 
+First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
+runner started, one session that carries several stages, a repeat round, the shell, the gate. The
+runner's prompt names its path and repeats none of it.
+
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/evidence/<story>/conflicts` — the files git
 could not merge — and the two sides as git shows them (`git diff`, `git log`). Nothing else.
 Output: the conflicted files with every conflict resolved, plus `.dca-factory/runs/<story>/integrate.md`.

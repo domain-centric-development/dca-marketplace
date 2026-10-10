@@ -1015,15 +1015,23 @@ def verify_runner(runner, verbose=False):
               output.count("would run (review:") == 3 and "apply the `review-ddd` skill" in output
               and ".dca-factory/runs/STORY-1/reviews/hexagonal.md" in output
               and output.index("would run (review:ddd)") < output.index("── stage judge"), [l[:120] for l in output.splitlines() if "review:" in l][:3])
+        # what a session does with those paths is in the rules every stage holds to, which the prompt names
+        common_path = os.path.normpath(os.path.join(os.path.dirname(runner), "..", "reference", "stage-common.md"))
+        common = " ".join(open(common_path, encoding="utf-8").read().split())
         check("runner: every stage prompt says where things are — the profile, the run folder, the gate's contract "
-              "through the cli, never the gate's source",
+              "through the cli and the rules every stage holds to, which say never the gate's source",
               output.count("the stack profile is dca-factory.profile.yaml") == 9
               and output.count("factory-cli.py --contract <stage>") == 9
-              and "never the gate's source" in output,
+              and output.count("The rules every stage holds to: ") == 9 and "stage-common.md." in output
+              and "never the gate's source" in common and "never the gate's source" not in output,
               [l[:160] for l in output.splitlines() if "would run" in l][:2])
-        check("runner: the document stage's prompt names the skeleton the pipeline wrote",
-              "document.md as a skeleton" in output and "`## Paths` section" in output,
-              [l[:200] for l in output.splitlines() if "skeleton" in l])
+        document_skill = " ".join(open(os.path.join(os.path.dirname(runner), "..", "..", "stage-document", "SKILL.md"),
+                                       encoding="utf-8").read().split())
+        check("runner: the document stage's skill names the skeleton the pipeline writes, and that skill is in its prompt",
+              "--document-skeleton <story>` (the runner runs it" in document_skill
+              and "cite paths from that section in exactly that form" in document_skill
+              and "Apply the stage-document skill" in output,
+              document_skill[:200])
 
     # 1c. an adoption builds nothing: plan, test, judge, then the adopt gate
     for root in throwaway():
@@ -1603,8 +1611,12 @@ def verify_runner(runner, verbose=False):
               and output.count("── gate build  (re-checked by the runner)") == 2
               and output.count("ran through") == 1,
               f"exit {code}; starts {starts}; prompts {[p[-120:] for p in prompts]}; {output.strip().splitlines()[-4:]}")
-        check("prompt: a stage is asked for independent calls in one turn and for plain commands the allow-list covers",
-              bool(prompts) and "into one turn" in prompts[0] and "one plain command per call" in prompts[0],
+        common = " ".join(open(os.path.join(os.path.dirname(runner), "..", "reference", "stage-common.md"),
+                               encoding="utf-8").read().split())
+        check("prompt: a stage is asked for independent calls in one turn and for plain commands the allow-list covers "
+              "— by the rules every stage holds to, which its prompt names",
+              bool(prompts) and "The rules every stage holds to: " in prompts[0] and "stage-common.md" in prompts[0]
+              and "into one turn" in common and "one plain command per call" in common,
               [p[-400:] for p in prompts[:1]])
 
     # 1b-api. the catalog nodes the profile names (`knowledge.read`) are in the prompt as paths; without the key the
@@ -1667,8 +1679,14 @@ def verify_runner(runner, verbose=False):
               and starts == ["plan", "test", "build", "test", "build", "tidy", "judge", "document"]
               and "goes back to the test stage" in output,
               f"exit {code}; starts {starts}; asked {asked}; {output.strip().splitlines()[-3:]}")
-        check("build sent back: the second test prompt names build.md and says not to change what the test asserts",
-              len(prompts) == 2 and "build.md" in prompts[1] and "assert" in prompts[1],
+        common = " ".join(open(os.path.join(os.path.dirname(runner), "..", "reference", "stage-common.md"),
+                               encoding="utf-8").read().split())
+        check("build sent back: the second test prompt names build.md, and the rules it names say not to change what "
+              "the test asserts",
+              len(prompts) == 2 and "The build stage sent the story back: " in prompts[1] and "build.md" in prompts[1]
+              and "stage-common.md" in prompts[1]
+              and "*The build stage sent the story back*: `build.md` names a defect in a test's own code — the test "
+                  "stage repairs exactly that, without changing what the test asserts" in common,
               prompts[-1][-260:] if prompts else "no test prompt recorded")
         code, output, starts, delivered, prompts, asked = buildback_run(shared=True)
         check("build sent back: a shared builder's `back: test` is a round from the test stage as well",

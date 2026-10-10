@@ -378,9 +378,11 @@ heading (`── test`). A call that failed is `✗ <reason>`; one the tool deni
 
 ## What a stage is told
 
-Every stage prompt names where things are — the stack profile, the story's run folder, the knowledge
-skill's catalog — and `factory-cli.py --contract <stage>`: the exact shape the gate holds that stage's
-file to, in a page, from the gate's own constants, so a stage reads that and never the gate's source.
+Every stage prompt names the skill, the story and where things are — the stack profile, the story's run
+folder, the knowledge skill's catalog, the reports of an earlier round — and `factory-cli.py --contract
+<stage>`: the exact shape the gate holds that stage's file to, in a page, from the gate's own constants,
+so a stage reads that and never the gate's source. Nothing else: what a session does with those paths
+is in the skills and in `factory-run/reference/stage-common.md`, which every stage skill reads first.
 A stage that runs its own gate runs it with `--brief` (what passed is one line, what did not stays
 verbatim). Before the document stage the runner writes the stage's file as a skeleton
 (`factory-cli.py --document-skeleton <story>`) with every changed path and run file root-relative under

@@ -5,6 +5,10 @@ description: Test stage of a factory run — writes one end-user test per accept
 
 # Write the tests for one story
 
+First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
+runner started, one session that carries several stages, a repeat round, the shell, the gate. The
+runner's prompt names its path and repeats none of it.
+
 Input: the story, `.dca-factory/runs/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
 product description (`project/product.md`, or where the profile's `product:` points) where the plan
 says a criterion touches them. Nothing else. Open the files the plan's

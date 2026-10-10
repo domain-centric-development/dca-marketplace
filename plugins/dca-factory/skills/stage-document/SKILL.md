@@ -5,6 +5,10 @@ description: Documentation stage of a factory run — brings the project's own d
 
 # Document what the story changed
 
+First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
+runner started, one session that carries several stages, a repeat round, the shell, the gate. The
+runner's prompt names its path and repeats none of it.
+
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `build.md`, `judge.md`, and the diff —
 `.dca-factory/evidence/<story>/story.diff`, which the pipeline writes (where it says there is no diff,
 `changed.txt` lists the files). Nothing else.

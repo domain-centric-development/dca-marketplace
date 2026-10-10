@@ -5,6 +5,10 @@ description: Judge stage of a factory run — reviews the story's change from th
 
 # Judge one story's change
 
+First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
+runner started, one session that carries several stages, a repeat round, the shell, the gate. The
+runner's prompt names its path and repeats none of it.
+
 Input: the story and its epic (`epic.md` beside it), `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
 `.dca-factory/evidence/<story>/story.diff`, which the pipeline writes; open a whole file only where the
 diff's context does not carry the question, and explore no further than a finding needs — the
