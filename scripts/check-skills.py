@@ -11,6 +11,10 @@ The boundary is a check because the place a skill sits in attracts content: `dca
 works without the method's artifacts, and without the check its general skills drift back towards
 rule ids, `dca-*` skills, marker names and the conventions overlay. `--self-test` runs only the
 boundary check's own cases.
+
+Every SKILL.md stays under 32 KiB, because some tools stop reading a project document there and cut the
+rest without saying so: an instruction past that point does not exist for them. Detail moves into files
+beside the skill that its SKILL.md names.
 """
 
 import os
@@ -176,6 +180,27 @@ def self_test(patterns):
     return failures
 
 
+# The size past which some tools cut a project document without saying so.
+SKILL_LIMIT = 32 * 1024
+
+
+def check_skill_sizes(root):
+    """Every SKILL.md below the root, hidden folders aside: (problems, the largest as (bytes, path))."""
+    problems, largest = [], (0, "")
+    for folder, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        if "SKILL.md" not in files:
+            continue
+        path = os.path.join(folder, "SKILL.md")
+        size = os.path.getsize(path)
+        where = os.path.relpath(path, root)
+        largest = max(largest, (size, where))
+        if size >= SKILL_LIMIT:
+            problems.append(f"{where}: {size} bytes, over the {SKILL_LIMIT // 1024} KiB a tool may cut without "
+                            f"saying so — move detail into a file beside it that it names")
+    return problems, largest
+
+
 # Paragraphs every delivery stage holds to, said once in `factory-run/reference/stage-common.md`; a stage skill
 # that carries one of them again has drifted back to saying it four times per shared builder.
 STAGE_COMMON = "plugins/dca-factory/skills/factory-run/reference/stage-common.md"
@@ -266,6 +291,12 @@ def main():
     print(f"check-skills: the stage skills point at stage-common.md and repeat none of its {len(STAGE_COMMON_SENTENCES)} rules"
           if not common else f"check-skills: {len(common)} stage-common problem(s)")
     problems += common
+    sizes, (size, where) = check_skill_sizes(ROOT)
+    for problem in sizes:
+        print(f"check-skills: {problem}", file=sys.stderr)
+    print(f"check-skills: every SKILL.md is under {SKILL_LIMIT // 1024} KiB (the largest: {where}, {size} bytes)"
+          if not sizes else f"check-skills: {len(sizes)} SKILL.md file(s) over {SKILL_LIMIT // 1024} KiB")
+    problems += sizes
     boundary = check_boundary(ROOT, patterns)
     for problem in boundary:
         print(f"check-skills: {problem}", file=sys.stderr)

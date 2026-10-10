@@ -354,7 +354,8 @@ bash .agents/factory/factory.sh run --story STORY-3 --separate-stages   # the sa
 ```
 
 One process per stage is the profile's `stages: separate` or `--separate-stages` for a run;
-`FACTORY_SHARED_BUILDER=0` or `FACTORY_SHARED_VERIFIER=0` separates one half. Measured: the shared builder
+`FACTORY_SHARED_BUILDER=0` or `FACTORY_SHARED_VERIFIER=0` separates one half, and `run --shared-builder` or
+`--shared-verifier` shares that half again for one run (without either, they change nothing). Measured: the shared builder
 cost 31 % less on one story at the same verdict, and on a smaller model it was the variant that delivered
 every story where the separate stages stopped one on its third round.
 

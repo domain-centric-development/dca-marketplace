@@ -6,6 +6,7 @@ Nothing here runs a command or decides a stage; the modules above read through t
 can never disagree about what a file says.
 """
 
+import difflib
 import hashlib
 import os
 import re
@@ -243,6 +244,45 @@ def read_profile(path):
         key, value = line.split(":", 1)
         profile[key.strip()] = value.strip().strip('"').strip("'")
     return profile
+
+
+#: The profile's schema: every key the gate, the cli, the runner or a stage reads, as written in
+#: `templates/factory.profile.yaml.tmpl`. A key outside it is read by nobody, so the contract check names it — a
+#: note, never a refusal: a misspelt `requried:` is a check that quietly went, a key from a newer release is one
+#: this copy cannot use.
+PROFILE_KEYS = frozenset((
+    # the commands and how the gate selects and reads a single test
+    "compile", "test", "e2eTest", "architecture", "format", "formatFix",
+    "filterFlag", "filterFormat", "filterJoin", "testReport", "testEvidence",
+    # what the project has, and what must hold
+    "required", "browser", "integration", "http.stub", "adopt.breakProof", "acceptance", "run",
+    # where things are (DEFAULTS), the generated map and the glossary; `backlog` is the older layout's, named by
+    # the layout hint
+    *DEFAULTS, "contextMap", "glossary", "backlog",
+    # what the stages read and how the runner starts them
+    "knowledge", "knowledge.read", "reviews", "stages", "parallel", "stageTimeout", "sessionUsage", "contract",
+    # `model` alone is refused by the model check, which names the right form
+    "model",
+))
+
+#: Key families: `<prefix><name>`, with an open list of names — a test command (`test.integration`), what a
+#: command covers (`covers.test`), a carrier (`carrier.build`), a perspective's reviewer (`review.ddd`), a model
+#: (`model.claude`, `model.claude.tidy`; the model check holds tool and stage).
+PROFILE_FAMILIES = ("test.", "covers.", "carrier.", "review.", "model.")
+
+
+def unknown_profile_keys(profile):
+    """The profile's keys outside the schema, each with the nearest known one where one is close (else None)."""
+    unknown = []
+    for key in sorted(profile):
+        if key in PROFILE_KEYS or any(key.startswith(family) and len(key) > len(family)
+                                      for family in PROFILE_FAMILIES):
+            continue
+        head, dot, tail = key.partition(".")
+        family = difflib.get_close_matches(head + ".", PROFILE_FAMILIES, n=1, cutoff=0.75) if dot and tail else []
+        near = [family[0] + tail] if family else difflib.get_close_matches(key, PROFILE_KEYS, n=1, cutoff=0.75)
+        unknown.append((key, near[0] if near else None))
+    return unknown
 
 
 def read_text(path):

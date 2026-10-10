@@ -3084,6 +3084,37 @@ def tree_digest(root):
     return seen
 
 
+# A command line the docs show: the program, then its words up to the end of the code span or a `#` comment.
+DOC_COMMAND = re.compile(r"(factory\.sh|story-gate\.py|factory-cli\.py)\b([^`#]*)")
+# The runner's subcommands that hand their flags on — to the cli, the gate or the fixture suite — beside its own.
+PASSED_ON = {"backlog": "cli", "decisions": "cli", "follow": "cli", "help": "cli", "discover": "cli",
+             "check": "gate", "verify": "verify"}
+
+
+def doc_unknown_flags(text, accepted):
+    """Every `--flag` the text shows in a command line of factory.sh, story-gate.py or factory-cli.py that the
+    program does not accept; `accepted` maps sh, gate, cli and verify to their flags."""
+    spans, fenced = [], False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif fenced:
+            spans.append(line)
+        else:
+            spans += re.findall(r"`([^`]+)`", line)
+    unknown = set()
+    for span in spans:
+        for program, rest in DOC_COMMAND.findall(span):
+            words = rest.split()
+            if program == "factory.sh":
+                known = accepted["sh"] | accepted.get(PASSED_ON.get(words[0] if words else ""), set())
+            else:
+                known = accepted["gate" if program == "story-gate.py" else "cli"]
+            unknown |= {f"{program} {flag}" for flag in re.findall(r"(?<![\w-])(--[a-z][\w-]*)", rest)
+                        if flag not in known}
+    return sorted(unknown)
+
+
 def verify_setup(runner, verbose=False):
     results = []
 
@@ -3861,6 +3892,18 @@ def verify_setup(runner, verbose=False):
     check("observe: defines no reader the gate has — it imports the gate's",
           not duplicated and "def front_matter(" not in observe_text and "from dca_factory import" in observe_text,
           duplicated)
+    # every flag the README shows on a command line is one its program accepts
+    argparse_flags = lambda text: {flag for call in re.findall(r"add_argument\(([^)]*)", text)
+                                   for flag in re.findall(r'"(--[\w-]+)"', call)}
+    accepted = {"gate": argparse_flags(modules["gate"]), "cli": argparse_flags(modules["cli"]),
+                "verify": argparse_flags(open(__file__, encoding="utf-8").read()),
+                "sh": {flag for labels in re.findall(r"^\s*((?:--[\w-]+\|?)+)\)", runner_text, re.M)
+                       for flag in labels.split("|")}}
+    readme = open(os.path.join(os.path.dirname(runner), "..", "..", "..", "README.md"), encoding="utf-8").read()
+    unknown = doc_unknown_flags(readme, accepted)
+    planted = doc_unknown_flags("`factory.sh run --no-such-flag` · `factory.sh follow --once`", accepted)
+    check("docs: every flag the README shows for factory.sh, story-gate.py or factory-cli.py is one the program accepts",
+          not unknown and planted == ["factory.sh --no-such-flag"], f"{unknown}; planted {planted}")
     shutil.rmtree(lone_home, ignore_errors=True)
 
     failures = [name for name, ok, _ in results if not ok]
@@ -4871,6 +4914,16 @@ def run_groups(args):
         (Case("contract: a contract that is not a number is refused", "plan", 1,
               must_fail=("contract",)),
          dict(profile="contract: latest\n" + PROFILE)),
+        # A key outside the profile's schema is read by nobody: named with the nearest known key, never a refusal.
+        (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
+              must_pass=("contract",),
+              text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
+         dict(profile="contract: 17\nrequried: compile\n" + PROFILE)),
+        (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
+              absent=("no key the pipeline reads",)),
+         dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
+                                "carrier.discover: product-discovery\nmodel.claude.tidy: haiku\nknowledge.read: a.md\n"
+                                "stageTimeout: 30m\nhttp.stub: none\nadopt.breakProof: all\n")),
 
         # --- the shape the selector depends on ------------------------------
         # The documented limit, as a case: a selector resolves through a source file *named after
