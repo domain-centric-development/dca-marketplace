@@ -290,7 +290,7 @@ plugin_skills() {
   for candidate in \
       "${FACTORY_PLUGIN_DIR:-}" \
       "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)" \
-      .claude/skills .codex/skills .opencode/skills \
+      ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} \
       "$HOME"/.claude/plugins/cache/*/dca-factory/*/skills; do
     [ -n "$candidate" ] && [ -f "$candidate/factory-run/scripts/story-gate.py" ] || continue
     # through the skill, not the folder: a project's skill folder holds one link per skill, so the
@@ -399,8 +399,8 @@ update_project() {                          # update_project <explicit skill fol
   fi
   before=$(sed -n 's/^version:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
   before_contract=$(sed -n 's/^contract:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
-  for tool in claude codex opencode; do
-    target=".$tool/skills"
+  for tool in ${TOOL_NAMES[@]+"${TOOL_NAMES[@]}"}; do
+    target=$(skill_dir_of "$tool")
     mode=$(skills_mode "$target")
     [ -n "$mode" ] || continue
     # the mode the project has — unless the person names the other one, which is how a project switches
@@ -438,7 +438,7 @@ update_project() {                          # update_project <explicit skill fol
 # — nobody edited it — and kept and named otherwise, because then the project made it its own.
 prune_renamed_copies() {                    # prune_renamed_copies <pipeline skill folder>
   local src=$1 target old new plugin copy candidate reference version best_version
-  for target in .claude/skills .codex/skills .opencode/skills; do
+  for target in ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"}; do
     [ -d "$target" ] && [ ! -L "$target" ] || continue
     while read -r old new plugin; do
       copy="$target/$old"
@@ -497,8 +497,16 @@ check_gate_freshness() {
 
 # --- tool adapters -----------------------------------------------------------
 
+# What the runner knows of a tool is a row of the cli's tool table (`TOOL_*`, read at the start); a value of one
+# row by its tool: `tool_field TOOL_SKILLS claude` → .claude/skills.
+tool_field() {                              # tool_field <TOOL_* table> <tool>
+  local table=" ${!1:-} " entry
+  entry=${table#* "$2":}
+  [ "$entry" != "$table" ] && printf '%s' "${entry%% *}"
+}
+
 detect_tool() {
-  for candidate in claude codex opencode; do
+  for candidate in ${TOOL_NAMES[@]+"${TOOL_NAMES[@]}"}; do
     command -v "$candidate" >/dev/null 2>&1 && { echo "$candidate"; return; }
   done
   echo ""
@@ -544,35 +552,19 @@ allowed_commands() {
 # stage on the tool's prompt cache serves the prefix instead of writing it again.
 # FACTORY_ISOLATION=off runs a stage with the tool's full setup, for a run that needs something the
 # project does not carry; the run says so.
-STAGE_TOOLS="Read,Write,Edit,Glob,Grep,Bash,Skill"
 isolated() { [ "${FACTORY_ISOLATION:-on}" != off ]; }
+# The flags themselves are the tool record's, each passed only where the binary's help names it; the help is probed
+# once per binary, so every stage gets the same flags.
 isolation_flags() {                         # isolation_flags <tool>
   isolated || return 0
-  case "$1" in
-    claude)
-      local help="" flag want
-      # An older CLI refuses a flag it does not know and the stage would not start; ask it once.
-      command -v claude >/dev/null 2>&1 && help=${CLAUDE_HELP:-$(claude --help 2>/dev/null)}
-      for want in "--setting-sources project" "--strict-mcp-config" "--tools $STAGE_TOOLS" \
-                  "--exclude-dynamic-system-prompt-sections"; do
-        flag=${want%% *}
-        if [ -z "$help" ] || printf '%s' "$help" | grep -q -- "$flag"; then printf '%s ' "$want"; fi
-      done ;;
-    codex)
-      # The user's config.toml (MCP servers, profiles, a model) stays out; the login does not.
-      local help=""
-      command -v codex >/dev/null 2>&1 && help=$(codex exec --help 2>/dev/null)
-      if [ -z "$help" ] || printf '%s' "$help" | grep -q -- "--ignore-user-config"; then
-        printf '%s ' "--ignore-user-config"
-      fi ;;
-    opencode) printf '%s ' "--pure" ;;
-  esac
+  cli --tool-flags "$1" 2>/dev/null | tr -d '\n'; printf ' '
 }
 
 # The craft a profile names — carrier.<stage>, review.<perspective>, knowledge — has to be in the
 # project's own skill directory, because an isolated stage sees nothing else. Checked before the
 # first invocation, so a missing carrier stops the run instead of every stage quietly falling back.
-skill_dir_of() { case "$1" in claude) echo .claude/skills ;; codex) echo .codex/skills ;; opencode) echo .opencode/skills ;; esac; }
+skill_dir_of() { tool_field TOOL_SKILLS "$1"; }
+is_plugin_dir() { [[ " ${TOOL_PLUGIN_DIRS[*]:-} " == *" $1 "* ]]; }   # is_plugin_dir <skill folder>
 named_carriers() { cli --carriers 2>/dev/null; }
 # Skills the method plugins renamed: <old> <new> <the plugin that shipped the old one>. A profile that
 # still names an old one would run yesterday's copy without a word, so the run stops on it, and
@@ -624,6 +616,26 @@ check_carriers() {                          # check_carriers <tool>
   echo "factory:   project has no skills for yet: 'factory.sh setup --tool $1'), or FACTORY_ISOLATION=off" >&2
   echo "factory:   uses the tool's own setup." >&2
   return 2
+}
+
+# The tool, before any stage is paid for: its binary is asked once whether it knows every flag its record passes
+# (`cli --tool-probe`) — a flag a stage needs and the binary lacks stops the run; an isolation flag it lacks is left
+# out and named, as is a run without isolation or OpenCode without the pipeline's permission block.
+check_tool() {                              # check_tool <tool>
+  isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
+  [ -n "$1" ] && [ -n "$(tool_field TOOL_SKILLS "$1")" ] && [ -z "${FACTORY_TOOL_CMD:-}" ] || return 0
+  local out code=0
+  out=$(cli --tool-probe "$1" 2>/dev/null) || code=$?
+  if [ "$code" = 1 ]; then
+    printf 'factory: %s\n' "$out" >&2
+    echo "factory:   nothing was started — update the tool, or run with another (--tool)." >&2
+    return 2
+  fi
+  isolated && printf '%s\n' "$out" | sed -n 's/^\([a-z]*\): no /factory: \1 knows no /p' >&2
+  [ "$1" = opencode ] && [ "${FACTORY_OPENCODE_PERMISSIONS:-off}" != on ] && [ -z "${OPENCODE_CONFIG_CONTENT:-}" ] \
+    && echo "factory: OpenCode runs the stages with its own permissions, unrestricted — FACTORY_OPENCODE_PERMISSIONS=on \
+hands it the pipeline's list" >&2
+  return 0
 }
 
 # The profile's contract and model keys, before any stage is paid for: a run started --from a later
@@ -691,7 +703,7 @@ model_key() {                               # model_key <tool> <stage> — the p
   set -- "$1" "${2%%:*}"                    # review:<perspective> takes the key of `review`
   printf '%s' "$(cli --model "$1" "$2" 2>/dev/null)"
 }
-tool_args() { case "$1" in claude) printf '%s' "${FACTORY_CLAUDE_ARGS:-}" ;; codex) printf '%s' "${FACTORY_CODEX_ARGS:-}" ;; opencode) printf '%s' "${FACTORY_OPENCODE_ARGS:-}" ;; esac; }
+tool_args() { local name; name=$(tool_field TOOL_ARGS_ENV "$1"); [ -n "$name" ] && printf '%s' "${!name:-}"; }
 env_model() { tool_args "$1" | sed -n -E 's/.*(^| )(-m|--model)[ =]([^ ]*).*/\3/p' | head -1; }
 # The model flag for one stage, and why a request does not become one: "<flag args>|<note>".
 model_choice() {                            # model_choice <tool> <stage>
@@ -699,65 +711,27 @@ model_choice() {                            # model_choice <tool> <stage>
   [ -n "$requested" ] || { printf '|'; return; }
   if [ -n "${FACTORY_TOOL_CMD:-}" ]; then printf '|passed as FACTORY_MODEL to the custom command'; return; fi
   if [ -n "$(env_model "$1")" ]; then printf '|overridden by FACTORY_%s_ARGS (%s)' "$(printf '%s' "$1" | tr a-z A-Z)" "$(env_model "$1")"; return; fi
-  case "$1" in
-    claude) printf -- '--model %s|' "$requested" ;;
-    codex|opencode) printf -- '-m %s|' "$requested" ;;
-    *) printf '|no model flag for tool %s' "$1" ;;
-  esac
+  local flag; flag=$(tool_field TOOL_MODEL_FLAG "$1")
+  if [ -n "$flag" ]; then printf -- '%s %s|' "$flag" "$requested"; else printf '|no model flag for tool %s' "$1"; fi
 }
 
 # A stage in a story's worktree writes into the main checkout's run folder and the story's records: both are
-# linked into the worktree, and named to the tool as directories it may write besides its own. What it only
-# reads through a link — the installed pipeline, the evidence, the skills — Claude Code needs named as well to
-# read it at all, so it gets those too, under a deny rule; Codex reads everywhere and writes only where it is
-# named, so it gets the writable ones alone.
-add_dir_flags() {                           # add_dir_flags <tool>
-  local dir
-  for dir in ${ADD_DIRS[@]+"${ADD_DIRS[@]}"}; do printf -- '--add-dir %s ' "$dir"; done
-  [ "${1:-}" = claude ] || return 0
-  for dir in ${READ_DIRS[@]+"${READ_DIRS[@]}"}; do printf -- '--add-dir %s ' "$dir"; done
-}
-
+# linked into the worktree (ADD_DIRS), and what it only reads through a link — the installed pipeline, the evidence,
+# the skills — is named too (READ_DIRS). How a tool is told is its record's: Claude Code gets both as `--add-dir`,
+# Codex reads everywhere and gets the writable ones alone, OpenCode gets them in its permission block.
 # What proves a stage's work and what judges it are never the stage's to write, in the checkout and in a worktree
 # alike: the installed pipeline, the evidence folder and the skill folders. Claude Code refuses Write and Edit
 # under them by a deny rule (`Edit(//<absolute path>/**)`, which covers every editing tool and a write through a
 # worktree's link as well); the pipeline's hash and the gate's `pipeline` check stand behind it for every tool.
 protected_dirs() {
   local dir
-  for dir in .agents/factory "$(evidence_rel)" .claude/skills .codex/skills .opencode/skills .agents/skills; do
+  for dir in .agents/factory "$(evidence_rel)" ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} .agents/skills; do
     case "$dir" in /*|?:*) printf '%s\n' "$dir" ;; *) printf '%s\n' "$HOME_DIR/$dir" ;; esac
   done
 }
-deny_flags() {                              # deny_flags <tool>
-  [ "$1" = claude ] || return 0
-  local dir rules=""
-  while IFS= read -r dir; do
-    [ -n "$dir" ] && rules="$rules${rules:+,}Edit(//${dir#/}/**)"
-  done < <(protected_dirs)
-  printf -- '--disallowedTools %s' "$rules"
-}
-
-# OpenCode reads a permission block from OPENCODE_CONFIG_CONTENT (2.0.x): the same shell list as Claude's, every
-# edit allowed but under the protected folders, the linked folders as external ones it may use. Not probed against
-# a signed-in binary yet, so it is on only with FACTORY_OPENCODE_PERMISSIONS=on; without it OpenCode runs with its
-# own configuration, unrestricted, and the run says so. An existing OPENCODE_CONFIG_CONTENT is the person's and wins.
-opencode_permissions() {
-  if [ -n "${OPENCODE_CONFIG_CONTENT:-}" ] || [ "${FACTORY_OPENCODE_PERMISSIONS:-off}" != on ]; then
-    printf '%s' "${OPENCODE_CONFIG_CONTENT:-}"; return
-  fi
-  "$PY" - "$(allowed_commands)" "$(protected_dirs)" ${ADD_DIRS[@]+"${ADD_DIRS[@]}"} ${READ_DIRS[@]+"${READ_DIRS[@]}"} <<'PYEOF'
-import json, sys
-allowed, protected, linked = sys.argv[1], sys.argv[2].splitlines(), sys.argv[3:]
-bash = {"*": "deny"}
-for entry in allowed.split(","):
-    if entry.startswith("Bash(") and entry.endswith(":*)"):
-        bash[entry[5:-3] + "*"] = "allow"
-edit = {"*": "allow"}
-edit.update({dir.rstrip("/") + "/**": "deny" for dir in protected if dir})
-print(json.dumps({"permission": {"bash": bash, "edit": edit,
-                                 "external_directory": {dir.rstrip("/") + "/**": "allow" for dir in linked}}}))
-PYEOF
-}
+# OpenCode reads a permission block from OPENCODE_CONFIG_CONTENT: the same shell list as Claude's, every edit allowed
+# but under the protected folders, the linked folders as external ones it may use. Not on by default — set
+# FACTORY_OPENCODE_PERMISSIONS=on; an existing OPENCODE_CONFIG_CONTENT is the person's and wins.
 
 invoke() {                                  # invoke <tool> <prompt>
   local tool=$1 prompt=$2
@@ -787,22 +761,17 @@ invoke() {                                  # invoke <tool> <prompt>
   # the worker holding the checkout. Told which worker started it, the stage knows the claim is its own
   # and not a second writer's — without this a careful model refuses to write beside "the one writer".
   export FACTORY_WORKER="$WORKER" FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}"
-  case "$tool" in
-    # stream-json: one event per line as it happens, so a stage can be followed while it runs
-    # (`factory.sh follow`); the last line, `"type":"result"`, carries the usage the single object did.
-    claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format stream-json --verbose \
-                --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
-                $(add_dir_flags claude) $(deny_flags claude) $(isolation_flags claude) $model_args \
-                ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
-    # stdin closed: `codex exec` also reads a prompt from stdin, and an unattended run has none.
-    codex)    codex exec --json -s workspace-write $(add_dir_flags codex) $(isolation_flags codex) $model_args \
-                -c sandbox_workspace_write.network_access=true \
-                ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" < /dev/null > "$raw" ;;
-    opencode) OPENCODE_CONFIG_CONTENT="$(opencode_permissions)" \
-              opencode run --format json $(isolation_flags opencode) $model_args \
-                ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" < /dev/null > "$raw" ;;
-    *)        echo "factory: unknown tool '$tool'" >&2; return 2 ;;
-  esac
+  # The command line is the tool record's (`cli --tool-invocation`): its fixed flags, the shell it may use, the
+  # linked folders, the deny rules, the isolation flags as probed, the model, the person's FACTORY_<TOOL>_ARGS —
+  # and "$prompt", this function's variable, last.
+  [ -n "$(tool_field TOOL_SKILLS "$tool")" ] || { echo "factory: unknown tool '$tool'" >&2; return 2; }
+  local args=(--tool-invocation "$tool" --allow "$(allowed_commands)") dir line
+  [ -n "$model_args" ] && args+=(--tool-model "${model_args#* }")
+  for dir in ${ADD_DIRS[@]+"${ADD_DIRS[@]}"}; do args+=(--writable "$dir"); done
+  for dir in ${READ_DIRS[@]+"${READ_DIRS[@]}"}; do args+=(--readable "$dir"); done
+  while IFS= read -r dir; do [ -n "$dir" ] && args+=(--protect "$dir"); done < <(protected_dirs)
+  line=$(cli "${args[@]}") || { echo "factory: no invocation for tool '$tool'" >&2; return 2; }
+  eval "$line" < /dev/null > "$raw"
   local code=$?
   unset FACTORY_WORKER FACTORY_STAGE FACTORY_STORY
   return $code
@@ -811,19 +780,13 @@ invoke() {                                  # invoke <tool> <prompt>
 # Which format a tool's raw output is in, for the usage reading.
 usage_format() {                            # usage_format <tool>
   if [ -n "${FACTORY_TOOL_CMD:-}" ]; then echo "${FACTORY_USAGE_FORMAT:-none}"; return; fi
-  case "$1" in
-    claude) echo claude-json ;;
-    codex)  echo codex-jsonl ;;
-    opencode) echo opencode-json ;;
-    *)      echo none ;;
-  esac
+  local format; format=$(tool_field TOOL_USAGE "$1"); echo "${format:-none}"
 }
 
 # The model a tool ran with, where its output does not say: the -m/--model in its extra flags.
 model_flag() {                              # model_flag <tool> [stage]
   [ -n "${2:-}" ] && [ -n "$(model_key "$1" "$2")" ] && [ -z "$(env_model "$1")" ] && { model_key "$1" "$2"; return; }
-  local args=""
-  case "$1" in codex) args="${FACTORY_CODEX_ARGS:-}" ;; opencode) args="${FACTORY_OPENCODE_ARGS:-}" ;; esac
+  local args; args=$(tool_args "$1")
   # -E: BSD sed (macOS) has no `\|` in a basic expression, so the alternation is written extended
   printf '%s\n' "$args" | sed -n -E 's/.*(-m|--model)[ =]([^ ]*).*/\2/p' | head -1
 }
@@ -1007,12 +970,9 @@ install_project() {                         # install_project <tool> <skill fold
   fi
   local targets=()
   case "$tool" in
-    claude)   targets=(.claude/skills) ;;
-    codex)    targets=(.codex/skills) ;;
-    opencode) targets=(.opencode/skills) ;;
-    all)      targets=(.claude/skills .codex/skills .opencode/skills) ;;
+    all)      targets=(${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"}) ;;
     none)     targets=() ;;                  # only the project's files: gate, runner, hook, stamp
-    *)        usage ;;
+    *)        [ -n "$(skill_dir_of "$tool")" ] || usage; targets=("$(skill_dir_of "$tool")") ;;
   esac
   local source_abs; source_abs=$(cd "$from" && pwd)
   local copy_reason="" kind; kind=$(source_kind "$source_abs")
@@ -1057,7 +1017,7 @@ install_project() {                         # install_project <tool> <skill fold
       # The same set a link install gives this tool: for a tool without a plugin mechanism the craft
       # of the method plugins beside the pipeline, not only the carriers the profile already names.
       local copy_dirs="$source_abs"
-      [ "$target" != ".claude/skills" ] && copy_dirs=$(printf '%s\n%s' "$source_abs" "$(method_skill_dirs "$source_abs" | tr ' ' '\n')")
+      ! is_plugin_dir "$target" && copy_dirs=$(printf '%s\n%s' "$source_abs" "$(method_skill_dirs "$source_abs" | tr ' ' '\n')")
       if [ -f "$manifest" ]; then
         previous=$(manifest_names "$target")               # links too, when the project switches to copies
       else
@@ -1090,7 +1050,7 @@ install_project() {                         # install_project <tool> <skill fold
       # them made by hand (`dca-new`, a bench base). Not the install's, so never replaced unasked: a copy that is
       # byte for byte the plugin's, or one the person names with --adopt, becomes the install's and follows the
       # plugin from then on; a different one is named. Only what the project already holds — nothing is added.
-      if [ "$target" = ".claude/skills" ]; then
+      if is_plugin_dir "$target"; then
         local method_dir
         for method_dir in $(method_skill_dirs "$source_abs"); do
           for skill in "$method_dir"/*; do
@@ -1129,7 +1089,7 @@ install_project() {                         # install_project <tool> <skill fold
       continue
     fi
     local method_dirs; method_dirs=$(method_skill_dirs "$source_abs")
-    if [ -n "$method_dirs" ] && [ "$target" != ".claude/skills" ]; then
+    if [ -n "$method_dirs" ] && ! is_plugin_dir "$target"; then
       # A tool without a plugin mechanism finds *only* what is in this directory, so the craft the
       # profile names as a carrier (`carrier.build:`, `review.<perspective>:`) has to be here too —
       # otherwise the pipeline ports and the craft does not, and every stage falls back with a note.
@@ -1223,7 +1183,7 @@ install_project() {                         # install_project <tool> <skill fold
   done
   for target in ${targets[@]+"${targets[@]}"}; do
     [ -d "$target" ] && [ ! -L "$target" ] || continue
-    if [ "$target" = ".claude/skills" ] || [ -n "$copy_mode" ]; then
+    if is_plugin_dir "$target" || [ -n "$copy_mode" ]; then
       install_named_carriers "$target" "$source_abs" "$copy_mode"
     fi
   done
@@ -1305,10 +1265,12 @@ install_project() {                         # install_project <tool> <skill fold
       echo "factory:   links then point nowhere until 'factory.sh update' — 'setup --copy' or 'update --copy' avoids it." >&2
     fi
   fi
-  case " ${targets[*]+"${targets[*]}"} " in *" .claude/skills "*)
+  local target
+  for target in ${targets[@]+"${targets[@]}"}; do
+    is_plugin_dir "$target" || continue
     echo "factory: with the dca-factory plugin enabled, Claude Code lists these skills a second time as"
-    echo "factory:   dca-factory:<skill>; the project's entry is the one a session and a runner stage use." ;;
-  esac
+    echo "factory:   dca-factory:<skill>; the project's entry is the one a session and a runner stage use."
+  done
 }
 
 check_dca_setup() {                        # check_dca_setup <skill folder>
@@ -2211,7 +2173,7 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
   # The rules every session the runner starts holds to, in the skill text rather than the prompt: the project's
   # copy of the pipeline's skill first, the runner's own beside it otherwise.
   dir=$(skill_dir_of "$tool")
-  for dir in "${dir:-.claude/skills}" .claude/skills .codex/skills .opencode/skills .agents/skills; do
+  for dir in $dir ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} .agents/skills; do
     [ -f "$dir/factory-run/reference/stage-common.md" ] && { common="$dir/factory-run/reference/stage-common.md"; break; }
   done
   if [ -z "$common" ] && [ -f "$(dirname "${BASH_SOURCE[0]}")/../reference/stage-common.md" ]; then
@@ -2221,7 +2183,7 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
   knowledge=$(cli --get knowledge 2>/dev/null | awk '{print $1}')
   if [ -n "$knowledge" ]; then
     dir=$(skill_dir_of "$tool")
-    for dir in "${dir:-.claude/skills}" .claude/skills .codex/skills .opencode/skills .agents/skills; do
+    for dir in $dir ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} .agents/skills; do
       [ -d "$dir/$knowledge/catalog" ] && { catalog="$dir/$knowledge/catalog/"; break; }
     done
     local at=$catalog
@@ -2804,7 +2766,7 @@ run_story() {                               # run_story <story> <tool> <from> <d
   for linked in "$RUNS_REL" "$(cli --place epics 2>/dev/null)" "$(cli --place discovery 2>/dev/null)"; do
     [ -n "$linked" ] && [ -d "$HOME_DIR/$linked" ] && ADD_DIRS+=("$HOME_DIR/$linked")
   done
-  for linked in .agents/factory "$(evidence_rel)" .claude/skills .codex/skills .opencode/skills .agents/skills; do
+  for linked in .agents/factory "$(evidence_rel)" ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} .agents/skills; do
     [ -d "$HOME_DIR/$linked" ] && READ_DIRS+=("$HOME_DIR/$linked")
   done
   cd "$wt" || return 1
@@ -3025,10 +2987,10 @@ setup_write() {                             # setup_write [<key>]
   local source_abs target mode
   source_abs=$(cd "$dir/../../.." 2>/dev/null && pwd)
   if [ -n "$source_abs" ] && [ -f "$source_abs/factory-run/scripts/story-gate.py" ]; then
-    for target in .claude/skills .codex/skills .opencode/skills; do
+    for target in ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"}; do
       [ -d "$target" ] && [ ! -L "$target" ] || continue
       mode=$(skills_mode "$target")
-      if [ "$target" = ".claude/skills" ] || [ "$mode" = copy ]; then
+      if is_plugin_dir "$target" || [ "$mode" = copy ]; then
         install_named_carriers "$target" "$source_abs" "$([ "$mode" = copy ] && echo 1)"
       fi
     done
@@ -3204,10 +3166,7 @@ case "$command" in
       check_carriers "$tool" || exit $?
       check_contract_first || exit $?
       check_local_context "$tool"
-      isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
-      { [ "${tool:-}" = opencode ] && [ "${FACTORY_OPENCODE_PERMISSIONS:-off}" != on ] && echo "factory: OpenCode runs \
-the stages with its own permissions, unrestricted — FACTORY_OPENCODE_PERMISSIONS=on hands it the pipeline's list (not yet \
-probed against a signed-in OpenCode)" >&2; }
+      check_tool "$tool" || exit $?
       if [ -z "$from" ]; then
         # No stage named: the story starts where its files say, as the backlog run would start it.
         local_start=$(cli --story "$story" --start --slots 1) || exit $?
@@ -3249,10 +3208,7 @@ probed against a signed-in OpenCode)" >&2; }
     check_carriers "${tool:-}" || exit $?
     check_contract_first || exit $?
     check_local_context "${tool:-}"
-    isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
-    { [ "${tool:-}" = opencode ] && [ "${FACTORY_OPENCODE_PERMISSIONS:-off}" != on ] && echo "factory: OpenCode runs \
-the stages with its own permissions, unrestricted — FACTORY_OPENCODE_PERMISSIONS=on hands it the pipeline's list (not yet \
-probed against a signed-in OpenCode)" >&2; }
+    check_tool "${tool:-}" || exit $?
     [ -n "$dry" ] || { take_checkout && guard_pipeline_start; } || exit $?
     run_backlog "${tool:-stand-in}" "$watch" "$interval" "$dry"
     ;;

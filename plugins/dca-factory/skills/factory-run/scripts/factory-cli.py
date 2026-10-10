@@ -38,13 +38,18 @@ Options as the gate's: --epics, --runs, --profile (else FACTORY_PROFILE, else th
 """
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
 import re
 import shlex
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
+import typing
 
 # The lines carry `—` and `→`; a Windows console's code page cannot encode `→`, and the print raises.
 for _stream in (sys.stdout, sys.stderr):
@@ -748,9 +753,182 @@ def stages_shell(places=()):
               array("GUARDED_STAGES", [s.name for s in STAGES if s.guarded])]
     lines.append("KIND_STAGES=' " + " ".join(f"{kind}:{s.name}" for s in STAGES for kind in s.kinds) + " '")
     lines.append("STAGE_FILES=' " + " ".join(f"{name}:{file}" for name, file in STAGE_FILES.items()) + " '")
-    lines += [f"PLACE_{key.upper()}={shlex.quote(place(key))}" for key in places]
+    tools = tools_shell()
+    if tools is None:
+        return 2
+    lines += tools + [f"PLACE_{key.upper()}={shlex.quote(place(key))}" for key in places]
     print("\n".join(lines))
     return 0
+
+
+class Tool(typing.NamedTuple):
+    """One agent tool the runner can start a stage with. Everything the runner knows about a tool is here; bash
+    asks for an invocation (`--tool-invocation`) and runs it."""
+    name: str
+    command: tuple            #: the binary and its fixed arguments; the prompt goes last
+    help: tuple               #: how its flags are probed: the help of the subcommand the command runs
+    isolation: tuple          #: flag groups that keep the person's own setup out, each passed only where probed
+    usage: str                #: the raw output's format, for `--usage-from`
+    skills: str               #: the project folder the tool discovers skills in
+    model_flag: str           #: the flag that names a model
+    args_env: str             #: the person's extra flags (FACTORY_<TOOL>_ARGS), word-split, appended last
+    add_dirs: str             #: which linked folders it is named: "all" (writable and read-only), "writable", or
+                              #: "permission" — no flag, the permission block names them
+    deny: bool = False        #: the protected folders are refused through `--disallowedTools Edit(//<dir>/**)`
+    allow_list: bool = False  #: the shell a stage has is passed as `--allowed-tools`
+    permission_env: str = ""  #: the environment variable a permission block is passed in
+    plugins: bool = False     #: it loads the method skills from its plugins, so its skill folder holds the pipeline's
+                              #: alone; a tool without plugins finds only its folder, which then holds them all
+
+
+TOOLS = (
+    # stream-json: one event per line as it happens, so a stage can be followed while it runs (`factory.sh
+    # follow`); the last line, `"type":"result"`, carries the usage.
+    Tool("claude", ("claude", "-p", "--permission-mode", "acceptEdits", "--output-format", "stream-json",
+                    "--verbose"),
+         help=("claude", "--help"),
+         isolation=(("--setting-sources", "project"), ("--strict-mcp-config",), ("--tools", "{stage_tools}"),
+                    ("--exclude-dynamic-system-prompt-sections",)),
+         usage="claude-json", skills=".claude/skills", model_flag="--model", args_env="FACTORY_CLAUDE_ARGS",
+         add_dirs="all", deny=True, allow_list=True, plugins=True),
+    # The user's config.toml (MCP servers, profiles, a model) stays out; the login does not. stdin is closed by the
+    # runner: `codex exec` also reads a prompt from stdin, and an unattended run has none.
+    Tool("codex", ("codex", "exec", "--json", "-s", "workspace-write", "-c",
+                   "sandbox_workspace_write.network_access=true"),
+         help=("codex", "exec", "--help"), isolation=(("--ignore-user-config",),),
+         usage="codex-jsonl", skills=".codex/skills", model_flag="-m", args_env="FACTORY_CODEX_ARGS",
+         add_dirs="writable"),
+    Tool("opencode", ("opencode", "run", "--format", "json"),
+         help=("opencode", "run", "--help"), isolation=(("--pure",),),
+         usage="opencode-json", skills=".opencode/skills", model_flag="-m", args_env="FACTORY_OPENCODE_ARGS",
+         add_dirs="permission", permission_env="OPENCODE_CONFIG_CONTENT"),
+)
+TOOL = {tool.name: tool for tool in TOOLS}
+
+#: The built-in tools a stage process gets: the same list for every stage, so the prompt prefix is shared.
+STAGE_TOOLS = "Read,Write,Edit,Glob,Grep,Bash,Skill"
+
+
+def tool_help(tool):
+    """The tool's help text, probed once per binary and kept beside the temp files keyed by the binary's path, size
+    and time — every stage of a run gets the same flags, and a tool that is updated is probed again. "" when the
+    binary is not there. FACTORY_TOOL_HELP_<TOOL> stands in for the probe."""
+    stand_in = os.environ.get(f"FACTORY_TOOL_HELP_{tool.name.upper()}")
+    if stand_in is not None:
+        return stand_in
+    binary = shutil.which(tool.help[0])
+    if not binary:
+        return ""
+    stat = os.stat(binary)
+    key = f"{os.path.realpath(binary)}|{stat.st_size}|{int(stat.st_mtime)}|{' '.join(tool.help[1:])}"
+    cache = os.path.join(tempfile.gettempdir(), f"dca-factory-probes-{os.getuid() if hasattr(os, 'getuid') else 0}.json")
+    try:
+        with open(cache, encoding="utf-8") as handle:
+            known = json.load(handle)
+    except (OSError, ValueError):
+        known = {}
+    if key in known:
+        return known[key]
+    try:
+        done = subprocess.run([binary, *tool.help[1:]], capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""                                  # not kept: the next stage probes again
+    text = done.stdout + done.stderr
+    if done.returncode == 0 and text.strip():
+        known[key] = text
+        with contextlib.suppress(OSError):
+            temporary = f"{cache}.{os.getpid()}"
+            with open(temporary, "w", encoding="utf-8") as handle:
+                json.dump(known, handle)
+            os.replace(temporary, cache)
+    return text
+
+
+def has_flag(help_text, flag):
+    return re.search(r"(^|[\s,])" + re.escape(flag) + r"([\s,=<\[]|$)", help_text, re.M) is not None
+
+
+def isolation_args(tool):
+    """The isolation flags this binary knows: an older one refuses a flag it does not know and the stage would not
+    start, so each is passed only where the help names it — or every one where there is no binary to ask."""
+    if os.environ.get("FACTORY_ISOLATION", "on") == "off":
+        return []
+    help_text = tool_help(tool)
+    words = []
+    for group in tool.isolation:
+        if not help_text or has_flag(help_text, group[0]):
+            words += [word.replace("{stage_tools}", STAGE_TOOLS) for word in group]
+    return words
+
+
+def unprobed_flags(tool):
+    """What the binary's help does not name, as (required, isolation): a fixed, model, add-dir or allow-list flag the
+    record passes — a stage started with it fails — and an isolation flag the runner then leaves out, so the stage runs
+    with the tool's own setup. None when the binary is not there."""
+    help_text = tool_help(tool)
+    if not help_text:
+        return None
+    flags = [w for w in tool.command[len(tool.help) - 1:] if w.startswith("-")] + [tool.model_flag]
+    flags += ["--add-dir"] if tool.add_dirs in ("all", "writable") else []
+    flags += ["--allowed-tools", "--disallowedTools"] if tool.allow_list else []
+    missing = lambda names: sorted({flag for flag in names if not has_flag(help_text, flag)})
+    return missing(flags), missing(group[0] for group in tool.isolation)
+
+
+def permission_block(allowed, protected, linked):
+    """OpenCode's permission block: the same shell as Claude's allow-list, every edit allowed but under the protected
+    folders, the linked folders as external ones it may use."""
+    bash = {"*": "deny"}
+    for entry in allowed.split(","):
+        if entry.startswith("Bash(") and entry.endswith(":*)"):
+            bash[entry[5:-3] + "*"] = "allow"
+    edit = {"*": "allow"}
+    edit.update({folder.rstrip("/") + "/**": "deny" for folder in protected if folder})
+    return json.dumps({"permission": {"bash": bash, "edit": edit,
+                                      "external_directory": {folder.rstrip("/") + "/**": "allow" for folder in linked}}})
+
+
+def tool_invocation(tool, model="", writable=(), readable=(), protected=(), allowed=""):
+    """The command line that starts one stage with this tool, as shell words for the runner to `eval`, with the
+    prompt left as `"$prompt"` — the runner's variable, never text the cli quotes."""
+    words = []
+    if tool.permission_env:
+        block = os.environ.get(tool.permission_env, "")
+        if not block and os.environ.get("FACTORY_OPENCODE_PERMISSIONS", "off") == "on":
+            block = permission_block(allowed, protected, [*writable, *readable])
+        words.append(f"{tool.permission_env}={shlex.quote(block)}")
+    words += [shlex.quote(w) for w in tool.command]
+    if tool.allow_list:
+        words += ["--allowed-tools", shlex.quote(f"Read,Write,Edit,Glob,Grep,Skill,{allowed}")]
+    if tool.add_dirs in ("all", "writable"):
+        for folder in [*writable, *(readable if tool.add_dirs == "all" else ())]:
+            words += ["--add-dir", shlex.quote(folder)]
+    if tool.deny and protected:
+        words += ["--disallowedTools", shlex.quote(",".join(f"Edit(//{d.lstrip('/')}/**)" for d in protected))]
+    words += [shlex.quote(w) for w in isolation_args(tool)]
+    if model:
+        words += [tool.model_flag, shlex.quote(model)]
+    words += [shlex.quote(w) for w in shlex.split(os.environ.get(tool.args_env, ""))]
+    return " ".join(words + ['"$prompt"'])
+
+
+def tools_shell():
+    """The tool table as the runner reads it at its start: the names, each tool's skill folder, usage format,
+    extra-flags variable and model flag, as `<tool>:<value>` words — every one checked to be a plain word."""
+    bad = [w for t in TOOLS for w in (t.name, t.skills, t.usage, t.args_env, t.model_flag) if not TOOL_WORD.fullmatch(w)]
+    if bad:
+        print(f"factory-cli: the tool table holds a value the runner cannot take as a word: {', '.join(bad)}",
+              file=sys.stderr)
+        return None
+    pairs = lambda field: "' " + " ".join(f"{t.name}:{getattr(t, field)}" for t in TOOLS) + " '"
+    return [f"TOOL_NAMES=({' '.join(t.name for t in TOOLS)})", f"TOOL_SKILLS={pairs('skills')}",
+            f"TOOL_USAGE={pairs('usage')}", f"TOOL_ARGS_ENV={pairs('args_env')}",
+            f"TOOL_MODEL_FLAG={pairs('model_flag')}", f"TOOL_SKILL_DIRS=({' '.join(t.skills for t in TOOLS)})",
+            f"TOOL_PLUGIN_DIRS=({' '.join(t.skills for t in TOOLS if t.plugins)})"]
+
+
+TOOL_WORD = re.compile(r"[A-Za-z0-9_.-][A-Za-z0-9_./-]*")
 
 
 def tokens_of(entry):
@@ -4191,7 +4369,24 @@ def main(argv):
                              "(and `PLACE_<KEY>=` for --place), and exit")
     parser.add_argument("--for-kind", choices=ALL_KINDS, help="with --stages: the stages a story of that kind runs")
     parser.add_argument("--window", choices=tuple(SHARED_WINDOWS), help="with --stages: the stages that shared process carries")
-    parser.add_argument("--shell", action="store_true", help="with --stages: the table as bash assignments")
+    parser.add_argument("--shell", action="store_true", help="with --stages: the stage and the tool table as bash "
+                                                                "assignments")
+    parser.add_argument("--tool-invocation", metavar="TOOL", choices=tuple(TOOL),
+                        help="the command line that starts one stage with that tool, as shell words with the prompt "
+                             "left as \"$prompt\", and exit")
+    parser.add_argument("--tool-model", default="", help="with --tool-invocation: the model the stage runs on")
+    parser.add_argument("--writable", action="append", default=[], metavar="DIR",
+                        help="with --tool-invocation: a linked folder the stage writes into")
+    parser.add_argument("--readable", action="append", default=[], metavar="DIR",
+                        help="with --tool-invocation: a linked folder the stage only reads")
+    parser.add_argument("--protect", action="append", default=[], metavar="DIR",
+                        help="with --tool-invocation: a folder no stage writes (the pipeline, the evidence, the skills)")
+    parser.add_argument("--allow", default="", help="with --tool-invocation: the shell allow-list, Bash(<head>:*),…")
+    parser.add_argument("--tool-flags", metavar="TOOL", choices=tuple(TOOL),
+                        help="the isolation flags that tool gets, as probed, and exit")
+    parser.add_argument("--tool-probe", metavar="TOOL", choices=tuple(TOOL),
+                        help="the flags of the tool's record its binary's help does not name: one a stage needs "
+                             "(exit 1), an isolation flag only (named, exit 0), none (exit 0), no binary (exit 3)")
     parser.add_argument("--place", metavar="KEY",
                         help="where the factory reads KEY (product, tech, domain, epics, runs), from the profile or its default")
     parser.add_argument("--delivered", metavar="STORY",
@@ -4239,6 +4434,25 @@ def main(argv):
     set_places(read_profile(profile_path), epics=args.epics, runs=args.runs)
     args.epics, args.runs = place("epics"), place("runs")
     # the runner's questions first: they read one file and print one answer
+    if args.tool_invocation:
+        print(tool_invocation(TOOL[args.tool_invocation], args.tool_model, args.writable, args.readable, args.protect,
+                              args.allow))
+        return 0
+    if args.tool_flags:
+        print(" ".join(shlex.quote(w) for w in isolation_args(TOOL[args.tool_flags])))
+        return 0
+    if args.tool_probe:
+        tool = TOOL[args.tool_probe]
+        probed = unprobed_flags(tool)
+        if probed is None:
+            print(f"{tool.name}: no binary `{tool.help[0]}` on the PATH — not probed")
+            return 3
+        required, isolation = probed
+        print(f"{tool.name}: " + (f"the help does not name {', '.join(required)} — a stage started with it fails"
+                                   if required else "every flag a stage needs is in the help"))
+        if isolation:
+            print(f"{tool.name}: no {', '.join(isolation)} in this binary — its stages run with the tool's own setup")
+        return 1 if required else 0
     if args.stages:
         if args.shell:
             if args.place and args.place not in DEFAULTS:

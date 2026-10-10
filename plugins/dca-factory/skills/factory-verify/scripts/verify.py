@@ -19,6 +19,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -2643,53 +2644,72 @@ exit 0
     # a stage reads the pipeline, the evidence and the skills and never writes them: Claude Code gets them as
     # folders to read under a deny rule for every editing tool, in the checkout and in a worktree; Codex, which reads
     # everywhere, gets the writable folders alone
+    # the invocation is the tool record's: the cli builds it, the runner evals it
+    def invocation(tool, *extra, env=None):
+        return subprocess.run([sys.executable, cli_of(runner), "--tool-invocation", tool, *extra], capture_output=True,
+                              text=True, encoding="utf-8", errors="replace",
+                              env=dict(os.environ, FACTORY_ISOLATION="off", **(env or {}))).stdout.strip()
+    linked = ("--writable", "/home/p/project/epics", "--readable", "/home/p/.agents/factory",
+              "--protect", "/home/p/.agents/factory", "--protect", "/home/p/.dca-factory/evidence")
+    claude_line, codex_line = invocation("claude", *linked), invocation("codex", *linked)
+    checkout_line = invocation("claude", "--protect", "/home/p/.agents/factory")
+    check("runner: Claude reads the pipeline and the evidence through --add-dir and may not edit them; Codex gets "
+          "the writable folders alone; in the checkout the deny rules stand all the same",
+          "--add-dir /home/p/project/epics" in claude_line and "--add-dir /home/p/.agents/factory" in claude_line
+          and "Edit(//home/p/.agents/factory/**)" in claude_line
+          and "Edit(//home/p/.dca-factory/evidence/**)" in claude_line
+          and "--add-dir /home/p/project/epics" in codex_line and ".agents/factory" not in codex_line
+          and "--disallowedTools" not in codex_line
+          and "--add-dir" not in checkout_line and "Edit(//home/p/.agents/factory/**)" in checkout_line
+          and claude_line.endswith('"$prompt"') and codex_line.endswith('"$prompt"'),
+          [claude_line, codex_line, checkout_line])
+
+    # every tool against its real binary where one is installed: each flag its record passes is in the binary's help;
+    # a binary not installed here is named, not probed
+    for tool in ("claude", "codex", "opencode"):
+        probe = subprocess.run([sys.executable, cli_of(runner), "--tool-probe", tool], capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
+        if probe.returncode == 3:
+            check(f"tools: {tool} is not installed here — its record is not probed", True)
+        else:
+            check(f"tools: {tool} — every flag a stage needs is in this binary's help, an isolation flag it lacks is named",
+                  probe.returncode == 0, probe.stdout.strip())
     for root in throwaway():
-        listed = subprocess.run(
-            [BASH, "-c",
-             f'RUNS=.dca-factory/runs RUNS_REL=.dca-factory/runs HOME_DIR=/home/p; '
-             f'sed -n -e "/^evidence_rel()/,/^}}/p" -e "/^protected_dirs()/,/^}}/p" -e "/^deny_flags()/,/^}}/p" '
-             f'-e "/^add_dir_flags()/,/^}}/p" "{shell_path(runner)}" > fn.sh; . ./fn.sh; '
-             f'ADD_DIRS=(/home/p/project/epics) READ_DIRS=(/home/p/.agents/factory); '
-             f'echo "claude: $(add_dir_flags claude) $(deny_flags claude)"; echo "codex: $(add_dir_flags codex) $(deny_flags codex)"; '
-             f'ADD_DIRS=() READ_DIRS=(); echo "checkout: $(add_dir_flags claude) $(deny_flags claude)"'],
-            cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
-        claude_line = next((l for l in listed.splitlines() if l.startswith("claude:")), "")
-        codex_line = next((l for l in listed.splitlines() if l.startswith("codex:")), "")
-        checkout_line = next((l for l in listed.splitlines() if l.startswith("checkout:")), "")
-        check("runner: Claude reads the pipeline and the evidence through --add-dir and may not edit them; Codex gets "
-              "the writable folders alone; in the checkout the deny rules stand all the same",
-              "--add-dir /home/p/project/epics" in claude_line and "--add-dir /home/p/.agents/factory" in claude_line
-              and "Edit(//home/p/.agents/factory/**)" in claude_line
-              and "Edit(//home/p/.dca-factory/evidence/**)" in claude_line
-              and "--add-dir /home/p/project/epics" in codex_line and ".agents/factory" not in codex_line
-              and "--disallowedTools" not in codex_line
-              and "--add-dir" not in checkout_line and "Edit(//home/p/.agents/factory/**)" in checkout_line,
-              listed)
+        build_project(root)
+        copy_scripts(runner, root)
+        lacking = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                             env=dict(os.environ, FACTORY_TOOL_HELP_CLAUDE="  -p, --print\n  --model <model>\n"))
+        bare = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "opencode", "--dry-run",
+                          env=dict(os.environ, FACTORY_TOOL_HELP_OPENCODE="  --format choice\n  --model, -m string\n"))
+        flags = [line.split("tool flags:", 1)[1].strip() for line in bare[1].splitlines() if "tool flags:" in line]
+        check("tools: a binary that lacks a flag a stage needs stops the run before the first stage, named",
+              lacking[0] == 2 and "does not name" in lacking[1] and "--add-dir" in lacking[1]
+              and "── stage" not in lacking[1], lacking[1][-300:])
+        check("tools: an isolation flag the binary lacks is left out of every stage and named at the start",
+              bare[0] == 0 and "opencode knows no --pure" in bare[1] and flags and all("--pure" not in f for f in flags),
+              bare[1][-300:])
 
     # OpenCode, where the person switches it on, gets the same shell list and the same protected folders through its
     # permission block; a block the person set is theirs and is handed over unchanged
-    for root in throwaway():
-        script = (f'PY="{shell_path(sys.executable)}"; '
-                  f'sed -n "/^opencode_permissions()/,/^}}/p" "{shell_path(runner)}" > fn.sh; . ./fn.sh; '
-                  'allowed_commands() { echo "Bash(python3 .agents/factory/story-gate.py:*),Bash(git status:*),Bash(grep:*)"; }; '
-                  'protected_dirs() { printf "/home/p/.agents/factory\\n/home/p/.dca-factory/evidence\\n"; }; '
-                  'ADD_DIRS=(/home/p/project/epics) READ_DIRS=(/home/p/.agents/factory); ')
-        run = lambda extra: subprocess.run([BASH, "-c", script + extra], cwd=root, capture_output=True, text=True,
-                                           encoding="utf-8", errors="replace").stdout.strip()
-        off, on = run("opencode_permissions"), run("FACTORY_OPENCODE_PERMISSIONS=on opencode_permissions")
-        mine = run("OPENCODE_CONFIG_CONTENT='{\"x\":1}' FACTORY_OPENCODE_PERMISSIONS=on opencode_permissions")
-        try:
-            block = json.loads(on).get("permission", {})
-        except ValueError:
-            block = {}
-        check("runner: OpenCode's permission block, switched on, denies every shell head but the list and every edit "
-              "under the protected folders; off, nothing; the person's own block wins",
-              off == "" and mine == '{"x":1}' and block.get("bash", {}).get("*") == "deny"
-              and block.get("bash", {}).get("git status*") == "allow"
-              and block.get("edit", {}).get("/home/p/.agents/factory/**") == "deny"
-              and block.get("edit", {}).get("*") == "allow"
-              and block.get("external_directory", {}).get("/home/p/project/epics/**") == "allow",
-              [off, on, mine])
+    allow = ("--allow", "Bash(python3 .agents/factory/story-gate.py:*),Bash(git status:*),Bash(grep:*)")
+    block_of = lambda line: shlex.split(line)[0].split("=", 1)[1] if line.startswith("OPENCODE_CONFIG_CONTENT=") else None
+    off = block_of(invocation("opencode", *allow, *linked, env={"OPENCODE_CONFIG_CONTENT": ""}))
+    on = block_of(invocation("opencode", *allow, *linked, env={"FACTORY_OPENCODE_PERMISSIONS": "on",
+                                                              "OPENCODE_CONFIG_CONTENT": ""}))
+    mine = block_of(invocation("opencode", *allow, *linked, env={"FACTORY_OPENCODE_PERMISSIONS": "on",
+                                                                "OPENCODE_CONFIG_CONTENT": '{"x":1}'}))
+    try:
+        block = json.loads(on or "").get("permission", {})
+    except ValueError:
+        block = {}
+    check("runner: OpenCode's permission block, switched on, denies every shell head but the list and every edit "
+          "under the protected folders; off, nothing; the person's own block wins",
+          off == "" and mine == '{"x":1}' and block.get("bash", {}).get("*") == "deny"
+          and block.get("bash", {}).get("git status*") == "allow"
+          and block.get("edit", {}).get("/home/p/.agents/factory/**") == "deny"
+          and block.get("edit", {}).get("*") == "allow"
+          and block.get("external_directory", {}).get("/home/p/project/epics/**") == "allow",
+          [off, on, mine])
 
     # 4. the round counter is a file, and it counts up
     for root in throwaway():
