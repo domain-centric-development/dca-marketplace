@@ -24,16 +24,20 @@ from .contract import (
     ALL_KINDS, CONTRACT, DECISIONS_DIR, DEFAULTS, evidence_dir, evidence_rel, find_story, FINDINGS_FILE, flat_stories,
     GateError, git, is_delivered, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, resolve_profile, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_FILES, STAGE_ORDER, STAGES,
-    STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_kind, worktree_places)
+    STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_kind, worktree_places, decisions_store,
+    needs_human_ids)
+from .reports import (
+    tokens_of, usage_lines)
 from .state import (
-    git_tree, has_worktree, listed_files, run_owned, snapshot_reason, STAGE_WORD, STAGES_MADE, STORY_DIGEST,
-    story_title, tree_changes, worktree_of, worktrees_dir, write_mark, write_story_fields)
+    back_in, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
+    STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, verdict_in, worktree_of, worktrees_dir,
+    write_mark, write_story_fields)
 from .gate import (
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
-    integration_target, INVARIANTS_MARKER, plan_invariants, plan_proposals, read_clause_rows, read_invariant_rows,
-    scenario_clauses, TESTS_BASELINE)
+    integration_target, INVARIANTS_MARKER, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
+    read_invariant_rows, scenario_clauses, TESTS_BASELINE)
 from .tools import (
-    TOOL, tool_command, TOOLS, tools_shell)
+    isolation_args, TOOL, tool_command, TOOLS, tools_shell)
 
 
 FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
@@ -993,9 +997,11 @@ def document_skeleton(runs, story_id, cwd="."):
 
 # --- the run: what `factory.sh run` starts once its checks before the first stage passed -------------------------
 # One process per stage, so every stage starts with a fresh context and reads only its story and its predecessor's
-# file. The runner composes and starts; every project file it reads is read through the cli, as a process of its
-# own (`Run.cli`), so a story's worktree, the profile and the journal are read exactly as a person's call reads
-# them. What it may not decide — whether a stage is done — is the gate's, a process of its own as well.
+# file. The runner composes and starts; every project file it reads it reads with the cli's readers, in its own
+# process, after `Run.profile` set the places from where it stands — the checkout or a story's worktree — exactly
+# as a cli started there would. What changes the checkout's state — the claim, a skeleton, a worktree — runs as
+# the cli, a process of its own (`Run.cli`); what it may not decide — whether a stage is done — is the gate's, a
+# process of its own as well.
 #
 # Exit codes: 0 the story ran through, 1 a failure, 2 a usage error, 3 it stopped for a decision, 4 at --max-stages
 # or --story-budget, 5 another worker holds the checkout, 7 the pipeline or a person's file changed under it,
@@ -1113,18 +1119,18 @@ class Run:
             code = self.wait(process)
         return code, data.decode("utf-8", errors="replace").rstrip("\n") if capture else ""
 
-    def cli(self, *args, quiet=True, merge=False, cwd=None, env=None, stdin_text=None):
+    def cli(self, *args, quiet=True, merge=False, cwd=None, env=None):
         """The cli beside this runner: (exit code, stdout without its last newlines)."""
-        if stdin_text is not None:
-            flush()
-            done = subprocess.run([sys.executable, self.cli_path, *args], input=stdin_text.encode("utf-8"),
-                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL if quiet else None, cwd=cwd, env=env)
-            return done.returncode, done.stdout.decode("utf-8", errors="replace").rstrip("\n")
         return self.run([sys.executable, self.cli_path, *args], capture=True, quiet=quiet and not merge, merge=merge,
                         cwd=cwd, env=env)
 
-    def cli_out(self, *args):
-        return self.cli(*args)[1]
+    def profile(self):
+        """The stack profile as a cli started here would read it, with the places set from it — in a story's
+        worktree the main checkout's (FACTORY_HOME). Read again on every question: a person may edit the profile
+        while a run waits, and the places change as the runner moves between the checkout and a worktree."""
+        profile = read_profile(resolve_profile(os.environ.get("FACTORY_PROFILE") or None, os.getcwd()))
+        set_places(profile)
+        return profile
 
     def home_env(self):
         """The environment of a call made in the main checkout: no FACTORY_HOME, as there."""
@@ -1133,8 +1139,11 @@ class Run:
         return env
 
     def journal_line(self, story, line):
-        """Every journal line goes through the cli, which numbers it under the journal's lock."""
-        self.cli("--journal-line", story, stdin_text=line + "\n")
+        """Every journal line is numbered under the journal's lock, a folder — the same for the gate, the cli and
+        a reviewer appending beside the runner."""
+        self.profile()
+        with contextlib.suppress(OSError, GateError, ValueError):   # an unwritable journal costs the line, not the run
+            journal_writer(place("runs"), story).write(line + "\n")
 
     def gate_installed(self):
         return os.path.isfile(self.gate_path)
@@ -1304,7 +1313,7 @@ class Run:
     def stage_timeout(self):
         given = os.environ.get("FACTORY_STAGE_TIMEOUT")
         if given is None:
-            given = first_word(self.cli_out("--get", "stageTimeout")) if self.gate_installed() else ""
+            given = first_word(self.profile().get("stageTimeout", "")) if self.gate_installed() else ""
         value = seconds_of(given) if given else 0
         if given and value is None:
             err(f"factory: the stage time limit '{given}' is no number of seconds (90, 90s, 30m, 2h) — no limit applies")
@@ -1317,17 +1326,17 @@ class Run:
     def isolation_flags(self, tool):
         if not self.isolated():
             return ""
-        return self.cli_out("--tool-flags", tool).replace("\n", "") + " "
+        return (" ".join(shlex.quote(w) for w in isolation_args(TOOL[tool])) if tool in TOOL else "") + " "
 
     def allowed_commands(self):
         heads = [f"Bash({self.py} {self.gate_rel}:*)", f"Bash({self.py} .agents/factory/factory-cli.py:*)"]
-        for head in self.cli_out("--command-heads").split() + list(STAGE_SHELL_HEADS):
+        for head in command_heads(self.profile()) + list(STAGE_SHELL_HEADS):
             if f"Bash({head}:*)" not in heads:
                 heads.append(f"Bash({head}:*)")
         return ",".join(heads)
 
     def model_key(self, tool, stage):
-        return self.cli_out("--model", tool, (stage or "").split(":")[0])
+        return model_for(self.profile(), tool, (stage or "").split(":")[0])
 
     @staticmethod
     def tool_args(tool):
@@ -1427,10 +1436,11 @@ class Run:
     def record_usage(self, story, stage, tool, raw, seconds=None):
         """One `usage` line in the story's journal per invocation, and the stage's final message on screen."""
         fmt = self.usage_format(tool)
-        code, out = self.cli("--usage-from", fmt, raw, "--usage-model", self.model_flag(tool, stage))
-        if code != 0:
-            out = "unknown"
-        lines = out.split("\n")
+        model = self.model_flag(tool, stage)
+        try:
+            lines = "\n".join(usage_lines(fmt, raw, model)).split("\n")
+        except Exception:                   # a raw output no reader understands costs the line, never the run
+            lines = ["unknown"]
         fields = lines[0]
         if seconds is not None:
             fields += f"\tseconds={seconds}"
@@ -1440,30 +1450,52 @@ class Run:
 
     # --- what the files say --------------------------------------------------------------------------------
     def verdict_of(self, story):
-        return self.cli_out("--verdict", story)
+        self.profile()
+        return verdict_of_story(place("runs"), story)
 
     def asks_human(self, path):
-        return self.cli("--needs-human", path)[0] == 0
+        self.profile()
+        return needs_human_lines(path) is not None
 
     def back_to(self, story, stage=None):
-        code, out = self.cli("--back-to", story, *(["--stage", stage] if stage else []))
-        return out, code
+        """The stage a refusal sends the story back to: from the judge's file (`build` without one); with a stage,
+        `test` where that stage found the defect in a test's own code, else nothing."""
+        self.profile()
+        path = os.path.join(place("runs"), story, STAGE_FILES[stage] if stage else "judge.md")
+        if stage:
+            return "test" if os.path.isfile(path) and back_in(read_text(path)) == "test" else ""
+        return back_in(read_text(path)) if os.path.isfile(path) else "build"
 
     def start_stage(self, story):
-        return field_of(self.cli_out("--story", story, "--start", "--slots", "1"), "start")
+        self.profile()
+        found = start_of(os.getcwd(), place("epics"), place("runs"), story, 1)
+        return "" if found is None else found[1] or "none"
 
     def open_decisions(self, story):
-        return self.cli_out("--open-decisions", story)
+        self.profile()
+        return "\n".join(open_decision_files(os.getcwd(), story))
 
     def delivered(self, story):
-        return self.cli("--delivered", story)[0] == 0
+        self.profile()
+        try:
+            return is_delivered(read_front_matter(find_story(place("epics"), story))[0])
+        except GateError:
+            return False
+
+    def kind_of(self, story):
+        """`story`, `journey` or `adopt` — `story` for one that cannot be read."""
+        self.profile()
+        try:
+            return story_kind(read_front_matter(find_story(place("epics"), story))[0])
+        except GateError:
+            return "story"
 
     def stopped_for_human(self, artefact, stage, story):
         """A stage that ends with a needs-human section has stopped: name the record and the command that resumes.
         3 when the question is a record — what a backlog run can wait on —, 1 when the section names none."""
         err(f"factory: stage '{stage}' ends with a needs-human section — the run stops here.")
-        rows = [line.split("\t") for line in self.cli_out("--needs-human", artefact, "--story", story).split("\n")
-                if line.strip()]
+        self.profile()
+        rows = [line.split("\t") for line in needs_human_lines(artefact, story) or [] if line.strip()]
         ids = [row[0] for row in rows]
         if not ids:
             err("factory:   the section names no 'decision: <id>' — the stage has to write the question as")
@@ -1537,13 +1569,14 @@ class Run:
             common = own[len(self.pwd) + 1:] if own.startswith(self.pwd + "/") else own
         common = f" The rules every stage holds to: {common}." if common else ""
         catalog = ""
-        knowledge = first_word(self.cli_out("--get", "knowledge"))
+        profile = self.profile()
+        knowledge = first_word(profile.get("knowledge", ""))
         if knowledge:
             at = next((f"{d}/{knowledge}/catalog/" for d in self.skill_dirs(tool)
                        if os.path.isdir(f"{d}/{knowledge}/catalog")), "")
             if at:
                 catalog = f" The {knowledge} skill's catalog: {at}."
-                read = [f"{at}{path}" for path in self.cli_out("--get", "knowledge.read").replace(",", " ").split()
+                read = [f"{at}{path}" for path in profile.get("knowledge.read", "").replace(",", " ").split()
                         if os.path.isfile(f"{at}{path}")]
                 if read:
                     catalog += f" Before you write code, read once: {', '.join(read)}."
@@ -1572,7 +1605,7 @@ class Run:
         return f" This story's own worktree: {self.pwd}; the main checkout: {home}." if home else ""
 
     def guard_sentence(self):
-        guard = first_word(self.cli_out("--get", "carrier.guard"))
+        guard = first_word(self.profile().get("carrier.guard", ""))
         return f" The guard (the profile's carrier.guard): the {guard} skill." if guard else ""
 
     def prompt_for(self, stage, story):
@@ -1582,7 +1615,7 @@ class Run:
         later = self.later_refusals(story, stage, "this stage")
         if later and stage == self.start_stage(story):
             repeat += later
-        if stage == "test" and self.back_to(story, "build")[0] == "test":
+        if stage == "test" and self.back_to(story, "build") == "test":
             repeat += f" The build stage sent the story back: {self.runs}/{story}/build.md."
         if stage == "judge" and os.path.isfile(f"{self.runs}/{story}/.judge-previous.md"):
             repeat = f" This is a repeat round; the previous verdict: {self.runs}/{story}/.judge-previous.md."
@@ -1697,8 +1730,10 @@ class Run:
     # --- the budget before a dispatch ------------------------------------------------------------------------
     def used_tokens(self, story):
         try:
-            return int(self.cli_out("--usage", "--story", story, "--total") or 0)
-        except ValueError:
+            self.profile()
+            runs = place("runs")
+            return sum(tokens_of(entry) for s in run_stories(runs) if s == story for entry in journal_usage(runs, s).values())
+        except (OSError, ValueError, GateError):
             return 0
 
     def may_dispatch(self, story, what, count=1):
@@ -1758,7 +1793,7 @@ class Run:
                   f"`{self.py} {self.cli_path} --files-skeleton {story} <stage>`, "
                   f"`{self.py} {self.cli_path} --plan-skeleton {story}`. {self.where_things_are(tool, story)}")
         prompt += self.guard_sentence()
-        if self.back_to(story, "build")[0] == "test":
+        if self.back_to(story, "build") == "test":
             prompt += f" The build stage sent the story back: {self.runs}/{story}/build.md."
         for refused in stages:
             if os.path.isfile(f"{self.runs}/{story}/.gate-{refused}.txt"):
@@ -1784,7 +1819,7 @@ class Run:
         # A `back: test` the session already acted on is no round: tidy.md newer than build.md says it repaired the
         # test, built again and tidied — the re-checked gates below decide.
         repaired = "tidy" in stages and newer(f"{self.runs}/{story}/tidy.md", f"{self.runs}/{story}/build.md")
-        sent_back = "build" in stages and self.back_to(story, "build")[0] == "test"
+        sent_back = "build" in stages and self.back_to(story, "build") == "test"
         if sent_back and repaired:
             print("factory: build.md names a defect in a test's own code that the shared session repaired before tidy "
                   "— the gates re-check it.")
@@ -1842,12 +1877,13 @@ class Run:
         converges from the files. An adoption reviews no change and gets none."""
         if kind == "adopt":
             return 0
-        code, lines = self.cli("--perspectives")
-        if code != 0 or not lines:
+        self.profile()
+        rows = [(name, carrier) for name, carrier in perspectives_of(read_profile(resolve_profile(None, os.getcwd())))
+                if name]
+        if not rows:
             return 0
-        rows = [line.split("\t", 1) for line in lines.split("\n") if line.split("\t", 1)[0]]
         names = [row[0] for row in rows]
-        carriers = [row[1] if len(row) > 1 else "" for row in rows]
+        carriers = [row[1] for row in rows]
         folder = f"{self.runs}/{story}/reviews"
         print(f"   reviews: {', '.join(names)} — one process each, at once; the judge converges from "
               "reviews/<perspective>.md")
@@ -1908,8 +1944,7 @@ class Run:
                 err(f"factory: judge verdict 'changes-requested' in round {rounds} — three rounds did not converge. "
                     "needs-human.")
                 return 1
-            asked, code = self.back_to(story)
-            back = self.back_for(kind, asked if code == 0 and asked else "build")
+            back = self.back_for(kind, self.back_to(story) or "build")
             err(f"factory: judge verdict 'changes-requested' — round {rounds} goes back to the {back} stage.")
             return self.run_stages(story, tool, back, dry)
         if verdict == "story-conflict":
@@ -1998,8 +2033,7 @@ class Run:
                 err(f"factory:   {record}")
             err("factory:   answer under '## Answer' with answer:, by: and at:, then run the stage that asked (--from <stage>).")
             return 3
-        code, kind = self.cli("--story", story, "--kind")
-        kind = kind if code == 0 and kind else "story"
+        kind = self.kind_of(story)
         # Every gate passed in the story's worktree: only the integration is left, and it delivers the story; an
         # adopted story whose judge passed: only the adopt gate.
         if start == "integrate":
@@ -2118,7 +2152,7 @@ class Run:
             err(f"factory: the checkout was taken over by another worker before stage '{stage}' — stopping.")
             return 5
         if self.story_budget and self.used_tokens(story) >= self.story_budget:
-            err(f"factory: story {story} has used {self.cli_out('--usage', '--story', story, '--total')} tokens of its")
+            err(f"factory: story {story} has used {self.used_tokens(story)} tokens of its")
             err(f"factory:   --story-budget {self.story_budget} — stage '{stage}' is not dispatched; the work so far stays.")
             return 4
         if self.max_stages and self.invocations >= self.max_stages:
@@ -2177,7 +2211,7 @@ class Run:
                 "when it wrote its file.")
             return 1
         # The build stage found a defect in a test's own code: the round goes to the test stage, no human is asked.
-        sent_back = self.back_to(story, stage)[0] if stage == "build" else ""
+        sent_back = self.back_to(story, stage) if stage == "build" else ""
         if sent_back:
             rounds = self.bump_rounds(story)
             if rounds >= 3:
@@ -2299,8 +2333,8 @@ class Run:
             err(f"factory: no worktree could be made for {story} — nothing ran.")
             return 1
         print(f"factory: {story} works in its worktree, {wt[len(self.home) + 1:] if wt.startswith(self.home + '/') else wt}")
-        self.add_dirs = [f"{self.home}/{linked}" for linked in
-                         (self.runs_rel, self.cli_out("--place", "epics"), self.cli_out("--place", "discovery"))
+        self.profile()
+        self.add_dirs = [f"{self.home}/{linked}" for linked in (self.runs_rel, place("epics"), place("discovery"))
                          if linked and os.path.isdir(f"{self.home}/{linked}")]
         self.read_dirs = [f"{self.home}/{linked}" for linked in
                           (".agents/factory", self.evidence_rel(), *TOOL_SKILL_DIRS, ".agents/skills")
@@ -2317,6 +2351,7 @@ class Run:
             os.environ.pop("FACTORY_HOME", None)
             self.runs = self.runs_rel
             self.add_dirs, self.read_dirs = [], []
+            self.profile()
         if code == 0 and self.delivered(story):
             self.take_lock()
             try:
@@ -2328,7 +2363,7 @@ class Run:
     # --- the backlog -------------------------------------------------------------------------------------------
     def parallel_slots(self):
         """How many stories run at once: --parallel, else FACTORY_PARALLEL, else the profile's `parallel:`, else 1."""
-        given = self.parallel or os.environ.get("FACTORY_PARALLEL") or first_word(self.cli_out("--get", "parallel")) or "1"
+        given = self.parallel or os.environ.get("FACTORY_PARALLEL") or first_word(self.profile().get("parallel", "")) or "1"
         if not given.isdigit() or int(given) == 0:
             err(f"factory: parallel takes a whole number of stories, 1 or more — not '{given}'")
             return None
@@ -2488,6 +2523,76 @@ class Run:
 
 
 TOOL_SKILL_DIRS = tuple(tool.skills for tool in TOOLS)
+
+
+# --- what the runner reads from the project's files ----------------------------------------
+# One reader for the profile, a stage file and a decision record: the gate's. The runner calls these in its
+# own process; the cli prints the same answers for a person or a stage.
+
+COMMAND_KEYS = ("compile", "test", "e2eTest", "architecture", "format", "formatFix")
+
+
+def command_heads(profile):
+    """The first word of every command the profile declares, once each, in the profile's order."""
+    heads = []
+    for key, value in profile.items():
+        if key in COMMAND_KEYS or key.startswith("test."):
+            head = first_word(value)
+            if head and not head.startswith("{{") and head not in heads:
+                heads.append(head)
+    return heads
+
+
+def model_for(profile, tool, stage):
+    return first_word(profile.get(f"model.{tool}.{stage}") or profile.get(f"model.{tool}") or "")
+
+
+def verdict_of_story(runs, story_id):
+    path = os.path.join(runs, story_id, "judge.md")
+    return verdict_in(read_text(path)) if os.path.isfile(path) else ""
+
+
+def needs_human_lines(path, story_id=None):
+    """`<id>\\t<stage>\\t<record path>` for every decision the file's needs-human section names; None when it
+    asks nobody. The record lives beside the story, so the story's id says where to look."""
+    ids = needs_human_ids(read_text(path)) if os.path.isfile(path) else None
+    if ids is None:
+        return None
+    lines = []
+    for decision_id in ids:
+        record, stage = "", ""
+        try:
+            record = record_path(story_id, decision_id) if story_id else ""
+        except GateError:
+            record = ""
+        if record and os.path.isfile(record):
+            try:
+                stage = str(read_front_matter(record)[0].get("stage", "") or "")
+            except GateError:
+                stage = ""
+        lines.append(f"{decision_id}\t{stage or '-'}\t{shown(record) if record else '-'}")
+    return lines
+
+
+def open_decision_files(cwd, story_id):
+    """The records beside the story that carry no `## Answer` yet — the cheap check a run makes
+    before a stage; the gate does the fine reading (a draft without a name is still open)."""
+    try:
+        store = decisions_store(find_story(place("epics"), story_id))
+    except GateError:
+        return []
+    if not os.path.isdir(store):
+        return []
+    found = []
+    for name in sorted(os.listdir(store)):
+        if not name.endswith(".md"):
+            continue
+        text = read_text(os.path.join(store, name))
+        if not re.search(r"^## Answer", text, re.M):
+            found.append(shown(os.path.join(store, name)))
+    return found
+
+
 
 
 # --- the run's start ---------------------------------------------------------------------------------------------

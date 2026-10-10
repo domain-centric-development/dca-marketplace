@@ -1,9 +1,10 @@
 """Factory CLI — what shows and coordinates a factory run, beside the gate that decides.
 
 The gate (`story-gate.py`, in this folder) reads the project's files and refuses or lets a stage
-through. This file is everything a person or a runner asks *about* the pipeline, and the one place
-the runner asks a project file's content from — so the profile, a stage file and a decision record
-have one reader, the gate's, and two callers can never disagree about what they say.
+through. This file is everything a person, a stage or `factory.sh` asks *about* the pipeline. A project
+file's content it reads with the gate's readers, which the runner calls in its own process — so the
+profile, a stage file and a decision record have one reader, and two callers can never disagree about
+what they say.
 
     factory-cli.py --status [--story <id>] [--format text|md|json] [--live] [--part all|backlog]
     factory-cli.py --status --brief [--session-start]   two lines for a session's start
@@ -20,7 +21,7 @@ have one reader, the gate's, and two callers can never disagree about what they 
     factory-cli.py --window-start|--window-end <work> --story <id>   writing or answering, measured
     factory-cli.py --claim <owner> | --release [<owner>] | --listening   one worker per checkout
 
-What the runner reads through here instead of parsing a file itself:
+What factory.sh and a stage read through here instead of parsing a file itself:
 
     factory-cli.py --get <key>                the profile's value for one key ("" when absent)
     factory-cli.py --command-heads            the first word of every command the profile declares
@@ -69,7 +70,8 @@ from .tools import (
     isolation_args, TOOL, tool_invocation, unprobed_flags)
 from .runner import (
     contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
-    first_word, PASS_MARKS, plan_skeleton, run_main, stage_names, stages_shell, worktree_prepare, worktree_prune, worktree_remove)
+    command_heads, first_word, model_for, needs_human_lines, open_decision_files, PASS_MARKS, plan_skeleton, run_main,
+    stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove)
 
 
 def resolve(epics, argument):
@@ -1791,25 +1793,9 @@ def keep_pass(folder):
     return target
 
 
-# --- what the runner reads through here ----------------------------------------------------
-# One reader for the profile, a stage file and a decision record: the gate's. The runner used to parse
-# them with `sed` and could read a line the gate read differently — a determinism gap with no check.
-
-COMMAND_KEYS = ("compile", "test", "e2eTest", "architecture", "format", "formatFix")
-
+# --- the carriers the profile names ------------------------------------------------------
 
 CARRIER_KEY = re.compile(r"^(carrier\.[a-z]+|review\.[a-z-]+|knowledge)$")
-
-
-def command_heads(profile):
-    """The first word of every command the profile declares, once each, in the profile's order."""
-    heads = []
-    for key, value in profile.items():
-        if key in COMMAND_KEYS or key.startswith("test."):
-            head = first_word(value)
-            if head and not head.startswith("{{") and head not in heads:
-                heads.append(head)
-    return heads
 
 
 def carrier_lines(profile):
@@ -1819,56 +1805,6 @@ def carrier_lines(profile):
 def carriers(profile):
     """The skill names, without a `plugin:` prefix, sorted and unique."""
     return sorted({value.rsplit(":", 1)[-1] for _, value in carrier_lines(profile)})
-
-
-def model_for(profile, tool, stage):
-    return first_word(profile.get(f"model.{tool}.{stage}") or profile.get(f"model.{tool}") or "")
-
-
-def verdict_of_story(runs, story_id):
-    path = os.path.join(runs, story_id, "judge.md")
-    return verdict_in(read_text(path)) if os.path.isfile(path) else ""
-
-
-def needs_human_lines(path, story_id=None):
-    """`<id>\\t<stage>\\t<record path>` for every decision the file's needs-human section names; None when it
-    asks nobody. The record lives beside the story, so the story's id says where to look."""
-    ids = needs_human_ids(read_text(path)) if os.path.isfile(path) else None
-    if ids is None:
-        return None
-    lines = []
-    for decision_id in ids:
-        record, stage = "", ""
-        try:
-            record = record_path(story_id, decision_id) if story_id else ""
-        except GateError:
-            record = ""
-        if record and os.path.isfile(record):
-            try:
-                stage = str(read_front_matter(record)[0].get("stage", "") or "")
-            except GateError:
-                stage = ""
-        lines.append(f"{decision_id}\t{stage or '-'}\t{shown(record) if record else '-'}")
-    return lines
-
-
-def open_decision_files(cwd, story_id):
-    """The records beside the story that carry no `## Answer` yet — the cheap check a run makes
-    before a stage; the gate does the fine reading (a draft without a name is still open)."""
-    try:
-        store = decisions_store(find_story(place("epics"), story_id))
-    except GateError:
-        return []
-    if not os.path.isdir(store):
-        return []
-    found = []
-    for name in sorted(os.listdir(store)):
-        if not name.endswith(".md"):
-            continue
-        text = read_text(os.path.join(store, name))
-        if not re.search(r"^## Answer", text, re.M):
-            found.append(shown(os.path.join(store, name)))
-    return found
 
 
 def follow_render(event, denied=frozenset()):

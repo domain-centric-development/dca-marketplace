@@ -81,7 +81,7 @@ dca-marketplace/
   `.agents/factory/story-gate.py`, with `factory-cli.py` beside it for everything that shows or coordinates
   (status, help, usage, the checkout, the schedule) — both are entry points of the package `dca_factory/`
   beside them (stdlib only, each module imports by name from the ones above it), and the runner reads every
-  project file through the cli, never with `sed`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
+  project file with the package's readers, in its own process, never with `sed`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
   discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`, which checks and then hands the run to `dca_factory/runner.py`) is optional, the git
   pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile

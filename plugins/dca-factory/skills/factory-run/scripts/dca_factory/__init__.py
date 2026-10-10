@@ -6,7 +6,7 @@
     gate       what decides: the checks, their registry, the stamps a passed stage writes
     tools      an agent tool as a record, probed once against its binary
     runner     what the runner asks between stages: its tables, a story's worktree, the skeletons
-    cli        what a person or the runner asks about the pipeline: status, help, usage, the readers
+    cli        what a person, a stage or factory.sh asks about the pipeline: status, help, usage, the readers
 
 Each module imports from the ones above it in this list, never from one below. stdlib only.
 """

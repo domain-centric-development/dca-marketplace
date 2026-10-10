@@ -3789,7 +3789,7 @@ def verify_setup(runner, verbose=False):
         code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
         check("install: for Claude Code the report names the second listing under the plugin's namespace",
               "dca-factory:<skill>" in output, output.strip()[-300:])
-    # one parser: the runner asks the cli, which reads with the gate's readers — and the gate only decides
+    # one parser: factory.sh asks the cli, the runner calls its readers, both read with the gate's — and the gate only decides
     def cli(root, *argv):
         done = subprocess.run([sys.executable, cli_in(root), *argv], cwd=root, capture_output=True, text=True,
                               encoding="utf-8", errors="replace")
@@ -3887,7 +3887,18 @@ def verify_setup(runner, verbose=False):
     parsed = [l.strip()[:80] for l in runner_text.splitlines()
               if "sed -n" in l and not l.strip().startswith("#")
               and re.search(r"profile|judge\.md|needs-human|\$DECISIONS|carrier\.|model\\\.", l)]
-    check("runner: parses no profile, stage file or record itself — every read goes through the cli", not parsed, parsed[:3])
+    check("runner: factory.sh parses no profile, stage file or record itself — every read goes through the cli",
+          not parsed, parsed[:3])
+    # the runner reads in its own process: a cli process per question costs a Python start each, ~0.1 s, some
+    # twenty times a stage; what is left as a process changes state — the claim, a skeleton, a worktree, the schedule
+    reader_verbs = ("--get", "--model", "--verdict", "--needs-human", "--back-to", "--open-decisions", "--delivered",
+                    "--kind", "--start", "--command-heads", "--tool-flags", "--perspectives", "--place", "--usage",
+                    "--usage-from", "--journal-line")
+    spawned = sorted({verb for verb in reader_verbs
+                      if re.search(rf'self\.cli\([^)]*"{re.escape(verb)}"', modules["runner"])
+                      or re.search(rf'self\.cli_path,[^\]]*"{re.escape(verb)}"', modules["runner"])})
+    check("runner: reads the profile, the stage files, the records and the journal in its own process — no cli for a question",
+          not spawned, spawned)
     duplicated = [n for n in ("CRITERION", "MAPPING_ROW", "SELECTOR") if re.search(rf"^{n} = re\.compile", observe_text, re.M)]
     check("observe: defines no reader the gate has — it imports the gate's",
           not duplicated and "def front_matter(" not in observe_text and "from dca_factory import" in observe_text,

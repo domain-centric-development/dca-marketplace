@@ -60,8 +60,9 @@ GATE=".agents/factory/story-gate.py"
 GATE_REL=$GATE
 # What shows and coordinates, beside the gate that decides: the file next to this script (the project's
 # copy beside the project's runner, the plugin's beside the plugin's). It imports the gate beside *it*,
-# and it is the one reader the runner asks a project file's content from — the profile, a verdict, a
-# needs-human section, an open record — so the runner parses nothing the gate parses.
+# and it is the one reader this script asks a project file's content from — the profile, a verdict, a
+# needs-human section, an open record — so it parses nothing the gate parses; the runner it hands the run
+# to calls the same readers in its own process.
 CLI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/factory-cli.py"
 cli() { "$PY" "$CLI" "$@"; }
 RUNS=""                                      # the run folder — resolved below through the cli, from the profile

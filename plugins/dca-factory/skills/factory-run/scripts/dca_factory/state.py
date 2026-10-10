@@ -1502,17 +1502,15 @@ def schedule(cwd, epics, runs, slots=None, busy=()):
     return 0
 
 
-def start(cwd, epics, runs, story_id, slots=None):
-    """Where `run --story <id>` begins when no stage is named: the schedule's view of that one story.
-
-    Prints `state:`, `start:` (a stage, or `none`) and `detail:` — a contract the runner reads. A story
-    that is delivered, waits, is blocked or stopped gets `start: none`; another story's unfinished
-    code in the checkout blocks it the way it blocks the backlog run. Exit 2 for an unknown story."""
+def start_of(cwd, epics, runs, story_id, slots=None):
+    """Where `run --story <id>` begins when no stage is named: the schedule's view of that one story, as
+    (state, stage or None, detail); None for an unknown story. A story that is delivered, waits, is blocked or
+    stopped starts nowhere; another story's unfinished code in the checkout blocks it the way it blocks the
+    backlog run."""
     data = schedule_data(cwd, epics, runs)
     story = data["stories"].get(story_id)
     if story is None:
-        print(f"factory: no story {story_id} under {epics}/", file=sys.stderr)
-        return 2
+        return None
     state, stage, detail = story["state"], story["start"], story["detail"]
     if stage and not slots and has_worktree(story_id, factory_home() or cwd):
         state, stage, detail = "blocked", None, (f"its code is in its worktree — the runner takes it up: "
@@ -1521,6 +1519,16 @@ def start(cwd, epics, runs, story_id, slots=None):
     if stage and holder and holder != story_id:
         state, stage, detail = "blocked", None, (f"{holder} holds unfinished code in the checkout "
                                                  f"({data['stories'][holder]['state']}) — it is delivered first")
+    return state, stage, detail
+
+
+def start(cwd, epics, runs, story_id, slots=None):
+    """`start_of` printed as `state:`, `start:` (a stage, or `none`) and `detail:`. Exit 2 for an unknown story."""
+    found = start_of(cwd, epics, runs, story_id, slots)
+    if found is None:
+        print(f"factory: no story {story_id} under {epics}/", file=sys.stderr)
+        return 2
+    state, stage, detail = found
     print(f"state: {state}")
     print(f"start: {stage or 'none'}")
     print(f"detail: {detail}")

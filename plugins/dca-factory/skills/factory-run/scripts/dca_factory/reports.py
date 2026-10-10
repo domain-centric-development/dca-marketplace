@@ -530,21 +530,25 @@ def current_session():
 WINDOWS = ("backlog", "decisions")
 
 
-def usage_from(fmt, path, model=None):
+def usage_lines(fmt, path, model=None):
+    """One invocation's usage from a tool's raw output: the `model=… input=…` fields (or `unknown`), then the
+    final message the output carries, if any."""
     if fmt in ("claude-session", "codex-session"):
         usage = session_usage(fmt, [path])
-        print(usage_fields(usage) if usage else "unknown")
-        return 0
+        return [usage_fields(usage) if usage else "unknown"]
     usage, text = parse_usage(fmt, path)
     if usage is None:
-        print("unknown")
+        lines = ["unknown"]
     else:
         if model and not usage.get("model"):
             usage["model"] = model
         usage.setdefault("model", "unknown")
-        print("\t".join(f"{k}={usage[k]}" for k in ("model",) + USAGE_FIELDS + (("cost",) if "cost" in usage else ())))
-    if text.strip():
-        print(text.strip())
+        lines = ["\t".join(f"{k}={usage[k]}" for k in ("model",) + USAGE_FIELDS + (("cost",) if "cost" in usage else ()))]
+    return lines + ([text.strip()] if text.strip() else [])
+
+
+def usage_from(fmt, path, model=None):
+    print("\n".join(usage_lines(fmt, path, model)))
     return 0
 
 

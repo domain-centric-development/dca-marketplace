@@ -543,9 +543,9 @@ what must be true before the next one starts.
 *decides*: the readers, the backlog, the checks per stage, the decision records, `--change`, `--parity`
 and the file contract. Everything that *shows or coordinates* — status, help, usage and cost, the
 session logs, the checkout claim, the schedule, `--resolve` — is `factory-cli.py` beside it, the
-package's other entry point, which reads every project file through the same readers; the runner asks the cli for a
-profile value, a verdict, a needs-human section or an open record instead of parsing the file
-itself, so one file has one reader. A flag that moved is handed over by the gate, so an older hook or
+package's other entry point, which reads every project file through the same readers. The runner calls those
+readers in its own process for a profile value, a verdict, a needs-human section or an open record, and
+`factory.sh` asks the cli for them; neither parses the file itself, so one file has one reader. A flag that moved is handed over by the gate, so an older hook or
 instruction file still gets its answer:
 
 ```
