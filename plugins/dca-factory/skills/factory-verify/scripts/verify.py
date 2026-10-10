@@ -779,13 +779,13 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
                               ("judge.md", "## Verdict\nverdict: pass\n"), ("tests.md", TESTS)):
             if not os.path.isfile(os.path.join(root, ".dca-factory/runs/STORY-1", name)):
                 write(".dca-factory/runs/STORY-1/" + name, content)
-        if not os.path.isfile(os.path.join(root, ".dca-factory/runs/STORY-1/.story-digest")):
-            write(".dca-factory/runs/STORY-1/.story-digest", story_digest(os.path.join(root, "project/epics/sample/STORY-1/story.md")))
+        if not os.path.isfile(os.path.join(root, ".dca-factory/evidence/STORY-1/.story-digest")):
+            write(".dca-factory/evidence/STORY-1/.story-digest", story_digest(os.path.join(root, "project/epics/sample/STORY-1/story.md")))
         write(".dca-factory/runs/STORY-1/document.md", document)
     if rounds is not None:
-        write(".dca-factory/runs/STORY-1/.rounds", str(rounds))
+        write(".dca-factory/evidence/STORY-1/.rounds", str(rounds))
     if ledger is not None:
-        write(".dca-factory/runs/STORY-1/.tests-red", "\n".join(ledger) + "\n")
+        write(".dca-factory/evidence/STORY-1/.tests-red", "\n".join(ledger) + "\n")
     write("runner.sh", RUNNER_STUB)
     os.chmod(os.path.join(root, "runner.sh"), 0o755)
     write("gradlew-stub", TASK_RUNNER_STUB)
@@ -853,7 +853,7 @@ OUTCOME_CODE = (
     ("src/main/java/com/example/SomethingHappened.java", "public record SomethingHappened(String widgetId) {}\n"),
     ("src/main/java/com/example/Widget.java",
      "class Widget { void show() { registerEvent(new SomethingHappened(\"w\")); } }\n"),
-    (".dca-factory/runs/STORY-1/.verify/changed.txt",
+    (".dca-factory/evidence/STORY-1/changed.txt",
      "added\tsrc/main/java/com/example/SomethingHappened.java\nadded\tsrc/main/java/com/example/Widget.java\n"),
 )
 
@@ -869,7 +869,7 @@ def tests_rewritten_after_build(passes):
             os.utime(os.path.join(folder, name), (at, at))
         lines = "".join(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(at))}\tgate\t{stage}\texit=0\n"
                         for stage, at in passes)
-        write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv", lines)
+        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv", lines)
     return prepare
 
 
@@ -884,7 +884,7 @@ def plan_corrected_after_tests(passes):
             os.utime(os.path.join(folder, name), (at, at))
         lines = "".join(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(at))}\tgate\t{stage}\texit=0\tby=builder\n"
                         for stage, at in passes)
-        write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv", lines)
+        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv", lines)
     return prepare
 
 
@@ -1236,7 +1236,7 @@ def verify_runner(runner, verbose=False):
         check("runner: the final line names the stages that ran",
               "ran through plan,test,build,tidy,judge,document." in output,
               [l for l in output.splitlines() if "ran through" in l])
-        journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify")
+        journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1")
         kept = os.listdir(journal) if os.path.isdir(journal) else []     # absent when nothing ran
         journal_text = open(os.path.join(journal, "journal.tsv"), encoding="utf-8").read() \
             if os.path.isfile(os.path.join(journal, "journal.tsv")) else ""
@@ -1284,12 +1284,12 @@ def verify_runner(runner, verbose=False):
                 args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in", "--shared-builder"] \
                     + (["--dry-run"] if dry else [])
                 code, output = run_runner(runner, root, *args, env=env)
-                journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+                journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
                 starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
                           if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
                 lines = lambda path: (open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else [])
                 extras = {"calls": lines(os.path.join(root, "build", "runner-calls.log")),
-                          "suites": lines(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "suites.tsv"))}
+                          "suites": lines(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "suites.tsv"))}
                 return code, output, starts, story_delivered(root), extras
         code, output, starts, delivered, extras = shared_run()
         stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
@@ -1363,7 +1363,7 @@ def verify_runner(runner, verbose=False):
                 args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in", "--shared-verifier"] \
                     + (["--shared-builder"] if builder else []) + (["--dry-run"] if dry else [])
                 code, output = run_runner(runner, root, *args, env=env)
-                journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+                journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
                 starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
                           if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
                 document = os.path.join(root, ".dca-factory", "runs", "STORY-1", "document.md")
@@ -1426,7 +1426,7 @@ def verify_runner(runner, verbose=False):
                        "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
                 args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-verifier"] if verifier else [])
                 code, output = run_runner(runner, root, *args, env=env)
-                journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+                journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
                 starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
                           if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
                 prompts_file = os.path.join(root, "prompts.txt")
@@ -1473,7 +1473,7 @@ def verify_runner(runner, verbose=False):
                "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
                                   "--shared-builder", env=env)
-        journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+        journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
         starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
                   if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
         prompts = open(os.path.join(root, "builder-prompts.txt"), encoding="utf-8").read().strip().splitlines() \
@@ -1535,7 +1535,7 @@ def verify_runner(runner, verbose=False):
                        "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
                 args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-builder"] if shared else [])
                 code, output = run_runner(runner, root, *args, env=env)
-                journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+                journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
                 starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
                           if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
                 prompts_file = os.path.join(root, "test-prompts.txt")
@@ -1599,7 +1599,7 @@ def verify_runner(runner, verbose=False):
                "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
                                   "--shared-builder", "--shared-verifier", env=env)
-        journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+        journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
         starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
                   if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
         check("story-pass: a document gate refused over an earlier pass's build runs on from the build — "
@@ -1680,8 +1680,8 @@ def verify_runner(runner, verbose=False):
         gated(build_project(root, rounds=2))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "Build", "--tool", "stand-in",
                                   env={"FACTORY_TOOL_CMD": "echo INVOKED"})
-        rounds = open(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".rounds"), encoding="utf-8").read().strip() \
-            if os.path.isfile(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".rounds")) else "gone"
+        rounds = open(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".rounds"), encoding="utf-8").read().strip() \
+            if os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".rounds")) else "gone"
         check("runner: an unknown --from stage is refused (exit 2), invokes nothing and keeps the rounds",
               code == 2 and "INVOKED" not in output and rounds == "2", f"exit {code}; rounds {rounds}")
     # 1d4. three rounds stop a story; a person's --from starts a new count, keeps the old one, and the gate
@@ -1693,13 +1693,13 @@ def verify_runner(runner, verbose=False):
                                            env={"FACTORY_TOOL_CMD": "false"})
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "test", "--tool", "stand-in",
                                   "--max-stages", "0", env={"FACTORY_TOOL_CMD": "false"})
-        kept = glob.glob(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "rounds.*"))
-        journal_path = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+        kept = glob.glob(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "rounds.*"))
+        journal_path = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
         journal = open(journal_path, encoding="utf-8").read() if os.path.isfile(journal_path) else ""
         check("runner: a story stopped after three rounds does not run without --from",
               stopped_code == 1 and "stopped" in stopped and "── " not in stopped, stopped[-300:])
         check("runner: --from starts a new count of rounds and keeps the old one in the journal folder",
-              not os.path.isfile(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".rounds")) and len(kept) == 1
+              not os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".rounds")) and len(kept) == 1
               and "\trounds-reset\t" in journal, output[-400:])
         check("runner: resumed at a gated stage whose file exists, the gate decides before the stage is invoked",
               "── gate test  (the file exists" in output
@@ -1714,7 +1714,7 @@ def verify_runner(runner, verbose=False):
         stages = [line.split()[2] for line in output.splitlines() if line.startswith("── stage ")]
         check("runner: a gate refused on the environment stops once, counts no round and runs no stage again",
               code == 1 and stages == ["test"] and "refused on the environment" in output
-              and not os.path.isfile(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".rounds")),
+              and not os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".rounds")),
               f"stages {stages}, exit {code}: {output[-400:]}")
 
     # 1d2. a stage that asks writes the record; the run names it and how to resume
@@ -1871,7 +1871,7 @@ exit 0
               code == 3 and not story_delivered(root, "STORY-2")
               and os.path.isfile(os.path.join(root, "project", "epics", "sample", "STORY-2", "decisions", "accept-1.md"))
               and not os.path.isfile(os.path.join(folder, ".gate-document.txt"))
-              and not os.path.isfile(os.path.join(folder, ".rounds")),
+              and not os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-2", ".rounds")),
               f"exit {code}; {output.strip().splitlines()[-2:]}")
         with open(os.path.join(root, "project", "epics", "sample", "STORY-2", "decisions", "accept-1.md"), "a",
                   encoding="utf-8") as h:
@@ -1981,7 +1981,7 @@ exit 0
         ran = invocations(root)
         check("runner: a refused gate sends the story back to that stage, one round counted",
               code == 0 and ran.count("STORY-2 test") == 2 and "round 1 runs stage 'test' again" in output
-              and open(os.path.join(root, ".dca-factory", "runs", "STORY-2", ".rounds"), encoding="utf-8").read().strip() == "1",
+              and open(os.path.join(root, ".dca-factory", "evidence", "STORY-2", ".rounds"), encoding="utf-8").read().strip() == "1",
               f"exit {code}, invocations {ran}")
     for root in throwaway():
         env = backlog_fixture(root)
@@ -2037,7 +2037,7 @@ exit 0
         env = backlog_fixture(root)
         env.update({"FIXTURE_USAGE": claude_like, "FACTORY_USAGE_FORMAT": "claude-json"})
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
-        journal = open(os.path.join(root, ".dca-factory", "runs", "STORY-2", ".verify", "journal.tsv"), encoding="utf-8").read()
+        journal = open(os.path.join(root, ".dca-factory", "evidence", "STORY-2", "journal.tsv"), encoding="utf-8").read()
         stages = usage_json(os.path.join(root, ".agents", "factory", "story-gate.py"), root, "STORY-2")
         check("usage: each invocation's tokens land in the story's journal",
               code == 0 and journal.count("\tusage\t") == 9 and "output=900" in journal,
@@ -2214,8 +2214,8 @@ exit 0
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "claude", env=env)
         seen = open(os.path.join(root, "models.log"), encoding="utf-8").read().split() \
             if os.path.isfile(os.path.join(root, "models.log")) else []
-        journal = open(os.path.join(root, ".dca-factory", "runs", "STORY-2", ".verify", "journal.tsv"), encoding="utf-8").read() \
-            if os.path.isfile(os.path.join(root, ".dca-factory", "runs", "STORY-2", ".verify", "journal.tsv")) else ""
+        journal = open(os.path.join(root, ".dca-factory", "evidence", "STORY-2", "journal.tsv"), encoding="utf-8").read() \
+            if os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-2", "journal.tsv")) else ""
         status = subprocess.run([sys.executable, cli_in(root), "--status",
                                  "--story", "STORY-2"], cwd=root, capture_output=True, text=True, encoding="utf-8").stdout
         build_row = next((l for l in status.splitlines() if "Stages" in l), "")
@@ -2296,7 +2296,7 @@ exit 0
         # a gate a stage session runs itself and passes is on record, so a later gate can tell this pass's files;
         # the same gate run by a person or the runner leaves the journal to the runner
         gate_at = os.path.join(root, ".agents", "factory", "story-gate.py")
-        journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+        journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
         def gate_lines():
             return [l for l in (open(journal, encoding="utf-8").read().splitlines() if os.path.isfile(journal) else [])
                     if "\tgate\tplan\t" in l]
@@ -2341,7 +2341,7 @@ exit 0
         run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in", "--from", "judge",
                    env={"FACTORY_TOOL_CMD": 'mkdir -p .dca-factory/runs/STORY-1; printf "## Verdict\\nverdict: pass\\n" '
                                             '> .dca-factory/runs/STORY-1/judge.md'})
-        snap = read_snapshot(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "tree-before-judge.txt"))
+        snap = read_snapshot(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "tree-before-judge.txt"))
         check("snapshot: a file inside a directory this run added is hashed, not skipped",
               "src/brand-new/Added.java" in snap,
               f"{len(snap)} entries: {sorted(snap)[:4]}…")
@@ -2358,7 +2358,7 @@ exit 0
             env={"FACTORY_SHA256": "none",
                  "FACTORY_TOOL_CMD": 'mkdir -p .dca-factory/runs/STORY-1; printf "## Verdict\\nverdict: pass\\n" '
                                      '> .dca-factory/runs/STORY-1/judge.md'})
-        tree = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "tree-before-judge.txt")
+        tree = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "tree-before-judge.txt")
         first = open(tree, encoding="utf-8").readline().strip() if os.path.isfile(tree) else ""
         check("snapshot: without a sha256 command the snapshot says so, and the run says it too",
               first.startswith("# no-sha256-command") and "no sha256 command found" in output,
@@ -2464,7 +2464,7 @@ exit 0
         os.makedirs(os.path.join(root, ".dca-factory", "runs", "STORY-1"))
         counted = subprocess.run(
             [BASH, "-c",
-             f'RUNS=.dca-factory/runs; sed -n "/^bump_rounds/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
+             f'RUNS=.dca-factory/runs; sed -n -e "/^evidence()/,/^}}/p" -e "/^bump_rounds/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
              f'. ./fn.sh; bump_rounds STORY-1; bump_rounds STORY-1'],
             cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.split()
         check("runner: the round counter is a file and counts up", counted == ["1", "2"],
@@ -2549,7 +2549,7 @@ exit 0
         check("install: another hook manager's `core.hooksPath` is kept, and the install says how to chain",
               hooks == ".husky" and "left as it is" in output, f"hooksPath {hooks!r}")
         check("install: `.gitattributes` without a final newline keeps its last line whole",
-              attributes[:1] == ["*.png binary"] and any(l.startswith(".dca-factory/runs/**") for l in attributes), attributes)
+              attributes[:1] == ["*.png binary"] and any(l.startswith(".dca-factory/evidence/**") for l in attributes), attributes)
         for command in (["add", "-A"], ["reset", "-q", "--", ".claude"]):
             subprocess.run(["git", *command], cwd=root, capture_output=True)
         staged = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--change",
@@ -2574,7 +2574,7 @@ exit 0
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             # Wait for the stage itself to be under way — the claim taken and the stage's start in the
             # journal — rather than for a fixed time a loaded machine does not keep.
-            journal = os.path.join(root, ".dca-factory", "runs", "STORY-2", ".verify", "journal.tsv")
+            journal = os.path.join(root, ".dca-factory", "evidence", "STORY-2", "journal.tsv")
             deadline = time.time() + 20
             while time.time() < deadline and not (
                     os.path.exists(lock) and os.path.isfile(journal)
@@ -3568,7 +3568,7 @@ def verify_places(args):
                                         delivered_story(story("STORY-2", ["STORY-1"]), "2026-09-22T10:00:00Z")),
                                        (".dca-factory/runs/STORY-1/document.md", DOCUMENT),
                                        (".dca-factory/runs/STORY-2/document.md", DOCUMENT),
-                                       (".dca-factory/runs/STORY-2/.verify/journal.tsv",
+                                       (".dca-factory/evidence/STORY-2/journal.tsv",
                                         "2026-09-22T09:00:00Z\tstage-start\tplan\ttool=x\n"
                                         "2026-09-22T09:10:00Z\tstage-end\tplan\texit=0\n")))
         before = schedule_of(args.gate, root)
@@ -3651,7 +3651,7 @@ def verify_places(args):
         rows, nxt, _w, listing = schedule_of(args.gate, root)
         story_1 = open(os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md"), encoding="utf-8").read()
         profile = open(os.path.join(root, "dca-factory.profile.yaml"), encoding="utf-8").read()
-        digest_2 = open(os.path.join(root, ".dca-factory", "runs", "STORY-2", ".story-digest"), encoding="utf-8").read().strip()
+        digest_2 = open(os.path.join(root, ".dca-factory", "evidence", "STORY-2", ".story-digest"), encoding="utf-8").read().strip()
         expectations.append(("migrate: the profile moves to the root with `epics:` and the contract, project/backlog/ becomes "
                              "project/epics/, each record lands beside its story, the run artefacts move and the delivery "
                              "goes into the story — the project's own files under tasks/ untouched, a second run moves nothing",
@@ -3667,11 +3667,38 @@ def verify_places(args):
                              and not os.path.exists(os.path.join(root, "tasks", "STORY-1"))
                              and all(open(os.path.join(root, p), "rb").read() == c for p, c in foreign_before.items())
                              and digest_2 == story_digest(os.path.join(root, "project", "epics", "sample", "STORY-2", "story.md"))
-                             and ".dca-factory/runs/**/.verify/journal.tsv merge=union"
+                             and ".dca-factory/evidence/**/journal.tsv merge=union"
                              in open(os.path.join(root, ".gitattributes"), encoding="utf-8").read()
                              and "nothing to move" in second.stdout and tree_digest(root) == digest_after_first
                              and rows.get("STORY-1") == ("delivered", None) and rows.get("STORY-2", ("",))[0] == "in-progress",
                              f"{first.stdout.strip()[-500:]} | second: {second.stdout.strip()} | {rows}"))
+
+    # contract 17: what proves a story's work leaves its run folder — `update` moves `.verify/` and the marks to the
+    # evidence folder beside it, keeps what is there already, and moves nothing a second time
+    for root in throwaway():
+        backlog_project(root, extra_sources=(
+            (".dca-factory/runs/STORY-1/plan.md", "# Plan\n"),
+            (".dca-factory/runs/STORY-1/.verify/journal.tsv", "2026-10-01T10:00:00Z\tgate\tplan\texit=0\n"),
+            (".dca-factory/runs/STORY-1/.verify/base-tree", "none\n"),
+            (".dca-factory/runs/STORY-1/.tests-red", "a.b#c\t" + "0" * 64 + "\n"),
+            (".dca-factory/runs/STORY-1/.rounds", "2\n"),
+            (".dca-factory/evidence/STORY-1/.rounds", "1\n"),
+            (".gitattributes", ".dca-factory/runs/**/.verify/journal.tsv merge=union\n")))
+        first = cli(root, "--migrate-layout")
+        second = cli(root, "--migrate-layout")
+        run_dir, ev = (os.path.join(root, ".dca-factory", part, "STORY-1") for part in ("runs", "evidence"))
+        expectations.append(("migrate: the journal, the base tree and the marks move from the run folder to the evidence "
+                             "folder, a mark there already is kept and said, the hand-overs stay, the merge rule follows",
+                             first.returncode == 0 and os.path.isfile(os.path.join(ev, "journal.tsv"))
+                             and os.path.isfile(os.path.join(ev, "base-tree")) and os.path.isfile(os.path.join(ev, ".tests-red"))
+                             and open(os.path.join(ev, ".rounds"), encoding="utf-8").read() == "1\n"
+                             and "the run folder's dropped: .rounds" in first.stdout
+                             and not os.path.exists(os.path.join(run_dir, ".verify"))
+                             and os.path.isfile(os.path.join(run_dir, "plan.md"))
+                             and ".dca-factory/evidence/**/journal.tsv merge=union"
+                             in open(os.path.join(root, ".gitattributes"), encoding="utf-8").read()
+                             and "evidence →" not in second.stdout,
+                             first.stdout + second.stdout))
 
     # contract 16: a story is a folder — the flat layout of before is named, not read, and `update` moves each story
     # with its decisions and findings into a folder named after its id, through git where the files are tracked
@@ -4152,12 +4179,12 @@ def run_groups(args):
         (Case("test: a tests.md without `## Files` is refused once the stage's changes are recorded", "test", 1,
               must_fail=("files-listed",)),
          dict(tests=TESTS.split("\n## Files")[0] + "\n", extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-test.txt", "modified\tsrc/test/java/com/example/WidgetUnitTest.java\n"),))),
+             (".dca-factory/evidence/STORY-1/changed-test.txt", "modified\tsrc/test/java/com/example/WidgetUnitTest.java\n"),))),
         # WP-79 A2: the cheap checks come first, and a refusal among them leaves every process unstarted.
         (Case("test: a refusal before the suites leaves the runner uncalled", "test", 1,
               must_fail=("files-listed",), must_skip=("compiles", "tests-red"), text=("refused first",)),
          dict(tests=TESTS.split("\n## Files")[0] + "\n", extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-test.txt", "modified\tsrc/test/java/com/example/WidgetUnitTest.java\n"),),
+             (".dca-factory/evidence/STORY-1/changed-test.txt", "modified\tsrc/test/java/com/example/WidgetUnitTest.java\n"),),
               after=lambda root: [] if not os.path.isfile(os.path.join(root, "build/runner-calls.log"))
               else ["the runner was called: " + open(os.path.join(root, "build/runner-calls.log")).read()])),
         # WP-79 C10: a hand-over larger than what it has to say is noted, never refused.
@@ -4562,7 +4589,7 @@ def run_groups(args):
          dict(document=DOCUMENT, extra_sources=((".dca-factory/runs/STORY-1/judge.md", ""),))),
         (Case("document: a story changed after it was planned delivers nothing", "document", 1,
               must_fail=("story-pass",), text=("changed after it was planned",)),
-         dict(document=DOCUMENT, extra_sources=((".dca-factory/runs/STORY-1/.story-digest", "0" * 64),))),
+         dict(document=DOCUMENT, extra_sources=((".dca-factory/evidence/STORY-1/.story-digest", "0" * 64),))),
         # WP-84 V1 (contract 14): the story that introduces the epic's outcome event says so (`publishes:`); the plan
         # gate holds it to the epic's metric, the document gate to the code — the bench's epic said `TaskCreated`, the
         # code published `TaskAdded`, and nothing compared them (TODO #117)
@@ -4590,7 +4617,7 @@ def run_groups(args):
         (Case("document: an outcome event nothing the story changed raises is refused", "document", 1,
               must_fail=("outcome",), text=("nothing the story changed",)),
          dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
-              extra_sources=OUTCOME_CODE[:1] + ((".dca-factory/runs/STORY-1/.verify/changed.txt",
+              extra_sources=OUTCOME_CODE[:1] + ((".dca-factory/evidence/STORY-1/changed.txt",
                                                   "added\tsrc/main/java/com/example/SomethingHappened.java\n"),
                                                  ("src/main/java/com/example/Widget.java", "class Widget {}\n")))),
         (Case("document: an outcome event nested in the aggregate that raises it counts as raised", "document", 0,
@@ -4599,12 +4626,12 @@ def run_groups(args):
               extra_sources=(("src/main/java/com/example/Widget.java",
                               "class Widget { record SomethingHappened(String id) {} "
                               "void show() { registerEvent(new SomethingHappened(\"w\")); } }\n"),
-                             (".dca-factory/runs/STORY-1/.verify/changed.txt",
+                             (".dca-factory/evidence/STORY-1/changed.txt",
                               "added\tsrc/main/java/com/example/Widget.java\n")))),
         (Case("document: an event the project raised before this story is named as the wrong story's `publishes:`",
               "document", 1, must_fail=("outcome",), text=("belongs on the story that introduces the event",)),
          dict(document=DOCUMENT, story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"),
-              extra_sources=OUTCOME_CODE[:2] + ((".dca-factory/runs/STORY-1/.verify/changed.txt",
+              extra_sources=OUTCOME_CODE[:2] + ((".dca-factory/evidence/STORY-1/changed.txt",
                                                   "modified\tsrc/main/java/com/example/Other.java\n"),
                                                  ("src/main/java/com/example/Other.java", "class Other {}\n")))),
         (Case("document: an event's own factory and an import are no raise — the event file names itself, the "
@@ -4615,7 +4642,7 @@ def run_groups(args):
                               "  static SomethingHappened of(String id) { return new SomethingHappened(id); } }\n"),
                              ("src/main/java/com/example/Widget.java",
                               "import com.example.SomethingHappened;\nclass Widget { void show() {} }\n"),
-                             (".dca-factory/runs/STORY-1/.verify/changed.txt",
+                             (".dca-factory/evidence/STORY-1/changed.txt",
                               "added\tsrc/main/java/com/example/SomethingHappened.java\n"
                               "added\tsrc/main/java/com/example/Widget.java\n")))),
         (Case("document: a camel-cased test source set is no production code", "document", 1,
@@ -4666,18 +4693,18 @@ def run_groups(args):
         (Case("build: a hand-over that lists every changed file passes the files check", "build", 0,
               must_pass=("files-listed",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
+             (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Changed\n\n## Files\n\n- `src/main/Thing.java` — new\n"
                                         "- `src/main/Page.java` — shows it\n")))),
         (Case("build: a changed file the hand-over does not list is refused, named", "build", 1,
               must_fail=("files-listed",), text=("src/main/Page.java",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
+             (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Changed\n| File | Why |\n|---|---|\n| `src/main/Thing.java` | new |\n")))),
         (Case("build: a hand-over without a Files section is refused", "build", 1,
               must_fail=("files-listed",), text=("has no `## Files` section",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\n"),
+             (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Criteria\n")))),
         (Case("build: without a changed-files record the files check is skipped and named", "build", 0,
               must_skip=("files-listed",)),
@@ -4686,21 +4713,21 @@ def run_groups(args):
               "files, even with an earlier round's record there", "build", 0,
               must_skip=("files-listed",), text=("still open",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Other.java\n"),
-             (".dca-factory/runs/STORY-1/.verify/journal.tsv",
+             (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Other.java\n"),
+             (".dca-factory/evidence/STORY-1/journal.tsv",
               "2026-09-26T13:55:20.100Z\tstage-start\tbuild\ttool=claude-session\n")))),
         (Case("build: after a shared builder its record is the one checked — a file it changed that no hand-over "
               "lists is refused", "build", 1, must_fail=("files-listed",), text=("src/main/Page.java",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-builder.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
-             (".dca-factory/runs/STORY-1/.verify/journal.tsv", "2026-09-27T10:00:00.000Z\tstage-start\tbuilder\ttool=claude\n2026-09-27T10:30:00.000Z\tstage-end\tbuilder\texit=0\n"),
+             (".dca-factory/evidence/STORY-1/changed-builder.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
+             (".dca-factory/evidence/STORY-1/journal.tsv", "2026-09-27T10:00:00.000Z\tstage-start\tbuilder\ttool=claude\n2026-09-27T10:30:00.000Z\tstage-end\tbuilder\texit=0\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Files\n\n- `src/main/Thing.java` — new\n")))),
         (Case("build: after a shared builder a file listed by any of its hand-overs passes, and an older per-stage "
               "record is not read", "build", 0, must_pass=("files-listed",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Stale.java\n"),
-             (".dca-factory/runs/STORY-1/.verify/changed-builder.txt", "added\tsrc/test/ThingTest.java\nadded\tsrc/main/Thing.java\n"),
-             (".dca-factory/runs/STORY-1/.verify/journal.tsv",
+             (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Stale.java\n"),
+             (".dca-factory/evidence/STORY-1/changed-builder.txt", "added\tsrc/test/ThingTest.java\nadded\tsrc/main/Thing.java\n"),
+             (".dca-factory/evidence/STORY-1/journal.tsv",
               "2026-09-26T09:00:00.000Z\tstage-start\tbuild\ttool=claude\n2026-09-26T09:10:00.000Z\tstage-end\tbuild\texit=0\n"
               + "2026-09-27T10:00:00.000Z\tstage-start\tbuilder\ttool=claude\n2026-09-27T10:30:00.000Z\tstage-end\tbuilder\texit=0\n"),
              (".dca-factory/runs/STORY-1/tidy.md", "## Files\n\n- `src/test/ThingTest.java` — renamed a helper\n"),
@@ -4713,21 +4740,21 @@ def run_groups(args):
         (Case("tidy: a stage that changed no file needs no `## Files` section", "tidy", 0,
               must_pass=("files-listed",), text=("changed no file",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-tidy.txt", ""),
+             (".dca-factory/evidence/STORY-1/changed-tidy.txt", ""),
              (".dca-factory/runs/STORY-1/tidy.md", "# Tidy\n\nNothing to tidy: the build left no duplication.\n")))),
         (Case("build: a backticked route or `/` in a table's *Why* cell is prose, not a listed path", "build", 0,
               must_pass=("files-listed",), absent=("listed but not changed",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             (".dca-factory/runs/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\n"),
+             (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Files\n\n| File | Why |\n|---|---|\n"
                                         "| `src/main/Thing.java` | handles `GET /`, redirects to `/` |\n")))),
         (Case("plan: a gate run over a delivered story checks it and leaves its marks as they are", "plan", 0,
               text=("is delivered — checked",)),
          dict(story=delivered_story(STORY, "2026-09-27T10:00:00Z"),
-              extra_sources=((".dca-factory/runs/STORY-1/.story-digest", "the-digest-of-the-delivery\n"),),
+              extra_sources=((".dca-factory/evidence/STORY-1/.story-digest", "the-digest-of-the-delivery\n"),),
               after=lambda root: [f"{name} was rewritten" for name, kept in
                                   ((".story-digest", "the-digest-of-the-delivery"),)
-                                  if open(os.path.join(root, ".dca-factory/runs/STORY-1", name), encoding="utf-8").read().strip() != kept])),
+                                  if open(os.path.join(root, ".dca-factory/evidence/STORY-1", name), encoding="utf-8").read().strip() != kept])),
         (Case("document: a gate run over a delivered story checks it and leaves the delivery mark as it is",
               "document", 0, text=("is delivered — checked",)),
          dict(green=both_green, ledger=both_green, document=DOCUMENT,
@@ -5164,7 +5191,7 @@ def run_groups(args):
     for root in throwaway():
         build_project(root)
         run_gate(args.gate, root, "test")
-        ledger = open(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".tests-red"), encoding="utf-8").read()
+        ledger = open(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".tests-red"), encoding="utf-8").read()
         expectations.append(("red-proof: the test gate records each red test with its file's digest",
                              ledger.count("\t") == 2, ledger.strip()))
         os.makedirs(os.path.join(root, "green"), exist_ok=True)
@@ -5220,7 +5247,7 @@ def run_groups(args):
     # the tests only, so format, numbering and a forgotten rule cannot be refused.
     for root in throwaway():
         build_project(root, tests=None, extra_sources=PLAN_AND_TEST + (
-            (".dca-factory/runs/STORY-1/.verify/changed-test.txt", "added\tsrc/test/java/com/example/WidgetNameTest.java\n"),))
+            (".dca-factory/evidence/STORY-1/changed-test.txt", "added\tsrc/test/java/com/example/WidgetNameTest.java\n"),))
         tests_md = os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md")
         done = subprocess.run([sys.executable, args.cli, "--files-skeleton", "STORY-1", "test"], cwd=root,
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -5239,7 +5266,7 @@ def run_groups(args):
     # WP-79 A4: the hand-over's file list is the pipeline's to write, from the record the gate reads.
     for root in throwaway():
         build_project(root, green=both_green, ledger=both_green, extra_sources=(
-            (".dca-factory/runs/STORY-1/.verify/changed-build.txt",
+            (".dca-factory/evidence/STORY-1/changed-build.txt",
              "added\tsrc/main/Thing.java\nmodified\tsrc/main/Other.java\n"),))
         build_md = os.path.join(root, ".dca-factory", "runs", "STORY-1", "build.md")
 
@@ -5302,7 +5329,7 @@ def run_groups(args):
         keyed = dict(os.environ, FACTORY_SUITES_KEY="fixture-key")
         log = os.path.join(root, "build", "runner-calls.log")
         calls = lambda: len(open(log, encoding="utf-8").read().splitlines()) if os.path.isfile(log) else 0
-        record = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "suites.tsv")
+        record = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "suites.tsv")
 
         # `compile: true` and `architecture: true` are one invocation, so the second is read from the
         # record inside one gate run; whether the *tests* ran fresh is what the test lines say.
@@ -5356,7 +5383,7 @@ def run_groups(args):
             with open(os.path.join(root, "green", re.sub(r"[./#]", "", selector)), "w") as handle:
                 handle.write("")
         page_test = "src/test-pages/java/com/example/WidgetPageTest.java"
-        verify = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify")
+        verify = os.path.join(root, ".dca-factory", "evidence", "STORY-1")
         os.makedirs(verify, exist_ok=True)
         with open(os.path.join(verify, "changed-build.txt"), "w", encoding="utf-8") as handle:
             handle.write(f"added\tsrc/main/Thing.java\nmodified\t{page_test}\n")
@@ -5377,7 +5404,7 @@ def run_groups(args):
                              [l for l in output.splitlines() if "files-listed" in l or "red-proof" in l]))
     for root in throwaway():
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
-                                             (".dca-factory/runs/STORY-1/.verify/journal.tsv",
+                                             (".dca-factory/evidence/STORY-1/journal.tsv",
                                               "t\tstage-start\tplan\ttool=x\nt\tstage-end\tplan\texit=0\n"
                                               "t\tstage-start\ttest\ttool=x\n")))
         rows, nxt, wait, output = schedule_of(args.gate, root)
@@ -5400,11 +5427,11 @@ def run_groups(args):
                 digest_old = hashlib.sha256(old_page.encode("utf-8")).hexdigest()
                 unit = os.path.join(root, "src/test/java/com/example/WidgetUnitTest.java")
                 digest_unit = hashlib.sha256(open(unit, "rb").read()).hexdigest()
-                write_file(root, ".dca-factory/runs/STORY-1/.tests-red",
+                write_file(root, ".dca-factory/evidence/STORY-1/.tests-red",
                            f"com.example.WidgetPageTest#showsTheThing\t{digest_old}\n"
                            f"com.example.WidgetUnitTest#showsNothingWhenEmpty\t{digest_unit}\n")
                 code, output = run_gate(args.gate, root, "test")
-                ledger = open(os.path.join(root, ".dca-factory/runs/STORY-1/.tests-red"), encoding="utf-8").read()
+                ledger = open(os.path.join(root, ".dca-factory/evidence/STORY-1/.tests-red"), encoding="utf-8").read()
                 return code, output, ledger
         code, output, ledger = strengthened(None)
         expectations.append(("judge sent back: a test changed after its build met it, green without a break, is refused "
@@ -5460,7 +5487,7 @@ def run_groups(args):
                 subprocess.run([sys.executable, args.gate, "--record-base", "--story", "STORY-1"], cwd=root, capture_output=True)
                 write_file(root, "src/main/Thing.java", "class Thing {}\n")
                 write_file(root, "src/main/State.java", "enum State { OPEN }\n")
-                write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv",
+                write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv",
                            "2026-09-29T14:05:22.000Z\tstage-start\tbuilder\ttool=claude\n")
                 rows = "".join(f"| `{p}` | new |\n" for p in listed)
                 write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Changed\n| File | Why |\n|---|---|\n" + rows)
@@ -5487,7 +5514,7 @@ def run_groups(args):
                              and "tests-green" in passes[0] and "gate:pass story STORY-1 stage build" in lines,
                              lines[:6]))
         write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Criteria\n")
-        write_file(root, ".dca-factory/runs/STORY-1/.verify/changed-build.txt", "added\tsrc/main/Thing.java\n")
+        write_file(root, ".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\n")
         done = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "build", "--brief"],
                               cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
         lines = (done.stdout + done.stderr).splitlines()
@@ -5584,7 +5611,7 @@ def run_groups(args):
         run_folder = os.path.join(root, ".dca-factory", "runs", "STORY-1")
         os.remove(os.path.join(run_folder, "document.md"))
         write_file(root, "src/main/Thing.java", "class Thing {}\n")
-        write_file(root, ".dca-factory/runs/STORY-1/.verify/changed.txt",
+        write_file(root, ".dca-factory/evidence/STORY-1/changed.txt",
                    "added\tsrc/main/Thing.java\nremoved\tsrc/main/Gone.java\n")
         def skeleton():
             done = subprocess.run([sys.executable, cli_of(args.gate), "--document-skeleton", "STORY-1"], cwd=root,
@@ -5672,7 +5699,7 @@ def run_groups(args):
              err.splitlines()[:1] == c.splitlines()[:1], err),
         ]
         # follow: the stage in flight, one line per tool call — a cut stream is running, a result ends it
-        verify_dir = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify")
+        verify_dir = os.path.join(root, ".dca-factory", "evidence", "STORY-1")
         os.makedirs(verify_dir)
         shutil.copy(cut_out, os.path.join(verify_dir, "builder.000001.out"))
         follow = lambda *a: subprocess.run([sys.executable, args.cli, "--follow", "--once", *a], cwd=root,
@@ -5803,7 +5830,7 @@ def run_groups(args):
                 response("2026-09-23T10:09:00.000Z", "m9", 999)]) + "\n")          # after it
         with open(os.path.join(log_dir, session, "subagents", "agent-a.jsonl"), "w", encoding="utf-8") as handle:
             handle.write(response("2026-09-23T10:02:00.000Z", "a1", 7) + "\n")
-        journal = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "journal.tsv")
+        journal = os.path.join(root, ".dca-factory", "evidence", "S-1", "journal.tsv")
         os.makedirs(os.path.dirname(journal))
         with open(journal, "w", encoding="utf-8") as handle:
             handle.write("2026-09-23T10:00:30.000Z\tstage-start\tplan\ttool=claude-session\n")
@@ -5930,7 +5957,7 @@ def run_groups(args):
         backlog_project(root, ("STORY-2", []), extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_ASKING),
             ("project/epics/sample/STORY-1/decisions/01.md", DECISION),
-            (".dca-factory/runs/STORY-2/.verify/journal.tsv",
+            (".dca-factory/evidence/STORY-2/journal.tsv",
              "2026-09-23T10:00:00Z\tstage-start\tplan\ttool=x\n2026-09-23T10:01:00Z\tstage-end\tplan\texit=0\n"
              "2026-09-23T10:01:00Z\tusage\tplan\ttool=x\tmodel=m\tinput=10\tcache_read=0\tcache_write=0\toutput=90\tcost=0.01\n"
              "2026-09-23T10:02:00Z\tstage-start\ttest\ttool=x\n")))
@@ -6024,7 +6051,7 @@ def run_groups(args):
         ]
     for root in throwaway():
         # switched off: the gate records the stage and reads no session log
-        journal = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "journal.tsv")
+        journal = os.path.join(root, ".dca-factory", "evidence", "S-1", "journal.tsv")
         os.makedirs(os.path.dirname(journal))
         with open(journal, "w", encoding="utf-8") as handle:
             handle.write("2026-09-23T10:00:30.000Z\tstage-start\tplan\ttool=claude-session\n")
@@ -6056,7 +6083,7 @@ def run_groups(args):
             handle.write(entry("2026-09-23T10:02:00.000Z", 7) + "\n")
         with open(os.path.join(day, "rollout-2026-09-23T10-00-00-other-999.jsonl"), "w", encoding="utf-8") as handle:
             handle.write("not json — a log that must not be opened\n")
-        journal = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "journal.tsv")
+        journal = os.path.join(root, ".dca-factory", "evidence", "S-1", "journal.tsv")
         os.makedirs(os.path.dirname(journal))
         with open(journal, "w", encoding="utf-8") as handle:
             handle.write("2026-09-23T10:01:00.000Z\tstage-start\tplan\ttool=codex-session\n"
@@ -6067,7 +6094,7 @@ def run_groups(args):
                              plan.get("runs") == 1 and plan.get("measured") == 1 and plan.get("output") == 7, plan))
     for root in throwaway():
         # a union merge: one branch read the window, the other still points at the log; lines interleave
-        journal = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "journal.tsv")
+        journal = os.path.join(root, ".dca-factory", "evidence", "S-1", "journal.tsv")
         os.makedirs(os.path.dirname(journal))
         window = "window=2026-09-23T10:00:00.000Z/2026-09-23T10:05:00.000Z"
         with open(journal, "w", encoding="utf-8") as handle:
@@ -6147,7 +6174,7 @@ def run_groups(args):
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         backlog_project(root, ("STORY-2", []), extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
-            (".dca-factory/runs/STORY-1/.verify/journal.tsv", f"{now}\tstage-start\ttest\ttool=x\n"),))
+            (".dca-factory/evidence/STORY-1/journal.tsv", f"{now}\tstage-start\ttest\ttool=x\n"),))
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: a stage that started and has not ended is running, and nothing else starts",
                              rows.get("STORY-1", ("",))[0] == "running" and nxt.startswith("none")
@@ -6166,7 +6193,7 @@ def run_groups(args):
                              text=True, encoding="utf-8")
         expectations.append(("claim: a session's stage mark is refused while another worker holds the checkout",
                              out.returncode == 3 and not os.path.exists(
-                                 os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")), out.stdout))
+                                 os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")), out.stdout))
     for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
@@ -6301,7 +6328,7 @@ def run_groups(args):
                 subprocess.run(["git", *command], cwd=root, capture_output=True)
             subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
-            baseline = os.path.isfile(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".tests-baseline"))
+            baseline = os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".tests-baseline"))
             if change is None:
                 os.remove(os.path.join(root, unit))
             else:
@@ -6357,7 +6384,7 @@ def run_groups(args):
             subprocess.run(["git", *command], cwd=root, capture_output=True)
         subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
-        baseline = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".tests-baseline")
+        baseline = os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".tests-baseline")
         with open(baseline, encoding="utf-8") as handle:
             text = re.sub(r"^[0-9a-f]{40}", "0" * 40, handle.read(), flags=re.M)
         with open(baseline, "w", encoding="utf-8") as handle:
@@ -6476,7 +6503,8 @@ def run_groups(args):
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: a refused gate sends its story back to that stage",
                              rows.get("STORY-1") == ("in-progress", "build"), rows.get("STORY-1")))
-        with open(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".rounds"), "w", encoding="utf-8") as handle:
+        os.makedirs(os.path.join(root, ".dca-factory", "evidence", "STORY-1"), exist_ok=True)
+        with open(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".rounds"), "w", encoding="utf-8") as handle:
             handle.write("3\n")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: three rounds stop the story, and nothing waits for them",
@@ -6520,7 +6548,7 @@ def run_groups(args):
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         session = "0e0e0e0e-aaaa-bbbb-cccc-343434343434"
         stamp = lambda ago: time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - ago))
-        write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv",
+        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv",
                    f"{stamp(900)}\tusage\tdocument\ttool=claude-session\twindow={stamp(1200)}/{stamp(900)}"
                    f"\tsession=claude:{session}\n"
                    f"{stamp(60)}\tusage\tjudge\ttool=claude-session\twindow={stamp(120)}/{stamp(60)}"
@@ -6531,7 +6559,7 @@ def run_groups(args):
                 "output_tokens": 5}}}) + "\n" for ago in (1000, 90)))
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
         subprocess.run([sys.executable, args.cli, "--release", "nobody"], cwd=root, env=env, capture_output=True)
-        journal = open(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv"), encoding="utf-8").read()
+        journal = open(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv"), encoding="utf-8").read()
         document_line = next((l for l in journal.splitlines() if "\tdocument\t" in l), "")
         judge_line = next((l for l in journal.splitlines() if "\tjudge\t" in l), "")
         expectations.append(("usage: a release freezes a story's settled last window into its journal, and "
@@ -6544,7 +6572,7 @@ def run_groups(args):
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         session = "0f0f0f0f-aaaa-bbbb-cccc-121212121212"
         started = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - 120))
-        write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv", f"{started}\tstage-start\tbuild\ttool=claude-session\n")
+        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv", f"{started}\tstage-start\tbuild\ttool=claude-session\n")
         write_file(home, f"projects/-any-project/{session}.jsonl", json.dumps({"type": "assistant", "message": {
             "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "./gradlew test --rerun"}}]}}) + "\n")
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
@@ -6590,7 +6618,7 @@ def run_groups(args):
         # a shared builder that stopped on the plan's question, then ran again: the second window is the
         # question's, not a repeat a gate refused — the record names `stage: plan`, the window is `builder`
         build_project(root, **with_decisions(("STORY-1-01", DECISION + ANSWER)))
-        write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv",
+        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv",
                    "2026-09-28T10:00:00.000Z\tstage-start\tbuilder\ttool=claude-session\n"
                    "2026-09-28T10:05:00.000Z\tstage-end\tbuilder\texit=0\n"
                    "2026-09-28T10:20:00.000Z\tstage-start\tbuilder\ttool=claude-session\n"
@@ -6627,7 +6655,7 @@ def run_groups(args):
         # `selector<TAB>digest`, the build's `## Changed` table with its paths in plain cells
         backlog_project(root, extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED), (".dca-factory/runs/STORY-1/tests.md", TESTS),
-            (".dca-factory/runs/STORY-1/.tests-red", "".join(f"{sel}\t{'a' * 64}\n" for sel in both_green))))
+            (".dca-factory/evidence/STORY-1/.tests-red", "".join(f"{sel}\t{'a' * 64}\n" for sel in both_green))))
         observed = subprocess.run([sys.executable, os.path.join(HERE, "observe.py"), "--story", "STORY-1",
                                    "--json"], cwd=root, capture_output=True, text=True, encoding="utf-8",
                                   errors="replace")
@@ -6741,7 +6769,7 @@ def run_groups(args):
             h.write("- answered: eight products (a-human, STORY-1-accept-1).\n")
         taken = cli_run(root, "--reopen", "STORY-1")
         rows, _n, _w, _ = schedule_of(args.gate, root)
-        first_pass = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "pass-1")
+        first_pass = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "pass-1")
         kept = os.path.isfile(os.path.join(first_pass, "document.md")) and os.path.isfile(os.path.join(first_pass, "plan.md")) \
             and not os.path.exists(os.path.join(root, ".dca-factory", "runs", "STORY-1", "plan.md"))
         expectations.append(("reopen: only with an answered correction the story cites; then the story no longer says "
@@ -6937,10 +6965,10 @@ def run_groups(args):
                              stopped[0] == "stopped" and rows.get("STORY-1") == ("in-progress", "plan"),
                              f"before {stopped}, after {rows.get('STORY-1')}"))
     for root in throwaway():
-        os.makedirs(os.path.join(root, ".dca-factory", "runs", "S-1", ".verify"))
-        journal = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "journal.tsv")
+        os.makedirs(os.path.join(root, ".dca-factory", "evidence", "S-1"))
+        journal = os.path.join(root, ".dca-factory", "evidence", "S-1", "journal.tsv")
         line = "2026-01-01T00:00:00Z\tusage\tbuild\ttool=claude-session\twindow=2026-01-01T00:00:00Z/2026-01-01T00:01:00Z\tsession=claude:abc\n"
-        write_file(root, ".dca-factory/runs/S-1/.verify/journal.tsv", "2026-01-01T00:00:00Z\tstage-start\tbuild\ttool=claude-session\n" + line)
+        write_file(root, ".dca-factory/evidence/S-1/journal.tsv", "2026-01-01T00:00:00Z\tstage-start\tbuild\ttool=claude-session\n" + line)
         before = open(journal, encoding="utf-8").read()
         home = os.path.join(root, "home")
         write_file(home, "projects/p/abc.jsonl", json.dumps({"timestamp": "2026-01-01T00:00:30Z", "type": "assistant",
@@ -6976,7 +7004,7 @@ def run_groups(args):
         with open(os.path.join(root, ".dca-factory", "runs", "S-1", "build.md"), "w", encoding="utf-8") as handle:
             handle.write("## Files\n")                      # a run artefact: never part of the change
         mark("end")
-        folder = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify")
+        folder = os.path.join(root, ".dca-factory", "evidence", "S-1")
         read = lambda name: open(os.path.join(folder, name), encoding="utf-8").read() if os.path.isfile(
             os.path.join(folder, name)) else ""
         expectations += [
@@ -6995,9 +7023,9 @@ def run_groups(args):
     marker = lambda cwd, stage, edge: subprocess.run(
         [sys.executable, args.gate, f"--stage-{edge}", stage, "--story", "S-1"], cwd=cwd, capture_output=True,
         text=True, encoding="utf-8", env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
-    rows_of = lambda cwd, name: sorted(open(os.path.join(cwd, ".dca-factory", "runs", "S-1", ".verify", name),
+    rows_of = lambda cwd, name: sorted(open(os.path.join(cwd, ".dca-factory", "evidence", "S-1", name),
                                             encoding="utf-8").read().splitlines()) \
-        if os.path.isfile(os.path.join(cwd, ".dca-factory", "runs", "S-1", ".verify", name)) else []
+        if os.path.isfile(os.path.join(cwd, ".dca-factory", "evidence", "S-1", name)) else []
     for root in throwaway():
         for name in ("A", "B", "D"):
             write_file(root, f"src/{name}.txt", name.lower() + "\n")
@@ -7025,7 +7053,7 @@ def run_groups(args):
         marker(root, "plan", "start")                                 # the stage runs again
         write_file(root, "src/F.txt", "second pass\n")
         marker(root, "plan", "end")
-        diff = open(os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "story.diff"), encoding="utf-8").read()
+        diff = open(os.path.join(root, ".dca-factory", "evidence", "S-1", "story.diff"), encoding="utf-8").read()
         expectations.append(("changes: a stage run again keeps the first pass in the story's record and diff",
                              rows_of(root, "changed.txt") == ["added\tsrc/E.txt", "added\tsrc/F.txt"]
                              and "first pass" in diff, rows_of(root, "changed.txt")))
@@ -7038,7 +7066,7 @@ def run_groups(args):
         write_file(root, "project/src/A.txt", "a, changed\n")
         write_file(root, "other/X.txt", "x, outside the project\n")
         marker(project, "build", "end")
-        diff = open(os.path.join(project, ".dca-factory", "runs", "S-1", ".verify", "story.diff"), encoding="utf-8").read()
+        diff = open(os.path.join(project, ".dca-factory", "evidence", "S-1", "story.diff"), encoding="utf-8").read()
         expectations.append(("changes: a project inside a larger repository gets its own paths, and nothing "
                              "outside it", rows_of(project, "changed-build.txt") == ["modified\tsrc/A.txt"]
                              and rows_of(project, "changed.txt") == ["modified\tsrc/A.txt"]
@@ -7049,7 +7077,7 @@ def run_groups(args):
                                            cwd=root, capture_output=True, text=True, encoding="utf-8",
                                            env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
         mark("start"); mark("end")
-        diff = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "story.diff")
+        diff = os.path.join(root, ".dca-factory", "evidence", "S-1", "story.diff")
         expectations.append(("changes: outside a repository there is no diff, and the file says so",
                              os.path.isfile(diff) and "no diff" in open(diff, encoding="utf-8").read(), ""))
 
@@ -7135,7 +7163,7 @@ def run_groups(args):
         started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         backlog_project(root, story=delivered_story(STORY),
                         extra_sources=((".dca-factory/runs/STORY-1/document.md", "# Document\n"),
-                                             (".dca-factory/runs/STORY-1/.verify/journal.tsv",
+                                             (".dca-factory/evidence/STORY-1/journal.tsv",
                                               f"{started}\tstage-start\ttidy\ttool=claude\n")))
         rows, nxt, _w, listing = schedule_of(args.gate, root)
         shown = subprocess.run([sys.executable, args.cli, "--status"], cwd=root, capture_output=True,
@@ -7387,6 +7415,7 @@ STAND_IN_WORKTREE = """#!/bin/sh
 echo "$FACTORY_STORY $FACTORY_STAGE $(pwd -P)" >> "$FIXTURE_LOG"
 [ "$FACTORY_STAGE" = plan ] && printf '%s' "$FACTORY_PROMPT" > "$FIXTURE_LOG.prompt"
 d=".dca-factory/runs/$FACTORY_STORY"
+e=".dca-factory/evidence/$FACTORY_STORY"
 rec="project/epics/sample/$FACTORY_STORY/decisions/01.md"
 mkdir -p "$d"
 case "$FACTORY_STAGE" in
@@ -7403,7 +7432,7 @@ case "$FACTORY_STAGE" in
     printf '## Changed\\n\\n## Files\\n- `src/main/%s.txt` — changes\\n' "$FACTORY_STORY" > "$d/build.md"
     [ "${FIXTURE_SHARED:-1}" = 1 ] && printf -- '- `src/main/shared.txt` — changes\\n' >> "$d/build.md"
     # a later round adapts the story to what the main line brought: the profile's compile wants it
-    if [ -f "$d/.gate-integrate.txt" ] || ls "$d"/.verify/gate-integrate.* >/dev/null 2>&1; then
+    if [ -f "$d/.gate-integrate.txt" ] || ls "$e"/gate-integrate.* >/dev/null 2>&1; then
       : > src/main/adapted; printf -- '- `src/main/adapted` — changes\\n' >> "$d/build.md"
     fi
     if [ "$FACTORY_STORY" = "${FIXTURE_ASKS:-}" ] && [ ! -f "$rec" ]; then
@@ -7417,7 +7446,7 @@ case "$FACTORY_STAGE" in
   judge) printf '## Verdict\\nverdict: pass\\n' > "$d/judge.md" ;;
   document) printf '## Glossary\\n' > "$d/document.md" ;;
   integrate)
-    for f in $(cat "$d/.verify/conflicts"); do
+    for f in $(cat "$e/conflicts"); do
       grep -v -e '^<<<<<<< ' -e '^=======$' -e '^>>>>>>> ' "$f" > "$f.resolved"; mv "$f.resolved" "$f"
     done
     printf '# Integrate\\n\\n| File | The story changed | The main line changed | How both hold |\\n|---|---|---|---|\\n' > "$d/integrate.md" ;;
@@ -7597,7 +7626,7 @@ def verify_worktrees(runner, verbose=False):
               "the worktree as a round, and the story is integrated after it",
               code == 0 and story_delivered(root, "STORY-1") and len(builds) == 3
               and "gate 'integrate' refused the story on the main line" in output
-              and read(root, ".dca-factory/runs/STORY-1/.rounds").strip() == "1"
+              and read(root, ".dca-factory/evidence/STORY-1/.rounds").strip() == "1"
               and os.path.isfile(os.path.join(root, "src/main/adapted")),
               f"exit {code}; builds {len(builds)}; {output.strip().splitlines()[-8:]}")
 

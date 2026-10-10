@@ -27,7 +27,7 @@ Two processes may carry several stages under one window name in the journal and 
 record: the shared builder (`builder`: plan, test, build, tidy) and the shared verifier (`verifier`: judge,
 document). Every stage still writes its own file; the gate reads a window as the stages it carries.
 
-## What changed — `.dca-factory/runs/<story>/.verify/changed-<stage>.txt`, `changed.txt`, `story.diff`
+## What changed — `.dca-factory/evidence/<story>/changed-<stage>.txt`, `changed.txt`, `story.diff`
 
 The pipeline records what a story changes; no stage reconstructs it. Around every stage the
 runner — or `--stage-start`/`--stage-end` in a session — snapshots the working tree (every file git
@@ -50,7 +50,7 @@ In a table only the first cell names a file; the other cells say why, and a back
 there is prose. A stage that changed no file (a tidy with nothing to tidy) needs no such section.
 The next stages open these files first and search the tree only for what they do not answer.
 
-`.dca-factory/runs/<story>/.tests-red` records which selectors the test stage actually saw fail. The build gate
+`.dca-factory/evidence/<story>/.tests-red` records which selectors the test stage actually saw fail. The build gate
 requires each green test to appear in it, because a runner that matched **no** test exits 0 exactly
 like a passing one: without the record, a criterion with a mistyped or misplaced test would be
 certified green. When the file is absent altogether — the run artefacts need not be committed — the
@@ -68,12 +68,12 @@ instead: `.dca-factory/runs/<story>/breaks/<Class>--<method>.patch`, applied to 
 project, must turn it red (`break-proof`, the same proof an adoption gives for a test it wrote); the red
 record then holds the test's new version, so the build gate's `red-proof` accepts it.
 
-`.dca-factory/runs/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
+`.dca-factory/evidence/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
 the orchestrator remembers, because an in-session run has no other honest way to count and a
 resumed run must see the same number. At three the run stops. A refusal on `gate:fail environment` (a
 profile command's program missing on the gate's PATH) counts no round. A person's `factory.sh run
 --story <id> --from <stage>` starts a new count: the runner moves the file to
-`.dca-factory/runs/<story>/.verify/rounds.<UTC time>` and writes a `rounds-reset` line into the journal.
+`.dca-factory/evidence/<story>/rounds.<UTC time>` and writes a `rounds-reset` line into the journal.
 
 A mapped test is run with the profile command that **covers the file it was found in** — the
 end-user tests and the unit tests usually live in different projects or source sets, and a selector
@@ -82,18 +82,21 @@ so instead of guessing.
 
 ## One owner per place — the story carries its state, the run folder is protocol
 
-`.dca-factory/runs/<story>/` holds what a run produces: the hand-overs, the marks (`.story-digest`,
-`.tests-red`, `.tests-baseline`, `.rounds`, a gate's refusal), the journal and the snapshots under
-`.verify/`. Nothing the factory needs *after* a run lives there. Whether a story is delivered stands
+`.dca-factory/runs/<story>/` holds what the stages hand over: the hand-overs, their skeletons, a gate's
+refusal. What proves a stage's work lies beside it, in `.dca-factory/evidence/<story>/`: the marks
+(`.story-digest`, `.tests-red`, `.tests-baseline`, `.rounds`), the journal, the snapshots, the changed-files
+records, the base tree and the tools' output. The gate and the runner write the evidence folder; a stage reads
+it and never writes there — the runner names it to no tool as a folder to write. Nothing the factory needs
+*after* a run lives in either. Whether a story is delivered stands
 in the story itself: the document gate — or the adopt gate — writes `status: delivered` and
 `delivered: <UTC time>` into its front matter when it passes (an adopted story keeps `status: adopted`
 and gains the date). No stage, no skill and no person writes those two lines; `draft → approved` is
 the person's, `→ delivered` the gate's. The plan gate's story digest leaves the two lines out, so a
 delivery never reads as "the story changed after it was planned". A reopen (`--reopen`, on an answered
 correction the story cites) takes them out again and moves the delivered pass's hand-overs to
-`.verify/pass-<n>/`, so the first pass stays readable beside the next.
+`.dca-factory/evidence/<story>/pass-<n>/`, so the first pass stays readable beside the next.
 
-`.verify/suites.tsv` is the runner's record of the suite runs its own gates made: one row per passing
+`.dca-factory/evidence/<story>/suites.tsv` is the runner's record of the suite runs its own gates made: one row per passing
 invocation — the tree it ran on (a digest of the sources, the run folder and the tools' folders left
 out), the invocation, its exit code, what the reports said ran, and a signature under a key the runner
 hands to its gate processes alone. A later runner gate on the same tree reads its own rows instead of
@@ -136,7 +139,7 @@ the file:
 - Every hand-over says what the next stage needs and nothing a reader has elsewhere: the plan lists the
   criteria by key and level, not by the story's text (`factory-cli.py --plan-skeleton <story>` writes the
   headings and the keys); a change row cites one node; no hand-over records the gate's outcome — the gate's
-  report under `.verify/` is the evidence, and a stage edits no hand-over after the gate ran. `--contract <stage>`
+  report in `.dca-factory/evidence/<story>/` is the evidence, and a stage edits no hand-over after the gate ran. `--contract <stage>`
   names each file's measure — a base plus a share per criterion — and the gate notes a larger file
   (`gate:note size`), never refuses it.
 - The `## Files` list (the build's `## Changed` and the tidy's `## Moves` table's first column) is written
@@ -157,7 +160,7 @@ the file:
 ## A story's worktree — `.dca-factory/worktrees/<story>/`
 
 The runner gives every story a git worktree of its own, on a branch `story/<id>` made from the main
-checkout's branch, which `.dca-factory/runs/<story>/.verify/target` records. Every stage runs there and
+checkout's branch, which `.dca-factory/evidence/<story>/target` records. Every stage runs there and
 changes code there alone. What is state stays in the main checkout, and the worktree sees it through links
 (on Windows junctions): the epics with the stories and their records, the run folder, the discovery
 reports, the installed pipeline and the tools' skill folders; the product, technical and domain description
@@ -170,7 +173,7 @@ delivered yet: the gate says `integrate` and the runner integrates it, one story
 `.dca-factory/integrate.lock`. It commits the story's code on its branch, merges the target in and squashes
 the whole to one commit, `feat(<context>): <title>` (`test(…)` for an adoption or a journey) with `Story:
 <id>` in its body; factory commits carry `--no-verify`, because the integrate gate holds the tree to more than
-the hook does. Where the merge stops, the conflicted files are listed in `.verify/conflicts` and the
+the hook does. Where the merge stops, the conflicted files are listed in `.dca-factory/evidence/<story>/conflicts` and the
 `stage-integrate` agent resolves them in the worktree, writing `.dca-factory/runs/<story>/integrate.md` (`| File |
 The story changed | The main line changed | How both hold |`); the runner commits the resolution. The
 integrate gate (`--stage integrate`) then checks the tree as it now is — no unmerged path, no conflict marker
@@ -179,7 +182,7 @@ again), the story's tests green, the required suites, `architecture` and `format
 checkout's branch to the commit. Only then does it write `status: delivered`; a main checkout on another branch,
 or with a change of its own in a file the commit touches, is refused (`checkout`) and the story stops until
 `factory.sh run --story <id> --from integrate`. A refusal of the checks goes back to the build stage as a round, and
-the document stage writes its file anew (the earlier one stays as `.verify/document.before-integrate.md`).
+the document stage writes its file anew (the earlier one stays as `.dca-factory/evidence/<story>/document.before-integrate.md`).
 Delivered, the worktree and the branch go. A story set `superseded` with a worktree, or a worktree whose id no story
 has any more, loses both when the runner next starts; nothing of it reaches the main line.
 
@@ -295,7 +298,7 @@ What this does not do, on purpose: no leases, no revision numbers, no stale-answ
 the story changes underneath, no authorisation beyond `by:`. Files writable by the same user give
 process guarantees, not security ones.
 
-## Tests that existed before the story — `.dca-factory/runs/<story>/.tests-baseline`
+## Tests that existed before the story — `.dca-factory/evidence/<story>/.tests-baseline`
 
 The plan gate runs before any stage of a story touches a test. In a git repository it records every
 test file — found by name: `test_*.py`, `*Test.java`, `*Tests.cs`, `*IT.java`, `*.spec.ts`,

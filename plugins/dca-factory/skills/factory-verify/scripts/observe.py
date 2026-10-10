@@ -217,7 +217,7 @@ def locate(project, selector):
 def observe(project, runs, epics, story_id):
     report = Report()
     run_dir = os.path.join(project, runs, story_id)
-    journal_dir = os.path.join(run_dir, ".verify")
+    journal_dir = _gate.evidence_dir(os.path.join(project, runs), story_id)
 
     if not os.path.isdir(run_dir):
         report.finding("run", f"no run artefacts at {os.path.join(runs, story_id)} — nothing to observe")
@@ -262,7 +262,7 @@ def observe(project, runs, epics, story_id):
             report.ok("criteria", f"all {len(story_keys)} criterion keys map, verbatim")
 
     # --- 3. red before, green after — from the gate, not from a claim ----
-    ledger = read(os.path.join(run_dir, ".tests-red"))
+    ledger = read(os.path.join(journal_dir, ".tests-red"))
     # One line per selector, `selector<TAB>sha256 of its test file` — the gate binds a red proof to
     # the version of the test that failed; an older ledger has the selector alone.
     recorded = {line.split("\t", 1)[0].strip() for line in (ledger or "").splitlines() if line.strip()}
@@ -294,7 +294,7 @@ def observe(project, runs, epics, story_id):
                 if re.match(rf"story\s+{re.escape(story_id)}\s+stage\s+\w+$", detail):
                     continue
                 report.finding("gate", f"{name.split('.')[0]} reported: {detail}",
-                               f"{runs}/{story_id}/.verify/{name}")
+                               os.path.join(_gate.evidence_dir(runs, story_id), name).replace(os.sep, "/"))
             skipped = [l.strip()[10:] for l in text.splitlines() if l.startswith("gate:skip")]
             for entry in skipped:
                 report.blind("gate", f"{name.split('.')[0]} skipped: {entry}")
@@ -447,7 +447,7 @@ def observe(project, runs, epics, story_id):
             report.ok("carriers", f"{key}: {value} appears in the stage's own account")
 
     # --- 9. fall-backs, rounds, escalations ------------------------------
-    rounds = (read(os.path.join(run_dir, ".rounds")) or "").strip()
+    rounds = (read(os.path.join(journal_dir, ".rounds")) or "").strip()
     if rounds and rounds != "0":
         report.blind("rounds", f"the build/judge loop ran {rounds} extra round(s) — read judge.md for why")
     for name, text in present.items():

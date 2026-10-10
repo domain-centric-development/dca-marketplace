@@ -468,7 +468,7 @@ def mark_window(cwd, runs, story_id, name, edge, session_log=None):
     if name not in WINDOWS:
         print(f"window: {name!r} is none of {', '.join(WINDOWS)}")
         return 2
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     os.makedirs(os.path.dirname(journal), exist_ok=True)
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
@@ -501,7 +501,7 @@ def mark_window(cwd, runs, story_id, name, edge, session_log=None):
 
 def mark_stage(cwd, runs, story_id, stage, edge, session_log=None):
     """`--stage-start`/`--stage-end` for a stage run inside a session: the same journal the runner writes."""
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     os.makedirs(os.path.dirname(journal), exist_ok=True)
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
@@ -609,7 +609,7 @@ def freeze_all(runs):
     start of its own ever comes back to freeze them; the next command that writes anyway — a stage
     of another story, a claim, a release, a listening loop's look — does it for them. Never fails
     the command it rides on."""
-    for journal in glob.glob(os.path.join(runs, "*", ".verify", "journal.tsv")):
+    for journal in glob.glob(os.path.join(evidence_dir(runs, "*"), "journal.tsv")):
         with contextlib.suppress(OSError, GateError, ValueError):
             freeze_windows(journal)
 
@@ -651,7 +651,7 @@ def journal_usage(runs, story_id, resolve=True):
     """{stage: {invocations, measured, input, cache_read, cache_write, output, cost}} from the journal.
 
     `resolve=False` counts only what the journal carries itself, without opening a session log."""
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     stages = {}
     if not os.path.isfile(journal):
         return stages
@@ -726,11 +726,17 @@ def facts_model(cwd, runs, story_id):
                 priced=facts["priced"] > 0)
 
 
+def run_stories(runs):
+    """Every story with a run folder or an evidence folder — a story's journal outlives its deleted run folder."""
+    folders = (runs, evidence_dir(runs))
+    return sorted({d for root in folders if os.path.isdir(root) for d in os.listdir(root)
+                   if os.path.isdir(os.path.join(root, d))})
+
+
 def usage_report(runs, story_filter=None, total_only=False, cwd=".", epics=None, fmt="text"):
     """Tokens by class, as the status shows them: one story's stages, or every story by epic."""
     epics = epics or place("epics")
-    stories = sorted(d for d in os.listdir(runs) if os.path.isdir(os.path.join(runs, d))) \
-        if os.path.isdir(runs) else []
+    stories = run_stories(runs)
     if story_filter:
         stories = [s for s in stories if s == story_filter]
     if total_only:
@@ -906,10 +912,8 @@ def running_stages(runs):
     The journal knows that a stage began, not whether its process is still alive: a stage whose
     runner was killed reads the same, which is why the start time is shown with it."""
     found = []
-    if not os.path.isdir(runs):
-        return found
-    for story in sorted(os.listdir(runs)):
-        journal = os.path.join(runs, story, ".verify", "journal.tsv")
+    for story in run_stories(runs):
+        journal = os.path.join(evidence_dir(runs, story), "journal.tsv")
         if not os.path.isfile(journal):
             continue
         open_stage = None
@@ -1362,7 +1366,7 @@ def tokens_text(tokens, measured=True):
 
 def journal_events(runs, story_id):
     """[(time, kind, stage, fields)] of a story's journal, by time — a union merge interleaves lines."""
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     if not os.path.isfile(journal):
         return []
     events = []
@@ -1527,7 +1531,7 @@ def status_model(cwd, epics, runs, live=False):
         done = story["state"] == "delivered"
         stage = "" if done else next((st for sid, st, _t in running_stages(runs) if sid == story_id),
                                      story.get("start") or "")
-        journal = os.path.isfile(os.path.join(runs, story_id, ".verify", "journal.tsv"))
+        journal = os.path.isfile(os.path.join(evidence_dir(runs, story_id), "journal.tsv"))
         rows.append(dict(journal=journal, done=done, epic=story.get("epic", ""), story=story_id,
                          title=story.get("title", ""), mark=mark,
                          state=words, stage=stage or "—", passes=len(facts["passes"]) or 0,
@@ -2170,7 +2174,7 @@ def window_parts(runs, story_id, window):
     [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or None), denied}]."""
     order = SHARED_WINDOWS.get(window, ())
     total = {}
-    for path in sorted(glob.glob(os.path.join(runs, story_id, ".verify", f"{window}.*.out"))):
+    for path in sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), f"{window}.*.out"))):
         parts, cost = stream_parts(path)
         weight = sum(p["weight"] for p in parts)
         denied = [d["stage"] for d in stream_denials(path)]
@@ -2200,7 +2204,7 @@ def window_parts(runs, story_id, window):
 
 def window_part_now(runs, story_id, window):
     """The stage a running shared window is in, from its newest stream — '' when it has not loaded one."""
-    outs = sorted(glob.glob(os.path.join(runs, story_id, ".verify", f"{window}.*.out")))
+    outs = sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), f"{window}.*.out")))
     if not outs:
         return ""
     parts, _cost = stream_parts(max(outs, key=os.path.getmtime))
@@ -2258,7 +2262,7 @@ def story_model(cwd, epics, runs, story_id, live=False):
             facts["stages"][window]["parts"] = window_parts(runs, story_id, window)
     # the calls a stage was denied: each a turn spent on another way
     for stage, entry in facts["stages"].items():
-        entry["denials"] = [d for path in sorted(glob.glob(os.path.join(runs, story_id, ".verify", f"{stage}.*.out")))
+        entry["denials"] = [d for path in sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), f"{stage}.*.out")))
                             for d in stream_denials(path)]
         entry["denied"] = len(entry["denials"])
         if entry["denied"]:
@@ -2520,22 +2524,23 @@ def reopen(cwd, runs, epics, story_id):
 
 
 def keep_pass(folder):
-    """Before a story runs again from plan: its hand-overs, marks and refusals go to `.verify/pass-<n>/`, with the
-    base tree the pass's diff was taken against — the next pass records its own. The journal and the tree
-    snapshots stay where they are; the history continues. Returns the folder, or None without a run folder."""
+    """Before a story runs again from plan: its hand-overs and refusals, and the marks of the pass (`PASS_MARKS`, the
+    base tree the pass's diff was taken against among them), go to `<evidence>/<story>/pass-<n>/` — the next pass
+    records its own. The journal and the tree snapshots stay where they are; the history continues. Returns the
+    folder, or None without a run folder."""
     if not os.path.isdir(folder):
         return None
-    verify = os.path.join(folder, ".verify")
-    os.makedirs(verify, exist_ok=True)
-    number = 1 + sum(1 for name in os.listdir(verify) if name.startswith("pass-"))
-    target = os.path.join(verify, f"pass-{number}")
+    folder = os.path.normpath(folder)
+    evidence = evidence_dir(os.path.dirname(folder), os.path.basename(folder))
+    os.makedirs(evidence, exist_ok=True)
+    number = 1 + sum(1 for name in os.listdir(evidence) if name.startswith("pass-"))
+    target = os.path.join(evidence, f"pass-{number}")
     os.makedirs(target)
     for name in sorted(os.listdir(folder)):
-        if name != ".verify":
-            os.replace(os.path.join(folder, name), os.path.join(target, name))
-    base = os.path.join(verify, "base-tree")
-    if os.path.isfile(base):
-        os.replace(base, os.path.join(target, "base-tree"))
+        os.replace(os.path.join(folder, name), os.path.join(target, name))
+    for name in PASS_MARKS:
+        if os.path.isfile(os.path.join(evidence, name)):
+            os.replace(os.path.join(evidence, name), os.path.join(target, name))
     return target
 
 
@@ -2626,7 +2631,7 @@ def link_places(path, home, runs):
     copied = []
     for rel in folders:
         source, link = os.path.join(home, rel), os.path.join(path, rel)
-        if os.path.abspath(source) == os.path.abspath(runs):
+        if os.path.abspath(source) in (os.path.abspath(runs), os.path.abspath(evidence_dir(runs))):
             os.makedirs(source, exist_ok=True)
         if not os.path.isdir(source):
             continue
@@ -2652,7 +2657,7 @@ def link_places(path, home, runs):
 
 def write_base(runs, story_id, tree):
     """The tree the story's diff is taken against, once the worktree moved onto another base."""
-    folder = os.path.join(runs, story_id, ".verify")
+    folder = evidence_dir(runs, story_id)
     if os.path.isdir(folder) and tree:
         with open(os.path.join(folder, "base-tree"), "w", encoding="utf-8") as handle:
             handle.write(tree + "\n")
@@ -2666,7 +2671,7 @@ def worktree_prepare(cwd, runs, story_id):
         print("none — the repository has no commit yet, so a story has no branch to start from")
         return 0
     path, branch = worktree_of(story_id, cwd), STORY_BRANCH + story_id
-    target_file = os.path.join(runs, story_id, ".verify", "target")
+    target_file = os.path.join(evidence_dir(runs, story_id), "target")
     on = git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip()
     exclude_worktrees(cwd)
     if not has_worktree(story_id, cwd):
@@ -2785,7 +2790,7 @@ def integrate_prepare(cwd, runs, epics, story_id):
             if not conflicted:
                 print(f"factory: merging {target} into {story_id} failed — {done[1]}", file=sys.stderr)
                 return 1
-            with open(os.path.join(runs, story_id, ".verify", CONFLICTS_FILE), "w", encoding="utf-8") as handle:
+            with open(os.path.join(evidence_dir(runs, story_id), CONFLICTS_FILE), "w", encoding="utf-8") as handle:
                 handle.write("\n".join(conflicted) + "\n")
             for conflict in conflicted:
                 print(f"conflict: {conflict}")
@@ -2798,7 +2803,7 @@ def integrate_finish(cwd, runs, epics, story_id):
     the story squashed. Exit 1, naming the files, while a marker is left."""
     path = worktree_of(story_id, cwd)
     target = integration_target(runs, story_id)
-    listed = os.path.join(runs, story_id, ".verify", CONFLICTS_FILE)
+    listed = os.path.join(evidence_dir(runs, story_id), CONFLICTS_FILE)
     files = [line.strip() for line in read_text(listed).splitlines() if line.strip()] if os.path.isfile(listed) else []
     left = []
     for rel in files:
@@ -3043,7 +3048,7 @@ def schedule(cwd, epics, runs, slots=None, busy=()):
         start = f"from {story['start']}" if story["start"] else ""
         # What the story cost so far, from the runner's journal — kept per story on disk, so a
         # restart, a second session or a new run never resets it. An in-session run writes none.
-        journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+        journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
         spent = ""
         if os.path.isfile(journal):
             used = journal_usage(runs, story_id)
@@ -3181,6 +3186,46 @@ def move_path(cwd, src, dst):
     return "mv"
 
 
+#: What the gate and the runner keep in a story's evidence folder that a new pass starts without: the red ledger, the
+#: story's digest, the tests baseline, the round count and the base tree. The journal and the snapshots carry on.
+PASS_MARKS = (".tests-red", STORY_DIGEST, TESTS_BASELINE, ".rounds", "base-tree")
+
+
+def migrate_evidence(cwd, runs, say):
+    """Each story's evidence out of its run folder (contract 17): `<runs>/<story>/.verify/*` and the marks the gate
+    and the runner wrote there move to `<evidence>/<story>/`. Where the evidence folder has one already, the gate
+    wrote it since and it is kept; the run folder's older copy goes, and the move says so."""
+    import shutil
+    if not os.path.isdir(runs):
+        return
+    for name in sorted(os.listdir(runs)):
+        folder = os.path.join(runs, name)
+        if not os.path.isdir(folder):
+            continue
+        evidence = evidence_dir(runs, name)
+        verify = os.path.join(folder, ".verify")
+        sources = [(os.path.join(verify, entry), os.path.join(evidence, entry))
+                   for entry in (sorted(os.listdir(verify)) if os.path.isdir(verify) else [])]
+        sources += [(os.path.join(folder, mark), os.path.join(evidence, mark)) for mark in PASS_MARKS
+                    if mark != "base-tree" and os.path.lexists(os.path.join(folder, mark))]
+        if not sources:
+            continue
+        kept = []
+        for src, dst in sources:
+            if os.path.lexists(dst):
+                kept.append(os.path.basename(src))
+                if os.path.isdir(src) and not os.path.islink(src):
+                    shutil.rmtree(src)
+                else:
+                    os.remove(src)
+                continue
+            move_path(cwd, src, dst)
+        if os.path.isdir(verify) and not os.listdir(verify):
+            os.rmdir(verify)
+        say(f"{shown(folder)}/ evidence → {shown(evidence)}/"
+            + (f" (the evidence folder's own kept, the run folder's dropped: {', '.join(kept)})" if kept else ""))
+
+
 #: The marks that make a `tasks/<story>/` folder the factory's: without one it is the project's own.
 FACTORY_MARKS = (".verify", STORY_DIGEST, ".delivered", ".rounds", ".tests-red", TESTS_BASELINE, ".story-planned")
 
@@ -3314,19 +3359,26 @@ def migrate_layout(cwd):
                     say(f"{shown(story_path)} carries the delivery ({value})")
                 os.remove(delivered_file)
             digest = os.path.join(dst, STORY_DIGEST)
-            if os.path.isfile(digest) and not is_delivered(front):
-                write_mark(runs, name, STORY_DIGEST, story_digest(story_path))
+            if os.path.isfile(digest):
+                if not is_delivered(front):
+                    write_mark(runs, name, STORY_DIGEST, story_digest(story_path))
+                os.remove(digest)
         if not os.listdir(tasks):
             os.rmdir(tasks)
             say("tasks/ removed — it held nothing but the factory's run artefacts")
+    migrate_evidence(cwd, runs, say)
     attributes = ".gitattributes"
     if os.path.isfile(attributes):
         text = read_text(attributes)
-        old_line, new_line = "tasks/**/.verify/journal.tsv merge=union", f"{runs}/**/.verify/journal.tsv merge=union"
-        if old_line in text and runs != tasks:
+        new_line = f"{evidence_rel()}/**/journal.tsv merge=union"
+        old_lines = [line for line in (f"tasks/**/.verify/journal.tsv merge=union",
+                                       f"{runs}/**/.verify/journal.tsv merge=union") if line in text.splitlines()]
+        if old_lines:
+            for line in old_lines:
+                text = text.replace(line, new_line if new_line not in text else "")
             with open(attributes, "w", encoding="utf-8") as handle:
-                handle.write(text.replace(old_line, new_line))
-            say(f"{attributes}: the journals' merge rule follows the run folder")
+                handle.write(re.sub(r"\n{2,}", "\n", text))
+            say(f"{attributes}: the journals' merge rule follows the evidence folder")
     if not moved:
         print("migrate: nothing to move — the layout is current")
     return 0
@@ -3360,6 +3412,7 @@ def contract_body(stage, runs):
     path rule, the section names — taken from the constants the checks read, so the two cannot drift apart
     without this text changing with them."""
     folder = f"{runs}/<story>"
+    evidence = f"{evidence_dir(runs)}/<story>".replace(os.sep, "/")
     if stage == "plan":
         return f"""{CONTRACT_HEAD}
 
@@ -3393,7 +3446,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - titles: an end-user test's display name is the scenario's `Title:` line verbatim, else its key in words
   (`shows-empty-state` → "Shows empty state"); never the key itself in a name, display name or comment
 - one process per test command; each selector is read from its report by name
-- red: every selector in the table fails before any production code — the gate writes `{folder}/.tests-red`
+- red: every selector in the table fails before any production code — the gate writes `{evidence}/.tests-red`
   (`<selector>\t<sha256 of the test file>`); the build gate refuses a test changed after it was seen red (`red-proof`)
 - a round the judge sent back (`back: test`): a test you strengthen is already green and cannot be seen red — write its
   break, `{folder}/breaks/<fully.qualified.Class>--<method>.patch`, a `git apply` patch against the production code that
@@ -3465,7 +3518,7 @@ review — {folder}/reviews/<perspective>.md (one per perspective: {', '.join(_g
 - written by the perspective's carrier — the review skill `review.<perspective>:` names, or `review-<perspective>` — in that
   skill's report format: `## Findings` with `### must-fix`, `### should-fix`, `### nits`, each finding with the file and
   line it stands on and a one-line fix; "nothing found" said plainly where that is the case
-- the reviewer reads the diff (`{folder}/.verify/story.diff`), the story, plan.md, tests.md, build.md and the product and
+- the reviewer reads the diff (`{evidence}/story.diff`), the story, plan.md, tests.md, build.md and the product and
   technical description; it opens a file only where the diff's context does not carry the question; it changes nothing
 - the judge converges from these files: it confirms each must-fix and should-fix in the code, drops what it cannot point at,
   deduplicates across perspectives, and names the file it read per perspective under `## Perspectives covered`
@@ -3509,7 +3562,7 @@ def changed_for_skeleton(cwd, runs, story_id, stage):
     changed-files record where the stage has ended; a shared builder's record, or its open window's tree against
     the story's base, minus what the story's other hand-overs list (the gate checks their union).
     `None` when nothing was observed — the list is then the stage's, as the gate's skip says."""
-    folder = os.path.join(runs, story_id, ".verify")
+    folder = evidence_dir(runs, story_id)
     record = os.path.join(folder, f"changed-{stage}.txt")
     if os.path.isfile(record) and not _gate.snapshot_reason(record):
         return [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
@@ -3697,7 +3750,7 @@ def document_skeleton(runs, story_id, cwd="."):
     if os.path.isfile(target):
         return 0
     paths = []
-    record = os.path.join(folder, ".verify", "changed.txt")
+    record = os.path.join(evidence_dir(runs, story_id), "changed.txt")
     if os.path.isfile(record):
         for line in read_text(record).splitlines():
             parts = line.split("\t", 1)
@@ -3737,7 +3790,7 @@ def document_skeleton(runs, story_id, cwd="."):
 
 
 # --- follow: a stage you can watch --------------------------------------------------------------------
-# Every stage writes its tool's output to `.verify/<stage>.<HHMMSS>.out` as the tool writes it: Claude's
+# Every stage writes its tool's output to `<evidence>/<story>/<stage>.<HHMMSS>.out` as the tool writes it: Claude's
 # `stream-json`, Codex's `exec --json`, OpenCode's `run --format json` — one event per line. `follow`
 # reads the newest of them and prints one line per thing the tool did, so a person can see what a stage
 # does while it runs, whoever started it (a session, a shell, a worker, a bench). It starts nothing.
@@ -3842,19 +3895,19 @@ def follow_lines(text):
 def follow_outputs(runs, story, process=None):
     """[(stage, path)] of one story's stage outputs in the order they began, or of one process (`builder`,
     `review-ddd`, `plan`, …) alone."""
-    pattern = os.path.join(runs, story, ".verify", f"{process}.*.out" if process else "*.out")
+    pattern = os.path.join(evidence_dir(runs, story), f"{process}.*.out" if process else "*.out")
     outs = [p for p in glob.glob(pattern) if os.path.isfile(p)]
     return [(os.path.basename(p).split(".")[0], p) for p in sorted(outs, key=lambda p: (os.path.getmtime(p), p))]
 
 
 def follow_newest(runs, story=None, process=None):
     """(story, stage, path) of the newest stage output, of one story or of every story — None if none."""
-    pattern = os.path.join(runs, story or "*", ".verify", f"{process}.*.out" if process else "*.out")
+    pattern = os.path.join(evidence_dir(runs, story or "*"), f"{process}.*.out" if process else "*.out")
     outs = [p for p in glob.glob(pattern) if os.path.isfile(p)]
     if not outs:
         return None
     path = max(outs, key=lambda p: (os.path.getmtime(p), p))
-    return (os.path.basename(os.path.dirname(os.path.dirname(path))),
+    return (os.path.basename(os.path.dirname(path)),
             os.path.basename(path).split(".")[0], path)
 
 

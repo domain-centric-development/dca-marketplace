@@ -33,7 +33,7 @@ Checks by stage:
            reached, and a note when the project instructions are too large for a tool to load
     test   epic + every acceptance criterion mapped to a test in <runs>/<story>/tests.md,
            the test exists in the sources, the test sources compile, every mapped test is red.
-           Which selectors were red is recorded in <runs>/<story>/.tests-red
+           Which selectors were red is recorded in <evidence>/<story>/.tests-red
     build  epic + mapping + every mapped test is green **and was recorded red by the test stage**,
            every test command the profile's `required:` names, run whole (the stories before this
            one still hold), plus every extra check the profile declares for this stage
@@ -215,7 +215,7 @@ def worktree_places():
     discovery reports as links with the pipeline and the skill folders; the description and the profile as
     copies, read alone."""
     rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).rstrip("/")
-    folders = [rel("epics"), rel("runs"), rel("discovery")] + list(WORKTREE_LINKED)
+    folders = [rel("epics"), rel("runs"), evidence_rel(), rel("discovery")] + list(WORKTREE_LINKED)
     files = [rel("product"), rel("tech"), rel("domain"), PROFILE_FILE]
     return folders, files
 
@@ -224,6 +224,25 @@ def worktree_owned(path):
     """A path in a worktree that is the main checkout's, not the story's: under a linked place, or a copied file."""
     folders, files = worktree_places()
     return path in files or any(path == f or path.startswith(f + "/") for f in folders)
+
+
+#: Where the gate and the runner keep what proves a story's work — the journal, the red ledger, the tree snapshots,
+#: the changed-files records, the base tree, the story's digest, the round count: beside the run folder, never in
+#: it. A stage writes the run folder (its hand-over files); what it is judged by lies where no stage may write.
+EVIDENCE = "evidence"
+
+
+def evidence_rel():
+    """The evidence folder relative to the project: beside the run folder."""
+    runs = (PLACES_REL.get("runs") or DEFAULTS["runs"]).rstrip("/")
+    return os.path.join(os.path.dirname(runs) or ".dca-factory", EVIDENCE).replace("\\", "/")
+
+
+def evidence_dir(runs, story_id=None):
+    """A story's evidence folder (or the folder of all of them) beside the run folder `runs` — relative or
+    absolute as `runs` is."""
+    root = os.path.join(os.path.dirname(os.path.normpath(runs)) or ".dca-factory", EVIDENCE)
+    return os.path.join(root, story_id) if story_id else root
 
 
 def worktrees_dir():
@@ -1345,7 +1364,7 @@ def check_status(result, story_path, front):
 def check_rounds(result, runs, story_id):
     """The repeat counter lives in a file, so an in-session run cannot lose count and a
     resumed run sees the same number."""
-    path = os.path.join(runs, story_id, ".rounds")
+    path = os.path.join(evidence_dir(runs, story_id), ".rounds")
     if not os.path.isfile(path):
         return
     try:
@@ -1881,7 +1900,7 @@ def check_outcome_raised(result, profile, cwd, runs, story_id, front):
         return
     files = production_files(cwd)
     texts = {rel: read_text(os.path.join(cwd, rel)) for rel in files}
-    record = os.path.join(runs, story_id, ".verify", "changed.txt")
+    record = os.path.join(evidence_dir(runs, story_id), "changed.txt")
     changed, scope = None, "the story changed"
     if os.path.isfile(record) and not read_text(record).startswith(NOT_OBSERVED):
         changed = {parts[1] for parts in (line.split("\t", 1) for line in read_text(record).splitlines())
@@ -2271,7 +2290,7 @@ SUITES_RECORD = None
 def suites_tree_key(cwd, runs):
     """What a recorded run is keyed by: a digest of every source file's path and content — the run folder,
     the tools' folders and the build outputs left out — plus HEAD where there is one. The gate report the
-    runner copies into `.verify/` between two gates must not turn an unchanged tree into a new one, and a
+    runner copies into the evidence folder between two gates must not turn an unchanged tree into a new one, and a
     project before its `git init` has a tree as well."""
     digest = hashlib.sha256()
     code, head = git(cwd, "rev-parse", "HEAD")
@@ -2300,7 +2319,7 @@ def suites_signature(key, tree, invocation, code, ran_json):
 def open_suites_record(cwd, runs, story_id, key):
     """The rows of `.verify/suites.tsv` for this tree whose signature the runner's key confirms. A row
     written by anything else — a stage, a hand — carries no valid signature and is not read."""
-    path = os.path.join(runs, story_id, ".verify", "suites.tsv")
+    path = os.path.join(evidence_dir(runs, story_id), "suites.tsv")
     tree = suites_tree_key(cwd, runs)
     rows = {}
     if tree and os.path.isfile(path):
@@ -2488,7 +2507,7 @@ def check_story_pass(result, runs, story_id, story_path, front):
         result.fail("story-pass", f"{STAGE_FILES['judge']} says `verdict: {verdict or 'none'}` — only a judge's "
                                   f"`pass` lets a story be delivered")
         return
-    planned = os.path.join(folder, STORY_DIGEST)
+    planned = os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)
     if not os.path.isfile(planned):
         result.skip("story-pass", f"no {STORY_DIGEST} from the plan gate — whether the story changed since it was "
                                   f"planned is not checked")
@@ -3219,7 +3238,7 @@ def check_red_proof(result, cwd, located, digests, story):
 def red_ledger_path(runs, story):
     if not runs or not story:
         return None
-    return os.path.join(runs, story, ".tests-red")
+    return os.path.join(evidence_dir(runs, story), ".tests-red")
 
 
 def read_red_digests(runs, story):
@@ -3667,7 +3686,7 @@ def test_files(cwd):
 
 def record_tests_baseline(cwd, runs, story_id):
     """Write the baseline once per story; a later plan gate must not launder a change into it."""
-    path = os.path.join(runs, story_id, TESTS_BASELINE)
+    path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
     if os.path.isfile(path) or git(cwd, "rev-parse", "--git-dir")[0]:
         return
     files = test_files(cwd)
@@ -3805,7 +3824,7 @@ def switched_off(before, now):
 
 def stage_windows(runs, story_id):
     """(start, end) of every stage window in the story's journal, as epoch seconds; an open one ends now."""
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     windows, open_ = [], {}
     if not os.path.isfile(journal):
         return windows
@@ -3853,7 +3872,7 @@ def decision_covers(cwd, story_id, ids):
 
 
 def check_existing_tests(result, cwd, runs, story_id, story_body=""):
-    path = os.path.join(runs, story_id, TESTS_BASELINE)
+    path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
     if not os.path.isfile(path):
         result.skip("tests-kept", "no baseline of the tests that existed before this story "
                                   "(the plan gate records one in a git repository)")
@@ -4183,10 +4202,10 @@ CHANGE_EXCLUDED = (".agents/factory/",)
 
 
 def run_owned(path, runs):
-    """A path the pipeline writes itself and no stage answers for: the installed pipeline, the run folder,
-    a story's decision records (a stage's question, written into the story's folder)."""
+    """A path the pipeline writes itself and no stage answers for: the installed pipeline, the run folder, the
+    evidence folder, a story's decision records (a stage's question, written into the story's folder)."""
     epics = place("epics").rstrip("/") + "/"
-    return path.startswith(CHANGE_EXCLUDED + (runs.rstrip("/") + "/",)) \
+    return path.startswith(CHANGE_EXCLUDED + (runs.rstrip("/") + "/", evidence_rel() + "/")) \
         or (path.startswith(epics) and f"/{DECISIONS_DIR}/" in path[len(epics):]) \
         or (in_worktree() and worktree_owned(path))
 
@@ -4229,7 +4248,7 @@ def tree_snapshot(cwd):
 
 
 def write_snapshot(cwd, runs, story_id, label):
-    folder = os.path.join(runs, story_id, ".verify")
+    folder = evidence_dir(runs, story_id)
     os.makedirs(folder, exist_ok=True)
     snapshot = tree_snapshot(cwd)
     with open(os.path.join(folder, f"tree-{label}.txt"), "w", encoding="utf-8") as handle:
@@ -4312,7 +4331,7 @@ def tree_changes(cwd, base, now, runs):
 
 def record_base(cwd, runs, story_id):
     """At a story's first stage: the tree the story's diff is taken against. Written once."""
-    folder = os.path.join(runs, story_id, ".verify")
+    folder = evidence_dir(runs, story_id)
     os.makedirs(folder, exist_ok=True)
     base = os.path.join(folder, "base-tree")
     if not os.path.isfile(base):
@@ -4323,7 +4342,7 @@ def record_base(cwd, runs, story_id):
 
 def record_changes(cwd, runs, story_id, stage):
     """`changed-<stage>.txt`, the story's `changed.txt` and `story.diff`, after a stage has ended."""
-    folder = os.path.join(runs, story_id, ".verify")
+    folder = evidence_dir(runs, story_id)
     after = load_snapshot(os.path.join(folder, f"tree-after-{stage}.txt"))
     before = load_snapshot(os.path.join(folder, f"tree-before-{stage}.txt"))
     if after is None or before is None:
@@ -4395,7 +4414,7 @@ def listed_files(handover):
 
 def last_ended(runs, story_id, names):
     """Which of the named windows ended last in the story's journal, or None."""
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     last = None
     if os.path.isfile(journal):
         for line in read_text(journal).splitlines():
@@ -4407,7 +4426,7 @@ def last_ended(runs, story_id, names):
 
 def window_open(runs, story_id, window):
     """True while the journal's last mark for that exact window name is its start."""
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     if not os.path.isfile(journal):
         return False
     last = None
@@ -4422,7 +4441,7 @@ def stage_open(runs, story_id, stage):
     """True while the journal's last mark for the stage is its start: the stage is running (plan to tidy
     also while a shared builder, which marks itself `builder`, runs them; judge and document also while a
     shared verifier, `verifier`, runs them)."""
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     if not os.path.isfile(journal):
         return False
     last = None
@@ -4441,15 +4460,15 @@ def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
     A test file the stage put back to the version the test stage saw red is not the stage's change to
     list: the red ledger holds that version's digest, and a file that matches it again was restored,
     not changed — a stage that undid its own edit of a test would otherwise be refused for the undoing."""
-    record = os.path.join(runs, story_id, ".verify", f"changed-{stage}.txt")
+    record = os.path.join(evidence_dir(runs, story_id), f"changed-{stage}.txt")
     handovers = [STAGE_FILES[stage]]
     if last_ended(runs, story_id, (stage, "builder")) == "builder":
         # A shared builder ran plan to tidy in one window: its record is the one that holds, and a file it
         # changed is listed by whichever of its hand-overs belongs to the stage that changed it.
-        record = os.path.join(runs, story_id, ".verify", "changed-builder.txt")
+        record = os.path.join(evidence_dir(runs, story_id), "changed-builder.txt")
         handovers = [STAGE_FILES[name] for name in ("test", "build", "tidy")
                      if os.path.isfile(os.path.join(runs, story_id, STAGE_FILES[name]))]
-    base_file = os.path.join(runs, story_id, ".verify", "base-tree")
+    base_file = os.path.join(evidence_dir(runs, story_id), "base-tree")
     if window_open(runs, story_id, "builder") and stage in SHARED_WINDOWS["builder"] and os.path.isfile(base_file):
         # A shared builder runs its own gates inside its window, before any changed-files record exists. What the
         # story changed so far is the tree against its base: checked now, the builder can still list a file it
@@ -4570,7 +4589,7 @@ def file_digest(path):
 
 
 def write_mark(runs, story_id, name, content):
-    folder = os.path.join(runs, story_id)
+    folder = evidence_dir(runs, story_id)
     os.makedirs(folder, exist_ok=True)
     with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
         handle.write(content + "\n")
@@ -4691,7 +4710,8 @@ STALE_AFTER_SECONDS = 2.0
 def gate_passes(folder):
     """{stage: epoch} of the last passed gate per stage, from the journal's `gate <stage> exit=0` lines — the runner's, and a
     stage session's own gate run that passed (`by=<stage>`)."""
-    journal = os.path.join(folder, ".verify", "journal.tsv")
+    folder = os.path.normpath(folder)
+    journal = os.path.join(evidence_dir(os.path.dirname(folder), os.path.basename(folder)), "journal.tsv")
     passes = {}
     if not os.path.isfile(journal):
         return passes
@@ -4740,7 +4760,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
         return "delivered", None, "adopted" if status == "adopted" else ""
     if status and status not in ("approved", "adopted"):
         return "unreleased", None, f"status {status} — a human releases it first"
-    folder = os.path.join(runs, story_id)
+    folder, evidence = os.path.join(runs, story_id), evidence_dir(runs, story_id)
     kind = story_kind(front)
     texts = current_stage_files(folder, ADOPT_ORDER if kind == "adopt" else JOURNEY_ORDER if kind == "journey"
                                 else STAGE_ORDER)
@@ -4768,7 +4788,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     if answered:
         stage = min(answered, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 0)
         return "resumable", stage, f"decision {answered[stage]} answered — its stage applies it"
-    rounds_file = os.path.join(folder, ".rounds")
+    rounds_file = os.path.join(evidence, ".rounds")
     if os.path.isfile(rounds_file) and (read_text(rounds_file).strip() or "0").isdigit() \
             and int(read_text(rounds_file).strip() or "0") >= MAX_ROUNDS:
         return "stopped", None, f"{MAX_ROUNDS} rounds did not converge"
@@ -4796,7 +4816,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
             return "stopped", None, f"{STAGE_FILES[stage]} ends in `## needs-human` without an open record"
     if verdict_in(texts.get("judge", "")) == "story-conflict":
         return "stopped", None, "the judge found a story conflict"
-    planned = os.path.join(folder, STORY_DIGEST)
+    planned = os.path.join(evidence, STORY_DIGEST)
     if story_path and texts and os.path.isfile(planned) and os.path.isfile(os.path.join(folder, "plan.md")) \
             and read_text(planned).strip() != story_digest(story_path):
         return "in-progress", "plan", "the story changed after it was planned — every stage runs again"
@@ -4991,7 +5011,7 @@ def main(argv):
                         help="with --change: check the Git index, refuse when the working tree differs")
     parser.add_argument("--checks", help="with --change: only these checks (compile test architecture format)")
     parser.add_argument("--record-suites", action="store_true",
-                        help="the runner's gates: record every passing suite run under .verify/suites.tsv, signed "
+                        help="the runner's gates: record every passing suite run in the evidence folder's suites.tsv, signed "
                              "with FACTORY_SUITES_KEY, and reuse the runner's own record on an unchanged tree")
     parser.add_argument("--parity", metavar="CONFIG",
                         help="check every implementation's reports against a scenario contract and exit")
@@ -5271,7 +5291,7 @@ CONFLICT_MARKER = re.compile(r"^(<{7} |={7}$|>{7} )", re.M)
 
 def integration_target(runs, story_id):
     """The branch of the main checkout the story integrates into — recorded when its worktree was made."""
-    path = os.path.join(runs, story_id, ".verify", "target")
+    path = os.path.join(evidence_dir(runs, story_id), "target")
     return read_text(path).strip() if os.path.isfile(path) else ""
 
 
@@ -5285,7 +5305,7 @@ def check_integrated(result, cwd, runs, story_id):
         return
     target = integration_target(runs, story_id)
     if not target:
-        result.fail("integrate", f"no target recorded for {story_id} (.verify/target) — the worktree was not made "
+        result.fail("integrate", f"no target recorded for {story_id} (<evidence>/<story>/target) — the worktree was not made "
                                  f"by the runner")
         return
     code, unmerged = git(cwd, "diff", "--name-only", "--diff-filter=U")
@@ -5348,7 +5368,7 @@ def record_stage_pass(runs, story_id, stage):
     A shared builder that corrected the plan after the test gate refused it, and had the test gate pass again, holds
     a tests.md older than the plan: without the pass on record the document gate read tests.md as an earlier pass's
     and sent a story the judge had passed back to its test stage, twice."""
-    journal = os.path.join(runs, story_id, ".verify", "journal.tsv")
+    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     with contextlib.suppress(OSError):
         os.makedirs(os.path.dirname(journal), exist_ok=True)
         with open(journal, "a", encoding="utf-8") as handle:

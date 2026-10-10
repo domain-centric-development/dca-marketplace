@@ -367,7 +367,7 @@ bash .agents/factory/factory.sh follow --story STORY-3 --all  # every process of
 ```
 
 Every stage writes its tool's output as it happens — Claude's `stream-json`, Codex's `exec --json`,
-OpenCode's `run --format json` — to `.dca-factory/runs/<story>/.verify/<stage>.<time>.out`. `follow` reads
+OpenCode's `run --format json` — to `.dca-factory/evidence/<story>/<stage>.<time>.out`. `follow` reads
 the newest of them and prints what the stage reads, edits and runs, its answers and, at the end, its turns
 and cost. It works for any run, whoever started it — a session, a shell, a worker, a scheduled job — and
 starts nothing. The cost per stage is read from the same file's last event. The outputs stay beside the story,
@@ -429,7 +429,7 @@ starts fresh and reads the skill, the story and its predecessor's file again.
   <log>` or `codex-session <log>`
   (`~/.claude/projects/<project>/<session>.jsonl`, `~/.codex/sessions/<date>/rollout-*.jsonl`).
 
-**History.** Every number lives in the project: `.dca-factory/runs/<story>/.verify/journal.tsv`, next to the gate
+**History.** Every number lives in the project: `.dca-factory/evidence/<story>/journal.tsv`, next to the gate
 reports and each invocation's raw output (`*.out`). Whether `.dca-factory/runs/` is committed is the
 project's choice: committed, the history travels with the repository — `factory.sh status --usage`
 without `--story` shows every story ever run, `status --story` its passes and costs; left out, a clone
@@ -462,8 +462,8 @@ Only for stages run inside a session, marked with `--stage-start`/`--stage-end`,
 
 It reads with the rights of whoever runs it, so only their own logs. `FACTORY_SESSION_USAGE=off`
 switches it off for one person, `sessionUsage: off` in the stack profile for the project; in-session
-stages are then unknown. A committed `.dca-factory/runs/` carries token counts, models, times and the stages'
-final messages — leave `.dca-factory/runs/**/.verify/` out of the repository where that is internal.
+stages are then unknown. A committed `.dca-factory/evidence/` carries token counts, models, times and the stages'
+final messages — leave `.dca-factory/evidence/` out of the repository where that is internal.
 
 ## What it carries, and what it does not
 

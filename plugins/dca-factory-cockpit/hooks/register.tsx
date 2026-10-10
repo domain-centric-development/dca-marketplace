@@ -35,6 +35,8 @@ const TABS: { id: Tab; label: string; key: string }[] = [
 // The files read directly are the append-only journals and the hand-overs, never a state the factory computes.
 const RUNNER = '.agents/factory/factory.sh'
 const RUNS = '.dca-factory/runs'
+// What proves a story's work — journal, diff, the tools' output — beside the run folder, written by the gate and the runner.
+const EVIDENCE = '.dca-factory/evidence'
 
 async function factoryJson<T>($: EngineInterface, root: string, args: string[]): Promise<T | null> {
   const ran = await $.process.run(['bash', `${root}/${RUNNER}`, ...args], { cwd: root, timeoutMs: 60_000 })
@@ -58,21 +60,25 @@ async function readText($: EngineInterface, path: string): Promise<string> {
 }
 
 async function loadJournal($: EngineInterface, root: string, story: string): Promise<JournalEvent[]> {
-  return parseJournal(await readText($, `${root}/${RUNS}/${story}/.verify/journal.tsv`))
+  return parseJournal(await readText($, `${root}/${EVIDENCE}/${story}/journal.tsv`))
 }
 
 // The hand-overs, and the story's diff once the gate has produced it.
+const DIFF = 'story.diff'
+const handoverPath = (root: string, story: string, file: string) =>
+  `${root}/${file === DIFF ? EVIDENCE : RUNS}/${story}/${file}`
+
 async function handovers($: EngineInterface, root: string, story: string): Promise<string[]> {
   const files = (await $.fs.list(`${root}/${RUNS}/${story}`).catch(() => []))
     .filter(entry => entry.kind === 'file' && entry.name.endsWith('.md') && !entry.name.startsWith('.'))
     .map(entry => entry.name)
-  const hasDiff = await $.fs.exists(`${root}/${RUNS}/${story}/.verify/story.diff`).catch(() => false)
-  return hasDiff ? [...files, '.verify/story.diff'] : files
+  const hasDiff = await $.fs.exists(`${root}/${EVIDENCE}/${story}/story.diff`).catch(() => false)
+  return hasDiff ? [...files, DIFF] : files
 }
 
 // The processes a story ran, from the names of their outputs (`builder.085007.out` → builder), oldest first.
 async function outputs($: EngineInterface, root: string, story: string): Promise<string[]> {
-  const entries = (await $.fs.list(`${root}/${RUNS}/${story}/.verify`).catch(() => []))
+  const entries = (await $.fs.list(`${root}/${EVIDENCE}/${story}`).catch(() => []))
     .filter(entry => entry.kind === 'file' && entry.name.endsWith('.out'))
     .sort((a, b) => a.mtimeMs - b.mtimeMs)
   return [...new Set(entries.map(entry => entry.name.split('.')[0] ?? entry.name))]
@@ -810,7 +816,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.table(
           [{ name: 'file', width: 20 }],
           (now.handovers[open.id] ?? []).map(file => [
-            { node: ui.link(`file-${file.replace('.verify/', '')}`, file.replace('.verify/', ''), () => void openFile($, `${now.root}/.dca-factory/runs/${open.id}/${file}`, `${open.id} / ${file.replace('.verify/', '')}`, open)) },
+            { node: ui.link(`file-${file}`, file, () => void openFile($, handoverPath(now.root, open.id, file), `${open.id} / ${file}`, open)) },
           ]),
           'No hand-over yet.',
         ),

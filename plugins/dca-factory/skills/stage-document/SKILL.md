@@ -6,7 +6,7 @@ description: Documentation stage of a factory run — brings the project's own d
 # Document what the story changed
 
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `build.md`, `judge.md`, and the diff —
-`.dca-factory/runs/<story>/.verify/story.diff`, which the pipeline writes (where it says there is no diff,
+`.dca-factory/evidence/<story>/story.diff`, which the pipeline writes (where it says there is no diff,
 `changed.txt` lists the files). Nothing else.
 Output: the updated documents, plus `.dca-factory/runs/<story>/document.md` — which the pipeline starts for
 you: `factory-cli.py --document-skeleton <story>` (the runner runs it; in a session run it yourself before

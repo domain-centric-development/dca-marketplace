@@ -73,7 +73,7 @@ const FILES: Record<string, string> = {
     '',
     '## Sources',
   ].join('\n'),
-  [`${ROOT}/.dca-factory/runs/add-book/.verify/journal.tsv`]: [
+  [`${ROOT}/.dca-factory/evidence/add-book/journal.tsv`]: [
     '2026-09-23T17:24:53Z\tstage-start\tplan\ttool=claude',
     '2026-09-23T17:26:53Z\tstage-end\tplan\texit=0',
     '2026-09-23T17:27:00Z\tgate\tplan\texit=1',

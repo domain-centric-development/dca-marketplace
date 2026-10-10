@@ -83,7 +83,7 @@ SHARED_BUILDER_SET="${FACTORY_SHARED_BUILDER:+set}"
 SHARED_VERIFIER_SET="${FACTORY_SHARED_VERIFIER:+set}"
 SEPARATE_STAGES=""                           # --separate-stages: one process per stage for this run
 WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
-# The key the runner's own gate runs sign their suite record with (.verify/suites.tsv): a gate on an
+# The key the runner's own gate runs sign their suite record with (the evidence folder's suites.tsv): a gate on an
 # unchanged tree reuses only rows this key confirms. Handed to the gate process alone, never exported —
 # a stage's gate run, inside the tool's process, has no key, so it writes nothing the runner reads.
 SUITES_KEY=$( (openssl rand -hex 16 2>/dev/null || od -An -N16 -tx1 /dev/urandom) | tr -d ' \n')
@@ -149,6 +149,16 @@ case "$RUNS" in
 esac
 PARALLEL="${FACTORY_PARALLEL:-}"             # --parallel / FACTORY_PARALLEL / the profile's `parallel:`; 1 by default
 ADD_DIRS=()                                  # what a stage in a worktree may write in the main checkout
+# What proves a story's work — the journal, the red ledger, the snapshots, the round count — lies beside the run
+# folder, not in it: the gate and the runner write it, a stage never does. Absolute where the run folder is.
+evidence() {                                # evidence <story> — the story's evidence folder
+  local parent; parent=$(dirname "$RUNS"); [ "$parent" = . ] && parent=.dca-factory
+  printf '%s/evidence/%s' "$parent" "$1"
+}
+evidence_rel() {                            # the evidence folder, relative to the main checkout
+  local parent; parent=$(dirname "$RUNS_REL"); [ "$parent" = . ] && parent=.dca-factory
+  printf '%s/evidence' "$parent"
+}
 
 # Whether `ln -s` in this shell makes a symlink. On Windows (Git Bash, MSYS2) it needs developer
 # mode or an administrator *and* `MSYS=winsymlinks:nativestrict`; without those it silently makes
@@ -715,7 +725,7 @@ record_usage() {                            # record_usage <story> <stage> <tool
   [ -n "${5:-}" ] && fields="$fields	seconds=$5"
   [ "$(usage_format "$3")" = none ] || printf '%s\n' "$out" | sed '1d'
   printf '%s\tusage\t%s\ttool=%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "$3" "$fields" \
-    >> "$RUNS/$1/.verify/journal.tsv"
+    >> "$(evidence "$1")/journal.tsv"
 }
 
 # --- install -----------------------------------------------------------------
@@ -1157,7 +1167,7 @@ install_project() {                         # install_project <tool> <skill fold
   # lines at its end, which git reports as a conflict although keeping both is always right.
   if ! grep -qs "journal.tsv merge=union" .gitattributes; then
     [ -s .gitattributes ] && [ -n "$(tail -c 1 .gitattributes)" ] && printf '\n' >> .gitattributes
-    printf '%s\n' "$RUNS/**/.verify/journal.tsv merge=union" >> .gitattributes
+    printf '%s\n' "$(evidence_rel)/**/journal.tsv merge=union" >> .gitattributes
     echo "factory: .gitattributes merges the story journals by keeping both sides (merge=union)"
   fi
   # What a file manager drops into any folder it shows: no one's work, but a changed file to the gate's
@@ -1825,11 +1835,11 @@ that are its own (a test that asserts too little is the test stage's, with its b
   if [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
     echo "factory: --max-stages $MAX_STAGES reached before the shared stages of $story." >&2; return 4
   fi
-  local journal="$RUNS/$story/.verify/journal.tsv" began raw_out invoked=0
+  local journal="$(evidence "$story")/journal.tsv" began raw_out invoked=0
   [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
   snapshot "$story" "before-builder"
   printf '%s\tstage-start\tbuilder\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" >> "$journal"
-  raw_out="$RUNS/$story/.verify/builder.$(date -u +%H%M%S).out"
+  raw_out="$(evidence "$story")/builder.$(date -u +%H%M%S).out"
   began=$(date +%s)
   invocation_raw="$raw_out" stage_in_flight=builder story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
   record_usage "$story" builder "$tool" "$raw_out" "$(( $(date +%s) - began ))"
@@ -1867,8 +1877,8 @@ that are its own (a test that asserts too little is the test stage's, with its b
     echo "── gate test  (re-checked by the runner)"
     gate test "$story" || { echo "factory: the runner's re-check of gate 'test' refused the shared stages' work." >&2; return 1; }
   fi
-  if [ "$kind" = story ] && [[ " ${range[*]} " == *" test "* ]] && [ ! -s "$RUNS/$story/.tests-red" ]; then
-    echo "factory: the shared stages left no red proof ($RUNS/$story/.tests-red) — the test gate never saw the tests fail." >&2
+  if [ "$kind" = story ] && [[ " ${range[*]} " == *" test "* ]] && [ ! -s "$(evidence "$story")/.tests-red" ]; then
+    echo "factory: the shared stages left no red proof ($(evidence "$story")/.tests-red) — the test gate never saw the tests fail." >&2
     return 1
   fi
   for st in build tidy; do
@@ -1919,7 +1929,7 @@ run_reviews() {                             # run_reviews <story> <tool> <dry> [
   for i in "${!names[@]}"; do
     name=${names[$i]}; carrier=${carriers[$i]}
     prompt="Review the change of backlog story $story from the $name perspective: apply the \`$carrier\` skill to the diff \
-$RUNS/$story/.verify/story.diff — open a whole file only where the diff's context does not carry the question — with the \
+$(evidence "$story")/story.diff — open a whole file only where the diff's context does not carry the question — with the \
 story and its epic (epic.md beside it), $RUNS/$story/plan.md, tests.md and build.md and the product and technical description as its input. Write your \
 report to $folder/$name.md in the skill's own format: \`## Findings\` with must-fix, should-fix and nits, every finding \
 with the file and line it stands on and a one-line fix; say plainly when you found nothing. Change no other file and no \
@@ -1941,14 +1951,14 @@ $(where_things_are "$tool" "review:$name" "$story")"
   if [ -n "$MAX_STAGES" ] && [ "$((INVOCATIONS + ${#names[@]}))" -gt "$MAX_STAGES" ]; then
     echo "factory: --max-stages $MAX_STAGES reached before the reviews of $story (${#names[@]} process(es))." >&2; return 4
   fi
-  local journal="$RUNS/$story/.verify/journal.tsv" began pids=() raws=()
-  mkdir -p "$folder" "$RUNS/$story/.verify"
+  local journal="$(evidence "$story")/journal.tsv" began pids=() raws=()
+  mkdir -p "$folder" "$(evidence "$story")"
   rm -f "$folder"/*.md                       # a repeat round reviews today's change, never last round's report
   began=$(date +%s)
   for i in "${!names[@]}"; do
     name=${names[$i]}
     printf '%s\tstage-start\treview:%s\ttool=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$name" "$tool" >> "$journal"
-    raws[$i]="$RUNS/$story/.verify/review-$name.$(date -u +%H%M%S).out"
+    raws[$i]="$(evidence "$story")/review-$name.$(date -u +%H%M%S).out"
     ( invocation_raw="${raws[$i]}" stage_in_flight="review:$name" story_in_flight="$story" \
         invoke "$tool" "${prompts[$i]}"; echo $? > "${raws[$i]}.rc" ) &
     pids[$i]=$!
@@ -2000,12 +2010,12 @@ second writer. $(where_things_are "$tool" verifier "$story")"
   if [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
     echo "factory: --max-stages $MAX_STAGES reached before the shared stages of $story." >&2; return 4
   fi
-  local journal="$RUNS/$story/.verify/journal.tsv" began raw_out invoked=0
+  local journal="$(evidence "$story")/journal.tsv" began raw_out invoked=0
   [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
   [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
   snapshot "$story" "before-verifier"
   printf '%s\tstage-start\tverifier\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" >> "$journal"
-  raw_out="$RUNS/$story/.verify/verifier.$(date -u +%H%M%S).out"
+  raw_out="$(evidence "$story")/verifier.$(date -u +%H%M%S).out"
   began=$(date +%s)
   invocation_raw="$raw_out" stage_in_flight=verifier story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
   record_usage "$story" verifier "$tool" "$raw_out" "$(( $(date +%s) - began ))"
@@ -2075,9 +2085,10 @@ refused_from() {                            # refused_from <story> <refused stag
 }
 
 bump_rounds() {                             # bump_rounds <story> -> current count
-  local file="$RUNS/$1/.rounds" count=0
+  local file="$(evidence "$1")/.rounds" count=0
   [ -f "$file" ] && count=$(tr -dc '0-9' < "$file")
   count=$(( ${count:-0} + 1 ))
+  mkdir -p "$(dirname "$file")"
   printf '%s\n' "$count" > "$file"
   echo "$count"
 }
@@ -2095,13 +2106,13 @@ environment_refused() {                     # environment_refused <stage> <story
 # A person's --from restarts the story's count: the rounds so far were theirs to judge, and they chose
 # to go on. The old count is kept in the journal folder, never deleted.
 reset_rounds() {                            # reset_rounds <story>
-  local file="$RUNS/$1/.rounds"
+  local file="$(evidence "$1")/.rounds"
   [ -f "$file" ] || return 0
-  mkdir -p "$RUNS/$1/.verify"
-  mv "$file" "$RUNS/$1/.verify/rounds.$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$(evidence "$1")"
+  mv "$file" "$(evidence "$1")/rounds.$(date -u +%Y%m%dT%H%M%SZ)"
   printf '%s	rounds-reset	-	by=--from
-' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$RUNS/$1/.verify/journal.tsv"
-  echo "factory: --from $from starts a new count of rounds for $1 (the old one is under $RUNS/$1/.verify/)."
+' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$(evidence "$1")/journal.tsv"
+  echo "factory: --from $from starts a new count of rounds for $1 (the old one is under $(evidence "$1")/)."
 }
 
 # What a stage otherwise searches for — the profile, the run folder, the gate's expectations, the catalog —
@@ -2211,7 +2222,7 @@ session start is the one that started you, not a second writer.$(worktree_senten
 
 gate() {                                    # gate <stage> <story>
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
-  local report="$RUNS/$2/.gate-$1.txt" journal="$RUNS/$2/.verify"
+  local report="$RUNS/$2/.gate-$1.txt" journal="$(evidence "$2")"
   mkdir -p "$RUNS/$2" "$journal"
   FACTORY_SUITES_KEY="$SUITES_KEY" "$PY" "$GATE" --story "$2" --stage "$1" --record-suites 2>&1 | tee "$report"
   local code=${PIPESTATUS[0]}
@@ -2247,7 +2258,7 @@ NO_HASHES="# no-sha256-command: names only, no content hashes"
 # What the working tree looks like right now, so a later stage's claim about what it changed can be
 # checked rather than believed. Cheap: one porcelain listing plus a hash per file git reports.
 snapshot() {                                # snapshot <story> <label>
-  local journal="$RUNS/$1/.verify" file hash prefix entry code origin
+  local journal="$(evidence "$1")" file hash prefix entry code origin
   mkdir -p "$journal"
   hash=$(hasher)
   if [ "$hash" = none ]; then
@@ -2450,17 +2461,17 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       [ "$stage" = plan ] && [ -f "$GATE" ] && cli --plan-skeleton "$story" >/dev/null 2>&1
       # A skeleton the pipeline wrote is not the stage's file: kept aside, so a stage that left it untouched
       # is a stage that produced nothing, not a finished one.
-      rm -f "$RUNS/$story/.verify/$stage.skeleton"
+      rm -f "$(evidence "$story")/$stage.skeleton"
       [ -f "$RUNS/$story/$(stage_file "$stage")" ] && { [ "$stage" = plan ] || [ "$stage" = document ]; } \
-        && cp "$RUNS/$story/$(stage_file "$stage")" "$RUNS/$story/.verify/$stage.skeleton"
+        && cp "$RUNS/$story/$(stage_file "$stage")" "$(evidence "$story")/$stage.skeleton"
       snapshot "$story" "before-$stage"
       local choice requested note model_fields=""
       choice=$(model_choice "$tool" "$stage"); note=${choice#*|}; requested=$(model_key "$tool" "$stage")
       [ -n "$requested" ] && model_fields="	model_requested=$requested"
       [ -n "$note" ] && model_fields="$model_fields	model_applied=no ($note)"
       [ -n "$note" ] && echo "factory: model.$tool.$stage: $requested — $note"
-      printf '%s\tstage-start\t%s\ttool=%s%s\n' "$stage_started" "$stage" "$tool" "$model_fields" >> "$RUNS/$story/.verify/journal.tsv"
-      local raw_out; raw_out="$RUNS/$story/.verify/$stage.$(date -u +%H%M%S).out"
+      printf '%s\tstage-start\t%s\ttool=%s%s\n' "$stage_started" "$stage" "$tool" "$model_fields" >> "$(evidence "$story")/journal.tsv"
+      local raw_out; raw_out="$(evidence "$story")/$stage.$(date -u +%H%M%S).out"
       local invoked=0
       local began; began=$(date +%s)
       invocation_raw="$raw_out" stage_in_flight="$stage" story_in_flight="$story" \
@@ -2468,10 +2479,10 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       record_usage "$story" "$stage" "$tool" "$raw_out" "$(( $(date +%s) - began ))"
       [ "$invoked" = 0 ] || {
         printf '%s\tstage-end\t%s\texit=nonzero\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
-          >> "$RUNS/$story/.verify/journal.tsv"
+          >> "$(evidence "$story")/journal.tsv"
         echo "factory: the tool exited non-zero during stage '$stage'." >&2; return 1; }
       printf '%s\tstage-end\t%s\texit=0\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
-        >> "$RUNS/$story/.verify/journal.tsv"
+        >> "$(evidence "$story")/journal.tsv"
       snapshot "$story" "after-$stage"
       # What the stage changed and the story's diff so far, for the next stage to read first.
       [ -f "$GATE" ] && "$PY" "$GATE" --record-changes "$stage" --story "$story" >/dev/null 2>&1
@@ -2479,7 +2490,7 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       [ -f "$artefact" ] || {
         echo "factory: stage '$stage' produced no $artefact — a stage is finished when its file exists." >&2
         return 1; }
-      if [ -f "$RUNS/$story/.verify/$stage.skeleton" ] && cmp -s "$artefact" "$RUNS/$story/.verify/$stage.skeleton"; then
+      if [ -f "$(evidence "$story")/$stage.skeleton" ] && cmp -s "$artefact" "$(evidence "$story")/$stage.skeleton"; then
         echo "factory: stage '$stage' produced no $artefact beyond the pipeline's skeleton — a stage is finished when it wrote its file." >&2
         return 1
       fi
@@ -2617,13 +2628,13 @@ integrate_story() {                         # integrate_story <story> <tool> <dr
       # the agent works in the worktree as every stage does: with the story, the run folder and the skills linked
       ( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --worktree-link "$story" )
       TOOL_IN_FLIGHT=$tool
-      local raw_out; raw_out="$RUNS/$story/.verify/integrate.$(date -u +%H%M%S).out"
+      local raw_out; raw_out="$(evidence "$story")/integrate.$(date -u +%H%M%S).out"
       local began; began=$(date +%s)
-      printf '%s\tstage-start\tintegrate\ttool=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" >> "$RUNS/$story/.verify/journal.tsv"
+      printf '%s\tstage-start\tintegrate\ttool=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" >> "$(evidence "$story")/journal.tsv"
       invocation_raw="$raw_out" stage_in_flight=integrate story_in_flight="$story" \
         invoke "$tool" "$(integrate_prompt "$story" "$conflicts")"; code=$?
       record_usage "$story" integrate "$tool" "$raw_out" "$(( $(date +%s) - began ))"
-      printf '%s\tstage-end\tintegrate\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$code" = 0 ] && echo 0 || echo nonzero)" >> "$RUNS/$story/.verify/journal.tsv"
+      printf '%s\tstage-end\tintegrate\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$code" = 0 ] && echo 0 || echo nonzero)" >> "$(evidence "$story")/journal.tsv"
       if [ -f "$RUNS/$story/integrate.md" ] && asks_human "$RUNS/$story/integrate.md"; then
         drop_lock; stopped_for_human "$RUNS/$story/integrate.md" integrate "$story"; return $?
       fi
@@ -2662,7 +2673,7 @@ integrate_story() {                         # integrate_story <story> <tool> <dr
     # the integration took the links down; the build stage works with them again — and the document stage writes
     # its file anew for the story as it now is (the earlier one is kept beside the journal)
     take_lock; ( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --worktree-link "$story" ); drop_lock
-    [ -f "$RUNS/$story/document.md" ] && mv "$RUNS/$story/document.md" "$RUNS/$story/.verify/document.before-integrate.md"
+    [ -f "$RUNS/$story/document.md" ] && mv "$RUNS/$story/document.md" "$(evidence "$story")/document.before-integrate.md"
     run_stages "$story" "$tool" build "$dry"
     return $?
   done
@@ -2672,7 +2683,7 @@ integrate_story() {                         # integrate_story <story> <tool> <dr
 
 integrate_prompt() {                        # integrate_prompt <story> <conflicted files>
   printf '%s' "Apply the stage-integrate skill for backlog story $1. Merging the main line into this story's branch \
-stopped on conflicts in: $2. Their list is $RUNS/$1/.verify/conflicts. Resolve them in this worktree so both changes \
+stopped on conflicts in: $2. Their list is $(evidence "$1")/conflicts. Resolve them in this worktree so both changes \
 hold, write $RUNS/$1/integrate.md, and run no git add, commit, merge, rebase or checkout: the runner commits. Do the \
 step yourself in this session; do not delegate it.$(worktree_sentence) $(where_things_are "$TOOL_IN_FLIGHT" integrate "$1")"
 }
@@ -2814,7 +2825,7 @@ run_parallel() {                            # run_parallel <tool> <watch> <inter
       story=${entry%%:*}; pid=${entry#*:}; from=${pid#*:}; pid=${pid%%:*}
       if kill -0 "$pid" 2>/dev/null; then still="$still $entry"; continue; fi
       wait "$pid" 2>/dev/null
-      code=$(cat "$HOME_DIR/$RUNS_REL/$story/.verify/runner-exit" 2>/dev/null || echo 1)
+      code=$(cat "$HOME_DIR/$(evidence_rel)/$story/runner-exit" 2>/dev/null || echo 1)
       case "$code" in
         0) seen="$seen $story@$from" ;;
         3) ;;
@@ -2834,9 +2845,9 @@ run_parallel() {                            # run_parallel <tool> <watch> <inter
           echo "factory: $story ran from $from and the schedule names it there again — no progress, not started again." >&2
           [ "$failed" = 0 ] && failed=1; stopping=${stopping:-1}; continue ;; esac
         echo "══ story $story from $from  (slots: $slots)"
-        mkdir -p "$HOME_DIR/$RUNS_REL/$story/.verify"
-        rm -f "$HOME_DIR/$RUNS_REL/$story/.verify/runner-exit"
-        ( run_story "$story" "$tool" "$from" ""; echo $? > "$HOME_DIR/$RUNS_REL/$story/.verify/runner-exit" ) 2>&1 \
+        mkdir -p "$HOME_DIR/$(evidence_rel)/$story"
+        rm -f "$HOME_DIR/$(evidence_rel)/$story/runner-exit"
+        ( run_story "$story" "$tool" "$from" ""; echo $? > "$HOME_DIR/$(evidence_rel)/$story/runner-exit" ) 2>&1 \
           | prefix "$story" &
         children="$children $story:$!:$from"
         launched=1

@@ -5,7 +5,7 @@ description: Shows where the delivery pipeline stands in this project — which 
 
 # Show where the pipeline stands
 
-Input: the project's files — the story journals under `.dca-factory/runs/<story>/.verify/`, the decision records
+Input: the project's files — the story journals under `.dca-factory/evidence/<story>/`, the decision records
 under `<story>/decisions/` in each story's folder, the backlog under `project/epics/`. Output: an answer in the session. You write nothing,
 start nothing and answer nothing on anyone's behalf.
 

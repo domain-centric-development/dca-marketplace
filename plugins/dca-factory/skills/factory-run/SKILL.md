@@ -87,19 +87,19 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
 6. **gate `build`** — every mapped test green, and the profile's `architecture:` and `format:`
    commands succeed. Both run in the gate, not on a stage's word. On failure, hand the gate output back to
    `stage-build`. Every repeat round — this one, a refused gate after any stage, a judge's
-   `changes-requested` — increments `.dca-factory/runs/<story>/.rounds`; at **three** the run
+   `changes-requested` — increments `.dca-factory/evidence/<story>/.rounds`; at **three** the run
    stops and escalates. The counter is a file, not something you remember — an in-session run has
    no other honest way to count, and a resumed run must see the same number. Two refusals count no
    round: `gate:fail environment` — a profile command whose program the gate's shell did not find, which
    no stage can fix; stop and name it — and none at all when a person restarts the story with
-   `--from`, which starts a new count (the runner keeps the old one under `.dca-factory/runs/<story>/.verify/`).
+   `--from`, which starts a new count (the runner keeps the old one under `.dca-factory/evidence/<story>/`).
 7. **`stage-tidy`** → `.dca-factory/runs/<story>/tidy.md`: the refactor half of red–green–refactor, inside
    this story's footprint, with every test green and no test changed. A stage that changes nothing
    and says why is finished, not skipped.
 8. **gate `tidy`** — the same checks as the build gate, run again: the stage's whole claim is that
    nothing it touched changed what the code does.
 9. **`stage-judge`** → `.dca-factory/runs/<story>/judge.md`. Hand it what its skill names as input — the story,
-   the plan, `tests.md`, `build.md` and `.dca-factory/runs/<story>/.verify/story.diff`, which the end mark of the
+   the plan, `tests.md`, `build.md` and `.dca-factory/evidence/<story>/story.diff`, which the end mark of the
    stage before wrote — never "the tree against HEAD": the diff is the story's, HEAD may hold more.
    The file carries one of three verdicts:
    - `pass` — done, go to the report.
@@ -125,8 +125,8 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    complete verification. The run commits nothing — and a story waiting for acceptance is not
    ready to commit; say what the story's commit holds — the code
    and tests the stages changed, the story (its `status: delivered` line) and its `decisions/`, and —
-   where the project commits its run history — `.dca-factory/runs/<story>/` with its hidden files (the
-   red ledger, the story digest, the journal under `.verify/`). The commit hook checks the index against
+   where the project commits its run history — `.dca-factory/runs/<story>/` and
+   `.dca-factory/evidence/<story>/` with its hidden files (the red ledger, the story digest, the journal). The commit hook checks the index against
    the working tree, so a commit that leaves any of them behind untracked is refused.
    Then give the checkout back — `python3 .agents/factory/factory-cli.py --release` — delivered or
    stopped alike: a claim nobody releases keeps every other worker out until it goes stale
@@ -192,7 +192,7 @@ again. In a session, the same variant is one subagent for plan to tidy, running 
 stage and stopping on a refusal it cannot fix in three attempts; its window is marked as one stage,
 `builder` — `--stage-start builder` before it, `--stage-end builder` after its last file — and the gate
 reads that window as plan to tidy. After the end mark do what the runner does: check that
-`.dca-factory/runs/<story>/.tests-red` exists (a builder that never ran its test gate left no red proof; a
+`.dca-factory/evidence/<story>/.tests-red` exists (a builder that never ran its test gate left no red proof; a
 journey's or an adoption's test gate runs again instead), then run the build and tidy gates yourself —
 they now check the hand-overs against `changed-builder.txt`. In both, the judge keeps a fresh context
 of its own, and every stage still writes its own file, so the story can be resumed stage by stage. It
@@ -436,7 +436,7 @@ lets the gate decide first on today's tree: a file that holds costs no invocatio
 does run reads a report of now.
 
 **What a running stage does.** The runner keeps each stage's tool output as the tool writes it, one event
-per line, in `.dca-factory/runs/<story>/.verify/<stage>.<time>.out`. When the person asks what a stage is
+per line, in `.dca-factory/evidence/<story>/<stage>.<time>.out`. When the person asks what a stage is
 doing, run `bash .agents/factory/factory.sh follow --once` (or `--story <id>`) and show its lines — what
 the stage reads, edits and runs, its answers, its turns and cost at the end; `follow` without `--once`
 keeps printing for a person at a terminal; `--process builder` (or `verifier`, `review-ddd`, …) one process,

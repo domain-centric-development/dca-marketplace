@@ -38,7 +38,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     on('session.root', async () => ({ value: ROOT }))
     on('fs.exists', async () => ({ value: true }))
     on('fs.list', async (_: unknown, e: { path: string }) => ({
-      value: e.path.endsWith('/add-book/.verify')
+      value: e.path.endsWith('/evidence/add-book')
         ? [{ name: 'verifier.090000.out', kind: 'file', size: 0, mtimeMs: 2, isLink: false }, { name: 'builder.085007.out', kind: 'file', size: 0, mtimeMs: 1, isLink: false }]
         : [],
     }) as never)

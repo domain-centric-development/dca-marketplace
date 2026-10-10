@@ -6,7 +6,7 @@ description: Judge stage of a factory run — reviews the story's change from th
 # Judge one story's change
 
 Input: the story and its epic (`epic.md` beside it), `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
-`.dca-factory/runs/<story>/.verify/story.diff`, which the pipeline writes; open a whole file only where the
+`.dca-factory/evidence/<story>/story.diff`, which the pipeline writes; open a whole file only where the
 diff's context does not carry the question, and explore no further than a finding needs — the
 product and the technical description (`project/product.md`, `project/tech.md`, or where the
 profile's `product:` and `tech:` point) — **the review files** `.dca-factory/runs/<story>/reviews/<perspective>.md`,
