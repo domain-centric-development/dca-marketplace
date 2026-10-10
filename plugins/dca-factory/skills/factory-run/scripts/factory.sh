@@ -11,10 +11,12 @@
 #   factory.sh backlog [--check]             every story's state and the next one; --check the backlog
 #   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch] [--interval <s>]
 #                  [--max-stages <n>] [--story-budget <tokens>] [--separate-stages] [--parallel <n>] [--dry-run]
+#                  [--shared-builder] [--shared-verifier]
 #                    one story from where its files say (--from names the stage and starts a new
 #                    count of rounds), or without --story the whole backlog in the schedule's order;
 #                    every story in a worktree of its own, integrated into the checkout's branch when
-#                    every gate passed; --parallel runs up to <n> stories at once
+#                    every gate passed; --parallel runs up to <n> stories at once; shared stages are the
+#                    default, --shared-builder/--shared-verifier share one half over `stages: separate`
 #   factory.sh status [--story <id>] [--usage] [--refusals] [--brief]   what runs, what waits, every story, the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh follow [--story <id>] [--process <name>] [--once [--lines <n>]] [--all] [--format text|json]
@@ -73,7 +75,8 @@ STORY_BUDGET=""                              # --story-budget: tokens one story 
 # Shared stages are the default: plan to tidy in one builder process, judge and document in one verifier
 # process (never the builder's). The profile's `stages: separate` starts one process per stage instead;
 # for one run, --separate-stages does the same, and FACTORY_SHARED_BUILDER / FACTORY_SHARED_VERIFIER set
-# to 0 or 1 decide each half. --shared-builder and --shared-verifier are accepted and change nothing.
+# to 0 or 1 decide each half. --shared-builder and --shared-verifier share their half for one run over
+# `stages: separate` and FACTORY_SHARED_*=0; without either they change nothing, since shared is the default.
 SHARED_BUILDER="${FACTORY_SHARED_BUILDER:-}"
 case "$(printf '%s' "$SHARED_BUILDER" | tr '[:upper:]' '[:lower:]')" in 0|off|no|false) SHARED_BUILDER="" ;; esac
 SHARED_VERIFIER="${FACTORY_SHARED_VERIFIER:-}"
