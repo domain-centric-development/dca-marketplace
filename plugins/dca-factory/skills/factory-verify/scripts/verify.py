@@ -2396,6 +2396,7 @@ exit 0
         dropped = os.path.join(tempfile.mkdtemp(), "trimmed-plugin")   # outside the project: an update's source never lies inside it
         shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), dropped, symlinks=True)
         shutil.rmtree(os.path.join(dropped, "factory-decisions"))
+        write_file(dropped, "factory-run/scripts/__pycache__/factory-cli.cpython-314.pyc", "stale")
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "update",
                                   "--from", shell_path(dropped))
         check("copies: a skill the pipeline dropped is removed on update; the project's own stay",
@@ -2403,6 +2404,8 @@ exit 0
               and os.path.isdir(os.path.join(skills_dir, "our-own-skill"))
               and "OURS" in open(os.path.join(skills_dir, "stage-plan", "SKILL.md"), encoding="utf-8").read(),
               [l for l in output.splitlines() if "removed" in l or "kept" in l][:3])
+        cached = [d for d, subdirs, _ in os.walk(skills_dir) if os.path.basename(d) == "__pycache__"]
+        check("copies: no __pycache__ a run left in the source travels into the project's skills", not cached, cached)
 
     # 1r. inside an agent session the runner does not start a real tool
     for root in throwaway():

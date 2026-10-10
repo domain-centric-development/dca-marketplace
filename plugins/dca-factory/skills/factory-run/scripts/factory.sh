@@ -163,6 +163,10 @@ must() {                                    # must <what> <command...>
   "$@" || { echo "factory: could not $what — install aborted, the project is unchanged from here on." >&2; exit 1; }
 }
 
+copy_tree() {                               # copy_tree <from> <to>: a skill's folder, without the bytecode a run left in it
+  cp -R "$1" "$2" && find "$2" -name __pycache__ -type d -prune -exec rm -rf {} +
+}
+
 # A gate script states two things about itself: VERSION (where this copy came from) and CONTRACT
 # (the version of the files it reads and writes). Read them out of the file, because the copy in a
 # project is the only thing that knows which release governs that project.
@@ -735,7 +739,7 @@ install_named_carriers() {                  # install_named_carriers <target> <s
     fi
     rm -rf "${target:?}/$name"
     if [ -n "$copy_mode" ]; then
-      cp -R "$found" "$target/$name"
+      copy_tree "$found" "$target/$name"
     else
       ln -s "$found" "$target/$name"
     fi
@@ -827,7 +831,7 @@ install_project() {                         # install_project <tool> <skill fold
           continue
         fi
         rm -rf "${target:?}/$name"
-        must "copy $name into $target" cp -R "$skill" "$target/$name"
+        must "copy $name into $target" copy_tree "$skill" "$target/$name"
         echo "$name" >> "$manifest.new"
         copied=$((copied + 1))
       done < <(printf '%s\n' "$copy_dirs" | while IFS= read -r dir; do [ -n "$dir" ] && printf '%s\n' "$dir"/*; done)
@@ -846,7 +850,7 @@ install_project() {                         # install_project <tool> <skill fold
             if printf '%s\n' "$previous" | grep -qx "$name" || adopts "$name" \
                || diff -rq -x __pycache__ "$skill" "$target/$name" >/dev/null 2>&1; then
               rm -rf "${target:?}/$name"
-              must "copy $name into $target" cp -R "$skill" "$target/$name"
+              must "copy $name into $target" copy_tree "$skill" "$target/$name"
               echo "$name" >> "$manifest.new"
               copied=$((copied + 1))
             else
