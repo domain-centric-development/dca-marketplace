@@ -1589,13 +1589,19 @@ class Run:
                         if os.path.isfile(f"{at}{path}")]
                 if read:
                     catalog += f" Before you write code, read once: {', '.join(read)}."
-        cli_path = self.cli_path[len(self.pwd) + 1:] if self.cli_path.startswith(self.pwd + "/") else self.cli_path
-        if os.path.isfile(".agents/factory/factory-cli.py"):
-            cli_path = ".agents/factory/factory-cli.py"
+        cli_path = self.cli_rel()
         return (f"Where things are: the stack profile is {PROFILE_FILE}; the story's run folder {self.runs}/{story}/; "
                 f"its evidence folder {self.evidence_rel()}/{story}/; what the gate checks in a stage's file: "
                 f"`{self.py} {cli_path} --contract <stage>`.{common}{catalog} The shell you have without asking: "
                 f"the gate, the cli, the profile's commands, and {STAGE_SHELL}.")
+
+    def cli_rel(self):
+        """The cli as a stage's prompt names it: the project's copy by the path its allow-list grants
+        (`.agents/factory/factory-cli.py`, linked into a story's worktree), else relative to where the stage works.
+        An absolute path is a command the allow-list does not cover, and the stage is refused it."""
+        if os.path.isfile(".agents/factory/factory-cli.py"):
+            return ".agents/factory/factory-cli.py"
+        return self.cli_path[len(self.pwd) + 1:] if self.cli_path.startswith(self.pwd + "/") else self.cli_path
 
     def later_refusals(self, story, stage, where):
         """The reports of the gates after <stage> that refused the story and sent it back."""
@@ -1799,8 +1805,8 @@ class Run:
         prompt = (f"Carry out these stages of the delivery pipeline for backlog story {story}, one after another, in "
                   f"this one session: {', '.join(f'stage-{s}' for s in stages)}. The gate: "
                   f"`{self.py} {self.gate_rel} --story {story} --stage <stage> --brief`; the skeletons: "
-                  f"`{self.py} {self.cli_path} --files-skeleton {story} <stage>`, "
-                  f"`{self.py} {self.cli_path} --plan-skeleton {story}`. {self.where_things_are(tool, story)}")
+                  f"`{self.py} {self.cli_rel()} --files-skeleton {story} <stage>`, "
+                  f"`{self.py} {self.cli_rel()} --plan-skeleton {story}`. {self.where_things_are(tool, story)}")
         prompt += self.guard_sentence()
         if self.back_to(story, "build") == "test":
             prompt += f" The build stage sent the story back: {self.runs}/{story}/build.md."
@@ -1975,8 +1981,7 @@ class Run:
         """Judge and document in one tool process — never one process with the builder: the judge's independence
         from the builder is the point of the split."""
         stages = [st for st in SHARED_WINDOWS["verifier"] if self.kind_runs(kind, st)]
-        cli_path = self.cli_path[len(self.pwd) + 1:] if self.cli_path.startswith(self.pwd + "/") else self.cli_path
-        document = (f" The skeleton: `{self.py} {cli_path} --document-skeleton {story}`; the document gate: "
+        document = (f" The skeleton: `{self.py} {self.cli_rel()} --document-skeleton {story}`; the document gate: "
                     f"`{self.py} {self.gate_rel} --story {story} --stage document --brief`.") if kind != "adopt" else ""
         prompt = (f"Carry out these stages of the delivery pipeline for backlog story {story}, one after another, in "
                   f"this one session: {', '.join(f'stage-{s}' for s in stages)}.{document} "

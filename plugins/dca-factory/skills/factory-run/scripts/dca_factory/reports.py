@@ -577,6 +577,22 @@ PART_WEIGHTS = {"input": 1.0, "output": 5.0, "cache_read": 0.1, "cache_write_5m"
 
 PART_SKILL = re.compile(r"(?:^|:)stage-(plan|test|build|tidy|judge|document)$")
 
+#: The same skill read as a file — a process that opens `stage-<x>/SKILL.md` with Read or the shell instead of the
+#: Skill tool has begun that stage just the same.
+PART_SKILL_FILE = re.compile(r"(?:^|[/\s])stage-(plan|test|build|tidy|judge|document)/SKILL\.md\b")
+
+
+def part_of_call(block):
+    """The stage a tool call begins — by the Skill tool or by reading the stage's SKILL.md — or None."""
+    name, given = block.get("name"), block.get("input") or {}
+    if name == "Skill":
+        found = PART_SKILL.search(str(given.get("skill", "")))
+    elif name in ("Read", "Bash"):
+        found = PART_SKILL_FILE.search(str(given.get("file_path") or given.get("command") or ""))
+    else:
+        return None
+    return found.group(1) if found else None
+
 
 def stream_parts(path):
     """[{stage, start, end, input, cache_read, cache_write, output, weight}] of one shared process's stream,
@@ -611,13 +627,12 @@ def stream_parts(path):
             continue
         message = event.get("message") or {}
         for block in message.get("content") or []:
-            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill":
-                found = PART_SKILL.search(str((block.get("input") or {}).get("skill", "")))
-                if found and (current is None or current["stage"] != found.group(1)):
-                    if current is not None and moment:
-                        current["end"] = moment          # a part lasts until the next one begins
-                    current = dict(stage=found.group(1), start=moment, end=moment, answers=set())
-                    parts.append(current)
+            stage = part_of_call(block) if isinstance(block, dict) and block.get("type") == "tool_use" else None
+            if stage and (current is None or current["stage"] != stage):
+                if current is not None and moment:
+                    current["end"] = moment              # a part lasts until the next one begins
+                current = dict(stage=stage, start=moment, end=moment, answers=set())
+                parts.append(current)
         if moment and current is not None:
             current["end"] = moment
         usage = message.get("usage") or {}

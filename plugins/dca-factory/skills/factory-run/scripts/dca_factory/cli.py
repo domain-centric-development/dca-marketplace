@@ -56,7 +56,7 @@ from .contract import (
     record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
     story_id_of, story_kind, TECH_HEADINGS, VERSION)
 from .reports import (
-    claude_session_logs, codex_session_log, FOLLOW_ARGS, parse_time, PART_SKILL, session_usage_allowed, _short,
+    claude_session_logs, codex_session_log, FOLLOW_ARGS, parse_time, part_of_call, session_usage_allowed, _short,
     stream_denials, stream_parts, tokens_of, USAGE_FIELDS, usage_from, WINDOWS)
 from .state import (
     acceptance_records, accepted, accepted_criteria, back_in, claim, claim_path, freeze_all, has_worktree,
@@ -1835,10 +1835,11 @@ def follow_render(event, denied=frozenset()):
                 continue
             if part.get("type") == "tool_use":
                 given = part.get("input") or {}
-                stage = PART_SKILL.search(str(given.get("skill", ""))) if part.get("name") == "Skill" and isinstance(given, dict) else None
+                stage = part_of_call(part) if isinstance(given, dict) else None
                 if stage:
-                    lines.append(f"── {stage.group(1)}")            # a shared process begins this stage
-                    continue
+                    lines.append(f"── {stage}")                     # a shared process begins this stage
+                    if part.get("name") == "Skill":
+                        continue
                 arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
                 lines.append(f"▸ {part.get('name', 'tool')} {_short(arg, 100)}".rstrip())
             elif part.get("type") == "text" and str(part.get("text", "")).strip():

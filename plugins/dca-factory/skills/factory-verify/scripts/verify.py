@@ -1655,6 +1655,10 @@ def verify_runner(runner, verbose=False):
               and output.count("── gate build  (re-checked by the runner)") == 2
               and output.count("ran through") == 1,
               f"exit {code}; starts {starts}; prompts {[p[-120:] for p in prompts]}; {output.strip().splitlines()[-4:]}")
+        # in a story's worktree too: an absolute path is a command the stage's allow-list does not grant
+        named = sorted(set(re.findall(r"`\S+ (\S*(?:factory-cli|story-gate)\.py)", " ".join(prompts))))
+        check("prompt: the shared builder names the cli and the gate by the path the allow-list grants, never absolutely",
+              bool(named) and all(path.startswith(".agents/factory/") for path in named), named)
         common = " ".join(open(os.path.join(os.path.dirname(runner), "..", "reference", "stage-common.md"),
                                encoding="utf-8").read().split())
         check("prompt: a stage is asked for independent calls in one turn and for plain commands the allow-list covers "

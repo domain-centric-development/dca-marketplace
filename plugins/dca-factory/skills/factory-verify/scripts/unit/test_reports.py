@@ -195,6 +195,15 @@ class StreamParts(Reports):
         self.assertEqual(plan["end"], test["start"])
         self.assertEqual(plan["output"] + test["output"], 100)
 
+    def test_a_stage_whose_skill_file_is_read_begins_as_well(self):
+        call = lambda name, given: {"type": "assistant", "timestamp": "2026-10-10T10:00:00Z", "message": {
+            "id": name, "content": [{"type": "tool_use", "name": name, "input": given}], "usage": {"input_tokens": 1}}}
+        path = self.stream(call("Bash", {"command": "cat .claude/skills/stage-plan/SKILL.md; python3 x.py"}),
+                           call("Read", {"file_path": "/p/.claude/skills/stage-test/SKILL.md"}),
+                           call("Read", {"file_path": "/p/.claude/skills/stage-test/reference/more.md"}),
+                           call("Bash", {"command": "grep stage-build src/"}))
+        self.assertEqual([p["stage"] for p in reports.stream_parts(path)[0]], ["plan", "test"])
+
     def test_a_stream_that_loads_no_stage_has_no_parts(self):
         path = self.stream(answer("m1", "2026-10-10T10:00:00Z", {"input_tokens": 1}, text="hi"),
                            {"type": "result", "total_cost_usd": 0.5})
