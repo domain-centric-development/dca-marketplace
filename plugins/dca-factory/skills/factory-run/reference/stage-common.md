@@ -87,9 +87,9 @@ to edit your file after the gate ran, and never a reason to run the gate again.
 ## The shell a stage has
 
 The runner lets a stage run, without asking, the gate, the cli, the commands the stack profile declares,
-and the ordinary reading and text tools — `cd`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `grep`, `find`,
-`xargs`, `sed`, `diff`, `echo`, `printf`, `pwd`, `mkdir`, and `git status`, `git diff`, `git log`,
-`git ls-files`, `git apply --check` (how a break patch is tried). Everything else asks, and in an unattended run nobody answers:
+and the ordinary reading tools — `cd`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `grep`, `diff`, `pwd`, and
+`git status`, `git diff`, `git log`, `git ls-files`, `git apply --check` (how a break patch is tried). Nothing that
+writes: list files with Glob, search with Grep, write with Write (it makes the folders). Everything else asks, and in an unattended run nobody answers:
 the call is refused and the turn is lost. A file is changed with the editor tools, never with a script
 fed on stdin (`python3 -` and a heredoc) — that is the one habit the bench saw refused three times per
 story. In a session the same tools are the ones a person answers "yes" to without looking twice.

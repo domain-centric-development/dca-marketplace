@@ -289,9 +289,10 @@ inside an agent session (`FACTORY_ALLOW_NESTED=1` to force).
 The first message — even "hi" — then gets the state and the choices.
 
 The runner's own processes get a fixed allow-list instead: the gate, the cli, the commands the profile
-declares, and the ordinary reading and text tools (`sed`, `grep`, `find`, `xargs`, `cat`, `head`, `tail`,
+declares, and the ordinary reading tools (`grep`, `cat`, `head`, `tail`, `ls`, `diff`,
 `git diff`, `git ls-files`, `git apply --check`, …) — `factory.sh run --dry-run` prints it as `shell allowed`.
-A script on stdin (`python3 -`) is not on it: a stage changes files with the editor tools.
+No head that writes or runs is on it (`sed -i`, `xargs`, `find -exec`, `echo >`, `printf >`, `mkdir`, a script on
+stdin): a stage lists with Glob, searches with Grep and changes files with the editor tools.
 
 ## How to see where it stands
 
@@ -614,7 +615,7 @@ all — the file contracts and the gate are what make a run honest, not the runn
 | Tool | Isolation the runner applies | Not isolated |
 |---|---|---|
 | Claude Code | `--setting-sources project` (no user skills, user plugins or user settings), `--strict-mcp-config` (no MCP server), `--tools` with the stage tools only, `--exclude-dynamic-system-prompt-sections` (no per-machine text in the system prompt, so every stage shares one cached prefix); flags an older CLI does not know are left out | Claude Code's own built-in skills |
-| OpenCode | `--pure` (no external plugins); usage read from `--format json` | its tool set, which the runner does not restrict |
+| OpenCode | `--pure` (no external plugins); usage read from `--format json` | its tool set: unrestricted by default; `FACTORY_OPENCODE_PERMISSIONS=on` hands it the pipeline's shell list and protected folders as an `OPENCODE_CONFIG_CONTENT` permission block — not yet probed against a signed-in OpenCode, so off until it is |
 | Codex | `--ignore-user-config` (no `~/.codex/config.toml`: its MCP servers, profiles and model stay out; the login stays) — a model then comes from `FACTORY_CODEX_ARGS` | user skills under `~/.codex/skills` |
 
 Carriers the profile names (`carrier.<stage>`, `review.<perspective>`, `knowledge`) are therefore installed into

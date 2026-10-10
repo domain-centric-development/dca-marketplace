@@ -1098,10 +1098,11 @@ def verify_runner(runner, verbose=False):
         check("isolation: every stage gets the same flags, so the prompt prefix is shared across stages",
               len(flags) == 6 and len(set(flags)) == 1, flags)
         shell = [line.split("shell allowed:", 1)[1] for line in output.splitlines() if "shell allowed:" in line]
-        check("shell: the stage's allow-list names the gate, the cli, the reading tools and git's looking verbs, and "
-              "no script on stdin",
-              bool(shell) and all(s in shell[0] for s in ("story-gate.py:*)", "factory-cli.py:*)", "Bash(sed:*)",
-                                                             "Bash(xargs:*)", "Bash(git apply --check:*)"))
+        check("shell: the stage's allow-list names the gate, the cli, the reading tools and git's looking verbs — no "
+              "script on stdin, and no head that writes or runs (sed, xargs, find, echo, printf, mkdir)",
+              bool(shell) and all(s in shell[0] for s in ("story-gate.py:*)", "factory-cli.py:*)", "Bash(grep:*)",
+                                                             "Bash(cat:*)", "Bash(git apply --check:*)"))
+              and not any(f"Bash({head}:*)" in shell[0] for head in ("sed", "xargs", "find", "echo", "printf", "mkdir"))
               and "python3 -" not in shell[0] and "Bash(python3:*)" not in shell[0], shell[:1])
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   env=dict(os.environ, FACTORY_ISOLATION="off"))
@@ -2590,6 +2591,31 @@ exit 0
               and "--disallowedTools" not in codex_line
               and "--add-dir" not in checkout_line and "Edit(//home/p/.agents/factory/**)" in checkout_line,
               listed)
+
+    # OpenCode, where the person switches it on, gets the same shell list and the same protected folders through its
+    # permission block; a block the person set is theirs and is handed over unchanged
+    for root in throwaway():
+        script = (f'PY="{shell_path(sys.executable)}"; '
+                  f'sed -n "/^opencode_permissions()/,/^}}/p" "{shell_path(runner)}" > fn.sh; . ./fn.sh; '
+                  'allowed_commands() { echo "Bash(python3 .agents/factory/story-gate.py:*),Bash(git status:*),Bash(grep:*)"; }; '
+                  'protected_dirs() { printf "/home/p/.agents/factory\\n/home/p/.dca-factory/evidence\\n"; }; '
+                  'ADD_DIRS=(/home/p/project/epics) READ_DIRS=(/home/p/.agents/factory); ')
+        run = lambda extra: subprocess.run([BASH, "-c", script + extra], cwd=root, capture_output=True, text=True,
+                                           encoding="utf-8", errors="replace").stdout.strip()
+        off, on = run("opencode_permissions"), run("FACTORY_OPENCODE_PERMISSIONS=on opencode_permissions")
+        mine = run("OPENCODE_CONFIG_CONTENT='{\"x\":1}' FACTORY_OPENCODE_PERMISSIONS=on opencode_permissions")
+        try:
+            block = json.loads(on).get("permission", {})
+        except ValueError:
+            block = {}
+        check("runner: OpenCode's permission block, switched on, denies every shell head but the list and every edit "
+              "under the protected folders; off, nothing; the person's own block wins",
+              off == "" and mine == '{"x":1}' and block.get("bash", {}).get("*") == "deny"
+              and block.get("bash", {}).get("git status*") == "allow"
+              and block.get("edit", {}).get("/home/p/.agents/factory/**") == "deny"
+              and block.get("edit", {}).get("*") == "allow"
+              and block.get("external_directory", {}).get("/home/p/project/epics/**") == "allow",
+              [off, on, mine])
 
     # 4. the round counter is a file, and it counts up
     for root in throwaway():

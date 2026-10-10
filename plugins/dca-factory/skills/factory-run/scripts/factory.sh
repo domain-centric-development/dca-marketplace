@@ -500,14 +500,18 @@ detect_tool() {
 # turns held a single call. The prompt asks for independent calls in one turn.
 # A script fed on stdin (`python3 -`) stays out on purpose: a file is changed with the editor tools, and a
 # stage that reaches for a script instead is told so in its prompt.
-STAGE_SHELL="cd, ls, cat, head, tail, wc, sort, grep, find, xargs, sed, diff, echo, printf, pwd, mkdir, and git status, git diff, git log, git ls-files, git apply --check"
+# What writes or runs anything stays out as well — `sed` (`-i`), `xargs` and `find` (`-exec`, `-delete`), `echo`
+# and `printf` (a redirect), `mkdir`: each allowed head is allowed with every argument, so each of them was a way
+# to write where the editor tools are refused (WP-94). A stage lists files with Glob, searches with Grep and
+# writes with Write, which makes the folders it needs.
+STAGE_SHELL="cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git status, git diff, git log, git ls-files, git apply --check"
 allowed_commands() {
   local list="Bash($PY $GATE:*),Bash($PY .agents/factory/factory-cli.py:*)" head
   for head in $(cli --command-heads 2>/dev/null); do
     case "$list" in *"Bash($head:*)"*) ;; *) list="$list,Bash($head:*)" ;; esac
   done
   local tool
-  for tool in "cd" "ls" "cat" "head" "tail" "wc" "sort" "grep" "find" "xargs" "sed" "diff" "echo" "printf" "pwd" "mkdir" \
+  for tool in "cd" "ls" "cat" "head" "tail" "wc" "sort" "grep" "diff" "pwd" \
               "git status" "git diff" "git log" "git ls-files" "git apply --check"; do
     case "$list" in *"Bash($tool:*)"*) ;; *) list="$list,Bash($tool:*)" ;; esac
   done
@@ -715,6 +719,28 @@ deny_flags() {                              # deny_flags <tool>
   printf -- '--disallowedTools %s' "$rules"
 }
 
+# OpenCode reads a permission block from OPENCODE_CONFIG_CONTENT (2.0.x): the same shell list as Claude's, every
+# edit allowed but under the protected folders, the linked folders as external ones it may use. Not probed against
+# a signed-in binary yet, so it is on only with FACTORY_OPENCODE_PERMISSIONS=on; without it OpenCode runs with its
+# own configuration, unrestricted, and the run says so. An existing OPENCODE_CONFIG_CONTENT is the person's and wins.
+opencode_permissions() {
+  if [ -n "${OPENCODE_CONFIG_CONTENT:-}" ] || [ "${FACTORY_OPENCODE_PERMISSIONS:-off}" != on ]; then
+    printf '%s' "${OPENCODE_CONFIG_CONTENT:-}"; return
+  fi
+  "$PY" - "$(allowed_commands)" "$(protected_dirs)" ${ADD_DIRS[@]+"${ADD_DIRS[@]}"} ${READ_DIRS[@]+"${READ_DIRS[@]}"} <<'PYEOF'
+import json, sys
+allowed, protected, linked = sys.argv[1], sys.argv[2].splitlines(), sys.argv[3:]
+bash = {"*": "deny"}
+for entry in allowed.split(","):
+    if entry.startswith("Bash(") and entry.endswith(":*)"):
+        bash[entry[5:-3] + "*"] = "allow"
+edit = {"*": "allow"}
+edit.update({dir.rstrip("/") + "/**": "deny" for dir in protected if dir})
+print(json.dumps({"permission": {"bash": bash, "edit": edit,
+                                 "external_directory": {dir.rstrip("/") + "/**": "allow" for dir in linked}}}))
+PYEOF
+}
+
 invoke() {                                  # invoke <tool> <prompt>
   local tool=$1 prompt=$2
   # Which model, which effort, which sandbox a tool runs with is the tool's configuration and not
@@ -754,7 +780,8 @@ invoke() {                                  # invoke <tool> <prompt>
     codex)    codex exec --json -s workspace-write $(add_dir_flags codex) $(isolation_flags codex) $model_args \
                 -c sandbox_workspace_write.network_access=true \
                 ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" < /dev/null > "$raw" ;;
-    opencode) opencode run --format json $(isolation_flags opencode) $model_args \
+    opencode) OPENCODE_CONFIG_CONTENT="$(opencode_permissions)" \
+              opencode run --format json $(isolation_flags opencode) $model_args \
                 ${FACTORY_OPENCODE_ARGS:+$FACTORY_OPENCODE_ARGS} "$prompt" < /dev/null > "$raw" ;;
     *)        echo "factory: unknown tool '$tool'" >&2; return 2 ;;
   esac
@@ -2220,8 +2247,8 @@ up in a dependency's sources or a package cache, which is never the place."
 folder $(evidence "$story")/ — the journal, the diff, the gate's reports, written by the gate and the runner and only read \
 by you, as the pipeline and the skills are; what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
 source.$catalog \
-The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL. Change a file \
-with the editor tools; a script fed on stdin (python3 -) is refused and costs a turn. Every command is checked part \
+The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL. List files with \
+Glob, search with Grep, change a file with the editor tools (Write makes its folders); a script fed on stdin (python3 -) is refused and costs a turn. Every command is checked part \
 by part before it runs, and nobody is there to grant one: a loop, a variable or \$(…), a part outside that list and \
 a path outside the project are refused, each a turn spent. Run one plain command per call from the project root, \
 never a cd to an absolute path; read files with Read — several in parallel calls, never a loop over them. \
@@ -3196,6 +3223,9 @@ case "$command" in
       check_contract_first || exit $?
       check_local_context "$tool"
       isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
+      { [ "${tool:-}" = opencode ] && [ "${FACTORY_OPENCODE_PERMISSIONS:-off}" != on ] && echo "factory: OpenCode runs \
+the stages with its own permissions, unrestricted — FACTORY_OPENCODE_PERMISSIONS=on hands it the pipeline's list (not yet \
+probed against a signed-in OpenCode)" >&2; }
       if [ -z "$from" ]; then
         # No stage named: the story starts where its files say, as the backlog run would start it.
         local_start=$(cli --story "$story" --start --slots 1) || exit $?
@@ -3238,6 +3268,9 @@ case "$command" in
     check_contract_first || exit $?
     check_local_context "${tool:-}"
     isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
+    { [ "${tool:-}" = opencode ] && [ "${FACTORY_OPENCODE_PERMISSIONS:-off}" != on ] && echo "factory: OpenCode runs \
+the stages with its own permissions, unrestricted — FACTORY_OPENCODE_PERMISSIONS=on hands it the pipeline's list (not yet \
+probed against a signed-in OpenCode)" >&2; }
     [ -n "$dry" ] || { take_checkout && guard_pipeline_start; } || exit $?
     run_backlog "${tool:-stand-in}" "$watch" "$interval" "$dry"
     ;;
