@@ -1142,8 +1142,9 @@ def write_claim(path, owner, since):
     os.replace(temporary, path)
 
 
-def claim(cwd, owner):
-    """0 when `owner` holds the checkout now (claimed, renewed or taken over), 3 when another does."""
+def claim(cwd, owner, say=print):
+    """0 when `owner` holds the checkout now (claimed, renewed or taken over), 3 when another does; `say` gets
+    the line that tells which."""
     path = claim_path(cwd)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # Written aside, then linked into place: a link fails when the claim exists, so the file appears
@@ -1154,7 +1155,7 @@ def claim(cwd, owner):
         json.dump({"owner": owner, "since": stamp, "beat": stamp}, handle)
     try:
         os.link(temporary, path)
-        print(f"claim: {owner} holds the checkout")
+        say(f"claim: {owner} holds the checkout")
         return 0
     except FileExistsError:
         pass
@@ -1163,7 +1164,7 @@ def claim(cwd, owner):
             descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 handle.write(read_text(temporary))
-            print(f"claim: {owner} holds the checkout")
+            say(f"claim: {owner} holds the checkout")
             return 0
         except FileExistsError:
             pass
@@ -1181,10 +1182,10 @@ def claim(cwd, owner):
     age = (datetime.now(timezone.utc) - beat).total_seconds() if beat else None
     if age is None or age > stale_after():
         write_claim(path, owner, None)
-        print(f"claim: took over from {held.get('owner', 'an unreadable claim')} — no sign of life for "
+        say(f"claim: took over from {held.get('owner', 'an unreadable claim')} — no sign of life for "
               f"{int(age // 60) if age is not None else '?'} min, so it was stopped or crashed")
         return 0
-    print(f"claim: the checkout is held by {held.get('owner')} since {held.get('since')} (last sign of life "
+    say(f"claim: the checkout is held by {held.get('owner')} since {held.get('since')} (last sign of life "
           f"{int(age // 60)} min ago) — one worker per checkout; this one does not start")
     return 3
 

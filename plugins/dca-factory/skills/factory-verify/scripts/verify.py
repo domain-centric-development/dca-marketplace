@@ -3890,10 +3890,10 @@ def verify_setup(runner, verbose=False):
     check("runner: factory.sh parses no profile, stage file or record itself — every read goes through the cli",
           not parsed, parsed[:3])
     # the runner reads in its own process: a cli process per question costs a Python start each, ~0.1 s, some
-    # twenty times a stage; what is left as a process changes state — the claim, a skeleton, a worktree, the schedule
+    # twenty times a stage; what is left as a process changes state — the release, a skeleton, a worktree, the schedule
     reader_verbs = ("--get", "--model", "--verdict", "--needs-human", "--back-to", "--open-decisions", "--delivered",
                     "--kind", "--start", "--command-heads", "--tool-flags", "--perspectives", "--place", "--usage",
-                    "--usage-from", "--journal-line")
+                    "--usage-from", "--journal-line", "--claim")
     spawned = sorted({verb for verb in reader_verbs
                       if re.search(rf'self\.cli\([^)]*"{re.escape(verb)}"', modules["runner"])
                       or re.search(rf'self\.cli_path,[^\]]*"{re.escape(verb)}"', modules["runner"])})

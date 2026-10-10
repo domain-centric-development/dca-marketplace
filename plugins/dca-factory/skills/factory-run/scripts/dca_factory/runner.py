@@ -29,7 +29,7 @@ from .contract import (
 from .reports import (
     tokens_of, usage_lines)
 from .state import (
-    back_in, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
+    back_in, claim, freeze_all, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
 from .gate import (
@@ -1244,8 +1244,7 @@ class Run:
         if not self.gate_installed():
             err(f"factory: no gate at {self.gate_rel} — the checkout is not claimed; install the pipeline")
             return 0
-        code, _ = self.run([sys.executable, self.cli_path, "--claim", self.worker])
-        if code != 0:
+        if self.take_claim(print) != 0:
             err("factory: another worker holds this checkout — see 'factory.sh status'. Nothing was started.")
             return 5
         self.claimed = True
@@ -1262,8 +1261,18 @@ class Run:
         """The claim, renewed before a stage: False when another worker took the checkout over."""
         if not self.gate_installed():
             return True
-        code, _ = self.run([sys.executable, self.cli_path, "--claim", self.worker], stdout=subprocess.DEVNULL)
-        return code == 0
+        return self.take_claim(lambda _line: None) == 0
+
+    def take_claim(self, say):
+        """Take or renew the checkout's claim — one per main checkout, so a worktree renews its home's — after the
+        stories' journals are frozen, as every command that writes does. 3 when another worker holds it; 1 when the
+        claim cannot be written."""
+        self.profile()
+        freeze_all(place("runs"))
+        try:
+            return claim(os.getcwd(), self.worker, say)
+        except (OSError, ValueError):
+            return 1
 
     def take_lock(self):
         """One integration at a time: the git work in the main checkout runs under a lock beside the run folder."""
