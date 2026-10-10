@@ -103,6 +103,7 @@ import textwrap
 
 
 import time
+import typing
 
 
 from xml.etree import ElementTree
@@ -2815,21 +2816,6 @@ def check_documented(result, runs, story_id, cwd):
         result.ok("documented", f"{files} document(s) updated, every claim resolves")
 
 
-#: Extra profile commands run per stage, in this order. A key the profile does not
-#: declare is skipped and named — a gate that fails on a command nobody configured
-#: gets switched off, and then there is no governance at all.
-STAGE_CHECKS = {
-    "test": (),
-    "build": ("architecture", "format"),
-    # The tidy stage changes no behaviour, so its whole claim is that everything still holds:
-    # the same commands as the build stage, run again after the refactor.
-    "tidy": ("architecture", "format"),
-    "document": ("architecture",),
-    # The story on the main line as it is now: everything the tidy gate holds the story to, once more.
-    "integrate": ("architecture", "format"),
-}
-
-
 def check_stage_commands(result, profile, cwd, stage):
     """The gate must not *know* its checks, it looks them up. Adding a capability is
     then one line in the profile, not an edit to a stage."""
@@ -3548,13 +3534,62 @@ def record_path(story_id, rid, story_path=None):
     return os.path.join(store, rid[len(story_id) + 1:] + ".md") if rid.startswith(story_id + "-") else os.path.join(store, rid + ".md")
 
 
-STAGE_FILES = {"plan": "plan.md", "test": "tests.md", "build": "build.md", "tidy": "tidy.md",
-               "judge": "judge.md", "document": "document.md"}
+class Stage(typing.NamedTuple):
+    """One row of the pipeline. Everything the gate, the cli and the runner know about a stage is here; nothing
+    outside the table names a stage to decide on it."""
+    name: str
+    file: str = ""            #: the hand-over it writes under the run folder ("" — a gate-only step)
+    window: str = ""          #: the shared process that may carry it ("builder", "verifier"), "" — its own
+    kinds: tuple = ("story",) #: the story kinds that run it (story, journey, adopt)
+    gated: bool = True        #: a gate runs for it (`--stage <name>`)
+    post_gated: bool = False  #: that gate runs after its file is written, so a pass vouches for the file
+    commands: tuple = ()      #: the profile's extra commands its gate runs, in this order; a key not declared is
+                              #: skipped and named — a gate failing on a command nobody configured gets switched off
+    tested: bool = False      #: its gate runs the mapped tests (red or green) and the checks before them
+    suite: bool = False       #: its gate runs the policy's required suites whole
+    in_order: bool = True     #: a step of the story's run order (adopt and integrate are steps after it)
+
+
+ALL_KINDS = ("story", "journey", "adopt")
+
+STAGES = (
+    Stage("plan", "plan.md", window="builder", kinds=ALL_KINDS),
+    Stage("test", "tests.md", window="builder", kinds=ALL_KINDS, post_gated=True, tested=True),
+    Stage("build", "build.md", window="builder", post_gated=True, commands=("architecture", "format"),
+          tested=True, suite=True),
+    # The tidy stage changes no behaviour, so its whole claim is that everything still holds: the same commands
+    # as the build stage, run again after the refactor.
+    Stage("tidy", "tidy.md", window="builder", post_gated=True, commands=("architecture", "format"),
+          tested=True, suite=True),
+    Stage("judge", "judge.md", window="verifier", kinds=ALL_KINDS, gated=False),
+    Stage("document", "document.md", window="verifier", kinds=("story", "journey"), post_gated=True,
+          commands=("architecture",)),
+    # Nothing built: the adopt gate delivers an adopted story after its judge.
+    Stage("adopt", kinds=("adopt",), in_order=False),
+    # The story on the main line as it is now: everything the tidy gate holds the story to, once more.
+    Stage("integrate", "integrate.md", kinds=ALL_KINDS, commands=("architecture", "format"), tested=True,
+          suite=True, in_order=False),
+)
+STAGE = {stage.name: stage for stage in STAGES}
+
+#: The hand-over each stage of the run order writes.
+STAGE_FILES = {s.name: s.file for s in STAGES if s.in_order}
 
 #: One process may carry several stages and mark its window under one name: the shared builder (plan to
 #: tidy) and the shared verifier (judge, then document). The journal, the changed-files record and the
 #: usage are that window's; every stage still writes its own file.
-SHARED_WINDOWS = {"builder": ("plan", "test", "build", "tidy"), "verifier": ("judge", "document")}
+SHARED_WINDOWS = {w: tuple(s.name for s in STAGES if s.window == w) for w in dict.fromkeys(s.window for s in STAGES if s.window)}
+
+#: Extra profile commands run per stage, in this order.
+STAGE_CHECKS = {s.name: s.commands for s in STAGES if s.gated}
+
+#: The stages whose gate runs after their file is written, so a pass of that gate vouches for the file as it stands.
+POST_GATED = tuple(s.name for s in STAGES if s.post_gated)
+
+
+def stage_order(kind="story"):
+    """The run order of a story of this kind."""
+    return tuple(s.name for s in STAGES if s.in_order and kind in s.kinds)
 
 
 ANSWER_FIELDS = ("answer", "by", "at")
@@ -4795,15 +4830,15 @@ def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
 # Several stories are a loop over one story run, and the loop needs to know what comes next without
 # anyone remembering it. So the state is read off the same files a single run leaves — stage files,
 # refusal reports, the round counter, the verdict, the decision records — and never stored.
-STAGE_ORDER = ("plan", "test", "build", "tidy", "judge", "document")
+STAGE_ORDER = stage_order("story")
 #: Processes a model key may name beside the stages: the shared builder and verifier, and the reviewers.
 MODEL_PROCESSES = ("builder", "verifier", "review")
 
 
-JOURNEY_ORDER = ("plan", "test", "judge", "document")       # nothing to build: the steps are delivered
+JOURNEY_ORDER = stage_order("journey")                       # nothing to build: the steps are delivered
 
 
-ADOPT_ORDER = ("plan", "test", "judge")                     # nothing built: the adopt gate delivers it
+ADOPT_ORDER = stage_order("adopt")                           # nothing built: the adopt gate delivers it
 
 
 RUNNABLE = ("ready", "in-progress", "resumable")
@@ -4958,10 +4993,6 @@ def accepted_criteria(body):
         if match:
             found.append((match.group(1), ACCEPTED_TESTS.sub("", match.group(2)).strip()))
     return found
-
-
-#: The stages whose gate runs after their file is written, so a pass of that gate vouches for the file as it stands.
-POST_GATED = ("test", "build", "tidy", "document")
 
 
 def observe_writes(runs, story_id):
