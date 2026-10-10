@@ -613,8 +613,12 @@ contracts plus the gate keep an in-session run honest.
 Portable *in form* is not the same as verified *in fact*, and the difference is worth stating
 rather than leaving a reader to find it in a failing run.
 
-**Agent tools.** Claude Code, Codex and OpenCode have an adapter in `factory.sh`; any other tool
-plugs in through `FACTORY_TOOL_CMD`. Run the stage skills in-session and no adapter is needed at
+**Agent tools.** Claude Code, Codex and OpenCode each have a record in `factory-cli.py` — the command, how its
+flags are probed, the isolation, the usage format, the skill folder, the model flag, how linked and protected
+folders are named — and the runner starts a stage with what `factory-cli.py --tool-invocation <tool>` returns. Every
+flag is checked against the binary's help once per binary, before the first stage (`factory-cli.py --tool-probe
+<tool>`): a flag a stage needs that the binary lacks stops the run, an isolation flag it lacks is left out and named.
+Any other tool plugs in through `FACTORY_TOOL_CMD`. Run the stage skills in-session and no adapter is needed at
 all — the file contracts and the gate are what make a run honest, not the runner.
 
 **What a runner stage sees.** Only the project. Each tool gets the isolation it offers:
@@ -622,8 +626,8 @@ all — the file contracts and the gate are what make a run honest, not the runn
 | Tool | Isolation the runner applies | Not isolated |
 |---|---|---|
 | Claude Code | `--setting-sources project` (no user skills, user plugins or user settings), `--strict-mcp-config` (no MCP server), `--tools` with the stage tools only, `--exclude-dynamic-system-prompt-sections` (no per-machine text in the system prompt, so every stage shares one cached prefix); flags an older CLI does not know are left out | Claude Code's own built-in skills |
-| OpenCode | `--pure` (no external plugins); usage read from `--format json` | its tool set: unrestricted by default; `FACTORY_OPENCODE_PERMISSIONS=on` hands it the pipeline's shell list and protected folders as an `OPENCODE_CONFIG_CONTENT` permission block — not yet probed against a signed-in OpenCode, so off until it is |
-| Codex | `--ignore-user-config` (no `~/.codex/config.toml`: its MCP servers, profiles and model stay out; the login stays) — a model then comes from `FACTORY_CODEX_ARGS` | user skills under `~/.codex/skills` |
+| OpenCode | `--standalone` (a server of its own — attached to the background service, a stage would run with that process's configuration and permissions), an empty `OPENCODE_CONFIG_DIR` of the pipeline's (no user `opencode.json`, plugins or MCP servers; the login stays; a folder the person sets wins), and a permission block in `OPENCODE_CONFIG_CONTENT`: the pipeline's shell list, edits refused under the protected folders (named relative to the project — an absolute edit rule matches nothing), the linked folders as external ones it may write, the main checkout's protected folders refused by their path; `FACTORY_OPENCODE_PERMISSIONS=off` leaves the block out. Probed live on 2.0.20 | providers configured only in the user's `opencode.json` (a built-in one, or the project's own `opencode.json`, works); its usage: the last step's figures are often missing from `--format json`, so the cost read is a lower bound |
+| Codex | `--ignore-user-config` (no `~/.codex/config.toml`: its MCP servers, profiles and model stay out; the login stays) — a model then comes from `FACTORY_CODEX_ARGS`; its sandbox keeps `.agents/` read-only in every writable root, so the installed pipeline is out of reach | user skills under `~/.codex/skills`; the evidence and skill folders stay writable (the hash and the gate stand behind them) |
 
 Carriers the profile names (`carrier.<stage>`, `review.<perspective>`, `knowledge`) are therefore installed into
 the project: `setup --tool claude` puts them into `.claude/skills/` (one entry per skill, linked or copied like

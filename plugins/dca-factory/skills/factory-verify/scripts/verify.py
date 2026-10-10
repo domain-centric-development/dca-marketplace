@@ -2648,7 +2648,7 @@ exit 0
     def invocation(tool, *extra, env=None):
         return subprocess.run([sys.executable, cli_of(runner), "--tool-invocation", tool, *extra], capture_output=True,
                               text=True, encoding="utf-8", errors="replace",
-                              env=dict(os.environ, FACTORY_ISOLATION="off", **(env or {}))).stdout.strip()
+                              env={**os.environ, "FACTORY_ISOLATION": "off", **(env or {})}).stdout.strip()
     linked = ("--writable", "/home/p/project/epics", "--readable", "/home/p/.agents/factory",
               "--protect", "/home/p/.agents/factory", "--protect", "/home/p/.dca-factory/evidence")
     claude_line, codex_line = invocation("claude", *linked), invocation("codex", *linked)
@@ -2679,36 +2679,61 @@ exit 0
         copy_scripts(runner, root)
         lacking = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                              env=dict(os.environ, FACTORY_TOOL_HELP_CLAUDE="  -p, --print\n  --model <model>\n"))
-        bare = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "opencode", "--dry-run",
-                          env=dict(os.environ, FACTORY_TOOL_HELP_OPENCODE="  --format choice\n  --model, -m string\n"))
+        claude_help = ("  -p, --print\n  --permission-mode <mode>\n  --output-format <format>\n  --verbose\n  --model <model>\n"
+                       "  --add-dir <directories...>\n  --allowedTools, --allowed-tools <tools...>\n"
+                       "  --disallowedTools, --disallowed-tools <tools...>\n  --setting-sources <sources>\n"
+                       "  --tools <tools...>\n  --exclude-dynamic-system-prompt-sections\n")
+        bare = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                          env=dict(os.environ, FACTORY_TOOL_HELP_CLAUDE=claude_help))
         flags = [line.split("tool flags:", 1)[1].strip() for line in bare[1].splitlines() if "tool flags:" in line]
         check("tools: a binary that lacks a flag a stage needs stops the run before the first stage, named",
               lacking[0] == 2 and "does not name" in lacking[1] and "--add-dir" in lacking[1]
               and "── stage" not in lacking[1], lacking[1][-300:])
         check("tools: an isolation flag the binary lacks is left out of every stage and named at the start",
-              bare[0] == 0 and "opencode knows no --pure" in bare[1] and flags and all("--pure" not in f for f in flags),
+              bare[0] == 0 and "claude knows no --strict-mcp-config" in bare[1] and flags
+              and all("--strict-mcp-config" not in f and "--setting-sources project" in f for f in flags),
               bare[1][-300:])
+
+    # OpenCode runs a server of its own (attached to the background service, it would take that process's
+    # configuration) and reads an empty configuration folder of the pipeline's (it has no flag that keeps the
+    # person's setup out); a folder the person names wins, and FACTORY_ISOLATION=off drops it
+    plain = subprocess.run([sys.executable, cli_of(runner), "--tool-invocation", "opencode"], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace",
+                           env={k: v for k, v in os.environ.items() if k != "OPENCODE_CONFIG_DIR"}).stdout
+    own = invocation("opencode", env={"FACTORY_ISOLATION": "on", "OPENCODE_CONFIG_DIR": "/mine"})
+    check("tools: OpenCode runs --standalone with an empty configuration folder of the pipeline's — the person's "
+          "named folder wins, and isolation off drops it",
+          "opencode run --standalone" in plain and re.search(r"^OPENCODE_CONFIG_DIR=\S+ ", plain) is not None
+          and "--pure" not in plain and "OPENCODE_CONFIG_DIR" not in own
+          and "OPENCODE_CONFIG_DIR" not in invocation("opencode"), [plain.strip(), own])
 
     # OpenCode, where the person switches it on, gets the same shell list and the same protected folders through its
     # permission block; a block the person set is theirs and is handed over unchanged
     allow = ("--allow", "Bash(python3 .agents/factory/story-gate.py:*),Bash(git status:*),Bash(grep:*)")
     block_of = lambda line: shlex.split(line)[0].split("=", 1)[1] if line.startswith("OPENCODE_CONFIG_CONTENT=") else None
-    off = block_of(invocation("opencode", *allow, *linked, env={"OPENCODE_CONFIG_CONTENT": ""}))
+    worktree = {"FACTORY_HOME": "/home/p"}
+    default = block_of(invocation("opencode", *allow, *linked, env={"OPENCODE_CONFIG_CONTENT": "", **worktree}))
+    off = block_of(invocation("opencode", *allow, *linked, env={"FACTORY_OPENCODE_PERMISSIONS": "off",
+                                                               "OPENCODE_CONFIG_CONTENT": ""}))
     on = block_of(invocation("opencode", *allow, *linked, env={"FACTORY_OPENCODE_PERMISSIONS": "on",
-                                                              "OPENCODE_CONFIG_CONTENT": ""}))
+                                                              "OPENCODE_CONFIG_CONTENT": "", **worktree}))
     mine = block_of(invocation("opencode", *allow, *linked, env={"FACTORY_OPENCODE_PERMISSIONS": "on",
                                                                 "OPENCODE_CONFIG_CONTENT": '{"x":1}'}))
     try:
         block = json.loads(on or "").get("permission", {})
     except ValueError:
         block = {}
-    check("runner: OpenCode's permission block, switched on, denies every shell head but the list and every edit "
-          "under the protected folders; off, nothing; the person's own block wins",
-          off == "" and mine == '{"x":1}' and block.get("bash", {}).get("*") == "deny"
+    check("runner: OpenCode's permission block, on unless switched off, denies every shell head but the list and every edit "
+          "under the protected folders, named relative to the project (an absolute edit rule matches nothing there) and "
+          "refused as external folders by their path in a worktree; off, nothing; the person's own block wins",
+          off == "" and default == on and mine == '{"x":1}' and block.get("bash", {}).get("*") == "deny"
           and block.get("bash", {}).get("git status*") == "allow"
-          and block.get("edit", {}).get("/home/p/.agents/factory/**") == "deny"
+          and block.get("edit", {}).get(".agents/factory/**") == "deny"
+          and block.get("edit", {}).get(".dca-factory/evidence/**") == "deny"
+          and not any(key.startswith("/") for key in block.get("edit", {}))
           and block.get("edit", {}).get("*") == "allow"
-          and block.get("external_directory", {}).get("/home/p/project/epics/**") == "allow",
+          and block.get("external_directory", {}).get("/home/p/project/epics/**") == "allow"
+          and block.get("external_directory", {}).get("/home/p/.agents/factory/**") == "deny",
           [off, on, mine])
 
     # 4. the round counter is a file, and it counts up

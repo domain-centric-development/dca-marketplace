@@ -632,9 +632,8 @@ check_tool() {                              # check_tool <tool>
     return 2
   fi
   isolated && printf '%s\n' "$out" | sed -n 's/^\([a-z]*\): no /factory: \1 knows no /p' >&2
-  [ "$1" = opencode ] && [ "${FACTORY_OPENCODE_PERMISSIONS:-off}" != on ] && [ -z "${OPENCODE_CONFIG_CONTENT:-}" ] \
-    && echo "factory: OpenCode runs the stages with its own permissions, unrestricted — FACTORY_OPENCODE_PERMISSIONS=on \
-hands it the pipeline's list" >&2
+  [ "$1" = opencode ] && [ "${FACTORY_OPENCODE_PERMISSIONS:-on}" = off ] && [ -z "${OPENCODE_CONFIG_CONTENT:-}" ] \
+    && echo "factory: FACTORY_OPENCODE_PERMISSIONS=off — OpenCode runs the stages with its own permissions" >&2
   return 0
 }
 
@@ -729,9 +728,9 @@ protected_dirs() {
     case "$dir" in /*|?:*) printf '%s\n' "$dir" ;; *) printf '%s\n' "$HOME_DIR/$dir" ;; esac
   done
 }
-# OpenCode reads a permission block from OPENCODE_CONFIG_CONTENT: the same shell list as Claude's, every edit allowed
-# but under the protected folders, the linked folders as external ones it may use. Not on by default — set
-# FACTORY_OPENCODE_PERMISSIONS=on; an existing OPENCODE_CONFIG_CONTENT is the person's and wins.
+# OpenCode reads a permission block from OPENCODE_CONFIG_CONTENT (built by the cli, probed live on 2.0.20): the same
+# shell list as Claude's, every edit allowed but under the protected folders, the linked folders as external ones it
+# may use. FACTORY_OPENCODE_PERMISSIONS=off leaves it out; an existing OPENCODE_CONFIG_CONTENT is the person's and wins.
 
 invoke() {                                  # invoke <tool> <prompt>
   local tool=$1 prompt=$2
@@ -2203,8 +2202,10 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
   # checkout's, through the worktree's link. A path the list does not name is a refused call.
   local cli_path=${CLI#"$PWD/"}
   [ -f .agents/factory/factory-cli.py ] && cli_path=.agents/factory/factory-cli.py
+  # The evidence through the worktree's link, relative: a tool that refuses the main checkout's folders by their path
+  # (OpenCode's permission block) reads it there.
   printf '%s' "Where things are: the stack profile is $PROFILE; the story's run folder $RUNS/$story/; its evidence \
-folder $(evidence "$story")/; what the gate checks in a stage's file: \`$PY $cli_path --contract <stage>\`.$common$catalog \
+folder $(evidence_rel)/$story/; what the gate checks in a stage's file: \`$PY $cli_path --contract <stage>\`.$common$catalog \
 The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL."
 }
 

@@ -777,6 +777,8 @@ class Tool(typing.NamedTuple):
     deny: bool = False        #: the protected folders are refused through `--disallowedTools Edit(//<dir>/**)`
     allow_list: bool = False  #: the shell a stage has is passed as `--allowed-tools`
     permission_env: str = ""  #: the environment variable a permission block is passed in
+    isolation_env: tuple = () #: environment variables that do the same where the tool has no flag: (name, value),
+                              #: `{empty}` an empty folder of the pipeline's own
     plugins: bool = False     #: it loads the method skills from its plugins, so its skill folder holds the pipeline's
                               #: alone; a tool without plugins finds only its folder, which then holds them all
 
@@ -798,8 +800,11 @@ TOOLS = (
          help=("codex", "exec", "--help"), isolation=(("--ignore-user-config",),),
          usage="codex-jsonl", skills=".codex/skills", model_flag="-m", args_env="FACTORY_CODEX_ARGS",
          add_dirs="writable"),
-    Tool("opencode", ("opencode", "run", "--format", "json"),
-         help=("opencode", "run", "--help"), isolation=(("--pure",),),
+    # `opencode run` otherwise attaches to a background service started with another configuration: the permission
+    # block, the isolation and the model would be that process's. A config folder of its own keeps the person's
+    # opencode.json, plugins and MCP servers out; the login lives in the data folder and stays (probed 2.0.20).
+    Tool("opencode", ("opencode", "run", "--standalone", "--format", "json"),
+         help=("opencode", "run", "--help"), isolation=(), isolation_env=(("OPENCODE_CONFIG_DIR", "{empty}"),),
          usage="opencode-json", skills=".opencode/skills", model_flag="-m", args_env="FACTORY_OPENCODE_ARGS",
          add_dirs="permission", permission_env="OPENCODE_CONFIG_CONTENT"),
 )
@@ -845,6 +850,17 @@ def tool_help(tool):
     return text
 
 
+def empty_folder():
+    """A folder of the pipeline's own that holds nothing: what a tool reads as its configuration folder when the
+    person's must stay out."""
+    folder = os.path.join(tempfile.gettempdir(), f"dca-factory-empty-{os.getuid() if hasattr(os, 'getuid') else 0}")
+    with contextlib.suppress(OSError):
+        os.makedirs(folder, exist_ok=True)
+    if os.path.isdir(folder) and not os.listdir(folder):
+        return folder
+    return tempfile.mkdtemp(prefix="dca-factory-empty-")
+
+
 def has_flag(help_text, flag):
     return re.search(r"(^|[\s,])" + re.escape(flag) + r"([\s,=<\[]|$)", help_text, re.M) is not None
 
@@ -876,26 +892,35 @@ def unprobed_flags(tool):
     return missing(flags), missing(group[0] for group in tool.isolation)
 
 
-def permission_block(allowed, protected, linked):
-    """OpenCode's permission block: the same shell as Claude's allow-list, every edit allowed but under the protected
-    folders, the linked folders as external ones it may use."""
+def permission_block(allowed, protected, linked, cwd=None, home=None):
+    """OpenCode's permission block: the same shell as Claude's allow-list; every edit allowed but under the protected
+    folders, which its edit rules match relative to the project (an absolute pattern matches nothing there — probed
+    2.0.20); the linked folders as external ones it may use, and the protected ones among them refused there."""
+    cwd, home = os.path.abspath(cwd or os.getcwd()), os.path.abspath(home or os.environ.get("FACTORY_HOME") or cwd or ".")
     bash = {"*": "deny"}
     for entry in allowed.split(","):
         if entry.startswith("Bash(") and entry.endswith(":*)"):
             bash[entry[5:-3] + "*"] = "allow"
-    edit = {"*": "allow"}
-    edit.update({folder.rstrip("/") + "/**": "deny" for folder in protected if folder})
-    return json.dumps({"permission": {"bash": bash, "edit": edit,
-                                      "external_directory": {folder.rstrip("/") + "/**": "allow" for folder in linked}}})
+    edit, external = {"*": "allow"}, {folder.rstrip("/") + "/**": "allow" for folder in linked}
+    for folder in (f for f in protected if f):
+        absolute = os.path.abspath(folder)
+        inside = os.path.relpath(absolute, home)
+        if not inside.startswith(".."):
+            edit[inside.replace(os.sep, "/") + "/**"] = "deny"          # the project's, and a worktree's link of it
+        if os.path.relpath(absolute, cwd).startswith(".."):
+            external[absolute.rstrip("/") + "/**"] = "deny"             # the main checkout's, named by its path
+    return json.dumps({"permission": {"bash": bash, "edit": edit, "external_directory": external}})
 
 
 def tool_invocation(tool, model="", writable=(), readable=(), protected=(), allowed=""):
     """The command line that starts one stage with this tool, as shell words for the runner to `eval`, with the
     prompt left as `"$prompt"` — the runner's variable, never text the cli quotes."""
-    words = []
+    # a variable the person set is theirs and wins — a config folder that carries their local providers, say
+    words = [f"{name}={shlex.quote(value.replace('{empty}', empty_folder()))}" for name, value in tool.isolation_env
+             if os.environ.get("FACTORY_ISOLATION", "on") != "off" and not os.environ.get(name)]
     if tool.permission_env:
         block = os.environ.get(tool.permission_env, "")
-        if not block and os.environ.get("FACTORY_OPENCODE_PERMISSIONS", "off") == "on":
+        if not block and os.environ.get("FACTORY_OPENCODE_PERMISSIONS", "on") != "off":
             block = permission_block(allowed, protected, [*writable, *readable])
         words.append(f"{tool.permission_env}={shlex.quote(block)}")
     words += [shlex.quote(w) for w in tool.command]
