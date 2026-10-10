@@ -386,6 +386,23 @@ verbatim). Before the document stage the runner writes the stage's file as a ske
 `## Paths`, so a cited path is copied, never retyped package-relative — the one refusal that cost the
 document stage its rounds on Sonnet.
 
+## What a stage may not write
+
+A stage reads the pipeline and writes code, its hand-over and its question. It never writes what proves its work
+or what judges it:
+
+- **The evidence** — the journal, the red ledger, the snapshots and changed-files records, the base tree, the
+  story's digest, the round count, the tools' output — lies in `.dca-factory/evidence/<story>/`, beside the run
+  folder. The gate and the runner write it; the run folder keeps the hand-overs.
+- **The pipeline and the skills.** Claude Code gets `.agents/factory/`, the evidence folder and the skill folders
+  as folders to read, under a deny rule for every editing tool (`Edit(//<path>/**)`), in the checkout and in a
+  worktree alike; Codex, which reads everywhere, is given only the folders it writes. A change a stage makes
+  under `.agents/factory/` anyway is not hidden as the pipeline's own: the next gate refuses it (`pipeline`).
+- **The hash.** `gate.installed` records a SHA-256 over the installed files. The runner compares it when a run
+  starts — a pipeline that is not the installed one starts nothing — and again before every gate it runs; a
+  stage that rewrote the gate stops the run there (exit 7, `pipeline-changed` in the journal, the stop file
+  set). `factory.sh update` installs the pipeline again.
+
 ## How to see what a story cost
 
 The runner records every stage's tokens; nothing else is needed.
@@ -650,7 +667,7 @@ and the runner refuses a pair that differs) and readable with `python3 .agents/f
 | | What it answers | Who checks it, and how it ends |
 |---|---|---|
 | **file contract** (`CONTRACT`, and `contract:` in the stack profile) | can this gate read this project's files at all | the **gate**, on every run. A profile written for a higher contract is **refused**: this script would ignore whatever the newer contract added, and a key ignored in silence is a check that has quietly gone |
-| **script version** (`VERSION`) | which release governs this project | the **runner**, comparing `.agents/factory/gate.installed` — four machine-neutral lines (plugin, version, contract, the files of the release) written at install time and **committed with the project** — against the pipeline it finds beside it. A project on an older release of the same contract is valid and says so: an update to run, never a reason to refuse a story |
+| **script version** (`VERSION`) | which release governs this project | the **runner**, comparing `.agents/factory/gate.installed` — five machine-neutral lines (plugin, version, contract, the files of the release and their SHA-256) written at install time and **committed with the project** — against the pipeline it finds beside it. A project on an older release of the same contract is valid and says so: an update to run, never a reason to refuse a story |
 
 The current file contract is 8: the project description and backlog under `project/`, and the
 `acceptance:` key with its record. `factory.sh update` says when a profile's `contract:` line is to

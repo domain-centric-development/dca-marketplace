@@ -4198,14 +4198,16 @@ from datetime import datetime, timezone
 # run again does not move the story's starting point. Both are written as files the next stage reads
 # first, instead of reconstructing them. Paths are relative to the project, which may be a directory
 # inside a larger repository.
-CHANGE_EXCLUDED = (".agents/factory/",)
+#: The installed pipeline: every stage reads it, `factory.sh setup` and `update` alone change it. A stage's change
+#: there is not hidden as the pipeline's own — it is refused (`pipeline`), because it is the gate judging itself.
+PIPELINE_DIR = ".agents/factory/"
 
 
 def run_owned(path, runs):
-    """A path the pipeline writes itself and no stage answers for: the installed pipeline, the run folder, the
-    evidence folder, a story's decision records (a stage's question, written into the story's folder)."""
+    """A path the pipeline writes itself and no stage answers for: the run folder, the evidence folder, a story's
+    decision records (a stage's question, written into the story's folder)."""
     epics = place("epics").rstrip("/") + "/"
-    return path.startswith(CHANGE_EXCLUDED + (runs.rstrip("/") + "/", evidence_rel() + "/")) \
+    return path.startswith((runs.rstrip("/") + "/", evidence_rel() + "/")) \
         or (path.startswith(epics) and f"/{DECISIONS_DIR}/" in path[len(epics):]) \
         or (in_worktree() and worktree_owned(path))
 
@@ -4451,6 +4453,22 @@ def stage_open(runs, story_id, stage):
                 parts[2] == stage or parts[2] in SHARED_WINDOWS and stage in SHARED_WINDOWS[parts[2]]):
             last = parts[1]
     return last == "stage-start"
+
+
+def check_pipeline_untouched(result, runs, story_id):
+    """No stage of the story changed the installed pipeline: every changed-files record of the story is read, so a
+    change made by any stage is refused at the next gate, whichever stage made it. Silent without a record."""
+    records = sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), "changed-*.txt")))
+    if not records:
+        return
+    touched = sorted({line.split("\t", 1)[1] for record in records for line in read_text(record).splitlines()
+                      if "\t" in line and line.split("\t", 1)[1].startswith(PIPELINE_DIR)})
+    if touched:
+        result.fail("pipeline", f"a stage changed the installed pipeline: {', '.join(touched[:6])}"
+                                f"{' …' if len(touched) > 6 else ''} — a stage reads {PIPELINE_DIR} and never writes "
+                                f"it; put it back (`factory.sh update`, or git) and the stage runs again")
+    else:
+        result.ok("pipeline", f"no stage of {story_id} changed {PIPELINE_DIR}")
 
 
 def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
@@ -5155,6 +5173,8 @@ def main(argv):
             check_reviews(result, args.runs, story_id, profile)
             check_size(result, args.runs, story_id, ("judge.md", "document.md"), len(criteria))
             check_stage_commands(result, profile, cwd, args.stage)
+        if args.stage in ("test", "build", "tidy", "document", "adopt", "integrate"):
+            check_pipeline_untouched(result, args.runs, story_id)
         if args.stage == "adopt":
             check_adopt(result, profile, cwd, args.runs, story_id, front, criteria)
         if args.stage == "integrate":

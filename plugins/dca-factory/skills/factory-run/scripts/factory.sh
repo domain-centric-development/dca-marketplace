@@ -149,6 +149,7 @@ case "$RUNS" in
 esac
 PARALLEL="${FACTORY_PARALLEL:-}"             # --parallel / FACTORY_PARALLEL / the profile's `parallel:`; 1 by default
 ADD_DIRS=()                                  # what a stage in a worktree may write in the main checkout
+READ_DIRS=()                                 # what it reads there and never writes: the pipeline, the evidence, the skills
 # What proves a story's work — the journal, the red ledger, the snapshots, the round count — lies beside the run
 # folder, not in it: the gate and the runner write it, a stage never does. Absolute where the run folder is.
 evidence() {                                # evidence <story> — the story's evidence folder
@@ -210,6 +211,47 @@ gate_field() {                              # gate_field <file> <VERSION|CONTRAC
 #: sits is a property of a machine, not of the project, so it is resolved when it is needed instead
 #: of being frozen here — an absolute path written on one machine is wrong on every other one.
 STAMP=".agents/factory/gate.installed"
+
+# The files the install puts into .agents/factory/, in the stamp's order. Their hash is the stamp's `sha256:` line:
+# what was installed, so a runner can tell the pipeline it is about to trust from one a stage, a hand or a merge
+# changed since. The runner takes it at its start and compares before every gate it runs; a stage that rewrote the
+# gate through a link is stopped at the next gate, whatever tool it ran in.
+PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh"
+PIPELINE_SHA=""                              # the installed pipeline's hash, taken once when the run starts
+pipeline_hash() {                           # pipeline_hash [<folder>] — one SHA-256 over PIPELINE_FILES
+  local dir=${1:-$HOME_DIR/.agents/factory} hash file
+  hash=$(hasher); [ "$hash" = none ] && return 1
+  for file in $PIPELINE_FILES; do
+    if [ -f "$dir/$file" ]; then printf '%s  %s\n' "$($hash "$dir/$file" | cut -d" " -f1)" "$file"
+    else printf 'missing  %s\n' "$file"; fi
+  done | $hash | cut -d" " -f1
+}
+# At the start of a run: the pipeline is the one the stamp says was installed, and its hash is kept for the gates.
+guard_pipeline_start() {
+  [ -f "$HOME_DIR/$STAMP" ] || return 0
+  PIPELINE_SHA=$(pipeline_hash) || { PIPELINE_SHA=""; return 0; }   # no hash command: named by the snapshots
+  local stamped; stamped=$(sed -n 's/^sha256:[[:space:]]*//p' "$HOME_DIR/$STAMP" | head -1)
+  if [ -z "$stamped" ]; then
+    echo "factory: $STAMP carries no hash (installed before 0.68.0) — the gates compare against the pipeline as it" >&2
+    echo "factory:   is now; 'factory.sh update' records one." >&2
+  elif [ "$stamped" != "$PIPELINE_SHA" ]; then
+    echo "factory: the installed pipeline is not the one $STAMP records — a file under .agents/factory/ changed" >&2
+    echo "factory:   since the install. Nothing was started; 'factory.sh update' installs it again." >&2
+    return 7
+  fi
+}
+# Before every gate the runner runs: the pipeline is still the one the run started with.
+guard_pipeline() {                          # guard_pipeline <stage> <story>
+  [ -n "$PIPELINE_SHA" ] || return 0
+  local now; now=$(pipeline_hash) || return 0
+  [ "$now" = "$PIPELINE_SHA" ] && return 0
+  echo "factory: the installed pipeline changed during $2's run, before its $1 gate — a stage never writes" >&2
+  echo "factory:   .agents/factory/. Nothing more runs; 'factory.sh update' installs it again, and the story runs" >&2
+  echo "factory:   from the stage that changed it." >&2
+  printf '%s\tpipeline-changed\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$(evidence "$2")/journal.tsv"
+  : > "$STOP_FILE" 2>/dev/null
+  return 7
+}
 
 # The pipeline's own copy of the gate, for comparison against the project's copy. In order: an
 # explicit override, the checkout this script is running from (the usual case — the runner is
@@ -643,10 +685,34 @@ model_choice() {                            # model_choice <tool> <stage>
 }
 
 # A stage in a story's worktree writes into the main checkout's run folder and the story's records: both are
-# linked into the worktree, and named to the tool as directories it may write besides its own.
-add_dir_flags() {
+# linked into the worktree, and named to the tool as directories it may write besides its own. What it only
+# reads through a link — the installed pipeline, the evidence, the skills — Claude Code needs named as well to
+# read it at all, so it gets those too, under a deny rule; Codex reads everywhere and writes only where it is
+# named, so it gets the writable ones alone.
+add_dir_flags() {                           # add_dir_flags <tool>
   local dir
   for dir in ${ADD_DIRS[@]+"${ADD_DIRS[@]}"}; do printf -- '--add-dir %s ' "$dir"; done
+  [ "${1:-}" = claude ] || return 0
+  for dir in ${READ_DIRS[@]+"${READ_DIRS[@]}"}; do printf -- '--add-dir %s ' "$dir"; done
+}
+
+# What proves a stage's work and what judges it are never the stage's to write, in the checkout and in a worktree
+# alike: the installed pipeline, the evidence folder and the skill folders. Claude Code refuses Write and Edit
+# under them by a deny rule (`Edit(//<absolute path>/**)`, which covers every editing tool and a write through a
+# worktree's link as well); the pipeline's hash and the gate's `pipeline` check stand behind it for every tool.
+protected_dirs() {
+  local dir
+  for dir in .agents/factory "$(evidence_rel)" .claude/skills .codex/skills .opencode/skills .agents/skills; do
+    case "$dir" in /*|?:*) printf '%s\n' "$dir" ;; *) printf '%s\n' "$HOME_DIR/$dir" ;; esac
+  done
+}
+deny_flags() {                              # deny_flags <tool>
+  [ "$1" = claude ] || return 0
+  local dir rules=""
+  while IFS= read -r dir; do
+    [ -n "$dir" ] && rules="$rules${rules:+,}Edit(//${dir#/}/**)"
+  done < <(protected_dirs)
+  printf -- '--disallowedTools %s' "$rules"
 }
 
 invoke() {                                  # invoke <tool> <prompt>
@@ -682,9 +748,10 @@ invoke() {                                  # invoke <tool> <prompt>
     # (`factory.sh follow`); the last line, `"type":"result"`, carries the usage the single object did.
     claude)   claude -p "$prompt" --permission-mode acceptEdits --output-format stream-json --verbose \
                 --allowed-tools "Read,Write,Edit,Glob,Grep,Skill,$(allowed_commands)" \
-                $(add_dir_flags) $(isolation_flags claude) $model_args ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
+                $(add_dir_flags claude) $(deny_flags claude) $(isolation_flags claude) $model_args \
+                ${FACTORY_CLAUDE_ARGS:+$FACTORY_CLAUDE_ARGS} > "$raw" ;;
     # stdin closed: `codex exec` also reads a prompt from stdin, and an unattended run has none.
-    codex)    codex exec --json -s workspace-write $(add_dir_flags) $(isolation_flags codex) $model_args \
+    codex)    codex exec --json -s workspace-write $(add_dir_flags codex) $(isolation_flags codex) $model_args \
                 -c sandbox_workspace_write.network_access=true \
                 ${FACTORY_CODEX_ARGS:+$FACTORY_CODEX_ARGS} "$prompt" < /dev/null > "$raw" ;;
     opencode) opencode run --format json $(isolation_flags opencode) $model_args \
@@ -1144,7 +1211,8 @@ install_project() {                         # install_project <tool> <skill fold
     echo "plugin: dca-factory"
     echo "version: $(gate_field "$GATE" VERSION)"
     echo "contract: $(gate_field "$GATE" CONTRACT)"
-    echo "files: story-gate.py factory-cli.py observe.py factory.sh"
+    echo "files: $PIPELINE_FILES"
+    echo "sha256: $(pipeline_hash .agents/factory)"
   } > "$STAMP"
   echo "factory: gate → $GATE (version $(gate_field "$GATE" VERSION), file contract $(gate_field "$GATE" CONTRACT))"
   # Not a `must`: the project need not be a git repository for the gate to work, and a checkout
@@ -2144,8 +2212,9 @@ up in a dependency's sources or a package cache, which is never the place."
   # checkout's, through the worktree's link. A path the list does not name is a refused call.
   local cli_path=${CLI#"$PWD/"}
   [ -f .agents/factory/factory-cli.py ] && cli_path=.agents/factory/factory-cli.py
-  printf '%s' "Where things are: the stack profile is $PROFILE; this story's run folder is $RUNS/$story/; \
-what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
+  printf '%s' "Where things are: the stack profile is $PROFILE; this story's run folder is $RUNS/$story/, its evidence \
+folder $(evidence "$story")/ — the journal, the diff, the gate's reports, written by the gate and the runner and only read \
+by you, as the pipeline and the skills are; what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
 source.$catalog \
 The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL. Change a file \
 with the editor tools; a script fed on stdin (python3 -) is refused and costs a turn. Every command is checked part \
@@ -2224,6 +2293,7 @@ gate() {                                    # gate <stage> <story>
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
   local report="$RUNS/$2/.gate-$1.txt" journal="$(evidence "$2")"
   mkdir -p "$RUNS/$2" "$journal"
+  guard_pipeline "$1" "$2" || exit 7
   FACTORY_SUITES_KEY="$SUITES_KEY" "$PY" "$GATE" --story "$2" --stage "$1" --record-suites 2>&1 | tee "$report"
   local code=${PIPESTATUS[0]}
   # Every gate run is kept for the observer, with its verdict; only a *refusal* is kept where the
@@ -2703,12 +2773,15 @@ run_story() {                               # run_story <story> <tool> <from> <d
     "")    echo "factory: no worktree could be made for $story — nothing ran." >&2; return 1 ;;
   esac
   echo "factory: $story works in its worktree, ${wt#"$HOME_DIR/"}"
-  # every folder the worktree links to this checkout, so a read or a write through the link is the stage's own
+  # every folder the worktree links to this checkout: the run folder, the epics and the discovery reports to
+  # write, the pipeline, the evidence and the skills to read
   local linked
-  ADD_DIRS=()
-  for linked in "$RUNS_REL" "$(cli --place epics 2>/dev/null)" "$(cli --place discovery 2>/dev/null)" \
-                .agents/factory .claude/skills .codex/skills .opencode/skills .agents/skills; do
+  ADD_DIRS=() READ_DIRS=()
+  for linked in "$RUNS_REL" "$(cli --place epics 2>/dev/null)" "$(cli --place discovery 2>/dev/null)"; do
     [ -n "$linked" ] && [ -d "$HOME_DIR/$linked" ] && ADD_DIRS+=("$HOME_DIR/$linked")
+  done
+  for linked in .agents/factory "$(evidence_rel)" .claude/skills .codex/skills .opencode/skills .agents/skills; do
+    [ -d "$HOME_DIR/$linked" ] && READ_DIRS+=("$HOME_DIR/$linked")
   done
   cd "$wt" || return 1
   export FACTORY_HOME="$HOME_DIR"
@@ -2717,7 +2790,7 @@ run_story() {                               # run_story <story> <tool> <from> <d
   cd "$HOME_DIR" || exit 1
   unset FACTORY_HOME
   RUNS=$RUNS_REL
-  ADD_DIRS=()
+  ADD_DIRS=() READ_DIRS=()
   if [ "$code" = 0 ] && cli --delivered "$story" >/dev/null 2>&1; then
     take_lock; cli --worktree-remove "$story"; drop_lock
   fi
@@ -3132,7 +3205,7 @@ case "$command" in
         [ -n "$dry" ] || reset_rounds "$story"
       fi
       GATE_FIRST=1
-      [ -n "$dry" ] || take_checkout || exit $?
+      [ -n "$dry" ] || { take_checkout && guard_pipeline_start; } || exit $?
       run_story "$story" "$tool" "$from" "$dry"
       exit $?
     fi
@@ -3148,7 +3221,7 @@ case "$command" in
     check_contract_first || exit $?
     check_local_context "${tool:-}"
     isolated || echo "factory: FACTORY_ISOLATION=off — stages run with the tool's full setup, user plugins included" >&2
-    [ -n "$dry" ] || take_checkout || exit $?
+    [ -n "$dry" ] || { take_checkout && guard_pipeline_start; } || exit $?
     run_backlog "${tool:-stand-in}" "$watch" "$interval" "$dry"
     ;;
   *) usage ;;

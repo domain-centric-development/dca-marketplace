@@ -1186,6 +1186,56 @@ def verify_runner(runner, verbose=False):
               read.splitlines()[:1] == ["model=lmstudio-local/some-model\tinput=11973\tcache_read=11700\tcache_write=0\toutput=400"]
               and "the plan is written" in read, read)
 
+    # the installed pipeline is the one the stamp records, and stays it while a run lasts: its hash is taken at the
+    # start and compared before every gate — a stage that rewrites the gate is stopped at the next one
+    def pipeline_sha(root):
+        folder = os.path.join(root, ".agents", "factory")
+        listing = ""
+        for name in ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh"):
+            path = os.path.join(folder, name)
+            listing += (f"{hashlib.sha256(open(path, 'rb').read()).hexdigest()}  {name}\n" if os.path.isfile(path)
+                        else f"missing  {name}\n")
+        return hashlib.sha256(listing.encode("utf-8")).hexdigest()
+
+    for root in throwaway():
+        build_project(root)
+        copy_scripts(runner, root)
+        with open(os.path.join(root, ".agents", "factory", "gate.installed"), "w", encoding="utf-8") as handle:
+            handle.write(f"plugin: dca-factory\nsha256: {pipeline_sha(root)}\n")
+        with open(os.path.join(root, ".agents", "factory", "story-gate.py"), "a", encoding="utf-8") as handle:
+            handle.write("# changed by hand\n")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": 'echo "$FACTORY_STAGE" >> invoked.txt'})
+        check("runner: a pipeline that is not the one its stamp records starts nothing, and names the update",
+              code == 7 and "is not the one .agents/factory/gate.installed records" in output
+              and not os.path.isfile(os.path.join(root, "invoked.txt")), f"exit {code}; {output.strip()[-300:]}")
+    for root in throwaway():
+        build_project(root)
+        copy_scripts(runner, root)
+        with open(os.path.join(root, ".agents", "factory", "gate.installed"), "w", encoding="utf-8") as handle:
+            handle.write(f"plugin: dca-factory\nsha256: {pipeline_sha(root)}\n")
+        tests_path = os.path.join(root, "fixture-tests.md")
+        with open(tests_path, "w", encoding="utf-8") as handle:
+            handle.write(TESTS)
+        os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+        rewrite = ('echo "$FACTORY_STAGE" >> invoked.txt; mkdir -p .dca-factory/runs/STORY-1; '
+                   'case "$FACTORY_STAGE" in '
+                   '  plan) printf "## Context\\n## Changes\\n## Acceptance criteria\\n" > .dca-factory/runs/STORY-1/plan.md ;; '
+                   '  test) cat "$FIXTURE_TESTS" > .dca-factory/runs/STORY-1/tests.md; '
+                   '        echo "# the gate, made kinder" >> .agents/factory/story-gate.py ;; '
+                   'esac')
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": rewrite, "FIXTURE_TESTS": shell_path(tests_path)})
+        invoked = open(os.path.join(root, "invoked.txt"), encoding="utf-8").read().split() \
+            if os.path.isfile(os.path.join(root, "invoked.txt")) else []
+        journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
+        check("runner: a stage that rewrites the gate is stopped before the gate after it runs, journaled, and the "
+              "backlog is told to stop",
+              code == 7 and invoked == ["plan", "test"] and "changed during STORY-1's run, before its test gate" in output
+              and os.path.isfile(journal) and "\tpipeline-changed\ttest" in open(journal, encoding="utf-8").read()
+              and os.path.isfile(os.path.join(root, ".dca-factory", "stop")),
+              f"exit {code}; invoked {invoked}; {output.strip()[-300:]}")
+
     # 1b. a whole run without a model: the loop, the journal and the final report
     # FACTORY_TOOL_CMD stands in for the tool and writes each stage's artefact, so a defect in the
     # loop — a stage silently skipped, a report naming stages that never ran — fails here rather
@@ -2459,6 +2509,32 @@ exit 0
             check(f"runner: reads the verdict '{verdict}' from the file", parsed == expect,
                   f"parsed {parsed!r}")
 
+    # a stage reads the pipeline, the evidence and the skills and never writes them: Claude Code gets them as
+    # folders to read under a deny rule for every editing tool, in the checkout and in a worktree; Codex, which reads
+    # everywhere, gets the writable folders alone
+    for root in throwaway():
+        listed = subprocess.run(
+            [BASH, "-c",
+             f'RUNS=.dca-factory/runs RUNS_REL=.dca-factory/runs HOME_DIR=/home/p; '
+             f'sed -n -e "/^evidence_rel()/,/^}}/p" -e "/^protected_dirs()/,/^}}/p" -e "/^deny_flags()/,/^}}/p" '
+             f'-e "/^add_dir_flags()/,/^}}/p" "{shell_path(runner)}" > fn.sh; . ./fn.sh; '
+             f'ADD_DIRS=(/home/p/project/epics) READ_DIRS=(/home/p/.agents/factory); '
+             f'echo "claude: $(add_dir_flags claude) $(deny_flags claude)"; echo "codex: $(add_dir_flags codex) $(deny_flags codex)"; '
+             f'ADD_DIRS=() READ_DIRS=(); echo "checkout: $(add_dir_flags claude) $(deny_flags claude)"'],
+            cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        claude_line = next((l for l in listed.splitlines() if l.startswith("claude:")), "")
+        codex_line = next((l for l in listed.splitlines() if l.startswith("codex:")), "")
+        checkout_line = next((l for l in listed.splitlines() if l.startswith("checkout:")), "")
+        check("runner: Claude reads the pipeline and the evidence through --add-dir and may not edit them; Codex gets "
+              "the writable folders alone; in the checkout the deny rules stand all the same",
+              "--add-dir /home/p/project/epics" in claude_line and "--add-dir /home/p/.agents/factory" in claude_line
+              and "Edit(//home/p/.agents/factory/**)" in claude_line
+              and "Edit(//home/p/.dca-factory/evidence/**)" in claude_line
+              and "--add-dir /home/p/project/epics" in codex_line and ".agents/factory" not in codex_line
+              and "--disallowedTools" not in codex_line
+              and "--add-dir" not in checkout_line and "Edit(//home/p/.agents/factory/**)" in checkout_line,
+              listed)
+
     # 4. the round counter is a file, and it counts up
     for root in throwaway():
         os.makedirs(os.path.join(root, ".dca-factory", "runs", "STORY-1"))
@@ -3457,8 +3533,9 @@ def verify_setup(runner, verbose=False):
               code == 2 and "no factory-cli.py beside the gate" in output, f"exit {code}; {output.strip()[-200:]}")
         code, output = run_runner(project_runner(root), root, "update", "--from", source)
         stamp = open(os.path.join(root, ".agents", "factory", "gate.installed"), encoding="utf-8").read()
-        check("update: puts the cli beside the gate, and the record names the files of the release",
-              code == 0 and os.path.isfile(project_cli) and "files: story-gate.py factory-cli.py" in stamp,
+        check("update: puts the cli beside the gate, and the record names the files of the release and their hash",
+              code == 0 and os.path.isfile(project_cli) and "files: story-gate.py factory-cli.py" in stamp
+              and re.search(r"^sha256: [0-9a-f]{64}$", stamp, re.M) is not None,
               f"exit {code}; {stamp.strip()}")
         handed = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
                                  "--status", "--brief"], cwd=root, capture_output=True, text=True,
@@ -4691,7 +4768,7 @@ def run_groups(args):
         # --- the build gate -----------------------------------------------
         # --- the hand-over names what the stage changed ------------------------
         (Case("build: a hand-over that lists every changed file passes the files check", "build", 0,
-              must_pass=("files-listed",)),
+              must_pass=("files-listed", "pipeline")),
          dict(green=both_green, ledger=both_green, extra_sources=(
              (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Changed\n\n## Files\n\n- `src/main/Thing.java` — new\n"
@@ -4701,6 +4778,13 @@ def run_groups(args):
          dict(green=both_green, ledger=both_green, extra_sources=(
              (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Changed\n| File | Why |\n|---|---|\n| `src/main/Thing.java` | new |\n")))),
+        (Case("build: a stage that changed the installed pipeline is refused and the files named — listed or not",
+              "build", 1, must_fail=("pipeline",), text=("changed the installed pipeline: .agents/factory/story-gate.py",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             (".dca-factory/evidence/STORY-1/changed-build.txt",
+              "added\tsrc/main/Thing.java\nmodified\t.agents/factory/story-gate.py\n"),
+             (".dca-factory/runs/STORY-1/build.md", "## Changed\n\n## Files\n\n- `src/main/Thing.java` — new\n"
+                                        "- `.agents/factory/story-gate.py` — a faster gate\n")))),
         (Case("build: a hand-over without a Files section is refused", "build", 1,
               must_fail=("files-listed",), text=("has no `## Files` section",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
