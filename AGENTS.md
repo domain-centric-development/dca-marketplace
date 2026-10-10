@@ -58,7 +58,7 @@ dca-marketplace/
 │   └── agents/{e2e-tester,ddd-reviewer,hexagonal-reviewer,clean-code-reviewer}.md
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
 ├── .github/workflows/check.yml            # syntax, manifests, skill front matter, factory-verify (Linux, macOS, Windows/Git Bash)
-├── scripts/check-skills.py                # every skill folder has a SKILL.md with name and description; dca-craft names no DCA artifact (--self-test)
+├── scripts/check-skills.py                # every skill folder has a SKILL.md with name and description, under 32 KiB; dca-craft names no DCA artifact (--self-test)
 └── MULTI-HARNESS-PORTABILITY-2026-09-03.md  # superseded plan, kept as history — see its header
 ```
 

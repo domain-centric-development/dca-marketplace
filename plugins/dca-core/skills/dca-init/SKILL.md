@@ -226,21 +226,11 @@ file outside the DCA part: dependencies, the architecture source set or project,
 1. `templates/gradle/build-snippet.gradle.tmpl` → add `dca-building-blocks` and (Spring) `dca-spring` to the
    production `dependencies` (Groovy or Kotlin DSL as the build uses). Maven: `templates/maven/pom-snippet.xml.tmpl`
    (all dependencies; the test then lives in `src/test/java` and `src/test/resources`).
-   **Transactions in an in-memory start:** without a data starter there is no `PlatformTransactionManager` and
-   not even Boot's `TransactionAutoConfiguration` (`spring-boot-transaction`); `@Transactional` is then
-   silently inert and after-commit listeners never fire while every rule stays green. Add
-   `org.springframework.boot:spring-boot-transaction`, a small `PlatformTransactionManager` bean **in the
-   project** (a visible placeholder until a database arrives — `dca-spring` publishes none on purpose) and,
-   with Modulith, `spring-modulith-events-api` for `@ApplicationModuleListener`. Say so in the summary. The
-   bean comes from `templates/java/InMemoryTransactionManagerConfiguration.java.tmpl` →
-   `src/main/java/{{basePackagePath}}/infrastructure/config/InMemoryTransactionManagerConfiguration.java`. The
-   package is not a style choice: `DCA-LAY-004` allows transaction-manager wiring in the global infrastructure
-   package and below it (`<base>.infrastructure..`, `infrastructure/config/` included, where the conventions
-   put `@Configuration` classes) and in `<base>.sharedkernel.infrastructure..` — a top-level `<base>.config`
-   package or a context's own package fails the rule. The template steps aside by itself once `spring-jdbc` is
-   on the class path (`@ConditionalOnMissingClass`), so adding a data starter cannot leave the placeholder in
-   charge of real writes — verified: with `spring-boot-starter-jdbc` Boot's `JdbcTransactionManager` is the
-   one bean, without it the placeholder. Delete the class then anyway.
+   **Transactions in an in-memory start:** without a data starter there is no `PlatformTransactionManager`,
+   so `@Transactional` is silently inert and after-commit listeners never fire while every rule stays green.
+   Read `reference/in-memory-transactions.md` and add what it names — the dependency, the placeholder bean
+   from `templates/java/InMemoryTransactionManagerConfiguration.java.tmpl` in the package `DCA-LAY-004`
+   allows, with Modulith the events API. Say so in the summary.
 2. `templates/gradle/test-architecture.gradle.tmpl` → `gradle/plugins/test-architecture.gradle`, plus
    `apply from: "gradle/plugins/test-architecture.gradle"` in `build.gradle`. Creates the `testArchitecture`
    source set and the `test-architecture` task, wired into `check`.
@@ -336,23 +326,9 @@ the start.
 
 ## Placeholders
 
-| Placeholder | Source | Example |
-|---|---|---|
-| `{{basePackage}}` / `{{basePackagePath}}` | detected | `com.acme.shop` / `com/acme/shop` |
-| `{{rootNamespace}}`, `{{solutionName}}` | detected | `Acme.Shop`, `AcmeShop` |
-| `{{dcaJavaVersion}}`, `{{dcaDotnetVersion}}` | looked up at init time | `0.5.0` |
-| `{{junitVersion}}`, `{{testSdkVersion}}`, `{{xunitVersion}}`, `{{xunitRunnerVersion}}`, `{{targetFramework}}` | looked up / detected | `5.11.4`, `net10.0` |
-| `{{layoutCalls}}` | decisions B, D | `withIncomingSubpackage("in")`, `withUseCaseSuffix("ApplicationService")` |
-| `{{ruleSets}}` | decision C | `cycles,layered,hexagonal,naming` |
-| `{{noLayeredModuleYet}}` | detected: no `domain`/`application`/`adapter` package below the base package | `true` / `false` |
-| `{{springModulithEnabled}}` | detected | `true` / `false` |
-| `{{contextName}}`, `{{description}}`, `{{packageName}}` / `{{contextNamespace}}`, `{{contextClassName}}` | detected contexts | `Shopping Cart`, `com.acme.shop.cart`, `CartContext` |
-| `{{productionProjects}}`, `{{assemblyAnchors}}` | detected (.NET) | `../../src/Acme.Shop.Cart/Acme.Shop.Cart.csproj`, `Cart.CartContext` |
-| `{{contextMapPath}}` | decision F | `docs/architecture/context-map.md` |
-| `{{verifyCommand}}` | build system | `./gradlew test-architecture` |
-| `{{conventionsPath}}` | existing file or default | `.agents/dca/conventions.md` |
-| `{{build}}`, `{{guard}}`, `{{glossary}}`, `{{map}}`, `{{browserTests}}`, `{{review}}`, `{{reviewSkills}}` | Phase 1 item 7 | `true`; `` `review-ddd`, `dca-audit` `` |
-| `{{catalogPath}}` | decision G (`live catalog`) | `~/…/dca-knowledge-catalog/bundle` |
+The placeholders the templates carry — where each value comes from (detected, looked up at init time, a
+Phase 2 decision) and an example — are listed in `reference/placeholders.md`; read it before filling a
+template.
 
 ## After init — for the user
 
@@ -398,6 +374,8 @@ conventions file the `AGENTS.md` section names — `.agents/dca/conventions.md` 
   `dca-add rules`
 - `reference/resolved-configuration.md` — the resolved-configuration section of the conventions file, shared
   with `dca-new`
+- `reference/placeholders.md` — the templates' placeholders, where each value comes from
+- `reference/in-memory-transactions.md` — the transaction manager a Spring project without a data starter needs
 - `reference/questions.md` — every question this skill may ask, word for word, with where its answer is looked
   up first; `dca-new` asks the entries that apply to an empty directory in its one pass
 - `scripts/dca-report.py` — the report of this skill and of `dca-new project`, read from the disk
