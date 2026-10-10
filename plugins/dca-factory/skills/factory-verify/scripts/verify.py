@@ -7386,6 +7386,24 @@ def verify_worktrees(runner, verbose=False):
               f"exit {code}; shared {shared!r}; {git_out(root, 'log', '--oneline', 'main')}; "
               f"{output.strip().splitlines()[-8:]}")
 
+    # a waiting story the person sets superseded: the next run removes its worktree and branch, nothing of it on main
+    with tmpdir() as root:
+        log, env = fixture(root, [], asks="STORY-1")
+        run_runner(runner, root, "run", env=env)
+        story = os.path.join(root, "project/epics/sample/STORY-1/story.md")
+        waited = "STORY-1" in git_out(root, "worktree", "list")
+        text = read(root, "project/epics/sample/STORY-1/story.md")
+        with open(story, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(re.sub(r"(?m)^status: .*$", "status: superseded", text, count=1))
+        code, output = run_runner(runner, root, "run", env=env)
+        check("worktree: a waiting story set superseded loses its worktree and its branch when the runner next "
+              "starts; nothing of it reaches the main line",
+              waited and code == 0 and "STORY-1" not in git_out(root, "worktree", "list")
+              and not git_out(root, "branch", "--list", "story/*").strip()
+              and not os.path.exists(os.path.join(root, "src/main/STORY-1.txt"))
+              and "STORY-1 — superseded" in output,
+              f"waited {waited}; exit {code}; {git_out(root, 'worktree', 'list')}; {output.strip().splitlines()[-6:]}")
+
     # two slots: two independent stories at once, each in its worktree, every line named by its story; the one that
     # depends on another starts once that one is on the main line
     with tmpdir() as root:

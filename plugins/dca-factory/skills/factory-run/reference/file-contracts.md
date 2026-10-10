@@ -180,7 +180,8 @@ checkout's branch to the commit. Only then does it write `status: delivered`; a 
 or with a change of its own in a file the commit touches, is refused (`checkout`) and the story stops until
 `factory.sh run --story <id> --from integrate`. A refusal of the checks goes back to the build stage as a round, and
 the document stage writes its file anew (the earlier one stays as `.verify/document.before-integrate.md`).
-Delivered, the worktree and the branch go.
+Delivered, the worktree and the branch go. A story set `superseded` with a worktree, or a worktree whose id no story
+has any more, loses both when the runner next starts; nothing of it reaches the main line.
 
 ## Review files — `.dca-factory/runs/<story>/reviews/<perspective>.md`
 

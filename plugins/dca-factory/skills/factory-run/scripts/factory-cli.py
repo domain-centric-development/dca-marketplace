@@ -2726,6 +2726,23 @@ def worktree_remove(cwd, story_id):
     return 0
 
 
+def worktree_prune(cwd, epics):
+    """Worktrees no story will come back to: its story superseded, or no story of that id any more. Nothing
+    of them reaches the main line — the story's code goes with its branch."""
+    statuses = {}
+    for path in story_files(epics):
+        front, _body = read_front_matter(path)
+        statuses[str(front.get("id") or os.path.basename(story_folder(path))).strip()] = \
+            str(front.get("status", "")).strip().lower()
+    folder = os.path.join(cwd, worktrees_dir())
+    for story_id in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if statuses.get(story_id, "superseded") == "superseded":
+            why = "superseded" if story_id in statuses else "no story of that id"
+            print(f"worktree: {story_id} — {why}; its worktree goes, nothing of it is integrated")
+            worktree_remove(cwd, story_id)
+    return 0
+
+
 def squash_story(path, runs, story_id, target, front, body):
     """The story as one commit on top of the target: `feat(<context>): <title>`, the story's id in the body."""
     if git(path, "rev-parse", "HEAD")[1].strip() != git(path, "rev-parse", target)[1].strip():
@@ -4015,6 +4032,8 @@ def main(argv):
     parser.add_argument("--worktree-prepare", metavar="STORY",
                         help="make, update and link the story's worktree; print its path (or `none — <why>`)")
     parser.add_argument("--worktree-remove", metavar="STORY", help="remove the story's worktree and its branch")
+    parser.add_argument("--worktree-prune", action="store_true",
+                        help="remove the worktrees of superseded stories and of ids no story has any more")
     parser.add_argument("--worktree-link", metavar="STORY",
                         help="link the main checkout's places into the story's worktree again (an agent works in it)")
     parser.add_argument("--integrate-prepare", metavar="STORY",
@@ -4136,6 +4155,8 @@ def main(argv):
         return worktree_prepare(cwd, args.runs, args.worktree_prepare)
     if args.worktree_remove:
         return worktree_remove(cwd, args.worktree_remove)
+    if args.worktree_prune:
+        return worktree_prune(cwd, args.epics)
     if args.worktree_link:
         if not has_worktree(args.worktree_link, cwd):
             print(f"factory: {args.worktree_link} has no worktree", file=sys.stderr)

@@ -163,7 +163,8 @@ the same lines — the `stage-integrate` agent makes both changes hold, and the 
 checkout cannot take the commit (you changed the same file there, or switched branches), the story stops
 and says so; `factory.sh run --story <id> --from integrate` takes it up again. A repository without a
 commit, a detached HEAD, or a story begun in the checkout before it had a worktree run in the checkout as
-before. An IDE opens a story's worktree as a project of its own.
+before. An IDE opens a story's worktree as a project of its own. A story you set `superseded` loses its
+worktree and branch when the runner next starts.
 
 **A human looks before it counts.** With `acceptance: pages` in the profile (`factory-setup`
 proposes it where the product has web pages; `all` for every story, `none` for none), a story with

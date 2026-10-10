@@ -2722,6 +2722,8 @@ run_backlog() {                             # run_backlog <tool> <watch> <interv
   local out previous="" next story from last="" code slots
   [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
   slots=$(parallel_slots) || return 2
+  # a superseded story's worktree has nothing to integrate; it goes before the first story starts
+  [ -n "$dry" ] || { take_lock; cli --worktree-prune; drop_lock; }
   if [ "$slots" -gt 1 ] && [ -z "$dry" ]; then
     run_parallel "$tool" "$watch" "$interval" "$slots"
     return $?

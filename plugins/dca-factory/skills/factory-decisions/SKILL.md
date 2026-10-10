@@ -53,6 +53,11 @@ once per project. The state of a record is read off the file: no `## Answer` is 
    story then resumes at the test stage, whose red check accepts an expectation changed on a decision;
    resumed at the stage that asked, the changed test no longer matches its red proof and the build gate
    refuses it round after round. An answer that changes only production code needs no `applies:` line.
+5b. **An answer that sets the story's status is written into the story too.** Where the chosen option is to set
+   the story `superseded` or `adopted`, change the `status:` line in its `story.md` in the same breath, on the same
+   confirmation — show that line beside the block. The status is the person's to write, never a stage's: left
+   for a stage, the story would run its plan again for nothing. A superseded story runs no further; the runner
+   removes its worktree when it next starts, and nothing of it reaches the main line.
 6. **`by:` is the person, `at:` is now.** Ask whose decision it is if it is not obvious from the
    session; the git `user.name` is a suggestion to confirm, not an answer. `at:` is the current
    time in UTC, ISO 8601. You are not the decider and your name goes nowhere in the record.
