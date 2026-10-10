@@ -145,7 +145,7 @@ correctly after an interruption, in another session or in another tool:
 | `build.md`, gate `build` failing | `stage-build` again (count the round) — the runner does this for every refused gate after its stage |
 | `document.md`, the story not `status: delivered` | gate `document`; it writes `status: delivered` and `delivered:` into the story when it passes, and only then is the story delivered — the gate is the one writer of that line |
 | `.story-digest` differs from the story file | the story changed after it was planned: `stage-plan` again, and every stage after it |
-| a stage file older than the one before it | it belongs to an earlier pass — a stage ran again since (a re-plan, a build after `changes-requested`); that stage file and every later one count as not written |
+| a stage file journaled before the one before it | it belongs to an earlier pass — a stage ran again (a re-plan, a build after `changes-requested`); that stage file and every later one count as unwritten |
 | `build.md`, gate `build` passing, no `tidy.md` | `stage-tidy` |
 | `tidy.md`, gate `tidy` passing, no `judge.md` | `stage-judge` |
 | `judge.md` with `changes-requested` | `stage-build` (count the round) |

@@ -224,7 +224,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
 | `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
 | `factory.sh run [--story <id> [--from <stage>]] [--watch] [--parallel <n>]` | `factory-run` | one story through the six stages in its worktree, from where its files say, then integrated · `--from` names the stage (or `integrate`) and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch`, up to `<n>` at once with `--parallel` |
-| `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage |
+| `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--refusals] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage · the gate refusals, form against substance |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |
 | `factory.sh update [--from <dir>] [--copy\|--link] [--adopt <skill>,…\|all]` | `factory-update` | the newest pipeline found, same tools; the mode the project has, or the one named; `--adopt` takes over a method skill's copy the install did not make, which every later update then refreshes |
@@ -443,6 +443,11 @@ starts fresh and reads the skill, the story and its predecessor's file again.
 - `runs` counts invocations, repeat rounds included; `measured` those the tool reported on. The
   difference is shown as "without a usage report" — unknown, not zero.
 - Leave out `--story` for every story. `factory.sh backlog` shows each story's total in one line.
+- `factory.sh status --refusals [--story <id>] [--format json]` counts the gate refusals per story from the
+  journal — the runner's (`by=runner`, or no `by`) apart from the stages' own self-checks — and each as *form*
+  when every failed check is about how a hand-over is written (`FORM_CHECKS` in the gate: `files-listed`,
+  `story-pass`, `tests-mapped`, `test-titles`, `plan-levels`, `levels`, `documented`, `decisions`, `reviews`,
+  `layout`), as *substance* otherwise: a form refusal costs a round without the code being wrong.
 - `--story-budget <tokens>` on `run` or `backlog` stops before the next stage once the story has
   used that many. The count comes from the journal, so a restart does not reset it.
 - In a session (`/factory-run` without the runner) the orchestrator marks each stage with
@@ -461,7 +466,7 @@ the install marks it `merge=union` in `.gitattributes`: two branches that ran th
 without a conflict, a window read on one side and pending on the other counts once, and "running" is
 judged by time, not by line order. An in-session stage first
 records its window and the session log it read from; once that log has caught up (five minutes after
-the window), the next stage mark writes the numbers into the journal and drops the machine-local path,
+the window), the next stage mark appends the numbers as a `usage` line of their own, without the session's id,
 so the history survives a clone and the tool's cleanup of old session logs. `--usage` and the status
 only read.
 
@@ -481,7 +486,7 @@ Only for stages run inside a session, marked with `--stage-start`/`--stage-end`,
 - **Taken from them:** token counts, the model's name, timestamps — no content. Nothing leaves the
   machine.
 - **Kept in the project:** the journal records the session's id and the window, never a path; once
-  read, the numbers replace the id. The runner keeps each stage's final message (`*.out`).
+  read, a line with the numbers and without the id follows it. The runner keeps each stage's final message (`*.out`).
 
 It reads with the rights of whoever runs it, so only their own logs. `FACTORY_SESSION_USAGE=off`
 switches it off for one person, `sessionUsage: off` in the stack profile for the project; in-session

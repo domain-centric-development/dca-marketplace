@@ -735,6 +735,46 @@ def owned_confirm(runs, story_id):
     return 0
 
 
+def refusal_counts(runs, story_id):
+    """{who: {"form": n, "substance": n, "checks": {check: n}}} of a story's gate refusals, from its journal: the
+    runner's (`by=runner`, or no `by` in an older journal) and the stages' own self-checks apart. A refusal is form
+    when every check it names is one of FORM_CHECKS — the hand-over's shape, not the work."""
+    counts = {}
+    for event in journal_events(runs, story_id):
+        fields = event["fields"]
+        if event["kind"] != "gate" or fields.get("exit") != "1":
+            continue
+        who = "runner" if fields.get("by", "runner") == "runner" else "stages"
+        failed = [c for c in fields.get("fail", "").split(",") if c]
+        entry = counts.setdefault(who, {"form": 0, "substance": 0, "checks": {}})
+        entry["form" if failed and all(c in FORM_CHECKS for c in failed) else "substance"] += 1
+        for check in failed or ["unnamed"]:
+            entry["checks"][check] = entry["checks"].get(check, 0) + 1
+    return counts
+
+
+def refusals_report(runs, story_filter=None, fmt="text"):
+    """`--refusals`: every story's refusals, form against substance — what a bench counts."""
+    stories = [s for s in run_stories(runs) if not story_filter or s == story_filter]
+    data = {story: refusal_counts(runs, story) for story in stories}
+    if fmt == "json":
+        print(json.dumps({"form_checks": list(FORM_CHECKS), "stories": data}, indent=2, sort_keys=True))
+        return 0
+    for story, counts in data.items():
+        if not counts:
+            print(f"{story}  no refusal")
+            continue
+        parts = []
+        for who in ("runner", "stages"):
+            entry = counts.get(who)
+            if entry:
+                checks = ", ".join(f"{c} {n}" for c, n in sorted(entry["checks"].items()))
+                label = "runner" if who == "runner" else "the stages' own gates"
+                parts.append(f"{label}: {entry['form']} form, {entry['substance']} substance ({checks})")
+        print(f"{story}  " + " · ".join(parts))
+    return 0
+
+
 def run_stories(runs):
     """Every story with a run folder or an evidence folder — a story's journal outlives its deleted run folder."""
     folders = (runs, evidence_dir(runs))
@@ -1373,7 +1413,7 @@ def tokens_text(tokens, measured=True):
     return f"{tokens:,}" if measured and tokens else "not measured"
 
 
-def journal_events(runs, story_id):
+def journal_timeline(runs, story_id):
     """[(time, kind, stage, fields)] of a story's journal, by time — a union merge interleaves lines."""
     journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
     if not os.path.isfile(journal):
@@ -1410,7 +1450,7 @@ def story_facts(cwd, runs, story_id, front=None):
     """What a story's journal says: when it started and ended, how long its stages took, its passes
     (a pass begins at every plan start), and its tokens — per stage and per pass. When it was delivered
     is the story's own line, `delivered:`, not the journal's."""
-    events = journal_events(runs, story_id)
+    events = journal_timeline(runs, story_id)
     stages, passes, open_starts, counted = {}, [], {}, set()
     for moment, kind, stage, fields in events:
         if kind == "usage" and fields.get("window"):
@@ -4049,6 +4089,8 @@ def main(argv):
                                                               "outside a stage — backlog or decisions")
     parser.add_argument("--window-end", metavar="WORK", help="with --story: end that measuring window")
     parser.add_argument("--stage-start", metavar="STAGE", help="mark a stage's start inside a session (with --story)")
+    parser.add_argument("--refusals", action="store_true",
+                        help="every story's gate refusals from its journal, form against substance (or --story)")
     parser.add_argument("--journal-line", metavar="STORY",
                         help="append the lines on stdin (<time>\\t<kind>\\t<name>\\t…) to the story's journal, numbered")
     parser.add_argument("--owned-confirm", metavar="STORY",
@@ -4290,6 +4332,8 @@ def main(argv):
         return (owned_end(args.runs, args.story, args.stage_end, str(code)) or code) if args.stage_end else code
     if args.owned_confirm:
         return owned_confirm(args.runs, args.owned_confirm)
+    if args.refusals:
+        return refusals_report(args.runs, args.story, args.format)
     if args.journal_line:
         journal_writer(args.runs, args.journal_line).write(sys.stdin.read())
         return 0

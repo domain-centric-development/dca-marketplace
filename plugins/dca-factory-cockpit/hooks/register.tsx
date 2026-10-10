@@ -3,7 +3,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
-import { appendLines, clock, createLatch, day, exitWord, keepRefresh, moment, parseJournal, recommendedOption, recordOptions, rowSignature, stagesOf, touchesFactory, type RefreshWish } from './parse'
+import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, keepRefresh, moment, parseJournal, recommendedOption, recordOptions, rowSignature, stagesOf, touchesFactory, type RefreshWish } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -293,7 +293,7 @@ function announce($: EngineInterface, before: Cockpit, now: Cockpit): void {
   for (const [story, events] of Object.entries(now.journals)) {
     for (const event of events.slice(before.journals[story]?.length ?? events.length)) {
       if (event.kind === 'stage-start') $.ui.toast(`factory: ${story} — ${event.stage} started`)
-      if (event.kind === 'gate' && event.fields.exit !== '0') $.ui.toast(`factory: ${story} — ${event.stage} gate refused`)
+      if (isRefusal(event)) $.ui.toast(`factory: ${story} — ${event.stage} gate refused`)
     }
   }
   for (const row of now.status.rows) {
@@ -682,7 +682,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     )
     const records = now.decisions.filter(record => record.story === open.id)
     const waits = status.waiting.some(wait => wait.story === open.id)
-    const shown = events.filter(event => event.kind !== 'usage').slice(-Math.max(4, rows - 34))
+    const shown = events.filter(isHistory).slice(-Math.max(4, rows - 34))
     const mark = row?.mark ?? 'none'
     return page(
       [
@@ -797,7 +797,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ),
         ui.section('History', 'UTC'),
         ui.table(
-          [{ name: 'day', width: 10 }, { name: 'time', width: 9 }, { name: 'event', width: 8 }, COL.stage],
+          [{ name: 'day', width: 10 }, { name: 'time', width: 9 }, { name: 'event', width: 8 }, { ...COL.stage, isWide: true }],
           shown.map((event, index) => {
             const isGate = event.kind === 'gate'
             const passed = event.fields.exit === '0'
@@ -808,7 +808,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                 text: isGate ? (passed ? 'gate ✓' : 'gate ✗') : event.kind === 'stage-start' ? '▶ start' : '■ end',
                 color: isGate ? (passed ? C.done : C.fail) : event.kind === 'stage-start' ? C.accent : C.muted,
               },
-              { text: event.stage },
+              { text: isGate && gateBy(event) !== 'runner' ? `${event.stage} · by ${gateBy(event)}` : event.stage },
             ]
           }),
         ),

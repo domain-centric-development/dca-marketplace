@@ -80,6 +80,42 @@ end-user tests and the unit tests usually live in different projects or source s
 run against the wrong one matches nothing. When no declared command covers that path, the gate says
 so instead of guessing.
 
+## The journal — `.dca-factory/evidence/<story>/journal.tsv`
+
+One line per event, tab-separated: `<UTC time>\t<kind>\t<name>\t<field>=<value>…\tseq=<n>`. The sequence
+number orders the events, never the clock (after a union merge repeated a number, the time decides between the two): two events in one second are told apart by it, and which hand-over
+belongs to the story's current pass is read from it alone — no file time is compared. Every line is appended
+through one function of the gate, under the journal's lock (the folder `journal.tsv.lock`); the runner composes
+its lines and pipes them through `factory-cli.py --journal-line <story>`. Nothing else writes the file, and
+nothing rewrites it. A line without `seq=` takes its position in the file.
+
+| Kind | Name | Fields | Written by |
+|---|---|---|---|
+| `stage-start` | the stage, `builder`, `verifier`, `review:<perspective>` or `integrate` | `tool=`; `model_requested=` and `model_applied=no (<why>)` where the profile names a model; `stages=` for a shared window | the runner, `--stage-start` |
+| `stage-end` | as at its start | `exit=0`, `nonzero` or `owned` | the runner, `--stage-end` |
+| `window-start` · `window-end` | the work outside a stage (`backlog`, `decisions`) | `tool=` at the start | `--window-start`, `--window-end` |
+| `usage` | the stage or the window | `tool=`, then `model=`, `input=`, `cache_read=`, `cache_write=`, `output=`, `cost=` where the tool reports a price and `seconds=` for a runner invocation — or `unknown`; in a session `window=<start>/<end>` with `session=<tool>:<id>` until the log is read, then a second line with the numbers and the same `window=` | the runner, the stage and window marks |
+| `gate` | the stage the gate ran for | `exit=<n>`; `fail=<check>,…` on a refusal; `by=runner`, `by=<stage>` (a stage's own run under the runner) or `by=session`; the plan gate's refusal adds `backlog=<digest>` of the story and its epic | the gate, on every run over a story |
+| `wrote` | a hand-over: `plan.md`, `tests.md`, `build.md`, `tidy.md`, `judge.md`, `document.md` | `sha=<digest>` of its content, `sha=gone` once it is removed; `same=1` for a file of the window's stages that a window run to its end left as it was | the gate, at a window's start and end and at every gate run, for each file whose content differs from its last `wrote` |
+| `outdated` | `document.md` | `by=integrate` | the runner, when the integrate gate refuses |
+| `rounds-reset` | `-` | `by=--from` | the runner, on `run --from` |
+| `pipeline-changed` | the stage before whose gate the installed pipeline differed | — | the runner |
+| `owned-confirmed` | the parts a person confirmed, comma-separated | — | `--owned-confirm` |
+
+**The current pass.** A stage file counts from its last `wrote`, or from a later pass of its own gate (or its exit 3: every check passed, a person is asked) for
+`test`, `build`, `tidy` and `document` — those gates run after their file is written, so a pass vouches for the
+file as it stands. An `outdated` after that makes it an earlier pass's. In the stages' order, a file that counts
+from before the file ahead of it belongs to an earlier pass, and so does every file after it. A plan refusal holds
+while the story and its epic still match its `backlog=` digest; an integrate refusal holds until a `wrote
+build.md` follows it. A skeleton (`plan.md`, `document.md`) is the pipeline's only where the pipeline wrote it in
+that run: a file an earlier pass left is the stage's to bring up to date or leave as it is, and its gate decides.
+
+**Refusals.** `factory-cli.py --refusals [--story <id>] [--format json]` (`factory.sh status --refusals`) counts
+each story's `gate` lines with `exit=1`: the runner's (`by=runner`, or no `by`) apart from the stages' own
+self-checks, and each refusal as *form* when every check it names is one about how a hand-over is written
+(`files-listed`, `story-pass`, `tests-mapped`, `test-titles`, `plan-levels`, `levels`, `documented`, `decisions`,
+`reviews`, `layout`), as *substance* otherwise.
+
 ## One owner per place — the story carries its state, the run folder is protocol
 
 `.dca-factory/runs/<story>/` holds what the stages hand over: the hand-overs, their skeletons, a gate's
@@ -189,7 +225,8 @@ again), the story's tests green, the required suites, `architecture` and `format
 checkout's branch to the commit. Only then does it write `status: delivered`; a main checkout on another branch,
 or with a change of its own in a file the commit touches, is refused (`checkout`) and the story stops until
 `factory.sh run --story <id> --from integrate`. A refusal of the checks goes back to the build stage as a round, and
-the document stage writes its file anew (the earlier one stays as `.dca-factory/evidence/<story>/document.before-integrate.md`).
+the journal marks `document.md` an earlier pass's (`outdated document.md by=integrate`): the document stage writes it
+for the story as it now is, or its gate passes it as it stands.
 Delivered, the worktree and the branch go. A story set `superseded` with a worktree, or a worktree whose id no story
 has any more, loses both when the runner next starts; nothing of it reaches the main line.
 

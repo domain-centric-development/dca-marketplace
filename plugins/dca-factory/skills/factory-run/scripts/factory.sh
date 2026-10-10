@@ -15,7 +15,7 @@
 #                    count of rounds), or without --story the whole backlog in the schedule's order;
 #                    every story in a worktree of its own, integrated into the checkout's branch when
 #                    every gate passed; --parallel runs up to <n> stories at once
-#   factory.sh status [--story <id>] [--usage] [--brief]   what runs, what waits, every story, the cost
+#   factory.sh status [--story <id>] [--usage] [--refusals] [--brief]   what runs, what waits, every story, the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh follow [--story <id>] [--process <name>] [--once [--lines <n>]] [--all] [--format text|json]
 #                    what the stage in flight does, one line per tool call, as it happens; --process one
@@ -3069,7 +3069,7 @@ setup_write() {                             # setup_write [<key>]
 [ $# -ge 1 ] || usage
 command=$1; shift
 story=""; tool=""; from=""; dry=""; source_dir=""; copy_mode=""; LINK_MODE=""; watch=""; interval=60
-setup_mode=""; replace_key=""; want_usage=""; want_brief=""; session_start=""; live=""; view=()
+setup_mode=""; replace_key=""; want_usage=""; want_refusals=""; want_brief=""; session_start=""; live=""; view=()
 
 # The reading commands are the CLI's; the runner passes them on, so a project calls one script.
 # Whether this run shares its stages: --separate-stages, else an explicit FACTORY_SHARED_* or flag per half,
@@ -3102,6 +3102,7 @@ case "$command" in
       case "$1" in
         --story) [ $# -ge 2 ] || usage; story=$2; shift 2 ;;
         --usage) want_usage=1; shift ;;
+        --refusals) want_refusals=1; shift ;;
         --brief) want_brief=1; shift ;;
         --session-start) session_start=1; shift ;;
         --format|--color) [ $# -ge 2 ] || usage; view+=("$1" "$2"); shift 2 ;;
@@ -3115,6 +3116,7 @@ case "$command" in
       read_command --status --brief ${session_start:+--session-start}
     fi
     [ -n "$want_usage" ] && read_command --usage ${story:+--story "$story"}
+    [ -n "${want_refusals:-}" ] && { read_command --refusals ${story:+--story "$story"} ${view[@]+"${view[@]}"}; exit $?; }
     # Which pipeline this machine has is not the project's state: said with --live only, so the same
     # files give the same view everywhere.
     [ -n "${live:-}" ] && check_gate_freshness

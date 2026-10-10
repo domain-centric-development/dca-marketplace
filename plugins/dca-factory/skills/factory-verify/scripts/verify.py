@@ -3641,6 +3641,12 @@ def verify_setup(runner, verbose=False):
     runner_text = open(runner, encoding="utf-8").read()
     observe_text = open(os.path.join(os.path.dirname(runner), "..", "..", "factory-verify", "scripts", "observe.py"),
                         encoding="utf-8").read()
+    # the cli takes the gate's names into its own namespace; one it defines again hides the gate's from the cli's
+    # code alone, with another shape — a TypeError at the first call, never at import
+    defined = lambda text: set(re.findall(r"^def (\w+)\(", text, re.M)) | set(re.findall(r"^class (\w+)\b", text, re.M))
+    shadowed = sorted(defined(gate_text) & defined(cli_text) - {"main"})
+    check("cli: defines no function or class the gate defines — the shared namespace keeps one of each",
+          not shadowed, shadowed)
     check("gate: carries no colour code, no price and no session-log path — those are the cli's",
           "\\x1b[" not in gate_text and "def money(" not in gate_text and ".claude/projects" not in gate_text
           and "def money(" in cli_text and "\\x1b[" in cli_text)
@@ -7407,6 +7413,85 @@ def run_groups(args):
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("start: a document gate that found no outcome event resumes at build",
                              "start: build" in start, start))
+    # WP-94 step 2: the pass order is the journal's sequence, never the files' times
+    stage_files = {"plan.md": "# Plan\n", "tests.md": TESTS, "build.md": "# Build\n", "tidy.md": "# Tidy\n",
+                   "judge.md": "## Verdict\nverdict: pass\n", "document.md": "# Document\n"}
+    order = ("plan.md", "tests.md", "build.md", "tidy.md", "judge.md", "document.md")
+
+    def journal_of(root, lines):
+        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv",
+                   "".join(f"2026-10-10T10:00:00Z\t{line}\tseq={n}\n" for n, line in enumerate(lines, 1)))
+
+    def sha(root, name):
+        return hashlib.sha256(open(os.path.join(root, ".dca-factory", "runs", "STORY-1", name), "rb").read()).hexdigest()
+
+    def start_of(root):
+        return subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8").stdout
+
+    for root in throwaway():
+        # every event in one second: tests rewritten after the build, no build gate since — the build is an earlier
+        # pass's, which a two-second window of file times read as one pass
+        backlog_project(root, extra_sources=tuple((f".dca-factory/runs/STORY-1/{n}", stage_files[n]) for n in order))
+        journal_of(root, [f"wrote\t{n}\tsha={sha(root, n)}" for n in order] + [f"wrote\ttests.md\tsha={sha(root, 'tests.md')}"])
+        first = start_of(root)
+        journal_of(root, [f"wrote\t{n}\tsha={sha(root, n)}" for n in order]
+                   + [f"wrote\ttests.md\tsha={sha(root, 'tests.md')}", "gate\tbuild\texit=0\tby=runner",
+                      "gate\ttidy\texit=0\tby=runner", "gate\tdocument\texit=0\tby=runner"])
+        held = start_of(root)
+        expectations.append(("pass order: tests written after the build in the same second make the build an earlier "
+                             "pass's; the build's gate passing after them makes it hold",
+                             "start: build" in first and "start: build" not in held, first + "|" + held))
+    for root in throwaway():
+        # the integrate gate refused: the build runs again — until the build stage wrote build.md after the refusal
+        backlog_project(root, extra_sources=tuple((f".dca-factory/runs/STORY-1/{n}", stage_files[n]) for n in order)
+                        + ((".dca-factory/runs/STORY-1/.gate-integrate.txt", "gate:fail compiles\n"),))
+        base = [f"wrote\t{n}\tsha={sha(root, n)}" for n in order]
+        journal_of(root, base + ["gate\tintegrate\texit=1\tfail=compiles\tby=runner"])
+        refused = start_of(root)
+        write_file(root, ".dca-factory/runs/STORY-1/build.md", "# Build\nadapted to the main line\n")
+        journal_of(root, base + ["gate\tintegrate\texit=1\tfail=compiles\tby=runner",
+                                 f"wrote\tbuild.md\tsha={sha(root, 'build.md')}"])
+        rebuilt = start_of(root)
+        expectations.append(("pass order: an integrate refusal sends the story to build until build.md is written after "
+                             "it, by sequence, not by the files' times",
+                             "start: build" in refused and "integrate gate refused" in refused
+                             and "integrate gate refused" not in rebuilt, refused + "|" + rebuilt))
+    for root in throwaway():
+        # `outdated document.md`: the integrate step's mark instead of moving the file — the document stage runs
+        # again, or a later document gate pass makes the file hold as it stands
+        backlog_project(root, extra_sources=tuple((f".dca-factory/runs/STORY-1/{n}", stage_files[n]) for n in order))
+        base = [f"wrote\t{n}\tsha={sha(root, n)}" for n in order]
+        journal_of(root, base + ["outdated\tdocument.md\tby=integrate"])
+        outdated = start_of(root)
+        journal_of(root, base + ["outdated\tdocument.md\tby=integrate", "gate\tdocument\texit=0\tby=runner"])
+        passed = start_of(root)
+        expectations.append(("pass order: an outdated document.md is an earlier pass's until it is written again or its "
+                             "gate passes it",
+                             "document.md not written yet" in outdated and "document.md is written" in passed,
+                             outdated + "|" + passed))
+    for root in throwaway():
+        # a refusal is journaled with its checks, and a report counts form against substance, the runner's apart
+        backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n"),))
+        refused = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "test"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8")
+        journal = open(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv"), encoding="utf-8").read()
+        gate_line = next((l for l in journal.splitlines() if "\tgate\ttest\t" in l), "")
+        with open(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv"), "a", encoding="utf-8") as h:
+            h.write("2026-10-10T10:00:00Z\tgate\tbuild\texit=1\tfail=files-listed\tby=runner\tseq=90\n"
+                    "2026-10-10T10:01:00Z\tgate\tbuild\texit=1\tfail=files-listed,tests-red\tby=runner\tseq=91\n"
+                    "2026-10-10T10:02:00Z\tgate\tbuild\texit=1\tby=runner\tseq=92\n")
+        report = json.loads(subprocess.run([sys.executable, args.cli, "--refusals", "--story", "STORY-1", "--format",
+                                            "json"], cwd=root, capture_output=True, text=True,
+                                           encoding="utf-8").stdout or "{}")
+        runner_counts = report.get("stories", {}).get("STORY-1", {}).get("runner", {})
+        expectations.append(("refusals: a gate's refusal is journaled with its checks and who ran it; the report counts "
+                             "the runner's form against substance, apart from the stages' own",
+                             refused.returncode == 1 and re.search(r"\texit=1\tfail=[a-z,-]+\tby=session\tseq=\d+$",
+                                                                 gate_line) is not None
+                             and runner_counts.get("form") == 1 and runner_counts.get("substance") == 2
+                             and "stages" in report["stories"]["STORY-1"], (gate_line, report)))
+
     for root in throwaway():
         # in git, the scratch copy is what git sees — a package named `tasks` comes along
         build_project(root, story=ADOPTED, profile=PACKAGED_PROFILE, tests=TESTS + CHARACTERIZED,

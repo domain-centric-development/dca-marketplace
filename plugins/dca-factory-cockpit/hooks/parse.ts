@@ -18,6 +18,28 @@ export function parseJournal(text: string): JournalEvent[] {
     })
 }
 
+// Who ran a gate: the runner (also every line of a journal older than the `by` field), a stage checking
+// its own work under a runner, or a session or a person by hand.
+export function gateBy(event: JournalEvent): string {
+  return event.fields.by ?? 'runner'
+}
+
+// A stage's own run of the gate is a self-check, not the verdict between two stages.
+export function isSelfCheck(event: JournalEvent): boolean {
+  return event.kind === 'gate' && gateBy(event) !== 'runner' && gateBy(event) !== 'session'
+}
+
+// Only the runner refuses a stage; a stage's failing self-check is its own business.
+export function isRefusal(event: JournalEvent): boolean {
+  return event.kind === 'gate' && event.fields.exit !== '0' && gateBy(event) === 'runner'
+}
+
+// The lines a story's history shows: stages starting and ending, and gates — not usage, written
+// hand-overs or outdated marks.
+export function isHistory(event: JournalEvent): boolean {
+  return event.kind === 'stage-start' || event.kind === 'stage-end' || event.kind === 'gate'
+}
+
 // The stages in the order the journal first names them: plan…document, or builder/judge/document
 // when the project runs a shared builder — whatever the runner wrote, nothing assumed.
 export function stagesOf(events: JournalEvent[]): StageRun[] {
@@ -41,7 +63,7 @@ export function stagesOf(events: JournalEvent[]): StageRun[] {
         stage.seconds += Math.max(0, (Date.parse(event.at) - Date.parse(stage.runningSince)) / 1000)
       }
       stage.runningSince = null
-    } else if (event.kind === 'gate') {
+    } else if (event.kind === 'gate' && !isSelfCheck(event)) {
       run(event.stage).gates.push(event.fields.exit === '0')
     } else if (event.kind === 'usage') {
       const stage = run(event.stage)

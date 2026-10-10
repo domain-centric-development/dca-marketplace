@@ -53,7 +53,9 @@ place. They block nothing; a person closes a row (`done`, `wont-fix`) or a later
    project's.
 6. **Cost is tokens.** A session log has no price, so the view shows tokens and says so once; a
    runner that reports a price adds a cost column. "not measured" is unknown, not free. The full split
-   into input, cache and output per stage is `factory.sh status --usage`.
+   into input, cache and output per stage is `factory.sh status --usage`. Asked why a story took rounds,
+   `factory.sh status --refusals [--story <id>]` counts its gate refusals — the runner's apart from the stages'
+   own self-checks, each as *form* (only checks of how a hand-over is written) or *substance*.
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,

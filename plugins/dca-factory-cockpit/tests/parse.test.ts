@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filledCells, duration, moment, parseJournal, recommendedOption, recordOptions, rounds, stagesOf, touchesFactory, wrapWords } from '../hooks/parse'
+import { filledCells, duration, gateBy, isHistory, isRefusal, isSelfCheck, moment, parseJournal, recommendedOption, recordOptions, rounds, stagesOf, touchesFactory, wrapWords } from '../hooks/parse'
 
 test('a factory command or skill refreshes the view, other calls do not', () => {
   expect(touchesFactory({ tool: 'Bash', command: 'bash .agents/factory/factory.sh run' } as { tool: string })).toBe(true)
@@ -24,6 +24,36 @@ test('reads the stages, rounds, gates and the open stage from a journal', () => 
 
   expect(test1).toEqual({ stage: 'test', rounds: 2, gates: [false, true], seconds: 225, cost: 0.7783, tokens: 0, runningSince: null })
   expect(build?.runningSince).toBe('2026-09-23T17:29:32Z')
+})
+
+test('a journal with seq, wrote and outdated lines: only stages and verdict gates count', () => {
+  const journal = [
+    '2026-10-10T08:00:00Z\tstage-start\tbuilder\ttool=claude\tseq=1',
+    '2026-10-10T08:05:00Z\tgate\tbuild\texit=1\tfail=tests\tby=builder\tseq=2',
+    '2026-10-10T08:06:00Z\twrote\tbuilder\tsha=abc123\tseq=3',
+    '2026-10-10T08:06:01Z\twrote\tbuilder\tsha=abc123\tsame=1\tseq=4',
+    '2026-10-10T08:07:00Z\tstage-end\tbuilder\texit=0\tseq=5',
+    '2026-10-10T08:07:30Z\tgate\tbuilder\texit=0\tby=runner\tseq=6',
+    '2026-10-10T08:08:00Z\toutdated\tjudge\tseq=7',
+  ].join('\n')
+  const events = parseJournal(journal)
+
+  expect(events[1]?.fields).toEqual({ exit: '1', fail: 'tests', by: 'builder', seq: '2' })
+  expect(stagesOf(events)).toEqual([{ stage: 'builder', rounds: 1, gates: [true], seconds: 420, cost: 0, tokens: 0, runningSince: null }])
+  expect(events.filter(isHistory).map(event => event.kind)).toEqual(['stage-start', 'gate', 'stage-end', 'gate'])
+  expect(events.filter(isSelfCheck).map(gateBy)).toEqual(['builder'])
+})
+
+test('only the runner\'s refusal is a refusal to announce — older journals have no by field', () => {
+  const [old, runner, stage, session, passed] = parseJournal([
+    '2026-10-10T08:00:00Z\tgate\ttest\texit=1',
+    '2026-10-10T08:00:00Z\tgate\ttest\texit=1\tby=runner\tseq=1',
+    '2026-10-10T08:00:00Z\tgate\ttest\texit=1\tby=test\tseq=2',
+    '2026-10-10T08:00:00Z\tgate\ttest\texit=1\tby=session\tseq=3',
+    '2026-10-10T08:00:00Z\tgate\ttest\texit=0\tby=runner\tseq=4',
+  ].join('\n'))
+
+  expect([old, runner, stage, session, passed].map(event => isRefusal(event!))).toEqual([true, true, false, false, false])
 })
 
 test('formats durations', () => {

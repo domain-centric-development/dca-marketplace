@@ -272,7 +272,8 @@ def read_events(path):
         seq = fields.pop("seq", "")
         events.append({"seq": int(seq) if seq.isdigit() else position, "at": parts[0], "kind": parts[1],
                        "name": parts[2], "fields": fields, "line": line})
-    events.sort(key=lambda e: e["seq"])
+    # A union merge of two branches that ran the same story can repeat a number: the time decides between them.
+    events.sort(key=lambda e: (e["seq"], e["at"]))
     return events
 
 
@@ -402,7 +403,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 17
 
 
-VERSION = "0.68.0"
+VERSION = "0.69.0"
 
 
 def read_front_matter(path):
@@ -4991,7 +4992,9 @@ def pass_marks(runs, story_id):
         elif kind == "wrote":
             marks.pop(f"wrote:{name}", None)
         elif kind == "gate":
-            marks[f"{'pass' if fields.get('exit') == '0' else 'fail'}:{name}"] = event["seq"]
+            # 3: every check passed and a person is asked — the file holds, though the gate has not passed yet
+            marks[f"{'pass' if fields.get('exit') == '0' else 'held' if fields.get('exit') == '3' else 'fail'}:{name}"] \
+                = event["seq"]
         elif kind == "outdated":
             marks[f"outdated:{name}"] = event["seq"]
     return marks
@@ -5002,7 +5005,7 @@ def written_at(marks, stage):
     name = STAGE_FILES[stage]
     at = marks.get(f"wrote:{name}", 0)
     if stage in POST_GATED:
-        at = max(at, marks.get(f"pass:{stage}", 0))
+        at = max(at, marks.get(f"pass:{stage}", 0), marks.get(f"held:{stage}", 0))
     return None if marks.get(f"outdated:{name}", -1) > at else at
 
 
