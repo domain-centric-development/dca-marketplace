@@ -675,8 +675,7 @@ and the runner refuses a pair that differs) and readable with `python3 .agents/f
 | **file contract** (`CONTRACT`, and `contract:` in the stack profile) | can this gate read this project's files at all | the **gate**, on every run. A profile written for a higher contract is **refused**: this script would ignore whatever the newer contract added, and a key ignored in silence is a check that has quietly gone |
 | **script version** (`VERSION`) | which release governs this project | the **runner**, comparing `.agents/factory/gate.installed` — five machine-neutral lines (plugin, version, contract, the files of the release and their SHA-256) written at install time and **committed with the project** — against the pipeline it finds beside it. A project on an older release of the same contract is valid and says so: an update to run, never a reason to refuse a story |
 
-The current file contract is 8: the project description and backlog under `project/`, and the
-`acceptance:` key with its record. `factory.sh update` says when a profile's `contract:` line is to
+The current file contract is 17: a story's evidence beside its run folder, in `.dca-factory/evidence/<story>/`. `factory.sh update` says when a profile's `contract:` line is to
 be raised.
 
 The gate cannot answer the second one alone: a copied script has nothing to compare itself

@@ -307,10 +307,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 16
+CONTRACT = 17
 
 
-VERSION = "0.67.4"
+VERSION = "0.68.0"
 
 
 def read_front_matter(path):

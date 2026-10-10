@@ -149,6 +149,17 @@ def cli_in(root):
     return os.path.join(root, ".agents", "factory", "factory-cli.py")
 
 
+def pipeline_sha(root):
+    """The hash `gate.installed` records: one SHA-256 over the installed files' digests, as the runner takes it."""
+    folder = os.path.join(root, ".agents", "factory")
+    listing = ""
+    for name in ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh"):
+        path = os.path.join(folder, name)
+        listing += (f"{hashlib.sha256(open(path, 'rb').read()).hexdigest()}  {name}\n" if os.path.isfile(path)
+                    else f"missing  {name}\n")
+    return hashlib.sha256(listing.encode("utf-8")).hexdigest()
+
+
 def copy_scripts(beside, root):
     """The gate and the CLI, into a fixture's .agents/factory — as the install puts them there."""
     folder = os.path.dirname(beside)
@@ -1189,15 +1200,6 @@ def verify_runner(runner, verbose=False):
 
     # the installed pipeline is the one the stamp records, and stays it while a run lasts: its hash is taken at the
     # start and compared before every gate — a stage that rewrites the gate is stopped at the next one
-    def pipeline_sha(root):
-        folder = os.path.join(root, ".agents", "factory")
-        listing = ""
-        for name in ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh"):
-            path = os.path.join(folder, name)
-            listing += (f"{hashlib.sha256(open(path, 'rb').read()).hexdigest()}  {name}\n" if os.path.isfile(path)
-                        else f"missing  {name}\n")
-        return hashlib.sha256(listing.encode("utf-8")).hexdigest()
-
     for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
@@ -7660,6 +7662,28 @@ def verify_worktrees(runner, verbose=False):
     def read(root, rel):
         path = os.path.join(root, rel)
         return open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
+
+    # a stage in a worktree that rewrites the gate through the worktree's link changes the main checkout's pipeline:
+    # the runner's hash sees it before the next gate, whatever tool the stage ran in
+    for root in throwaway():
+        log, env = fixture(root, [])
+        with open(os.path.join(root, ".agents", "factory", "gate.installed"), "w", encoding="utf-8") as handle:
+            handle.write(f"plugin: dca-factory\nsha256: {pipeline_sha(root)}\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "stamp"], cwd=root,
+                       capture_output=True)
+        with open(os.path.join(root, "stand-in.sh"), "a", encoding="utf-8", newline="\n") as handle:
+            handle.write("")
+        script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            "  test) cat \"$FIXTURE_DIR/tests.md\" > \"$d/tests.md\" ;;",
+            "  test) cat \"$FIXTURE_DIR/tests.md\" > \"$d/tests.md\"; echo '# kinder' >> .agents/factory/story-gate.py ;;", 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        check("worktree: a stage that rewrites the gate through the worktree's link stops the run before the next gate",
+              "# kinder" in script and code == 7 and "changed during STORY-1's run, before its test gate" in output
+              and "# kinder" in read(root, ".agents/factory/story-gate.py"),
+              f"exit {code}; {output.strip()[-300:]}")
 
     # the story's commit holds what the stages changed and listed: an untracked file the gates' own commands left
     # (a report nobody ignored) stays out of it and is named
