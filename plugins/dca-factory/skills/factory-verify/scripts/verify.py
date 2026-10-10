@@ -12,6 +12,7 @@ fixture's "test runner" is a marker file, so red and green cost milliseconds ins
 """
 
 import argparse
+import ast
 import glob
 import hashlib
 import importlib.util
@@ -3647,6 +3648,8 @@ def verify_setup(runner, verbose=False):
     shadowed = sorted(defined(gate_text) & defined(cli_text) - {"main"})
     check("cli: defines no function or class the gate defines — the shared namespace keeps one of each",
           not shadowed, shadowed)
+    check("stages: no list of stage names outside the gate's table — the gate, the cli and the runner read STAGES",
+          not stage_lists(gate_text, cli_text, runner_text), stage_lists(gate_text, cli_text, runner_text))
     check("gate: carries no colour code, no price and no session-log path — those are the cli's",
           "\\x1b[" not in gate_text and "def money(" not in gate_text and ".claude/projects" not in gate_text
           and "def money(" in cli_text and "\\x1b[" in cli_text)
@@ -3979,6 +3982,44 @@ def verify_places(args):
                              and "verify_command" not in brief_same.stdout,
                              f"{differs.stdout.strip()} | {brief.stdout.strip()[-300:]}"))
     return expectations
+
+
+STAGE_NAMES = ("plan", "test", "build", "tidy", "judge", "document", "adopt", "integrate")
+
+
+def stage_lists(gate_text, cli_text, runner_text):
+    """Every place that lists two stage names or more by hand, outside the table and the checks registered against
+    it — and any stage name the gate's `main` decides on. A stage is a row: a list beside the table drifts from it."""
+    import ast
+    found = []
+    for label, text in (("story-gate.py", gate_text), ("factory-cli.py", cli_text)):
+        tree = ast.parse(text)
+        skip = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "STAGES" for t in node.targets):
+                skip.update(range(node.lineno, node.end_lineno + 1))
+            if isinstance(node, ast.FunctionDef):
+                for decorator in node.decorator_list:
+                    skip.update(range(decorator.lineno, decorator.end_lineno + 1))
+            if isinstance(node, ast.FunctionDef) and node.name == "main" and label == "story-gate.py":
+                for inner in ast.walk(node):
+                    if isinstance(inner, ast.Constant) and inner.value in STAGE_NAMES:
+                        found.append(f"{label}:{inner.lineno} main names {inner.value!r}")
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Tuple, ast.List, ast.Set)) and node.lineno not in skip:
+                names = [e.value for e in node.elts if isinstance(e, ast.Constant) and e.value in STAGE_NAMES]
+                if len(names) >= 2:
+                    found.append(f"{label}:{node.lineno} {names}")
+    word = r"\b(?:" + "|".join(STAGE_NAMES) + r")\b"
+    for number, line in enumerate(runner_text.splitlines(), 1):
+        code = line.split(" #", 1)[0] if not line.lstrip().startswith("#") else ""
+        lists = re.findall(r"\w+\+?=\(([^)]*)\)", code) + re.findall(r"\bfor \w+ in ([^;]*);", code) \
+            + re.findall(r"^\s*([\w|]+)\)", code) + re.findall(r'case "([^"]*)" in', code) \
+            + re.findall(r'case " ([^"]*) " in', code)
+        hits = [part for part in lists if len(re.findall(word, part)) >= 2]
+        if hits or len(re.findall(r'\[ "\$\w+" !?= ' + word + r" \]", code)) >= 2:
+            found.append(f"factory.sh:{number} {code.strip()[:90]}")
+    return found
 
 
 def main(argv=None):

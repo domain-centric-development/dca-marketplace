@@ -3546,6 +3546,9 @@ class Stage(typing.NamedTuple):
     commands: tuple = ()      #: the profile's extra commands its gate runs, in this order; a key not declared is
                               #: skipped and named — a gate failing on a command nobody configured gets switched off
     tested: bool = False      #: its gate runs the mapped tests (red or green) and the checks before them
+    red: bool = False         #: a story's mapped tests are red at its gate (a journey's and an adoption's green)
+    sizes: tuple = ()         #: the hand-overs whose size its gate weighs against the criteria
+    lists: bool = False       #: its hand-over lists the files it changed, and its gate holds it to that list
     suite: bool = False       #: its gate runs the policy's required suites whole
     in_order: bool = True     #: a step of the story's run order (adopt and integrate are steps after it)
 
@@ -3554,16 +3557,17 @@ ALL_KINDS = ("story", "journey", "adopt")
 
 STAGES = (
     Stage("plan", "plan.md", window="builder", kinds=ALL_KINDS),
-    Stage("test", "tests.md", window="builder", kinds=ALL_KINDS, post_gated=True, tested=True),
-    Stage("build", "build.md", window="builder", post_gated=True, commands=("architecture", "format"),
-          tested=True, suite=True),
+    Stage("test", "tests.md", window="builder", lists=True, kinds=ALL_KINDS, post_gated=True, tested=True, red=True,
+          sizes=("plan.md", "tests.md")),
+    Stage("build", "build.md", window="builder", lists=True, post_gated=True, commands=("architecture", "format"),
+          tested=True, suite=True, sizes=("build.md",)),
     # The tidy stage changes no behaviour, so its whole claim is that everything still holds: the same commands
     # as the build stage, run again after the refactor.
-    Stage("tidy", "tidy.md", window="builder", post_gated=True, commands=("architecture", "format"),
-          tested=True, suite=True),
+    Stage("tidy", "tidy.md", window="builder", lists=True, post_gated=True, commands=("architecture", "format"),
+          tested=True, suite=True, sizes=("tidy.md",)),
     Stage("judge", "judge.md", window="verifier", kinds=ALL_KINDS, gated=False),
     Stage("document", "document.md", window="verifier", kinds=("story", "journey"), post_gated=True,
-          commands=("architecture",)),
+          commands=("architecture",), sizes=("judge.md", "document.md")),
     # Nothing built: the adopt gate delivers an adopted story after its judge.
     Stage("adopt", kinds=("adopt",), in_order=False),
     # The story on the main line as it is now: everything the tidy gate holds the story to, once more.
@@ -4131,7 +4135,8 @@ def decision_covers(cwd, story_id, ids):
     def covers(rel, planned):
         if rel in planned:
             return True
-        return any(str(front.get("stage", "")).strip() in ("test", "build") or os.path.basename(rel) in body
+        return any(getattr(STAGE.get(str(front.get("stage", "")).strip()), "lists", False)
+                   or os.path.basename(rel) in body
                    for front, body in records)
     return covers
 
@@ -4759,8 +4764,8 @@ def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
         # A shared builder ran plan to tidy in one window: its record is the one that holds, and a file it
         # changed is listed by whichever of its hand-overs belongs to the stage that changed it.
         record = os.path.join(evidence_dir(runs, story_id), "changed-builder.txt")
-        handovers = [STAGE_FILES[name] for name in ("test", "build", "tidy")
-                     if os.path.isfile(os.path.join(runs, story_id, STAGE_FILES[name]))]
+        handovers = [s.file for s in STAGES if s.lists
+                     if os.path.isfile(os.path.join(runs, story_id, s.file))]
     base_file = os.path.join(evidence_dir(runs, story_id), "base-tree")
     if window_open(runs, story_id, "builder") and stage in SHARED_WINDOWS["builder"] and os.path.isfile(base_file):
         # A shared builder runs its own gates inside its window, before any changed-files record exists. What the
@@ -4771,8 +4776,8 @@ def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
         rows = tree_changes(cwd, base, now, runs) if now else None
         if rows is not None:
             record = None
-            handovers = [STAGE_FILES[name] for name in ("test", "build", "tidy")
-                         if os.path.isfile(os.path.join(runs, story_id, STAGE_FILES[name]))]
+            handovers = [s.file for s in STAGES if s.lists
+                         if os.path.isfile(os.path.join(runs, story_id, s.file))]
             changed_now = [path for _kind, path in rows]
     if record is not None and (not os.path.isfile(record) or stage_open(runs, story_id, stage)):
         if stage_open(runs, story_id, stage):
@@ -5321,8 +5326,313 @@ def hand_over_to_cli(argv):
     return completed.returncode
 
 
-def main(argv):
+class GateRun:
+    """What one gate run over a story knows; the registered checks read it and leave their findings in `result`
+    (and the mapping and the located tests for the checks after them)."""
+
+    def __init__(self, **fields):
+        self.mapping, self.located = {}, {}
+        self.__dict__.update(fields)
+        self.kind = story_kind(self.front)
+        # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
+        self.expected = "red" if self.stage.red and self.kind == "story" else "green"
+
+
+class Check(typing.NamedTuple):
+    name: str
+    run: typing.Callable
+    stages: tuple
+    needs_process: bool
+    unrun: typing.Callable       #: the check names a refusal before it leaves unproven
+
+
+#: The checks a gate run holds a story to, in this order: every check that needs no process first, and a refusal among
+#: them ends the run before a suite starts — a file list that is wrong is wrong in a millisecond, not after a minute of
+#: tests. What did not run is named, so the report says what is still unproven.
+CHECKS = []
+
+
+def check(name, stages=None, needs_process=False, unrun=None):
+    """Register a check against the stage table: `stages` names rows (None — every gated stage) or is a predicate
+    over a row."""
+    if stages is None:
+        chosen = tuple(s.name for s in STAGES if s.gated)
+    elif callable(stages):
+        chosen = tuple(s.name for s in STAGES if s.gated and stages(s))
+    else:
+        unknown = [name for name in stages if name not in STAGE or not STAGE[name].gated]
+        if unknown:
+            raise ValueError(f"check {name}: no gated stage {', '.join(unknown)}")
+        chosen = tuple(stages)
+
+    def register(function):
+        CHECKS.append(Check(name, function, chosen, needs_process, unrun or (lambda run: [name])))
+        return function
+    return register
+
+
+def run_checks(run):
+    chosen = [c for c in CHECKS if run.stage.name in c.stages]
+    for entry in (c for c in chosen if not c.needs_process):
+        entry.run(run)
+    process = [c for c in chosen if c.needs_process]
+    if run.result.failed and process:
+        refused = sorted({check for state, check, _m in run.result.entries if state == "fail"})
+        for entry in process:
+            for name in entry.unrun(run):
+                run.result.skip(name, f"not run — {', '.join(refused)} refused first; fix that, then it runs")
+        return
+    for entry in process:
+        entry.run(run)
+
+
+@check("story")
+def _story(run):
+    if not str(run.front.get("context", "")).strip():
+        run.result.fail("story", f"{run.story_path}: front matter has no `context:` — a story names the bounded "
+                                 f"context it changes")
+    else:
+        run.result.ok("story", f"{run.story_id} in context {run.front['context']} with {len(run.criteria)} criterion(s)")
+
+
+@check("contract")
+def _contract(run):
+    check_contract(run.result, run.profile)
+
+
+@check("status")
+def _status(run):
+    check_status(run.result, run.story_path, run.front)
+
+
+@check("epic")
+def _epic(run):
+    check_epic(run.result, run.story_path, run.front, run.args.epics)
+
+
+@check("outcome", stages=("plan",))
+def _outcome_named(run):
+    check_outcome_named(run.result, run.profile, run.story_path, run.front, run.args.epics)
+
+
+@check("rounds")
+def _rounds(run):
+    check_rounds(run.result, run.runs, run.story_id)
+
+
+@check("suites")
+def _suites(run):
     global SUITES_RECORD
+    if not run.args.record_suites:
+        return
+    key = os.environ.get("FACTORY_SUITES_KEY", "")
+    if key:
+        SUITES_RECORD = open_suites_record(run.cwd, run.runs, run.story_id, key)
+    else:
+        run.result.note("suites", "--record-suites without FACTORY_SUITES_KEY in the environment — nothing is "
+                                  "recorded or reused")
+
+
+@check("decisions")
+def _decisions(run):
+    check_decisions(run.result, run.runs, run.story_id, run.cwd, run.stage.name, run.story_path)
+
+
+@check("plan", stages=("plan",))
+def _plan(run):
+    check_happy_path(run.result, run.story_path, run.front, run.body, run.profile)
+    check_context_map(run.result, run.cwd, run.profile, str(run.front.get("context", "")).strip())
+    check_instruction_size(run.result, run.cwd)
+    check_project(run.result, run.cwd, run.profile)
+    check_models(run.result, run.profile)
+
+
+@check("document", stages=("document",))
+def _document(run):
+    check_story_pass(run.result, run.runs, run.story_id, run.story_path, run.front)
+    check_outcome_raised(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front)
+    check_documented(run.result, run.runs, run.story_id, run.cwd)
+    check_proposals_landed(run.result, run.runs, run.story_id, run.cwd, run.profile)
+    check_reviews(run.result, run.runs, run.story_id, run.profile)
+
+
+@check("pipeline", stages=lambda s: s.name != "plan")
+def _pipeline(run):
+    check_pipeline_untouched(run.result, run.runs, run.story_id)
+
+
+@check("owned")
+def _owned(run):
+    check_owned(run.result, run.runs, run.story_id, run.story_path)
+
+
+@check("adopt", stages=("adopt",))
+def _adopt(run):
+    check_adopt(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.criteria)
+
+
+@check("integrate", stages=("integrate",))
+def _integrated(run):
+    check_integrated(run.result, run.cwd, run.runs, run.story_id)
+
+
+@check("tests-mapped", stages=lambda s: s.tested)
+def _mapping(run):
+    run.mapping = check_mapping(run.result, run.runs, run.story_id, run.criteria)
+    run.located = check_exists(run.result, run.cwd, run.mapping)
+
+
+# Integrated, the story's diff carries the main line's changes beside its own: the file list, the tests that existed
+# before and the red proof were the stages' to hold, and they held.
+@check("files-listed", stages=lambda s: s.lists)
+def _files_listed(run):
+    check_files_listed(run.result, run.runs, run.story_id, run.stage.name, run.cwd, run.located)
+    check_existing_tests(run.result, run.cwd, run.runs, run.story_id, run.body)
+
+
+@check("test-design", stages=lambda s: s.red)
+def _test_design(run):
+    check_plan_levels(run.result, run.runs, run.story_id)
+    check_invariants(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.mapping)
+    check_levels(run.result, run.profile, run.runs, run.story_id, run.front, run.body, run.mapping, run.located)
+    check_clauses(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.body, run.mapping,
+                  run.located)
+    check_titles(run.result, run.profile, run.cwd, run.front, run.body, run.mapping, run.located)
+
+
+@check("size", stages=lambda s: s.sizes)
+def _size(run):
+    check_size(run.result, run.runs, run.story_id, run.stage.sizes, len(run.criteria))
+
+
+@check("red-proof", stages=lambda s: s.lists)
+def _red_proof(run):
+    # the red proof compares digests, so it belongs here, before any process
+    ledger = red_ledger_path(run.runs, run.story_id)
+    if run.expected == "green" and ledger and os.path.isfile(ledger):
+        check_red_proof(run.result, run.cwd, run.located, read_red_digests(run.runs, run.story_id), run.story_id)
+
+
+def whole_suites(run):
+    """At build and tidy the policy's required test commands run whole anyway: that run is the evidence for the mapped
+    tests as well, so those commands are not started a second time."""
+    if not run.stage.suite:
+        return ()
+    return tuple(k for k in test_command_keys(run.profile)
+                 if k in set(split_list(run.profile.get("required"))) and run.profile.get(k))
+
+
+@check("tests", stages=lambda s: s.tested, needs_process=True,
+       unrun=lambda run: ["compiles", f"tests-{run.expected}"] + (["suite"] if run.stage.suite else []))
+def _tests(run):
+    check_compiles(run.result, run.profile, run.cwd)
+    run.whole_runs = check_test_state(run.result, run.profile, run.cwd, run.mapping, run.expected, run.located,
+                                      run.runs, run.story_id, guard=run.kind in ("journey", "adopt"),
+                                      whole_for=whole_suites(run), red_proof=False)
+    if run.stage.suite:
+        check_required_suites(run.result, run.profile, run.cwd, run.whole_runs)
+
+
+@check("commands", stages=lambda s: s.commands, needs_process=True,
+       unrun=lambda run: [key for key in run.stage.commands if run.profile.get(key)])
+def _commands(run):
+    check_stage_commands(run.result, run.profile, run.cwd, run.stage.name)
+
+
+#: What a passing gate does, per stage — the writes a verdict makes.
+PASSED = {}
+
+
+def on_pass(stage):
+    if stage not in STAGE or not STAGE[stage].gated:
+        raise ValueError(f"on_pass: no gated stage {stage}")
+
+    def register(function):
+        PASSED.setdefault(stage, []).append(function)
+        return function
+    return register
+
+
+@on_pass("plan")
+def _plan_passed(run):
+    if is_delivered(run.front):
+        # Delivered is delivered: a plan gate run over a delivered story (a check, a re-verification) leaves the
+        # story and the marks the delivery rests on as they are.
+        run.result.note("story", f"{run.story_id} is delivered — checked, its marks are left as they are")
+    else:
+        write_mark(run.runs, run.story_id, STORY_DIGEST, story_digest(run.story_path))
+        record_tests_baseline(run.cwd, run.runs, run.story_id)
+
+
+@on_pass("document")
+def _document_passed(run):
+    result, story_id, story_path = run.result, run.story_id, run.story_path
+    if is_delivered(run.front):
+        # Delivered is delivered: a document gate run over a delivered story checks it and leaves the story's
+        # `delivered:` date as it is.
+        result.note("story", f"{story_id} is delivered — checked, its marks are left as they are")
+        return
+    try:
+        if acceptance_applies(run.cwd, run.runs, story_id, run.profile):
+            verdict, rid = acceptance_state(run.cwd, story_id, story_path)
+            if verdict == "accepted":
+                result.ok("acceptance", f"{rid} accepted — the story is delivered")
+            elif verdict == "open":
+                result.wait("acceptance", f"{rid} waits for a human's look — answer it through "
+                                          f"/factory-decisions; the story holds the checkout until then")
+                return
+            elif verdict == "correction":
+                result.fail("acceptance", f"{rid} asked for a correction that is not in the story yet — "
+                                          f"write it in (criteria, an `answered:` line naming {rid}); the "
+                                          f"story then runs again from plan")
+                return
+            else:
+                asked = ask_acceptance(run.cwd, run.runs, story_id, story_path, run.profile, run.criteria)
+                result.wait("acceptance", f"{asked} asks a human to accept the story before it is "
+                                          f"delivered — {shown(record_path(story_id, asked, story_path))}, "
+                                          f"answered through /factory-decisions")
+                return
+    except GateError as error:
+        result.fail("acceptance", str(error))
+        return
+    if result.failed:
+        return
+    if in_worktree():
+        # In its worktree a story is delivered when its code is on the main line: the integrate step merges it,
+        # holds it to the gate once more, and the integrate gate writes the delivery.
+        result.ok("integrate", f"every check passed — {story_id} is delivered once its worktree is integrated "
+                               f"into the main checkout (the runner's integrate step)")
+        return
+    # The one write into a story the gate makes: delivered is its verdict, kept where the story is.
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    write_story_fields(story_path, status="delivered", delivered=stamp)
+    result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`")
+    # The judge's confirmed defects that did not block: kept beside the story, not in the run folder alone.
+    added, open_now = record_findings(story_path, story_id, run.front, run.runs)
+    if added or open_now:
+        result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
+                              f"{open_now} open there")
+
+
+@on_pass("adopt")
+def _adopt_passed(run):
+    if is_delivered(run.front):
+        return
+    if in_worktree():
+        run.result.ok("integrate", f"every check passed — {run.story_id} is adopted once its tests are integrated "
+                                   f"into the main checkout (the runner's integrate step)")
+        return
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    write_story_fields(run.story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built
+    run.result.ok("delivered", f"{shown(run.story_path)} carries `delivered: {stamp}` — adopted")
+
+
+@on_pass("integrate")
+def _integrate_passed(run):
+    integrate_into_home(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs)
+
+
+def main(argv):
     # `--brief` is the gate's own beside `--stage` (a stage's compact report); alone it is the status's, moved.
     moved = MOVED_TO_CLI - ({"--brief"} if "--stage" in argv else set())
     if any(token.split("=", 1)[0] in moved for token in argv):
@@ -5335,7 +5645,7 @@ def main(argv):
     parser.add_argument("--story")
     parser.add_argument(
         "--stage",
-        choices=("plan", "test", "build", "tidy", "document", "adopt", "integrate"),
+        choices=tuple(s.name for s in STAGES if s.gated),
     )
     parser.add_argument("--change", action="store_true",
                         help="run the profile's checks outside a story and exit")
@@ -5458,179 +5768,17 @@ def main(argv):
         story_id = str(front.get("id") or os.path.basename(story_folder(story_path)))
         observe_writes(args.runs, story_id)
         criteria = criteria_of(story_path, body)
-        if not str(front.get("context", "")).strip():
-            result.fail(
-                "story",
-                f"{story_path}: front matter has no `context:` — a story names the "
-                f"bounded context it changes",
-            )
-        else:
-            result.ok(
-                "story",
-                f"{story_id} in context {front['context']} with "
-                f"{len(criteria)} criterion(s)",
-            )
-        profile = read_profile(resolve_profile(args.profile, cwd))
-        check_contract(result, profile)
-        check_status(result, story_path, front)
-        check_epic(result, story_path, front, args.epics)
-        if args.stage == "plan":
-            check_outcome_named(result, profile, story_path, front, args.epics)
-        check_rounds(result, args.runs, story_id)
-        if args.record_suites:
-            key = os.environ.get("FACTORY_SUITES_KEY", "")
-            if key:
-                SUITES_RECORD = open_suites_record(cwd, args.runs, story_id, key)
-            else:
-                result.note("suites", "--record-suites without FACTORY_SUITES_KEY in the environment — "
-                                      "nothing is recorded or reused")
-        check_decisions(result, args.runs, story_id, cwd, args.stage, story_path)
-        if args.stage == "plan":
-            check_happy_path(result, story_path, front, body, profile)
-            check_context_map(
-                result, cwd, profile, str(front.get("context", "")).strip()
-            )
-            check_instruction_size(result, cwd)
-            check_project(result, cwd, profile)
-            check_models(result, profile)
-        if args.stage == "document":
-            check_story_pass(result, args.runs, story_id, story_path, front)
-            check_outcome_raised(result, profile, cwd, args.runs, story_id, front)
-            check_documented(result, args.runs, story_id, cwd)
-            check_proposals_landed(result, args.runs, story_id, cwd, profile)
-            check_reviews(result, args.runs, story_id, profile)
-            check_size(result, args.runs, story_id, ("judge.md", "document.md"), len(criteria))
-            check_stage_commands(result, profile, cwd, args.stage)
-        if args.stage in ("test", "build", "tidy", "document", "adopt", "integrate"):
-            check_pipeline_untouched(result, args.runs, story_id)
-        check_owned(result, args.runs, story_id, story_path)
-        if args.stage == "adopt":
-            check_adopt(result, profile, cwd, args.runs, story_id, front, criteria)
-        if args.stage == "integrate":
-            check_integrated(result, cwd, args.runs, story_id)
-        if args.stage in ("test", "build", "tidy", "integrate"):
-            mapping = check_mapping(result, args.runs, story_id, criteria)
-            located = check_exists(result, cwd, mapping)
-            # The checks that need no process come first, and a refusal among them ends the run before
-            # a suite starts: a file list that is wrong is wrong in a millisecond, not after a minute of
-            # tests. What did not run is named, so the report says what is still unproven.
-            # Integrated, the story's diff carries the main line's changes beside its own: the file list, the
-            # tests that existed before and the red proof were the stages' to hold, and they held.
-            if args.stage != "integrate":
-                check_files_listed(result, args.runs, story_id, args.stage, cwd, located)
-                check_existing_tests(result, cwd, args.runs, story_id, body)
-                check_size(result, args.runs, story_id,
-                           ("plan.md", "tests.md") if args.stage == "test" else (STAGE_FILES[args.stage],),
-                           len(criteria))
-            if args.stage == "test":
-                check_plan_levels(result, args.runs, story_id)
-                check_invariants(result, profile, cwd, args.runs, story_id, front, mapping)
-                check_levels(result, profile, args.runs, story_id, front, body, mapping, located)
-                check_clauses(result, profile, cwd, args.runs, story_id, front, body, mapping, located)
-                check_titles(result, profile, cwd, front, body, mapping, located)
-            # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
-            expected = "red" if args.stage == "test" and story_kind(front) == "story" else "green"
-            ledger = red_ledger_path(args.runs, story_id)
-            if expected == "green" and ledger and os.path.isfile(ledger) and args.stage != "integrate":
-                # the red proof compares digests, so it belongs here, before any process
-                check_red_proof(result, cwd, located, read_red_digests(args.runs, story_id), story_id)
-            if result.failed:
-                refused = sorted({check for state, check, _m in result.entries if state == "fail"})
-                unrun = ["compiles", f"tests-{expected}"]
-                if args.stage in ("build", "tidy", "integrate"):
-                    unrun.append("suite")
-                unrun += [key for key in STAGE_CHECKS.get(args.stage, ()) if profile.get(key)]
-                for check in unrun:
-                    result.skip(check, f"not run — {', '.join(refused)} refused first; fix that, then it runs")
-            else:
-                check_compiles(result, profile, cwd)
-                # At build and tidy the policy's required test commands run whole anyway: that run is the
-                # evidence for the mapped tests as well, so those commands are not started a second time.
-                whole_for = ()
-                if args.stage in ("build", "tidy", "integrate"):
-                    whole_for = tuple(k for k in test_command_keys(profile)
-                                      if k in set(split_list(profile.get("required"))) and profile.get(k))
-                whole_runs = check_test_state(
-                    result,
-                    profile,
-                    cwd,
-                    mapping,
-                    expected,
-                    located,
-                    args.runs,
-                    story_id,
-                    guard=story_kind(front) in ("journey", "adopt"),
-                    whole_for=whole_for,
-                    red_proof=False,
-                )
-                if args.stage in ("build", "tidy", "integrate"):
-                    check_required_suites(result, profile, cwd, whole_runs)
-                check_stage_commands(result, profile, cwd, args.stage)
+        run = GateRun(result=result, args=args, cwd=cwd, runs=args.runs, stage=STAGE[args.stage], story_id=story_id,
+                      story_path=story_path, front=front, body=body, criteria=criteria,
+                      profile=read_profile(resolve_profile(args.profile, cwd)))
+        run_checks(run)
     except GateError as error:
         result.fail("gate", str(error))
         return journal_gate(result, args, story_id, story_path, result.report(args.story, args.stage, args.json,
                                                                               args.brief))
-    if not result.failed and args.stage == "plan":
-        if is_delivered(front):
-            # Delivered is delivered: a plan gate run over a delivered story (a check, a re-verification)
-            # leaves the story and the marks the delivery rests on as they are.
-            result.note("story", f"{story_id} is delivered — checked, its marks are left as they are")
-        else:
-            write_mark(args.runs, story_id, STORY_DIGEST, story_digest(story_path))
-            record_tests_baseline(cwd, args.runs, story_id)
-    if not result.failed and args.stage == "document" and is_delivered(front):
-        # Delivered is delivered: a document gate run over a delivered story checks it and leaves the
-        # story's `delivered:` date as it is.
-        result.note("story", f"{story_id} is delivered — checked, its marks are left as they are")
-    elif not result.failed and args.stage == "document":
-        deliver = True
-        try:
-            if acceptance_applies(cwd, args.runs, story_id, profile):
-                verdict, rid = acceptance_state(cwd, story_id, story_path)
-                if verdict == "accepted":
-                    result.ok("acceptance", f"{rid} accepted — the story is delivered")
-                elif verdict == "open":
-                    deliver = False
-                    result.wait("acceptance", f"{rid} waits for a human's look — answer it through "
-                                              f"/factory-decisions; the story holds the checkout until then")
-                elif verdict == "correction":
-                    deliver = False
-                    result.fail("acceptance", f"{rid} asked for a correction that is not in the story yet — "
-                                              f"write it in (criteria, an `answered:` line naming {rid}); the "
-                                              f"story then runs again from plan")
-                else:
-                    deliver = False
-                    asked = ask_acceptance(cwd, args.runs, story_id, story_path, profile, criteria)
-                    result.wait("acceptance", f"{asked} asks a human to accept the story before it is "
-                                              f"delivered — {shown(record_path(story_id, asked, story_path))}, "
-                                              f"answered through /factory-decisions")
-        except GateError as error:
-            result.fail("acceptance", str(error))
-            deliver = False
-        if deliver and not result.failed and in_worktree():
-            # In its worktree a story is delivered when its code is on the main line: the integrate step merges
-            # it, holds it to the gate once more, and the integrate gate writes the delivery.
-            result.ok("integrate", f"every check passed — {story_id} is delivered once its worktree is integrated "
-                                   f"into the main checkout (the runner's integrate step)")
-        elif deliver and not result.failed:
-            # The one write into a story the gate makes: delivered is its verdict, kept where the story is.
-            stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            write_story_fields(story_path, status="delivered", delivered=stamp)
-            result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`")
-            # The judge's confirmed defects that did not block: kept beside the story, not in the run folder alone.
-            added, open_now = record_findings(story_path, story_id, front, args.runs)
-            if added or open_now:
-                result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
-                                      f"{open_now} open there")
-    if not result.failed and args.stage == "adopt" and not is_delivered(front) and in_worktree():
-        result.ok("integrate", f"every check passed — {story_id} is adopted once its tests are integrated into the "
-                               f"main checkout (the runner's integrate step)")
-    elif not result.failed and args.stage == "adopt" and not is_delivered(front):
-        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        write_story_fields(story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built
-        result.ok("delivered", f"{shown(story_path)} carries `delivered: {stamp}` — adopted")
-    if not result.failed and args.stage == "integrate":
-        integrate_into_home(result, cwd, story_path, story_id, front, args.runs)
+    if not result.failed:
+        for finish in PASSED.get(args.stage, ()):
+            finish(run)
     return journal_gate(result, args, story_id, story_path, result.report(story_id, args.stage, args.json, args.brief))
 
 
