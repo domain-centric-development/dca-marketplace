@@ -726,6 +726,22 @@ def facts_model(cwd, runs, story_id):
                 priced=facts["priced"] > 0)
 
 
+def owned_confirm(runs, story_id):
+    """The person's word that the story and its answers are as they want them after a stage changed them: the mark
+    goes, what changed is journaled, and the story runs on from what its files say."""
+    folder = evidence_dir(runs, story_id)
+    marked = os.path.join(folder, OWNED_CHANGED)
+    if not os.path.isfile(marked):
+        print(f"owned: nothing to confirm for {story_id} — no stage changed its story or an answer")
+        return 0
+    parts = [line.split(":", 1)[1].strip() for line in read_text(marked).splitlines() if line.startswith("changed:")]
+    os.remove(marked)
+    with open(os.path.join(folder, "journal.tsv"), "a", encoding="utf-8") as handle:
+        handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\towned-confirmed\t{','.join(parts)}\n")
+    print(f"owned: {story_id} — {', '.join(parts)} confirmed as the person's; the story runs on")
+    return 0
+
+
 def run_stories(runs):
     """Every story with a run folder or an evidence folder — a story's journal outlives its deleted run folder."""
     folders = (runs, evidence_dir(runs))
@@ -4022,6 +4038,8 @@ def main(argv):
                                                               "outside a stage — backlog or decisions")
     parser.add_argument("--window-end", metavar="WORK", help="with --story: end that measuring window")
     parser.add_argument("--stage-start", metavar="STAGE", help="mark a stage's start inside a session (with --story)")
+    parser.add_argument("--owned-confirm", metavar="STORY",
+                        help="a person looked at the story and its answers after a stage changed them: the story runs on")
     parser.add_argument("--stage-end", metavar="STAGE",
                         help="mark its end and record what it used, read from the session's own log")
     parser.add_argument("--session-log", help="with --stage-end: the session log to read, where it is not found")
@@ -4252,8 +4270,13 @@ def main(argv):
     if args.stage_start or args.stage_end:
         if not args.story:
             parser.error("--stage-start/--stage-end need --story")
-        return mark_stage(cwd, args.runs, args.story, args.stage_start or args.stage_end,
+        if args.stage_start:
+            record_owned(args.runs, args.story)
+        code = mark_stage(cwd, args.runs, args.story, args.stage_start or args.stage_end,
                           "start" if args.stage_start else "end", args.session_log)
+        return (owned_end(args.runs, args.story, args.stage_end) or code) if args.stage_end else code
+    if args.owned_confirm:
+        return owned_confirm(args.runs, args.owned_confirm)
     if args.usage_from:
         return usage_from(args.usage_from[0], args.usage_from[1], args.usage_model)
     if args.usage:

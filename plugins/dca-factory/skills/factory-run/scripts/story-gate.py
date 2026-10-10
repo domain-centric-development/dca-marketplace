@@ -604,6 +604,112 @@ def write_story_fields(path, **fields):
             lines.insert(after + 1 if after is not None else max(len(lines) - 1, 1), f"{key}: {value}")
     with open(path, "w", encoding="utf-8", newline="") as handle:
         handle.write("---" + newline.join(lines) + "---" + parts[2])
+    rebaseline_owned(path)
+
+
+# --- what is the person's: the story and the answers (WP-94) --------------------------------------------------
+# A story's file and every decision's `## Answer` are written by a person — through `/factory-decisions`, by hand —
+# and by the gate where it delivers or reopens a story; never by a stage. At a stage window's start the runner (or a
+# session's `--stage-start`) records a digest of them; a gate inside the window and the window's end compare. A
+# change under a stage is marked (`.owned-changed`) and the story stays stopped until a person looked at it and
+# confirms (`factory-cli.py --owned-confirm <story>`). `by:` is free text: the digest is the proof, not the name.
+OWNED_DIGEST = ".owned-digest"
+OWNED_CHANGED = ".owned-changed"
+
+
+def answer_section(text):
+    """A record's `## Answer` section as written, up to the next `## ` heading — the person's part of it."""
+    lines, inside = [], False
+    for line in text.splitlines():
+        if line.strip().lower() == "## answer":
+            inside = True
+        elif inside and line.startswith("## "):
+            break
+        if inside:
+            lines.append(line)
+    return "\n".join(lines).rstrip() if lines else None      # a section appended after it leaves it as it was
+
+
+def owned_parts(story_path):
+    """{part: sha256} of what is the person's: the story file, and the `## Answer` of every record that has one."""
+    parts = {STORY_FILE: file_digest(story_path)} if story_path and os.path.isfile(story_path) else {}
+    store = decisions_store(story_path) if story_path else None
+    for name in sorted(os.listdir(store)) if store and os.path.isdir(store) else []:
+        if name.endswith(".md"):
+            answer = answer_section(read_text(os.path.join(store, name)))
+            if answer is not None:
+                parts[f"{DECISIONS_DIR}/{name} ## Answer"] = hashlib.sha256(answer.encode("utf-8")).hexdigest()
+    return parts
+
+
+def owned_story_path(story_id):
+    try:
+        return find_story(place("epics"), story_id)
+    except GateError:
+        return None
+
+
+def record_owned(runs, story_id, story_path=None):
+    """At a window's start: the digest of the person's parts, one line per part."""
+    story_path = story_path or owned_story_path(story_id)
+    folder = evidence_dir(runs, story_id)
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, OWNED_DIGEST), "w", encoding="utf-8") as handle:
+        handle.writelines(f"{digest}  {part}\n" for part, digest in sorted(owned_parts(story_path).items()))
+
+
+def owned_changes(runs, story_id, story_path=None):
+    """The parts that changed since the window's start — None where no window recorded them."""
+    path = os.path.join(evidence_dir(runs, story_id), OWNED_DIGEST)
+    if not os.path.isfile(path):
+        return None
+    before = {}
+    for line in read_text(path).splitlines():
+        digest, _, part = line.partition("  ")
+        if part:
+            before[part] = digest
+    now = owned_parts(story_path or owned_story_path(story_id))
+    return sorted(part for part in set(before) | set(now) if before.get(part) != now.get(part))
+
+
+def rebaseline_owned(story_path):
+    """The gate wrote the story itself (delivered, reopened): an open window's digest takes the new state."""
+    story_id = story_id_of(story_path)
+    runs = place("runs")
+    if os.path.isfile(os.path.join(evidence_dir(runs, story_id), OWNED_DIGEST)):
+        record_owned(runs, story_id, story_path)
+
+
+def owned_end(runs, story_id, window):
+    """At a window's end: unchanged, the digest goes; changed, the change is marked and named. Exit 7 then."""
+    folder = evidence_dir(runs, story_id)
+    changed = owned_changes(runs, story_id)
+    with contextlib.suppress(OSError):
+        os.remove(os.path.join(folder, OWNED_DIGEST))
+    if not changed:
+        return 0
+    with open(os.path.join(folder, OWNED_CHANGED), "w", encoding="utf-8") as handle:
+        handle.write(f"window: {window}\n" + "".join(f"changed: {part}\n" for part in changed))
+    print(f"factory: {', '.join(changed)} of {story_id} changed while the {window} stage ran — the story and the "
+          f"answers are the person's, a stage writes neither. The story stays stopped until a person looked at it: "
+          f"`factory-cli.py --owned-confirm {story_id}`.", file=sys.stderr)
+    return 7
+
+
+def check_owned(result, runs, story_id, story_path):
+    """Inside a window, and after one that changed what is the person's, the gate refuses."""
+    marked = os.path.join(evidence_dir(runs, story_id), OWNED_CHANGED)
+    if os.path.isfile(marked):
+        parts = [line.split(":", 1)[1].strip() for line in read_text(marked).splitlines() if line.startswith("changed:")]
+        result.fail("owned", f"{', '.join(parts)} changed under a stage — a person looks at it and confirms "
+                             f"(`factory-cli.py --owned-confirm {story_id}`) before the story runs on")
+        return
+    changed = owned_changes(runs, story_id, story_path)
+    if changed:
+        result.fail("owned", f"{', '.join(changed)} changed while this stage runs — the story and the answers are the "
+                             f"person's; a stage writes its question into a record, never an answer, and never the story")
+    elif changed is not None:
+        result.ok("owned", "the story and the answers are as the stage found them")
 
 
 def story_ids(epics):
@@ -4769,6 +4875,10 @@ def current_stage_files(folder, order):
 
 def story_state(cwd, runs, story_id, front, story_path=None):
     """(state, stage to run from or None, detail) for one story, from its files alone."""
+    # Before anything the story says about itself: a stage may have written it (WP-94).
+    if os.path.isfile(os.path.join(evidence_dir(runs, story_id), OWNED_CHANGED)):
+        return "stopped", None, (f"the story or an answer changed under a stage — a person looks at it, then "
+                                 f"`factory-cli.py --owned-confirm {story_id}`")
     status = str(front.get("status", "")).strip().lower()
     if status == "superseded":
         return "superseded", None, "replaced by another story"
@@ -4780,6 +4890,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
         return "unreleased", None, f"status {status} — a human releases it first"
     folder, evidence = os.path.join(runs, story_id), evidence_dir(runs, story_id)
     kind = story_kind(front)
+
     texts = current_stage_files(folder, ADOPT_ORDER if kind == "adopt" else JOURNEY_ORDER if kind == "journey"
                                 else STAGE_ORDER)
     try:
@@ -5037,6 +5148,8 @@ def main(argv):
                         help="check the profile's contract and model keys alone (the runner, before its first stage)")
     parser.add_argument("--record-base", action="store_true",
                         help="with --story: record the tree the story's diff is taken against (the first stage)")
+    parser.add_argument("--owned", nargs=2, metavar=("start|end", "WINDOW"),
+                        help="with --story: record the person's parts at a stage window's start, compare at its end")
     parser.add_argument("--record-changes", metavar="STAGE",
                         help="with --story: write changed-<stage>.txt, changed.txt and story.diff from the snapshots")
     parser.add_argument("--project", action="store_true",
@@ -5073,6 +5186,13 @@ def main(argv):
             if state != "pass":
                 print(f"gate:{state} {check} — {message}")
         return 1 if result.failed else 0
+    if args.owned:
+        if not args.story:
+            parser.error("--owned needs --story")
+        if args.owned[0] == "start":
+            record_owned(args.runs, args.story)
+            return 0
+        return owned_end(args.runs, args.story, args.owned[1])
     if args.record_base or args.record_changes:
         if not args.story:
             parser.error("--record-base/--record-changes need --story")
@@ -5175,6 +5295,7 @@ def main(argv):
             check_stage_commands(result, profile, cwd, args.stage)
         if args.stage in ("test", "build", "tidy", "document", "adopt", "integrate"):
             check_pipeline_untouched(result, args.runs, story_id)
+        check_owned(result, args.runs, story_id, story_path)
         if args.stage == "adopt":
             check_adopt(result, profile, cwd, args.runs, story_id, front, criteria)
         if args.stage == "integrate":

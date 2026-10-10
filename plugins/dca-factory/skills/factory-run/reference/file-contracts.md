@@ -86,7 +86,11 @@ so instead of guessing.
 refusal. What proves a stage's work lies beside it, in `.dca-factory/evidence/<story>/`: the marks
 (`.story-digest`, `.tests-red`, `.tests-baseline`, `.rounds`), the journal, the snapshots, the changed-files
 records, the base tree and the tools' output. The gate and the runner write the evidence folder; a stage reads
-it and never writes there — the runner names it to no tool as a folder to write. Nothing the factory needs
+it and never writes there — the runner names it to no tool as a folder to write. `.owned-digest` holds, while a
+stage window is open, the digest of what is the person's — the story file and every decision's `## Answer`; the
+window's end compares, and a change leaves `.owned-changed`: the story is stopped and the gate refuses (`owned`)
+until `factory-cli.py --owned-confirm <story>`. The gate's own writes (delivered, reopened, `## Applied`) are
+not a change. Nothing the factory needs
 *after* a run lives in either. Whether a story is delivered stands
 in the story itself: the document gate — or the adopt gate — writes `status: delivered` and
 `delivered: <UTC time>` into its front matter when it passes (an adopted story keeps `status: adopted`

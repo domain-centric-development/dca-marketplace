@@ -1906,12 +1906,14 @@ that are its own (a test that asserts too little is the test stage's, with its b
   local journal="$(evidence "$story")/journal.tsv" began raw_out invoked=0
   [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
   snapshot "$story" "before-builder"
+  owned start builder "$story"
   printf '%s\tstage-start\tbuilder\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" >> "$journal"
   raw_out="$(evidence "$story")/builder.$(date -u +%H%M%S).out"
   began=$(date +%s)
   invocation_raw="$raw_out" stage_in_flight=builder story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
   record_usage "$story" builder "$tool" "$raw_out" "$(( $(date +%s) - began ))"
   printf '%s\tstage-end\tbuilder\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$invoked" = 0 ] && echo 0 || echo nonzero)" >> "$journal"
+  owned end builder "$story" || return 7
   [ "$invoked" = 0 ] || { echo "factory: the tool exited non-zero during the shared stages." >&2; return 1; }
   snapshot "$story" "after-builder"
   [ -f "$GATE" ] && "$PY" "$GATE" --record-changes builder --story "$story" >/dev/null 2>&1
@@ -2082,12 +2084,14 @@ second writer. $(where_things_are "$tool" verifier "$story")"
   [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
   [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
   snapshot "$story" "before-verifier"
+  owned start verifier "$story"
   printf '%s\tstage-start\tverifier\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" >> "$journal"
   raw_out="$(evidence "$story")/verifier.$(date -u +%H%M%S).out"
   began=$(date +%s)
   invocation_raw="$raw_out" stage_in_flight=verifier story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
   record_usage "$story" verifier "$tool" "$raw_out" "$(( $(date +%s) - began ))"
   printf '%s\tstage-end\tverifier\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$invoked" = 0 ] && echo 0 || echo nonzero)" >> "$journal"
+  owned end verifier "$story" || return 7
   [ "$invoked" = 0 ] || { echo "factory: the tool exited non-zero during the shared stages." >&2; return 1; }
   snapshot "$story" "after-verifier"
   [ -f "$GATE" ] && "$PY" "$GATE" --record-changes verifier --story "$story" >/dev/null 2>&1
@@ -2287,6 +2291,13 @@ Read only the story and the files the skill names as its input, and write its ou
 $RUNS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages. \
 This session was started by the pipeline's runner, which holds the checkout for it: the worker named at \
 session start is the one that started you, not a second writer.$(worktree_sentence) $(where_things_are "$TOOL_IN_FLIGHT" "$stage" "$story")$skeleton$guard$repeat"
+}
+
+# What is the person's — the story, every decision's answer — is unchanged across a stage window: recorded at its
+# start, compared at its end by the gate. A change stops the story until a person confirms it (exit 7).
+owned() {                                   # owned <start|end> <window> <story>
+  [ -f "$GATE" ] || return 0
+  "$PY" "$GATE" --owned "$1" "$2" --story "$3"
 }
 
 gate() {                                    # gate <stage> <story>
@@ -2540,6 +2551,7 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       [ -n "$requested" ] && model_fields="	model_requested=$requested"
       [ -n "$note" ] && model_fields="$model_fields	model_applied=no ($note)"
       [ -n "$note" ] && echo "factory: model.$tool.$stage: $requested — $note"
+      owned start "$stage" "$story"
       printf '%s\tstage-start\t%s\ttool=%s%s\n' "$stage_started" "$stage" "$tool" "$model_fields" >> "$(evidence "$story")/journal.tsv"
       local raw_out; raw_out="$(evidence "$story")/$stage.$(date -u +%H%M%S).out"
       local invoked=0
@@ -2547,6 +2559,9 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       invocation_raw="$raw_out" stage_in_flight="$stage" story_in_flight="$story" \
         invoke "$tool" "$(prompt_for "$stage" "$story")" || invoked=$?
       record_usage "$story" "$stage" "$tool" "$raw_out" "$(( $(date +%s) - began ))"
+      owned end "$stage" "$story" || {
+        printf '%s\tstage-end\t%s\texit=owned\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" >> "$(evidence "$story")/journal.tsv"
+        return 7; }
       [ "$invoked" = 0 ] || {
         printf '%s\tstage-end\t%s\texit=nonzero\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
           >> "$(evidence "$story")/journal.tsv"
@@ -2700,11 +2715,13 @@ integrate_story() {                         # integrate_story <story> <tool> <dr
       TOOL_IN_FLIGHT=$tool
       local raw_out; raw_out="$(evidence "$story")/integrate.$(date -u +%H%M%S).out"
       local began; began=$(date +%s)
+      owned start integrate "$story"
       printf '%s\tstage-start\tintegrate\ttool=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" >> "$(evidence "$story")/journal.tsv"
       invocation_raw="$raw_out" stage_in_flight=integrate story_in_flight="$story" \
         invoke "$tool" "$(integrate_prompt "$story" "$conflicts")"; code=$?
       record_usage "$story" integrate "$tool" "$raw_out" "$(( $(date +%s) - began ))"
       printf '%s\tstage-end\tintegrate\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$code" = 0 ] && echo 0 || echo nonzero)" >> "$(evidence "$story")/journal.tsv"
+      owned end integrate "$story" || { drop_lock; return 7; }
       if [ -f "$RUNS/$story/integrate.md" ] && asks_human "$RUNS/$story/integrate.md"; then
         drop_lock; stopped_for_human "$RUNS/$story/integrate.md" integrate "$story"; return $?
       fi

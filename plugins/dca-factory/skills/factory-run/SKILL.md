@@ -261,7 +261,9 @@ stages the way they see the runner's. A mark without a log it can read records t
 unknown. Do not work on anything else between the two marks: the window counts everything the
 session did in it. The marks also record what the stage changed — the start its tree, the end the
 changed-files record — so call the stage's gate **after** `--stage-end`: a gate inside the window
-(a stage checking its own work) skips the files check and says the stage is still open.
+(a stage checking its own work) skips the files check and says the stage is still open. `--stage-end`
+exits 7 where the story file or a `## Answer` changed inside the window: stop the story and tell the human —
+`factory-cli.py --owned-confirm <id>` is theirs to run once they looked.
 
 A single stage the human asked for (`/stage-build` on a story that already has a plan) is always
 done here — the runner delivers whole stories.

@@ -1236,6 +1236,62 @@ def verify_runner(runner, verbose=False):
               and os.path.isfile(os.path.join(root, ".dca-factory", "stop")),
               f"exit {code}; invoked {invoked}; {output.strip()[-300:]}")
 
+    def cli(root, *argv):
+        return subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "factory-cli.py"), *argv],
+                              cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+    # the story and the answers are the person's: a stage that answers its own question, or delivers its story in
+    # the story's file, is stopped at the end of its window, the story is held, and a person's confirmation frees it
+    for label, write in (
+            ("answers its own question",
+             'mkdir -p project/epics/sample/STORY-1/decisions; cat "$FIXTURE_RECORD" > project/epics/sample/STORY-1/decisions/01.md'),
+            ("writes `status: delivered` into its story",
+             'sed "s/^status: approved/status: delivered/" project/epics/sample/STORY-1/story.md > s.tmp; '
+             'mv s.tmp project/epics/sample/STORY-1/story.md')):
+        for root in throwaway():
+            build_project(root)
+            copy_scripts(runner, root)
+            record = os.path.join(root, "fixture-record.md")
+            with open(record, "w", encoding="utf-8") as handle:
+                handle.write(DECISION + ANSWER)
+            stand = ('echo "$FACTORY_STAGE" >> invoked.txt; mkdir -p .dca-factory/runs/STORY-1; '
+                     'printf "## Context\\n## Changes\\n## Acceptance criteria\\n" > .dca-factory/runs/STORY-1/plan.md; '
+                     + write)
+            code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                      env={"FACTORY_TOOL_CMD": stand, "FIXTURE_RECORD": shell_path(record)})
+            marked = os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".owned-changed")
+            gate_after = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"),
+                                         "--story", "STORY-1", "--stage", "plan"], cwd=root, capture_output=True,
+                                        text=True, encoding="utf-8", errors="replace").stdout
+            held = cli(root, "--schedule").stdout
+            was_marked = os.path.isfile(marked)
+            confirmed = cli(root, "--owned-confirm", "STORY-1")
+            freed = cli(root, "--schedule").stdout
+            check(f"runner: a stage that {label} is stopped at its window's end (exit 7), the story held and the gate "
+                  f"refusing until a person confirms",
+                  code == 7 and "stage ran — the story and the answers are the person" in output and was_marked
+                  and "gate:fail owned" in gate_after and "owned-confirm" in held
+                  and confirmed.returncode == 0 and not os.path.isfile(marked) and "owned-confirm" not in freed,
+                  f"exit {code}; {output.strip()[-240:]} | gate {gate_after.strip()[-200:]} | held {held.strip()[-200:]}")
+    # a person's answer between two windows is no stage's change: the window records it as found
+    for root in throwaway():
+        build_project(root)
+        copy_scripts(runner, root)
+        gate = [sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--story", "STORY-1"]
+        subprocess.run(gate + ["--owned", "start", "plan"], cwd=root, capture_output=True)
+        ended = subprocess.run(gate + ["--owned", "end", "plan"], cwd=root, capture_output=True, text=True)
+        write_file(root, "project/epics/sample/STORY-1/decisions/01.md", DECISION + ANSWER)
+        subprocess.run(gate + ["--owned", "start", "test"], cwd=root, capture_output=True)
+        with open(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"), "a",
+                  encoding="utf-8") as handle:
+            handle.write("\n## Applied\nat: 2026-10-10T10:00:00Z\nstage: test\n")
+        applied = subprocess.run(gate + ["--owned", "end", "test"], cwd=root, capture_output=True, text=True)
+        check("runner: an answer written between two windows and the gate's `## Applied` stamp inside one are no "
+              "stage's change",
+              ended.returncode == 0 and applied.returncode == 0
+              and not os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".owned-changed")),
+              f"{ended.returncode} {applied.returncode} {applied.stderr.strip()[-200:]}")
+
     # 1b. a whole run without a model: the loop, the journal and the final report
     # FACTORY_TOOL_CMD stands in for the tool and writes each stage's artefact, so a defect in the
     # loop — a stage silently skipped, a report naming stages that never ran — fails here rather

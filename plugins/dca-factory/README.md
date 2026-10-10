@@ -402,6 +402,11 @@ or what judges it:
   starts — a pipeline that is not the installed one starts nothing — and again before every gate it runs; a
   stage that rewrote the gate stops the run there (exit 7, `pipeline-changed` in the journal, the stop file
   set). `factory.sh update` installs the pipeline again.
+- **The story and the answers.** The story file and every decision's `## Answer` are the person's. A stage window
+  records their digest at its start and compares at its end (the runner, or `--stage-end` in a session); a stage
+  that answered its own question or set its story's `status:` stops the run (exit 7), and the story stays
+  stopped — the gate refuses it (`owned`) — until a person looked and runs `factory-cli.py --owned-confirm
+  <story>`. `by:` stays free text: the digest is the proof, not the name.
 
 ## How to see what a story cost
 

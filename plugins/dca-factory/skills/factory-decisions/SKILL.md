@@ -151,6 +151,9 @@ inside one anyway.
 - Do not invent a record. A question that reached you as a sentence and has no file is the asking
   stage's omission; the next gate refuses it, and the fix is that stage writing the record. The one
   record you write is a human's acceptance correction for a story already delivered (above).
+- Do not confirm a stage's change for the human. A story the schedule shows stopped because "the story or
+  an answer changed under a stage" waits for the human to look at what changed (the story's `git diff`, the
+  record); only on their word run `python3 .agents/factory/factory-cli.py --owned-confirm <story>`.
 - Do not summarise several records into one answer. Each is answered on its own, even when the
   same word settles them all.
 
