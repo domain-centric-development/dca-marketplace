@@ -2587,14 +2587,14 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       [ "$stage" = judge ] && [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
       [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
       # The document stage's file starts as the pipeline's skeleton: every path it may cite, root-relative.
-      local had_file=""; [ -f "$RUNS/$story/$(stage_file "$stage")" ] && had_file=1
-      [ "$stage" = document ] && [ -f "$GATE" ] && cli --document-skeleton "$story" >/dev/null 2>&1
-      [ "$stage" = plan ] && [ -f "$GATE" ] && cli --plan-skeleton "$story" >/dev/null 2>&1
+      local had_file="" skeleton=""; [ -f "$RUNS/$story/$(stage_file "$stage")" ] && had_file=1
+      [ "$stage" = document ] && [ -f "$GATE" ] && { cli --document-skeleton "$story" >/dev/null 2>&1; skeleton=1; }
+      [ "$stage" = plan ] && [ -f "$GATE" ] && { cli --plan-skeleton "$story" >/dev/null 2>&1; skeleton=1; }
       # A skeleton the pipeline wrote is not the stage's file: kept aside, so a stage that left it untouched
       # is a stage that produced nothing, not a finished one. A file an earlier pass left is no skeleton: the
       # stage brings it up to date or leaves it, and its gate decides.
       rm -f "$(evidence "$story")/$stage.skeleton"
-      [ -z "$had_file" ] && [ -f "$RUNS/$story/$(stage_file "$stage")" ] && { [ "$stage" = plan ] || [ "$stage" = document ]; } \
+      [ -z "$had_file" ] && [ -f "$RUNS/$story/$(stage_file "$stage")" ] && [ -n "$skeleton" ] \
         && cp "$RUNS/$story/$(stage_file "$stage")" "$(evidence "$story")/$stage.skeleton"
       snapshot "$story" "before-$stage"
       local choice requested note model_fields=""
@@ -2635,14 +2635,15 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       # then builds on a decision nobody took.
       # The build stage found a defect in a test's own code (a helper, a locator), not in what it asserts: the
       # round goes to the test stage, which repairs it and proves it with a break — no human is asked.
-      if [ "$stage" = build ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
+      local sent_back=""; [ "$stage" = build ] && sent_back=$(cli --back-to "$story" --stage "$stage" 2>/dev/null)
+      if [ -n "$sent_back" ]; then
         local sent_rounds; sent_rounds=$(bump_rounds "$story")
         if [ "$sent_rounds" -ge 3 ]; then
           echo "factory: the build stage sent the story back in round $sent_rounds — three rounds did not converge. needs-human." >&2
           return 1
         fi
-        echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the test stage." >&2
-        run_stages "$story" "$tool" test "$dry"
+        echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the $sent_back stage." >&2
+        run_stages "$story" "$tool" "$sent_back" "$dry"
         return $?
       fi
       if asks_human "$artefact"; then
