@@ -47,7 +47,7 @@ dca-marketplace/
 │   ├── skills/dca-knowledge/catalog/      # GENERATED mirror of dca-knowledge-catalog/bundle — never hand-edit
 │   └── skills/{dca-modelling,dca-discipline,dca-audit}/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
-│   ├── skills/factory-run/                # orchestrator + scripts/{story-gate.py (decides), factory-cli.py (shows, coordinates), factory.sh} + templates (profile, backlog, decision record, hook) + reference
+│   ├── skills/factory-run/                # orchestrator + scripts/{dca_factory/ (the package: contract, reports, state, gate, tools, runner, cli), story-gate.py (decides) and factory-cli.py (shows, coordinates) as its entry points, factory.sh} + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document,stage-integrate}/
 │   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-help,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; the factory explained; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
@@ -79,7 +79,8 @@ dca-marketplace/
   surface an actor lacks; `skills/factory-run/scripts/story-gate.py`
   is the deterministic check between the stages, copied into a consuming project as
   `.agents/factory/story-gate.py`, with `factory-cli.py` beside it for everything that shows or coordinates
-  (status, help, usage, the checkout, the schedule) — the cli imports the gate, and the runner reads every
+  (status, help, usage, the checkout, the schedule) — both are entry points of the package `dca_factory/`
+  beside them (stdlib only, each module imports by name from the ones above it), and the runner reads every
   project file through the cli, never with `sed`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
   discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`) is optional, the git
@@ -143,13 +144,13 @@ interfaces are aliased to the library ones or kept and declared through `DcaLayo
 | Guide text (`dca-guide/*.md`) or authored catalog nodes | regenerate the catalog; the mirror follows |
 | Context-map relationship declarations or renderer options | `dca-init` (the renderer test) and `dca-audit` (declarations against the map); `context-map` in dca-craft only for a change to DDD's relationship patterns themselves |
 | Craft that a delivery stage or a review perspective needs (test writing, implementation, a review angle) | the **skill** carries it (portable — every tool reads skills); an agent stays a thin wrapper around that skill for isolated context and a restricted tool set. Knowledge in an agent alone is Claude-only |
-| A stage or a gate check added or changed | a stage is one row of `STAGES` in `story-gate.py` — the cli (`--stages`) and the runner read it, and a list of stage names beside it fails verify; a check registers against the table with `@check(name, stages=…, needs_process=…)`, a pass action with `@on_pass(stage)`; what a stage is told stands in its skill and `stage-common.md`, the runner's prompt names the skill and the paths |
-| An agent tool added or one of its flags changed | one record in `TOOLS` in `factory-cli.py` — the runner reads the tool table at its start and starts a stage with `--tool-invocation`; verify probes each installed binary's help for every flag the record passes |
+| A stage or a gate check added or changed | a stage is one row of `STAGES` in `dca_factory/contract.py` — the cli (`--stages`) and the runner read it, and a list of stage names beside it fails verify; a check registers against the table with `@check(name, stages=…, needs_process=…)`, a pass action with `@on_pass(stage)`; what a stage is told stands in its skill and `stage-common.md`, the runner's prompt names the skill and the paths |
+| An agent tool added or one of its flags changed | one record in `TOOLS` in `dca_factory/tools.py` — the runner reads the tool table at its start and starts a stage with `--tool-invocation`; verify probes each installed binary's help for every flag the record passes |
 | A gate check, a stage order or the runner changed | extend `plugins/dca-factory/skills/factory-verify/scripts/verify.py` with a case for what changed — the gate is the correctness argument for every stage, so it may not rest on a hand check. `.github/workflows/check.yml` runs the suite on every push and pull request, on Linux, macOS and Windows (Git Bash); never state a case count in prose, it drifts |
-| Delivery process: backlog fields, stage order, gate checks, file hand-overs | `dca-factory/skills/factory-run/SKILL.md`, its `reference/{backlog-contract,file-contracts}.md`, `scripts/story-gate.py`, and the affected `stage-*/SKILL.md`. A gate check is a script change, never a hook or a stage self-assessment |
+| Delivery process: backlog fields, stage order, gate checks, file hand-overs | `dca-factory/skills/factory-run/SKILL.md`, its `reference/{backlog-contract,file-contracts}.md`, `scripts/dca_factory/gate.py`, and the affected `stage-*/SKILL.md`. A gate check is a script change, never a hook or a stage self-assessment |
 | A stage needs project knowledge (build command, test runner, source set) | it goes into the project's stack profile, never into a skill |
-| What the gate **reads or writes** changes incompatibly (profile keys, the `gate:tests` table, the red ledger, a document claim's shape) | raise `CONTRACT` in `story-gate.py` *and* in `templates/factory.profile.yaml.tmpl`, and refresh the gate copy in every consuming project — an older copy then refuses the newer profile instead of ignoring a key |
-| Anything else in `dca-factory` ships | keep `VERSION` in `story-gate.py` in step with `plugin.json` (`factory-cli.py` takes it from the gate); that number is provenance, so the runner can tell a project it is behind the pipeline |
+| What the gate **reads or writes** changes incompatibly (profile keys, the `gate:tests` table, the red ledger, a document claim's shape) | raise `CONTRACT` in `dca_factory/contract.py` *and* in `templates/factory.profile.yaml.tmpl`, and refresh the gate copy in every consuming project — an older copy then refuses the newer profile instead of ignoring a key |
+| Anything else in `dca-factory` ships | keep `VERSION` in `dca_factory/contract.py` in step with `plugin.json` (one package, so the gate and the cli carry the same); that number is provenance, so the runner can tell a project it is behind the pipeline |
 
 Sync targets in the other direction: root `AGENTS.md` § 5 (plugin contents, installation), `planning/porting-status.md`
 row "Marketplace bootstrap branch".

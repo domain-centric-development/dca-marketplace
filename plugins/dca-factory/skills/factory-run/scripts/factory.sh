@@ -218,9 +218,13 @@ must() {                                    # must <what> <command...>
 # A gate script states two things about itself: VERSION (where this copy came from) and CONTRACT
 # (the version of the files it reads and writes). Read them out of the file, because the copy in a
 # project is the only thing that knows which release governs that project.
+# The gate's entry point names neither: they live in the package beside it (dca_factory/contract.py).
 gate_field() {                              # gate_field <file> <VERSION|CONTRACT>
   [ -f "$1" ] || return 1
-  sed -n "s/^$2 = *//p" "$1" | head -1 | tr -d '"' | tr -d "'"
+  local file=$1
+  grep -q "^$2 = " "$file" || file="$(dirname "$1")/dca_factory/contract.py"
+  [ -f "$file" ] || return 1
+  sed -n "s/^$2 = *//p" "$file" | head -1 | tr -d '"' | tr -d "'"
 }
 
 #: What the project records about the pipeline it installed. Three facts, no paths and no
@@ -234,14 +238,22 @@ STAMP=".agents/factory/gate.installed"
 # what was installed, so a runner can tell the pipeline it is about to trust from one a stage, a hand or a merge
 # changed since. The runner takes it at its start and compares before every gate it runs; a stage that rewrote the
 # gate through a link is stopped at the next gate, whatever tool it ran in.
-PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh"
+# A name ending in `/` is the package: every module in it, so a module added or removed changes the hash too.
+PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh dca_factory/"
 PIPELINE_SHA=""                              # the installed pipeline's hash, taken once when the run starts
 pipeline_hash() {                           # pipeline_hash [<folder>] — one SHA-256 over PIPELINE_FILES
   local dir=${1:-$HOME_DIR/.agents/factory} hash file
   hash=$(hasher); [ "$hash" = none ] && return 1
   for file in $PIPELINE_FILES; do
-    if [ -f "$dir/$file" ]; then printf '%s  %s\n' "$($hash "$dir/$file" | cut -d" " -f1)" "$file"
-    else printf 'missing  %s\n' "$file"; fi
+    case $file in
+      */) if [ -d "$dir/$file" ]; then
+            for module in "$dir/$file"*.py; do
+              [ -f "$module" ] && printf '%s  %s\n' "$($hash "$module" | cut -d" " -f1)" "$file${module##*/}"
+            done
+          else printf 'missing  %s\n' "$file"; fi ;;
+      *)  if [ -f "$dir/$file" ]; then printf '%s  %s\n' "$($hash "$dir/$file" | cut -d" " -f1)" "$file"
+          else printf 'missing  %s\n' "$file"; fi ;;
+    esac
   done | $hash | cut -d" " -f1
 }
 # At the start of a run: the pipeline is the one the stamp says was installed, and its hash is kept for the gates.
@@ -641,20 +653,13 @@ check_tool() {                              # check_tool <tool>
 # stage has no plan gate in front of it, and a stage run on the wrong model is spent money.
 check_contract_first() {
   [ -f "$GATE" ] || return 0
-  # The two files are one release: a CLI that reads the journal with another release's rules shows a
-  # wrong state with a straight face, so a pair that differs — or a gate alone — does not run a stage.
-  local gate_version cli_version project_cli=".agents/factory/factory-cli.py"
-  if [ -f "$project_cli" ] && [ "$(cd "$(dirname "$GATE")" && pwd -P)" = "$(cd "$(dirname "$CLI")" && pwd -P)" ]; then
-    gate_version=$(gate_field "$GATE" VERSION); cli_version=$(gate_field "$CLI" VERSION)
-    # A cli that reads `VERSION = _gate.VERSION` takes its version from the gate beside it: one release by
-    # construction. Only a cli that carries a number of its own — an older release's — can differ.
-    [ "$cli_version" = "_gate.VERSION" ] && cli_version=$gate_version
-    if [ "$gate_version" != "$cli_version" ]; then
-      echo "factory: story-gate.py is $gate_version and factory-cli.py is $cli_version — one release, two files;" >&2
-      echo "factory:   'factory.sh update' puts a matching pair here. Nothing was started." >&2
-      return 2
-    fi
-  elif [ ! -f "$project_cli" ]; then
+  # The gate and the cli are two entry points of one package: without the package beside the gate, or without the
+  # cli, nothing runs — `update` puts all three there.
+  if [ ! -d "$(dirname "$GATE")/dca_factory" ]; then
+    echo "factory: no dca_factory/ beside the gate — 'factory.sh update' puts it there. Nothing was started." >&2
+    return 2
+  fi
+  if [ ! -f .agents/factory/factory-cli.py ]; then
     echo "factory: no factory-cli.py beside the gate — 'factory.sh update' puts it there. Nothing was started." >&2
     return 2
   fi
@@ -1190,6 +1195,13 @@ install_project() {                         # install_project <tool> <skill fold
     write_skill_ignores "$target" "$([ -n "$copy_mode" ] && echo copy || echo link)"
   done
   check_dca_setup "$from"
+  # The package first, swapped in whole: a module the new release no longer has must not stay behind, and no
+  # __pycache__ travels with it.
+  rm -rf .agents/factory/.dca_factory.new
+  must "create the package folder" mkdir -p .agents/factory/.dca_factory.new
+  must "copy the package to .agents/factory/dca_factory" cp "$from/factory-run/scripts/dca_factory/"*.py .agents/factory/.dca_factory.new/
+  rm -rf .agents/factory/dca_factory
+  must "put the package in place" mv .agents/factory/.dca_factory.new .agents/factory/dca_factory
   must "copy the gate to $GATE" cp "$from/factory-run/scripts/story-gate.py" "$GATE"
   # What shows and coordinates, beside the gate that decides — the same release, checked before a run.
   must "copy the cli to .agents/factory/factory-cli.py" \

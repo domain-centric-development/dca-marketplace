@@ -151,6 +151,30 @@ def cli_in(root):
     return os.path.join(root, ".agents", "factory", "factory-cli.py")
 
 
+PACKAGE = "dca_factory"
+MODULES = ("contract", "reports", "state", "gate", "tools", "runner", "cli")
+GATE_SIDE = ("contract", "reports", "state", "gate")        # what decides; tools, runner and cli show and start
+
+
+def package_dir(beside):
+    """The pipeline's package beside a gate, a cli or a runner."""
+    return os.path.join(os.path.dirname(beside), PACKAGE)
+
+
+def package_text(beside, modules=MODULES):
+    return {m: open(os.path.join(package_dir(beside), m + ".py"), encoding="utf-8").read() for m in modules}
+
+
+# A probe run in a fresh interpreter: every module of the package beside argv[1], its names in one namespace `pkg`.
+PACKAGE_PROBE = ("import importlib, os, sys, types\n"
+                 "sys.dont_write_bytecode = True\n"
+                 "sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[1])))\n"
+                 "pkg = types.SimpleNamespace()\n"
+                 f"for m in {MODULES!r}:\n"
+                 "    pkg.__dict__.update({k: v for k, v in vars(importlib.import_module('dca_factory.' + m)).items()"
+                 " if not k.startswith('__')})\n")
+
+
 def pipeline_sha(root):
     """The hash `gate.installed` records: one SHA-256 over the installed files' digests, as the runner takes it."""
     folder = os.path.join(root, ".agents", "factory")
@@ -159,6 +183,12 @@ def pipeline_sha(root):
         path = os.path.join(folder, name)
         listing += (f"{hashlib.sha256(open(path, 'rb').read()).hexdigest()}  {name}\n" if os.path.isfile(path)
                     else f"missing  {name}\n")
+    package = os.path.join(folder, PACKAGE)
+    if os.path.isdir(package):
+        for name in sorted(n for n in os.listdir(package) if n.endswith(".py")):
+            listing += f"{hashlib.sha256(open(os.path.join(package, name), 'rb').read()).hexdigest()}  {PACKAGE}/{name}\n"
+    else:
+        listing += f"missing  {PACKAGE}/\n"
     return hashlib.sha256(listing.encode("utf-8")).hexdigest()
 
 
@@ -168,6 +198,14 @@ def copy_scripts(beside, root):
     os.makedirs(os.path.join(root, ".agents", "factory"), exist_ok=True)
     for name in ("story-gate.py", "factory-cli.py"):
         shutil.copy(os.path.join(folder, name), os.path.join(root, ".agents", "factory", name))
+    copy_package(folder, os.path.join(root, ".agents", "factory"))
+
+
+def copy_package(folder, into):
+    """The package beside a gate, into another folder — its modules, no __pycache__."""
+    target = os.path.join(into, PACKAGE)
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(os.path.join(folder, PACKAGE), target, ignore=shutil.ignore_patterns("__pycache__"))
 DEFAULT_RUNNER = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "factory.sh"))
 
 EPIC = """---
@@ -1831,8 +1869,7 @@ def verify_runner(runner, verbose=False):
         gated(build_project(root))
         cli = cli_of(runner)
         names = subprocess.run(
-            [sys.executable, "-c", "import importlib.util as u, sys; s = u.spec_from_file_location('gate', sys.argv[1]); "
-             "m = u.module_from_spec(s); s.loader.exec_module(m); print(' '.join(r.name for r in m.STAGES)); "
+            [sys.executable, "-c", PACKAGE_PROBE + "m = pkg; print(' '.join(r.name for r in m.STAGES)); "
              "print(' '.join(r.name for r in m.STAGES if r.in_order))",
              os.path.join(os.path.dirname(runner), "story-gate.py")],
             capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
@@ -1849,7 +1886,7 @@ def verify_runner(runner, verbose=False):
               f"table {names}; --all {every!r}; --stages {order!r}; shell {shell[:200]!r}")
         patched = os.path.join(root, "patched-plugin")
         shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), patched, symlinks=True)
-        patched_gate = os.path.join(patched, "factory-run", "scripts", "story-gate.py")
+        patched_gate = os.path.join(patched, "factory-run", "scripts", PACKAGE, "contract.py")
         body = open(patched_gate, encoding="utf-8").read()
         row = '    Stage("adopt", kinds=("adopt",), in_order=False),\n'
         with open(patched_gate, "w", encoding="utf-8", newline="\n") as handle:
@@ -2591,8 +2628,10 @@ exit 0
         plugin = os.path.join(root, "newer-plugin", "factory-run", "scripts")
         os.makedirs(plugin)
         shutil.copy(os.path.join(os.path.dirname(runner), "factory-cli.py"), os.path.join(plugin, "factory-cli.py"))
-        body = open(os.path.join(os.path.dirname(runner), "story-gate.py"), encoding="utf-8").read()
-        with open(os.path.join(plugin, "story-gate.py"), "w", encoding="utf-8") as handle:
+        shutil.copy(os.path.join(os.path.dirname(runner), "story-gate.py"), os.path.join(plugin, "story-gate.py"))
+        copy_package(os.path.dirname(runner), plugin)
+        body = open(os.path.join(package_dir(runner), "contract.py"), encoding="utf-8").read()
+        with open(os.path.join(plugin, PACKAGE, "contract.py"), "w", encoding="utf-8") as handle:
             handle.write(body.replace('VERSION = "', 'VERSION = "9.9.9-', 1))
         env = {"FACTORY_PLUGIN_DIR": shell_path(os.path.join(root, "newer-plugin"))}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
@@ -2602,7 +2641,7 @@ exit 0
               [l for l in output.splitlines() if "installed from pipeline" in l])
         # and a differing *contract* is the louder message, because it is a compatibility question
         contract = re.search(r"^CONTRACT = (\d+)", body, re.M).group(1)
-        with open(os.path.join(plugin, "story-gate.py"), "w", encoding="utf-8") as handle:
+        with open(os.path.join(plugin, PACKAGE, "contract.py"), "w", encoding="utf-8") as handle:
             handle.write(re.sub(r"^CONTRACT = \d+", f"CONTRACT = {int(contract) + 1}", body, count=1, flags=re.M))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
                                   "--dry-run", env=env)
@@ -3500,7 +3539,7 @@ def verify_setup(runner, verbose=False):
         # adding a tool to an installed project from another pipeline version is an update nobody asked for
         build_project(root)
         run_setup(runner, root, "--tool", "none", "--from", source)
-        gate_copy = os.path.join(root, ".agents", "factory", "story-gate.py")
+        gate_copy = os.path.join(root, ".agents", "factory", PACKAGE, "contract.py")
         text = open(gate_copy, encoding="utf-8").read()
         older = re.sub(r'^VERSION = "[^"]+"', 'VERSION = "0.0.1"', text, count=1, flags=re.M)
         with open(gate_copy, "w", encoding="utf-8") as handle:
@@ -3711,22 +3750,21 @@ def verify_setup(runner, verbose=False):
               and cli(root, "--needs-human", ".dca-factory/runs/STORY-1/tidy.md")[0] == 1
               and cli(root, "--open-decisions", "STORY-1")[1].split("\n") == ["project/epics/sample/STORY-1/decisions/01.md"],
               f"{asks}; {cli(root, '--open-decisions', 'STORY-1')}")
-        # the project's own runner copy runs with the cli beside its gate: the cli takes its version from the gate
-        # by construction (`VERSION = _gate.VERSION`), so the pair is one release
+        # the project's own runner copy runs with the cli and the package beside its gate: two entry points of one
+        # package, so one release by construction
         code, output = run_runner(project_runner(root), root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   env={"FACTORY_ISOLATION": "off"})
-        check("runner: the project's own copy of the runner accepts the cli beside its gate — its version follows the gate's",
-              code != 2 and "one release, two files" not in output and "Nothing was started" not in output,
-              f"exit {code}; {output.strip()[-200:]}")
-        # a pair of one release, or no run: the runner refuses a cli of another version and a missing one
+        check("runner: the project's own copy of the runner runs with the cli and the package beside its gate",
+              code != 2 and "Nothing was started" not in output, f"exit {code}; {output.strip()[-200:]}")
+        # no package, or no cli: nothing runs
+        package = os.path.join(root, ".agents", "factory", PACKAGE)
+        shutil.move(package, package + ".away")
+        code, output = run_runner(project_runner(root), root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                                  env={"FACTORY_ISOLATION": "off"})
+        shutil.move(package + ".away", package)
+        check("runner: without the package beside the gate nothing is started, and the update is named",
+              code == 2 and f"no {PACKAGE}/ beside the gate" in output, f"exit {code}; {output.strip()[-200:]}")
         project_cli = cli_in(root)
-        text = open(project_cli, encoding="utf-8").read()
-        with open(project_cli, "w", encoding="utf-8") as handle:
-            handle.write(text.replace("VERSION = _gate.VERSION", 'VERSION = "0.0.1"', 1))
-        code, output = run_runner(project_runner(root), root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
-                                  env={"FACTORY_ISOLATION": "off"})
-        check("runner: a cli of another version than the gate stops a run before its first stage",
-              code == 2 and "one release, two files" in output, f"exit {code}; {output.strip()[-200:]}")
         os.remove(project_cli)
         code, output = run_runner(project_runner(root), root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   env={"FACTORY_ISOLATION": "off"})
@@ -3743,29 +3781,45 @@ def verify_setup(runner, verbose=False):
                                 encoding="utf-8", errors="replace")
         check("gate: a flag that moved to the cli is handed over, so an older caller still gets its answer",
               handed.returncode == 0 and handed.stdout.startswith("factory:"), handed.stdout.strip()[:200])
-    gate_text = open(os.path.join(os.path.dirname(runner), "story-gate.py"), encoding="utf-8").read()
-    cli_text = open(os.path.join(os.path.dirname(runner), "factory-cli.py"), encoding="utf-8").read()
+    modules = package_text(runner)
+    gate_text = "\n".join(modules[m] for m in GATE_SIDE)
+    cli_text = "\n".join(modules[m] for m in MODULES if m not in GATE_SIDE)
     runner_text = open(runner, encoding="utf-8").read()
     observe_text = open(os.path.join(os.path.dirname(runner), "..", "..", "factory-verify", "scripts", "observe.py"),
                         encoding="utf-8").read()
-    # the cli takes the gate's names into its own namespace; one it defines again hides the gate's from the cli's
-    # code alone, with another shape — a TypeError at the first call, never at import
-    defined = lambda text: set(re.findall(r"^def (\w+)\(", text, re.M)) | set(re.findall(r"^class (\w+)\b", text, re.M))
-    shadowed = sorted(defined(gate_text) & defined(cli_text) - {"main"})
-    check("cli: defines no function or class the gate defines — the shared namespace keeps one of each",
-          not shadowed, shadowed)
+    # one owner per name: a module that defines a name another defines too hides it from its own code, and every
+    # module imports what it uses by name from the one module that defines it — from above, never from below
+    defined = lambda text: set(re.findall(r"^def (\w+)\(", text, re.M)) | set(re.findall(r"^class (\w+)\b", text, re.M)) \
+        | set(re.findall(r"^([A-Z_][A-Z0-9_]*) = ", text, re.M))
+    owners = {}
+    for name in MODULES:
+        for symbol in defined(modules[name]) - {"main"}:
+            owners.setdefault(symbol, []).append(name)
+    shadowed = sorted(f"{symbol}: {', '.join(at)}" for symbol, at in owners.items() if len(at) > 1)
+    check("package: no module defines a function, class or constant another module defines", not shadowed, shadowed)
+    upward = [f"{name} imports from {source}" for name in MODULES
+              for source in re.findall(r"^from \.(\w+) import", modules[name], re.M)
+              if source not in MODULES or MODULES.index(source) >= MODULES.index(name)]
+    merged = [name for name in MODULES if "globals().update" in modules[name] or "import *" in modules[name]]
+    check("package: every module imports by name from the modules above it — no star, no namespace merge, no cycle",
+          not upward and not merged, upward + merged)
+    entries = {name: open(os.path.join(os.path.dirname(runner), name), encoding="utf-8").read()
+               for name in ("story-gate.py", "factory-cli.py")}
+    check("package: story-gate.py and factory-cli.py are entry points — no bytecode, the package's main, nothing more",
+          all(len(text.splitlines()) <= 12 and "sys.dont_write_bytecode = True" in text and "import main" in text
+              for text in entries.values()), {k: len(v.splitlines()) for k, v in entries.items()})
     check("stages: no list of stage names outside the gate's table — the gate, the cli and the runner read STAGES",
-          not stage_lists(gate_text, cli_text, runner_text), stage_lists(gate_text, cli_text, runner_text))
-    check("gate: carries no colour code, no price and no session-log path — those are the cli's",
-          "\\x1b[" not in gate_text and "def money(" not in gate_text and ".claude/projects" not in gate_text
-          and "def money(" in cli_text and "\\x1b[" in cli_text)
+          not stage_lists(modules, runner_text), stage_lists(modules, runner_text))
+    check("gate: carries no colour code and no session-log path — those are the cli's",
+          "\\x1b[" not in gate_text and ".claude/projects" not in gate_text and "\\x1b[" in cli_text)
     parsed = [l.strip()[:80] for l in runner_text.splitlines()
               if "sed -n" in l and not l.strip().startswith("#")
               and re.search(r"profile|judge\.md|needs-human|\$DECISIONS|carrier\.|model\\\.", l)]
     check("runner: parses no profile, stage file or record itself — every read goes through the cli", not parsed, parsed[:3])
     duplicated = [n for n in ("CRITERION", "MAPPING_ROW", "SELECTOR") if re.search(rf"^{n} = re\.compile", observe_text, re.M)]
     check("observe: defines no reader the gate has — it imports the gate's",
-          not duplicated and "def front_matter(" not in observe_text and "story_gate" in observe_text, duplicated)
+          not duplicated and "def front_matter(" not in observe_text and "from dca_factory import" in observe_text,
+          duplicated)
     shutil.rmtree(lone_home, ignore_errors=True)
 
     failures = [name for name, ok, _ in results if not ok]
@@ -3779,11 +3833,18 @@ OLD_PROFILE = ".agents/factory/factory.profile.yaml"
 
 
 def gate_module(path):
-    """The gate as a module, for the one function a case calls directly (the front-matter writer)."""
-    spec = importlib.util.spec_from_file_location("story_gate_under_test", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    """The package beside a gate as one namespace, for the few functions and constants a case reads directly."""
+    import importlib
+    import types
+    sys.dont_write_bytecode = True
+    folder = os.path.dirname(os.path.abspath(path))
+    if folder not in sys.path:
+        sys.path.insert(0, folder)
+    namespace = types.SimpleNamespace()
+    for name in MODULES:
+        namespace.__dict__.update({k: v for k, v in vars(importlib.import_module(f"{PACKAGE}.{name}")).items()
+                                   if not k.startswith("__")})
+    return namespace
 
 
 def old_layout(root, delivered="2026-09-20T10:00:00Z"):
@@ -4093,12 +4154,12 @@ def verify_places(args):
 STAGE_NAMES = ("plan", "test", "build", "tidy", "judge", "document", "adopt", "integrate")
 
 
-def stage_lists(gate_text, cli_text, runner_text):
+def stage_lists(modules, runner_text):
     """Every place that lists two stage names or more by hand, outside the table and the checks registered against
     it — and any stage name the gate's `main` decides on. A stage is a row: a list beside the table drifts from it."""
     import ast
     found = []
-    for label, text in (("story-gate.py", gate_text), ("factory-cli.py", cli_text)):
+    for label, text in ((f"{name}.py", modules[name]) for name in MODULES):
         tree = ast.parse(text)
         skip = set()
         for node in ast.walk(tree):
@@ -4107,7 +4168,7 @@ def stage_lists(gate_text, cli_text, runner_text):
             if isinstance(node, ast.FunctionDef):
                 for decorator in node.decorator_list:
                     skip.update(range(decorator.lineno, decorator.end_lineno + 1))
-            if isinstance(node, ast.FunctionDef) and node.name == "main" and label == "story-gate.py":
+            if isinstance(node, ast.FunctionDef) and node.name == "main" and label == "gate.py":
                 for inner in ast.walk(node):
                     if isinstance(inner, ast.Constant) and inner.value in STAGE_NAMES:
                         found.append(f"{label}:{inner.lineno} main names {inner.value!r}")
@@ -6083,9 +6144,7 @@ def run_groups(args):
         parts_out = os.path.join(root, "builder-parts.jsonl")
         with open(parts_out, "w", encoding="utf-8") as handle:
             handle.write("\n".join(json.dumps(e) for e in shared_events) + "\n")
-        probe = ("import importlib.util, json, sys\n"
-                 "spec = importlib.util.spec_from_file_location('cli', sys.argv[1]); cli = importlib.util.module_from_spec(spec)\n"
-                 "spec.loader.exec_module(cli)\n"
+        probe = (PACKAGE_PROBE + "import json\ncli = pkg\n"
                  "parts, cost = cli.stream_parts(sys.argv[2])\n"
                  "print(json.dumps({'cost': cost, 'parts': [dict(stage=p['stage'], seconds=(p['end'] - p['start']).total_seconds(),"
                  " read=p['cache_read'], output=p['output'], weight=p['weight']) for p in parts]}))\n")
@@ -6117,9 +6176,7 @@ def run_groups(args):
         denied_out = os.path.join(root, "builder-denied.jsonl")
         with open(denied_out, "w", encoding="utf-8") as handle:
             handle.write("\n".join(json.dumps(e) for e in denied_events) + "\n")
-        probe = ("import importlib.util, json, sys\n"
-                 "spec = importlib.util.spec_from_file_location('cli', sys.argv[1]); cli = importlib.util.module_from_spec(spec)\n"
-                 "spec.loader.exec_module(cli)\n"
+        probe = (PACKAGE_PROBE + "import json\ncli = pkg\n"
                  "print(json.dumps({'denied': cli.stream_denials(sys.argv[2]),"
                  " 'lines': cli.follow_lines(open(sys.argv[2]).read())[0]}))\n")
         seen = json.loads(subprocess.run([sys.executable, "-c", probe, args.cli, denied_out], capture_output=True,
@@ -6536,9 +6593,7 @@ def run_groups(args):
     # --- contract 15: every Then and And names the line that asserts it; a stored-state clause never on a stub ----
     print()
     expectations = []
-    probe = ("import importlib.util, json, sys\n"
-             "spec = importlib.util.spec_from_file_location('gate', sys.argv[1]); g = importlib.util.module_from_spec(spec)\n"
-             "spec.loader.exec_module(g)\n"
+    probe = (PACKAGE_PROBE + "import json\ng = pkg\n"
              "root, contract = sys.argv[2], sys.argv[3]\n"
              "body = open(root + '/story.md', encoding='utf-8').read()\n"
              "r = g.Result()\n"

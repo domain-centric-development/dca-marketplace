@@ -105,6 +105,7 @@ when it is a checkout (a clone of the marketplace, or `FACTORY_PLUGIN_DIR`: an e
 dca-factory.profile.yaml     your build and test commands, one per test source set
 .agents/factory/story-gate.py            the gate, callable from a terminal and from CI
 .agents/factory/factory-cli.py           what shows and coordinates — status, help, usage, the checkout — beside it
+.agents/factory/dca_factory/             the package both are entry points of (stdlib only, no bytecode written)
 .githooks/pre-commit                     the change check on what every commit contains (core.hooksPath)
 .claude/skills/.dca-factory-skills       what the install placed there, in which mode, from which kind of source
 ```
@@ -530,12 +531,13 @@ what must be true before the next one starts.
 
 ## The gate
 
-`skills/factory-run/scripts/story-gate.py` — one dependency-free Python script, copied into the
-project as `.agents/factory/story-gate.py` so every tool and every CI run execute the same check. It
+`skills/factory-run/scripts/story-gate.py` — the entry point of a dependency-free Python package
+(`dca_factory/`: contract, reports, state, gate, tools, runner, cli), copied into the project as
+`.agents/factory/` so every tool and every CI run execute the same check. It
 *decides*: the readers, the backlog, the checks per stage, the decision records, `--change`, `--parity`
 and the file contract. Everything that *shows or coordinates* — status, help, usage and cost, the
-session logs, the checkout claim, the schedule, `--resolve` — is `factory-cli.py` beside it, which
-imports the gate and reads every project file through its readers; the runner asks the cli for a
+session logs, the checkout claim, the schedule, `--resolve` — is `factory-cli.py` beside it, the
+package's other entry point, which reads every project file through the same readers; the runner asks the cli for a
 profile value, a verdict, a needs-human section or an open record instead of parsing the file
 itself, so one file has one reader. A flag that moved is handed over by the gate, so an older hook or
 instruction file still gets its answer:
@@ -613,7 +615,7 @@ contracts plus the gate keep an in-session run honest.
 Portable *in form* is not the same as verified *in fact*, and the difference is worth stating
 rather than leaving a reader to find it in a failing run.
 
-**Agent tools.** Claude Code, Codex and OpenCode each have a record in `factory-cli.py` — the command, how its
+**Agent tools.** Claude Code, Codex and OpenCode each have a record in `dca_factory/tools.py` — the command, how its
 flags are probed, the isolation, the usage format, the skill folder, the model flag, how linked and protected
 folders are named — and the runner starts a stage with what `factory-cli.py --tool-invocation <tool>` returns. Every
 flag is checked against the binary's help once per binary, before the first stage (`factory-cli.py --tool-probe
@@ -678,8 +680,8 @@ one asks for it, never in the abstract.
 ## Versions, and what a version answers
 
 The gate is **copied** into a project, so two questions come apart that a single version number
-would run together. Both are stated in `story-gate.py` (the cli beside it carries the same `VERSION`,
-and the runner refuses a pair that differs) and readable with `python3 .agents/factory/story-gate.py --version`:
+would run together. Both are stated in `dca_factory/contract.py` (the gate and the cli are
+entry points of that one package, so they carry the same) and readable with `python3 .agents/factory/story-gate.py --version`:
 
 | | What it answers | Who checks it, and how it ends |
 |---|---|---|
