@@ -2785,6 +2785,24 @@ def squash_story(path, runs, story_id, target, front, body):
 CONFLICTS_FILE = "conflicts"
 
 
+def stage_story(path, runs, story_id):
+    """Into the index of the story's worktree: every tracked file the story changed or removed, and the untracked
+    ones a stage window of the story made (`stages-made.txt`) — the files the gates held to the hand-overs. An
+    untracked file no stage made (a gate command's report nobody ignored, a file manager's) stays out of the
+    story's commit and is named."""
+    git(path, "add", "-u", "--", ".")
+    made = os.path.join(evidence_dir(runs, story_id), STAGES_MADE)
+    named = {line.strip() for line in read_text(made).splitlines() if line.strip()} if os.path.isfile(made) else set()
+    untracked = [p for p in git(path, "ls-files", "--others", "--exclude-standard", "-z")[1].split("\0") if p]
+    taken = [p for p in untracked if p in named]
+    left = [p for p in untracked if p not in named and not run_owned(p, runs)]
+    if taken:
+        git(path, "add", "--", *taken)
+    if left:
+        print(f"integrate: left out of {story_id}'s commit, no stage's record names them: {', '.join(left[:8])}"
+              f"{' …' if len(left) > 8 else ''}", file=sys.stderr)
+
+
 def integrate_prepare(cwd, runs, epics, story_id):
     """The integrate step's git half: the story's code committed on its branch, the main line merged in, the
     whole squashed to one commit. Exit 3 with `conflict: <path>` lines where the merge needs a hand; 0 when the
@@ -2796,7 +2814,7 @@ def integrate_prepare(cwd, runs, epics, story_id):
     target = integration_target(runs, story_id)
     front, body = read_front_matter(find_story(epics, story_id))
     restore_places(path)
-    git(path, "add", "-A", "--", ".")
+    stage_story(path, runs, story_id)
     if git(path, "diff", "--cached", "--quiet")[0] != 0:
         git(path, *git_identity(path), "commit", "--no-verify", "--quiet", "-m", f"wip({story_id}): before integration")
     if git(path, "merge-base", "--is-ancestor", target, "HEAD")[0] != 0:
@@ -2832,7 +2850,7 @@ def integrate_finish(cwd, runs, epics, story_id):
         print(f"factory: a conflict marker is left in {', '.join(left)} — the merge is not resolved", file=sys.stderr)
         return 1
     restore_places(path)
-    git(path, "add", "-A", "--", ".")
+    stage_story(path, runs, story_id)
     done = git(path, *git_identity(path), "commit", "--no-verify", "--quiet", "--no-edit")
     if done[0] != 0 and git(path, "diff", "--name-only", "--diff-filter=U")[1].strip():
         print(f"factory: the merge could not be committed — {done[1]}", file=sys.stderr)
@@ -3204,7 +3222,7 @@ def move_path(cwd, src, dst):
 
 #: What the gate and the runner keep in a story's evidence folder that a new pass starts without: the red ledger, the
 #: story's digest, the tests baseline, the round count and the base tree. The journal and the snapshots carry on.
-PASS_MARKS = (".tests-red", STORY_DIGEST, TESTS_BASELINE, ".rounds", "base-tree")
+PASS_MARKS = (".tests-red", STORY_DIGEST, TESTS_BASELINE, ".rounds", "base-tree", STAGES_MADE)
 
 
 def migrate_evidence(cwd, runs, say):

@@ -4320,6 +4320,9 @@ def run_owned(path, runs):
 
 DELETED = "deleted"
 
+#: The paths every stage window of a pass changed, one per line: what the story's commit takes of the untracked files.
+STAGES_MADE = "stages-made.txt"
+
 
 #: The first line of a snapshot or a changed-files record that carries no observation, and says why.
 NOT_OBSERVED = "# not observed: "
@@ -4467,8 +4470,15 @@ def record_changes(cwd, runs, story_id, stage):
                 handle.write(f"# no diff: {reason}\n")
         return
     tracked = tracked_files(cwd)
+    rows = changes_between(before, after, runs, tracked)
     with open(os.path.join(folder, f"changed-{stage}.txt"), "w", encoding="utf-8") as handle:
-        handle.writelines(f"{kind}\t{path}\n" for kind, path in changes_between(before, after, runs, tracked))
+        handle.writelines(f"{kind}\t{path}\n" for kind, path in rows)
+    # Every path a stage window of this pass changed, kept across rounds: a later round's record of the same stage
+    # replaces the earlier one, and a file the first round made would drop out of the story's commit with it.
+    made = os.path.join(folder, STAGES_MADE)
+    known = set(read_text(made).splitlines()) if os.path.isfile(made) else set()
+    with open(made, "w", encoding="utf-8") as handle:
+        handle.writelines(f"{path}\n" for path in sorted(known | {path for _kind, path in rows}))
     base_file = os.path.join(folder, "base-tree")
     base = read_text(base_file).strip() if os.path.isfile(base_file) else "none"
     now = git_tree(cwd) if base != "none" else None

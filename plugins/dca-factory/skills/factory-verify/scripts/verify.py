@@ -7661,6 +7661,18 @@ def verify_worktrees(runner, verbose=False):
         path = os.path.join(root, rel)
         return open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
 
+    # the story's commit holds what the stages changed and listed: an untracked file the gates' own commands left
+    # (a report nobody ignored) stays out of it and is named
+    for root in throwaway():
+        log, env = fixture(root, [], profile="compile: touch gate-output.junk\n")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        committed = git_out(root, "show", "--name-only", "--format=", "main").split()
+        check("integrate: the story's commit takes the files its stages listed, not an untracked file a gate's "
+              "command left, and names what it left out",
+              code == 0 and "src/main/STORY-1.txt" in committed and "gate-output.junk" not in committed
+              and "left out of STORY-1's commit" in output and "gate-output.junk" in output,
+              f"exit {code}; {committed}; {output.strip()[-300:]}")
+
     # one slot: a story that waits with code in its worktree does not stop the next; answered, it resumes there,
     # meets the other story's change in a file both touched, and the integrate step makes both hold
     for root in throwaway():
@@ -7785,6 +7797,8 @@ def verify_worktrees(runner, verbose=False):
         # the main line moved while STORY-1 waited, and the story keeps its base: a file of its own is in the way
         with open(os.path.join(root, ".dca-factory/worktrees/STORY-1/src/main/STORY-2.txt"), "w", encoding="utf-8") as h:
             h.write("in the way\n")
+        with open(os.path.join(root, ".dca-factory/evidence/STORY-1/stages-made.txt"), "a", encoding="utf-8") as h:
+            h.write("src/main/STORY-2.txt\n")       # made by the story's stage, as far as the record goes
         code, output = run_runner(runner, root, "run", env=env)
         ran = lines(log)
         builds = [l for l in ran if l.startswith("STORY-1 build")]

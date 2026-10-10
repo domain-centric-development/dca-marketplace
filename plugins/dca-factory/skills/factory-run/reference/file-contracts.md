@@ -174,7 +174,10 @@ changes. `.dca-factory/worktrees/` is kept out of the main checkout's status in 
 
 **The integrate step.** When every gate passed — the document gate, or the adopt gate — the story is not
 delivered yet: the gate says `integrate` and the runner integrates it, one story at a time under
-`.dca-factory/integrate.lock`. It commits the story's code on its branch, merges the target in and squashes
+`.dca-factory/integrate.lock`. It commits the story's code on its branch — every tracked file it changed and the
+untracked ones a stage window made (`.dca-factory/evidence/<story>/stages-made.txt`, kept across rounds); an
+untracked file no stage made, such as a gate command's report nobody ignored, stays out and is named — merges the
+target in and squashes
 the whole to one commit, `feat(<context>): <title>` (`test(…)` for an adoption or a journey) with `Story:
 <id>` in its body; factory commits carry `--no-verify`, because the integrate gate holds the tree to more than
 the hook does. Where the merge stops, the conflicted files are listed in `.dca-factory/evidence/<story>/conflicts` and the
