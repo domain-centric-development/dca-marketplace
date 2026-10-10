@@ -2596,14 +2596,15 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       # then builds on a decision nobody took.
       # The build stage found a defect in a test's own code (a helper, a locator), not in what it asserts: the
       # round goes to the test stage, which repairs it and proves it with a break — no human is asked.
-      if [ "$stage" = build ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
+      local sent_back=""; [ "$stage" = build ] && sent_back=$(cli --back-to "$story" --stage "$stage" 2>/dev/null)
+      if [ -n "$sent_back" ]; then
         local sent_rounds; sent_rounds=$(bump_rounds "$story")
         if [ "$sent_rounds" -ge 3 ]; then
           echo "factory: the build stage sent the story back in round $sent_rounds — three rounds did not converge. needs-human." >&2
           return 1
         fi
-        echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the test stage." >&2
-        run_stages "$story" "$tool" test "$dry"
+        echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the $sent_back stage." >&2
+        run_stages "$story" "$tool" "$sent_back" "$dry"
         return $?
       fi
       if asks_human "$artefact"; then
