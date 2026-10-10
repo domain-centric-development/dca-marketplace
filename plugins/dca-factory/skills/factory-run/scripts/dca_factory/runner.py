@@ -5,12 +5,20 @@ integrate, remove), the layout migration an update runs, and the skeleton of eve
 writes before a stage.
 """
 
+import argparse
 import contextlib
+import glob
+import hashlib
 import os
 import re
+import secrets
 import shlex
 import shutil
+import signal
+import socket
+import subprocess
 import sys
+import threading
 import time
 from .contract import (
     ALL_KINDS, CONTRACT, DECISIONS_DIR, DEFAULTS, evidence_dir, evidence_rel, find_story, FINDINGS_FILE, flat_stories,
@@ -25,7 +33,7 @@ from .gate import (
     integration_target, INVARIANTS_MARKER, plan_invariants, plan_proposals, read_clause_rows, read_invariant_rows,
     scenario_clauses, TESTS_BASELINE)
 from .tools import (
-    tools_shell)
+    TOOL, tool_command, TOOLS, tools_shell)
 
 
 FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
@@ -981,3 +989,1665 @@ def document_skeleton(runs, story_id, cwd="."):
     print(f"factory: {runs}/{story_id}/document.md — the skeleton with {len(paths)} path(s) under `## Paths`"
           + (f" and {terms} proposed term(s) under `## Glossary`" if terms else ""))
     return 0
+
+
+# --- the run: what `factory.sh run` starts once its checks before the first stage passed -------------------------
+# One process per stage, so every stage starts with a fresh context and reads only its story and its predecessor's
+# file. The runner composes and starts; every project file it reads is read through the cli, as a process of its
+# own (`Run.cli`), so a story's worktree, the profile and the journal are read exactly as a person's call reads
+# them. What it may not decide — whether a stage is done — is the gate's, a process of its own as well.
+#
+# Exit codes: 0 the story ran through, 1 a failure, 2 a usage error, 3 it stopped for a decision, 4 at --max-stages
+# or --story-budget, 5 another worker holds the checkout, 7 the pipeline or a person's file changed under it,
+# 124 a stage ran past its time limit is reported as a failure (1), 129/130/143 a hang-up, an interrupt, a TERM.
+
+#: The shell a stage may use without asking, beside the gate, the cli and the profile's commands: the ordinary
+#: reading and text tools, and the git verbs that look without changing anything (`git apply --check` is how a
+#: stage tries a break patch). What writes or runs anything stays out — `sed -i`, `xargs`, `find -exec`, a redirect
+#: of `echo`/`printf`, `mkdir`: each allowed head is allowed with every argument (WP-94). Measured on the bench:
+#: without the reading tools a stage hit the allow-list about three times per story, each a wasted turn.
+STAGE_SHELL_HEADS = ("cd", "ls", "cat", "head", "tail", "wc", "sort", "grep", "diff", "pwd",
+                     "git status", "git diff", "git log", "git ls-files", "git apply --check")
+STAGE_SHELL = ("cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git status, git diff, git log, git ls-files, "
+               "git apply --check")
+
+#: The first line of a snapshot written without a hash: the observer reads such a snapshot as absent, because a
+#: snapshot of empty digests compares equal to every other and would read as "this stage changed nothing".
+NO_HASHES = "# no-sha256-command: names only, no content hashes"
+
+#: Where a tool ran past this many seconds, it is stopped (0: no limit) — FACTORY_STAGE_TIMEOUT, else the profile's
+#: `stageTimeout:`. A number with `s`, `m` or `h`; a bare number is seconds.
+TIMEOUT_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600}
+TIMED_OUT = 124
+SIGNAL_EXITS = {"SIGTERM": 143, "SIGHUP": 129, "SIGINT": 130}
+
+
+class Stopped(Exception):
+    """The run ends here with this exit code — the pipeline changed under it, a signal arrived."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def utc(fmt="%Y-%m-%dT%H:%M:%SZ"):
+    return time.strftime(fmt, time.gmtime())
+
+
+def seconds_of(text):
+    """`90`, `90s`, `30m`, `2h` → seconds; None for anything else."""
+    match = re.fullmatch(r"\s*(\d+)\s*([smh]?)\s*", str(text or ""))
+    return int(match.group(1)) * TIMEOUT_UNITS[match.group(2)] if match else None
+
+
+def first_word(value):
+    parts = str(value or "").split()
+    return parts[0] if parts else ""
+
+
+def newer(path, than):
+    """`[ path -nt than ]`: path exists and is newer, or than does not exist."""
+    if not os.path.exists(path):
+        return False
+    return not os.path.exists(than) or os.path.getmtime(path) > os.path.getmtime(than)
+
+
+class Run:
+    """One runner process: the story or the backlog it runs, and what it keeps between stages."""
+
+    def __init__(self, options, home, runs, worker=None):
+        self.py = os.environ.get("FACTORY_RUNNER_PYTHON") or "python3"   # the name the prompts and the list carry
+        self.scripts = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.cli_path = os.path.join(self.scripts, "factory-cli.py")
+        self.gate_rel = ".agents/factory/story-gate.py"
+        self.gate_path = self.gate_rel
+        self.home = home
+        self.pwd = os.getcwd()
+        self.runs_rel = runs
+        self.runs = runs
+        absolute = os.path.isabs(runs) or re.match(r"^[A-Za-z]:", runs)
+        parent = os.path.dirname(runs) if absolute else os.path.join(home, os.path.dirname(runs))
+        self.stop_file = os.path.join(parent, "stop").replace("\\", "/") if absolute else f"{home}/{os.path.dirname(runs)}/stop"
+        self.lock_dir = f"{os.path.dirname(runs)}/integrate.lock" if absolute else f"{home}/{os.path.dirname(runs)}/integrate.lock"
+        self.worker = worker or f"runner:{socket.gethostname() or 'host'}:{os.getpid()}"
+        self.suites_key = secrets.token_hex(16)
+        self.invocations = 0
+        self.nested_code = 0
+        self.gate_first = False
+        self.max_stages = options.max_stages
+        self.story_budget = options.story_budget
+        self.shared_builder = options.builder == "shared"
+        self.shared_verifier = options.verifier == "shared"
+        self.parallel = options.parallel
+        self.options = options
+        self.add_dirs, self.read_dirs = [], []
+        self.tool_in_flight = ""
+        self.pipeline_sha = os.environ.get("FACTORY_RUNNER_PIPELINE_SHA", "")
+        self.claimed = False
+        self.lock_held = False
+        self.sleeping = False
+        self.pending = None
+        self.timeout = self.stage_timeout()
+
+    # --- processes -----------------------------------------------------------------------------------------
+    def wait(self, process, timeout=None):
+        return process.wait(timeout=timeout)
+
+    def checkpoint(self):
+        """A TERM or HUP that arrived ends the run here — between stages, never inside one."""
+        if self.pending is not None:
+            code, self.pending = self.pending, None
+            raise Stopped(code)
+
+    def run(self, argv, *, capture=False, quiet=False, merge=False, cwd=None, env=None, stdin=None, stdout=None):
+        """A child process run to its end: (exit code, its stdout when captured)."""
+        out = subprocess.PIPE if capture else stdout
+        errors = subprocess.STDOUT if merge else (subprocess.DEVNULL if quiet else None)
+        flush()
+        process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=stdin, stdout=out, stderr=errors)
+        data = b""
+        if capture:
+            data, _ = process.communicate()
+            code = process.returncode
+        else:
+            code = self.wait(process)
+        return code, data.decode("utf-8", errors="replace").rstrip("\n") if capture else ""
+
+    def cli(self, *args, quiet=True, merge=False, cwd=None, env=None, stdin_text=None):
+        """The cli beside this runner: (exit code, stdout without its last newlines)."""
+        if stdin_text is not None:
+            flush()
+            done = subprocess.run([sys.executable, self.cli_path, *args], input=stdin_text.encode("utf-8"),
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL if quiet else None, cwd=cwd, env=env)
+            return done.returncode, done.stdout.decode("utf-8", errors="replace").rstrip("\n")
+        return self.run([sys.executable, self.cli_path, *args], capture=True, quiet=quiet and not merge, merge=merge,
+                        cwd=cwd, env=env)
+
+    def cli_out(self, *args):
+        return self.cli(*args)[1]
+
+    def home_env(self):
+        """The environment of a call made in the main checkout: no FACTORY_HOME, as there."""
+        env = dict(os.environ)
+        env.pop("FACTORY_HOME", None)
+        return env
+
+    def journal_line(self, story, line):
+        """Every journal line goes through the cli, which numbers it under the journal's lock."""
+        self.cli("--journal-line", story, stdin_text=line + "\n")
+
+    def gate_installed(self):
+        return os.path.isfile(self.gate_path)
+
+    # --- places --------------------------------------------------------------------------------------------
+    def evidence(self, story):
+        parent = os.path.dirname(self.runs)
+        parent = ".dca-factory" if parent in (".", "") else parent
+        return f"{parent}/evidence/{story}"
+
+    def evidence_rel(self):
+        parent = os.path.dirname(self.runs_rel)
+        parent = ".dca-factory" if parent in (".", "") else parent
+        return f"{parent}/evidence"
+
+    def stage_file(self, stage):
+        return STAGE_FILES.get(stage, "")
+
+    def artefact(self, story, stage):
+        return f"{self.runs}/{story}/{self.stage_file(stage)}"
+
+    @staticmethod
+    def kind_runs(kind, stage):
+        return stage in STAGE and kind in STAGE[stage].kinds
+
+    def back_for(self, kind, stage):
+        """Where a round goes back to: <stage>, or the last builder stage before it the kind runs."""
+        if self.kind_runs(kind, stage):
+            return stage
+        back = stage
+        for st in SHARED_WINDOWS["builder"]:
+            if self.kind_runs(kind, st):
+                back = st
+            if st == stage:
+                break
+        return back
+
+    # --- the pipeline, unchanged ---------------------------------------------------------------------------
+    @staticmethod
+    def hashing():
+        return os.environ.get("FACTORY_SHA256", "") != "none"
+
+    def pipeline_hash(self, folder=None):
+        """One SHA-256 over the installed files' digests — the stamp's `sha256:` line."""
+        if not self.hashing():
+            return None
+        folder = folder or os.path.join(self.home, ".agents", "factory")
+        listing = ""
+        for name in PIPELINE_FILES:
+            path = os.path.join(folder, name)
+            if name.endswith("/"):
+                if not os.path.isdir(path):
+                    listing += f"missing  {name}\n"
+                    continue
+                for module in sorted(n for n in os.listdir(path) if n.endswith(".py")):
+                    listing += f"{file_sha(os.path.join(path, module))}  {name}{module}\n"
+            elif os.path.isfile(path):
+                listing += f"{file_sha(path)}  {name}\n"
+            else:
+                listing += f"missing  {name}\n"
+        return hashlib.sha256(listing.encode("utf-8")).hexdigest()
+
+    def guard_pipeline_start(self):
+        stamp = os.path.join(self.home, STAMP)
+        if not os.path.isfile(stamp):
+            return 0
+        self.pipeline_sha = self.pipeline_hash() or ""
+        if not self.pipeline_sha:
+            return 0
+        stamped = next((line.split(":", 1)[1].strip() for line in read_text(stamp).splitlines()
+                        if line.startswith("sha256:")), "")
+        if not stamped:
+            err(f"factory: {STAMP} carries no hash (installed before 0.68.0) — the gates compare against the pipeline as it")
+            err("factory:   is now; 'factory.sh update' records one.")
+        elif stamped != self.pipeline_sha:
+            err(f"factory: the installed pipeline is not the one {STAMP} records — a file under .agents/factory/ changed")
+            err("factory:   since the install. Nothing was started; 'factory.sh update' installs it again.")
+            return 7
+        return 0
+
+    def guard_pipeline(self, stage, story):
+        """Before every gate the runner runs: the pipeline is still the one the run started with."""
+        if not self.pipeline_sha:
+            return 0
+        now = self.pipeline_hash()
+        if not now or now == self.pipeline_sha:
+            return 0
+        err(f"factory: the installed pipeline changed during {story}'s run, before its {stage} gate — a stage never writes")
+        err("factory:   .agents/factory/. Nothing more runs; 'factory.sh update' installs it again, and the story runs")
+        err("factory:   from the stage that changed it.")
+        self.journal_line(story, f"{utc()}\tpipeline-changed\t{stage}")
+        with contextlib.suppress(OSError):
+            open(self.stop_file, "w").close()
+        return 7
+
+    # --- the checkout ----------------------------------------------------------------------------------------
+    def take_checkout(self):
+        if not self.gate_installed():
+            err(f"factory: no gate at {self.gate_rel} — the checkout is not claimed; install the pipeline")
+            return 0
+        code, _ = self.run([sys.executable, self.cli_path, "--claim", self.worker])
+        if code != 0:
+            err("factory: another worker holds this checkout — see 'factory.sh status'. Nothing was started.")
+            return 5
+        self.claimed = True
+        return 0
+
+    def release(self):
+        if self.claimed:
+            self.claimed = False
+            with contextlib.suppress(Exception):
+                subprocess.run([sys.executable, self.cli_path, "--release", self.worker], cwd=self.home,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=self.home_env())
+
+    def renew(self):
+        """The claim, renewed before a stage: False when another worker took the checkout over."""
+        if not self.gate_installed():
+            return True
+        code, _ = self.run([sys.executable, self.cli_path, "--claim", self.worker], stdout=subprocess.DEVNULL)
+        return code == 0
+
+    def take_lock(self):
+        """One integration at a time: the git work in the main checkout runs under a lock beside the run folder."""
+        with contextlib.suppress(OSError):
+            os.makedirs(os.path.dirname(self.lock_dir), exist_ok=True)
+        stale = int(os.environ.get("FACTORY_STALE_AFTER") or 7200)
+        while True:
+            try:
+                os.mkdir(self.lock_dir)
+                self.lock_held = True
+                return 0
+            except FileExistsError:
+                pass
+            except OSError:
+                if not os.path.isdir(os.path.dirname(self.lock_dir)):
+                    err(f"factory: no place for the lock at {self.lock_dir}")
+                    return 1
+            try:
+                age = int(time.time() - os.path.getmtime(self.lock_dir))
+            except OSError:
+                age = 0
+            if age > stale:
+                err(f"factory: {self.lock_dir} is {age}s old — its holder ended without giving it back; taken over.")
+                with contextlib.suppress(OSError):
+                    os.rmdir(self.lock_dir)
+                continue
+            self.sleep(2)
+
+    def drop_lock(self):
+        if self.lock_held:
+            self.lock_held = False
+            with contextlib.suppress(OSError):
+                os.rmdir(self.lock_dir)
+        return 0
+
+    def sleep(self, seconds):
+        """A pause a TERM or HUP ends at once — nothing runs beside it."""
+        self.checkpoint()
+        self.sleeping = True
+        try:
+            time.sleep(seconds)
+        finally:
+            self.sleeping = False
+        self.checkpoint()
+
+    # --- the tool ----------------------------------------------------------------------------------------------
+    def stage_timeout(self):
+        given = os.environ.get("FACTORY_STAGE_TIMEOUT")
+        if given is None:
+            given = first_word(self.cli_out("--get", "stageTimeout")) if self.gate_installed() else ""
+        value = seconds_of(given) if given else 0
+        if given and value is None:
+            err(f"factory: the stage time limit '{given}' is no number of seconds (90, 90s, 30m, 2h) — no limit applies")
+        return value or 0
+
+    @staticmethod
+    def isolated():
+        return os.environ.get("FACTORY_ISOLATION", "on") != "off"
+
+    def isolation_flags(self, tool):
+        if not self.isolated():
+            return ""
+        return self.cli_out("--tool-flags", tool).replace("\n", "") + " "
+
+    def allowed_commands(self):
+        heads = [f"Bash({self.py} {self.gate_rel}:*)", f"Bash({self.py} .agents/factory/factory-cli.py:*)"]
+        for head in self.cli_out("--command-heads").split() + list(STAGE_SHELL_HEADS):
+            if f"Bash({head}:*)" not in heads:
+                heads.append(f"Bash({head}:*)")
+        return ",".join(heads)
+
+    def model_key(self, tool, stage):
+        return self.cli_out("--model", tool, (stage or "").split(":")[0])
+
+    @staticmethod
+    def tool_args(tool):
+        record = TOOL.get(tool)
+        return os.environ.get(record.args_env, "") if record and record.args_env else ""
+
+    def env_model(self, tool):
+        match = re.search(r".*(?:^| )(?:-m|--model)[ =]([^ ]*)", self.tool_args(tool))
+        return match.group(1) if match else ""
+
+    def model_choice(self, tool, stage):
+        """The model flag for one stage, and why a request does not become one: (flag words, note). The model is
+        the project's choice, stated in the profile per tool and stage (`model.<tool>.<stage>`, falling back to
+        `model.<tool>`); the pipeline names none. A `--model`/`-m` in FACTORY_<TOOL>_ARGS wins — the person's local
+        override — and the run says so. Exactly one model flag is ever passed."""
+        requested = self.model_key(tool, stage)
+        if not requested:
+            return "", ""
+        if os.environ.get("FACTORY_TOOL_CMD"):
+            return "", "passed as FACTORY_MODEL to the custom command"
+        if self.env_model(tool):
+            return "", f"overridden by FACTORY_{tool.upper()}_ARGS ({self.env_model(tool)})"
+        flag = TOOL[tool].model_flag if tool in TOOL else ""
+        return (f"{flag} {requested}", "") if flag else ("", f"no model flag for tool {tool}")
+
+    def model_flag(self, tool, stage=""):
+        """The model a tool ran with, where its output does not say."""
+        if stage and self.model_key(tool, stage) and not self.env_model(tool):
+            return self.model_key(tool, stage)
+        match = re.search(r".*(?:-m|--model)[ =]([^ ]*)", self.tool_args(tool))
+        return match.group(1) if match else ""
+
+    def protected_dirs(self):
+        dirs = [".agents/factory", self.evidence_rel(), *TOOL_SKILL_DIRS, ".agents/skills"]
+        return [d if os.path.isabs(d) or re.match(r"^[A-Za-z]:", d) else f"{self.home}/{d}" for d in dirs]
+
+    def usage_format(self, tool):
+        if os.environ.get("FACTORY_TOOL_CMD"):
+            return os.environ.get("FACTORY_USAGE_FORMAT") or "none"
+        return (TOOL[tool].usage if tool in TOOL else "") or "none"
+
+    def dry_lines(self, tool, prompt, model_stage):
+        print(f"   would run: {prompt}")
+        isolation = os.environ.get("FACTORY_ISOLATION")
+        print(f"   tool flags: {self.isolation_flags(tool)}" + (f"(FACTORY_ISOLATION={isolation})" if isolation else ""))
+        print(f"   shell allowed: {self.allowed_commands()}")
+        flags, note = self.model_choice(tool, model_stage)
+        print(f"   model: {flags}{note}")
+
+    def invoke(self, tool, prompt, raw, stage, story, count=True):
+        """One stage's tool process; its output kept in <raw>, where the tool also says what the stage cost."""
+        if count:
+            self.invocations += 1
+        flags, _note = self.model_choice(tool, stage)
+        command = os.environ.get("FACTORY_TOOL_CMD")
+        env = dict(os.environ, FACTORY_WORKER=self.worker, FACTORY_STAGE=stage or "", FACTORY_STORY=story or "")
+        if command:
+            env.update(FACTORY_PROMPT=prompt, FACTORY_RUNS=self.runs, FACTORY_MODEL=self.model_key(tool, stage))
+            code = self.tool_process(["sh", "-c", command], env, raw, stdin=None, stage=stage)
+            if raw != os.devnull and not os.environ.get("FACTORY_USAGE_FORMAT"):
+                with contextlib.suppress(OSError):
+                    sys.stdout.write(read_text(raw))
+                    flush()
+            return code
+        if tool not in TOOL:
+            err(f"factory: unknown tool '{tool}'")
+            return 2
+        variables, argv = tool_command(TOOL[tool], model=flags.split(" ", 1)[1] if flags else "",
+                                       writable=self.add_dirs, readable=self.read_dirs,
+                                       protected=self.protected_dirs(), allowed=self.allowed_commands())
+        env.update(variables)
+        return self.tool_process(spawnable(argv + [prompt]), env, raw, stdin=subprocess.DEVNULL, stage=stage)
+
+    def tool_process(self, argv, env, raw, stdin, stage):
+        """A tool started in a session of its own, so a time limit or an interrupt stops it with what it started."""
+        flush()
+        with open(raw, "wb") as out:
+            try:
+                process = subprocess.Popen(argv, env=env, stdin=stdin, stdout=out, start_new_session=os.name != "nt")
+            except OSError as error:
+                err(f"factory: the tool could not be started — {error}")
+                return 127
+            try:
+                return self.wait(process, timeout=self.timeout or None)
+            except subprocess.TimeoutExpired:
+                stop_group(process)
+                err(f"factory: stage '{stage}' ran past its time limit of {self.timeout}s (FACTORY_STAGE_TIMEOUT, the "
+                    f"profile's stageTimeout:) — the tool was stopped.")
+                return TIMED_OUT
+            except KeyboardInterrupt:
+                stop_group(process, signal.SIGINT)
+                raise Stopped(SIGNAL_EXITS["SIGINT"])
+
+    def exit_field(self, code):
+        return "0" if code == 0 else "timeout" if code == TIMED_OUT else "nonzero"
+
+    def record_usage(self, story, stage, tool, raw, seconds=None):
+        """One `usage` line in the story's journal per invocation, and the stage's final message on screen."""
+        fmt = self.usage_format(tool)
+        code, out = self.cli("--usage-from", fmt, raw, "--usage-model", self.model_flag(tool, stage))
+        if code != 0:
+            out = "unknown"
+        lines = out.split("\n")
+        fields = lines[0]
+        if seconds is not None:
+            fields += f"\tseconds={seconds}"
+        if fmt != "none" and len(lines) > 1:
+            print("\n".join(lines[1:]))
+        self.journal_line(story, f"{utc()}\tusage\t{stage}\ttool={tool}\t{fields}")
+
+    # --- what the files say --------------------------------------------------------------------------------
+    def verdict_of(self, story):
+        return self.cli_out("--verdict", story)
+
+    def asks_human(self, path):
+        return self.cli("--needs-human", path)[0] == 0
+
+    def back_to(self, story, stage=None):
+        code, out = self.cli("--back-to", story, *(["--stage", stage] if stage else []))
+        return out, code
+
+    def start_stage(self, story):
+        return field_of(self.cli_out("--story", story, "--start", "--slots", "1"), "start")
+
+    def open_decisions(self, story):
+        return self.cli_out("--open-decisions", story)
+
+    def delivered(self, story):
+        return self.cli("--delivered", story)[0] == 0
+
+    def stopped_for_human(self, artefact, stage, story):
+        """A stage that ends with a needs-human section has stopped: name the record and the command that resumes.
+        3 when the question is a record — what a backlog run can wait on —, 1 when the section names none."""
+        err(f"factory: stage '{stage}' ends with a needs-human section — the run stops here.")
+        rows = [line.split("\t") for line in self.cli_out("--needs-human", artefact, "--story", story).split("\n")
+                if line.strip()]
+        ids = [row[0] for row in rows]
+        if not ids:
+            err("factory:   the section names no 'decision: <id>' — the stage has to write the question as")
+            err("factory:   <story>/decisions/<nn>.md in the story's folder; the next gate refuses a question nobody was asked.")
+        for rid in ids:
+            record = next((row[2] for row in rows if row[0] == rid and len(row) > 2), "")
+            if record and record != "-" and os.path.isfile(record):
+                applies = next((row[1] for row in rows if row[0] == rid and len(row) > 1 and row[1] != "-"), "")
+                err(f"factory:   decision {rid} → {record} — answer it there under '## Answer'")
+                err(f"factory:   with answer:, by: and at:, then: factory.sh run --story {story} — it resumes at "
+                    f"{applies or stage}, or earlier where the answer's applies: names an earlier stage")
+            else:
+                err(f"factory:   decision {rid} is named but its record {record or 'beside the story'} does not exist.")
+        err(f"factory:   read {artefact} and decide; the stages after it were not run.")
+        return 3 if ids else 1
+
+    def refused_from(self, story, refused):
+        """The stage a refused gate's round starts at: the refused stage, or an earlier one whose file the story's
+        state reads as an earlier pass's."""
+        start = self.start_stage(story)
+        for st in STAGE_ORDER:
+            if st == refused:
+                break
+            if st == start:
+                return start
+        return refused
+
+    def bump_rounds(self, story):
+        path = f"{self.evidence(story)}/.rounds"
+        count = int("".join(c for c in read_text(path) if c.isdigit()) or 0) if os.path.isfile(path) else 0
+        count += 1
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(f"{count}\n")
+        return count
+
+    def environment_refused(self, stage, story):
+        """A refusal whose cause is the machine: no stage can put a tool on the PATH, so no round is counted."""
+        report = f"{self.runs}/{story}/.gate-{stage}.txt"
+        lines = read_text(report).splitlines() if os.path.isfile(report) else []
+        if not any(line.startswith("gate:fail environment") for line in lines):
+            return False
+        reason = next((line[len("gate:fail environment — "):] for line in lines
+                       if line.startswith("gate:fail environment — ")), "")
+        err(f"factory: gate '{stage}' refused on the environment, not on the story — {reason}")
+        err(f"factory:   no round is counted. Fix it, then: factory.sh run --story {story}")
+        return True
+
+    def reset_rounds(self, story, given_from):
+        """A person's --from restarts the story's count; the old one is kept beside it, never deleted."""
+        path = f"{self.evidence(story)}/.rounds"
+        if not os.path.isfile(path):
+            return
+        os.replace(path, f"{self.evidence(story)}/rounds.{utc('%Y%m%dT%H%M%SZ')}")
+        self.journal_line(story, f"{utc()}\trounds-reset\t-\tby=--from")
+        print(f"factory: --from {given_from} starts a new count of rounds for {story} (the old one is under "
+              f"{self.evidence(story)}/).")
+
+    # --- what a stage is told ----------------------------------------------------------------------------------
+    def skill_dirs(self, tool):
+        first = TOOL[tool].skills if tool in TOOL else ""
+        return [d for d in (first, *TOOL_SKILL_DIRS, ".agents/skills") if d]
+
+    def where_things_are(self, tool, story):
+        """What a stage otherwise searches for — the profile, the run folder, the gate's expectations, the
+        catalog — named in its prompt."""
+        common = next((f"{d}/factory-run/reference/stage-common.md" for d in self.skill_dirs(tool)
+                       if os.path.isfile(f"{d}/factory-run/reference/stage-common.md")), "")
+        own = os.path.abspath(os.path.join(self.scripts, "..", "reference", "stage-common.md"))
+        if not common and os.path.isfile(own):
+            common = own[len(self.pwd) + 1:] if own.startswith(self.pwd + "/") else own
+        common = f" The rules every stage holds to: {common}." if common else ""
+        catalog = ""
+        knowledge = first_word(self.cli_out("--get", "knowledge"))
+        if knowledge:
+            at = next((f"{d}/{knowledge}/catalog/" for d in self.skill_dirs(tool)
+                       if os.path.isdir(f"{d}/{knowledge}/catalog")), "")
+            if at:
+                catalog = f" The {knowledge} skill's catalog: {at}."
+                read = [f"{at}{path}" for path in self.cli_out("--get", "knowledge.read").replace(",", " ").split()
+                        if os.path.isfile(f"{at}{path}")]
+                if read:
+                    catalog += f" Before you write code, read once: {', '.join(read)}."
+        cli_path = self.cli_path[len(self.pwd) + 1:] if self.cli_path.startswith(self.pwd + "/") else self.cli_path
+        if os.path.isfile(".agents/factory/factory-cli.py"):
+            cli_path = ".agents/factory/factory-cli.py"
+        return (f"Where things are: the stack profile is {PROFILE_FILE}; the story's run folder {self.runs}/{story}/; "
+                f"its evidence folder {self.evidence_rel()}/{story}/; what the gate checks in a stage's file: "
+                f"`{self.py} {cli_path} --contract <stage>`.{common}{catalog} The shell you have without asking: "
+                f"the gate, the cli, the profile's commands, and {STAGE_SHELL}.")
+
+    def later_refusals(self, story, stage, where):
+        """The reports of the gates after <stage> that refused the story and sent it back."""
+        found, seen = "", False
+        for later in STAGE_ORDER:
+            if later == stage:
+                seen = True
+                continue
+            if seen and os.path.isfile(f"{self.runs}/{story}/.gate-{later}.txt"):
+                found += (f" The {later} gate refused the story and sent it back to {where}: "
+                          f"{self.runs}/{story}/.gate-{later}.txt.")
+        return found
+
+    def worktree_sentence(self):
+        home = os.environ.get("FACTORY_HOME")
+        return f" This story's own worktree: {self.pwd}; the main checkout: {home}." if home else ""
+
+    def guard_sentence(self):
+        guard = first_word(self.cli_out("--get", "carrier.guard"))
+        return f" The guard (the profile's carrier.guard): the {guard} skill." if guard else ""
+
+    def prompt_for(self, stage, story):
+        repeat = ""
+        if os.path.isfile(f"{self.runs}/{story}/.gate-{stage}.txt"):
+            repeat = f" The gate refused this stage before: {self.runs}/{story}/.gate-{stage}.txt."
+        later = self.later_refusals(story, stage, "this stage")
+        if later and stage == self.start_stage(story):
+            repeat += later
+        if stage == "test" and self.back_to(story, "build")[0] == "test":
+            repeat += f" The build stage sent the story back: {self.runs}/{story}/build.md."
+        if stage == "judge" and os.path.isfile(f"{self.runs}/{story}/.judge-previous.md"):
+            repeat = f" This is a repeat round; the previous verdict: {self.runs}/{story}/.judge-previous.md."
+        guard = self.guard_sentence() if stage in STAGE and STAGE[stage].guarded else ""
+        return (f"Apply the stage-{stage} skill for backlog story {story}.{self.worktree_sentence()} "
+                f"{self.where_things_are(self.tool_in_flight, story)}{guard}{repeat}")
+
+    def integrate_prompt(self, story, conflicts):
+        return (f"Apply the stage-integrate skill for backlog story {story}. Merging the main line into this story's "
+                f"branch stopped on conflicts in: {conflicts}. Their list: {self.evidence(story)}/conflicts."
+                f"{self.worktree_sentence()} {self.where_things_are(self.tool_in_flight, story)}")
+
+    # --- the gate --------------------------------------------------------------------------------------------
+    def owned(self, edge, window, story, code=None):
+        """What is the person's is unchanged across a stage window — recorded at its start, compared at its end."""
+        if not self.gate_installed():
+            return 0
+        return self.run([sys.executable, self.gate_path, "--owned", edge, window,
+                         *([str(code)] if code is not None else []), "--story", story])[0]
+
+    def record(self, flag, story, *more):
+        """`--record-base` / `--record-changes <stage>`: what the story's diff is taken against, and what it changed."""
+        if self.gate_installed():
+            self.run([sys.executable, self.gate_path, flag, *more, "--story", story], quiet=True,
+                     stdout=subprocess.DEVNULL)
+
+    def gate(self, stage, story, gate_path=None):
+        gate_path = gate_path or self.gate_path
+        if not os.path.isfile(gate_path):
+            err(f"factory: no gate at {gate_path} — run 'factory.sh setup'")
+            return 2
+        report = f"{self.runs}/{story}/.gate-{stage}.txt"
+        journal = self.evidence(story)
+        os.makedirs(f"{self.runs}/{story}", exist_ok=True)
+        os.makedirs(journal, exist_ok=True)
+        if self.guard_pipeline(stage, story):
+            raise Stopped(7)
+        flush()
+        env = dict(os.environ, FACTORY_SUITES_KEY=self.suites_key)
+        process = subprocess.Popen([sys.executable, gate_path, "--story", story, "--stage", stage, "--record-suites"],
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+        with open(report, "wb") as kept:
+            for chunk in iter(lambda: process.stdout.readline(), b""):
+                kept.write(chunk)
+                sys.stdout.buffer.write(chunk)
+                sys.stdout.flush()
+        code = process.wait()
+        # Every gate run is kept for the observer, with its verdict; only a refusal is kept where the next stage
+        # reads it. 3 is not a refusal: every check passed and a human is asked (acceptance).
+        shutil.copy(report, f"{journal}/gate-{stage}.{utc('%H%M%S')}.txt")
+        if code in (0, 3):
+            os.remove(report)
+        return code
+
+    def snapshot(self, story, label):
+        """What the working tree looks like right now, so a later stage's claim about what it changed can be
+        checked rather than believed."""
+        journal = self.evidence(story)
+        os.makedirs(journal, exist_ok=True)
+        hashing = self.hashing()
+        if not hashing:
+            err("factory: no sha256 command found (shasum, sha256sum, openssl) — the tree snapshots")
+            err("factory:   record file names without content, and factory-verify reports every check")
+            err("factory:   that needs a digest as not observed. Install one of the three for full evidence.")
+        lines = [NO_HASHES] if not hashing else []
+        prefix = subprocess.run(["git", "rev-parse", "--show-prefix"], capture_output=True, text=True).stdout.strip()
+        status = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain", "-z", "-uall", "--", "."],
+                                capture_output=True).stdout.decode("utf-8", errors="replace")
+        strip = lambda name: name[len(prefix):] if prefix and name.startswith(prefix) else name
+        origin = ""
+        for entry in status.split("\0"):
+            if not entry:
+                continue
+            if origin:                          # -z writes a rename's source as the next entry
+                if origin == "R":
+                    lines.append(f"deleted  {strip(entry)}")
+                origin = ""
+                continue
+            code, name = entry[:2], strip(entry[3:])
+            if code[:1] in ("R", "C"):
+                origin = code[:1]
+            if "D" in code:
+                lines.append(f"deleted  {name}")
+                continue
+            if not os.path.isfile(name):
+                continue
+            lines.append(f"{file_sha(name) if hashing else '-'}  {name}")
+        with contextlib.suppress(OSError):
+            with open(f"{journal}/tree-{label}.txt", "w", encoding="utf-8", newline="\n") as handle:
+                handle.write("".join(line + "\n" for line in lines))
+
+    def adopt_gate(self, story, tool, dry):
+        """Every scenario on a green test, the judge's pass, a break for every test the adoption wrote: passed, it
+        delivers the story; refused, the test stage runs again, one round counted."""
+        print("── gate adopt")
+        if dry:
+            return 0
+        if self.gate("adopt", story) == 0:
+            if os.environ.get("FACTORY_HOME"):
+                return self.integrate_story(story, tool, dry)
+            print(f"factory: story {story} is adopted.")
+            return 0
+        if self.environment_refused("adopt", story):
+            return 1
+        rounds = self.bump_rounds(story)
+        if rounds >= 3:
+            err(f"factory: gate 'adopt' refused in round {rounds} — three rounds did not converge. needs-human.")
+            return 1
+        err(f"factory: gate 'adopt' refused — round {rounds} runs the test stage again with the gate's report.")
+        return self.run_stages(story, tool, "test", dry)
+
+    # --- the budget before a dispatch ------------------------------------------------------------------------
+    def used_tokens(self, story):
+        try:
+            return int(self.cli_out("--usage", "--story", story, "--total") or 0)
+        except ValueError:
+            return 0
+
+    def may_dispatch(self, story, what, count=1):
+        """The claim renewed, the story's budget and the cap on stages checked before an invocation, never after.
+        None when it may run, else the exit code (5 the checkout is gone, 4 a limit)."""
+        self.checkpoint()
+        if not self.renew():
+            err(f"factory: the checkout was taken over by another worker before {what} — stopping.")
+            return 5
+        if self.story_budget and self.used_tokens(story) >= self.story_budget:
+            return "budget"
+        if self.max_stages and self.invocations + count - 1 >= self.max_stages:
+            return "stages"
+        return None
+
+    def window(self, story, tool, window, stages, prompt):
+        """One shared process — the builder or the verifier — from its snapshot to its usage line; the tool's exit
+        code, or 7 when a person's file changed in it."""
+        raw = f"{self.evidence(story)}/{window}.{utc('%H%M%S')}.out"
+        self.record("--record-base", story)
+        self.snapshot(story, f"before-{window}")
+        self.owned("start", window, story)
+        self.journal_line(story, f"{utc()}\tstage-start\t{window}\ttool={tool}\tstages={','.join(stages)}")
+        began = time.time()
+        invoked = self.invoke(tool, prompt, raw, window, story)
+        self.record_usage(story, window, tool, raw, int(time.time() - began))
+        self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit={self.exit_field(invoked)}")
+        self.checkpoint()
+        if self.owned("end", window, story, invoked) != 0:
+            return 7
+        if invoked != 0:
+            err("factory: the tool exited non-zero during the shared stages.")
+            return 1
+        self.snapshot(story, f"after-{window}")
+        self.record("--record-changes", story, window)
+        return 0
+
+    # --- the shared processes ----------------------------------------------------------------------------------
+    def budget_note(self, story, what):
+        err(f"factory: story {story} has reached its --story-budget {self.story_budget} — {what} are not dispatched.")
+        return 4
+
+    def run_shared_builder(self, story, tool, start, dry, kind="story"):
+        """Plan to tidy in one tool process, so each stage builds on what the one before read. The process runs
+        each stage's gate itself; the runner checks, not believes: the red proof must exist and the gates after
+        it run again here."""
+        stages, on = [], False
+        for st in SHARED_WINDOWS["builder"]:
+            on = on or st == start
+            if self.kind_runs(kind, st) and on:
+                stages.append(st)
+        if not stages:
+            return 0
+        prompt = (f"Carry out these stages of the delivery pipeline for backlog story {story}, one after another, in "
+                  f"this one session: {', '.join(f'stage-{s}' for s in stages)}. The gate: "
+                  f"`{self.py} {self.gate_rel} --story {story} --stage <stage> --brief`; the skeletons: "
+                  f"`{self.py} {self.cli_path} --files-skeleton {story} <stage>`, "
+                  f"`{self.py} {self.cli_path} --plan-skeleton {story}`. {self.where_things_are(tool, story)}")
+        prompt += self.guard_sentence()
+        if self.back_to(story, "build")[0] == "test":
+            prompt += f" The build stage sent the story back: {self.runs}/{story}/build.md."
+        for refused in stages:
+            if os.path.isfile(f"{self.runs}/{story}/.gate-{refused}.txt"):
+                prompt += f" The gate refused stage {refused} before: {self.runs}/{story}/.gate-{refused}.txt."
+        prompt += self.later_refusals(story, stages[-1], f"stage {start}")
+        if os.path.isfile(f"{self.runs}/{story}/judge.md") and self.verdict_of(story) == "changes-requested":
+            prompt += f" The judge asked for changes: {self.runs}/{story}/judge.md."
+        print(f"── stage {'+'.join(stages)}  (tool: {tool}, one shared context)")
+        if dry:
+            self.dry_lines(tool, prompt, "builder")
+            return 0
+        refused = self.may_dispatch(story, "the shared stages")
+        if refused == "budget":
+            return self.budget_note(story, "the shared stages")
+        if refused == "stages":
+            err(f"factory: --max-stages {self.max_stages} reached before the shared stages of {story}.")
+            return 4
+        if refused:
+            return refused
+        code = self.window(story, tool, "builder", stages, prompt)
+        if code:
+            return code
+        # A `back: test` the session already acted on is no round: tidy.md newer than build.md says it repaired the
+        # test, built again and tidied — the re-checked gates below decide.
+        repaired = "tidy" in stages and newer(f"{self.runs}/{story}/tidy.md", f"{self.runs}/{story}/build.md")
+        sent_back = "build" in stages and self.back_to(story, "build")[0] == "test"
+        if sent_back and repaired:
+            print("factory: build.md names a defect in a test's own code that the shared session repaired before tidy "
+                  "— the gates re-check it.")
+        if sent_back and not repaired:
+            rounds = self.bump_rounds(story)
+            if rounds >= 3:
+                err(f"factory: the build stage sent the story back in round {rounds} — three rounds did not converge. "
+                    "needs-human.")
+                return 1
+            err(f"factory: the build stage found a defect in a test's own code — round {rounds} goes back to the test stage.")
+            self.nested_code = self.run_stages(story, tool, "test", dry)
+            return 99
+        for st in stages:
+            artefact = self.artefact(story, st)
+            if not os.path.isfile(artefact):
+                err(f"factory: the shared stages produced no {artefact} — stage '{st}' is not finished.")
+                return 1
+            if self.asks_human(artefact):
+                return self.stopped_for_human(artefact, st, story)
+        # Checked, not believed: a story's tests were seen red; a journey's and an adoption's are green at their
+        # test gate, so that gate runs again here.
+        for st in stages:
+            if not (STAGE[st].in_order and STAGE[st].tested and not STAGE[st].suite):
+                continue
+            if kind != "story":
+                print(f"── gate {st}  (re-checked by the runner)")
+                if self.gate(st, story) != 0:
+                    err(f"factory: the runner's re-check of gate '{st}' refused the shared stages' work.")
+                    return 1
+            elif not os.path.isfile(f"{self.evidence(story)}/.tests-red") \
+                    or not os.path.getsize(f"{self.evidence(story)}/.tests-red"):
+                err(f"factory: the shared stages left no red proof ({self.evidence(story)}/.tests-red) — the {st} "
+                    f"gate never saw the tests fail.")
+                return 1
+        for st in stages:
+            if not STAGE[st].post_gated or (STAGE[st].tested and not STAGE[st].suite):
+                continue
+            print(f"── gate {st}  (re-checked by the runner)")
+            if self.gate(st, story) != 0:
+                if self.environment_refused(st, story):
+                    return 1
+                rounds = self.bump_rounds(story)
+                if rounds >= 3:
+                    err(f"factory: the runner's re-check of gate '{st}' refused in round {rounds} — three rounds did "
+                        "not converge. needs-human.")
+                    return 1
+                err(f"factory: the runner's re-check of gate '{st}' refused — round {rounds} runs the shared stages "
+                    f"again from '{st}' with the gate's report.")
+                self.nested_code = self.run_stages(story, tool, st, dry)
+                return 99
+        return 0
+
+    def run_reviews(self, story, tool, dry, kind="story"):
+        """One tool process per perspective, started at once, each writing reviews/<perspective>.md; the judge then
+        converges from the files. An adoption reviews no change and gets none."""
+        if kind == "adopt":
+            return 0
+        code, lines = self.cli("--perspectives")
+        if code != 0 or not lines:
+            return 0
+        rows = [line.split("\t", 1) for line in lines.split("\n") if line.split("\t", 1)[0]]
+        names = [row[0] for row in rows]
+        carriers = [row[1] if len(row) > 1 else "" for row in rows]
+        folder = f"{self.runs}/{story}/reviews"
+        print(f"   reviews: {', '.join(names)} — one process each, at once; the judge converges from "
+              "reviews/<perspective>.md")
+        prompts = [(f"Review the change of backlog story {story} from the {name} perspective: apply the `{carrier}` "
+                    f"skill to the diff {self.evidence(story)}/story.diff, as *A review the runner started* in the "
+                    f"rules every stage holds to says. Its input beside the diff: the story and its epic (epic.md "
+                    f"beside it), {self.runs}/{story}/plan.md, tests.md and build.md, and the product and technical "
+                    f"description. Your report: {folder}/{name}.md. {self.where_things_are(tool, story)}")
+                   for name, carrier in zip(names, carriers)]
+        if dry:
+            for name, prompt in zip(names, prompts):
+                print(f"   would run (review:{name}): {prompt}")
+            return 0
+        refused = self.may_dispatch(story, "the reviews", count=len(names))
+        if refused == "budget":
+            return self.budget_note(story, "the reviews")
+        if refused == "stages":
+            err(f"factory: --max-stages {self.max_stages} reached before the reviews of {story} ({len(names)} process(es)).")
+            return 4
+        if refused:
+            return refused
+        os.makedirs(folder, exist_ok=True)
+        os.makedirs(self.evidence(story), exist_ok=True)
+        for old in glob.glob(f"{folder}/*.md"):           # a repeat round reviews today's change, never last round's
+            os.remove(old)
+        began = time.time()
+        raws = {}
+        for name in names:
+            self.journal_line(story, f"{utc()}\tstage-start\treview:{name}\ttool={tool}")
+            raws[name] = f"{self.evidence(story)}/review-{name}.{utc('%H%M%S')}.out"
+        codes = {}
+        threads = [threading.Thread(target=lambda n=name, p=prompt: codes.__setitem__(
+                       n, self.invoke(tool, p, raws[n], f"review:{n}", story, count=False)))
+                   for name, prompt in zip(names, prompts)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.invocations += len(names)
+        seconds = int(time.time() - began)
+        for name in names:
+            self.record_usage(story, f"review:{name}", tool, raws[name], seconds)
+            self.journal_line(story, f"{utc()}\tstage-end\treview:{name}\texit={self.exit_field(codes.get(name, 1))}")
+            if not os.path.isfile(f"{folder}/{name}.md"):
+                err(f"factory: the {name} reviewer left no {folder}/{name}.md — the judge runs that pass itself and says so.")
+        self.checkpoint()
+        return 0
+
+    def judged(self, story, tool, dry, kind):
+        """The judge's verdict decides what comes next — read from its file, never assumed. None to go on."""
+        verdict = self.verdict_of(story)
+        if verdict == "pass":
+            print("factory: judge verdict 'pass'.")
+            return None
+        if verdict == "changes-requested":
+            rounds = self.bump_rounds(story)
+            if rounds >= 3:
+                err(f"factory: judge verdict 'changes-requested' in round {rounds} — three rounds did not converge. "
+                    "needs-human.")
+                return 1
+            asked, code = self.back_to(story)
+            back = self.back_for(kind, asked if code == 0 and asked else "build")
+            err(f"factory: judge verdict 'changes-requested' — round {rounds} goes back to the {back} stage.")
+            return self.run_stages(story, tool, back, dry)
+        if verdict == "story-conflict":
+            err("factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes back to the "
+                f"build stage. needs-human: read {self.runs}/{story}/judge.md.")
+            return 1
+        if not verdict:
+            err(f"factory: {self.runs}/{story}/judge.md carries no 'verdict:' line — the judge stage is not finished.")
+            return 1
+        err(f"factory: judge verdict '{verdict}' is not one of pass|changes-requested|story-conflict.")
+        return 1
+
+    def accepting(self, story):
+        err(f"factory: story {story} waits for a human's acceptance — answer it with /factory-decisions;")
+        err("factory:   the story holds the checkout until then.")
+        return 3
+
+    def run_shared_verifier(self, story, tool, dry, kind="story"):
+        """Judge and document in one tool process — never one process with the builder: the judge's independence
+        from the builder is the point of the split."""
+        stages = [st for st in SHARED_WINDOWS["verifier"] if self.kind_runs(kind, st)]
+        cli_path = self.cli_path[len(self.pwd) + 1:] if self.cli_path.startswith(self.pwd + "/") else self.cli_path
+        document = (f" The skeleton: `{self.py} {cli_path} --document-skeleton {story}`; the document gate: "
+                    f"`{self.py} {self.gate_rel} --story {story} --stage document --brief`.") if kind != "adopt" else ""
+        prompt = (f"Carry out these stages of the delivery pipeline for backlog story {story}, one after another, in "
+                  f"this one session: {', '.join(f'stage-{s}' for s in stages)}.{document} "
+                  f"{self.where_things_are(tool, story)}")
+        print(f"── stage {'+'.join(stages)}  (tool: {tool}, one shared context)")
+        if dry:
+            self.dry_lines(tool, prompt, "verifier")
+            return 0
+        refused = self.may_dispatch(story, "the shared stages")
+        if refused == "budget":
+            return self.budget_note(story, "the shared stages")
+        if refused == "stages":
+            err(f"factory: --max-stages {self.max_stages} reached before the shared stages of {story}.")
+            return 4
+        if refused:
+            return refused
+        judge = f"{self.runs}/{story}/judge.md"
+        if os.path.isfile(judge):
+            os.replace(judge, f"{self.runs}/{story}/.judge-previous.md")
+        code = self.window(story, tool, "verifier", stages, prompt)
+        if code:
+            return code
+        if not os.path.isfile(judge):
+            err(f"factory: the shared stages produced no {judge} — stage 'judge' is not finished.")
+            return 1
+        if self.asks_human(judge):
+            return self.stopped_for_human(judge, "judge", story)
+        code = self.judged(story, tool, dry, kind)
+        if code is not None:
+            return code
+        if self.kind_runs(kind, "adopt"):
+            return self.adopt_gate(story, tool, dry)
+        artefact = f"{self.runs}/{story}/document.md"
+        if not os.path.isfile(artefact):
+            err(f"factory: the shared stages produced no {artefact} — stage 'document' is not finished.")
+            return 1
+        if self.asks_human(artefact):
+            return self.stopped_for_human(artefact, "document", story)
+        print("── gate document  (re-checked by the runner)")
+        gate_code = self.gate("document", story)
+        if gate_code == 3:
+            return self.accepting(story)
+        if gate_code != 0:
+            if self.environment_refused("document", story):
+                return 1
+            rounds = self.bump_rounds(story)
+            if rounds >= 3:
+                err(f"factory: gate 'document' refused in round {rounds} — three rounds did not converge. needs-human.")
+                return 1
+            again = self.refused_from(story, "document")
+            err(f"factory: gate 'document' refused — round {rounds} runs stage '{again}' again with the gate's report.")
+            return self.run_stages(story, tool, again, dry)
+        return 0
+
+    # --- a story's stages ----------------------------------------------------------------------------------------
+    def run_stages(self, story, tool, start=None, dry=False):
+        """The story's stages from <start> on, in the checkout it is called in."""
+        start = start or STAGE_ORDER[0]
+        waiting = self.open_decisions(story)
+        if waiting:
+            err(f"factory: story {story} waits for a decision — no stage runs until it is answered:")
+            for record in waiting.split():
+                err(f"factory:   {record}")
+            err("factory:   answer under '## Answer' with answer:, by: and at:, then run the stage that asked (--from <stage>).")
+            return 3
+        code, kind = self.cli("--story", story, "--kind")
+        kind = kind if code == 0 and kind else "story"
+        # Every gate passed in the story's worktree: only the integration is left, and it delivers the story; an
+        # adopted story whose judge passed: only the adopt gate.
+        if start == "integrate":
+            return self.integrate_story(story, tool, dry)
+        if start == "adopt":
+            return self.adopt_gate(story, tool, dry)
+        started, ran, built = False, [], False
+        for stage in STAGE_ORDER:
+            started = started or stage == start
+            if not started:
+                continue
+            row = STAGE[stage]
+            if not self.kind_runs(kind, stage):
+                why = {"journey": "a journey builds nothing", "adopt": "an adopted story is not built"}.get(
+                    kind, f"a {kind} story does not run it")
+                print(f"── stage {stage}  (skipped: {why})")
+                continue
+            if row.gated and not row.post_gated:
+                print(f"── gate {stage}")
+                if self.gate(stage, story) != 0:
+                    err(f"factory: gate '{stage}' refused the story. Fix it before the stage runs.")
+                    return 1
+            if self.shared_builder and row.window == "builder":
+                if not built:
+                    code = self.run_shared_builder(story, tool, stage, dry, kind)
+                    if code == 99:                  # a refused re-check ran the story again from there
+                        return self.nested_code
+                    if code != 0:
+                        return code
+                    built = True
+                ran.append(stage)
+                continue
+            # The reviews come before the judge: one process per perspective, at once.
+            if stage == "judge":
+                code = self.run_reviews(story, tool, dry, kind)
+                if code != 0:
+                    return code
+            # The verifier runs where the judge would; resumed at the document stage alone it runs in its own context.
+            if self.shared_verifier and stage == SHARED_WINDOWS["verifier"][0]:
+                code = self.run_shared_verifier(story, tool, dry, kind)
+                if code != 0:
+                    return code
+                ran += [st for st in SHARED_WINDOWS["verifier"] if self.kind_runs(kind, st)]
+                break
+            artefact = self.artefact(story, stage)
+            # Resumed at a gated stage whose file exists: the gate decides first, on today's tree.
+            if self.gate_first and stage == start and not dry and stage != "document" and row.post_gated \
+                    and os.path.isfile(artefact):
+                self.gate_first = False
+                print(f"── gate {stage}  (the file exists — checked before the stage is invoked)")
+                if self.quiet_gate(stage, story) == 0:
+                    print(f"factory: {artefact} already holds — stage '{stage}' is not invoked again.")
+                    ran.append(stage)
+                    continue
+                if self.environment_refused(stage, story):
+                    return 1
+            self.gate_first = False
+            # A resumed story whose document file exists and was never refused: its gate decides first.
+            if stage == "document" and not dry and os.path.isfile(artefact) \
+                    and not os.path.isfile(f"{self.runs}/{story}/.gate-document.txt") and not self.delivered(story):
+                print("── gate document  (the file exists — checked before the stage is invoked)")
+                if self.quiet_gate("document", story) == 0:
+                    print(f"factory: {artefact} already holds — the document stage is not invoked again.")
+                    ran.append("document")
+                    break
+            print(f"── stage {stage}  (tool: {tool}, fresh context)")
+            self.tool_in_flight = tool
+            if dry:
+                self.dry_lines(tool, self.prompt_for(stage, story), stage)
+            else:
+                code = self.run_one(story, tool, stage, dry)
+                if code is not None:
+                    return code
+            if row.post_gated:
+                print(f"── gate {stage}")
+                gate_code = 0 if dry else self.gate(stage, story)
+                if gate_code == 3:
+                    return self.accepting(story)
+                if gate_code != 0:
+                    if self.environment_refused(stage, story):
+                        return 1
+                    rounds = self.bump_rounds(story)
+                    if rounds >= 3:
+                        err(f"factory: gate '{stage}' refused in round {rounds} — three rounds did not converge. needs-human.")
+                        return 1
+                    again = self.refused_from(story, stage)
+                    err(f"factory: gate '{stage}' refused — round {rounds} runs stage '{again}' again with the gate's report.")
+                    return self.run_stages(story, tool, again, dry)
+            ran.append(stage)
+            if stage == "judge" and not dry:
+                code = self.judged(story, tool, dry, kind)
+                if code is not None:
+                    return code
+                if self.kind_runs(kind, "adopt"):
+                    return self.adopt_gate(story, tool, dry)
+        # What ran, not what the script knows how to run.
+        print(f"factory: story {story} ran through {','.join(ran) or 'nothing'}.")
+        if os.environ.get("FACTORY_HOME") and not dry and self.start_stage(story) == "integrate":
+            return self.integrate_story(story, tool, dry)
+        return 0
+
+    def quiet_gate(self, stage, story):
+        """A gate whose lines nobody reads — the runner asks it only whether a file already holds."""
+        with open(os.devnull, "w") as null:
+            saved = sys.stdout, sys.stderr
+            sys.stdout = sys.stderr = null
+            try:
+                return self.gate(stage, story)
+            finally:
+                sys.stdout, sys.stderr = saved
+
+    def run_one(self, story, tool, stage, dry):
+        """One stage in a process of its own; None when it ran and its file stands, else the run's exit code."""
+        self.checkpoint()
+        if not self.renew():
+            err(f"factory: the checkout was taken over by another worker before stage '{stage}' — stopping.")
+            return 5
+        if self.story_budget and self.used_tokens(story) >= self.story_budget:
+            err(f"factory: story {story} has used {self.cli_out('--usage', '--story', story, '--total')} tokens of its")
+            err(f"factory:   --story-budget {self.story_budget} — stage '{stage}' is not dispatched; the work so far stays.")
+            return 4
+        if self.max_stages and self.invocations >= self.max_stages:
+            err(f"factory: --max-stages {self.max_stages} reached before stage '{stage}' of {story} — nothing more is")
+            err("factory:   dispatched; the work so far stays as it is and the next run continues from it.")
+            return 4
+        stage_started = utc()
+        # The previous verdict is an input to the next one, not something to overwrite.
+        if stage == "judge" and os.path.isfile(f"{self.runs}/{story}/judge.md"):
+            os.replace(f"{self.runs}/{story}/judge.md", f"{self.runs}/{story}/.judge-previous.md")
+        self.record("--record-base", story)
+        artefact = self.artefact(story, stage)
+        evidence = self.evidence(story)
+        had_file = os.path.isfile(artefact)
+        # The plan's and the document's file start as the pipeline's skeleton; a skeleton the pipeline wrote is kept
+        # aside, so a stage that left it untouched produced nothing. A file an earlier pass left is no skeleton.
+        skeleton = {"document": "--document-skeleton", "plan": "--plan-skeleton"}.get(stage)
+        if skeleton and self.gate_installed():
+            self.cli(skeleton, story)
+        with contextlib.suppress(OSError):
+            os.remove(f"{evidence}/{stage}.skeleton")
+        if not had_file and skeleton and os.path.isfile(artefact):
+            os.makedirs(evidence, exist_ok=True)
+            shutil.copy(artefact, f"{evidence}/{stage}.skeleton")
+        self.snapshot(story, f"before-{stage}")
+        flags, note = self.model_choice(tool, stage)
+        requested = self.model_key(tool, stage)
+        model_fields = (f"\tmodel_requested={requested}" if requested else "") + \
+            (f"\tmodel_applied=no ({note})" if note else "")
+        if note:
+            print(f"factory: model.{tool}.{stage}: {requested} — {note}")
+        self.owned("start", stage, story)
+        self.journal_line(story, f"{stage_started}\tstage-start\t{stage}\ttool={tool}{model_fields}")
+        raw = f"{evidence}/{stage}.{utc('%H%M%S')}.out"
+        began = time.time()
+        invoked = self.invoke(tool, self.prompt_for(stage, story), raw, stage, story)
+        self.record_usage(story, stage, tool, raw, int(time.time() - began))
+        if self.owned("end", stage, story, invoked) != 0:
+            self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit=owned")
+            return 7
+        if invoked != 0:
+            self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit={self.exit_field(invoked)}")
+            self.checkpoint()
+            err(f"factory: the tool exited non-zero during stage '{stage}'.")
+            return 1
+        self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit=0")
+        self.checkpoint()
+        self.snapshot(story, f"after-{stage}")
+        self.record("--record-changes", story, stage)
+        if not os.path.isfile(artefact):
+            err(f"factory: stage '{stage}' produced no {artefact} — a stage is finished when its file exists.")
+            return 1
+        kept = f"{evidence}/{stage}.skeleton"
+        if os.path.isfile(kept) and read_bytes(kept) == read_bytes(artefact):
+            err(f"factory: stage '{stage}' produced no {artefact} beyond the pipeline's skeleton — a stage is finished "
+                "when it wrote its file.")
+            return 1
+        # The build stage found a defect in a test's own code: the round goes to the test stage, no human is asked.
+        sent_back = self.back_to(story, stage)[0] if stage == "build" else ""
+        if sent_back:
+            rounds = self.bump_rounds(story)
+            if rounds >= 3:
+                err(f"factory: the build stage sent the story back in round {rounds} — three rounds did not converge. "
+                    "needs-human.")
+                return 1
+            err(f"factory: the build stage found a defect in a test's own code — round {rounds} goes back to the "
+                f"{sent_back} stage.")
+            return self.run_stages(story, tool, sent_back, dry)
+        # A stage that ends with a needs-human section has stopped, whatever its file otherwise says.
+        if self.asks_human(artefact):
+            return self.stopped_for_human(artefact, stage, story)
+        return None
+
+    # --- a story in its worktree (WP-92) -------------------------------------------------------------------------
+    def in_home(self, *args, merge=True):
+        """A cli call made in the main checkout, as a person's would be there: (exit code, its lines)."""
+        return self.cli(*args, merge=merge, quiet=False, cwd=os.environ.get("FACTORY_HOME") or self.home,
+                        env=self.home_env())
+
+    def link_worktree(self, story):
+        self.run([sys.executable, self.cli_path, "--worktree-link", story], cwd=os.environ.get("FACTORY_HOME") or self.home,
+                 env=self.home_env())
+
+    def integrate_story(self, story, tool, dry):
+        """Delivered is the integration: the main line merged into the story (a stage-integrate agent where git stops
+        on a conflict), squashed, the gate once more on that tree, the main checkout fast-forwarded — under the lock."""
+        print("── integrate")
+        if dry:
+            print(f"   would merge {story}'s branch with the main line and fast-forward the main checkout")
+            return 0
+        home = os.environ.get("FACTORY_HOME") or self.home
+        for attempt in (1, 2, 3):
+            self.take_lock()
+            try:
+                code, out = self.in_home("--integrate-prepare", story)
+                print(out)
+                if code == 3:
+                    conflicts = "".join(line[len("conflict: "):] + " " for line in out.split("\n")
+                                        if line.startswith("conflict: "))
+                    print(f"── stage integrate  (tool: {tool}, fresh context — the merge stopped on: {conflicts})")
+                    self.link_worktree(story)
+                    self.tool_in_flight = tool
+                    raw = f"{self.evidence(story)}/integrate.{utc('%H%M%S')}.out"
+                    began = time.time()
+                    self.owned("start", "integrate", story)
+                    self.journal_line(story, f"{utc()}\tstage-start\tintegrate\ttool={tool}")
+                    code = self.invoke(tool, self.integrate_prompt(story, conflicts), raw, "integrate", story)
+                    self.record_usage(story, "integrate", tool, raw, int(time.time() - began))
+                    self.journal_line(story, f"{utc()}\tstage-end\tintegrate\texit={self.exit_field(code)}")
+                    self.checkpoint()
+                    if self.owned("end", "integrate", story, code) != 0:
+                        return 7
+                    record = f"{self.runs}/{story}/integrate.md"
+                    if os.path.isfile(record) and self.asks_human(record):
+                        self.drop_lock()
+                        return self.stopped_for_human(record, "integrate", story)
+                    code, out = self.in_home("--integrate-finish", story)
+                    print(out)
+                    if code != 0:
+                        err(f"factory: the conflicts of {story} are not resolved — needs-human: the worktree {self.pwd} "
+                            "holds the merge.")
+                        return 1
+                elif code != 0:
+                    err(f"factory: {story} could not be merged with the main line — the worktree {self.pwd} keeps it as it was.")
+                    return 1
+                print("── gate integrate")
+                code = self.gate("integrate", story, gate_path=f"{home}/{self.gate_rel}")
+            finally:
+                self.drop_lock()
+            if code == 0:
+                print(f"factory: story {story} is integrated and delivered.")
+                return 0
+            report = f"{self.runs}/{story}/.gate-integrate.txt"
+            fails = [line for line in (read_text(report).splitlines() if os.path.isfile(report) else [])
+                     if line.startswith("gate:fail ")]
+            if fails and all(line.startswith("gate:fail moved") for line in fails):
+                print(f"factory: the main line moved on while {story} was merged — merged again (attempt {attempt + 1}).")
+                continue
+            if any(line.startswith("gate:fail checkout") for line in fails):
+                err(f"factory: the main checkout could not take {story} — see {report}; then: factory.sh run --story "
+                    f"{story} --from integrate")
+                return 1
+            if self.environment_refused("integrate", story):
+                return 1
+            rounds = self.bump_rounds(story)
+            if rounds >= 3:
+                err(f"factory: gate 'integrate' refused in round {rounds} — three rounds did not converge. needs-human.")
+                return 1
+            err(f"factory: gate 'integrate' refused the story on the main line — round {rounds} runs the build stage "
+                "again with the gate's report.")
+            # the integration took the links down; the build stage works with them again — and document.md is an
+            # earlier pass's: the document stage writes it for the story as it now is, or its gate passes it as it is
+            self.take_lock()
+            try:
+                self.link_worktree(story)
+            finally:
+                self.drop_lock()
+            self.journal_line(story, f"{utc()}\toutdated\tdocument.md\tby=integrate")
+            return self.run_stages(story, tool, "build", dry)
+        err(f"factory: the main line moved on three times while {story} was integrated — run it again.")
+        return 1
+
+    def run_story(self, story, tool, start, dry):
+        """Every story in its worktree: made or brought up to date and linked, under the lock; the stages run in it
+        with the run folder named absolutely and FACTORY_HOME naming this checkout; delivered, its worktree goes."""
+        if dry:
+            return self.run_stages(story, tool, start, dry)
+        self.take_lock()
+        try:
+            _, out = self.cli("--worktree-prepare", story, quiet=False)
+        finally:
+            self.drop_lock()
+        wt = out.split("\n")[-1] if out else ""
+        if wt.startswith("none"):
+            print(f"factory: {story} runs in the checkout — {wt[len('none — '):] if wt.startswith('none — ') else wt}")
+            return self.run_stages(story, tool, start, dry)
+        if not wt:
+            err(f"factory: no worktree could be made for {story} — nothing ran.")
+            return 1
+        print(f"factory: {story} works in its worktree, {wt[len(self.home) + 1:] if wt.startswith(self.home + '/') else wt}")
+        self.add_dirs = [f"{self.home}/{linked}" for linked in
+                         (self.runs_rel, self.cli_out("--place", "epics"), self.cli_out("--place", "discovery"))
+                         if linked and os.path.isdir(f"{self.home}/{linked}")]
+        self.read_dirs = [f"{self.home}/{linked}" for linked in
+                          (".agents/factory", self.evidence_rel(), *TOOL_SKILL_DIRS, ".agents/skills")
+                          if os.path.isdir(f"{self.home}/{linked}")]
+        os.chdir(wt)
+        self.pwd = wt
+        os.environ["FACTORY_HOME"] = self.home
+        self.runs = f"{self.home}/{self.runs_rel}"
+        try:
+            code = self.run_stages(story, tool, start, dry)
+        finally:
+            os.chdir(self.home)
+            self.pwd = self.home
+            os.environ.pop("FACTORY_HOME", None)
+            self.runs = self.runs_rel
+            self.add_dirs, self.read_dirs = [], []
+        if code == 0 and self.delivered(story):
+            self.take_lock()
+            try:
+                self.run([sys.executable, self.cli_path, "--worktree-remove", story])
+            finally:
+                self.drop_lock()
+        return code
+
+    # --- the backlog -------------------------------------------------------------------------------------------
+    def parallel_slots(self):
+        """How many stories run at once: --parallel, else FACTORY_PARALLEL, else the profile's `parallel:`, else 1."""
+        given = self.parallel or os.environ.get("FACTORY_PARALLEL") or first_word(self.cli_out("--get", "parallel")) or "1"
+        if not given.isdigit() or int(given) == 0:
+            err(f"factory: parallel takes a whole number of stories, 1 or more — not '{given}'")
+            return None
+        return int(given)
+
+    def nothing_more(self, out, watch):
+        print(out)
+        print("factory: nothing more can run" + (", and nothing waits on an answer that would change that" if watch else "")
+              + ".")
+
+    def waiting_note(self, out, previous, interval):
+        """Waiting is reading files, never asking an agent: an unchanged schedule is said once."""
+        if out != previous:
+            print(out)
+            print(f"factory: waiting for an answer — the schedule is read again every {interval}s; {self.stop_file} "
+                  "ends the watch.")
+        return out
+
+    def run_backlog(self, tool, watch, interval, dry):
+        """Story after story, in the order the schedule names, read off the files every time. A failure ends it."""
+        if not self.gate_installed():
+            err(f"factory: no gate at {self.gate_rel} — run 'factory.sh setup'")
+            return 2
+        slots = self.parallel_slots()
+        if slots is None:
+            return 2
+        # a superseded story's worktree has nothing to integrate; it goes before the first story starts
+        if not dry:
+            self.take_lock()
+            try:
+                self.run([sys.executable, self.cli_path, "--worktree-prune"])
+            finally:
+                self.drop_lock()
+        if slots > 1 and not dry:
+            return self.run_parallel(tool, watch, interval, slots)
+        previous, last = "", ""
+        while True:
+            # waiting is working too: the claim is renewed on every look
+            if not dry and not self.renew():
+                err("factory: another worker took over this checkout — the backlog run ends here.")
+                return 5
+            if os.path.isfile(self.stop_file):
+                print(f"factory: {self.stop_file} exists — the backlog run stops here. Remove it to run again.")
+                return 0
+            code, out = self.cli("--schedule", "--slots", "1", merge=True)
+            if code != 0:
+                err(out)
+                err("factory: the schedule could not be read.")
+                return 1
+            following = next((line[len("next: "):] for line in out.split("\n") if line.startswith("next: ")), "")
+            if following and not following.startswith("none"):
+                story, start = following.split(" ", 1)[0], following.split(" ", 1)[-1]
+                if following == last:
+                    print(out)
+                    err(f"factory: {story} ran from {start} and the schedule names it there again — no progress, stopping.")
+                    return 1
+                print(f"══ story {story} from {start}")
+                if dry:
+                    print(out)
+                    print(f"   would run: factory.sh run --story {story} --from {start}")
+                    return 0
+                code = self.run_story(story, tool, start, False)
+                if code == 0:
+                    last = following
+                    continue
+                if code == 3:                       # waits for a decision; the schedule skips it now
+                    last = ""
+                    continue
+                err(f"factory: story {story} stopped (exit {code}) — the backlog run ends here.")
+                return code
+            if not watch or not any(line == "wait: yes" or line.startswith("wait: yes") for line in out.split("\n")):
+                self.nothing_more(out, watch)
+                return 0
+            previous = self.waiting_note(out, previous, interval)
+            last = ""
+            self.sleep(interval)
+
+    def run_parallel(self, tool, watch, interval, slots):
+        """Several stories at once, each in its worktree, each a runner process of its own whose lines carry its id.
+        A failure starts nothing more and lets the running ones finish; so does the stop file and a TERM."""
+        children, seen, failed, stopping, previous, out = {}, set(), 0, None, "", ""
+        while True:
+            if stopping is None and self.pending is not None:
+                stopping, failed = self.pending, failed or self.pending
+                self.pending = None
+                err("factory: stopped by a signal — no further story starts; the running ones finish.")
+            if stopping is None and not self.renew():
+                err("factory: another worker took over this checkout — no further story starts.")
+                stopping, failed = 5, 5
+            if stopping is None and os.path.isfile(self.stop_file):
+                print(f"factory: {self.stop_file} exists — no further story starts; the running ones finish.")
+                stopping = "stop"
+            for story, (process, start, pump) in list(children.items()):
+                if process.poll() is None:
+                    continue
+                pump.join()
+                del children[story]
+                code = process.returncode
+                if code == 0:
+                    seen.add(f"{story}@{start}")
+                elif code != 3:
+                    err(f"factory: story {story} stopped (exit {code}) — no further story starts; the running ones finish.")
+                    stopping = stopping if stopping is not None else code
+                    failed = failed or code
+            launched = False
+            if stopping is None:
+                code, out = self.cli("--schedule", "--slots", str(slots), "--busy", ",".join(children), merge=True)
+                if code != 0:
+                    err(out)
+                    err("factory: the schedule could not be read.")
+                    stopping, failed = 1, 1
+                else:
+                    for following in [line[len("next: "):] for line in out.split("\n") if line.startswith("next: ")]:
+                        if following.startswith("none"):
+                            continue
+                        story, start = following.split(" ", 1)[0], following.split(" ", 1)[-1]
+                        if f"{story}@{start}" in seen:
+                            err(f"factory: {story} ran from {start} and the schedule names it there again — no "
+                                "progress, not started again.")
+                            failed = failed or 1
+                            stopping = stopping if stopping is not None else 1
+                            continue
+                        print(f"══ story {story} from {start}  (slots: {slots})")
+                        os.makedirs(f"{self.home}/{self.evidence_rel()}/{story}", exist_ok=True)
+                        children[story] = self.start_child(story, tool, start)
+                        launched = True
+            if not children and not launched:
+                if stopping is not None:
+                    return failed if isinstance(stopping, int) or failed else 0
+                if not watch or not any(line.startswith("wait: yes") for line in out.split("\n")):
+                    self.nothing_more(out, watch)
+                    return failed
+                previous = self.waiting_note(out, previous, interval)
+                time.sleep(interval)
+                continue
+            time.sleep(2)
+
+    def start_child(self, story, tool, start):
+        """One story's run as a runner process of its own — the same worker on the claim, the run's pipeline hash —
+        its lines named with the story's id."""
+        options = self.options
+        argv = [sys.executable, self.cli_path, "--run", "--child", "--story", story, "--from", start, "--tool", tool,
+                "--builder", options.builder, "--verifier", options.verifier]
+        argv += ["--max-stages", str(options.max_stages)] if options.max_stages else []
+        argv += ["--story-budget", str(options.story_budget)] if options.story_budget else []
+        env = dict(os.environ, FACTORY_RUNNER_WORKER=self.worker, FACTORY_RUNNER_PIPELINE_SHA=self.pipeline_sha)
+        flush()
+        process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+
+        def pump():
+            for line in iter(process.stdout.readline, b""):
+                sys.stdout.write(f"[{story}] {line.decode('utf-8', errors='replace').rstrip(chr(10))}\n")
+                sys.stdout.flush()
+        thread = threading.Thread(target=pump, daemon=True)
+        thread.start()
+        return process, start, thread
+
+
+TOOL_SKILL_DIRS = tuple(tool.skills for tool in TOOLS)
+
+
+# --- the run's start ---------------------------------------------------------------------------------------------
+STAMP = ".agents/factory/gate.installed"
+#: The files the install puts into .agents/factory/, in the stamp's order; a name ending in `/` is the package.
+PIPELINE_FILES = ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh", "dca_factory/")
+
+
+def file_sha(path):
+    try:
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+    except OSError:
+        return ""
+
+
+def read_bytes(path):
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
+def field_of(text, key):
+    return next((line[len(key) + 2:] for line in text.split("\n") if line.startswith(f"{key}: ")), "")
+
+
+def flush():
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+
+def err(text):
+    sys.stdout.flush()
+    print(text, file=sys.stderr, flush=True)
+
+
+def stop_group(process, first=None):
+    """A tool and what it started, stopped: <first> (TERM by default), then KILL after five seconds."""
+    if os.name == "nt":
+        process.kill()
+        process.wait()
+        return
+    for sig, grace in ((first or signal.SIGTERM, 5), (signal.SIGKILL, 5)):
+        with contextlib.suppress(OSError):
+            os.killpg(process.pid, sig)
+        try:
+            process.wait(timeout=grace)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def spawnable(argv):
+    """On Windows a tool found on the PATH may be a script or a `.cmd`, which no process starts by itself."""
+    if os.name != "nt":
+        return argv
+    found = shutil.which(argv[0]) or argv[0]
+    if found.lower().endswith((".cmd", ".bat")):
+        return ["cmd", "/c", found, *argv[1:]]
+    if not found.lower().endswith((".exe", ".com")):
+        return ["sh", found, *argv[1:]]
+    return [found, *argv[1:]]
+
+
+def run_options(argv):
+    parser = argparse.ArgumentParser(prog="factory.sh run", description="the runner, started by `factory.sh run`")
+    parser.add_argument("--story")
+    parser.add_argument("--tool", default="")
+    parser.add_argument("--from", dest="start", default="")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--interval", type=int, default=30)
+    parser.add_argument("--max-stages", type=int, default=0)
+    parser.add_argument("--story-budget", type=int, default=0)
+    parser.add_argument("--builder", choices=("shared", "separate"), default="shared")
+    parser.add_argument("--verifier", choices=("shared", "separate"), default="shared")
+    parser.add_argument("--parallel", default="")
+    parser.add_argument("--child", action="store_true", help="one story of a parallel run, under its parent's claim")
+    return parser.parse_args(argv)
+
+
+def run_main(argv):
+    """`factory.sh run` once its checks passed: the claim, the pipeline's hash, the story or the backlog, and the
+    claim and the lock given back however the run ends."""
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(line_buffering=True)
+    options = run_options(argv)
+    cwd = os.getcwd()
+    home = os.environ.get("FACTORY_HOME") or os.path.realpath(cwd)
+    set_places(read_profile(resolve_profile(os.environ.get("FACTORY_PROFILE") or None, cwd)))
+    run = Run(options, home, place("runs"), worker=os.environ.get("FACTORY_RUNNER_WORKER") if options.child else None)
+
+    def stop(signum, _frame):
+        name = signal.Signals(signum).name
+        err("factory: stopped by a hang-up — after the running stage, nothing more starts" if name == "SIGHUP" else
+            "factory: stopped by a signal — after the running stage, nothing more starts")
+        run.pending = SIGNAL_EXITS[name]
+        if run.sleeping:
+            run.pending = None
+            raise Stopped(SIGNAL_EXITS[name])
+    for name in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), stop)
+    try:
+        code = run_start(run, options)
+        run.checkpoint()
+        return code
+    except Stopped as stopped:
+        return stopped.code
+    except KeyboardInterrupt:
+        err("factory: interrupted — the claim and the lock are given back; the stage's files stay as they are.")
+        return SIGNAL_EXITS["SIGINT"]
+    finally:
+        run.drop_lock()
+        if not options.child:
+            run.release()
+
+
+def run_start(run, options):
+    tool = options.tool
+    if options.child:
+        run.gate_first = False
+        return run.run_story(options.story, tool or "stand-in", options.start, False)
+    if options.story:
+        story, start = options.story, options.start
+        if not start:
+            # No stage named: the story starts where its files say, as the backlog run would start it.
+            code, answer = run.cli("--story", story, "--start", "--slots", "1", quiet=False)
+            if code != 0:
+                return code
+            state, start, detail = field_of(answer, "state"), field_of(answer, "start"), field_of(answer, "detail")
+            if start in ("none", ""):
+                if state == "delivered":
+                    print(f"factory: story {story} is delivered" + (f" ({detail})" if detail else "") + " — nothing runs.")
+                    return 0
+                if state == "waiting":
+                    err(f"factory: story {story} waits for {detail} — answer it with /factory-decisions.")
+                    return 3
+                if state == "running":
+                    err(f"factory: story {story} is running ({detail}) — one run at a time.")
+                    return 5
+                err(f"factory: story {story} is {state}" + (f" — {detail}" if detail else "") + ".")
+                err(f"factory:   nothing runs; name the stage to run it anyway: factory.sh run --story {story} --from <stage>")
+                return 1
+            print(f"factory: story {story} starts at {start}" + (f" — {detail}" if detail else ""))
+        else:
+            names = [s.name for s in STAGES if s.in_order] + [s.name for s in STAGES if not s.in_order]
+            if start not in names:
+                err(f"factory: --from {start} names no stage ({' '.join(names)}) — nothing ran, the rounds are as they were")
+                return 2
+            if not options.dry_run:
+                run.reset_rounds(story, start)
+        run.gate_first = True
+        if not options.dry_run:
+            code = run.take_checkout() or run.guard_pipeline_start()
+            if code:
+                return code
+        return run.run_story(story, tool or "stand-in", start, options.dry_run)
+    if not options.dry_run:
+        code = run.take_checkout() or run.guard_pipeline_start()
+        if code:
+            return code
+    return run.run_backlog(tool or "stand-in", options.watch, max(1, min(3600, options.interval)), options.dry_run)

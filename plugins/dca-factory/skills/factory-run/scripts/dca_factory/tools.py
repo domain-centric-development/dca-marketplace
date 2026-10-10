@@ -173,29 +173,37 @@ def permission_block(allowed, protected, linked, cwd=None, home=None):
     return json.dumps({"permission": {"bash": bash, "edit": edit, "external_directory": external}})
 
 
-def tool_invocation(tool, model="", writable=(), readable=(), protected=(), allowed=""):
-    """The command line that starts one stage with this tool, as shell words for the runner to `eval`, with the
-    prompt left as `"$prompt"` — the runner's variable, never text the cli quotes."""
+def tool_command(tool, model="", writable=(), readable=(), protected=(), allowed=""):
+    """What starts one stage with this tool: the variables it is started with and its arguments, the prompt not
+    among them — the caller appends it."""
     # a variable the person set is theirs and wins — a config folder that carries their local providers, say
-    words = [f"{name}={shlex.quote(value.replace('{empty}', empty_folder()))}" for name, value in tool.isolation_env
-             if os.environ.get("FACTORY_ISOLATION", "on") != "off" and not os.environ.get(name)]
+    env = {name: value.replace("{empty}", empty_folder()) for name, value in tool.isolation_env
+           if os.environ.get("FACTORY_ISOLATION", "on") != "off" and not os.environ.get(name)}
     if tool.permission_env:
         block = os.environ.get(tool.permission_env, "")
         if not block and os.environ.get("FACTORY_OPENCODE_PERMISSIONS", "on") != "off":
             block = permission_block(allowed, protected, [*writable, *readable])
-        words.append(f"{tool.permission_env}={shlex.quote(block)}")
-    words += [shlex.quote(w) for w in tool.command]
+        env[tool.permission_env] = block
+    argv = list(tool.command)
     if tool.allow_list:
-        words += ["--allowed-tools", shlex.quote(f"Read,Write,Edit,Glob,Grep,Skill,{allowed}")]
+        argv += ["--allowed-tools", f"Read,Write,Edit,Glob,Grep,Skill,{allowed}"]
     if tool.add_dirs in ("all", "writable"):
         for folder in [*writable, *(readable if tool.add_dirs == "all" else ())]:
-            words += ["--add-dir", shlex.quote(folder)]
+            argv += ["--add-dir", folder]
     if tool.deny and protected:
-        words += ["--disallowedTools", shlex.quote(",".join(f"Edit(//{d.lstrip('/')}/**)" for d in protected))]
-    words += [shlex.quote(w) for w in isolation_args(tool)]
+        argv += ["--disallowedTools", ",".join(f"Edit(//{d.lstrip('/')}/**)" for d in protected)]
+    argv += isolation_args(tool)
     if model:
-        words += [tool.model_flag, shlex.quote(model)]
-    words += [shlex.quote(w) for w in shlex.split(os.environ.get(tool.args_env, ""))]
+        argv += [tool.model_flag, model]
+    argv += shlex.split(os.environ.get(tool.args_env, ""))
+    return env, argv
+
+
+def tool_invocation(tool, model="", writable=(), readable=(), protected=(), allowed=""):
+    """The same command line as shell words for a caller to `eval`, with the prompt left as `"$prompt"` — the
+    caller's variable, never text quoted here."""
+    env, argv = tool_command(tool, model, writable, readable, protected, allowed)
+    words = [f"{name}={shlex.quote(value)}" for name, value in env.items()] + [shlex.quote(w) for w in argv]
     return " ".join(words + ['"$prompt"'])
 
 

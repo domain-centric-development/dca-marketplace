@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import shutil
 import subprocess
 import sys
@@ -2669,13 +2670,10 @@ exit 0
             code, output = run_runner(
                 runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                 env={"FACTORY_VERIFY_VERDICT": "1"})
-            # the dry run does not reach the judge, so read the parser directly
-            # the function asks the cli beside the runner, so the sourced snippet gets what the runner defines
+            # the dry run does not reach the judge, so read the runner's own reader directly
             parsed = subprocess.run(
-                [BASH, "-c",
-                 f'PY="{shell_path(sys.executable)}"; CLI="{shell_path(cli_of(runner))}"; cli() {{ "$PY" "$CLI" "$@"; }}; '
-                 f'RUNS=.dca-factory/runs; sed -n "/^verdict_of/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
-                 f'. ./fn.sh; verdict_of STORY-1'],
+                [sys.executable, "-c", PACKAGE_PROBE + "import os\nrun = pkg.Run(pkg.run_options([]), os.getcwd(), "
+                 "'.dca-factory/runs')\nprint(run.verdict_of('STORY-1'))", cli_of(runner)],
                 cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
             check(f"runner: reads the verdict '{verdict}' from the file", parsed == expect,
                   f"parsed {parsed!r}")
@@ -2779,9 +2777,8 @@ exit 0
     for root in throwaway():
         os.makedirs(os.path.join(root, ".dca-factory", "runs", "STORY-1"))
         counted = subprocess.run(
-            [BASH, "-c",
-             f'RUNS=.dca-factory/runs; sed -n -e "/^evidence()/,/^}}/p" -e "/^bump_rounds/,/^}}/p" "{shell_path(runner)}" > fn.sh; '
-             f'. ./fn.sh; bump_rounds STORY-1; bump_rounds STORY-1'],
+            [sys.executable, "-c", PACKAGE_PROBE + "import os\nrun = pkg.Run(pkg.run_options([]), os.getcwd(), "
+             "'.dca-factory/runs')\nprint(run.bump_rounds('STORY-1'), run.bump_rounds('STORY-1'))", cli_of(runner)],
             cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.split()
         check("runner: the round counter is a file and counts up", counted == ["1", "2"],
               f"got {counted}")
@@ -2905,6 +2902,50 @@ exit 0
                   held_while_running and not os.path.exists(lock) and process.returncode == 143,
                   f"held while running {held_while_running}, released {not os.path.exists(lock)}, "
                   f"exit {process.returncode}")
+        # a stage past its time limit is stopped, with what it started, and named; the journal says why it ended
+        for limit_env, profile_line in (({"FACTORY_STAGE_TIMEOUT": "2"}, ""), ({}, "stageTimeout: 2s\n")):
+            for root in throwaway():
+                env = backlog_fixture(root)
+                subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+                if profile_line:
+                    with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
+                        handle.write(profile_line)
+                began = time.time()
+                code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in",
+                                          env=dict(limit_env, FACTORY_TOOL_CMD="sleep 30"))
+                journal = os.path.join(root, ".dca-factory", "evidence", "STORY-2", "journal.tsv")
+                ended = open(journal, encoding="utf-8").read() if os.path.isfile(journal) else ""
+                check(f"runner: a stage past its time limit ({'FACTORY_STAGE_TIMEOUT' if limit_env else 'the profile'}"
+                      ") is stopped and named, and the journal says it timed out",
+                      code == 1 and time.time() - began < 25 and "ran past its time limit of 2s" in output
+                      and "exit=timeout" in ended
+                      and not os.path.exists(os.path.join(root, ".git", "dca-factory-worker.lock")),
+                      f"exit {code}; {time.time() - began:.0f}s; {output.strip()[-300:]}")
+        # an interrupt stops the stage's tool too, and the checkout is given back at once
+        for root in throwaway():
+            env = backlog_fixture(root)
+            subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+            lock = os.path.join(root, ".git", "dca-factory-worker.lock")
+            marker = os.path.join(root, "tool-finished")
+            process = subprocess.Popen([BASH, runner, "run", "--story", "STORY-2", "--tool", "stand-in"], cwd=root,
+                                       env=dict(os.environ, FACTORY_TOOL_CMD=f"sleep 8; touch {shell_path(marker)}"),
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            journal = os.path.join(root, ".dca-factory", "evidence", "STORY-2", "journal.tsv")
+            deadline = time.time() + 20
+            while time.time() < deadline and not (
+                    os.path.exists(lock) and os.path.isfile(journal)
+                    and "stage-start" in open(journal, encoding="utf-8", errors="replace").read()):
+                time.sleep(0.1)
+            time.sleep(0.5)
+            began = time.time()
+            process.send_signal(signal.SIGINT)
+            output = process.communicate(timeout=30)[0].decode("utf-8", errors="replace")
+            took = time.time() - began
+            time.sleep(8)
+            check("runner: an interrupt stops the running stage's tool and gives the checkout back at once (exit 130)",
+                  process.returncode == 130 and took < 7 and not os.path.exists(lock) and not os.path.exists(marker),
+                  f"exit {process.returncode}; {took:.1f}s; lock {os.path.exists(lock)}; tool ran on "
+                  f"{os.path.exists(marker)}; {output.strip()[-200:]}")
 
     # 5. install leaves live links from a checkout, one per skill, never the whole folder
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))

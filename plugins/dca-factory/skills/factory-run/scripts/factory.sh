@@ -64,10 +64,6 @@ CLI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/factory-cli.py"
 cli() { "$PY" "$CLI" "$@"; }
 RUNS=""                                      # the run folder — resolved below through the cli, from the profile
 STOP_FILE=""                                 # <run folder's parent>/stop: exists → a backlog run stops before its next story
-INVOCATIONS=0                                # agent invocations in this process
-TOOL_IN_FLIGHT=""                            # the tool a stage prompt is built for (the catalog path depends on it)
-NESTED_CODE=0                                # the result of a story run a shared builder's round started
-GATE_FIRST=""                                # set for the first stage of an explicit story run: its gate decides first
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
 # Shared stages are the default: plan to tidy in one builder process, judge and document in one verifier
@@ -81,11 +77,6 @@ case "$(printf '%s' "$SHARED_VERIFIER" | tr '[:upper:]' '[:lower:]')" in 0|off|n
 SHARED_BUILDER_SET="${FACTORY_SHARED_BUILDER:+set}"
 SHARED_VERIFIER_SET="${FACTORY_SHARED_VERIFIER:+set}"
 SEPARATE_STAGES=""                           # --separate-stages: one process per stage for this run
-WORKER="runner:$(hostname 2>/dev/null || echo host):$$"   # this runner's name on the checkout claim
-# The key the runner's own gate runs sign their suite record with (the evidence folder's suites.tsv): a gate on an
-# unchanged tree reuses only rows this key confirms. Handed to the gate process alone, never exported —
-# a stage's gate run, inside the tool's process, has no key, so it writes nothing the runner reads.
-SUITES_KEY=$( (openssl rand -hex 16 2>/dev/null || od -An -N16 -tx1 /dev/urandom) | tr -d ' \n')
 
 # Inside an agent session the stages run in that session (`/factory-run`); a runner started from
 # there would start a tool process per stage on top of it. So `run` and `backlog` refuse to start a
@@ -100,21 +91,6 @@ refuse_nested() {
     echo "factory:   runner from a terminal of its own. FACTORY_ALLOW_NESTED=1 starts it here anyway." >&2
     return 6
   fi
-}
-
-# One worker per checkout: the gate's claim, taken before the first stage, renewed before each one,
-# given back when the runner ends — however it ends.
-take_checkout() {
-  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — the checkout is not claimed; install the pipeline" >&2; return 0; }
-  cli --claim "$WORKER" || {
-    echo "factory: another worker holds this checkout — see 'factory.sh status'. Nothing was started." >&2
-    return 5; }
-  trap 'cli --release "$WORKER" >/dev/null 2>&1' EXIT
-  # Without these, a TERM or HUP ends the runner at once — its EXIT trap gives the claim back while
-  # the stage's tool process runs on, and a second worker starts beside it. With a trap set, bash
-  # runs it once the foreground stage has ended, so the claim is released only after that.
-  trap 'echo "factory: stopped by a signal — after the running stage, nothing more starts" >&2; exit 143' TERM
-  trap 'echo "factory: stopped by a hang-up — after the running stage, nothing more starts" >&2; exit 129' HUP
 }
 
 # Which Python runs the gate. `python3` is the POSIX spelling; on Windows the interpreter is
@@ -151,14 +127,6 @@ case "$RUNS" in
   *)      STOP_FILE="$HOME_DIR/$STOP_FILE"; LOCK_DIR="$HOME_DIR/$(dirname "$RUNS")/integrate.lock" ;;
 esac
 PARALLEL="${FACTORY_PARALLEL:-}"             # --parallel / FACTORY_PARALLEL / the profile's `parallel:`; 1 by default
-ADD_DIRS=()                                  # what a stage in a worktree may write in the main checkout
-READ_DIRS=()                                 # what it reads there and never writes: the pipeline, the evidence, the skills
-# What proves a story's work — the journal, the red ledger, the snapshots, the round count — lies beside the run
-# folder, not in it: the gate and the runner write it, a stage never does. Absolute where the run folder is.
-evidence() {                                # evidence <story> — the story's evidence folder
-  local parent; parent=$(dirname "$RUNS"); [ "$parent" = . ] && parent=.dca-factory
-  printf '%s/evidence/%s' "$parent" "$1"
-}
 evidence_rel() {                            # the evidence folder, relative to the main checkout
   local parent; parent=$(dirname "$RUNS_REL"); [ "$parent" = . ] && parent=.dca-factory
   printf '%s/evidence' "$parent"
@@ -176,30 +144,6 @@ can_symlink() {
   local result=$?
   rm -rf "$probe"
   return $result
-}
-
-# A stage is finished when its hand-over file exists. The names are the file contract's, not the
-# stage names — the test stage writes `tests.md`, because the table in it maps several tests.
-stage_file() {
-  local entry=${STAGE_FILES#* "$1":}
-  [ "$entry" != "$STAGE_FILES" ] && echo "${entry%% *}"
-}
-
-# Whether a story of <kind> runs <stage> (a step too), as the table says.
-kind_runs() {                               # kind_runs <kind> <stage>
-  [[ "$KIND_STAGES" == *" $1:$2 "* ]]
-}
-
-# Where a round goes back to for a story of <kind>: <stage>, or the last builder stage before it the kind runs —
-# a journey and an adoption build nothing, so their round goes back to the test stage.
-back_for() {                                # back_for <kind> <stage> -> stage
-  local st back=$2
-  kind_runs "$1" "$2" && { echo "$2"; return; }
-  for st in "${BUILDER_STAGES[@]}"; do
-    kind_runs "$1" "$st" && back=$st
-    [ "$st" = "$2" ] && break
-  done
-  echo "$back"
 }
 
 usage() { sed -n '2,/^# FACTORY_TOOL_CMD/p' "$0" | sed '$d' >&2; exit 2; }
@@ -236,13 +180,13 @@ STAMP=".agents/factory/gate.installed"
 
 # The files the install puts into .agents/factory/, in the stamp's order. Their hash is the stamp's `sha256:` line:
 # what was installed, so a runner can tell the pipeline it is about to trust from one a stage, a hand or a merge
-# changed since. The runner takes it at its start and compares before every gate it runs; a stage that rewrote the
-# gate through a link is stopped at the next gate, whatever tool it ran in.
+# changed since. The runner (dca_factory/runner.py, the same digest) takes it at its start and compares before every
+# gate it runs; a stage that rewrote the gate through a link is stopped at the next gate, whatever tool it ran in.
+# The modules in the C locale's order, as Python sorts them.
 # A name ending in `/` is the package: every module in it, so a module added or removed changes the hash too.
 PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh dca_factory/"
-PIPELINE_SHA=""                              # the installed pipeline's hash, taken once when the run starts
 pipeline_hash() {                           # pipeline_hash [<folder>] — one SHA-256 over PIPELINE_FILES
-  local dir=${1:-$HOME_DIR/.agents/factory} hash file
+  local dir=${1:-$HOME_DIR/.agents/factory} hash file module LC_ALL=C
   hash=$(hasher); [ "$hash" = none ] && return 1
   for file in $PIPELINE_FILES; do
     case $file in
@@ -255,32 +199,6 @@ pipeline_hash() {                           # pipeline_hash [<folder>] — one S
           else printf 'missing  %s\n' "$file"; fi ;;
     esac
   done | $hash | cut -d" " -f1
-}
-# At the start of a run: the pipeline is the one the stamp says was installed, and its hash is kept for the gates.
-guard_pipeline_start() {
-  [ -f "$HOME_DIR/$STAMP" ] || return 0
-  PIPELINE_SHA=$(pipeline_hash) || { PIPELINE_SHA=""; return 0; }   # no hash command: named by the snapshots
-  local stamped; stamped=$(sed -n 's/^sha256:[[:space:]]*//p' "$HOME_DIR/$STAMP" | head -1)
-  if [ -z "$stamped" ]; then
-    echo "factory: $STAMP carries no hash (installed before 0.68.0) — the gates compare against the pipeline as it" >&2
-    echo "factory:   is now; 'factory.sh update' records one." >&2
-  elif [ "$stamped" != "$PIPELINE_SHA" ]; then
-    echo "factory: the installed pipeline is not the one $STAMP records — a file under .agents/factory/ changed" >&2
-    echo "factory:   since the install. Nothing was started; 'factory.sh update' installs it again." >&2
-    return 7
-  fi
-}
-# Before every gate the runner runs: the pipeline is still the one the run started with.
-guard_pipeline() {                          # guard_pipeline <stage> <story>
-  [ -n "$PIPELINE_SHA" ] || return 0
-  local now; now=$(pipeline_hash) || return 0
-  [ "$now" = "$PIPELINE_SHA" ] && return 0
-  echo "factory: the installed pipeline changed during $2's run, before its $1 gate — a stage never writes" >&2
-  echo "factory:   .agents/factory/. Nothing more runs; 'factory.sh update' installs it again, and the story runs" >&2
-  echo "factory:   from the stage that changed it." >&2
-  printf '%s\tpipeline-changed\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" | journal_line "$2"
-  : > "$STOP_FILE" 2>/dev/null
-  return 7
 }
 
 # The pipeline's own copy of the gate, for comparison against the project's copy. In order: an
@@ -524,38 +442,6 @@ detect_tool() {
   echo ""
 }
 
-# The commands a stage must be allowed to run: the gate and whatever the stack profile declares.
-# A tool that asks for permission has nobody to ask in a headless run, and a project settings file
-# is ignored while the workspace is untrusted — so the allowlist is passed on the command line.
-# The shell a stage may use without asking, beside the gate, the cli and the profile's commands: the ordinary
-# reading and text tools, and the three git verbs that look without changing anything (`git apply --check` is
-# how a stage tries a break patch). Measured on the bench: without them a stage hit the allow-list about three
-# times per story — `sed`, `xargs`, `git apply --check`, a `grep` after `git ls-files`, then `cd <folder> && …` chains
-# once those were allowed — each a wasted turn. What stays refused — a loop, a variable, `$(…)`, a path outside the
-# project — cost a 0.64.0 bench run about twenty denied calls (`status --story` lists them); the prompt says so.
-# Calls per turn: a 0.65.2 bench stage made 69 calls in 67 turns — one file written per turn, each turn resending
-# ≈170k of context; the same stage on another model made 41 calls in 19 turns. Across a whole run 75–85 % of the
-# turns held a single call. The prompt asks for independent calls in one turn.
-# A script fed on stdin (`python3 -`) stays out on purpose: a file is changed with the editor tools, and a
-# stage that reaches for a script instead is told so in its prompt.
-# What writes or runs anything stays out as well — `sed` (`-i`), `xargs` and `find` (`-exec`, `-delete`), `echo`
-# and `printf` (a redirect), `mkdir`: each allowed head is allowed with every argument, so each of them was a way
-# to write where the editor tools are refused (WP-94). A stage lists files with Glob, searches with Grep and
-# writes with Write, which makes the folders it needs.
-STAGE_SHELL="cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git status, git diff, git log, git ls-files, git apply --check"
-allowed_commands() {
-  local list="Bash($PY $GATE:*),Bash($PY .agents/factory/factory-cli.py:*)" head
-  for head in $(cli --command-heads 2>/dev/null); do
-    case "$list" in *"Bash($head:*)"*) ;; *) list="$list,Bash($head:*)" ;; esac
-  done
-  local tool
-  for tool in "cd" "ls" "cat" "head" "tail" "wc" "sort" "grep" "diff" "pwd" \
-              "git status" "git diff" "git log" "git ls-files" "git apply --check"; do
-    case "$list" in *"Bash($tool:*)"*) ;; *) list="$list,Bash($tool:*)" ;; esac
-  done
-  echo "$list"
-}
-
 # A stage process sees the project and nothing else: not the person's own skills, plugins or MCP
 # servers, and not a second copy of this pipeline from an installed plugin — which one a stage would
 # pick is chance, and a colleague with other plugins would get another pipeline. It also starts
@@ -565,12 +451,6 @@ allowed_commands() {
 # FACTORY_ISOLATION=off runs a stage with the tool's full setup, for a run that needs something the
 # project does not carry; the run says so.
 isolated() { [ "${FACTORY_ISOLATION:-on}" != off ]; }
-# The flags themselves are the tool record's, each passed only where the binary's help names it; the help is probed
-# once per binary, so every stage gets the same flags.
-isolation_flags() {                         # isolation_flags <tool>
-  isolated || return 0
-  cli --tool-flags "$1" 2>/dev/null | tr -d '\n'; printf ' '
-}
 
 # The craft a profile names — carrier.<stage>, review.<perspective>, knowledge — has to be in the
 # project's own skill directory, because an isolated stage sees nothing else. Checked before the
@@ -698,117 +578,14 @@ for m in data.get('data',[]):
   return 0
 }
 
-# The model a stage runs on is the project's choice, stated in the profile per tool and stage
-# (`model.<tool>.<stage>`, falling back to `model.<tool>`); the pipeline itself names no model. A
-# `--model`/`-m` the person puts in FACTORY_<TOOL>_ARGS wins — it is their local override, for
-# example for a provider that does not work here — and the run says so. Exactly one model flag is
-# ever passed: which of two a tool would honour is its behaviour, not something to rely on.
-model_key() {                               # model_key <tool> <stage> — the profile's choice, or nothing
-  set -- "$1" "${2%%:*}"                    # review:<perspective> takes the key of `review`
-  printf '%s' "$(cli --model "$1" "$2" 2>/dev/null)"
-}
-tool_args() { local name; name=$(tool_field TOOL_ARGS_ENV "$1"); [ -n "$name" ] && printf '%s' "${!name:-}"; }
-env_model() { tool_args "$1" | sed -n -E 's/.*(^| )(-m|--model)[ =]([^ ]*).*/\3/p' | head -1; }
-# The model flag for one stage, and why a request does not become one: "<flag args>|<note>".
-model_choice() {                            # model_choice <tool> <stage>
-  local requested; requested=$(model_key "$1" "$2")
-  [ -n "$requested" ] || { printf '|'; return; }
-  if [ -n "${FACTORY_TOOL_CMD:-}" ]; then printf '|passed as FACTORY_MODEL to the custom command'; return; fi
-  if [ -n "$(env_model "$1")" ]; then printf '|overridden by FACTORY_%s_ARGS (%s)' "$(printf '%s' "$1" | tr a-z A-Z)" "$(env_model "$1")"; return; fi
-  local flag; flag=$(tool_field TOOL_MODEL_FLAG "$1")
-  if [ -n "$flag" ]; then printf -- '%s %s|' "$flag" "$requested"; else printf '|no model flag for tool %s' "$1"; fi
-}
-
-# A stage in a story's worktree writes into the main checkout's run folder and the story's records: both are
-# linked into the worktree (ADD_DIRS), and what it only reads through a link — the installed pipeline, the evidence,
-# the skills — is named too (READ_DIRS). How a tool is told is its record's: Claude Code gets both as `--add-dir`,
-# Codex reads everywhere and gets the writable ones alone, OpenCode gets them in its permission block.
-# What proves a stage's work and what judges it are never the stage's to write, in the checkout and in a worktree
-# alike: the installed pipeline, the evidence folder and the skill folders. Claude Code refuses Write and Edit
-# under them by a deny rule (`Edit(//<absolute path>/**)`, which covers every editing tool and a write through a
-# worktree's link as well); the pipeline's hash and the gate's `pipeline` check stand behind it for every tool.
-protected_dirs() {
-  local dir
-  for dir in .agents/factory "$(evidence_rel)" ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} .agents/skills; do
-    case "$dir" in /*|?:*) printf '%s\n' "$dir" ;; *) printf '%s\n' "$HOME_DIR/$dir" ;; esac
-  done
-}
-# OpenCode reads a permission block from OPENCODE_CONFIG_CONTENT (built by the cli, probed live on 2.0.20): the same
-# shell list as Claude's, every edit allowed but under the protected folders, the linked folders as external ones it
-# may use. FACTORY_OPENCODE_PERMISSIONS=off leaves it out; an existing OPENCODE_CONFIG_CONTENT is the person's and wins.
-
-invoke() {                                  # invoke <tool> <prompt>
-  local tool=$1 prompt=$2
-  # Which model, which effort, which sandbox a tool runs with is the tool's configuration and not
-  # the pipeline's — but a default that does not work stops the run, so each adapter takes extra
-  # flags from the environment: FACTORY_CLAUDE_ARGS, FACTORY_CODEX_ARGS, FACTORY_OPENCODE_ARGS.
-  # Example: FACTORY_OPENCODE_ARGS="--model <provider>/<model>" where the default provider is not
-  # authenticated. The pipeline never chooses a model; it only stops standing in the way of one.
-  # One seam, for two honest purposes: a project whose tool is none of the three can plug it in,
-  # and the runner's own loop can be exercised without a model — which is the only way a defect in
-  # the loop is found by a test rather than by a wasted run.
-  INVOCATIONS=$((INVOCATIONS + 1))
-  # The tool's own output is kept per invocation (`$raw`), because it is also where the tool says
-  # what the stage cost. Claude and Codex are asked for their machine-readable form; the runner
-  # prints the stage's final message from it, so the log still reads as text.
-  local raw="${invocation_raw:-/dev/null}"
-  local choice model_args; choice=$(model_choice "$tool" "${stage_in_flight:-}"); model_args=${choice%%|*}
-  if [ -n "${FACTORY_TOOL_CMD:-}" ]; then
-    FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}" FACTORY_PROMPT="$prompt" \
-      FACTORY_WORKER="$WORKER" \
-      FACTORY_RUNS="$RUNS" FACTORY_MODEL="$(model_key "$tool" "${stage_in_flight:-}")" sh -c "$FACTORY_TOOL_CMD" > "$raw"
-    local code=$?
-    [ "$raw" = /dev/null ] || { [ -n "${FACTORY_USAGE_FORMAT:-}" ] || cat "$raw"; }
-    return $code
-  fi
-  # The stage's own session reads the project's session-start hook like any session, and that hook names
-  # the worker holding the checkout. Told which worker started it, the stage knows the claim is its own
-  # and not a second writer's — without this a careful model refuses to write beside "the one writer".
-  export FACTORY_WORKER="$WORKER" FACTORY_STAGE="${stage_in_flight:-}" FACTORY_STORY="${story_in_flight:-}"
-  # The command line is the tool record's (`cli --tool-invocation`): its fixed flags, the shell it may use, the
-  # linked folders, the deny rules, the isolation flags as probed, the model, the person's FACTORY_<TOOL>_ARGS —
-  # and "$prompt", this function's variable, last.
-  [ -n "$(tool_field TOOL_SKILLS "$tool")" ] || { echo "factory: unknown tool '$tool'" >&2; return 2; }
-  local args=(--tool-invocation "$tool" --allow "$(allowed_commands)") dir line
-  [ -n "$model_args" ] && args+=(--tool-model "${model_args#* }")
-  for dir in ${ADD_DIRS[@]+"${ADD_DIRS[@]}"}; do args+=(--writable "$dir"); done
-  for dir in ${READ_DIRS[@]+"${READ_DIRS[@]}"}; do args+=(--readable "$dir"); done
-  while IFS= read -r dir; do [ -n "$dir" ] && args+=(--protect "$dir"); done < <(protected_dirs)
-  line=$(cli "${args[@]}") || { echo "factory: no invocation for tool '$tool'" >&2; return 2; }
-  eval "$line" < /dev/null > "$raw"
-  local code=$?
-  unset FACTORY_WORKER FACTORY_STAGE FACTORY_STORY
-  return $code
-}
-
-# Which format a tool's raw output is in, for the usage reading.
-usage_format() {                            # usage_format <tool>
-  if [ -n "${FACTORY_TOOL_CMD:-}" ]; then echo "${FACTORY_USAGE_FORMAT:-none}"; return; fi
-  local format; format=$(tool_field TOOL_USAGE "$1"); echo "${format:-none}"
-}
-
-# The model a tool ran with, where its output does not say: the -m/--model in its extra flags.
-model_flag() {                              # model_flag <tool> [stage]
-  [ -n "${2:-}" ] && [ -n "$(model_key "$1" "$2")" ] && [ -z "$(env_model "$1")" ] && { model_key "$1" "$2"; return; }
-  local args; args=$(tool_args "$1")
+# The model a local tool runs with, for the context check above: the -m/--model in its extra flags.
+model_flag() {                              # model_flag <tool>
+  local name args; name=$(tool_field TOOL_ARGS_ENV "$1"); [ -n "$name" ] && args=${!name:-}
   # -E: BSD sed (macOS) has no `\|` in a basic expression, so the alternation is written extended
-  printf '%s\n' "$args" | sed -n -E 's/.*(-m|--model)[ =]([^ ]*).*/\2/p' | head -1
-}
-
-# One `usage` line in the story's journal per invocation, and the stage's final message on screen.
-record_usage() {                            # record_usage <story> <stage> <tool> <raw> [seconds]
-  local out fields
-  out=$(cli --usage-from "$(usage_format "$3")" "$4" --usage-model "$(model_flag "$3" "$2")" 2>/dev/null) \
-    || out="unknown"
-  fields=$(printf '%s\n' "$out" | head -1)
-  [ -n "${5:-}" ] && fields="$fields	seconds=$5"
-  [ "$(usage_format "$3")" = none ] || printf '%s\n' "$out" | sed '1d'
-  printf '%s\tusage\t%s\ttool=%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "$3" "$fields" \
-    | journal_line "$1"
+  printf '%s\n' "${args:-}" | sed -n -E 's/.*(-m|--model)[ =]([^ ]*).*/\2/p' | head -1
 }
 
 # --- install -----------------------------------------------------------------
-
 
 # Whether a directory holds nothing but links into the given source — then it is ours to replace
 # with one link, and no project-owned skill is lost.
@@ -1387,7 +1164,6 @@ SWITCHES = {
     "browser": "the plan takes browser tests for a page",
 }
 
-
 def files():
     found = []
     for root, dirs, names in os.walk("."):
@@ -1396,7 +1172,6 @@ def files():
         rel = "" if root == "." else root[2:].replace(os.sep, "/") + "/"
         found += [rel + name for name in sorted(names)]
     return found
-
 
 def glob_re(pattern):
     out, i = "", 0
@@ -1411,7 +1186,6 @@ def glob_re(pattern):
             out, i = out + re.escape(pattern[i]), i + 1
     return re.compile(out + r"\Z")
 
-
 def read_preset(path):
     entries = []
     for raw in open(path, encoding="utf-8"):
@@ -1421,16 +1195,13 @@ def read_preset(path):
             entries.append((key.strip(), value.strip()))
     return entries
 
-
 TREE = None
-
 
 def matches(globs):
     global TREE
     TREE = files() if TREE is None else TREE
     patterns = [glob_re(g) for g in globs.split()]
     return [f for f in TREE if any(p.match(f) for p in patterns)]
-
 
 def holds(key, value):
     """The files one detection line matched — empty when it does not hold."""
@@ -1448,7 +1219,6 @@ def holds(key, value):
                 pass
         return hits
     raise SystemExit(f"factory: unknown detection `{key}` — a preset has detect.exists and detect.contains only")
-
 
 def detect():
     presets = []
@@ -1520,10 +1290,8 @@ def detect():
                     values[key] = path
     return values, applied, governance
 
-
 def norm(value):
     return value.strip().strip('"').strip("'").strip()
-
 
 def active(path):
     keys = {}
@@ -1533,7 +1301,6 @@ def active(path):
             key, value = line.split(":", 1)
             keys.setdefault(key.strip(), value.strip())
     return keys
-
 
 def proposals(values, profile):
     """(missing, differing): what detection finds that the profile lacks, and where it says otherwise.
@@ -1551,7 +1318,6 @@ def proposals(values, profile):
             differing.append((key, profile[key], value))
     return missing, differing
 
-
 def switch(key):
     if key.startswith("test."):
         key = "test"
@@ -1566,7 +1332,6 @@ def switch(key):
     if key in LOCATIONS:
         return "the stages read it there"
     return SWITCHES.get(key, "")
-
 
 values, applied, governance = detect()
 if mode == "detect":
@@ -1803,500 +1568,12 @@ PYEOF
 
 # --- run ---------------------------------------------------------------------
 
-# The judge's verdict decides what comes next, and the script must read it from the file rather
-# than assume the run continues: `changes-requested` goes back to the build stage (one round),
-# `story-conflict` stops the run — the story or the plan is wrong, and no build round fixes that.
-verdict_of() {                              # verdict_of <story>
-  cli --verdict "$1" 2>/dev/null
-}
-
-# Whether a stage file stops the run: a `## needs-human` section with something in it. A bare
-# heading — empty, or `(none)` copied from the file template — asks nobody anything.
-asks_human() {                              # asks_human <file>
-  cli --needs-human "$1" >/dev/null 2>&1
-}
-
-# A stage that ends with a needs-human section has stopped. The question is a record of its own, so
-# the answer has a place to land and a second session finds it without this transcript: name the
-# file, and the command that resumes. 3 only when the question is a record — that is what a backlog
-# run can wait on; a section without one is a stop a human has to look at, like any other failure.
-stopped_for_human() {                       # stopped_for_human <artefact> <stage> <story>
-  local artefact=$1 stage=$2 story=$3 ids id applies
-  echo "factory: stage '$stage' ends with a needs-human section — the run stops here." >&2
-  # the id alone: a stage may go on writing after it on the same line ("decision: s-01. The browser …")
-  local lines record; lines=$(cli --needs-human "$artefact" --story "$story" 2>/dev/null)
-  ids=$(printf '%s\n' "$lines" | awk -F'\t' 'NF {print $1}')
-  if [ -z "$ids" ]; then
-    echo "factory:   the section names no 'decision: <id>' — the stage has to write the question as" >&2
-    echo "factory:   <story>/decisions/<nn>.md in the story's folder; the next gate refuses a question nobody was asked." >&2
-  fi
-  for id in $ids; do
-    record=$(printf '%s\n' "$lines" | awk -F'\t' -v i="$id" '$1 == i {print $3}' | head -1)
-    if [ -n "$record" ] && [ "$record" != - ] && [ -f "$record" ]; then
-      # The record names the stage that applies the answer — for a judge's story conflict that is not the
-      # judge — unless the answer names another (`applies:`). The run without --from reads which off the files.
-      applies=$(printf '%s\n' "$lines" | awk -F'\t' -v i="$id" '$1 == i && $2 != "-" {print $2}' | head -1)
-      echo "factory:   decision $id → $record — answer it there under '## Answer'" >&2
-      echo "factory:   with answer:, by: and at:, then: factory.sh run --story $story — it resumes at" \
-           "${applies:-$stage}, or earlier where the answer's applies: names an earlier stage" >&2
-    else
-      echo "factory:   decision $id is named but its record ${record:-beside the story} does not exist." >&2
-    fi
-  done
-  echo "factory:   read $artefact and decide; the stages after it were not run." >&2
-  [ -n "$ids" ] && return 3
-  return 1
-}
-
-# --shared-builder: plan, test, build and tidy in ONE tool process, so each stage builds on what the
-# one before read instead of reading it again (measured: −31 % on a story, the same tokens but far
-# fewer cache writes). Off unless asked for, per run. The process runs each stage's gate itself; the
-# runner then checks, not believes: the red proof must exist (the test gate ran and saw the tests
-# fail) and the build and tidy gates run again here. The judge and the document stage stay separate
-# processes with a fresh context — the judge's independence is the point of it. Only `model.<tool>`
-# applies to the shared process; per-stage model keys need a process per stage.
-run_shared_builder() {                      # run_shared_builder <story> <tool> <from> <dry> [<kind>]
-  local story=$1 tool=$2 from=$3 dry=$4 kind=${5:-story} range=() on=0 st
-  for st in "${BUILDER_STAGES[@]}"; do
-    [ "$st" = "$from" ] && on=1
-    # a journey and an adoption build nothing: their shared stages are plan and test
-    kind_runs "$kind" "$st" || continue
-    [ "$on" = 1 ] && range+=("$st")
-  done
-  [ "${#range[@]}" -gt 0 ] || return 0
-  local list; list=$(IFS=+; echo "${range[*]}")
-  local prompt="Carry out these stages of the delivery pipeline for backlog story $story, one after another, \
-in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//'). The gate: \
-\`$PY $GATE --story $story --stage <stage> --brief\`; the skeletons: \`$PY $CLI --files-skeleton $story <stage>\`, \
-\`$PY $CLI --plan-skeleton $story\`. $(where_things_are "$tool" builder "$story")"
-  local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
-  [ -n "$guard" ] && prompt="$prompt The guard (the profile's carrier.guard): the $guard skill."
-  if [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
-    prompt="$prompt The build stage sent the story back: $RUNS/$story/build.md."
-  fi
-  local refused
-  for refused in "${range[@]}"; do
-    [ -f "$RUNS/$story/.gate-$refused.txt" ] && prompt="$prompt The gate refused stage $refused before: \
-$RUNS/$story/.gate-$refused.txt."
-  done
-  # a gate after the shared range — the document gate's `outcome` or `story-pass` — sent the story back to <from>
-  prompt="$prompt$(later_refusals "$story" "${range[${#range[@]}-1]}" "stage $from")"
-  if [ -f "$RUNS/$story/judge.md" ] && [ "$(verdict_of "$story")" = changes-requested ]; then
-    prompt="$prompt The judge asked for changes: $RUNS/$story/judge.md."
-  fi
-  echo "── stage $list  (tool: $tool, one shared context)"
-  if [ -n "$dry" ]; then
-    echo "   would run: $prompt"
-    echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
-    echo "   shell allowed: $(allowed_commands)"
-    local dry_choice; dry_choice=$(model_choice "$tool" builder)
-    echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
-    return 0
-  fi
-  if [ -f "$GATE" ] && ! cli --claim "$WORKER" >/dev/null; then
-    echo "factory: the checkout was taken over by another worker before the shared stages — stopping." >&2; return 5
-  fi
-  if [ -n "$STORY_BUDGET" ] && [ "$(cli --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
-    echo "factory: story $story has reached its --story-budget $STORY_BUDGET — the shared stages are not dispatched." >&2; return 4
-  fi
-  if [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
-    echo "factory: --max-stages $MAX_STAGES reached before the shared stages of $story." >&2; return 4
-  fi
-  local journal="$(evidence "$story")/journal.tsv" began raw_out invoked=0
-  [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
-  snapshot "$story" "before-builder"
-  owned start builder "$story"
-  printf '%s\tstage-start\tbuilder\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" | journal_line "$story"
-  raw_out="$(evidence "$story")/builder.$(date -u +%H%M%S).out"
-  began=$(date +%s)
-  invocation_raw="$raw_out" stage_in_flight=builder story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
-  record_usage "$story" builder "$tool" "$raw_out" "$(( $(date +%s) - began ))"
-  printf '%s\tstage-end\tbuilder\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$invoked" = 0 ] && echo 0 || echo nonzero)" | journal_line "$story"
-  owned end builder "$story" "$invoked" || return 7
-  [ "$invoked" = 0 ] || { echo "factory: the tool exited non-zero during the shared stages." >&2; return 1; }
-  snapshot "$story" "after-builder"
-  [ -f "$GATE" ] && "$PY" "$GATE" --record-changes builder --story "$story" >/dev/null 2>&1
-  # A `back: test` the session already acted on is no round: it went back to the test stage in its own context,
-  # repaired the test, built again and tidied — tidy.md newer than build.md says so, and the re-checked gates below
-  # decide. Sending it back again finds nothing to do, three times, and ends in needs-human (bench 2026-10-01).
-  local repaired=""
-  if [[ " ${range[*]} " == *" tidy "* ]] && [ "$RUNS/$story/tidy.md" -nt "$RUNS/$story/build.md" ]; then repaired=1; fi
-  if [[ " ${range[*]} " == *" build "* ]] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ] && [ -n "$repaired" ]; then
-    echo "factory: build.md names a defect in a test's own code that the shared session repaired before tidy — the gates re-check it."
-  fi
-  if [[ " ${range[*]} " == *" build "* ]] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ] && [ -z "$repaired" ]; then
-    local sent_rounds; sent_rounds=$(bump_rounds "$story")
-    if [ "$sent_rounds" -ge 3 ]; then
-      echo "factory: the build stage sent the story back in round $sent_rounds — three rounds did not converge. needs-human." >&2
-      return 1
-    fi
-    echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the test stage." >&2
-    run_stages "$story" "$tool" test "$dry"
-    NESTED_CODE=$?
-    return 99
-  fi
-  for st in "${range[@]}"; do
-    local artefact="$RUNS/$story/$(stage_file "$st")"
-    [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage '$st' is not finished." >&2; return 1; }
-    if asks_human "$artefact"; then stopped_for_human "$artefact" "$st" "$story"; return $?; fi
-  done
-  # Checked, not believed: the process says it ran the gates; the runner looks. A story's tests were seen
-  # red; a journey's and an adoption's are green at their test gate, so that gate runs again here.
-  for st in "${RED_STAGES[@]}"; do
-    [[ " ${range[*]} " == *" $st "* ]] || continue
-    if [ "$kind" != story ]; then
-      echo "── gate $st  (re-checked by the runner)"
-      gate "$st" "$story" || { echo "factory: the runner's re-check of gate '$st' refused the shared stages' work." >&2; return 1; }
-    elif [ ! -s "$(evidence "$story")/.tests-red" ]; then
-      echo "factory: the shared stages left no red proof ($(evidence "$story")/.tests-red) — the $st gate never saw the tests fail." >&2
-      return 1
-    fi
-  done
-  for st in "${range[@]}"; do
-    [[ " ${POST_GATED[*]} " == *" $st "* ]] && [[ " ${RED_STAGES[*]} " != *" $st "* ]] || continue
-    echo "── gate $st  (re-checked by the runner)"
-    if ! gate "$st" "$story"; then
-      environment_refused "$st" "$story" && return 1
-      # The same way back a refusal takes between separate stages: one round, the builder again from the
-      # refused stage with the gate's report as its input, three rounds stop the story.
-      local refused_rounds; refused_rounds=$(bump_rounds "$story")
-      if [ "$refused_rounds" -ge 3 ]; then
-        echo "factory: the runner's re-check of gate '$st' refused in round $refused_rounds — three rounds did not converge. needs-human." >&2
-        return 1
-      fi
-      echo "factory: the runner's re-check of gate '$st' refused — round $refused_rounds runs the shared stages again from '$st' with the gate's report." >&2
-      run_stages "$story" "$tool" "$st" "$dry"
-      NESTED_CODE=$?
-      return 99
-    fi
-  done
-  return 0
-}
-
 # --shared-verifier: judge and document in ONE tool process — the document stage starts on what the judge
 # has just read (the story, the diff, the plan, the glossary) instead of reading it again. The twin of
 # --shared-builder, and never one process with it: the judge's independence from the builder is the point
 # of the split; the verifier shares a context only with the stage after the verdict, which writes no code.
 # The process runs the document gate itself; the runner reads the verdict, re-checks the document gate,
 # and takes a `changes-requested` back to the build stage as it always does.
-
-# The reviews: one tool process per perspective, started at once, each writing its report to
-# reviews/<perspective>.md; the judge then converges from the files instead of reviewing in its own context —
-# a reviewer that did not build and a judge that did not review. The perspectives and their carriers come from
-# the profile through the cli (the three built-ins plus `reviews:`). An adoption reviews no change and gets none.
-# A reviewer that leaves no file is not stood in for: the judge names the perspective as run in-session.
-run_reviews() {                             # run_reviews <story> <tool> <dry> [<kind>]
-  local story=$1 tool=$2 dry=$3 kind=${4:-story}
-  [ "$kind" = adopt ] && return 0
-  local lines; lines=$(cli --perspectives 2>/dev/null) || return 0
-  [ -n "$lines" ] || return 0
-  local names=() carriers=() name carrier
-  while IFS=$'\t' read -r name carrier; do [ -n "$name" ] && { names+=("$name"); carriers+=("$carrier"); }; done <<< "$lines"
-  local folder="$RUNS/$story/reviews" i prompt
-  local listed=""; for name in "${names[@]}"; do listed="${listed:+$listed, }$name"; done
-  echo "   reviews: $listed — one process each, at once; the judge converges from reviews/<perspective>.md"
-  local prompts=()
-  for i in "${!names[@]}"; do
-    name=${names[$i]}; carrier=${carriers[$i]}
-    prompt="Review the change of backlog story $story from the $name perspective: apply the \`$carrier\` skill to the diff \
-$(evidence "$story")/story.diff, as *A review the runner started* in the rules every stage holds to says. Its input \
-beside the diff: the story and its epic (epic.md beside it), $RUNS/$story/plan.md, tests.md and build.md, and the \
-product and technical description. Your report: $folder/$name.md. $(where_things_are "$tool" "review:$name" "$story")"
-    prompts+=("$prompt")
-  done
-  if [ -n "$dry" ]; then
-    for i in "${!names[@]}"; do echo "   would run (review:${names[$i]}): ${prompts[$i]}"; done
-    return 0
-  fi
-  if [ -f "$GATE" ] && ! cli --claim "$WORKER" >/dev/null; then
-    echo "factory: the checkout was taken over by another worker before the reviews — stopping." >&2; return 5
-  fi
-  if [ -n "$STORY_BUDGET" ] && [ "$(cli --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
-    echo "factory: story $story has reached its --story-budget $STORY_BUDGET — the reviews are not dispatched." >&2; return 4
-  fi
-  if [ -n "$MAX_STAGES" ] && [ "$((INVOCATIONS + ${#names[@]}))" -gt "$MAX_STAGES" ]; then
-    echo "factory: --max-stages $MAX_STAGES reached before the reviews of $story (${#names[@]} process(es))." >&2; return 4
-  fi
-  local journal="$(evidence "$story")/journal.tsv" began pids=() raws=()
-  mkdir -p "$folder" "$(evidence "$story")"
-  rm -f "$folder"/*.md                       # a repeat round reviews today's change, never last round's report
-  began=$(date +%s)
-  for i in "${!names[@]}"; do
-    name=${names[$i]}
-    printf '%s\tstage-start\treview:%s\ttool=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$name" "$tool" | journal_line "$story"
-    raws[$i]="$(evidence "$story")/review-$name.$(date -u +%H%M%S).out"
-    ( invocation_raw="${raws[$i]}" stage_in_flight="review:$name" story_in_flight="$story" \
-        invoke "$tool" "${prompts[$i]}"; echo $? > "${raws[$i]}.rc" ) &
-    pids[$i]=$!
-  done
-  wait "${pids[@]}" 2>/dev/null
-  INVOCATIONS=$((INVOCATIONS + ${#names[@]}))
-  local seconds=$(( $(date +%s) - began )) code
-  for i in "${!names[@]}"; do
-    name=${names[$i]}
-    code=$(cat "${raws[$i]}.rc" 2>/dev/null || echo 1); rm -f "${raws[$i]}.rc"
-    record_usage "$story" "review:$name" "$tool" "${raws[$i]}" "$seconds"
-    printf '%s\tstage-end\treview:%s\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$name" "$([ "$code" = 0 ] && echo 0 || echo nonzero)" | journal_line "$story"
-    [ -f "$folder/$name.md" ] || echo "factory: the $name reviewer left no $folder/$name.md — the judge runs that pass itself and says so." >&2
-  done
-  return 0
-}
-
-run_shared_verifier() {                     # run_shared_verifier <story> <tool> <dry> [<kind>]
-  local story=$1 tool=$2 dry=$3 kind=${4:-story} range=() st
-  for st in "${VERIFIER_STAGES[@]}"; do kind_runs "$kind" "$st" && range+=("$st"); done  # an adoption documents nothing: its verifier is the judge alone
-  local list; list=$(IFS=+; echo "${range[*]}")
-  local document=""
-  [ "$kind" != adopt ] && document=" The skeleton: \`$PY ${CLI#"$PWD/"} --document-skeleton $story\`; the document \
-gate: \`$PY $GATE --story $story --stage document --brief\`."
-  local prompt="Carry out these stages of the delivery pipeline for backlog story $story, one after another, \
-in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//').$document \
-$(where_things_are "$tool" verifier "$story")"
-  echo "── stage $list  (tool: $tool, one shared context)"
-  if [ -n "$dry" ]; then
-    echo "   would run: $prompt"
-    echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
-    echo "   shell allowed: $(allowed_commands)"
-    local dry_choice; dry_choice=$(model_choice "$tool" verifier)
-    echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
-    return 0
-  fi
-  if [ -f "$GATE" ] && ! cli --claim "$WORKER" >/dev/null; then
-    echo "factory: the checkout was taken over by another worker before the shared stages — stopping." >&2; return 5
-  fi
-  if [ -n "$STORY_BUDGET" ] && [ "$(cli --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
-    echo "factory: story $story has reached its --story-budget $STORY_BUDGET — the shared stages are not dispatched." >&2; return 4
-  fi
-  if [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
-    echo "factory: --max-stages $MAX_STAGES reached before the shared stages of $story." >&2; return 4
-  fi
-  local journal="$(evidence "$story")/journal.tsv" began raw_out invoked=0
-  [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
-  [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
-  snapshot "$story" "before-verifier"
-  owned start verifier "$story"
-  printf '%s\tstage-start\tverifier\ttool=%s\tstages=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" "$(IFS=,; echo "${range[*]}")" | journal_line "$story"
-  raw_out="$(evidence "$story")/verifier.$(date -u +%H%M%S).out"
-  began=$(date +%s)
-  invocation_raw="$raw_out" stage_in_flight=verifier story_in_flight="$story" invoke "$tool" "$prompt" || invoked=$?
-  record_usage "$story" verifier "$tool" "$raw_out" "$(( $(date +%s) - began ))"
-  printf '%s\tstage-end\tverifier\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$invoked" = 0 ] && echo 0 || echo nonzero)" | journal_line "$story"
-  owned end verifier "$story" "$invoked" || return 7
-  [ "$invoked" = 0 ] || { echo "factory: the tool exited non-zero during the shared stages." >&2; return 1; }
-  snapshot "$story" "after-verifier"
-  [ -f "$GATE" ] && "$PY" "$GATE" --record-changes verifier --story "$story" >/dev/null 2>&1
-  local artefact="$RUNS/$story/judge.md"
-  [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage 'judge' is not finished." >&2; return 1; }
-  if asks_human "$artefact"; then stopped_for_human "$artefact" judge "$story"; return $?; fi
-  local verdict rounds; verdict=$(verdict_of "$story")
-  case "$verdict" in
-    pass) echo "factory: judge verdict 'pass'." ;;
-    changes-requested)
-      rounds=$(bump_rounds "$story")
-      if [ "$rounds" -ge 3 ]; then
-        echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
-        return 1
-      fi
-      local back; back=$(back_for "$kind" "$(cli --back-to "$story" 2>/dev/null || echo build)")
-      echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
-      run_stages "$story" "$tool" "$back" "$dry"; return $? ;;
-    story-conflict)
-      echo "factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes back to the build stage. needs-human: read $RUNS/$story/judge.md." >&2
-      return 1 ;;
-    "") echo "factory: $RUNS/$story/judge.md carries no 'verdict:' line — the judge stage is not finished." >&2; return 1 ;;
-    *) echo "factory: judge verdict '$verdict' is not one of pass|changes-requested|story-conflict." >&2; return 1 ;;
-  esac
-  if kind_runs "$kind" adopt; then adopt_gate "$story" "$tool" "$dry"; return $?; fi
-  artefact="$RUNS/$story/document.md"
-  [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage 'document' is not finished." >&2; return 1; }
-  if asks_human "$artefact"; then stopped_for_human "$artefact" document "$story"; return $?; fi
-  # Checked, not believed: the process says it ran the document gate; the runner looks.
-  echo "── gate document  (re-checked by the runner)"
-  local gate_code=0; gate document "$story" || gate_code=$?
-  if [ "$gate_code" = 3 ]; then
-    echo "factory: story $story waits for a human's acceptance — answer it with /factory-decisions;" >&2
-    echo "factory:   the story holds the checkout until then." >&2
-    return 3
-  fi
-  if [ "$gate_code" != 0 ]; then
-    environment_refused document "$story" && return 1
-    local refused_rounds; refused_rounds=$(bump_rounds "$story")
-    if [ "$refused_rounds" -ge 3 ]; then
-      echo "factory: gate 'document' refused in round $refused_rounds — three rounds did not converge. needs-human." >&2
-      return 1
-    fi
-    local again; again=$(refused_from "$story" document)
-    echo "factory: gate 'document' refused — round $refused_rounds runs stage '$again' again with the gate's report." >&2
-    run_stages "$story" "$tool" "$again" "$dry"; return $?
-  fi
-  return 0
-}
-
-# The stage a refused gate's round starts at: the refused stage, or an earlier one whose file the story's
-# state reads as an earlier pass's — the document gate's `story-pass` refuses over it, and the document stage
-# alone cannot fix that (bench 2026-10-02).
-refused_from() {                            # refused_from <story> <refused stage> -> stage
-  local start st
-  start=$(cli --story "$1" --start --slots 1 2>/dev/null | sed -n 's/^start: //p')
-  for st in "${STAGES[@]}"; do
-    [ "$st" = "$2" ] && break
-    [ "$st" = "$start" ] && { echo "$start"; return; }
-  done
-  echo "$2"
-}
-
-bump_rounds() {                             # bump_rounds <story> -> current count
-  local file="$(evidence "$1")/.rounds" count=0
-  [ -f "$file" ] && count=$(tr -dc '0-9' < "$file")
-  count=$(( ${count:-0} + 1 ))
-  mkdir -p "$(dirname "$file")"
-  printf '%s\n' "$count" > "$file"
-  echo "$count"
-}
-
-# A refusal whose cause is the machine, not the story: the gate found no program a profile command
-# needs. No stage can put a tool on the PATH, so no round is counted and nothing runs again.
-environment_refused() {                     # environment_refused <stage> <story>
-  local report="$RUNS/$2/.gate-$1.txt"
-  [ -f "$report" ] && grep -q '^gate:fail environment' "$report" || return 1
-  echo "factory: gate '$1' refused on the environment, not on the story — $(sed -n 's/^gate:fail environment — //p' "$report" | head -n 1)" >&2
-  echo "factory:   no round is counted. Fix it, then: factory.sh run --story $2" >&2
-  return 0
-}
-
-# A person's --from restarts the story's count: the rounds so far were theirs to judge, and they chose
-# to go on. The old count is kept in the journal folder, never deleted.
-reset_rounds() {                            # reset_rounds <story>
-  local file="$(evidence "$1")/.rounds"
-  [ -f "$file" ] || return 0
-  mkdir -p "$(evidence "$1")"
-  mv "$file" "$(evidence "$1")/rounds.$(date -u +%Y%m%dT%H%M%SZ)"
-  printf '%s	rounds-reset	-	by=--from
-' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | journal_line "$1"
-  echo "factory: --from $from starts a new count of rounds for $1 (the old one is under $(evidence "$1")/)."
-}
-
-# What a stage otherwise searches for — the profile, the run folder, the gate's expectations, the catalog —
-# named in its prompt. Measured on a builder session: about twenty `find`/`ls` and four reads of the gate's
-# source, for facts the runner has in hand.
-where_things_are() {                        # where_things_are <tool> <stage|"the stage"> <story>
-  local tool=$1 stage=$2 story=$3 knowledge="" catalog="" common="" dir
-  # The rules every session the runner starts holds to, in the skill text rather than the prompt: the project's
-  # copy of the pipeline's skill first, the runner's own beside it otherwise.
-  dir=$(skill_dir_of "$tool")
-  for dir in $dir ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} .agents/skills; do
-    [ -f "$dir/factory-run/reference/stage-common.md" ] && { common="$dir/factory-run/reference/stage-common.md"; break; }
-  done
-  if [ -z "$common" ] && [ -f "$(dirname "${BASH_SOURCE[0]}")/../reference/stage-common.md" ]; then
-    common="$(cd "$(dirname "${BASH_SOURCE[0]}")/../reference" && pwd)/stage-common.md"; common=${common#"$PWD/"}
-  fi
-  [ -n "$common" ] && common=" The rules every stage holds to: $common."
-  knowledge=$(cli --get knowledge 2>/dev/null | awk '{print $1}')
-  if [ -n "$knowledge" ]; then
-    dir=$(skill_dir_of "$tool")
-    for dir in $dir ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} .agents/skills; do
-      [ -d "$dir/$knowledge/catalog" ] && { catalog="$dir/$knowledge/catalog/"; break; }
-    done
-    local at=$catalog
-    [ -n "$catalog" ] && catalog=" The $knowledge skill's catalog: $catalog."
-    # The nodes the profile names to read once before writing code (`knowledge.read`), as paths: told only "the
-    # catalog", a stage read seven templates, reached for a jar and grepped six nodes for what one lists
-    # (bench 2026-10-06).
-    local read="" path
-    if [ -n "$at" ]; then
-      for path in $(cli --get knowledge.read 2>/dev/null | tr ',' ' '); do
-        [ -f "$at$path" ] && read="${read:+$read, }$at$path"
-      done
-      [ -n "$read" ] && catalog="$catalog Before you write code, read once: $read."
-    fi
-  fi
-  # named as the allow-list names it: the project's copy, relative to the root — in a story's worktree the main
-  # checkout's, through the worktree's link. A path the list does not name is a refused call.
-  local cli_path=${CLI#"$PWD/"}
-  [ -f .agents/factory/factory-cli.py ] && cli_path=.agents/factory/factory-cli.py
-  # The evidence through the worktree's link, relative: a tool that refuses the main checkout's folders by their path
-  # (OpenCode's permission block) reads it there.
-  printf '%s' "Where things are: the stack profile is $PROFILE; the story's run folder $RUNS/$story/; its evidence \
-folder $(evidence_rel)/$story/; what the gate checks in a stage's file: \`$PY $cli_path --contract <stage>\`.$common$catalog \
-The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL."
-}
-
-start_stage() {                             # start_stage <story> -> the stage the story's files say it runs from
-  cli --story "$1" --start --slots 1 2>/dev/null | sed -n 's/^start: //p'
-}
-
-# The reports of the gates after <stage> that refused the story: a later gate sent it back to <stage>, and that
-# stage cannot fix what it does not see. <where> is how the sentence names the stage ("this stage", "stage build").
-later_refusals() {                          # later_refusals <story> <stage> <where> -> sentences
-  local later seen=0
-  for later in "${STAGES[@]}"; do
-    [ "$later" = "$2" ] && { seen=1; continue; }
-    [ "$seen" = 1 ] && [ -f "$RUNS/$1/.gate-$later.txt" ] && printf ' The %s gate refused the story and sent it back to %s: %s/%s/.gate-%s.txt.' \
-      "$later" "$3" "$RUNS" "$1" "$later"
-  done
-  return 0
-}
-
-worktree_sentence() {
-  [ -n "${FACTORY_HOME:-}" ] || return 0
-  printf ' %s' "This story's own worktree: $PWD; the main checkout: $FACTORY_HOME."
-}
-
-prompt_for() {                              # prompt_for <stage> <story>
-  local stage=$1 story=$2 repeat=""
-  # A repeat round that cannot see why the gate refused works blind, and every stage skill says to
-  # work only on what the gate confirmed. So the refusal is named as an input, not remembered.
-  [ -f "$RUNS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before: $RUNS/$story/.gate-$stage.txt."
-  # A later gate may have sent the story back to this stage — the document gate's `outcome` to the build,
-  # its `story-pass` to the stage whose file it read as an earlier pass's. Its report is this stage's input
-  # too; without it the stage repeats what was refused. Said to the stage the story starts from alone.
-  # The file checks come first: the cli is asked only on the rare path where a later report exists.
-  local later; later=$(later_refusals "$story" "$stage" "this stage")
-  [ -n "$later" ] && [ "$stage" = "$(start_stage "$story")" ] && repeat="$repeat$later"
-  if [ "$stage" = test ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
-    repeat="$repeat The build stage sent the story back: $RUNS/$story/build.md."
-  fi
-  [ "$stage" = judge ] && [ -f "$RUNS/$story/.judge-previous.md" ] && repeat=" This is a repeat round; the previous \
-verdict: $RUNS/$story/.judge-previous.md."
-  # The guard the profile names holds the invariants while code is edited: named in the prompt of every stage
-  # that writes production code, so none starts without it in view.
-  local guard=""
-  if [[ " ${GUARDED_STAGES[*]:-} " == *" $stage "* ]]; then
-    guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
-    [ -n "$guard" ] && guard=" The guard (the profile's carrier.guard): the $guard skill."
-  fi
-  printf '%s' "Apply the stage-$stage skill for backlog story $story.$(worktree_sentence) \
-$(where_things_are "$TOOL_IN_FLIGHT" "$stage" "$story")$guard$repeat"
-}
-
-# Every journal line goes through the cli, which numbers it under the journal's lock: the runner composes the line,
-# the cli appends it. Never `>>` into a journal.
-journal_line() {                            # printf '<line>' | journal_line <story>
-  cli --journal-line "$1" >/dev/null
-}
-
-# What is the person's — the story, every decision's answer — is unchanged across a stage window: recorded at its
-# start, compared at its end by the gate. A change stops the story until a person confirms it (exit 7).
-owned() {                                   # owned <start|end> <window> <story> [<tool exit>]
-  [ -f "$GATE" ] || return 0
-  "$PY" "$GATE" --owned "$1" "$2" ${4:+"$4"} --story "$3"
-}
-
-gate() {                                    # gate <stage> <story>
-  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
-  local report="$RUNS/$2/.gate-$1.txt" journal="$(evidence "$2")"
-  mkdir -p "$RUNS/$2" "$journal"
-  guard_pipeline "$1" "$2" || exit 7
-  FACTORY_SUITES_KEY="$SUITES_KEY" "$PY" "$GATE" --story "$2" --stage "$1" --record-suites 2>&1 | tee "$report"
-  local code=${PIPESTATUS[0]}
-  # Every gate run is kept for the observer, with its verdict; only a *refusal* is kept where the
-  # next stage reads it. A run that has to be reconstructed afterwards from what a stage claimed is
-  # exactly the evidence the gate exists to replace.
-  cp "$report" "$journal/gate-$1.$(date -u +%H%M%S).txt"
-  # 3 is not a refusal: every check passed and a human is asked (acceptance) — nothing to run again.
-  { [ "$code" = 0 ] || [ "$code" = 3 ]; } && rm -f "$report"
-  return "$code"
-}
 
 # Which SHA-256 command this machine has, resolved once. `shasum` is the BSD and macOS spelling and
 # arrives with perl; `sha256sum` is the coreutils one and all a slim Linux image has; `openssl` is
@@ -2311,637 +1588,6 @@ hasher() {
   elif command -v openssl >/dev/null 2>&1; then HASHER="openssl dgst -sha256 -r"
   else HASHER="none"; fi
   printf '%s' "$HASHER"
-}
-
-#: The first line of a snapshot written without a hash command. The observer reads it and treats
-#: the snapshot as absent — see below for why that is the only honest reading.
-NO_HASHES="# no-sha256-command: names only, no content hashes"
-
-# What the working tree looks like right now, so a later stage's claim about what it changed can be
-# checked rather than believed. Cheap: one porcelain listing plus a hash per file git reports.
-snapshot() {                                # snapshot <story> <label>
-  local journal="$(evidence "$1")" file hash prefix entry code origin
-  mkdir -p "$journal"
-  hash=$(hasher)
-  if [ "$hash" = none ]; then
-    # Named, and named loudly. A snapshot of empty digests compares equal to every other one, so
-    # the observer would read "this stage changed nothing" off a missing tool — the strongest claim
-    # in its report, from the least evidence. So the snapshot says it carries no content, and the
-    # run says which command it looked for.
-    echo "factory: no sha256 command found (shasum, sha256sum, openssl) — the tree snapshots" >&2
-    echo "factory:   record file names without content, and factory-verify reports every check" >&2
-    echo "factory:   that needs a digest as not observed. Install one of the three for full evidence." >&2
-  fi
-  {
-    [ "$hash" = none ] && echo "$NO_HASHES"
-    # -uall: without it a newly added directory is listed as one entry and every file in it is
-    # missing from the snapshot — so a test added by this run, and edited afterwards, would look
-    # untouched. `--porcelain` also quotes unusual names, hence the -z form and the NUL split. Its
-    # paths are the repository's; `-- .` and the prefix make them the project's, which may be a
-    # directory inside it. A tracked file that is gone is recorded as `deleted` — left out, its
-    # removal would be in no stage's record.
-    prefix=$(git rev-parse --show-prefix 2>/dev/null)
-    git -c core.fileMode=false status --porcelain -z -uall -- . 2>/dev/null \
-      | tr '\0' '\n' | { origin=""; while IFS= read -r entry; do
-      [ -n "$entry" ] || continue
-      if [ -n "$origin" ]; then           # -z writes a rename's source as the next entry
-        [ "$origin" = R ] && printf '%s  %s\n' deleted "${entry#"$prefix"}"
-        origin=""
-        continue
-      fi
-      code=${entry:0:2} file=${entry:3}
-      file=${file#"$prefix"}
-      case $code in R*|C*) origin=${code:0:1} ;; esac
-      case $code in *D*) printf '%s  %s\n' deleted "$file"; continue ;; esac
-      [ -f "$file" ] || continue
-      if [ "$hash" = none ]; then
-        printf '%s  %s\n' "-" "$file"
-      else
-        printf '%s  %s\n' "$($hash "$file" 2>/dev/null | cut -d" " -f1)" "$file"
-      fi
-    done; }
-  } > "$journal/tree-$2.txt" 2>/dev/null || true
-}
-
-# A record beside the story that carries no '## Answer' yet. The gate does the
-# fine reading (a draft without a name is still open); this is the cheap check that keeps a run from
-# starting a stage while the story waits for a human.
-open_decisions() {                          # open_decisions <story>
-  cli --open-decisions "$1" 2>/dev/null
-}
-
-# The adopt gate: every scenario on a green test, the judge's pass, a break for every test the adoption
-# wrote. Passed, it delivers the story; refused, the test stage runs again, one round counted.
-adopt_gate() {                              # adopt_gate <story> <tool> <dry>
-  echo "── gate adopt"
-  [ -n "$3" ] && return 0
-  if gate adopt "$1"; then
-    if [ -n "${FACTORY_HOME:-}" ]; then
-      integrate_story "$1" "$2" "$3"
-      return $?
-    fi
-    echo "factory: story $1 is adopted."
-    return 0
-  fi
-  environment_refused adopt "$1" && return 1
-  local rounds; rounds=$(bump_rounds "$1")
-  if [ "$rounds" -ge 3 ]; then
-    echo "factory: gate 'adopt' refused in round $rounds — three rounds did not converge. needs-human." >&2
-    return 1
-  fi
-  echo "factory: gate 'adopt' refused — round $rounds runs the test stage again with the gate's report." >&2
-  run_stages "$1" "$2" test "$3"
-}
-
-run_stages() {                              # run_stages <story> <tool> <from> <dry> — in the checkout it is called in
-  local story=$1 tool=$2 from=${3:-${STAGES[0]}} dry=${4:-}
-  local started=0 ran="" waiting built="" st
-  waiting=$(open_decisions "$story")
-  if [ -n "$waiting" ]; then
-    echo "factory: story $story waits for a decision — no stage runs until it is answered:" >&2
-    printf 'factory:   %s\n' $waiting >&2
-    echo "factory:   answer under '## Answer' with answer:, by: and at:, then run the stage that asked (--from <stage>)." >&2
-    return 3
-  fi
-  local kind; kind=$(cli --story "$story" --kind 2>/dev/null || echo story)
-  # Every gate passed in the story's worktree: only the integration is left, and it delivers the story.
-  if [ "$from" = integrate ]; then
-    integrate_story "$story" "$tool" "$dry"
-    return $?
-  fi
-  # An adopted story whose judge passed: only the adopt gate is left, and it delivers the story.
-  if [ "$from" = adopt ]; then
-    adopt_gate "$story" "$tool" "$dry"
-    return $?
-  fi
-  for stage in "${STAGES[@]}"; do
-    [ "$stage" = "$from" ] && started=1
-    [ "$started" = 1 ] || continue
-    # A journey walks what is delivered: nothing to build, nothing to tidy. An adoption builds nothing and
-    # documents nothing: plan, test, judge, then the adopt gate. The table says which kind runs which stage.
-    if ! kind_runs "$kind" "$stage"; then
-      case "$kind" in
-        journey) echo "── stage $stage  (skipped: a journey builds nothing)" ;;
-        adopt)   echo "── stage $stage  (skipped: an adopted story is not built)" ;;
-        *)       echo "── stage $stage  (skipped: a $kind story does not run it)" ;;
-      esac
-      continue
-    fi
-
-    if [[ " ${PRE_GATED[*]} " == *" $stage "* ]]; then
-      echo "── gate $stage"
-      gate "$stage" "$story" || { echo "factory: gate '$stage' refused the story. Fix it before the stage runs." >&2; return 1; }
-    fi
-
-    if [ -n "$SHARED_BUILDER" ] && [[ " ${BUILDER_STAGES[*]} " == *" $stage "* ]]; then
-      if [ -z "$built" ]; then
-        local shared_code=0
-        run_shared_builder "$story" "$tool" "$stage" "$dry" "$kind" || shared_code=$?
-        # 99: a refused re-check ran the story again from there — that run's result is this one's
-        [ "$shared_code" = 99 ] && return "$NESTED_CODE"
-        [ "$shared_code" = 0 ] || return "$shared_code"
-        built=1
-      fi
-      ran="${ran:+$ran,}$stage"
-      continue
-    fi
-    # The reviews come before the judge, in every tier: one process per perspective, at once.
-    if [ "$stage" = judge ]; then
-      local reviews_code=0
-      run_reviews "$story" "$tool" "$dry" "$kind" || reviews_code=$?
-      [ "$reviews_code" = 0 ] || return "$reviews_code"
-    fi
-    # The verifier runs where the judge would: judge, then document in the same process. Resumed at the
-    # document stage alone (--from document, a refused document round), the stage runs in its own context.
-    if [ -n "$SHARED_VERIFIER" ] && [ "$stage" = "${VERIFIER_STAGES[0]}" ]; then
-      run_shared_verifier "$story" "$tool" "$dry" "$kind" || return $?
-      for st in "${VERIFIER_STAGES[@]}"; do kind_runs "$kind" "$st" && ran="${ran:+$ran,}$st"; done
-      break
-    fi
-
-    # Resumed at a gated stage whose file exists: the gate decides first, on today's tree. A file that
-    # holds costs no invocation, and a stage that does run reads a report of now, not of a round the
-    # machine lost (a tool missing on the PATH, a count reset by --from).
-    if [ -n "$GATE_FIRST" ] && [ "$stage" = "$from" ] && [ -z "$dry" ] && [ "$stage" != document ] \
-       && [[ " ${POST_GATED[*]} " == *" $stage "* ]] && [ -f "$RUNS/$story/$(stage_file "$stage")" ]; then
-      GATE_FIRST=""
-      echo "── gate $stage  (the file exists — checked before the stage is invoked)"
-      local first_code=0
-      gate "$stage" "$story" >/dev/null 2>&1 || first_code=$?
-      if [ "$first_code" = 0 ]; then
-        echo "factory: $RUNS/$story/$(stage_file "$stage") already holds — stage '$stage' is not invoked again."
-        ran="${ran:+$ran,}$stage"
-        continue
-      fi
-      environment_refused "$stage" "$story" && return 1
-    fi
-    GATE_FIRST=""
-    # A resumed story whose document file exists and was never refused: its gate decides first, and a
-    # file that already holds costs no invocation.
-    if [ "$stage" = document ] && [ -z "$dry" ] && [ -f "$RUNS/$story/document.md" ] \
-       && [ ! -f "$RUNS/$story/.gate-document.txt" ] && ! cli --delivered "$story" >/dev/null 2>&1; then
-      echo "── gate document  (the file exists — checked before the stage is invoked)"
-      if gate document "$story" >/dev/null 2>&1; then
-        echo "factory: $RUNS/$story/document.md already holds — the document stage is not invoked again."
-        ran="${ran:+$ran,}document"
-        break
-      fi
-    fi
-    echo "── stage $stage  (tool: $tool, fresh context)"
-    TOOL_IN_FLIGHT=$tool
-    if [ -n "$dry" ]; then
-      echo "   would run: $(prompt_for "$stage" "$story")"
-      echo "   tool flags: $(isolation_flags "$tool")${FACTORY_ISOLATION:+(FACTORY_ISOLATION=$FACTORY_ISOLATION)}"
-      echo "   shell allowed: $(allowed_commands)"
-      local dry_choice; dry_choice=$(model_choice "$tool" "$stage")
-      echo "   model: ${dry_choice%%|*}${dry_choice#*|}"
-    elif [ -f "$GATE" ] && ! cli --claim "$WORKER" >/dev/null; then
-      echo "factory: the checkout was taken over by another worker before stage '$stage' — stopping." >&2
-      return 5
-    elif [ -n "$STORY_BUDGET" ] && [ "$(cli --usage --story "$story" --total 2>/dev/null || echo 0)" -ge "$STORY_BUDGET" ]; then
-      # Checked before the invocation, from the journal: a restart, a second session or a new run
-      # continues the same count. The last stage may overshoot — usage is known only after it ran.
-      echo "factory: story $story has used $(cli --usage --story "$story" --total) tokens of its" >&2
-      echo "factory:   --story-budget $STORY_BUDGET — stage '$stage' is not dispatched; the work so far stays." >&2
-      return 4
-    elif [ -n "$MAX_STAGES" ] && [ "$INVOCATIONS" -ge "$MAX_STAGES" ]; then
-      # Checked before the invocation, never after: the cap is what may still be spent. Nothing is
-      # undone — the stages so far keep their files, and the schedule resumes the story from them.
-      echo "factory: --max-stages $MAX_STAGES reached before stage '$stage' of $story — nothing more is" >&2
-      echo "factory:   dispatched; the work so far stays as it is and the next run continues from it." >&2
-      return 4
-    else
-      # Never `started` — that name is the loop's "have we reached --from yet" flag, and
-      # overwriting it skips every later stage while the run still reports success.
-      local stage_started; stage_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-      # The previous verdict is an input to the next one, not something to overwrite: a defect a judge
-      # confirmed may not vanish in the next round without a word.
-      [ "$stage" = judge ] && [ -f "$RUNS/$story/judge.md" ] && mv "$RUNS/$story/judge.md" "$RUNS/$story/.judge-previous.md"
-      [ -f "$GATE" ] && "$PY" "$GATE" --record-base --story "$story" >/dev/null 2>&1
-      # The document stage's file starts as the pipeline's skeleton: every path it may cite, root-relative.
-      local had_file="" skeleton=""; [ -f "$RUNS/$story/$(stage_file "$stage")" ] && had_file=1
-      [ "$stage" = document ] && skeleton=1 && [ -f "$GATE" ] && cli --document-skeleton "$story" >/dev/null 2>&1
-      [ "$stage" = plan ] && skeleton=1 && [ -f "$GATE" ] && cli --plan-skeleton "$story" >/dev/null 2>&1
-      # A skeleton the pipeline wrote is not the stage's file: kept aside, so a stage that left it untouched
-      # is a stage that produced nothing, not a finished one. A file an earlier pass left is no skeleton: the
-      # stage brings it up to date or leaves it, and its gate decides.
-      rm -f "$(evidence "$story")/$stage.skeleton"
-      [ -z "$had_file" ] && [ -n "$skeleton" ] && [ -f "$RUNS/$story/$(stage_file "$stage")" ] \
-        && cp "$RUNS/$story/$(stage_file "$stage")" "$(evidence "$story")/$stage.skeleton"
-      snapshot "$story" "before-$stage"
-      local choice requested note model_fields=""
-      choice=$(model_choice "$tool" "$stage"); note=${choice#*|}; requested=$(model_key "$tool" "$stage")
-      [ -n "$requested" ] && model_fields="	model_requested=$requested"
-      [ -n "$note" ] && model_fields="$model_fields	model_applied=no ($note)"
-      [ -n "$note" ] && echo "factory: model.$tool.$stage: $requested — $note"
-      owned start "$stage" "$story"
-      printf '%s\tstage-start\t%s\ttool=%s%s\n' "$stage_started" "$stage" "$tool" "$model_fields" | journal_line "$story"
-      local raw_out; raw_out="$(evidence "$story")/$stage.$(date -u +%H%M%S).out"
-      local invoked=0
-      local began; began=$(date +%s)
-      invocation_raw="$raw_out" stage_in_flight="$stage" story_in_flight="$story" \
-        invoke "$tool" "$(prompt_for "$stage" "$story")" || invoked=$?
-      record_usage "$story" "$stage" "$tool" "$raw_out" "$(( $(date +%s) - began ))"
-      owned end "$stage" "$story" "$invoked" || {
-        printf '%s\tstage-end\t%s\texit=owned\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" | journal_line "$story"
-        return 7; }
-      [ "$invoked" = 0 ] || {
-        printf '%s\tstage-end\t%s\texit=nonzero\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
-          | journal_line "$story"
-        echo "factory: the tool exited non-zero during stage '$stage'." >&2; return 1; }
-      printf '%s\tstage-end\t%s\texit=0\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$stage" \
-        | journal_line "$story"
-      snapshot "$story" "after-$stage"
-      # What the stage changed and the story's diff so far, for the next stage to read first.
-      [ -f "$GATE" ] && "$PY" "$GATE" --record-changes "$stage" --story "$story" >/dev/null 2>&1
-      local artefact="$RUNS/$story/$(stage_file "$stage")"
-      [ -f "$artefact" ] || {
-        echo "factory: stage '$stage' produced no $artefact — a stage is finished when its file exists." >&2
-        return 1; }
-      if [ -f "$(evidence "$story")/$stage.skeleton" ] && cmp -s "$artefact" "$(evidence "$story")/$stage.skeleton"; then
-        echo "factory: stage '$stage' produced no $artefact beyond the pipeline's skeleton — a stage is finished when it wrote its file." >&2
-        return 1
-      fi
-      # A stage that ends with a needs-human section has stopped, whatever its file otherwise says.
-      # Reading only "does the file exist" turns an escalation into a hand-over, and the next stage
-      # then builds on a decision nobody took.
-      # The build stage found a defect in a test's own code (a helper, a locator), not in what it asserts: the
-      # round goes to the test stage, which repairs it and proves it with a break — no human is asked.
-      local sent_back=""; [ "$stage" = build ] && sent_back=$(cli --back-to "$story" --stage "$stage" 2>/dev/null)
-      if [ -n "$sent_back" ]; then
-        local sent_rounds; sent_rounds=$(bump_rounds "$story")
-        if [ "$sent_rounds" -ge 3 ]; then
-          echo "factory: the build stage sent the story back in round $sent_rounds — three rounds did not converge. needs-human." >&2
-          return 1
-        fi
-        echo "factory: the build stage found a defect in a test's own code — round $sent_rounds goes back to the $sent_back stage." >&2
-        run_stages "$story" "$tool" "$sent_back" "$dry"
-        return $?
-      fi
-      if asks_human "$artefact"; then
-        stopped_for_human "$artefact" "$stage" "$story"
-        return $?
-      fi
-    fi
-
-    if [[ " ${POST_GATED[*]} " == *" $stage "* ]]; then
-      echo "── gate $stage"
-      local gate_code=0
-      [ -z "$dry" ] && { gate "$stage" "$story" || gate_code=$?; }
-      if [ "$gate_code" = 3 ]; then
-        echo "factory: story $story waits for a human's acceptance — answer it with /factory-decisions;" >&2
-        echo "factory:   the story holds the checkout until then." >&2
-        return 3
-      fi
-      if [ "$gate_code" != 0 ]; then
-        environment_refused "$stage" "$story" && return 1
-        # The same way back a judge's `changes-requested` takes: the stage runs again with the gate's
-        # report as its input, one round counted, and three rounds stop the story.
-        local refused_rounds; refused_rounds=$(bump_rounds "$story")
-        if [ "$refused_rounds" -ge 3 ]; then
-          echo "factory: gate '$stage' refused in round $refused_rounds — three rounds did not converge. needs-human." >&2
-          return 1
-        fi
-        local again; again=$(refused_from "$story" "$stage")
-        echo "factory: gate '$stage' refused — round $refused_rounds runs stage '$again' again with the gate's report." >&2
-        run_stages "$story" "$tool" "$again" "$dry"
-        return $?
-      fi
-    fi
-
-    ran="${ran:+$ran,}$stage"
-
-    if [ "$stage" = "judge" ] && [ -z "$dry" ]; then
-      local verdict rounds
-      verdict=$(verdict_of "$story")
-      case "$verdict" in
-        pass)
-          echo "factory: judge verdict 'pass'."
-          if kind_runs "$kind" adopt; then
-            adopt_gate "$story" "$tool" "$dry"
-            return $?
-          fi
-          ;;
-        changes-requested)
-          rounds=$(bump_rounds "$story")
-          if [ "$rounds" -ge 3 ]; then
-            echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
-            return 1
-          fi
-          local back; back=$(back_for "$kind" "$(cli --back-to "$story" 2>/dev/null || echo build)")
-          echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
-          run_stages "$story" "$tool" "$back" "$dry"
-          return $?
-          ;;
-        story-conflict)
-          echo "factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes back to the build stage. needs-human: read $RUNS/$story/judge.md." >&2
-          return 1
-          ;;
-        "")
-          echo "factory: $RUNS/$story/judge.md carries no 'verdict:' line — the judge stage is not finished." >&2
-          return 1
-          ;;
-        *)
-          echo "factory: judge verdict '$verdict' is not one of pass|changes-requested|story-conflict." >&2
-          return 1
-          ;;
-      esac
-    fi
-  done
-  # What ran, not what the script knows how to run: a message that names six stages after one of
-  # them is exactly the self-report the gates exist to replace.
-  echo "factory: story $story ran through ${ran:-nothing}."
-  # In its worktree the story is delivered once it is on the main line — when the files say every gate passed.
-  if [ -n "${FACTORY_HOME:-}" ] && [ -z "$dry" ] && [ "$(start_stage "$story")" = integrate ]; then
-    integrate_story "$story" "$tool" "$dry"
-    return $?
-  fi
-}
-
-# --- a story in its worktree (WP-92) -----------------------------------------------------------------
-# Every story runs in a worktree of its own, `story/<id>`, made from the main checkout's branch: a story that
-# waits — for an answer, for an acceptance — holds no checkout, and with --parallel several run at once. The
-# worktree links what is state to the main checkout (the epics with their records, the run folder, the
-# pipeline, the skills), so every reader sees one source. Delivered is the integration: the main line merged
-# into the story (a stage-integrate agent where git stops on a conflict), the story squashed to one commit,
-# the gate once more on that tree, and the main checkout's branch fast-forwarded to it. One integration at a
-# time: the git work in the main checkout runs under a lock beside the run folder.
-take_lock() {
-  local age
-  mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null
-  until mkdir "$LOCK_DIR" 2>/dev/null; do
-    [ -d "$(dirname "$LOCK_DIR")" ] || { echo "factory: no place for the lock at $LOCK_DIR" >&2; return 1; }
-    age=$("$PY" -c 'import os,sys,time; print(int(time.time() - os.path.getmtime(sys.argv[1])))' "$LOCK_DIR" 2>/dev/null || echo 0)
-    if [ "${age:-0}" -gt "${FACTORY_STALE_AFTER:-7200}" ]; then
-      echo "factory: $LOCK_DIR is ${age}s old — its holder ended without giving it back; taken over." >&2
-      rmdir "$LOCK_DIR" 2>/dev/null
-      continue
-    fi
-    sleep 2
-  done
-}
-drop_lock() { rmdir "$LOCK_DIR" 2>/dev/null; return 0; }
-
-integrate_story() {                         # integrate_story <story> <tool> <dry> — in the story's worktree
-  local story=$1 tool=$2 dry=$3 attempt code out conflicts report
-  echo "── integrate"
-  if [ -n "$dry" ]; then echo "   would merge $story's branch with the main line and fast-forward the main checkout"; return 0; fi
-  for attempt in 1 2 3; do
-    take_lock
-    out=$( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --integrate-prepare "$story" 2>&1 ); code=$?
-    printf '%s\n' "$out"
-    if [ "$code" = 3 ]; then
-      conflicts=$(printf '%s\n' "$out" | sed -n 's/^conflict: //p' | tr '\n' ' ')
-      echo "── stage integrate  (tool: $tool, fresh context — the merge stopped on: $conflicts)"
-      # the agent works in the worktree as every stage does: with the story, the run folder and the skills linked
-      ( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --worktree-link "$story" )
-      TOOL_IN_FLIGHT=$tool
-      local raw_out; raw_out="$(evidence "$story")/integrate.$(date -u +%H%M%S).out"
-      local began; began=$(date +%s)
-      owned start integrate "$story"
-      printf '%s\tstage-start\tintegrate\ttool=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tool" | journal_line "$story"
-      invocation_raw="$raw_out" stage_in_flight=integrate story_in_flight="$story" \
-        invoke "$tool" "$(integrate_prompt "$story" "$conflicts")"; code=$?
-      record_usage "$story" integrate "$tool" "$raw_out" "$(( $(date +%s) - began ))"
-      printf '%s\tstage-end\tintegrate\texit=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$code" = 0 ] && echo 0 || echo nonzero)" | journal_line "$story"
-      owned end integrate "$story" "$code" || { drop_lock; return 7; }
-      if [ -f "$RUNS/$story/integrate.md" ] && asks_human "$RUNS/$story/integrate.md"; then
-        drop_lock; stopped_for_human "$RUNS/$story/integrate.md" integrate "$story"; return $?
-      fi
-      out=$( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --integrate-finish "$story" 2>&1 ); code=$?
-      printf '%s\n' "$out"
-      if [ "$code" != 0 ]; then
-        drop_lock
-        echo "factory: the conflicts of $story are not resolved — needs-human: the worktree $PWD holds the merge." >&2
-        return 1
-      fi
-    elif [ "$code" != 0 ]; then
-      drop_lock
-      echo "factory: $story could not be merged with the main line — the worktree $PWD keeps it as it was." >&2
-      return 1
-    fi
-    echo "── gate integrate"
-    code=0; GATE="$FACTORY_HOME/$GATE_REL" gate integrate "$story" || code=$?
-    drop_lock
-    [ "$code" = 0 ] && { echo "factory: story $story is integrated and delivered."; return 0; }
-    report="$RUNS/$story/.gate-integrate.txt"
-    if grep -q '^gate:fail moved' "$report" 2>/dev/null && ! grep -v '^gate:fail moved' "$report" | grep -q '^gate:fail '; then
-      echo "factory: the main line moved on while $story was merged — merged again (attempt $((attempt + 1)))."
-      continue
-    fi
-    if grep -q '^gate:fail checkout' "$report" 2>/dev/null; then
-      echo "factory: the main checkout could not take $story — see $report; then: factory.sh run --story $story --from integrate" >&2
-      return 1
-    fi
-    environment_refused integrate "$story" && return 1
-    local rounds; rounds=$(bump_rounds "$story")
-    if [ "$rounds" -ge 3 ]; then
-      echo "factory: gate 'integrate' refused in round $rounds — three rounds did not converge. needs-human." >&2
-      return 1
-    fi
-    echo "factory: gate 'integrate' refused the story on the main line — round $rounds runs the build stage again with the gate's report." >&2
-    # the integration took the links down; the build stage works with them again — and document.md is an earlier
-    # pass's: the document stage writes it for the story as it now is, or its gate passes it as it stands
-    take_lock; ( cd "$FACTORY_HOME" && unset FACTORY_HOME && cli --worktree-link "$story" ); drop_lock
-    printf '%s\toutdated\tdocument.md\tby=integrate\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | journal_line "$story"
-    run_stages "$story" "$tool" build "$dry"
-    return $?
-  done
-  echo "factory: the main line moved on three times while $story was integrated — run it again." >&2
-  return 1
-}
-
-integrate_prompt() {                        # integrate_prompt <story> <conflicted files>
-  printf '%s' "Apply the stage-integrate skill for backlog story $1. Merging the main line into this story's branch \
-stopped on conflicts in: $2. Their list: $(evidence "$1")/conflicts.$(worktree_sentence) \
-$(where_things_are "$TOOL_IN_FLIGHT" integrate "$1")"
-}
-
-# Every story in its worktree: made or brought up to date and linked, under the lock; the stages run in it with
-# the run folder named absolutely and FACTORY_HOME naming this checkout; delivered, its worktree goes. Where the
-# project cannot have one (no commit yet, a detached HEAD, a story begun in the checkout before), it runs here.
-run_story() {                               # run_story <story> <tool> <from> <dry>
-  local story=$1 tool=$2 from=$3 dry=$4 wt code=0
-  if [ -n "$dry" ]; then run_stages "$story" "$tool" "$from" "$dry"; return $?; fi
-  take_lock
-  wt=$(cli --worktree-prepare "$story" | tail -1); code=$?
-  drop_lock
-  case "$wt" in
-    none*) echo "factory: $story runs in the checkout — ${wt#none — }"
-           run_stages "$story" "$tool" "$from" "$dry"; return $? ;;
-    "")    echo "factory: no worktree could be made for $story — nothing ran." >&2; return 1 ;;
-  esac
-  echo "factory: $story works in its worktree, ${wt#"$HOME_DIR/"}"
-  # every folder the worktree links to this checkout: the run folder, the epics and the discovery reports to
-  # write, the pipeline, the evidence and the skills to read
-  local linked
-  ADD_DIRS=() READ_DIRS=()
-  for linked in "$RUNS_REL" "$(cli --place epics 2>/dev/null)" "$(cli --place discovery 2>/dev/null)"; do
-    [ -n "$linked" ] && [ -d "$HOME_DIR/$linked" ] && ADD_DIRS+=("$HOME_DIR/$linked")
-  done
-  for linked in .agents/factory "$(evidence_rel)" ${TOOL_SKILL_DIRS[@]+"${TOOL_SKILL_DIRS[@]}"} .agents/skills; do
-    [ -d "$HOME_DIR/$linked" ] && READ_DIRS+=("$HOME_DIR/$linked")
-  done
-  cd "$wt" || return 1
-  export FACTORY_HOME="$HOME_DIR"
-  RUNS="$HOME_DIR/$RUNS_REL"
-  run_stages "$story" "$tool" "$from" "$dry" || code=$?
-  cd "$HOME_DIR" || exit 1
-  unset FACTORY_HOME
-  RUNS=$RUNS_REL
-  ADD_DIRS=() READ_DIRS=()
-  if [ "$code" = 0 ] && cli --delivered "$story" >/dev/null 2>&1; then
-    take_lock; cli --worktree-remove "$story"; drop_lock
-  fi
-  return "$code"
-}
-
-# Story after story, in the order the schedule names. The schedule is read off the files every
-# time, so nothing here remembers what ran: a story that stopped for a decision is simply not named
-# again until its record is answered, and then it is named with the stage that asked. A failure
-# ends the loop — retrying a broken stage spends a run on the same refusal.
-run_backlog() {                             # run_backlog <tool> <watch> <interval> <dry>
-  local tool=$1 watch=$2 interval=$3 dry=$4
-  local out previous="" next story from last="" code slots
-  [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup'" >&2; return 2; }
-  slots=$(parallel_slots) || return 2
-  # a superseded story's worktree has nothing to integrate; it goes before the first story starts
-  [ -n "$dry" ] || { take_lock; cli --worktree-prune; drop_lock; }
-  if [ "$slots" -gt 1 ] && [ -z "$dry" ]; then
-    run_parallel "$tool" "$watch" "$interval" "$slots"
-    return $?
-  fi
-  while :; do
-    # waiting is working too: the claim is renewed on every look, so a watch that waits for an answer
-    # for hours is not mistaken for a crashed one
-    [ -n "$dry" ] || cli --claim "$WORKER" >/dev/null || {
-      echo "factory: another worker took over this checkout — the backlog run ends here." >&2; return 5; }
-    if [ -f "$STOP_FILE" ]; then
-      echo "factory: $STOP_FILE exists — the backlog run stops here. Remove it to run again."
-      return 0
-    fi
-    out=$(cli --schedule --slots 1 2>&1) || {
-      printf '%s\n' "$out" >&2; echo "factory: the schedule could not be read." >&2; return 1; }
-    next=$(printf '%s\n' "$out" | sed -n 's/^next: //p' | head -1)
-    case "$next" in
-      none*|"") ;;
-      *)
-        story=${next%% *}; from=${next#* }
-        if [ "$next" = "$last" ]; then
-          printf '%s\n' "$out"
-          echo "factory: $story ran from $from and the schedule names it there again — no progress, stopping." >&2
-          return 1
-        fi
-        echo "══ story $story from $from"
-        if [ -n "$dry" ]; then
-          printf '%s\n' "$out"
-          echo "   would run: factory.sh run --story $story --from $from"
-          return 0
-        fi
-        run_story "$story" "$tool" "$from" ""
-        code=$?
-        case "$code" in
-          0) last=$next; continue ;;
-          3) last=""; continue ;;              # waits for a decision; the schedule skips it now
-          *) echo "factory: story $story stopped (exit $code) — the backlog run ends here." >&2
-             return "$code" ;;
-        esac
-        ;;
-    esac
-    if [ -z "$watch" ] || ! printf '%s\n' "$out" | grep -q '^wait: yes'; then
-      printf '%s\n' "$out"
-      echo "factory: nothing more can run$([ -n "$watch" ] && echo ", and nothing waits on an answer that would change that")."
-      return 0
-    fi
-    # Waiting is reading files, never asking an agent: an unchanged schedule costs one gate call.
-    if [ "$out" != "$previous" ]; then
-      printf '%s\n' "$out"
-      echo "factory: waiting for an answer — the schedule is read again every ${interval}s; $STOP_FILE ends the watch."
-      previous=$out
-    fi
-    last=""
-    sleep "$interval"
-  done
-}
-
-# How many stories run at once: --parallel, else FACTORY_PARALLEL, else the profile's `parallel:`, else 1. A slot
-# counts a story with a running stage; one that waits for an answer or an acceptance holds none.
-parallel_slots() {
-  local n=${PARALLEL:-$(cli --get parallel 2>/dev/null | awk '{print $1}')}
-  n=${n:-1}
-  case "$n" in ''|*[!0-9]*|0) echo "factory: parallel takes a whole number of stories, 1 or more — not '$n'" >&2; return 1 ;; esac
-  echo "$n"
-}
-
-prefix() {                                  # prefix <story> — every line of a story's run, named
-  local line
-  while IFS= read -r line || [ -n "$line" ]; do printf '[%s] %s\n' "$1" "$line"; done
-}
-
-# Several stories at once, each in its worktree, each a process of its own whose lines carry its id. The
-# schedule is asked with the stories this runner runs; a story that ends frees its slot for the next. A failure
-# starts nothing more and lets the running ones finish; so does the stop file. --max-stages and --story-budget
-# count per story process here.
-run_parallel() {                            # run_parallel <tool> <watch> <interval> <slots>
-  local tool=$1 watch=$2 interval=$3 slots=$4
-  local children="" still entry story pid from code out next busy failed=0 stopping="" seen="" launched previous=""
-  while :; do
-    if [ -z "$stopping" ] && ! cli --claim "$WORKER" >/dev/null; then
-      echo "factory: another worker took over this checkout — no further story starts." >&2; stopping=5; failed=5
-    fi
-    if [ -z "$stopping" ] && [ -f "$STOP_FILE" ]; then
-      echo "factory: $STOP_FILE exists — no further story starts; the running ones finish."; stopping=stop
-    fi
-    still=""
-    for entry in $children; do
-      story=${entry%%:*}; pid=${entry#*:}; from=${pid#*:}; pid=${pid%%:*}
-      if kill -0 "$pid" 2>/dev/null; then still="$still $entry"; continue; fi
-      wait "$pid" 2>/dev/null
-      code=$(cat "$HOME_DIR/$(evidence_rel)/$story/runner-exit" 2>/dev/null || echo 1)
-      case "$code" in
-        0) seen="$seen $story@$from" ;;
-        3) ;;
-        *) echo "factory: story $story stopped (exit $code) — no further story starts; the running ones finish." >&2
-           stopping=${stopping:-$code}; [ "$failed" = 0 ] && failed=$code ;;
-      esac
-    done
-    children=$still
-    launched=""
-    if [ -z "$stopping" ]; then
-      busy=""; for entry in $children; do busy="$busy${busy:+,}${entry%%:*}"; done
-      out=$(cli --schedule --slots "$slots" --busy "$busy" 2>&1) || {
-        printf '%s\n' "$out" >&2; echo "factory: the schedule could not be read." >&2; stopping=1; failed=1; }
-      for next in $(printf '%s\n' "$out" | sed -n 's/^next: //p' | grep -v '^none' | tr ' ' '@'); do
-        story=${next%%@*}; from=${next#*@}
-        case " $seen " in *" $story@$from "*)
-          echo "factory: $story ran from $from and the schedule names it there again — no progress, not started again." >&2
-          [ "$failed" = 0 ] && failed=1; stopping=${stopping:-1}; continue ;; esac
-        echo "══ story $story from $from  (slots: $slots)"
-        mkdir -p "$HOME_DIR/$(evidence_rel)/$story"
-        rm -f "$HOME_DIR/$(evidence_rel)/$story/runner-exit"
-        ( run_story "$story" "$tool" "$from" ""; echo $? > "$HOME_DIR/$(evidence_rel)/$story/runner-exit" ) 2>&1 \
-          | prefix "$story" &
-        children="$children $story:$!:$from"
-        launched=1
-      done
-    fi
-    if [ -z "$children" ] && [ -z "$launched" ]; then
-      [ -n "$stopping" ] && return "$failed"
-      if [ -z "$watch" ] || ! printf '%s\n' "$out" | grep -q '^wait: yes'; then
-        printf '%s\n' "$out"
-        echo "factory: nothing more can run$([ -n "$watch" ] && echo ", and nothing waits on an answer that would change that")."
-        return "$failed"
-      fi
-      if [ "$out" != "$previous" ]; then
-        printf '%s\n' "$out"
-        echo "factory: waiting for an answer — the schedule is read again every ${interval}s; $STOP_FILE ends the watch."
-        previous=$out
-      fi
-      sleep "$interval"
-      continue
-    fi
-    sleep 2
-  done
 }
 
 # --- setup -------------------------------------------------------------------
@@ -3034,6 +1680,16 @@ resolve_stages() {
   [ -n "$SHARED_BUILDER_SET" ] || SHARED_BUILDER=$default
   [ -n "$SHARED_VERIFIER_SET" ] || SHARED_VERIFIER=$default
   return 0
+}
+
+# The run itself is the package's runner (`dca_factory/runner.py`): the checks above passed, this process becomes
+# it — the same process id, so the worker's name on the claim is the one the checks saw. It takes the claim, guards
+# the pipeline's hash, runs the story or the backlog and gives the claim and the lock back however it ends.
+run_python() {                              # run_python <runner flags…>
+  exec env FACTORY_RUNNER_PYTHON="$PY" "$PY" "$CLI" --run "$@" ${dry:+--dry-run} \
+    ${MAX_STAGES:+--max-stages "$MAX_STAGES"} ${STORY_BUDGET:+--story-budget "$STORY_BUDGET"} \
+    --builder "$([ -n "$SHARED_BUILDER" ] && echo shared || echo separate)" \
+    --verifier "$([ -n "$SHARED_VERIFIER" ] && echo shared || echo separate)" ${PARALLEL:+--parallel "$PARALLEL"}
 }
 
 read_command() {                            # read_command <cli flags…>
@@ -3180,35 +1836,7 @@ case "$command" in
       check_contract_first || exit $?
       check_local_context "$tool"
       check_tool "$tool" || exit $?
-      if [ -z "$from" ]; then
-        # No stage named: the story starts where its files say, as the backlog run would start it.
-        local_start=$(cli --story "$story" --start --slots 1) || exit $?
-        local_state=$(printf '%s\n' "$local_start" | sed -n 's/^state: //p')
-        from=$(printf '%s\n' "$local_start" | sed -n 's/^start: //p')
-        local_detail=$(printf '%s\n' "$local_start" | sed -n 's/^detail: //p')
-        if [ "$from" = none ] || [ -z "$from" ]; then
-          case "$local_state" in
-            delivered) echo "factory: story $story is delivered${local_detail:+ ($local_detail)} — nothing runs."; exit 0 ;;
-            waiting)   echo "factory: story $story waits for $local_detail — answer it with /factory-decisions." >&2; exit 3 ;;
-            running)   echo "factory: story $story is running ($local_detail) — one run at a time." >&2; exit 5 ;;
-            *)         echo "factory: story $story is $local_state${local_detail:+ — $local_detail}." >&2
-                       echo "factory:   nothing runs; name the stage to run it anyway: factory.sh run --story $story --from <stage>" >&2
-                       exit 1 ;;
-          esac
-        fi
-        echo "factory: story $story starts at $from${local_detail:+ — $local_detail}"
-      else
-        case " ${STAGES[*]:-} ${STEPS[*]:-} " in
-          *" $from "*) ;;
-          *) echo "factory: --from $from names no stage (${STAGES[*]:-} ${STEPS[*]:-}) — nothing ran, the rounds are as they were" >&2
-             exit 2 ;;
-        esac
-        [ -n "$dry" ] || reset_rounds "$story"
-      fi
-      GATE_FIRST=1
-      [ -n "$dry" ] || { take_checkout && guard_pipeline_start; } || exit $?
-      run_story "$story" "$tool" "$from" "$dry"
-      exit $?
+      run_python --story "$story" --tool "$tool" ${from:+--from "$from"}
     fi
     # Without --story: the backlog, story after story in the order the schedule names.
     case "$interval" in ''|*[!0-9]*) echo "factory: --interval takes whole seconds" >&2; exit 2 ;; esac
@@ -3222,8 +1850,7 @@ case "$command" in
     check_contract_first || exit $?
     check_local_context "${tool:-}"
     check_tool "${tool:-}" || exit $?
-    [ -n "$dry" ] || { take_checkout && guard_pipeline_start; } || exit $?
-    run_backlog "${tool:-stand-in}" "$watch" "$interval" "$dry"
+    run_python --tool "${tool:-stand-in}" ${watch:+--watch} --interval "$interval"
     ;;
   *) usage ;;
 esac

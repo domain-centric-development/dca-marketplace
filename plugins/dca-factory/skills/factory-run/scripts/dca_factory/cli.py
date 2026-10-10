@@ -69,7 +69,7 @@ from .tools import (
     isolation_args, TOOL, tool_invocation, unprobed_flags)
 from .runner import (
     contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
-    PASS_MARKS, plan_skeleton, stage_names, stages_shell, worktree_prepare, worktree_prune, worktree_remove)
+    first_word, PASS_MARKS, plan_skeleton, run_main, stage_names, stages_shell, worktree_prepare, worktree_prune, worktree_remove)
 
 
 def resolve(epics, argument):
@@ -1801,11 +1801,6 @@ COMMAND_KEYS = ("compile", "test", "e2eTest", "architecture", "format", "formatF
 CARRIER_KEY = re.compile(r"^(carrier\.[a-z]+|review\.[a-z-]+|knowledge)$")
 
 
-def first_word(value):
-    parts = str(value or "").split()
-    return parts[0] if parts else ""
-
-
 def command_heads(profile):
     """The first word of every command the profile declares, once each, in the profile's order."""
     heads = []
@@ -2048,6 +2043,8 @@ def follow(runs, story, once, fmt, width, process=None, every=False):
 
 
 def main(argv):
+    if argv[:1] == ["--run"]:                    # `factory.sh run` once its checks passed: the runner itself
+        return run_main(argv[1:])
     parser = argparse.ArgumentParser(add_help=True, description="factory cli")
     parser.add_argument("--version", action="version", version=f"factory-cli {VERSION} (file contract {CONTRACT})")
     parser.add_argument("--story")
