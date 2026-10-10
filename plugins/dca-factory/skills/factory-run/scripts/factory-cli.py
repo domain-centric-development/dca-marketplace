@@ -476,7 +476,7 @@ def mark_window(cwd, runs, story_id, name, edge, session_log=None):
     if session_log:
         kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
     freeze_all(runs)
-    with open(journal, "a", encoding="utf-8") as handle:
+    with journal_writer(runs, story_id) as handle:
         if edge == "start":
             handle.write(f"{stamp}\twindow-start\t{name}\ttool={kind}\n")
             print(f"window: {name} of {story_id} started ({kind})")
@@ -513,7 +513,7 @@ def mark_stage(cwd, runs, story_id, stage, edge, session_log=None):
     if session_log:
         kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
     allowed = session_usage_allowed(cwd)
-    with open(journal, "a", encoding="utf-8") as handle:
+    with journal_writer(runs, story_id) as handle:
         if edge == "start":
             # The model the profile asks this tool to run the stage on. A session cannot switch its own
             # model; a subagent may run on it. Which model the window actually used is read from the
@@ -572,36 +572,30 @@ def freeze_windows(journal):
     """Write the numbers of every session window that can be read now into the journal itself.
 
     The window points at a session log on this machine, which a clone does not have and the tool
-    deletes after a while. Once read, the journal carries the numbers and no path, so the history
-    stays with the project."""
+    deletes after a while. Once read, the numbers are appended as a usage line of their own with the same window and
+    no path — the line that pointed at the log stays, and the reader counts a window once, the read line first. The
+    journal is only ever appended to, so nothing another writer appends meanwhile is lost."""
     if not os.path.isfile(journal):
         return
-    text = read_text(journal)
-    lines, changed = text.splitlines(), False
     settled = datetime.now(timezone.utc).timestamp() - FREEZE_AFTER
-    for i, line in enumerate(lines):
-        parts = line.split("\t")
-        if len(parts) < 4 or parts[1] != "usage" or not any(p.startswith("window=") for p in parts):
+    events = read_events(journal)
+    frozen = {(e["name"], e["fields"].get("window")) for e in events if e["kind"] == "usage"
+              and "window" in e["fields"] and "log" not in e["fields"] and "session" not in e["fields"]}
+    for event in events:
+        fields = event["fields"]
+        if event["kind"] != "usage" or "window" not in fields or ("log" not in fields and "session" not in fields):
             continue
-        fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
+        if (event["name"], fields["window"]) in frozen:
+            continue
         end = parse_time(fields.get("window", "").partition("/")[2])
         if end is None or end.timestamp() > settled:
             continue                            # the log may still lag behind this window
         read = resolve_window(fields)
         if read is None:
             continue
-        lines[i] = "\t".join(parts[:3] + [f"tool={fields.get('tool', '')}", usage_fields(read),
-                                            f"window={fields['window']}"])
-        changed = True
-    if changed:
-        # Written aside and moved into place, with whatever was appended while the logs were read —
-        # the runner or a stage mark may write a line at any moment.
-        grown = read_text(journal)
-        tail = grown[len(text):] if grown.startswith(text) else ""
-        temporary = f"{journal}.{os.getpid()}"
-        with open(temporary, "w", encoding="utf-8") as handle:
-            handle.write("\n".join(lines) + "\n" + tail)
-        os.replace(temporary, journal)
+        append_event(journal, "usage", event["name"], f"tool={fields.get('tool', '')}", *usage_fields(read).split("\t"),
+                     f"window={fields['window']}", at=event["at"])
+        frozen.add((event["name"], fields["window"]))
 
 
 def freeze_all(runs):
@@ -658,7 +652,7 @@ def journal_usage(runs, story_id, resolve=True):
     # A journal merged with `merge=union` can hold one session window twice — read on one branch,
     # still pending on the other. A window is one stage run, so it is counted once, the read one first.
     counted_windows = set()
-    lines = sorted(read_text(journal).splitlines(), key=lambda l: ("log=" in l, l))
+    lines = sorted(read_text(journal).splitlines(), key=lambda l: ("log=" in l or "session=" in l, l))
     for line in lines:
         parts = line.split("\t")
         if len(parts) < 3:
@@ -736,8 +730,7 @@ def owned_confirm(runs, story_id):
         return 0
     parts = [line.split(":", 1)[1].strip() for line in read_text(marked).splitlines() if line.startswith("changed:")]
     os.remove(marked)
-    with open(os.path.join(folder, "journal.tsv"), "a", encoding="utf-8") as handle:
-        handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\towned-confirmed\t{','.join(parts)}\n")
+    journal_append(runs, story_id, "owned-confirmed", ",".join(parts))
     print(f"owned: {story_id} — {', '.join(parts)} confirmed as the person's; the story runs on")
     return 0
 
@@ -4056,6 +4049,8 @@ def main(argv):
                                                               "outside a stage — backlog or decisions")
     parser.add_argument("--window-end", metavar="WORK", help="with --story: end that measuring window")
     parser.add_argument("--stage-start", metavar="STAGE", help="mark a stage's start inside a session (with --story)")
+    parser.add_argument("--journal-line", metavar="STORY",
+                        help="append the lines on stdin (<time>\\t<kind>\\t<name>\\t…) to the story's journal, numbered")
     parser.add_argument("--owned-confirm", metavar="STORY",
                         help="a person looked at the story and its answers after a stage changed them: the story runs on")
     parser.add_argument("--stage-end", metavar="STAGE",
@@ -4288,13 +4283,16 @@ def main(argv):
     if args.stage_start or args.stage_end:
         if not args.story:
             parser.error("--stage-start/--stage-end need --story")
-        if args.stage_start:
-            record_owned(args.runs, args.story)
         code = mark_stage(cwd, args.runs, args.story, args.stage_start or args.stage_end,
                           "start" if args.stage_start else "end", args.session_log)
-        return (owned_end(args.runs, args.story, args.stage_end) or code) if args.stage_end else code
+        if args.stage_start and code == 0:
+            record_owned(args.runs, args.story)
+        return (owned_end(args.runs, args.story, args.stage_end, str(code)) or code) if args.stage_end else code
     if args.owned_confirm:
         return owned_confirm(args.runs, args.owned_confirm)
+    if args.journal_line:
+        journal_writer(args.runs, args.journal_line).write(sys.stdin.read())
+        return 0
     if args.usage_from:
         return usage_from(args.usage_from[0], args.usage_from[1], args.usage_model)
     if args.usage:

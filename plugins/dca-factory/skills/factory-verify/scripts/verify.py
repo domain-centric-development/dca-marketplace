@@ -869,33 +869,41 @@ OUTCOME_CODE = (
 )
 
 
+def ordered_journal(root, events, story="STORY-1"):
+    """The story's journal as a stage run leaves it: `(at, kind, name)` in the order they happened — `wrote` a
+    hand-over (with the digest it has now, so the gate sees nothing new), `gate` a pass. The order is the sequence
+    numbers', never the files' times."""
+    folder = os.path.join(root, ".dca-factory", "runs", story)
+    lines = []
+    for seq, (at, kind, name) in enumerate(sorted(events), 1):
+        stamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(at))
+        if kind == "wrote":
+            digest = hashlib.sha256(open(os.path.join(folder, name), "rb").read()).hexdigest()
+            lines.append(f"{stamp}\twrote\t{name}\tsha={digest}\tseq={seq}\n")
+        else:
+            lines.append(f"{stamp}\tgate\t{name}\texit=0\tby=builder\tseq={seq}\n")
+    write_file(root, f".dca-factory/evidence/{story}/journal.tsv", "".join(lines))
+
+
 def tests_rewritten_after_build(passes):
-    """A shared session that went back to its test stage after the build: tests.md is newer than build.md,
-    tidy and the rest come after it. `passes` writes the runner's journal lines for the gates that passed
-    after tests.md was written — the build held for the current tests — or none (bench 2026-10-02)."""
+    """A shared session that went back to its test stage after the build: tests.md was written after build.md,
+    tidy and the rest come after it. `passes` are the gates that passed after tests.md was written — the build held
+    for the current tests — or none (TODO #122, bench 2026-10-02)."""
     def prepare(root, _args):
-        folder = os.path.join(root, ".dca-factory", "runs", "STORY-1")
-        for name, at in (("plan.md", 1000), ("build.md", 1200), ("tests.md", 1300), ("tidy.md", 1350),
-                         ("judge.md", 1400), ("document.md", 1500)):
-            os.utime(os.path.join(folder, name), (at, at))
-        lines = "".join(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(at))}\tgate\t{stage}\texit=0\n"
-                        for stage, at in passes)
-        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv", lines)
+        ordered_journal(root, [(at, "wrote", name) for name, at in (
+            ("plan.md", 1000), ("build.md", 1200), ("tests.md", 1300), ("tidy.md", 1350), ("judge.md", 1400),
+            ("document.md", 1500))] + [(at, "gate", stage) for stage, at in passes])
     return prepare
 
 
 def plan_corrected_after_tests(passes):
     """A shared builder whose own test gate refused a plan row: it corrected plan.md after writing tests.md and had
-    the test gate pass again, in its session. `passes` writes that session's journal line, or none (bench 2026-10-06:
-    the judge passed the story, the document gate sent it back to test twice)."""
+    the test gate pass again, in its session. `passes` is that session's gate pass, or none (0.65.2, bench
+    2026-10-06: the judge passed the story, the document gate sent it back to test twice)."""
     def prepare(root, _args):
-        folder = os.path.join(root, ".dca-factory", "runs", "STORY-1")
-        for name, at in (("tests.md", 1300), ("plan.md", 1306), ("build.md", 1400), ("tidy.md", 1450),
-                         ("judge.md", 1500), ("document.md", 1600)):
-            os.utime(os.path.join(folder, name), (at, at))
-        lines = "".join(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(at))}\tgate\t{stage}\texit=0\tby=builder\n"
-                        for stage, at in passes)
-        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv", lines)
+        ordered_journal(root, [(at, "wrote", name) for name, at in (
+            ("tests.md", 1300), ("plan.md", 1306), ("build.md", 1400), ("tidy.md", 1450), ("judge.md", 1500),
+            ("document.md", 1600))] + [(at, "gate", stage) for stage, at in passes])
     return prepare
 
 
@@ -1688,7 +1696,7 @@ def verify_runner(runner, verbose=False):
     stale_cmd = ('if [ "$FACTORY_STAGE" = verifier ]; then FACTORY_STAGE=judge sh -c "$FIXTURE_STAND_IN"; '
                  '"$FIXTURE_PY" .agents/factory/factory-cli.py --document-skeleton STORY-1 >/dev/null; '
                  'FACTORY_STAGE=document sh -c "$FIXTURE_STAND_IN"; '
-                 'if [ ! -f touched ]; then : > touched; sleep 3; touch .dca-factory/runs/STORY-1/tests.md; fi; '
+                 'if [ ! -f touched ]; then : > touched; printf "\\n" >> .dca-factory/runs/STORY-1/tests.md; fi; '
                  'elif [ "$FACTORY_STAGE" = builder ]; then '
                  'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
                  'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
@@ -2402,8 +2410,8 @@ exit 0
         check("priming: a shared builder is told it carries out plan, test, build and tidy, all in this session",
               code == 0 and "the shared builder of story STORY-1" in output and "plan, test, build, tidy" in output
               and "stage builder" not in output, output.strip().splitlines()[-1:])
-        # a gate a stage session runs itself and passes is on record, so a later gate can tell this pass's files;
-        # the same gate run by a person or the runner leaves the journal to the runner
+        # every gate run over a story is on record, with who ran it, so a later gate can tell this pass's files and a
+        # report can tell the runner's refusals from a stage's own checks
         gate_at = os.path.join(root, ".agents", "factory", "story-gate.py")
         journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
         def gate_lines():
@@ -2416,9 +2424,11 @@ exit 0
                                 capture_output=True, text=True, encoding="utf-8",
                                 env=dict(os.environ, FACTORY_WORKER="runner:host:1", FACTORY_STAGE="builder"))
         after = gate_lines()
-        check("journal: a gate a stage session ran and passed is recorded (`by=builder`); one a person ran is not",
-              plain.returncode == 0 and staged.returncode == 0 and not before
-              and len(after) == 1 and after[0].endswith("\texit=0\tby=builder"),
+        check("journal: a gate run is recorded with who ran it — a stage session under a runner (`by=builder`), a "
+              "person or a session without one (`by=session`), each numbered",
+              plain.returncode == 0 and staged.returncode == 0 and len(before) == 1
+              and re.search(r"\texit=0\tby=session\tseq=\d+$", before[0]) is not None
+              and len(after) == 2 and re.search(r"\texit=0\tby=builder\tseq=\d+$", after[1]) is not None,
               (plain.returncode, staged.returncode, before, after, staged.stdout[-300:]))
         subprocess.run([sys.executable, cli_in(root), "--release"], cwd=root, capture_output=True)
 
@@ -6728,12 +6738,13 @@ def run_groups(args):
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
         subprocess.run([sys.executable, args.cli, "--release", "nobody"], cwd=root, env=env, capture_output=True)
         journal = open(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv"), encoding="utf-8").read()
-        document_line = next((l for l in journal.splitlines() if "\tdocument\t" in l), "")
-        judge_line = next((l for l in journal.splitlines() if "\tjudge\t" in l), "")
-        expectations.append(("usage: a release freezes a story's settled last window into its journal, and "
-                             "leaves a young one open",
-                             "input=7" in document_line and "session=" not in document_line
-                             and "session=" in judge_line and "input=" not in judge_line, journal))
+        document_lines = [l for l in journal.splitlines() if "\tdocument\t" in l]
+        judge_lines = [l for l in journal.splitlines() if "\tjudge\t" in l]
+        expectations.append(("usage: a release freezes a story's settled last window into its journal by appending "
+                             "the read numbers — the line pointing at the log stays — and leaves a young one open",
+                             len(document_lines) == 2 and "session=" in document_lines[0]
+                             and "input=7" in document_lines[1] and "session=" not in document_lines[1]
+                             and len(judge_lines) == 1 and "input=" not in judge_lines[0], journal))
     for root, home in throwaway(2):
         # inside a stage the journal is silent; the stage's session log is where its sign of life is
         backlog_project(root)
@@ -7120,18 +7131,19 @@ def run_groups(args):
                              rows.get("STORY-1", ("",))[0] == "superseded" and nxt == "STORY-2 plan", f"next: {nxt}"))
     for root in throwaway():
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/.gate-plan.txt", "gate:fail epic\n"),))
-        refused = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".gate-plan.txt")
-        os.utime(refused, (time.time() - 60, time.time() - 60))
-        story_file = os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md")
-        for name in ("STORY-1/story.md", "epic.md"):
-            os.utime(os.path.join(root, "project", "epics", "sample", name), (time.time() - 120, time.time() - 120))
+        epic = os.path.join(root, "project", "epics", "sample", "epic.md")
+        complete = open(epic, encoding="utf-8").read()
+        write_file(root, "project/epics/sample/epic.md", complete.replace("goal: They can see it\n", ""))
+        refusal = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         stopped = rows.get("STORY-1")
-        os.utime(story_file, None)                              # repaired after the refusal
+        write_file(root, "project/epics/sample/epic.md", complete)          # repaired after the refusal
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: a story the plan gate refused runs from plan again once it was repaired",
-                             stopped[0] == "stopped" and rows.get("STORY-1") == ("in-progress", "plan"),
-                             f"before {stopped}, after {rows.get('STORY-1')}"))
+                             refusal.returncode == 1 and stopped[0] == "stopped"
+                             and rows.get("STORY-1") == ("in-progress", "plan"),
+                             f"refusal {refusal.returncode}; before {stopped}, after {rows.get('STORY-1')}"))
     for root in throwaway():
         os.makedirs(os.path.join(root, ".dca-factory", "evidence", "S-1"))
         journal = os.path.join(root, ".dca-factory", "evidence", "S-1", "journal.tsv")
@@ -7367,8 +7379,7 @@ def run_groups(args):
                                                              or "changes" in label else "pass") + "\n",
                      "document.md": "# Document\n"}
             backlog_project(root, extra_sources=tuple((f".dca-factory/runs/STORY-1/{n}", files[n]) for n in older + newer))
-            for number, name in enumerate(older):
-                os.utime(os.path.join(root, ".dca-factory", "runs", "STORY-1", name), (1000 + number, 1000 + number))
+            ordered_journal(root, [(1000 + n, "wrote", name) for n, name in enumerate(older + newer)])
             start = subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
                                    capture_output=True, text=True, encoding="utf-8").stdout
             expectations.append((f"start: {label}", f"start: {want}" in start, start))
@@ -7379,8 +7390,7 @@ def run_groups(args):
                  ("tidy.md", "# Tidy\n", 1300), ("judge.md", "## Verdict\nverdict: pass\n", 1400),
                  ("document.md", "# Document\n", 1500), (".gate-document.txt", "gate:fail story-pass\n", 1600))
         backlog_project(root, extra_sources=tuple((f".dca-factory/runs/STORY-1/{n}", c) for n, c, _a in files))
-        for name, _content, at in files:
-            os.utime(os.path.join(root, ".dca-factory", "runs", "STORY-1", name), (at, at))
+        ordered_journal(root, [(at, "wrote", name) for name, _content, at in files if not name.startswith(".")])
         start = subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("start: a refused document gate over an earlier pass's build resumes at build, "
@@ -7392,8 +7402,7 @@ def run_groups(args):
                  ("document.md", "# Document\n", 1500),
                  (".gate-document.txt", "gate:fail outcome — no type `SomethingHappened`\n", 1600))
         backlog_project(root, extra_sources=tuple((f".dca-factory/runs/STORY-1/{n}", c) for n, c, _a in files))
-        for name, _content, at in files:
-            os.utime(os.path.join(root, ".dca-factory", "runs", "STORY-1", name), (at, at))
+        ordered_journal(root, [(at, "wrote", name) for name, _content, at in files if not name.startswith(".")])
         start = subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("start: a document gate that found no outcome event resumes at build",

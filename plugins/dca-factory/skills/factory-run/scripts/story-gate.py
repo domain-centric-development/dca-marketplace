@@ -245,6 +245,98 @@ def evidence_dir(runs, story_id=None):
     return os.path.join(root, story_id) if story_id else root
 
 
+#: The story's journal: one line per event — `<UTC time>\t<kind>\t<name>\t<field=value>…\tseq=<n>`. The sequence
+#: number orders the events, never the clock: two events in one second, a file written in the same second as a gate
+#: ran, are told apart by it. The runner, the gate and the cli append through `journal_append`, nothing else writes.
+JOURNAL = "journal.tsv"
+
+
+def journal_path(runs, story_id):
+    return os.path.join(evidence_dir(runs, story_id), JOURNAL)
+
+
+def journal_events(runs, story_id):
+    """[{seq, at, kind, name, fields}] in order. A line from before sequence numbers takes its position."""
+    return read_events(journal_path(runs, story_id))
+
+
+def read_events(path):
+    events = []
+    if not os.path.isfile(path):
+        return events
+    for position, line in enumerate(read_text(path).splitlines(), 1):
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
+        seq = fields.pop("seq", "")
+        events.append({"seq": int(seq) if seq.isdigit() else position, "at": parts[0], "kind": parts[1],
+                       "name": parts[2], "fields": fields, "line": line})
+    events.sort(key=lambda e: e["seq"])
+    return events
+
+
+@contextlib.contextmanager
+def journal_lock(path):
+    """One writer at a time on a journal: parallel reviewers and a stage's own gate append beside the runner. A
+    folder is made atomically on every platform; one left by a killed process is taken over after half a minute."""
+    lock = path + ".lock"
+    deadline = time.time() + 10
+    while True:
+        try:
+            os.mkdir(lock)
+            break
+        except FileExistsError:
+            with contextlib.suppress(OSError):
+                if time.time() - os.path.getmtime(lock) > 30:
+                    os.rmdir(lock)
+                    continue
+            if time.time() > deadline:
+                break                               # never block a run on a stale lock: append unlocked
+            time.sleep(0.02)
+    try:
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            os.rmdir(lock)
+
+
+def journal_append(runs, story_id, kind, name, *fields, at=None):
+    """Append one event with the next sequence number; returns it."""
+    return append_event(journal_path(runs, story_id), kind, name, *fields, at=at)
+
+
+def append_event(path, kind, name, *fields, at=None):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with journal_lock(path):
+        seq = 1 + max((e["seq"] for e in read_events(path)), default=0)
+        stamp = at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        cells = [stamp, kind, name] + [str(f) for f in fields if str(f)] + [f"seq={seq}"]
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write("\t".join(c.replace("\t", " ").replace("\n", " ") for c in cells) + "\n")
+    return seq
+
+
+class journal_writer:
+    """`with journal_writer(runs, story) as handle: handle.write("<time>\t<kind>\t<name>\t…\n")` — the old
+    append idiom, every line through `journal_append`, so a writer that composes its lines keeps doing so."""
+
+    def __init__(self, runs, story_id):
+        self.runs, self.story_id = runs, story_id
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def write(self, text):
+        for line in text.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                journal_append(self.runs, self.story_id, parts[1], parts[2], *parts[3:], at=parts[0])
+
+
 def worktrees_dir():
     """Where the stories' worktrees live, relative to the main checkout: beside the run folder."""
     runs = (PLACES_REL.get("runs") or DEFAULTS["runs"]).rstrip("/")
@@ -615,6 +707,8 @@ def write_story_fields(path, **fields):
 # confirms (`factory-cli.py --owned-confirm <story>`). `by:` is free text: the digest is the proof, not the name.
 OWNED_DIGEST = ".owned-digest"
 OWNED_CHANGED = ".owned-changed"
+#: The hand-overs' digests at a window's start: what the window left as it was.
+WINDOW_DIGEST = ".window-digest"
 
 
 def answer_section(text):
@@ -654,6 +748,11 @@ def record_owned(runs, story_id, story_path=None):
     story_path = story_path or owned_story_path(story_id)
     folder = evidence_dir(runs, story_id)
     os.makedirs(folder, exist_ok=True)
+    observe_writes(runs, story_id)               # what a person or an earlier window left, before this one writes
+    run_folder = os.path.join(runs, story_id)
+    with open(os.path.join(folder, WINDOW_DIGEST), "w", encoding="utf-8") as handle:
+        handle.writelines(f"{file_digest(os.path.join(run_folder, name))}  {name}\n" for name in STAGE_FILES.values()
+                          if os.path.isfile(os.path.join(run_folder, name)))
     with open(os.path.join(folder, OWNED_DIGEST), "w", encoding="utf-8") as handle:
         handle.writelines(f"{digest}  {part}\n" for part, digest in sorted(owned_parts(story_path).items()))
 
@@ -680,9 +779,33 @@ def rebaseline_owned(story_path):
         record_owned(runs, story_id, story_path)
 
 
-def owned_end(runs, story_id, window):
+def mark_window_files(runs, story_id, window):
+    """A window that ran its stages to the end wrote their files — also one it wrote again as it was: the journal
+    then says so (`wrote <file> same=1`), after what the window wrote anew, in the stages' order."""
+    folder, run_folder = evidence_dir(runs, story_id), os.path.join(runs, story_id)
+    path = os.path.join(folder, WINDOW_DIGEST)
+    at_start = {}
+    if os.path.isfile(path):
+        for line in read_text(path).splitlines():
+            digest, _, name = line.partition("  ")
+            at_start[name] = digest
+        os.remove(path)
+    for stage in SHARED_WINDOWS.get(window, (window,)):
+        name = STAGE_FILES.get(stage)
+        full = os.path.join(run_folder, name) if name else None
+        if full and os.path.isfile(full) and at_start.get(name) == file_digest(full):
+            journal_append(runs, story_id, "wrote", name, f"sha={at_start[name]}", "same=1")
+
+
+def owned_end(runs, story_id, window, ran="0"):
     """At a window's end: unchanged, the digest goes; changed, the change is marked and named. Exit 7 then."""
     folder = evidence_dir(runs, story_id)
+    observe_writes(runs, story_id)               # what the window wrote, in the stages' order
+    if ran == "0":
+        mark_window_files(runs, story_id, window)
+    else:
+        with contextlib.suppress(OSError):
+            os.remove(os.path.join(folder, WINDOW_DIGEST))
     changed = owned_changes(runs, story_id)
     with contextlib.suppress(OSError):
         os.remove(os.path.join(folder, OWNED_DIGEST))
@@ -2601,7 +2724,7 @@ def check_story_pass(result, runs, story_id, story_path, front):
     A document written for an earlier pass, or over a judge who asked for changes, delivers nothing."""
     order = JOURNEY_ORDER if story_kind(front) == "journey" else STAGE_ORDER
     folder = os.path.join(runs, story_id)
-    texts = current_stage_files(folder, order)
+    texts = current_stage_files(runs, story_id, order)
     gaps = [f"{STAGE_FILES[s]} ({'written for an earlier pass' if os.path.isfile(os.path.join(folder, STAGE_FILES[s])) else 'missing'})"
             for s in order if s not in texts]
     if gaps:
@@ -4836,51 +4959,88 @@ def accepted_criteria(body):
     return found
 
 
-#: How much older than the file before it a stage file may be and still count as the same pass: a checkout
-#: writes a story's files within moments of each other, in no particular order.
-STALE_AFTER_SECONDS = 2.0
+#: The stages whose gate runs after their file is written, so a pass of that gate vouches for the file as it stands.
+POST_GATED = ("test", "build", "tidy", "document")
 
 
-def gate_passes(folder):
-    """{stage: epoch} of the last passed gate per stage, from the journal's `gate <stage> exit=0` lines — the runner's, and a
-    stage session's own gate run that passed (`by=<stage>`)."""
-    folder = os.path.normpath(folder)
-    journal = os.path.join(evidence_dir(os.path.dirname(folder), os.path.basename(folder)), "journal.tsv")
-    passes = {}
-    if not os.path.isfile(journal):
-        return passes
-    for line in read_text(journal).splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 4 and parts[1] == "gate" and parts[3] == "exit=0":
-            with contextlib.suppress(ValueError):
-                passes[parts[2]] = calendar.timegm(time.strptime(parts[0][:19], "%Y-%m-%dT%H:%M:%S"))
-    return passes
+def observe_writes(runs, story_id):
+    """Journal a `wrote <file> sha=<digest>` for every hand-over whose content changed since the journal last saw it,
+    in the stages' order — at a window's start and end and at every gate run, so the journal alone tells which file
+    was written after which. A file gone since is journaled `sha=gone`."""
+    folder = os.path.join(runs, story_id)
+    seen = {}
+    for event in journal_events(runs, story_id):
+        if event["kind"] == "wrote":
+            seen[event["name"]] = event["fields"].get("sha")
+    for stage in STAGE_ORDER:
+        name = STAGE_FILES[stage]
+        path = os.path.join(folder, name)
+        digest = file_digest(path) if os.path.isfile(path) else "gone"
+        if seen.get(name, "gone") != digest:
+            journal_append(runs, story_id, "wrote", name, f"sha={digest}")
 
 
-def gate_passed_since(folder, gate, stage):
+def pass_marks(runs, story_id):
+    """{name: seq} of what the journal says about the hand-overs: `wrote:<file>` (the last write), `pass:<gate>` (the
+    last pass of that gate), `fail:<gate>` (the last refusal), `outdated:<file>` (marked an earlier pass's)."""
+    marks = {}
+    for event in journal_events(runs, story_id):
+        kind, name, fields = event["kind"], event["name"], event["fields"]
+        if kind == "wrote" and fields.get("sha") != "gone":
+            marks[f"wrote:{name}"] = event["seq"]
+        elif kind == "wrote":
+            marks.pop(f"wrote:{name}", None)
+        elif kind == "gate":
+            marks[f"{'pass' if fields.get('exit') == '0' else 'fail'}:{name}"] = event["seq"]
+        elif kind == "outdated":
+            marks[f"outdated:{name}"] = event["seq"]
+    return marks
+
+
+def written_at(marks, stage):
+    """When the stage's file last held for the pass: its last write, or a later pass of its own gate."""
+    name = STAGE_FILES[stage]
+    at = marks.get(f"wrote:{name}", 0)
+    if stage in POST_GATED:
+        at = max(at, marks.get(f"pass:{stage}", 0))
+    return None if marks.get(f"outdated:{name}", -1) > at else at
+
+
+def gate_passed_since(runs, story_id, gate, stage):
     """Whether the gate passed after the stage's file was last written — the runner's or a stage's own run."""
-    path = os.path.join(folder, STAGE_FILES[stage])
-    return os.path.isfile(path) and gate_passes(folder).get(gate, 0) >= os.path.getmtime(path) - STALE_AFTER_SECONDS
+    marks = pass_marks(runs, story_id)
+    return os.path.isfile(os.path.join(runs, story_id, STAGE_FILES[stage])) \
+        and marks.get(f"pass:{gate}", 0) >= marks.get(f"wrote:{STAGE_FILES[stage]}", 0) > 0
 
 
-def current_stage_files(folder, order):
-    """{stage: text} for the stage files of the story's current pass. A stage that ran again — a re-plan, a
-    build after `changes-requested`, a test stage applying an answer — makes every later file an earlier
-    pass's: it stays on disk as history, but it no longer says where the story stands. A stage whose gate
-    passed after the file before it was written holds for this pass, though its own file is older: a shared
-    session that went back to its test stage after the build and had the build gate pass again."""
+def current_stage_files(runs, story_id, order):
+    """{stage: text} for the stage files of the story's current pass, from the journal's order alone. A stage that
+    ran again — a re-plan, a build after `changes-requested`, a test stage applying an answer — makes every later file
+    an earlier pass's: it stays on disk as history, but it no longer says where the story stands. A stage whose gate
+    passed after the file before it was written holds for this pass, though its own file is older: a shared session
+    that went back to its test stage after the build and had the build gate pass again."""
+    folder = os.path.join(runs, story_id)
+    marks = pass_marks(runs, story_id)
     texts, newest = {}, None
-    passes = gate_passes(folder)
     for stage in order:
         path = os.path.join(folder, STAGE_FILES[stage])
         if not os.path.isfile(path):
             continue
-        written = max(os.path.getmtime(path), passes.get(stage, 0))
-        if newest is not None and written < newest - STALE_AFTER_SECONDS:
+        written = written_at(marks, stage)
+        if written is None or (newest is not None and written < newest):
             break
         texts[stage] = read_text(path)
-        newest = max(written, newest or written)
+        newest = max(written, newest or 0)
     return texts
+
+
+def backlog_digest(story_path):
+    """The story and its epic as the plan gate read them: a refusal holds until one of the two changes."""
+    digest = hashlib.sha256()
+    for path in (story_path, story_path and os.path.join(epic_folder(story_path), EPIC_FILE)):
+        if path and os.path.isfile(path):
+            digest.update(open(path, "rb").read())
+    return digest.hexdigest()
 
 
 def story_state(cwd, runs, story_id, front, story_path=None):
@@ -4901,8 +5061,9 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     folder, evidence = os.path.join(runs, story_id), evidence_dir(runs, story_id)
     kind = story_kind(front)
 
-    texts = current_stage_files(folder, ADOPT_ORDER if kind == "adopt" else JOURNEY_ORDER if kind == "journey"
+    texts = current_stage_files(runs, story_id, ADOPT_ORDER if kind == "adopt" else JOURNEY_ORDER if kind == "journey"
                                 else STAGE_ORDER)
+    marks = pass_marks(runs, story_id)
     try:
         records = records_of(story_id, story_path)
     except GateError as error:
@@ -4933,10 +5094,10 @@ def story_state(cwd, runs, story_id, front, story_path=None):
         return "stopped", None, f"{MAX_ROUNDS} rounds did not converge"
     refusal = os.path.join(folder, ".gate-plan.txt")
     if os.path.isfile(refusal):
-        # Repaired since: the story or its epic is newer than the refusal, so the plan gate asks again.
-        sources = [p for p in (story_path, story_path and os.path.join(epic_folder(story_path), EPIC_FILE))
-                   if p and os.path.isfile(p)]
-        if not any(os.path.getmtime(p) > os.path.getmtime(refusal) for p in sources):
+        # Repaired since: the story or its epic is not what the plan gate refused, so the plan gate asks again.
+        refused = next((e["fields"].get("backlog") for e in reversed(journal_events(runs, story_id))
+                        if e["kind"] == "gate" and e["name"] == "plan" and e["fields"].get("exit") != "0"), None)
+        if not refused or refused == backlog_digest(story_path):
             return "stopped", None, "the plan gate refused the story — the backlog needs a fix"
         return "in-progress", "plan", "the story changed after the plan gate refused it — planned again"
     conflict = needs_human_ids(texts.get("judge", "")) or []
@@ -4960,9 +5121,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
             and read_text(planned).strip() != story_digest(story_path):
         return "in-progress", "plan", "the story changed after it was planned — every stage runs again"
     integrate_refusal = os.path.join(folder, ".gate-integrate.txt")
-    build_file = os.path.join(folder, STAGE_FILES["build"])
-    if os.path.isfile(integrate_refusal) and not (os.path.isfile(build_file)
-                                                   and os.path.getmtime(build_file) > os.path.getmtime(integrate_refusal)):
+    if os.path.isfile(integrate_refusal) and not marks.get(f"wrote:{STAGE_FILES['build']}", 0) > marks.get("fail:integrate", 0):
         report = read_text(integrate_refusal)
         if "gate:fail checkout" in report:
             return "stopped", None, ("the main checkout could not take the story's commit — see .gate-integrate.txt; "
@@ -4988,11 +5147,11 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     adopt = story_kind(front) == "adopt"
     integrating = has_worktree(story_id, factory_home() or cwd)
     if adopt and verdict_in(texts.get("judge", "")) == "pass":
-        if integrating and gate_passed_since(folder, "adopt", "judge"):
+        if integrating and gate_passed_since(runs, story_id, "adopt", "judge"):
             return "in-progress", "integrate", "the adopt gate passed — its worktree is integrated next"
         return "in-progress", "adopt", "the judge confirmed the tests — the adopt gate delivers it"
     if "document" in texts:
-        if integrating and gate_passed_since(folder, "document", "document"):
+        if integrating and gate_passed_since(runs, story_id, "document", "document"):
             return "in-progress", "integrate", "every gate passed — its worktree is integrated next"
         if story_path:
             with contextlib.suppress(GateError, OSError):
@@ -5158,8 +5317,9 @@ def main(argv):
                         help="check the profile's contract and model keys alone (the runner, before its first stage)")
     parser.add_argument("--record-base", action="store_true",
                         help="with --story: record the tree the story's diff is taken against (the first stage)")
-    parser.add_argument("--owned", nargs=2, metavar=("start|end", "WINDOW"),
-                        help="with --story: record the person's parts at a stage window's start, compare at its end")
+    parser.add_argument("--owned", nargs="+", metavar="start|end WINDOW [EXIT]",
+                        help="with --story: a stage window's start and end — the person's parts recorded and compared, "
+                             "the hand-overs it wrote journaled; EXIT is the window's tool exit (0 by default)")
     parser.add_argument("--record-changes", metavar="STAGE",
                         help="with --story: write changed-<stage>.txt, changed.txt and story.diff from the snapshots")
     parser.add_argument("--project", action="store_true",
@@ -5202,7 +5362,9 @@ def main(argv):
         if args.owned[0] == "start":
             record_owned(args.runs, args.story)
             return 0
-        return owned_end(args.runs, args.story, args.owned[1])
+        if len(args.owned) < 2:
+            parser.error("--owned takes start|end and the window's name")
+        return owned_end(args.runs, args.story, args.owned[1], args.owned[2] if len(args.owned) > 2 else "0")
     if args.record_base or args.record_changes:
         if not args.story:
             parser.error("--record-base/--record-changes need --story")
@@ -5255,10 +5417,12 @@ def main(argv):
         # Not a note: a profile or a story the gate does not read would leave every check skipped and named,
         # and a green run that covers nothing.
         result.fail("layout", hint)
+    story_path = story_id = None
     try:
         story_path = find_story(args.epics, args.story)
         front, body = read_front_matter(story_path)
         story_id = str(front.get("id") or os.path.basename(story_folder(story_path)))
+        observe_writes(args.runs, story_id)
         criteria = criteria_of(story_path, body)
         if not str(front.get("context", "")).strip():
             result.fail(
@@ -5370,7 +5534,8 @@ def main(argv):
                 check_stage_commands(result, profile, cwd, args.stage)
     except GateError as error:
         result.fail("gate", str(error))
-        return result.report(args.story, args.stage, args.json, args.brief)
+        return journal_gate(result, args, story_id, story_path, result.report(args.story, args.stage, args.json,
+                                                                              args.brief))
     if not result.failed and args.stage == "plan":
         if is_delivered(front):
             # Delivered is delivered: a plan gate run over a delivered story (a check, a re-verification)
@@ -5432,9 +5597,7 @@ def main(argv):
         result.ok("delivered", f"{shown(story_path)} carries `delivered: {stamp}` — adopted")
     if not result.failed and args.stage == "integrate":
         integrate_into_home(result, cwd, story_path, story_id, front, args.runs)
-    if not result.failed and args.stage in ("plan", "test", "build", "tidy") and os.environ.get("FACTORY_WORKER"):
-        record_stage_pass(args.runs, story_id, args.stage)
-    return result.report(story_id, args.stage, args.json, args.brief)
+    return journal_gate(result, args, story_id, story_path, result.report(story_id, args.stage, args.json, args.brief))
 
 
 CONFLICT_MARKER = re.compile(r"^(<{7} |={7}$|>{7} )", re.M)
@@ -5514,17 +5677,27 @@ def integrate_into_home(result, cwd, story_path, story_id, front, runs):
                               f"{open_now} open there")
 
 
-def record_stage_pass(runs, story_id, stage):
-    """A gate a stage the runner started ran itself and passed, in the run's journal beside the runner's own lines.
-    A shared builder that corrected the plan after the test gate refused it, and had the test gate pass again, holds
-    a tests.md older than the plan: without the pass on record the document gate read tests.md as an earlier pass's
-    and sent a story the judge had passed back to its test stage, twice."""
-    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
+#: Checks about how a hand-over is written rather than whether the work is right: a refusal by one of them costs a
+#: round without the code being wrong. The journal names every refusal's checks; reports count the two apart.
+FORM_CHECKS = ("files-listed", "story-pass", "tests-mapped", "test-titles", "plan-levels", "levels", "documented",
+               "decisions", "reviews", "layout")
+
+
+def journal_gate(result, args, story_id, story_path, code):
+    """Every gate run over a story is an event: `gate <stage> exit=<code> fail=<checks> by=<who>` — the runner's
+    (`by=runner`, the one that signs suites), a stage's own under a runner (`by=<stage>`), a session's (`by=session`).
+    The plan gate's refusal carries the backlog's digest, so a repair is seen without a clock."""
+    if not story_id:
+        return code
+    failed = sorted({check for state, check, _ in result.entries if state == "fail"})
+    by = "runner" if args.record_suites else (os.environ.get("FACTORY_STAGE") or "stage") \
+        if os.environ.get("FACTORY_WORKER") else "session"
+    fields = [f"exit={code}"] + ([f"fail={','.join(failed)}"] if failed else []) + [f"by={by}"]
+    if args.stage == "plan" and code == 1 and story_path:
+        fields.append(f"backlog={backlog_digest(story_path)}")
     with contextlib.suppress(OSError):
-        os.makedirs(os.path.dirname(journal), exist_ok=True)
-        with open(journal, "a", encoding="utf-8") as handle:
-            handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\tgate\t{stage}\texit=0\t"
-                         f"by={os.environ.get('FACTORY_STAGE') or 'stage'}\n")
+        journal_append(args.runs, story_id, "gate", args.stage, *fields)
+    return code
 
 
 if __name__ == "__main__":
