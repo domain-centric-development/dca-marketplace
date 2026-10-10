@@ -1,6 +1,8 @@
 # DCA Review Checklist (per layer)
 
-Apply only the checks for each file's layer.
+Apply only the checks for each file's layer. The sections are the rows of the report's Block B; a cell counts
+the must-fix and should-fix findings of its section, never the nits. A check that cites a rule id is reported
+in Block A, rule by rule — here it asks only what that rule cannot see.
 
 ---
 

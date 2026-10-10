@@ -4,7 +4,9 @@
 Reads ``../dca-java/rules.json`` (dca-archunit, the rule ids' source of truth) and
 ``../dca-dotnet/rules.json`` (DomainCentric.ArchRules: ported rules, ``n/a`` entries with a
 reason, and the .NET-only ``DCA-NET`` set), both relative to the marketplace root, and writes
-``plugins/dca-core/skills/dca-init/reference/archunit-rule-catalog.md``. Stdlib only.
+``archunit-rule-catalog.md`` into the references of ``dca-init`` (which installs the rules) and
+``dca-audit`` (which reads a project against them, installed or not). Two copies, because a project
+may install either skill alone. Stdlib only.
 
 Usage:  python3 scripts/render-rule-catalog.py [--java PATH] [--dotnet PATH] [--out PATH]
 """
@@ -18,10 +20,10 @@ from pathlib import Path
 MARKETPLACE = Path(__file__).resolve().parent.parent
 DEFAULT_JAVA = MARKETPLACE.parent / "dca-java" / "rules.json"
 DEFAULT_DOTNET = MARKETPLACE.parent / "dca-dotnet" / "rules.json"
-DEFAULT_OUT = (
-    MARKETPLACE / "plugins" / "dca-core" / "skills" / "dca-init" / "reference"
-    / "archunit-rule-catalog.md"
-)
+DEFAULT_OUTS = [
+    MARKETPLACE / "plugins" / "dca-core" / "skills" / skill / "reference" / "archunit-rule-catalog.md"
+    for skill in ("dca-init", "dca-audit")
+]
 
 SET_TITLES = {
     "cycles": "Cyclic dependencies",
@@ -34,6 +36,7 @@ SET_TITLES = {
     "contextmap": "Context map",
     "advanced": "DDD advanced patterns",
     "usecase": "Use case patterns",
+    "errors": "Failure types and their translation",
     "dotnet": ".NET-only rules",
 }
 
@@ -127,12 +130,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--java", type=Path, default=DEFAULT_JAVA)
     parser.add_argument("--dotnet", type=Path, default=DEFAULT_DOTNET)
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--out", type=Path, action="append", help="default: both skill references")
     args = parser.parse_args()
     java = json.loads(args.java.read_text(encoding="utf-8"))
     dotnet = json.loads(args.dotnet.read_text(encoding="utf-8"))
-    args.out.write_text(render(java, dotnet), encoding="utf-8")
-    print(f"{args.out}: {len(java.get('rules', [])) if isinstance(java, dict) else len(java)} Java entries, {len(dotnet.get('rules', [])) if isinstance(dotnet, dict) else len(dotnet)} .NET entries")
+    text = render(java, dotnet)
+    for out in args.out or DEFAULT_OUTS:
+        out.write_text(text, encoding="utf-8")
+    print(f"{', '.join(str(o) for o in args.out or DEFAULT_OUTS)}: {len(java.get('rules', [])) if isinstance(java, dict) else len(java)} Java entries, {len(dotnet.get('rules', [])) if isinstance(dotnet, dict) else len(dotnet)} .NET entries")
 
 
 if __name__ == "__main__":

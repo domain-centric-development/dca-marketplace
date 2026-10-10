@@ -7,8 +7,9 @@ description: |
   translation, cross-context boundaries, naming consistency — and says which rules of the suite the project
   could switch on next. The brownfield entry beside `dca-init`. Use when the user asks to "review my DCA code",
   "is this DCA-compliant", "audit this project / this context for DCA", "/dca-review" (the former name), "where does this code stand against the
-  method", "/dca-review" (the former name), or "/dca-audit [<scope>]". The answer leads with a checklist — every
-  check of the method with a mark, per bounded context — then the findings and the rules to switch on next.
+  method", "/dca-review" (the former name), or "/dca-audit [<scope>]". The answer leads with the standing in two
+  blocks per bounded context — the rule suite set by set, opened to the failing rule, and the review checklist
+  section by section — then the findings and the rules to switch on next.
   Default scope is the whole project; `diff`, a path or a context name narrows it. A person runs it; a delivery
   pipeline's judge does not load it by default.
 ---
@@ -123,15 +124,45 @@ For each finding, capture:
 - **Why** (one sentence — quote the principle)
 - **Suggested fix** (one-line code suggestion when feasible)
 
-### Phase 4: The rules to switch on next
+### Phase 4: The structure, rule by rule
 
-After the review, two lists:
+Block A of the report: where the code stands against the rule suite, **whether the suite is installed or
+not**. On a brownfield project it is not — that is the point of the block: it shows what already holds and
+what would fail on the first run, before anyone adds a dependency. The rules are those of
+`reference/archunit-rule-catalog.md` (Java and .NET, generated from both rule libraries), grouped by its rule
+sets; the set names are the rows, the bounded contexts the columns.
 
-1. **Rules of the suite the project does not enforce yet** and could: read `dca-archunit.properties`
-   (or the .NET configuration) for sets and rules on `warn`, `off` or absent, and name, per finding above,
-   the rule id that would have caught it statically — with the count of places that would fail today. That
-   is the adoption path: switch on what fails nowhere, freeze what fails somewhere, and fix the frozen list
-   story by story. The catalog's adoption tiers (`dca-knowledge`: `guide/archunit-governance/`) say the order.
+**The reading — the default.** For every rule, its *Selects* and *Checks* columns say which classes it looks at
+and what it asserts; judge the code in scope against exactly that, with the layout the project actually has
+(Phase 2) — a project whose packages do not match the default layout is read through the `DcaLayout` options
+the rule catalog names, and the deviations are said once in the summary. A rule that selects nothing in a
+context is `–` there. Informational rules have no mark. The marks are the audit's reading, not a run: the
+summary line says so, and the first run of the suite confirms or corrects them.
+
+**The run — where the suite is installed.** A project with the architecture test (`dca-init` ran) may have its
+last result: the JUnit report (Java: `build/test-results/<task>/TEST-*.xml` of the task that runs the
+`DcaArchitectureTest`; .NET: the `.trx` of the architecture test project). Where it is younger than the newest
+source file, its outcomes replace the reading: one test case per rule id (`[DCA-TAC-002] …`), a failure's
+message lists the violating classes, which name their context, a skipped case is a rule on `off` or
+informational. A stale report is not used. The audit reads a report — it never runs the build.
+
+**What counts.** With the suite installed, its configuration decides: `dca-archunit.properties` (or the .NET
+configuration) and the architecture test's `additionalSelection()` — a set or rule on `off` is `off` in its
+cell, one on `warn` keeps its mark with `(warn)`, a frozen rule counts only what is not in its baseline.
+Without the suite every rule counts — Block A then answers "what if we switched all of it on today".
+
+**Fine where it fails.** A set every rule of which holds in a context is one row with `✓`. A set with a
+failing rule in any context opens: its row shows the count, and below it one row per failing rule — id,
+short name, places per context — while the rules that hold stay summarised in the set row (`12 of 14 hold`).
+A failing rule is never hidden in a set total, and a holding one never gets a row of its own.
+
+Then two lists:
+
+1. **Rules of the suite the project does not enforce yet** and could: the sets and rules on `warn`, `off` or
+   absent, each with the places that would fail today — from Block A, and from the findings of Block B a
+   rule would have caught statically. That is the adoption path: switch on what fails nowhere, freeze what
+   fails somewhere, and fix the frozen list story by story. The catalog's adoption tiers (`dca-knowledge`:
+   `guide/archunit-governance/`) say the order.
 2. **Patterns the suite has no rule for** that *could* be enforced statically: propose one only for a
    structural property with named positive and negative fixtures and a clear selection scope. Past-tense
    event names are a language review prompt: `Sent` is valid without an `ed` suffix — do not propose a
@@ -139,24 +170,44 @@ After the review, two lists:
 
 ### Phase 5: Output
 
-Produce a structured report. It **leads with the checklist**: how far the code fits the method, check by
-check, so a reader sees the standing before the findings — that is what an audit is for. One row per
-section of `reference/checklist.md` that applies to the scope (a section whose layer the scope has no
-files for is `–`), one column per bounded context in scope (one column for a single context or a diff),
-and a mark per cell: `✓` every check of the section holds, `✗ n` the number of places that break one,
-`–` not applicable. The summary line counts the sections that hold.
+Produce a structured report. It **leads with the standing**: how far the code fits the method, so a reader
+sees it before the findings — that is what an audit is for. Two blocks, kept apart, because they answer
+different questions and a red cell in one must not hide a green one in the other:
+
+- **Block A — Structure** (Phase 4): what the rule suite checks, a row per rule set, opened to the rule where
+  one fails.
+- **Block B — Review**: what only a reader sees, a row per section of `reference/checklist.md` that applies to
+  the scope, a column per bounded context in scope (one column for a single context or a diff). A cell counts
+  the **must-fix and should-fix** findings of that section: `✓` none, `✗ n` that many, `–` no files of the
+  layer. **Nits do not colour a cell** — they are listed below with the findings, and a cell may read `✓ · 2 nits`.
+  A check the checklist marks with a rule id is Block A's; Block B confirms only what that rule cannot see.
+
+Findings outside the checklist — a security flaw, a runtime defect, a broken contract with a client — are
+reported in their own section, **Outside the method**, with the same severities; they do not enter either
+block's standing. Say so rather than stretching a checklist section to hold them.
 
 ```
 ## DCA Audit
 
 **Scope:** the project — 3 contexts, {N} source files          (or: {N} files changed on this branch)
-**Standing:** 21 of 27 applicable checks hold · 6 with findings · rule suite: 118 rules enforced, 9 on warn
+**Structure:** 9 of 11 rule sets hold — 2 rules would fail in 3 places (read against the catalog; the suite is not installed)
+**Review:** 21 of 27 applicable checks hold · 1 must-fix · 6 should-fix · 9 nits
 
-### Checklist
-| Check (`reference/checklist.md`) | catalog | ordering | shipping |
+### A — Structure (rule suite)
+| Rule set | catalog | ordering | shipping |
+|---|---|---|---|
+| layered · onion · hexagonal · strategic · contextmap · advanced · naming · cycles | ✓ | ✓ | ✓ |
+| tactical — 20 of 21 hold | ✓ | ✗ 2 | ✓ |
+| ↳ `DCA-TAC-002` aggregate holds no injected dependency | ✓ | ✗ 2 | ✓ |
+| usecase — 16 of 17 hold | ✓ | ✓ | ✗ 1 |
+| ↳ `DCA-USE-013` no remote port inside a transaction | ✓ | ✓ | ✗ 1 |
+| errors | off | off | off |
+
+### B — Review (`reference/checklist.md`; must-fix and should-fix only)
+| Check | catalog | ordering | shipping |
 |---|---|---|---|
 | Domain — Model: aggregate roots | ✓ | ✗ 2 | ✓ |
-| Domain — Model: value objects | ✓ | ✓ | ✓ |
+| Domain — Model: value objects | ✓ · 1 nit | ✓ | ✓ |
 | Domain — Failures | ✗ 1 | ✓ | – |
 | Domain — Events | ✓ | ✓ | – |
 | Application — Use cases: input port, implementation, command, result | ✓ | ✓ | ✗ 1 |
@@ -180,10 +231,13 @@ and a mark per cell: `✓` every check of the section holds, `✗ n` the number 
 - `path/CartCleared.java` — Event name is past tense ✓ but carries no `occurredOn`
   Suggested fix: add `UUID eventId, Instant occurredOn` — the two members the `DomainEvent` contract requires.
 
+### Outside the method
+
+(security, runtime and contract findings no checklist section holds — same format, not counted above)
+
 ### Rules to switch on next
 
-(the suite's rules on warn or off that would have caught findings above, with the places that fail today —
-then the rules the suite lacks and could carry)
+(the suite's rules on warn or off with the places that fail today — then the rules the suite lacks and could carry)
 
 ### Strengths
 
@@ -191,9 +245,10 @@ then the rules the suite lacks and could carry)
 - Output ports are interfaces in application, shared when reused and local when owned by one operation ✓
 ```
 
-Every `✗ n` in the checklist has its `n` findings below, file and line each; a `✓` is a claim about every
-file of that layer in that context, so say in one line how many files the check ran over. Run the audit
-again after the fixes: the checklist is what a team compares between two runs.
+Every `✗ n` has its `n` places below — Block A's in the rule rows (the violating classes, grouped), Block B's
+in the findings, file and line each. A `✓` is a claim about every file of that layer in that context, so say
+in one line how many files each block ran over. Run the audit again after the fixes: the two blocks are what
+a team compares between two runs.
 
 ## Anti-patterns this review catches
 
@@ -371,7 +426,8 @@ never invent a DCA convention from memory.
 
 ## Things this review does NOT do
 
-- **Doesn't run code or tests.** Static review only.
+- **Doesn't run code or tests.** Static review only — Block A is read against the rule catalog; where the
+  suite is installed it may take the suite's last report instead (Phase 4), and it never starts the build.
 - **Doesn't refactor.** It reports — the user fixes.
 - **Doesn't catch business-logic bugs.** It only flags structural/conceptual issues.
 - **Doesn't enforce a single style.** If the project's convention is `*ApplicationService` and
@@ -387,6 +443,8 @@ never invent a DCA convention from memory.
 - `reference/checklist.md` — the complete per-layer checklist (includes Output Port Granularity section)
 - `reference/use-case-pattern.md` — central reference for use-case folder structure, file roles, shared-vs-local output-port decision guide, ArchUnit rules
 - `reference/naming-conventions.md` — extracted from the guide's package-structure chapter
+- `reference/archunit-rule-catalog.md` — every rule of both libraries, set by set, with what it selects and checks;
+  generated (`scripts/render-rule-catalog.py`), the same text as `dca-init`'s — Block A reads it
 
 ### Wiring and metadata review
 

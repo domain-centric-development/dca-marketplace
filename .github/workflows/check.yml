@@ -94,9 +94,10 @@ jobs:
         working-directory: dca-marketplace
         run: |
           python3 scripts/render-rule-catalog.py
-          if ! git diff --quiet -- plugins/dca-core/skills/dca-init/reference/archunit-rule-catalog.md; then
+          if ! git diff --quiet -- plugins/dca-core/skills/*/reference/archunit-rule-catalog.md \
+             || [ -n "$(git ls-files --others --exclude-standard -- plugins/dca-core/skills/*/reference/archunit-rule-catalog.md)" ]; then
             echo "::error::archunit-rule-catalog.md is stale - run scripts/render-rule-catalog.py and commit it"
-            git --no-pager diff -- plugins/dca-core/skills/dca-init/reference/archunit-rule-catalog.md
+            git --no-pager diff -- plugins/dca-core/skills/*/reference/archunit-rule-catalog.md
             exit 1
           fi
       - name: The vendored knowledge catalog equals the canonical bundle

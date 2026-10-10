@@ -109,7 +109,7 @@ dca-marketplace/
 | Path | Source | Regenerate |
 |---|---|---|
 | `plugins/dca-core/skills/dca-knowledge/catalog/` | `../dca-knowledge-catalog/bundle/` | `cd ../dca-knowledge-catalog && PYTHONPATH=src python3 -m dca_catalog.generate` (mirrors here by default; the mirror drops the `resource:` frontmatter) |
-| `plugins/dca-core/skills/dca-init/reference/archunit-rule-catalog.md` | `../dca-java/rules.json`, `../dca-dotnet/rules.json` | `python3 scripts/render-rule-catalog.py` |
+| `plugins/dca-core/skills/{dca-init,dca-audit}/reference/archunit-rule-catalog.md` (one text, two copies — either skill may be installed alone) | `../dca-java/rules.json`, `../dca-dotnet/rules.json` | `python3 scripts/render-rule-catalog.py` |
 
 The rendered files carry no link into a sibling repository — content travels, links do not. Check
 the sources, not the copies, when a rule text looks wrong.

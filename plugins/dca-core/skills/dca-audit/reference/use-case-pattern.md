@@ -298,7 +298,7 @@ cannot see.
 | `DCA-HEX-012` | No `DomainService` in `adapter/incoming/` |
 | `DCA-NAM-002` | Diagnostic only: a use case without an injectable stereotype |
 
-Full list with selection and check: `dca-init/reference/archunit-rule-catalog.md`.
+Full list with selection and check: `archunit-rule-catalog.md` beside this file.
 
 ---
 
@@ -375,6 +375,6 @@ public sealed class PlaceOrderUseCase : IPlaceOrderInputPort
 
 - [checklist.md](checklist.md) — per-layer audit checks (Application — Use Cases, Application — Output Ports)
 - [naming-conventions.md](naming-conventions.md) — complete naming tables
-- [archunit-rule-catalog.md](../../dca-init/reference/archunit-rule-catalog.md) — the static rules that enforce the pattern
+- [archunit-rule-catalog.md](archunit-rule-catalog.md) — the static rules that enforce the pattern
 - [DTO Mapping Strategy](../../dca-new/SKILL.md#dto-mapping-at-the-adapter-boundary) — how adapters map to commands and results
 - [Module Selection Guide](../../dca-init/reference/module-selection-guide.md) — which rule modules enforce the use-case pattern
