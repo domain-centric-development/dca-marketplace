@@ -42,6 +42,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import sys
 import time
 
@@ -693,12 +694,62 @@ def journal_usage(runs, story_id, resolve=True):
     return {s: e for s, e in stages.items() if e["invocations"] or e["measured"]}
 
 
+#: Where a process that is no stage of the table sits among the stages in a report: beside a stage of a shared
+#: window, by an offset — the shared builder after the last stage it carries, the reviews just before the verifier's
+#: first stage, which converges them, the shared verifier after that stage; the backlog before every stage, the
+#: decisions after them.
+PROCESS_RANKS = {"builder": (SHARED_WINDOWS["builder"][-1], 0.5), "review:": (SHARED_WINDOWS["verifier"][0], -0.2),
+                 "verifier": (SHARED_WINDOWS["verifier"][0], 0.5)}
+OUTSIDE_RANKS = {"backlog": -1, "decisions": 98}
+
+
 def stage_rank(stage):
-    """Stage order for reports; the shared builder process (plan to tidy in one) sits before the judge, the
-    shared verifier (judge, then document) after it."""
-    return STAGE_ORDER.index(stage) if stage in STAGE_ORDER else 3.5 if stage == "builder" \
-        else 3.8 if stage.startswith("review:") else 4.5 if stage == "verifier" else -1 if stage == "backlog" \
-        else 98 if stage == "decisions" else 99
+    """Stage order for reports: the table's run order, the processes beside the stages they carry."""
+    if stage in STAGE_ORDER:
+        return STAGE_ORDER.index(stage)
+    process = "review:" if stage.startswith("review:") else stage
+    if process in PROCESS_RANKS:
+        anchor, offset = PROCESS_RANKS[process]
+        return STAGE_ORDER.index(anchor) + offset
+    return OUTSIDE_RANKS.get(stage, 99)
+
+
+#: What a stage name may look like for the runner: the cli prints the table as shell lines the runner evaluates,
+#: so a name is checked to be a plain word before it is printed.
+STAGE_WORD = re.compile(r"[a-z][a-z0-9_-]*")
+FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
+
+
+def stage_names(kind=None, window=None, every=False):
+    """The table's stage names in its order: the run order (every row with `every`), narrowed to the stages a story
+    of `kind` runs and to those `window` carries."""
+    return [s.name for s in STAGES if (every or s.in_order) and (kind is None or kind in s.kinds)
+            and (window is None or s.window == window)]
+
+
+def stages_shell(places=()):
+    """The table as the runner reads it once at its start, one bash assignment per line: the run order, the steps
+    after it, each shared window's stages, which gate runs before and which after its stage, the stages whose gate
+    runs the mapped tests without the suite, which kind runs which row, the hand-over each stage writes — and the
+    places asked for, quoted. Every name is the table's, checked to be a plain word; nothing is read from a file."""
+    names = [s.name for s in STAGES] + list(SHARED_WINDOWS) + list(ALL_KINDS)
+    bad = [name for name in names if not STAGE_WORD.fullmatch(name)]
+    bad += [file for file in STAGE_FILES.values() if not FILE_WORD.fullmatch(file)]
+    if bad:
+        print(f"factory-cli: the stage table holds a name the runner cannot take as a word: {', '.join(bad)}",
+              file=sys.stderr)
+        return 2
+    array = lambda name, values: f"{name}=({' '.join(values)})"
+    lines = [array("STAGES", STAGE_ORDER), array("STEPS", [s.name for s in STAGES if not s.in_order])]
+    lines += [array(f"{window.upper().replace('-', '_')}_STAGES", stages) for window, stages in SHARED_WINDOWS.items()]
+    lines += [array("PRE_GATED", [s.name for s in STAGES if s.in_order and s.gated and not s.post_gated]),
+              array("POST_GATED", [s.name for s in STAGES if s.in_order and s.post_gated]),
+              array("RED_STAGES", [s.name for s in STAGES if s.in_order and s.tested and not s.suite])]
+    lines.append("KIND_STAGES=' " + " ".join(f"{kind}:{s.name}" for s in STAGES for kind in s.kinds) + " '")
+    lines.append("STAGE_FILES=' " + " ".join(f"{name}:{file}" for name, file in STAGE_FILES.items()) + " '")
+    lines += [f"PLACE_{key.upper()}={shlex.quote(place(key))}" for key in places]
+    print("\n".join(lines))
+    return 0
 
 
 def tokens_of(entry):
@@ -1458,7 +1509,7 @@ def story_facts(cwd, runs, story_id, front=None):
                 continue
             counted.add((stage, fields["window"]))
         if kind == "stage-start":
-            if stage == "plan" or not passes:
+            if stage == STAGE_ORDER[0] or not passes:
                 passes.append(dict(start=moment, end=None, seconds=0, tokens=0, measured=0, runs=0, stages=set()))
             passes[-1]["stages"].add(stage)
             open_starts[stage] = moment
@@ -3461,9 +3512,7 @@ def contract_text(stage, runs):
     text = contract_body(stage, runs)
     if text is None:
         return None
-    files = {"plan": ("plan.md",), "test": ("tests.md",), "build": ("build.md",), "tidy": ("tidy.md",),
-             "judge": ("judge.md",), "document": ("document.md",)}.get(stage, ())
-    for name in files:
+    for name in (STAGE_FILES[stage],) if stage in STAGE_FILES else ():
         base, per = HANDOVER_BUDGET[name]
         text += (f"\n- size: what {name} has to say fits in {base / 1000:.1f} kB"
                  + (f" plus {per} bytes per criterion" if per else "")
@@ -3528,7 +3577,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - `## Notes`: `- uncovered: <key> — <why>` only when unavoidable — not what a test fails on: the red run records it
 - stubs: a type with nothing a criterion observes (a record and its fields, an enum, an interface, an exception type) is
   written whole here; a method whose outcome a criterion asserts throws — whatever a criterion observes, throws"""
-    if stage in ("build", "tidy"):
+    if stage in FILES_SECTIONS and STAGE[stage].suite:
         table, name = ("## Changed", "build") if stage == "build" else ("## Moves", "tidy")
         return f"""{CONTRACT_HEAD}
 
@@ -3636,7 +3685,7 @@ def changed_for_skeleton(cwd, runs, story_id, stage):
     # the gate checks the union of the three hand-overs against the builder's record: a file another
     # hand-over lists is not this stage's to list (inside the open window only the earlier ones exist)
     listed = set()
-    for name in ("test", "build", "tidy"):
+    for name in FILES_SECTIONS:
         if name != stage:
             listed |= _gate.listed_files(os.path.join(runs, story_id, STAGE_FILES[name])) or set()
     not_listed = lambda path: path not in listed and not any(path.endswith("/" + n) for n in listed)
@@ -3660,7 +3709,7 @@ def _files_skeleton(runs, story_id, stage, cwd="."):
     The stage fills in the why; it never types the list — the one refusal that cost the test stage a
     gate run in the bench. Idempotent: a path already listed is not added twice."""
     if stage not in FILES_SECTIONS:
-        print(f"factory: --files-skeleton takes test, build or tidy, not {stage!r}", file=sys.stderr)
+        print(f"factory: --files-skeleton takes {', '.join(FILES_SECTIONS)}, not {stage!r}", file=sys.stderr)
         return 2
     changed = changed_for_skeleton(cwd, runs, story_id, stage)
     if changed is None:
@@ -4054,7 +4103,8 @@ def main(argv):
     parser.add_argument("--once", action="store_true", help="with --follow: print the newest output's last lines and exit")
     parser.add_argument("--process", help="with --follow: only that process's output — builder, verifier, review-ddd, plan, …")
     parser.add_argument("--all", dest="every", action="store_true",
-                        help="with --follow --story: every process of the story, in the order they began, and exit")
+                        help="with --follow --story: every process of the story, in the order they began, and exit; "
+                             "with --stages: every row of the table, the steps after the run order too")
     parser.add_argument("--lines", type=int, default=30, help="with --follow --once: how many lines (0: all)")
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
@@ -4134,13 +4184,20 @@ def main(argv):
     parser.add_argument("--drift", action="store_true",
                         help="name a difference between the profile's architecture command and the conventions file's "
                              "(exit 1), or nothing (exit 0); with --brief the same one line")
+    parser.add_argument("--stages", action="store_true",
+                        help="the gate's stage table: the run order, space-separated (--for-kind, --window, --all "
+                             "narrow or widen it); with --shell the bash lines the runner reads once at its start "
+                             "(and `PLACE_<KEY>=` for --place), and exit")
+    parser.add_argument("--for-kind", choices=ALL_KINDS, help="with --stages: the stages a story of that kind runs")
+    parser.add_argument("--window", choices=tuple(SHARED_WINDOWS), help="with --stages: the stages that shared process carries")
+    parser.add_argument("--shell", action="store_true", help="with --stages: the table as bash assignments")
     parser.add_argument("--place", metavar="KEY",
                         help="where the factory reads KEY (product, tech, domain, epics, runs), from the profile or its default")
     parser.add_argument("--delivered", metavar="STORY",
                         help="exit 0 when the story carries the gate's delivered mark, 1 when it does not")
     parser.add_argument("--contract", metavar="STAGE",
-                        help="the exact shape the gate holds that stage's file to (plan, test, build, tidy, judge, "
-                             "document), from the gate's own constants, and exit")
+                        help=f"the exact shape the gate holds that stage's file to ({', '.join(STAGE_ORDER)}), or "
+                             "review or glossary, from the gate's own constants, and exit")
     parser.add_argument("--files-skeleton", nargs=2, metavar=("STORY", "STAGE"),
                         help="write the test, build or tidy hand-over's file list from what the tree changed "
                              "(the file's skeleton when it is missing, the missing paths when the stage wrote it)")
@@ -4181,6 +4238,13 @@ def main(argv):
     set_places(read_profile(profile_path), epics=args.epics, runs=args.runs)
     args.epics, args.runs = place("epics"), place("runs")
     # the runner's questions first: they read one file and print one answer
+    if args.stages:
+        if args.shell:
+            if args.place and args.place not in DEFAULTS:
+                parser.error(f"--place takes one of {', '.join(DEFAULTS)}")
+            return stages_shell((args.place,) if args.place else ())
+        print(" ".join(stage_names(args.for_kind, args.window, args.every)))
+        return 0
     if args.contract:
         text = contract_text(args.contract, args.runs)
         if text is None:
@@ -4244,9 +4308,9 @@ def main(argv):
         print(verdict_of_story(args.runs, args.verdict))
         return 0
     if args.back_to:
-        if args.stage == "build":
+        if args.stage:
             # the build stage found a defect in a test's own code, not in what it asserts: only `test` sends it back
-            path = os.path.join(args.runs, args.back_to, STAGE_FILES["build"])
+            path = os.path.join(args.runs, args.back_to, STAGE_FILES[args.stage])
             print("test" if os.path.isfile(path) and back_in(read_text(path)) == "test" else "")
             return 0
         path = os.path.join(args.runs, args.back_to, "judge.md")

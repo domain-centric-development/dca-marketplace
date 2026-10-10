@@ -1802,6 +1802,45 @@ def verify_runner(runner, verbose=False):
             if os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".rounds")) else "gone"
         check("runner: an unknown --from stage is refused (exit 2), invokes nothing and keeps the rounds",
               code == 2 and "INVOKED" not in output and rounds == "2", f"exit {code}; rounds {rounds}")
+    # 1d3''. the stages are the gate's table: the cli prints it, and the runner's stages and --from names come from it
+    #       — a row added to a copy of the gate is a stage of that copy's runner, without a line of the runner changed
+    for root in throwaway():
+        gated(build_project(root))
+        cli = cli_of(runner)
+        names = subprocess.run(
+            [sys.executable, "-c", "import importlib.util as u, sys; s = u.spec_from_file_location('gate', sys.argv[1]); "
+             "m = u.module_from_spec(s); s.loader.exec_module(m); print(' '.join(r.name for r in m.STAGES)); "
+             "print(' '.join(r.name for r in m.STAGES if r.in_order))",
+             os.path.join(os.path.dirname(runner), "story-gate.py")],
+            capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
+        every = subprocess.run([sys.executable, cli, "--stages", "--all"], cwd=root, capture_output=True, text=True,
+                               encoding="utf-8").stdout.strip()
+        order = subprocess.run([sys.executable, cli, "--stages"], cwd=root, capture_output=True, text=True,
+                               encoding="utf-8").stdout.strip()
+        shell = subprocess.run([sys.executable, cli, "--stages", "--shell", "--place", "runs"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8").stdout
+        check("cli: --stages prints the gate's table — every row with --all, the run order without; --shell the same "
+              "order as the runner's STAGES and the run folder quoted",
+              len(names) == 2 and every == names[0] and order == names[1]
+              and f"STAGES=({order})" in shell.splitlines() and "PLACE_RUNS=.dca-factory/runs" in shell.splitlines(),
+              f"table {names}; --all {every!r}; --stages {order!r}; shell {shell[:200]!r}")
+        patched = os.path.join(root, "patched-plugin")
+        shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), patched, symlinks=True)
+        patched_gate = os.path.join(patched, "factory-run", "scripts", "story-gate.py")
+        body = open(patched_gate, encoding="utf-8").read()
+        row = '    Stage("adopt", kinds=("adopt",), in_order=False),\n'
+        with open(patched_gate, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(body.replace(row, '    Stage("probe", "probe.md", gated=False),\n' + row, 1))
+        patched_runner = os.path.join(patched, "factory-run", "scripts", "factory.sh")
+        code_bad, refused = run_runner(patched_runner, root, "run", "--story", "STORY-1", "--from", "nonsense",
+                                       "--tool", "claude", "--dry-run")
+        code_probe, probed = run_runner(patched_runner, root, "run", "--story", "STORY-1", "--from", "probe",
+                                        "--tool", "claude", "--dry-run")
+        check("runner: a row added to the gate's table is a stage of the runner — named among --from's stages and run "
+              "from there, the runner unchanged",
+              row in body and code_bad == 2 and "document probe adopt integrate)" in refused
+              and code_probe == 0 and "── stage probe" in probed and "names no stage" not in probed,
+              f"exit {code_bad}/{code_probe}; {refused[-200:]!r}; {probed[-300:]!r}")
     # 1d4. three rounds stop a story; a person's --from starts a new count, keeps the old one, and the gate
     #      checks the existing file before the stage is invoked
     for root in throwaway():

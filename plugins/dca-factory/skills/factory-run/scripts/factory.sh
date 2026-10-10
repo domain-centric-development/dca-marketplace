@@ -48,13 +48,12 @@
 
 set -uo pipefail
 
-STAGES=(plan test build tidy judge document)
-# Which gate runs when. `plan` is the only gate that can run *before* its stage: it reads the
-# backlog alone. Every other gate judges the file its stage writes — `tests.md`, the implementation,
-# `document.md` — so it runs after it. Gating `test` up front would refuse every story for the
-# missing file its own stage is about to write.
-PRE_GATED=(plan)
-POST_GATED=(test build tidy document)
+# The stages are the gate's table, read through the cli once Python is found (below): STAGES, the run order;
+# STEPS, what comes after it; BUILDER_STAGES and VERIFIER_STAGES, what each shared process carries. And which
+# gate runs when: `plan` is the only gate that can run *before* its stage (PRE_GATED): it reads the backlog alone.
+# Every other gate judges the file its stage writes — `tests.md`, the implementation, `document.md` — so it runs
+# after it (POST_GATED). Gating `test` up front would refuse every story for the missing file its own stage is
+# about to write.
 GATE=".agents/factory/story-gate.py"
 GATE_REL=$GATE
 # What shows and coordinates, beside the gate that decides: the file next to this script (the project's
@@ -133,9 +132,13 @@ fi
 # Every Python this runner starts writes UTF-8 — the gate's and the setup's lines carry `—` and `→`,
 # and a Windows console's code page (cp1252) cannot encode them: the print raises and the step dies.
 export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
-# Where the run artefacts go: the profile's `runs:` or its default, read through the cli like every other
-# place — the runner hard-codes no path of the project's. The stop file lives beside the runs.
-RUNS=$(cli --place runs 2>/dev/null); RUNS=${RUNS:-.dca-factory/runs}
+# The stage table and where the run artefacts go, in one call: the gate's stages as bash arrays — names the cli
+# checks to be plain words, never read from a file — and the profile's `runs:` or its default, quoted, read through
+# the cli like every other place: the runner hard-codes no path of the project's and no stage. Without a cli beside
+# the runner there are no stages, and `run` stops before its first one (the cli pair's check names the update).
+# The stop file lives beside the runs.
+eval "$(cli --stages --shell --place runs 2>/dev/null)"
+RUNS=${PLACE_RUNS:-.dca-factory/runs}
 STOP_FILE="$(dirname "$RUNS")/stop"
 # Every story runs in a worktree of its own (WP-92): the runner works from the main checkout, HOME_DIR, and
 # enters a story's worktree for its stages. What is state stays here — the run folder is named absolutely
@@ -178,10 +181,25 @@ can_symlink() {
 # A stage is finished when its hand-over file exists. The names are the file contract's, not the
 # stage names — the test stage writes `tests.md`, because the table in it maps several tests.
 stage_file() {
-  case "$1" in
-    test) echo "tests.md" ;;
-    *)    echo "$1.md" ;;
-  esac
+  local entry=${STAGE_FILES#* "$1":}
+  [ "$entry" != "$STAGE_FILES" ] && echo "${entry%% *}"
+}
+
+# Whether a story of <kind> runs <stage> (a step too), as the table says.
+kind_runs() {                               # kind_runs <kind> <stage>
+  [[ "$KIND_STAGES" == *" $1:$2 "* ]]
+}
+
+# Where a round goes back to for a story of <kind>: <stage>, or the last builder stage before it the kind runs —
+# a journey and an adoption build nothing, so their round goes back to the test stage.
+back_for() {                                # back_for <kind> <stage> -> stage
+  local st back=$2
+  kind_runs "$1" "$2" && { echo "$2"; return; }
+  for st in "${BUILDER_STAGES[@]}"; do
+    kind_runs "$1" "$st" && back=$st
+    [ "$st" = "$2" ] && break
+  done
+  echo "$back"
 }
 
 usage() { sed -n '2,/^# FACTORY_TOOL_CMD/p' "$0" | sed '$d' >&2; exit 2; }
@@ -1864,13 +1882,12 @@ stopped_for_human() {                       # stopped_for_human <artefact> <stag
 # fail) and the build and tidy gates run again here. The judge and the document stage stay separate
 # processes with a fresh context — the judge's independence is the point of it. Only `model.<tool>`
 # applies to the shared process; per-stage model keys need a process per stage.
-BUILDER_STAGES=(plan test build tidy)
 run_shared_builder() {                      # run_shared_builder <story> <tool> <from> <dry> [<kind>]
   local story=$1 tool=$2 from=$3 dry=$4 kind=${5:-story} range=() on=0 st
   for st in "${BUILDER_STAGES[@]}"; do
     [ "$st" = "$from" ] && on=1
     # a journey and an adoption build nothing: their shared stages are plan and test
-    [ "$kind" != story ] && { [ "$st" = build ] || [ "$st" = tidy ]; } && continue
+    kind_runs "$kind" "$st" || continue
     [ "$on" = 1 ] && range+=("$st")
   done
   [ "${#range[@]}" -gt 0 ] || return 0
@@ -1970,16 +1987,18 @@ that are its own (a test that asserts too little is the test stage's, with its b
   done
   # Checked, not believed: the process says it ran the gates; the runner looks. A story's tests were seen
   # red; a journey's and an adoption's are green at their test gate, so that gate runs again here.
-  if [ "$kind" != story ] && [[ " ${range[*]} " == *" test "* ]]; then
-    echo "── gate test  (re-checked by the runner)"
-    gate test "$story" || { echo "factory: the runner's re-check of gate 'test' refused the shared stages' work." >&2; return 1; }
-  fi
-  if [ "$kind" = story ] && [[ " ${range[*]} " == *" test "* ]] && [ ! -s "$(evidence "$story")/.tests-red" ]; then
-    echo "factory: the shared stages left no red proof ($(evidence "$story")/.tests-red) — the test gate never saw the tests fail." >&2
-    return 1
-  fi
-  for st in build tidy; do
+  for st in "${RED_STAGES[@]}"; do
     [[ " ${range[*]} " == *" $st "* ]] || continue
+    if [ "$kind" != story ]; then
+      echo "── gate $st  (re-checked by the runner)"
+      gate "$st" "$story" || { echo "factory: the runner's re-check of gate '$st' refused the shared stages' work." >&2; return 1; }
+    elif [ ! -s "$(evidence "$story")/.tests-red" ]; then
+      echo "factory: the shared stages left no red proof ($(evidence "$story")/.tests-red) — the $st gate never saw the tests fail." >&2
+      return 1
+    fi
+  done
+  for st in "${range[@]}"; do
+    [[ " ${POST_GATED[*]} " == *" $st "* ]] && [[ " ${RED_STAGES[*]} " != *" $st "* ]] || continue
     echo "── gate $st  (re-checked by the runner)"
     if ! gate "$st" "$story"; then
       environment_refused "$st" "$story" && return 1
@@ -2005,7 +2024,6 @@ that are its own (a test that asserts too little is the test stage's, with its b
 # of the split; the verifier shares a context only with the stage after the verdict, which writes no code.
 # The process runs the document gate itself; the runner reads the verdict, re-checks the document gate,
 # and takes a `changes-requested` back to the build stage as it always does.
-VERIFIER_STAGES=(judge document)
 
 # The reviews: one tool process per perspective, started at once, each writing its report to
 # reviews/<perspective>.md; the judge then converges from the files instead of reviewing in its own context —
@@ -2074,8 +2092,8 @@ $(where_things_are "$tool" "review:$name" "$story")"
 }
 
 run_shared_verifier() {                     # run_shared_verifier <story> <tool> <dry> [<kind>]
-  local story=$1 tool=$2 dry=$3 kind=${4:-story} range=(judge)
-  [ "$kind" = adopt ] || range+=(document)  # an adoption documents nothing: its verifier is the judge alone
+  local story=$1 tool=$2 dry=$3 kind=${4:-story} range=() st
+  for st in "${VERIFIER_STAGES[@]}"; do kind_runs "$kind" "$st" && range+=("$st"); done  # an adoption documents nothing: its verifier is the judge alone
   local list; list=$(IFS=+; echo "${range[*]}")
   local document=""
   [ "$kind" != adopt ] && document=" Then — only when your judge file says \`verdict: pass\` — run \
@@ -2134,8 +2152,7 @@ second writer. $(where_things_are "$tool" verifier "$story")"
         echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
         return 1
       fi
-      local back; back=$(cli --back-to "$story" 2>/dev/null || echo build)
-      { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
+      local back; back=$(back_for "$kind" "$(cli --back-to "$story" 2>/dev/null || echo build)")
       echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
       run_stages "$story" "$tool" "$back" "$dry"; return $? ;;
     story-conflict)
@@ -2144,7 +2161,7 @@ second writer. $(where_things_are "$tool" verifier "$story")"
     "") echo "factory: $RUNS/$story/judge.md carries no 'verdict:' line — the judge stage is not finished." >&2; return 1 ;;
     *) echo "factory: judge verdict '$verdict' is not one of pass|changes-requested|story-conflict." >&2; return 1 ;;
   esac
-  if [ "$kind" = adopt ]; then adopt_gate "$story" "$tool" "$dry"; return $?; fi
+  if kind_runs "$kind" adopt; then adopt_gate "$story" "$tool" "$dry"; return $?; fi
   artefact="$RUNS/$story/document.md"
   [ -f "$artefact" ] || { echo "factory: the shared stages produced no $artefact — stage 'document' is not finished." >&2; return 1; }
   if asks_human "$artefact"; then stopped_for_human "$artefact" document "$story"; return $?; fi
@@ -2445,8 +2462,8 @@ adopt_gate() {                              # adopt_gate <story> <tool> <dry>
 }
 
 run_stages() {                              # run_stages <story> <tool> <from> <dry> — in the checkout it is called in
-  local story=$1 tool=$2 from=${3:-plan} dry=${4:-}
-  local started=0 ran="" waiting built=""
+  local story=$1 tool=$2 from=${3:-${STAGES[0]}} dry=${4:-}
+  local started=0 ran="" waiting built="" st
   waiting=$(open_decisions "$story")
   if [ -n "$waiting" ]; then
     echo "factory: story $story waits for a decision — no stage runs until it is answered:" >&2
@@ -2468,14 +2485,14 @@ run_stages() {                              # run_stages <story> <tool> <from> <
   for stage in "${STAGES[@]}"; do
     [ "$stage" = "$from" ] && started=1
     [ "$started" = 1 ] || continue
-    # A journey walks what is delivered: nothing to build, nothing to tidy.
-    if [ "$kind" = journey ] && { [ "$stage" = build ] || [ "$stage" = tidy ]; }; then
-      echo "── stage $stage  (skipped: a journey builds nothing)"
-      continue
-    fi
-    # An adoption builds nothing and documents nothing: plan, test, judge, then the adopt gate.
-    if [ "$kind" = adopt ] && { [ "$stage" = build ] || [ "$stage" = tidy ] || [ "$stage" = document ]; }; then
-      echo "── stage $stage  (skipped: an adopted story is not built)"
+    # A journey walks what is delivered: nothing to build, nothing to tidy. An adoption builds nothing and
+    # documents nothing: plan, test, judge, then the adopt gate. The table says which kind runs which stage.
+    if ! kind_runs "$kind" "$stage"; then
+      case "$kind" in
+        journey) echo "── stage $stage  (skipped: a journey builds nothing)" ;;
+        adopt)   echo "── stage $stage  (skipped: an adopted story is not built)" ;;
+        *)       echo "── stage $stage  (skipped: a $kind story does not run it)" ;;
+      esac
       continue
     fi
 
@@ -2504,9 +2521,9 @@ run_stages() {                              # run_stages <story> <tool> <from> <
     fi
     # The verifier runs where the judge would: judge, then document in the same process. Resumed at the
     # document stage alone (--from document, a refused document round), the stage runs in its own context.
-    if [ -n "$SHARED_VERIFIER" ] && [ "$stage" = judge ]; then
+    if [ -n "$SHARED_VERIFIER" ] && [ "$stage" = "${VERIFIER_STAGES[0]}" ]; then
       run_shared_verifier "$story" "$tool" "$dry" "$kind" || return $?
-      ran="${ran:+$ran,}judge"; [ "$kind" != adopt ] && ran="$ran,document"
+      for st in "${VERIFIER_STAGES[@]}"; do kind_runs "$kind" "$st" && ran="${ran:+$ran,}$st"; done
       break
     fi
 
@@ -2667,7 +2684,7 @@ run_stages() {                              # run_stages <story> <tool> <from> <
       case "$verdict" in
         pass)
           echo "factory: judge verdict 'pass'."
-          if [ "$kind" = adopt ]; then
+          if kind_runs "$kind" adopt; then
             adopt_gate "$story" "$tool" "$dry"
             return $?
           fi
@@ -2678,8 +2695,7 @@ run_stages() {                              # run_stages <story> <tool> <from> <
             echo "factory: judge verdict 'changes-requested' in round $rounds — three rounds did not converge. needs-human." >&2
             return 1
           fi
-          local back; back=$(cli --back-to "$story" 2>/dev/null || echo build)
-          { [ "$kind" = journey ] || [ "$kind" = adopt ]; } && back=test
+          local back; back=$(back_for "$kind" "$(cli --back-to "$story" 2>/dev/null || echo build)")
           echo "factory: judge verdict 'changes-requested' — round $rounds goes back to the $back stage." >&2
           run_stages "$story" "$tool" "$back" "$dry"
           return $?
@@ -3253,9 +3269,9 @@ probed against a signed-in OpenCode)" >&2; }
         fi
         echo "factory: story $story starts at $from${local_detail:+ — $local_detail}"
       else
-        case " ${STAGES[*]} adopt integrate " in
+        case " ${STAGES[*]:-} ${STEPS[*]:-} " in
           *" $from "*) ;;
-          *) echo "factory: --from $from names no stage (${STAGES[*]} adopt integrate) — nothing ran, the rounds are as they were" >&2
+          *) echo "factory: --from $from names no stage (${STAGES[*]:-} ${STEPS[*]:-}) — nothing ran, the rounds are as they were" >&2
              exit 2 ;;
         esac
         [ -n "$dry" ] || reset_rounds "$story"
