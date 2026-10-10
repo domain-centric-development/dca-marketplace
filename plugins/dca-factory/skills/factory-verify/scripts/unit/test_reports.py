@@ -200,10 +200,7 @@ class StreamParts(Reports):
                            {"type": "result", "total_cost_usd": 0.5})
         self.assertEqual(reports.stream_parts(path), ([], 0.5))
 
-    @unittest.expectedFailure
     def test_a_stream_that_is_gone_has_no_parts(self):
-        # stream_parts catches OSError, but read_text raises GateError for a missing file — kept as a known
-        # defect: a stream removed between the caller's glob and the read raises instead of counting nothing
         self.assertEqual(reports.stream_parts("/no/such/stream"), ([], None))
 
 

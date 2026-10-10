@@ -720,7 +720,8 @@ def backlog_digest(story_path):
     digest = hashlib.sha256()
     for path in (story_path, story_path and os.path.join(epic_folder(story_path), EPIC_FILE)):
         if path and os.path.isfile(path):
-            digest.update(open(path, "rb").read())
+            with open(path, "rb") as handle:
+                digest.update(handle.read())
     return digest.hexdigest()
 
 

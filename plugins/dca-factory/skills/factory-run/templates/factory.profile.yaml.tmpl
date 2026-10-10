@@ -131,6 +131,8 @@
 # parallel     how many stories the runner runs at once, each in its worktree (default 1). A slot counts a
 #              story with a running stage; one that waits for an answer or an acceptance holds none.
 #              `factory.sh run --parallel <n>` and FACTORY_PARALLEL override the line for one run
+# stageTimeout how long one stage's tool may run (90, 90s, 30m, 2h; no limit by default) before the runner
+#              stops it; FACTORY_STAGE_TIMEOUT overrides the line for one run
 # reviews      perspectives the judge stage covers *in addition to* its built-in ones
 # review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
 #              tool; a review *agent* only in a tool that has agents — where it is missing, the
@@ -153,6 +155,7 @@ formatFix: {{FORMAT_FIX_COMMAND}}
 #acceptance: pages
 #stages: separate
 #parallel: 2
+#stageTimeout: 45m
 #run: <how a person starts the application>
 #knowledge: <the catalog skill a stage cites>
 #knowledge.read: <paths inside that catalog a stage reads once before it writes code, comma-separated>

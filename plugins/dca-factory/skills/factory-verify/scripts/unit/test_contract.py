@@ -58,10 +58,7 @@ class Profile(unittest.TestCase):
                 "contract": "17", "test": "gradle test --tests '{class}' -q", "format": "spotless",
                 "model.claude.build": "opus"})
 
-    @unittest.expectedFailure
     def test_a_double_quoted_value_keeps_a_single_quote_at_its_end(self):
-        # read_profile strips `"` and then `'` from both ends, so a command ending in a quoted argument loses
-        # its closing quote — kept as a known defect until the reader takes one pair of quotes only
         with tempfile.TemporaryDirectory() as root:
             path = write(os.path.join(root, "p.yaml"), "test: \"gradle test --tests '{class}'\"\n")
             self.assertEqual(contract.read_profile(path)["test"], "gradle test --tests '{class}'")

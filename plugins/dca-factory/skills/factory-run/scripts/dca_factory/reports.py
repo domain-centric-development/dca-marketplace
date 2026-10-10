@@ -13,7 +13,7 @@ import re
 from datetime import datetime, timezone
 from xml.etree import ElementTree
 from .contract import (
-    read_profile, read_text, resolve_profile, SHARED_WINDOWS)
+    GateError, read_profile, read_text, resolve_profile, SHARED_WINDOWS)
 
 
 #: Where test runners leave a report of what they actually executed. These are file-format
@@ -584,7 +584,7 @@ def stream_parts(path):
     parts, current, answers, cost, output_total = [], None, {}, None, None
     try:
         lines = read_text(path).splitlines()
-    except OSError:
+    except (OSError, GateError):
         return [], None
     for raw in lines:
         try:
@@ -665,7 +665,7 @@ def stream_denials(path):
     permission: the tool refuses the call, and the stage spends a turn on another way."""
     try:
         text = read_text(path)
-    except OSError:
+    except (OSError, GateError):
         return []
     events = []
     try:

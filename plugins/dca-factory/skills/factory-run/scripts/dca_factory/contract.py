@@ -195,7 +195,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 17
 
 
-VERSION = "0.72.0"
+VERSION = "0.73.0"
 
 
 def read_front_matter(path):
@@ -231,6 +231,11 @@ def read_front_matter(path):
     return data, parts[2]
 
 
+def unquoted(value):
+    """A profile value without the one pair of quotes around it — a quote inside it, at its end too, stays."""
+    return value[1:-1] if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'" else value
+
+
 def read_profile(path):
     """Flat `key: value` profile. Missing file is not an error — every command
     is then reported as not declared."""
@@ -242,7 +247,7 @@ def read_profile(path):
         if not line or line.startswith("#") or ":" not in line:
             continue
         key, value = line.split(":", 1)
-        profile[key.strip()] = value.strip().strip('"').strip("'")
+        profile[key.strip()] = unquoted(value.strip())
     return profile
 
 

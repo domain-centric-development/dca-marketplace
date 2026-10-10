@@ -454,6 +454,11 @@ starts fresh and reads the skill, the story and its predecessor's file again.
   `layout`), as *substance* otherwise: a form refusal costs a round without the code being wrong.
 - `--story-budget <tokens>` on `run` or `backlog` stops before the next stage once the story has
   used that many. The count comes from the journal, so a restart does not reset it.
+- A stage's time limit — `FACTORY_STAGE_TIMEOUT`, else the profile's `stageTimeout:` (`90`, `90s`, `30m`, `2h`;
+  none by default) — stops a tool that runs past it, with every process it started, and the journal records
+  `exit=timeout`. Ctrl-C stops the running stage's tool too and gives the checkout back (exit 130); a TERM or a
+  hang-up lets the running stage finish and starts nothing more (143, 129). The runner is `dca_factory/runner.py`;
+  `factory.sh run` checks the tool, the carriers and the contract and then hands over to it.
 - In a session (`/factory-run` without the runner) the orchestrator marks each stage with
   `--stage-start`/`--stage-end`; the numbers come from the session's own log, without a price, so
   `cost` reads `—`.
