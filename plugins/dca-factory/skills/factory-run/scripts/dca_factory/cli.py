@@ -1451,6 +1451,22 @@ def window_parts(runs, story_id, window):
     return rows
 
 
+def window_running(entry, runs, story_id, moving, live):
+    """A shared window whose process still runs has no usage line yet — the tool reports it at its end. Its row
+    shows what the newest stream says so far: the tokens of its parts, and with `live` the time since it began;
+    the cost stays the tool's and comes with the end."""
+    if not entry or moving["stage"] not in SHARED_WINDOWS or entry["measured"] >= entry["runs"]:
+        return
+    outs = glob.glob(os.path.join(evidence_dir(runs, story_id), f"{moving['stage']}.*.out"))
+    parts = stream_parts(max(outs, key=os.path.getmtime))[0] if outs else []
+    for field in USAGE_FIELDS:
+        entry[field] = entry.get(field, 0) + sum(p[field] for p in parts)
+    entry["tokens"] += sum(p[field] for p in parts for field in USAGE_FIELDS)
+    if live and moving.get("since"):
+        entry["seconds"] += max((datetime.now(timezone.utc) - moving["since"]).total_seconds(), 0)
+    entry["running"] = True
+
+
 def window_part_now(runs, story_id, window):
     """The stage a running shared window is in, from its newest stream — '' when it has not loaded one."""
     outs = sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), f"{window}.*.out")))
@@ -1509,6 +1525,9 @@ def story_model(cwd, epics, runs, story_id, live=False):
     for window in SHARED_WINDOWS:
         if window in facts["stages"]:
             facts["stages"][window]["parts"] = window_parts(runs, story_id, window)
+    for moving in overview["running"]:
+        if moving["story"] == story_id and not moving["interrupted"]:
+            window_running(facts["stages"].get(moving["stage"]), runs, story_id, moving, live)
     # the calls a stage was denied: each a turn spent on another way
     for stage, entry in facts["stages"].items():
         entry["denials"] = [d for path in sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), f"{stage}.*.out")))
@@ -1541,7 +1560,10 @@ def stage_cells(model):
     for stage in sorted(model["stages"], key=stage_rank):
         e = model["stages"][stage]
         cells = [stage, e["runs"], took_text(e["seconds"])] + token_cells(e, e["measured"])
-        if e["measured"] < e["runs"]:
+        if e.get("running"):
+            cells[1] = f"{e['runs']} (running)"
+            cells[3:3 + 5] = token_cells(e, True)
+        elif e["measured"] < e["runs"]:
             cells[1] = f"{e['runs']} ({e['runs'] - e['measured']} not measured)"
         if model["priced"]:
             cells.append(f"{e['cost']:.2f}" if e["priced"] else "—")
@@ -1565,7 +1587,8 @@ def stage_cells(model):
             rows.append(sub)
     total = {k: sum(e.get(k, 0) for e in model["stages"].values())
              for k in ("runs", "seconds", "tokens", "measured", "cost") + USAGE_FIELDS}
-    cells = ["total", total["runs"], took_text(total["seconds"])] + token_cells(total, total["measured"])
+    streaming = any(e.get("running") for e in model["stages"].values())
+    cells = ["total", total["runs"], took_text(total["seconds"])] + token_cells(total, total["measured"] or streaming)
     if model["priced"]:
         cells.append(f"{total['cost']:.2f}")
     if per_stage:
