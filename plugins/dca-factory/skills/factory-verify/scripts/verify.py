@@ -1563,8 +1563,12 @@ def verify_runner(runner, verbose=False):
               and "goes back to the test stage" in output,
               f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
         second = prompts.strip().splitlines()[-1] if prompts.strip() else ""
-        check("judge sent back: the test stage's prompt names the judge's file and its confirmed defects",
-              len(prompts.strip().splitlines()) >= 2 and "judge.md" in second, second[-240:] or "no test prompt recorded")
+        test_skill = " ".join(open(os.path.join(os.path.dirname(runner), "..", "..", "stage-test", "SKILL.md"),
+                                   encoding="utf-8").read().split())
+        check("judge sent back: the test stage runs again on its skill, which says to fix the judge's confirmed defects",
+              len(prompts.strip().splitlines()) >= 2 and "Apply the stage-test skill" in second
+              and "Where `judge.md` in the run folder says `verdict: changes-requested`, fix exactly the confirmed "
+                  "defects that are this stage's" in test_skill, second[-240:] or "no test prompt recorded")
         code, output, starts, delivered, prompts = back_run(verifier=True)
         check("judge sent back: the shared verifier's `back: test` goes to the test stage as well",
               code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "verifier", "test", "build", "tidy", "verifier"],
