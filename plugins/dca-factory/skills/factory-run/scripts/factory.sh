@@ -2281,19 +2281,19 @@ prompt_for() {                              # prompt_for <stage> <story>
   if [ "$stage" = test ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
     repeat="$repeat The build stage sent the story back: $RUNS/$story/build.md."
   fi
-  if { [ "$stage" = test ] || [ "$stage" = build ]; } && [ -f "$RUNS/$story/judge.md" ] \
+  if [[ " ${JUDGED_STAGES[*]:-} " == *" $stage "* ]] && [ -f "$RUNS/$story/judge.md" ] \
      && [ "$(verdict_of "$story")" = changes-requested ]; then
     repeat="$repeat The judge asked for changes: $RUNS/$story/judge.md."
   fi
   [ "$stage" = judge ] && [ -f "$RUNS/$story/.judge-previous.md" ] && repeat=" This is a repeat round; the previous \
 verdict: $RUNS/$story/.judge-previous.md."
-  # The guard the profile names holds the invariants while code is edited: said in the prompt of the two
-  # stages that write production code, so no build or tidy stage starts without it in view.
+  # The guard the profile names holds the invariants while code is edited: named in the prompt of every stage
+  # that writes production code, so none starts without it in view.
   local guard=""
-  case "$stage" in build|tidy)
+  if [[ " ${GUARDED_STAGES[*]:-} " == *" $stage "* ]]; then
     guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
-    [ -n "$guard" ] && guard=" The guard (the profile's carrier.guard): the $guard skill." ;;
-  esac
+    [ -n "$guard" ] && guard=" The guard (the profile's carrier.guard): the $guard skill."
+  fi
   printf '%s' "Apply the stage-$stage skill for backlog story $story.$(worktree_sentence) \
 $(where_things_are "$TOOL_IN_FLIGHT" "$stage" "$story")$guard$repeat"
 }

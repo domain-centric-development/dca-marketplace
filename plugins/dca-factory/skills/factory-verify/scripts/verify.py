@@ -4072,7 +4072,8 @@ def stage_lists(gate_text, cli_text, runner_text):
         code = line.split(" #", 1)[0] if not line.lstrip().startswith("#") else ""
         lists = re.findall(r"\w+\+?=\(([^)]*)\)", code) + re.findall(r"\bfor \w+ in ([^;]*);", code) \
             + re.findall(r"^\s*([\w|]+)\)", code) + re.findall(r'case "([^"]*)" in', code) \
-            + re.findall(r'case " ([^"]*) " in', code)
+            + re.findall(r'case " ([^"]*) " in', code) \
+            + re.findall(r"\bin ([\w|]+)\)", code)
         hits = [part for part in lists if len(re.findall(word, part)) >= 2]
         if hits or len(re.findall(r'\[ "\$\w+" !?= ' + word + r" \]", code)) >= 2:
             found.append(f"factory.sh:{number} {code.strip()[:90]}")
