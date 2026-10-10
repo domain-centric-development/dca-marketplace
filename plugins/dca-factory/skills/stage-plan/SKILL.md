@@ -119,6 +119,17 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    gate lets the later stages change only what is listed and backed. A test that only has to follow a
    changed shape — a type it builds gains a field, its assertions and expected values stay — is not
    contradicted: it is neither listed nor asked about.
+9a. **Find what the system already shows.** A scenario whose `Then` holds on today's code cannot get a red
+   test, and the test gate refuses a green one. Look for it the same way — the test sources, and the
+   scenarios of the delivered and adopted stories under the epics. Where any holds already, write **one**
+   decision record (`stage: plan`) naming each such scenario, the test that asserts it (file and line) and the
+   story that delivered it, and stop. The options and your recommendation follow from who carries it:
+   - **a delivered or adopted story's scenario carries it** → recommend `superseded` for a whole story, or
+     taking the scenario out of this one: the behaviour has its story and its test, a second one adds nothing;
+   - **only code carries it, no story** → recommend `adopted` for a whole story: adoption maps the scenarios
+     to tests and writes the missing ones with a break each;
+   - either way, the third option is to change the story so it asks for what the page does not do yet.
+   A scenario the story changes is step 9's, not this one.
 10. Name business terms **and operations** in the criteria that are not in the glossary yet, as
    proposals with a one-line definition — an operation as `<domain word> (<code word>): <what it does
    to which term>`. Name use cases, commands and events from the operation's code word. The code word

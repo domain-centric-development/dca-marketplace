@@ -130,11 +130,15 @@ that smuggles the decision in.
    - **state and lifecycle:** every transition a rule names, including the conflict case where two
      sources of the same value meet;
    - **changed behaviour:** what looks different afterwards → `## Changed expectations`;
-   - **already the system's behaviour:** a whole story whose scenarios the system already shows is not
-     a story to build but one to **adopt** — `status: adopted` (the backlog contract's "Adopted story"):
-     the factory maps it to green tests, writes the missing ones with a break each, and records it as
-     delivered with evidence. Offer it; on a brownfield project, offer once per new story to adopt the
-     existing behaviour the new story depends on — never as a stop;
+   - **already a story's:** compare every scenario with the scenarios of the delivered and adopted stories
+     under the epics, and with the tests that assert them. A scenario another story already carries is
+     not written again: name that story and leave it out. A whole story that is covered so is not
+     written — or, where it exists already, is set `superseded` on the person's say-so;
+   - **already the system's behaviour:** a whole story whose scenarios the system already shows, and
+     no story carries, is not a story to build but one to **adopt** — `status: adopted` (the backlog
+     contract's "Adopted story"): the factory maps it to green tests, writes the missing ones with a
+     break each, and records it as delivered with evidence. Offer it; on a brownfield project, offer
+     once per new story to adopt the existing behaviour the new story depends on — never as a stop;
    - **already green:** check every scenario whose outcome is an absence or a non-change — "no …
      is shown", "nothing changes", "… still works" — against the code as it is today. If it already
      holds (the element does not exist yet, so it is not shown), it is a guarantee, not a
