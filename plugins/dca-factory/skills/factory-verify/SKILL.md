@@ -62,12 +62,17 @@ plainly that this part is a reading and not a measurement.
 ```bash
 bash .agents/factory/factory.sh verify --fixtures   # the newest pipeline's suite on this machine
 python3 <this skill>/scripts/verify.py            # the same, this skill's; add -v for the gate output of a failing case
-python3 <this skill>/scripts/verify.py --group setup --junit report.xml   # one group (checks, runner, setup); a JUnit report
+python3 <this skill>/scripts/verify.py --group worktree                  # one group: checks, runner, worktree, setup
+python3 <this skill>/scripts/verify.py --jobs 1 --junit report.xml       # in one process, in order; a JUnit report
 ```
+
+The fixtures of a group are independent, so the suite spreads them over processes — as many as the machine
+has cores, at most six (`--jobs`). While you work, run the group your change touches; the whole suite once
+before the commit.
 
 It builds a throwaway project per case and calls the project's own `story-gate.py`, the `factory-cli.py` beside it and
 `factory.sh`, so it checks the code a run would actually use, not a description of it. It never
-starts an agent tool: every runner case uses a stand-in or a dry run. Three groups:
+starts an agent tool: every runner case uses a stand-in or a dry run. Four groups:
 
 - **the gate's checks** — an incomplete epic, a draft story, a context that is not on the map, an
   unmapped criterion, a selector with no test behind it, a test that is green too early, a green
@@ -76,6 +81,8 @@ starts an agent tool: every runner case uses a stand-in or a dry run. Three grou
 - **the runner's shape** — that the plan gate runs *before* its stage and every other gate after
   it, that the test stage's artefact is `tests.md` and not `test.md`, that the judge's verdict is
   read from the file, that the round counter is a file and counts up;
+- **the worktrees** — that every story runs in a worktree of its own, that a waiting story holds no slot,
+  that stories run side by side with `--parallel`, and that a story reaches the main line as one commit;
 - **setup** — the profile each preset writes, `setup --check` and `--write`, the verbs; that the skills arrive as a live link rather than a copy, that the gate is copied
   into the project where CI can call it, that a tool without a plugin mechanism also gets the
   craft a profile may name as a carrier, and that `--copy` still produces a copy.

@@ -55,6 +55,40 @@ def tmpdir():
     return tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
 
 
+#: This process's shard of the fixtures: index and count (`--shard i/n`). `--jobs n` runs n shards per group
+#: side by side, each a process of its own; the fixture blocks are independent, so block k goes to shard k mod n.
+SHARD = [0, 1]
+FIXTURES_SEEN = [0]
+
+
+def drain(rows):
+    """The rows noted since the last look, and the list empty again — so a section shows its own rows only,
+    whichever blocks before it this shard ran."""
+    taken = list(rows)
+    rows.clear()
+    return taken
+
+
+def one_shard():
+    """One unit of fixtures without a directory of its own — a helper that makes one per call, and the calls
+    with their checks: `for _ in one_shard():` runs them in one shard."""
+    yield from throwaway(0)
+
+
+def throwaway(count=1):
+    """One fixture block: `for root in throwaway():` runs its body in a throwaway directory — and skips it when
+    the block falls to another shard. `throwaway(2)` yields two directories. A block the body never enters
+    leaves nothing behind; the directories go when the body is done."""
+    index = FIXTURES_SEEN[0]
+    FIXTURES_SEEN[0] += 1
+    if index % SHARD[1] != SHARD[0]:
+        return
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        dirs = [stack.enter_context(tmpdir()) for _ in range(count)]
+        yield dirs[0] if count == 1 else tuple(dirs) if count else None
+
+
 def shell_path(path):
     """A path as bash reads it on every platform — forward slashes, `C:/…` on Windows."""
     return path.replace("\\", "/")
@@ -90,6 +124,7 @@ def posix_shell():
 #: The bash the runner cases call. The same resolution the gate uses, because the same wrong
 #: answer — the WSL launcher — would make every runner case fail with an empty transcript.
 BASH = posix_shell() or "bash"
+DEFAULT_JOBS = max(1, min(6, os.cpu_count() or 1))
 SYMLINKS = can_symlink()
 if os.name == "nt":
     print(f"verify: bash → {BASH}; symlinks {'available' if SYMLINKS else 'unavailable, install copies'}")
@@ -944,7 +979,7 @@ def verify_runner(runner, verbose=False):
             print(f"          {detail}")
 
     # 1. the stage order, and which gate runs before its stage and which after
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
@@ -971,7 +1006,7 @@ def verify_runner(runner, verbose=False):
               [l[:200] for l in output.splitlines() if "skeleton" in l])
 
     # 1c. an adoption builds nothing: plan, test, judge, then the adopt gate
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, story=STORY.replace("status: approved", "status: adopted"))
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
@@ -984,7 +1019,7 @@ def verify_runner(runner, verbose=False):
               "would run (review:" not in output and "reviews:" not in output)
 
     # 1b. a journey walks what is delivered: no build, no tidy
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
                       .replace("depends_on: []", "depends_on: [STORY-0]"))
         copy_scripts(runner, root)
@@ -998,7 +1033,7 @@ def verify_runner(runner, verbose=False):
                         "gate document"] and "stage build  (skipped: a journey builds nothing)" in output, f"got {order}")
 
     # 1d. a later gate sent the story back: its report is the earlier stage's input, or the stage repeats the refusal
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, extra_sources=((".dca-factory/runs/STORY-1/.gate-document.txt",
                                             "gate:fail outcome — no type `SomethingHappened` in the production code\n"),))
         copy_scripts(runner, root)
@@ -1021,7 +1056,7 @@ def verify_runner(runner, verbose=False):
               [l[:200] for l in output.splitlines() if "Carry out" in l][:1])
 
     # 1a'. shared stages are the default; the profile's `stages: separate` or --separate-stages start one process each
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         plain_env = {k: v for k, v in os.environ.items() if not k.startswith("FACTORY_SHARED_")}
@@ -1051,7 +1086,7 @@ def verify_runner(runner, verbose=False):
               code_bad == 2 and "neither shared nor separate" in out_bad, out_bad[-200:])
 
     # 1a. the stage process sees only the project: the isolation flags, one prefix for every stage
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
@@ -1074,7 +1109,7 @@ def verify_runner(runner, verbose=False):
         check("isolation: FACTORY_ISOLATION=off drops the flags and the run says so",
               flags and not any(w.split()[0] in flags[0] for w in wanted) and "FACTORY_ISOLATION=off" in output,
               flags[:1])
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, profile=PROFILE + "carrier.build: no-such-craft\n")
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
@@ -1089,7 +1124,7 @@ def verify_runner(runner, verbose=False):
             elif line.strip().startswith("model:") and stage:
                 rows[stage] = line.strip()[len("model:"):].strip()
         return rows
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, profile=PROFILE + "model.claude.tidy: model-a\nmodel.codex.tidy: model-c\n")
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
@@ -1108,14 +1143,14 @@ def verify_runner(runner, verbose=False):
                                   env=dict(os.environ, FACTORY_CLAUDE_ARGS="--model model-z"))
         check("model: a --model in FACTORY_CLAUDE_ARGS wins over the profile, and the run says so",
               "overridden by FACTORY_CLAUDE_ARGS (model-z)" in models_of(output).get("tidy", ""), models_of(output))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, profile=PROFILE + "model.claude: model-b\n")
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         check("model: `model.<tool>` is the default for every stage without a key of its own",
               set(models_of(output).values()) == {"--model model-b"} and len(models_of(output)) == 6,
               models_of(output))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, profile=PROFILE.replace("contract: 6", "") + "contract: 99\n")
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "build", "--tool", "claude",
@@ -1134,7 +1169,7 @@ def verify_runner(runner, verbose=False):
     check("model: no model name in the runner, the gate, a template or a skill", not named, named)
 
     # an OpenCode invocation's usage, from the events `opencode run --format json` writes
-    with tmpdir() as root:
+    for root in throwaway():
         raw = os.path.join(root, "stage.out")
         with open(raw, "w", encoding="utf-8") as handle:
             handle.write("\n".join(json.dumps(e) for e in [
@@ -1176,7 +1211,7 @@ def verify_runner(runner, verbose=False):
         '  for s in $(cat "$FIXTURE_GREEN" 2>/dev/null); do mkdir -p green; : > "green/$s"; done ;; '
         'esac'
     )
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         # the stand-in turns the mapped tests green from the build stage onwards
@@ -1230,71 +1265,72 @@ def verify_runner(runner, verbose=False):
                    'if [ "$s" = test ] && [ -z "${FIXTURE_SKIP_TEST_GATE:-}" ]; then '
                    '"$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; done; '
                    'else sh -c "$FIXTURE_STAND_IN"; fi')
-    def shared_run(skip_test_gate=False, dry=False, **project):
-        with tmpdir() as root:
-            build_project(root, **project)
-            copy_scripts(runner, root)
-            tests_path = os.path.join(root, "fixture-tests.md")
-            with open(tests_path, "w", encoding="utf-8") as handle:
-                handle.write(TESTS)
-            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
-            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
-                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
-            env = {"FACTORY_TOOL_CMD": builder_cmd, "FIXTURE_STAND_IN": stand_in,
-                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_PY": shell_path(sys.executable),
-                   "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
-            if skip_test_gate:
-                env["FIXTURE_SKIP_TEST_GATE"] = "1"
-            args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in", "--shared-builder"] \
-                + (["--dry-run"] if dry else [])
-            code, output = run_runner(runner, root, *args, env=env)
-            journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
-            starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                      if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
-            lines = lambda path: (open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else [])
-            extras = {"calls": lines(os.path.join(root, "build", "runner-calls.log")),
-                      "suites": lines(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "suites.tsv"))}
-            return code, output, starts, story_delivered(root), extras
-    code, output, starts, delivered, extras = shared_run()
-    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
-    check("shared builder: plan to tidy run as one process, then judge and document each in their own",
-          code == 0 and starts == ["builder", "judge", "document"] and delivered
-          and stage_lines == ["stage plan+test+build+tidy", "stage judge", "stage document"]
-          and "ran through plan,test,build,tidy,judge,document." in output,
-          f"exit {code}; starts {starts}; {stage_lines}; {output.strip().splitlines()[-3:]}")
-    check("shared builder: the runner re-checks the build and tidy gates itself",
-          "── gate build  (re-checked by the runner)" in output and "── gate tidy  (re-checked by the runner)" in output,
-          [l for l in output.splitlines() if l.startswith("── gate")])
-    # WP-79 A3: the runner's gates record their passing suite runs; the tidy re-check, on the tree the
-    # build re-check just recorded, runs none. The stand-in's own test gate (2 calls, one per command)
-    # and the build re-check (2) are the only calls; on a gate without the record there are 6.
-    check("shared builder: the tidy re-check on the tree the build re-check recorded runs no suite",
-          len(extras["calls"]) == 4 and "recorded at" in output and len(extras["suites"]) >= 2,
-          f"calls {extras['calls']}; suites {len(extras['suites'])} row(s); "
-          f"{[l for l in output.splitlines() if 'recorded at' in l][:2]}")
-    code, output, starts, delivered, _extras = shared_run(skip_test_gate=True)
-    check("shared builder: a process that never ran the test gate is caught — no red proof, no judge",
-          code == 1 and "no red proof" in output and "judge" not in starts and not delivered,
-          f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
-    code, output, starts, delivered, _extras = shared_run(
-        story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
-        .replace("depends_on: []", "depends_on: [STORY-0]"), green=both_green)
-    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
-                   if l.startswith("── stage ") and "(skipped" not in l]
-    check("shared builder: a journey shares plan and test, its test gate re-checked, and is delivered",
-          code == 0 and stage_lines == ["stage plan+test", "stage judge", "stage document"] and delivered
-          and "── gate test  (re-checked by the runner)" in output,
-          f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
-    code, output, starts, delivered, _extras = shared_run(story=ADOPTED, green=both_green)
-    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
-                   if l.startswith("── stage ") and "(skipped" not in l]
-    check("shared builder: an adopted story shares plan and test, then its judge and the adopt gate deliver it",
-          code == 0 and stage_lines == ["stage plan+test", "stage judge"] and delivered,
-          f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
-    code, output, starts, delivered, _extras = shared_run(dry=True)
-    check("shared builder: the dry run shows the one shared invocation and starts nothing",
-          "stage plan+test+build+tidy  (tool: stand-in, one shared context)" in output and starts == [],
-          [l for l in output.splitlines() if l.startswith("── stage")])
+    for _ in one_shard():
+        def shared_run(skip_test_gate=False, dry=False, **project):
+            with tmpdir() as root:
+                build_project(root, **project)
+                copy_scripts(runner, root)
+                tests_path = os.path.join(root, "fixture-tests.md")
+                with open(tests_path, "w", encoding="utf-8") as handle:
+                    handle.write(TESTS)
+                os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+                with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                    handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+                env = {"FACTORY_TOOL_CMD": builder_cmd, "FIXTURE_STAND_IN": stand_in,
+                       "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_PY": shell_path(sys.executable),
+                       "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+                if skip_test_gate:
+                    env["FIXTURE_SKIP_TEST_GATE"] = "1"
+                args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in", "--shared-builder"] \
+                    + (["--dry-run"] if dry else [])
+                code, output = run_runner(runner, root, *args, env=env)
+                journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+                starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                          if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
+                lines = lambda path: (open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else [])
+                extras = {"calls": lines(os.path.join(root, "build", "runner-calls.log")),
+                          "suites": lines(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "suites.tsv"))}
+                return code, output, starts, story_delivered(root), extras
+        code, output, starts, delivered, extras = shared_run()
+        stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
+        check("shared builder: plan to tidy run as one process, then judge and document each in their own",
+              code == 0 and starts == ["builder", "judge", "document"] and delivered
+              and stage_lines == ["stage plan+test+build+tidy", "stage judge", "stage document"]
+              and "ran through plan,test,build,tidy,judge,document." in output,
+              f"exit {code}; starts {starts}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+        check("shared builder: the runner re-checks the build and tidy gates itself",
+              "── gate build  (re-checked by the runner)" in output and "── gate tidy  (re-checked by the runner)" in output,
+              [l for l in output.splitlines() if l.startswith("── gate")])
+        # WP-79 A3: the runner's gates record their passing suite runs; the tidy re-check, on the tree the
+        # build re-check just recorded, runs none. The stand-in's own test gate (2 calls, one per command)
+        # and the build re-check (2) are the only calls; on a gate without the record there are 6.
+        check("shared builder: the tidy re-check on the tree the build re-check recorded runs no suite",
+              len(extras["calls"]) == 4 and "recorded at" in output and len(extras["suites"]) >= 2,
+              f"calls {extras['calls']}; suites {len(extras['suites'])} row(s); "
+              f"{[l for l in output.splitlines() if 'recorded at' in l][:2]}")
+        code, output, starts, delivered, _extras = shared_run(skip_test_gate=True)
+        check("shared builder: a process that never ran the test gate is caught — no red proof, no judge",
+              code == 1 and "no red proof" in output and "judge" not in starts and not delivered,
+              f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
+        code, output, starts, delivered, _extras = shared_run(
+            story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
+            .replace("depends_on: []", "depends_on: [STORY-0]"), green=both_green)
+        stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
+                       if l.startswith("── stage ") and "(skipped" not in l]
+        check("shared builder: a journey shares plan and test, its test gate re-checked, and is delivered",
+              code == 0 and stage_lines == ["stage plan+test", "stage judge", "stage document"] and delivered
+              and "── gate test  (re-checked by the runner)" in output,
+              f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+        code, output, starts, delivered, _extras = shared_run(story=ADOPTED, green=both_green)
+        stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
+                       if l.startswith("── stage ") and "(skipped" not in l]
+        check("shared builder: an adopted story shares plan and test, then its judge and the adopt gate deliver it",
+              code == 0 and stage_lines == ["stage plan+test", "stage judge"] and delivered,
+              f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+        code, output, starts, delivered, _extras = shared_run(dry=True)
+        check("shared builder: the dry run shows the one shared invocation and starts nothing",
+              "stage plan+test+build+tidy  (tool: stand-in, one shared context)" in output and starts == [],
+              [l for l in output.splitlines() if l.startswith("── stage")])
 
     # 1b''. --shared-verifier: judge and document in one process, the document gate re-checked by the runner
     verifier_cmd = ('if [ "$FACTORY_STAGE" = verifier ]; then '
@@ -1308,63 +1344,64 @@ def verify_runner(runner, verbose=False):
                     'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
                     'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; done; '
                     'else sh -c "$FIXTURE_STAND_IN"; fi')
-    def verifier_run(verdict="", dry=False, builder=False, **project):
-        with tmpdir() as root:
-            build_project(root, **project)
-            copy_scripts(runner, root)
-            tests_path = os.path.join(root, "fixture-tests.md")
-            with open(tests_path, "w", encoding="utf-8") as handle:
-                handle.write(TESTS)
-            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
-            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
-                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
-            env = {"FACTORY_TOOL_CMD": verifier_cmd, "FIXTURE_STAND_IN": stand_in,
-                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_PY": shell_path(sys.executable),
-                   "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
-            if verdict:
-                env["FIXTURE_VERDICT"] = verdict
-            args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in", "--shared-verifier"] \
-                + (["--shared-builder"] if builder else []) + (["--dry-run"] if dry else [])
-            code, output = run_runner(runner, root, *args, env=env)
-            journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
-            starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                      if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
-            document = os.path.join(root, ".dca-factory", "runs", "STORY-1", "document.md")
-            paths = ""
-            if os.path.isfile(document):
-                paths = open(document, encoding="utf-8").read()
-            return code, output, starts, story_delivered(root), paths
-    code, output, starts, delivered, paths = verifier_run()
-    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
-    check("shared verifier: plan to tidy each in their own process, then judge and document as one",
-          code == 0 and starts == ["plan", "test", "build", "tidy", "verifier"] and delivered
-          and stage_lines == ["stage plan", "stage test", "stage build", "stage tidy", "stage judge+document"]
-          and "ran through plan,test,build,tidy,judge,document." in output,
-          f"exit {code}; starts {starts}; {stage_lines}; {output.strip().splitlines()[-3:]}")
-    check("shared verifier: the runner re-checks the document gate itself",
-          "── gate document  (re-checked by the runner)" in output, [l for l in output.splitlines() if l.startswith("── gate")])
-    code, output, starts, delivered, paths = verifier_run(verdict="changes-requested")
-    check("shared verifier: a judge that asks for changes goes back to the build stage, and no document is written",
-          code == 1 and not delivered and starts.count("verifier") == 3 and starts.count("build") == 3
-          and "three rounds did not converge" in output and not paths,
-          f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
-    code, output, starts, delivered, paths = verifier_run(builder=True)
-    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
-    check("shared verifier: with the shared builder a story runs in two processes — one builds, one checks — never one",
-          code == 0 and starts == ["builder", "verifier"] and delivered
-          and stage_lines == ["stage plan+test+build+tidy", "stage judge+document"],
-          f"exit {code}; starts {starts}; {stage_lines}")
-    code, output, starts, delivered, paths = verifier_run(story=ADOPTED, green=both_green)
-    stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
-                   if l.startswith("── stage ") and "(skipped" not in l]
-    check("shared verifier: an adopted story's verifier is the judge alone, then the adopt gate delivers it",
-          code == 0 and stage_lines == ["stage plan", "stage test", "stage judge"] and delivered,
-          f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
-    code, output, starts, delivered, paths = verifier_run(dry=True)
-    check("shared verifier: the dry run shows the one shared invocation and starts nothing",
-          "stage judge+document  (tool: stand-in, one shared context)" in output and starts == []
-          and "--document-skeleton STORY-1" in output,
-          [l for l in output.splitlines() if l.startswith("── stage")])
+    for _ in one_shard():
+        def verifier_run(verdict="", dry=False, builder=False, **project):
+            with tmpdir() as root:
+                build_project(root, **project)
+                copy_scripts(runner, root)
+                tests_path = os.path.join(root, "fixture-tests.md")
+                with open(tests_path, "w", encoding="utf-8") as handle:
+                    handle.write(TESTS)
+                os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+                with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                    handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+                env = {"FACTORY_TOOL_CMD": verifier_cmd, "FIXTURE_STAND_IN": stand_in,
+                       "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_PY": shell_path(sys.executable),
+                       "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+                if verdict:
+                    env["FIXTURE_VERDICT"] = verdict
+                args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in", "--shared-verifier"] \
+                    + (["--shared-builder"] if builder else []) + (["--dry-run"] if dry else [])
+                code, output = run_runner(runner, root, *args, env=env)
+                journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+                starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                          if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
+                document = os.path.join(root, ".dca-factory", "runs", "STORY-1", "document.md")
+                paths = ""
+                if os.path.isfile(document):
+                    paths = open(document, encoding="utf-8").read()
+                return code, output, starts, story_delivered(root), paths
+        code, output, starts, delivered, paths = verifier_run()
+        stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
+        check("shared verifier: plan to tidy each in their own process, then judge and document as one",
+              code == 0 and starts == ["plan", "test", "build", "tidy", "verifier"] and delivered
+              and stage_lines == ["stage plan", "stage test", "stage build", "stage tidy", "stage judge+document"]
+              and "ran through plan,test,build,tidy,judge,document." in output,
+              f"exit {code}; starts {starts}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+        check("shared verifier: the runner re-checks the document gate itself",
+              "── gate document  (re-checked by the runner)" in output, [l for l in output.splitlines() if l.startswith("── gate")])
+        code, output, starts, delivered, paths = verifier_run(verdict="changes-requested")
+        check("shared verifier: a judge that asks for changes goes back to the build stage, and no document is written",
+              code == 1 and not delivered and starts.count("verifier") == 3 and starts.count("build") == 3
+              and "three rounds did not converge" in output and not paths,
+              f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
+        code, output, starts, delivered, paths = verifier_run(builder=True)
+        stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
+        check("shared verifier: with the shared builder a story runs in two processes — one builds, one checks — never one",
+              code == 0 and starts == ["builder", "verifier"] and delivered
+              and stage_lines == ["stage plan+test+build+tidy", "stage judge+document"],
+              f"exit {code}; starts {starts}; {stage_lines}")
+        code, output, starts, delivered, paths = verifier_run(story=ADOPTED, green=both_green)
+        stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
+                       if l.startswith("── stage ") and "(skipped" not in l]
+        check("shared verifier: an adopted story's verifier is the judge alone, then the adopt gate delivers it",
+              code == 0 and stage_lines == ["stage plan", "stage test", "stage judge"] and delivered,
+              f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
+        code, output, starts, delivered, paths = verifier_run(dry=True)
+        check("shared verifier: the dry run shows the one shared invocation and starts nothing",
+              "stage judge+document  (tool: stand-in, one shared context)" in output and starts == []
+              and "--document-skeleton STORY-1" in output,
+              [l for l in output.splitlines() if l.startswith("── stage")])
 
     # 1b-back. a judge that sends the story back for a test defect: the run goes to the test stage, not the build
     back_judge = ('if [ "$FACTORY_STAGE" = judge ] || [ "$FACTORY_STAGE" = verifier ]; then '
@@ -1374,38 +1411,39 @@ def verify_runner(runner, verbose=False):
                   'if [ "$was" = verifier ]; then FACTORY_STAGE=document sh -c "$FIXTURE_STAND_IN"; fi; fi; '
                   'else if [ "$FACTORY_STAGE" = test ]; then printf "%s\\n" "$FACTORY_PROMPT" >> prompts.txt; fi; '
                   'sh -c "$FIXTURE_STAND_IN"; fi')
-    def back_run(verifier=False):
-        with tmpdir() as root:
-            build_project(root)
-            copy_scripts(runner, root)
-            tests_path = os.path.join(root, "fixture-tests.md")
-            with open(tests_path, "w", encoding="utf-8") as handle:
-                handle.write(TESTS)
-            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
-            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
-                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
-            env = {"FACTORY_TOOL_CMD": back_judge, "FIXTURE_STAND_IN": stand_in,
-                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
-            args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-verifier"] if verifier else [])
-            code, output = run_runner(runner, root, *args, env=env)
-            journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
-            starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                      if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
-            prompts_file = os.path.join(root, "prompts.txt")
-            prompts = open(prompts_file, encoding="utf-8").read() if os.path.isfile(prompts_file) else ""
-            return code, output, starts, story_delivered(root), prompts
-    code, output, starts, delivered, prompts = back_run()
-    check("judge sent back: `back: test` runs the test stage again, then build, tidy and the judge — the story is delivered",
-          code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "judge", "test", "build", "tidy", "judge", "document"]
-          and "goes back to the test stage" in output,
-          f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
-    second = prompts.strip().splitlines()[-1] if prompts.strip() else ""
-    check("judge sent back: the test stage's prompt names the judge's file and its confirmed defects",
-          len(prompts.strip().splitlines()) >= 2 and "judge.md" in second, second[-240:] or "no test prompt recorded")
-    code, output, starts, delivered, prompts = back_run(verifier=True)
-    check("judge sent back: the shared verifier's `back: test` goes to the test stage as well",
-          code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "verifier", "test", "build", "tidy", "verifier"],
-          f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+    for _ in one_shard():
+        def back_run(verifier=False):
+            with tmpdir() as root:
+                build_project(root)
+                copy_scripts(runner, root)
+                tests_path = os.path.join(root, "fixture-tests.md")
+                with open(tests_path, "w", encoding="utf-8") as handle:
+                    handle.write(TESTS)
+                os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+                with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                    handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+                env = {"FACTORY_TOOL_CMD": back_judge, "FIXTURE_STAND_IN": stand_in,
+                       "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+                args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-verifier"] if verifier else [])
+                code, output = run_runner(runner, root, *args, env=env)
+                journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+                starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                          if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
+                prompts_file = os.path.join(root, "prompts.txt")
+                prompts = open(prompts_file, encoding="utf-8").read() if os.path.isfile(prompts_file) else ""
+                return code, output, starts, story_delivered(root), prompts
+        code, output, starts, delivered, prompts = back_run()
+        check("judge sent back: `back: test` runs the test stage again, then build, tidy and the judge — the story is delivered",
+              code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "judge", "test", "build", "tidy", "judge", "document"]
+              and "goes back to the test stage" in output,
+              f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+        second = prompts.strip().splitlines()[-1] if prompts.strip() else ""
+        check("judge sent back: the test stage's prompt names the judge's file and its confirmed defects",
+              len(prompts.strip().splitlines()) >= 2 and "judge.md" in second, second[-240:] or "no test prompt recorded")
+        code, output, starts, delivered, prompts = back_run(verifier=True)
+        check("judge sent back: the shared verifier's `back: test` goes to the test stage as well",
+              code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "verifier", "test", "build", "tidy", "verifier"],
+              f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
 
     # 1b-recheck. the runner's re-check of a shared builder refuses: a round with the gate's report, not a stop
     recheck_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
@@ -1416,7 +1454,7 @@ def verify_runner(runner, verbose=False):
                    'if [ ! -f \"$FIXTURE_HOME/built-once\" ]; then : > \"$FIXTURE_HOME/built-once\"; mkdir -p src/main; echo "class Stray {}" > src/main/Stray.java; '
                    'else printf -- "- src/main/Stray.java\\n" >> .dca-factory/runs/STORY-1/build.md; fi; '
                    'else sh -c "$FIXTURE_STAND_IN"; fi')
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         in_git(root)
@@ -1454,7 +1492,7 @@ def verify_runner(runner, verbose=False):
     # 1b-api. the catalog nodes the profile names (`knowledge.read`) are in the prompt as paths; without the key the
     # prompt names none and says nothing about a method's API
     for read, expected in (("guide/language-mappings/building-blocks.md", True), (None, False)):
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root, profile=PROFILE + "knowledge: dca-knowledge\n"
                           + (f"knowledge.read: {read}\n" if read else ""))
             copy_scripts(runner, root)
@@ -1482,57 +1520,58 @@ def verify_runner(runner, verbose=False):
                      'if [ ! -f sent-back ]; then : > sent-back; printf "\\nback: test\\n" >> .dca-factory/runs/STORY-1/build.md; fi; '
                      'else if [ "$FACTORY_STAGE" = test ]; then printf "%s\\n" "$FACTORY_PROMPT" >> test-prompts.txt; fi; '
                      'sh -c "$FIXTURE_STAND_IN"; fi')
-    def buildback_run(shared=False, cmd=None):
-        with tmpdir() as root:
-            build_project(root)
-            copy_scripts(runner, root)
-            tests_path = os.path.join(root, "fixture-tests.md")
-            with open(tests_path, "w", encoding="utf-8") as handle:
-                handle.write(TESTS)
-            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
-            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
-                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
-            env = {"FACTORY_TOOL_CMD": cmd or buildback_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
-                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
-            args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-builder"] if shared else [])
-            code, output = run_runner(runner, root, *args, env=env)
-            journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
-            starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
-                      if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
-            prompts_file = os.path.join(root, "test-prompts.txt")
-            prompts = open(prompts_file, encoding="utf-8").read().strip().splitlines() if os.path.isfile(prompts_file) else []
-            asked = os.path.isdir(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions"))
-            return code, output, starts, story_delivered(root), prompts, asked
-    code, output, starts, delivered, prompts, asked = buildback_run()
-    check("build sent back: `back: test` in build.md runs the test stage again, then the build — no human asked, "
-          "the story is delivered",
-          code == 0 and delivered and not asked
-          and starts == ["plan", "test", "build", "test", "build", "tidy", "judge", "document"]
-          and "goes back to the test stage" in output,
-          f"exit {code}; starts {starts}; asked {asked}; {output.strip().splitlines()[-3:]}")
-    check("build sent back: the second test prompt names build.md and says not to change what the test asserts",
-          len(prompts) == 2 and "build.md" in prompts[1] and "assert" in prompts[1],
-          prompts[-1][-260:] if prompts else "no test prompt recorded")
-    code, output, starts, delivered, prompts, asked = buildback_run(shared=True)
-    check("build sent back: a shared builder's `back: test` is a round from the test stage as well",
-          code == 0 and delivered and not asked and starts[:2] == ["builder", "builder"]
-          and "goes back to the test stage" in output,
-          f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
-    # 0.55.1: the shared builder went back to the test stage in its own session, repaired the test, built again and
-    # tidied — build.md still carries the finding's `back: test`, tidy.md is newer. That round converged; sending
-    # the story back again would find nothing to do, three times, and end in needs-human (bench 2026-10-01).
-    resolved_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
-                    'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
-                    'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
-                    'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; '
-                    'if [ "$s" = build ]; then printf "\\n## Back to the test stage\\nback: test\\n" >> .dca-factory/runs/STORY-1/build.md; sleep 1; fi ;; '
-                    'esac; done; '
-                    'else sh -c "$FIXTURE_STAND_IN"; fi')
-    code, output, starts, delivered, prompts, asked = buildback_run(shared=True, cmd=resolved_cmd)
-    check("build sent back: a `back: test` the shared session repaired before tidy is no round — one builder, delivered",
-          code == 0 and delivered and not asked and starts.count("builder") == 1
-          and "goes back to the test stage" not in output,
-          f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+    for _ in one_shard():
+        def buildback_run(shared=False, cmd=None):
+            with tmpdir() as root:
+                build_project(root)
+                copy_scripts(runner, root)
+                tests_path = os.path.join(root, "fixture-tests.md")
+                with open(tests_path, "w", encoding="utf-8") as handle:
+                    handle.write(TESTS)
+                os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+                with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                    handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+                env = {"FACTORY_TOOL_CMD": cmd or buildback_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
+                       "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+                args = ["run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in"] + (["--shared-builder"] if shared else [])
+                code, output = run_runner(runner, root, *args, env=env)
+                journal = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")
+                starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
+                          if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
+                prompts_file = os.path.join(root, "test-prompts.txt")
+                prompts = open(prompts_file, encoding="utf-8").read().strip().splitlines() if os.path.isfile(prompts_file) else []
+                asked = os.path.isdir(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions"))
+                return code, output, starts, story_delivered(root), prompts, asked
+        code, output, starts, delivered, prompts, asked = buildback_run()
+        check("build sent back: `back: test` in build.md runs the test stage again, then the build — no human asked, "
+              "the story is delivered",
+              code == 0 and delivered and not asked
+              and starts == ["plan", "test", "build", "test", "build", "tidy", "judge", "document"]
+              and "goes back to the test stage" in output,
+              f"exit {code}; starts {starts}; asked {asked}; {output.strip().splitlines()[-3:]}")
+        check("build sent back: the second test prompt names build.md and says not to change what the test asserts",
+              len(prompts) == 2 and "build.md" in prompts[1] and "assert" in prompts[1],
+              prompts[-1][-260:] if prompts else "no test prompt recorded")
+        code, output, starts, delivered, prompts, asked = buildback_run(shared=True)
+        check("build sent back: a shared builder's `back: test` is a round from the test stage as well",
+              code == 0 and delivered and not asked and starts[:2] == ["builder", "builder"]
+              and "goes back to the test stage" in output,
+              f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+        # 0.55.1: the shared builder went back to the test stage in its own session, repaired the test, built again and
+        # tidied — build.md still carries the finding's `back: test`, tidy.md is newer. That round converged; sending
+        # the story back again would find nothing to do, three times, and end in needs-human (bench 2026-10-01).
+        resolved_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
+                        'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                        'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
+                        'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; '
+                        'if [ "$s" = build ]; then printf "\\n## Back to the test stage\\nback: test\\n" >> .dca-factory/runs/STORY-1/build.md; sleep 1; fi ;; '
+                        'esac; done; '
+                        'else sh -c "$FIXTURE_STAND_IN"; fi')
+        code, output, starts, delivered, prompts, asked = buildback_run(shared=True, cmd=resolved_cmd)
+        check("build sent back: a `back: test` the shared session repaired before tidy is no round — one builder, delivered",
+              code == 0 and delivered and not asked and starts.count("builder") == 1
+              and "goes back to the test stage" not in output,
+              f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
 
     # 0.57.1: the shared verifier rewrote tests.md after the build gate passed — the document gate's `story-pass`
     # refuses over an earlier pass's build.md, and the round runs on from the build, not the document stage alone,
@@ -1547,7 +1586,7 @@ def verify_runner(runner, verbose=False):
                  'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi ;; '
                  'esac; done; '
                  'else sh -c "$FIXTURE_STAND_IN"; fi')
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         tests_path = os.path.join(root, "fixture-tests.md")
@@ -1570,7 +1609,7 @@ def verify_runner(runner, verbose=False):
               f"exit {code}; starts {starts}; {output.strip().splitlines()[-4:]}")
 
     # 1c. a stage that writes no file stops the run, and says which file was missing
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
@@ -1580,7 +1619,7 @@ def verify_runner(runner, verbose=False):
               output.strip().splitlines()[-1] if output.strip() else "no output")
 
     # 1d. a stage that escalates stops the run
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         escalating = ('mkdir -p .dca-factory/runs/STORY-1; printf "## Context\\n## Changes\\n'
@@ -1594,7 +1633,7 @@ def verify_runner(runner, verbose=False):
               f"stages that ran: {stages}, exit {code}")
 
     # 1d1. a bare needs-human heading from the template is not an escalation
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         bare = ('mkdir -p .dca-factory/runs/STORY-1; printf "## Context\\n## Changes\\n'
@@ -1618,26 +1657,26 @@ def verify_runner(runner, verbose=False):
         copy_scripts(runner, root)
         return root
 
-    with tmpdir() as root:
+    for root in throwaway():
         gated(build_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n"),)))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         order = [line.strip()[3:].split("  (")[0].strip() for line in output.splitlines() if line.startswith("── ")]
         check("runner: without --from a story with plan and tests written resumes at build, not at plan",
               code == 0 and order[:1] == ["stage build"] and "starts at build" in output, f"got {order}")
-    with tmpdir() as root:
+    for root in throwaway():
         gated(build_project(root, document="# Document\n", story=delivered_story(STORY)))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
                                   env={"FACTORY_TOOL_CMD": "false"})
         check("runner: a delivered story runs nothing without --from, and says so",
               code == 0 and "is delivered" in output and "── " not in output, output[-300:])
-    with tmpdir() as root:
+    for root in throwaway():
         gated(build_project(root, story=STORY.replace("depends_on: []", "depends_on: [STORY-0]")))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
                                   env={"FACTORY_TOOL_CMD": "false"})
         check("runner: a story whose dependency is not delivered does not run without --from, and names --from",
               code == 1 and "blocked" in output and "--from" in output and "── " not in output, output[-300:])
     # 1d3'. a --from that names no stage runs nothing and keeps the count
-    with tmpdir() as root:
+    for root in throwaway():
         gated(build_project(root, rounds=2))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "Build", "--tool", "stand-in",
                                   env={"FACTORY_TOOL_CMD": "echo INVOKED"})
@@ -1647,7 +1686,7 @@ def verify_runner(runner, verbose=False):
               code == 2 and "INVOKED" not in output and rounds == "2", f"exit {code}; rounds {rounds}")
     # 1d4. three rounds stop a story; a person's --from starts a new count, keeps the old one, and the gate
     #      checks the existing file before the stage is invoked
-    with tmpdir() as root:
+    for root in throwaway():
         gated(build_project(root, rounds=3, extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n"),
                                                           (".dca-factory/runs/STORY-1/.gate-test.txt", "gate:fail rounds — stale\n"))))
         stopped_code, stopped = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
@@ -1667,7 +1706,7 @@ def verify_runner(runner, verbose=False):
               and output.index("── gate test  (the file exists") < (output.find("── stage test") % (len(output) + 1)),
               output[-400:])
     # 1d5. a program missing on the PATH stops the story once, without a round
-    with tmpdir() as root:
+    for root in throwaway():
         gated(build_project(root, tests=None, profile=PROFILE.replace("compile: true", "compile: dca-no-such-tool"),
                             extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n"), ("tests.fixture", TESTS))))
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "test", "--tool", "stand-in",
@@ -1679,7 +1718,7 @@ def verify_runner(runner, verbose=False):
               f"stages {stages}, exit {code}: {output[-400:]}")
 
     # 1d2. a stage that asks writes the record; the run names it and how to resume
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         asking = ('mkdir -p .dca-factory/runs/STORY-1 project/epics/sample/STORY-1/decisions; '
@@ -1708,7 +1747,7 @@ def verify_runner(runner, verbose=False):
     # 1e. install keeps what the project owns
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
     # 1e'. a project that already drives a browser gets that command and `browser: playwright` in its profile
-    with tmpdir() as root:
+    for root in throwaway():
         for path, text in (("build.gradle", "plugins { id 'java' }\napply from: \"gradle/plugins/test-e2e.gradle\"\n"),
                            ("gradle/plugins/test-e2e.gradle", "dependencies { testE2eImplementation 'com.microsoft.playwright:playwright:1.62.0' }\n")):
             os.makedirs(os.path.dirname(os.path.join(root, path)) or root, exist_ok=True)
@@ -1726,7 +1765,7 @@ def verify_runner(runner, verbose=False):
                            for plugin in os.listdir(plugins_dir))), None) \
         if os.path.isdir(plugins_dir := os.path.dirname(os.path.dirname(source))) else None
     if carrier:
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root, profile=PROFILE + f"carrier.build: {carrier}\n")
             code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
             skills_dir = os.path.join(root, ".claude", "skills")
@@ -1741,7 +1780,7 @@ def verify_runner(runner, verbose=False):
             code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
             check("install: after it, the runner's carrier check passes", code == 0 and "── stage plan" in output,
                   output[-200:])
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         own = os.path.join(root, ".codex", "skills", "our-own-skill")
         os.makedirs(own)
@@ -1760,7 +1799,7 @@ def verify_runner(runner, verbose=False):
             check("install: a link whose skill is gone from the source is pruned",
                   "gone-from-the-source" not in entries)
     if SYMLINKS:
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root)
             skills = os.path.join(root, ".codex", "skills")
             os.makedirs(skills)
@@ -1822,7 +1861,7 @@ exit 0
             handle.write(ANSWER)
 
     # WP-66: a story that waits for acceptance stops the runner like a question, and counts no round
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as h:
             h.write("acceptance: all\n")
@@ -1858,7 +1897,7 @@ exit 0
             else:
                 i += 1
         return out
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         code, output = run_runner(runner, root, "run", env=env)
         ran = norm(invocations(root))
@@ -1882,7 +1921,7 @@ exit 0
               f"exit {code}, {len(invocations(root))} invocations")
 
     # 1h. --watch: waits on the answer without invoking anything, then picks the story up itself
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         environment = dict(os.environ)
         environment.update(env)
@@ -1912,14 +1951,14 @@ exit 0
               f"exit {code}, {len(invocations(root))} invocations, last lines: {output.strip().splitlines()[-3:]}")
 
     # 1i. the limits: --max-stages stops dispatch and keeps the work, the stop file ends a run
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         code, output = run_runner(runner, root, "run", "--max-stages", "2", env=env)
         check("backlog: --max-stages stops before the next invocation and keeps what ran",
               code == 4 and invocations(root) == ["STORY-1 plan", "STORY-2 plan"]
               and os.path.isfile(os.path.join(root, ".dca-factory", "runs", "STORY-2", "plan.md")),
               f"exit {code}, invocations {invocations(root)}")
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         os.makedirs(os.path.join(root, ".dca-factory"), exist_ok=True)
         open(os.path.join(root, ".dca-factory", "stop"), "w").close()
@@ -1929,7 +1968,7 @@ exit 0
               f"exit {code}, invocations {invocations(root)}")
 
     # 1j. a refused gate after its stage: the stage runs again with the report, one round counted
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         # the test stage forgets the mapping the first time, and writes it the second
         stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
@@ -1944,7 +1983,7 @@ exit 0
               code == 0 and ran.count("STORY-2 test") == 2 and "round 1 runs stage 'test' again" in output
               and open(os.path.join(root, ".dca-factory", "runs", "STORY-2", ".rounds"), encoding="utf-8").read().strip() == "1",
               f"exit {code}, invocations {ran}")
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
             '  test) cat fixture/tests.md > "$d/tests.md" ;;', '  test) echo "# Tests" > "$d/tests.md" ;;')
@@ -1956,7 +1995,7 @@ exit 0
               f"exit {code}, invocations {invocations(root)}")
 
     # 1k. a repeat judge round sees the previous verdict
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
             "  judge) printf '## Verdict\\nverdict: pass\\n' > \"$d/judge.md\" ;;",
@@ -1975,7 +2014,7 @@ exit 0
               f"exit {code}; prompts: {prompts[-300:]}")
 
     # 1m. a judge's story conflict is a question: the run waits, and names the stage that applies it
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         with open(os.path.join(root, "fixture", "judge-conflict.md"), "w", encoding="utf-8") as handle:
             handle.write(JUDGE_CONFLICT.replace("STORY-1", "STORY-2"))
@@ -1994,7 +2033,7 @@ exit 0
     # 1n. what a stage cost: recorded per invocation, summed per story and stage, bounded per story
     claude_like = ('{"result":"done","total_cost_usd":0.01,"modelUsage":{"some-model":{"inputTokens":100,'
                    '"outputTokens":900,"cacheReadInputTokens":0,"cacheCreationInputTokens":0}}}')
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         env.update({"FIXTURE_USAGE": claude_like, "FACTORY_USAGE_FORMAT": "claude-json"})
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
@@ -2012,7 +2051,7 @@ exit 0
         _, _, _, sched = schedule_of(os.path.join(root, ".agents", "factory", "story-gate.py"), root)
         check("usage: the schedule shows a story's tokens", "9,000 tokens" in sched,
               [l for l in sched.splitlines() if "STORY-2" in l])
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         env.update({"FIXTURE_USAGE": claude_like, "FACTORY_USAGE_FORMAT": "claude-json"})
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in",
@@ -2023,7 +2062,7 @@ exit 0
         check("usage: --story-budget stops dispatch once the story has used it, and a restart keeps the count",
               code == 4 and first == 3 and code2 == 4 and len(invocations(root)) == 3
               and "has used 3000 tokens" in output2, f"exit {code}/{code2}, invocations {first}/{len(invocations(root))}")
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         stages = usage_json(os.path.join(root, ".agents", "factory", "story-gate.py"), root, "STORY-2")
@@ -2032,7 +2071,7 @@ exit 0
               and all(e["tokens"] == 0 for e in stages.values()), {k: (e["runs"], e["measured"]) for k, e in stages.items()})
 
     # 1l. a resumed document stage whose file already holds is not invoked again
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
         undeliver(root, "STORY-2")
@@ -2045,7 +2084,7 @@ exit 0
               f"exit {code}, {len(invocations(root)) - before} new invocation(s)")
 
     # 1o. update: the newest pipeline, the same tools, links stay links and copies stay copies
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_setup(runner, root, "--tool", "codex", "--from", source)
         stamp = os.path.join(root, ".agents", "factory", "gate.installed")
@@ -2071,7 +2110,7 @@ exit 0
               "raise it to 'contract:" in output
               and "contract: 1" in open(os.path.join(root, "dca-factory.profile.yaml"), encoding="utf-8").read(),
               [l for l in output.splitlines() if "contract" in l][:2])
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
         copied = os.path.join(root, ".claude", "skills", "factory-run", "SKILL.md")
@@ -2084,7 +2123,7 @@ exit 0
               and not os.path.islink(os.path.join(root, ".claude", "skills", "factory-run"))
               and "STALE COPY" not in open(copied, encoding="utf-8").read() and "commit" in output,
               output.strip().splitlines()[-4:])
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_setup(runner, root, "--tool", "codex", "--from", source)
         stamp = os.path.join(root, ".agents", "factory", "gate.installed")
@@ -2096,7 +2135,7 @@ exit 0
         check("status --live: a project behind the pipeline is told so, with the update to run",
               code == 0 and "installed from pipeline 0.0.1" in output, [l for l in output.splitlines() if "pipeline" in l][:2])
 
-    with tmpdir() as root:
+    for root in throwaway():
         # a newer pipeline with a skill the project's runner never heard of, and its own install step
         newer = os.path.join(root, "newer-plugin")
         shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), newer, symlinks=True)
@@ -2119,7 +2158,7 @@ exit 0
               and os.path.isfile(os.path.join(project, ".agents", "factory", "added-by-the-newer-install")),
               output.strip().splitlines()[-3:])
 
-    with tmpdir() as root:
+    for root in throwaway():
         # copies: the project's own skills, including one with a pipeline skill's name, survive; a skill
         # the pipeline dropped leaves the copy
         build_project(root)
@@ -2148,7 +2187,7 @@ exit 0
               [l for l in output.splitlines() if "removed" in l or "kept" in l][:3])
 
     # 1r. inside an agent session the runner does not start a real tool
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         nested = dict(os.environ)
         nested.pop("FACTORY_TOOL_CMD", None)
@@ -2165,7 +2204,7 @@ exit 0
               code == 0 and len(invocations(root)) == 9, f"exit {code}")
 
     # 1q. a custom command is handed the stage's model and the journal says it was not applied by the runner
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
             handle.write("model.claude.build: model-q\n")
@@ -2188,7 +2227,7 @@ exit 0
               f"exit {code}; {seen}; {build_row}")
 
     # 1p. a runner does not start while another worker holds the checkout
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         subprocess.run([sys.executable, cli_in(root), "--claim",
@@ -2204,7 +2243,7 @@ exit 0
               code == 0 and len(invocations(root)) == 9 and released, f"exit {code}, released {released}")
 
     # 1q. a session starts knowing where the pipeline stands: AGENTS.md for every tool, a hook for Claude
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         with open(os.path.join(root, "AGENTS.md"), "a", encoding="utf-8") as handle:
             handle.write("\nThe project's own line.\n")
@@ -2275,7 +2314,7 @@ exit 0
         subprocess.run([sys.executable, cli_in(root), "--release"], cwd=root, capture_output=True)
 
     # 1e2. a stage the runner starts is told which worker started it, for the hook and the prompt alike
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
         in_git(root)
@@ -2289,7 +2328,7 @@ exit 0
               seen.startswith("runner:") and seen.endswith("|plan|STORY-1"), seen or output[-400:])
 
     # 1f. the snapshot sees files in a directory this run added
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
@@ -2311,7 +2350,7 @@ exit 0
 
     # 1g. no sha256 command on the machine: the snapshot says so instead of recording empty
     # digests, because empty digests compare equal and would read as "this stage changed nothing".
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         code, output = run_runner(
@@ -2330,7 +2369,7 @@ exit 0
 
     # 1h. an install step that cannot write must abort, not report success. A regular file where
     # `.agents/factory` has to be a directory is the cheapest way to make one `mkdir` fail.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         shutil.rmtree(os.path.join(root, ".agents"), ignore_errors=True)
         with open(os.path.join(root, ".agents"), "w", encoding="utf-8") as handle:
@@ -2343,7 +2382,7 @@ exit 0
 
     # 1i. the architecture test is found where source layouts actually put it — several directories
     # down. A `**` glob without `shopt -s globstar` matches one level and reported none.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, extra_sources=(
             ("src/test-architecture/java/com/example/ArchitectureTest.java",
              "class ArchitectureTest {}\n"),))
@@ -2354,7 +2393,7 @@ exit 0
 
     # 1j. the install stamps where the gate came from, and a later run says when the project is
     # behind the pipeline. The gate itself cannot tell: a copied script has nothing to compare to.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_setup(runner, root, "--tool", "codex", "--from", source)
         stamp = os.path.join(root, ".agents", "factory", "gate.installed")
@@ -2391,7 +2430,7 @@ exit 0
               [l for l in output.splitlines() if "contract" in l])
 
     # 2. the artefact name the runner waits for is the file contract's, not the stage's name
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
                                   "--from", "test", "--dry-run")
@@ -2402,7 +2441,7 @@ exit 0
     # 3. the judge's verdict decides what comes next
     for verdict, expect in (("pass", "pass"), ("changes-requested", "changes-requested"),
                             ("story-conflict", "story-conflict")):
-        with tmpdir() as root:
+        for root in throwaway():
             os.makedirs(os.path.join(root, ".dca-factory", "runs", "STORY-1"))
             with open(os.path.join(root, ".dca-factory", "runs", "STORY-1", "judge.md"), "w", encoding="utf-8") as handle:
                 handle.write(f"# Judge\n\n## Verdict\nverdict: {verdict}\n")
@@ -2421,7 +2460,7 @@ exit 0
                   f"parsed {parsed!r}")
 
     # 4. the round counter is a file, and it counts up
-    with tmpdir() as root:
+    for root in throwaway():
         os.makedirs(os.path.join(root, ".dca-factory", "runs", "STORY-1"))
         counted = subprocess.run(
             [BASH, "-c",
@@ -2451,7 +2490,7 @@ exit 0
                            f"---\nname: {name}\ndescription: {plugin} {version}\n---\n")
         return os.path.join(cache, "dca-factory", "0.2.0", "skills")
     if SYMLINKS:
-        with tmpdir() as root, tmpdir() as home:
+        for root, home in throwaway(2):
             build_project(root, profile=PROFILE + "carrier.build: dca-modelling\n")
             cached = cache_fixture(home)
             run_setup(runner, root, "--tool", "codex", "--from", shell_path(cached), "--link", env={"HOME": home})
@@ -2463,7 +2502,7 @@ exit 0
                   targets.get("dca-modelling", "").endswith(os.path.join("dca-core", "0.2.0", "skills", "dca-modelling"))
                   and not any(os.sep + "0.1.0" + os.sep in t for t in targets.values()),
                   {k: v[-40:] for k, v in targets.items() if "0.1.0" in v or k == "dca-modelling"})
-    with tmpdir() as root, tmpdir() as home:
+    for root, home in throwaway(2):
         build_project(root, profile=PROFILE + "carrier.build: dca-modelling\n")
         cached = cache_fixture(home)
         run_setup(runner, root, "--tool", "claude", "--from", shell_path(cached), "--copy", env={"HOME": home})
@@ -2475,7 +2514,7 @@ exit 0
         check("copies: a copied carrier survives an update, also when no neighbour has it any more",
               code == 0 and os.path.isfile(carrier_copy)
               and "dca-modelling" in open(manifest, encoding="utf-8").read().split(), output.strip().splitlines()[-4:])
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         shells = [b for b in ("/bin/bash",) if os.path.isfile(b)] or [BASH]
         in_git(root)
@@ -2484,7 +2523,7 @@ exit 0
         check("setup: `--tool none` writes gate, runner and hook — also under the system bash",
               completed.returncode == 0 and os.path.isfile(os.path.join(root, ".agents", "factory", "story-gate.py")),
               f"{shells[0]}: exit {completed.returncode}; {(completed.stderr or completed.stdout).strip()[-200:]}")
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         in_git(root)
         with open(os.path.join(root, ".gitignore"), "w", encoding="utf-8", newline="\n") as handle:
@@ -2497,7 +2536,7 @@ exit 0
         check("install: `.gitignore` keeps the files a file manager drops out of git — once, the last line whole",
               ignores[:1] == ["build/"] and ignores.count(".DS_Store") == 1 and ignores.count("Thumbs.db") == 1
               and ignored and "file manager" not in output, f"{ignores} | src/.DS_Store ignored: {ignored}")
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         subprocess.run(["git", "config", "core.hooksPath", ".husky"], cwd=root, capture_output=True)
@@ -2519,14 +2558,14 @@ exit 0
         check("hook: right after a link install the commit check does not refuse the tool folders it left untracked",
               "gate:fail snapshot" not in staged.stdout and os.path.exists(os.path.join(root, ".claude", "skills")),
               [l for l in staged.stdout.splitlines() if "snapshot" in l][:2])
-    with tmpdir() as root:
+    for root in throwaway():
         env = backlog_fixture(root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", "--max-stages", "x",
                                   env=env)
         check("runner: `run` refuses a --max-stages that is not a number, before any stage",
               code == 2 and invocations(root) == [], f"exit {code}")
     if os.name != "nt":
-        with tmpdir() as root:
+        for root in throwaway():
             env = backlog_fixture(root)
             subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
             lock = os.path.join(root, ".git", "dca-factory-worker.lock")
@@ -2553,7 +2592,7 @@ exit 0
 
     # 5. install leaves live links from a checkout, one per skill, never the whole folder
     source = shell_path(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
         target = os.path.join(root, ".claude", "skills")
@@ -2584,7 +2623,7 @@ exit 0
               f"exit {usage_code}; {usage_out[:120]}")
         check("install: a stack profile is written when the project has none",
               os.path.isfile(os.path.join(root, "dca-factory.profile.yaml")))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_setup(runner, root, "--tool", "codex", "--from", source)
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
@@ -2594,7 +2633,7 @@ exit 0
         check("install: a tool without plugins also gets the craft the profile may name",
               pipeline.issubset(set(entries)) and len(entries) > len(pipeline),
               f"{len(entries)} skills: {sorted(entries)[:6]}…")
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
         target = os.path.join(root, ".claude", "skills", "factory-run")
@@ -2714,7 +2753,7 @@ def verify_setup(runner, verbose=False):
     # item 2: the golden profiles, before and after the presets
     python = None
     for name, files in PRESET_FIXTURES.items():
-        with tmpdir() as root:
+        for root in throwaway():
             fixture(root, files)
             code, output = run_setup(runner, root, "--tool", "none", "--from", lone)
             lines = active_lines(profile_of(root)) or []
@@ -2728,7 +2767,7 @@ def verify_setup(runner, verbose=False):
 
     # a profile without an integration level is named until someone decides one
     for name, want in (("gradle", True), ("gradle-integration", False)):
-        with tmpdir() as root:
+        for root in throwaway():
             fixture(root, PRESET_FIXTURES[name])
             run_setup(runner, root, "--tool", "none", "--from", lone)
             checked = run_setup(runner, root, "--check")[1]
@@ -2739,7 +2778,7 @@ def verify_setup(runner, verbose=False):
     for extra, want in (("e2eTest: ./gradlew test-e2e --rerun\nrequired: compile test\n", True),
                         ("e2eTest: ./gradlew test-e2e --rerun\nrequired: compile test e2eTest\n", False),
                         ("e2eTest: none\nrequired: compile test\n", False)):
-        with tmpdir() as root:
+        for root in throwaway():
             fixture(root, PRESET_FIXTURES["gradle"])
             run_setup(runner, root, "--tool", "none", "--from", lone)
             path = os.path.join(root, "dca-factory.profile.yaml")
@@ -2753,7 +2792,7 @@ def verify_setup(runner, verbose=False):
                   ("? e2eTest in required" in checked) == want, checked.strip()[-400:])
 
     # item 4: a new stack is one file — a made-up one in FACTORY_STACKS_DIR, no change to the script
-    with tmpdir() as root, tmpdir() as stacks:
+    for root, stacks in throwaway(2):
         write_file(stacks, "cargo.preset", "kind: stack\norder: 10\ndetect.exists: Cargo.toml\n"
                                             "compile: cargo test --no-run\ntest: cargo nextest run\n")
         write_file(root, "Cargo.toml", "[package]\n")
@@ -2767,7 +2806,7 @@ def verify_setup(runner, verbose=False):
     check("presets: the runner carries no stack knowledge outside comments", not knowledge, knowledge[:3])
 
     # item 9: no repository, no setup — and nothing written
-    with tmpdir() as root:
+    for root in throwaway():
         write_file(root, "build.gradle", "plugins { id 'java' }\n")
         code, output = run_runner(runner, root, "setup", "--tool", "none", "--from", source)
         check("setup: outside a git repository it stops with one line and writes nothing",
@@ -2775,7 +2814,7 @@ def verify_setup(runner, verbose=False):
               f"exit {code}; {output.strip()}")
 
     # item 10: the check and the write, on an empty, a complete and a conflicting profile
-    with tmpdir() as root:
+    for root in throwaway():
         fixture(root, PRESET_FIXTURES["gradle-playwright-e2e"])
         in_git(root)
         code, output = run_runner(runner, root, "setup", "--check")
@@ -2819,13 +2858,13 @@ def verify_setup(runner, verbose=False):
         check("setup --check: the conflict resolved, exit 0", code == 0, output.strip().splitlines()[-1:])
 
     # formatFix beside every detected format; covers.* only while its command is the detected one
-    with tmpdir() as root:
+    for root in throwaway():
         fixture(root, {"build.gradle": "plugins { id 'com.diffplug.spotless' version '8.2.1' }\n"})
         run_setup(runner, root, "--tool", "none", "--from", source)
         lines = active_lines(profile_of(root)) or []
         check("presets: a detected formatter writes its check and its fix together",
               "format: ./gradlew spotlessCheck" in lines and "formatFix: ./gradlew spotlessApply" in lines, lines)
-    with tmpdir() as root:
+    for root in throwaway():
         fixture(root, {"App.sln": "\n", ".editorconfig": "root = true\n"})
         run_setup(runner, root, "--tool", "none", "--from", source)
         lines = active_lines(profile_of(root)) or []
@@ -2838,7 +2877,7 @@ def verify_setup(runner, verbose=False):
         code, output = run_runner(runner, root, "setup", "--check")
         check("setup --check: `covers.test` is not proposed to a `test:` the person narrowed",
               code == 0 and "covers.test" not in output and "· test   differs" in output, output.strip().splitlines())
-    with tmpdir() as root:
+    for root in throwaway():
         write_file(root, ".editorconfig", "root = true\n")
         write_file(root, "build.gradle", "plugins { id 'java' }\n")
         run_setup(runner, root, "--tool", "none", "--from", source)
@@ -2850,7 +2889,7 @@ def verify_setup(runner, verbose=False):
                     if any(os.path.isdir(os.path.join(os.path.dirname(os.path.dirname(source)), plugin, "skills", name))
                            for plugin in os.listdir(os.path.dirname(os.path.dirname(source))))), None)
     if carrier and SYMLINKS:
-        with tmpdir() as root, tmpdir() as plugins:
+        for root, plugins in throwaway(2):
             # the pipeline copied beside the real method plugins, its template naming the carrier
             real = os.path.dirname(os.path.dirname(source))
             for plugin in os.listdir(real):
@@ -2871,7 +2910,7 @@ def verify_setup(runner, verbose=False):
                   and code == 0, output.strip().splitlines()[-2:])
 
     # item 7: update replaces the files in-process and leaves the profile alone
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
         with open(profile_of(root), "a", encoding="utf-8") as handle:
@@ -2890,7 +2929,7 @@ def verify_setup(runner, verbose=False):
 
     # copies installed from a cache, at the cache's own version: `update` without --from finds the cache,
     # never the project's copies — on a version tie the copies would win by order and be refused as the source
-    with tmpdir() as root, tmpdir() as home:
+    for root, home in throwaway(2):
         cache = os.path.join(home, ".claude", "plugins", "cache", "m", "dca-factory", "1.2.3")
         write_file(cache, ".claude-plugin/plugin.json", "{}")
         shutil.copytree(source, os.path.join(cache, "skills"), symlinks=True)
@@ -2907,7 +2946,7 @@ def verify_setup(runner, verbose=False):
 
     # a clone of a project that keeps its skill links out of git has no links: update brings them back
     if can_symlink():
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root)
             subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
             run_setup(runner, root, "--tool", "claude", "--from", source)
@@ -2922,7 +2961,7 @@ def verify_setup(runner, verbose=False):
     # an update started from the project's own runner, with no --from: the skill links name the pipeline,
     # the project's skill folder does not — linked onto themselves they would become loops
     if can_symlink():
-        with tmpdir() as root, tmpdir() as home:
+        for root, home in throwaway(2):
             build_project(root)
             run_setup(runner, root, "--tool", "claude", "--from", source)
             # one link per skill, as the install makes them
@@ -2952,7 +2991,7 @@ def verify_setup(runner, verbose=False):
                   output.strip().splitlines()[-3:])
 
     # item 11: the verbs mirror the skills; the old ones are gone
-    with tmpdir() as root:
+    for root in throwaway():
         env = dict(os.environ)
         build_project(root)
         run_setup(runner, root, "--tool", "claude", "--from", source)
@@ -3015,7 +3054,7 @@ def verify_setup(runner, verbose=False):
         check("status --brief: the gate's session-start lines carry no detection", "detection" not in gate_brief)
     # WP-64 1a: a carrier line only for a skill installed beside the pipeline; the places from AGENTS.md
     governed = {"build.gradle": "dependencies { testImplementation 'dev.domaincentric:dca-archunit:0.6.0' }\n"}
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         os.remove(profile_of(root))
         fixture(root, governed)
@@ -3029,7 +3068,7 @@ def verify_setup(runner, verbose=False):
     installed = {name for plugin in os.listdir(plugins_dir) if plugin != "dca-factory"
                  for name in (os.listdir(os.path.join(plugins_dir, plugin, "skills"))
                               if os.path.isdir(os.path.join(plugins_dir, plugin, "skills")) else [])}
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         os.remove(profile_of(root))
         fixture(root, governed)
@@ -3081,7 +3120,7 @@ def verify_setup(runner, verbose=False):
                           for n in ("review-ddd", "review-hexagonal", "review-clean-code"))
                   and not any(l.startswith("reviews:") and ("ddd" in l or "hexagonal" in l) for l in lines)),
               [l for l in lines if l.startswith(("review", "reviews"))])
-    with tmpdir() as root:
+    for root in throwaway():
         write_file(root, "AGENTS.md", "# A project\n\n<!-- dca-describe: start -->\n## Project description\n\n"
                    "- product: `docs/what.md` — the product\n- tech: `project/tech.md` — the stack\n"
                    "<!-- dca-describe: end -->\n")
@@ -3093,14 +3132,14 @@ def verify_setup(runner, verbose=False):
         check("places: the pipeline's AGENTS.md block carries no location line of its own",
               "project/product.md" not in agents.split("<!-- dca-factory: start -->")[1], agents[-400:])
     # WP-63 7a: renamed skills — the run stops on an old name, update removes an unedited old copy
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\nreview.domain: review-domain\n")
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         check("renames: a profile naming a renamed skill stops the run, with the new line for each",
               code == 2 and "carrier.build: ddd-modelling → carrier.build: dca-modelling" in output
               and "review.domain: review-domain → review.ddd: review-ddd" in output and "── stage" not in output,
               output.strip().splitlines()[-5:])
-    with tmpdir() as root, tmpdir() as home:
+    for root, home in throwaway(2):
         cache = os.path.join(home, ".claude", "plugins", "cache", "m")
         for plugin, version, skill, body in (("software-craftsmanship", "0.5.0", "review-craft", "old v0.5.0\n"),
                                              ("software-craftsmanship", "0.5.1", "review-craft", "old v0.5.1\n"),
@@ -3128,7 +3167,7 @@ def verify_setup(runner, verbose=False):
         check("renames: update names the old profile key with its new form and writes nothing into the profile",
               "carrier.build: ddd-modelling → carrier.build: dca-modelling" in output
               and "carrier.build: ddd-modelling" in open(profile_of(root), encoding="utf-8").read(), output.strip()[-300:])
-    with tmpdir() as home:
+    for home in throwaway():
         cache = os.path.join(home, ".claude", "plugins", "cache", "m")
         write_file(os.path.join(cache, "dca-factory", "9.0.0"), ".claude-plugin/plugin.json", "{}")
         shutil.copytree(source, os.path.join(cache, "dca-factory", "9.0.0", "skills"), symlinks=True)
@@ -3143,7 +3182,7 @@ def verify_setup(runner, verbose=False):
             check("renames: a plugin left in the cache under its old name is no source — e2e-testing comes from dca-craft",
                   os.path.isdir(link) and "dca-craft" in open(os.path.join(link, "SKILL.md"), encoding="utf-8").read(),
                   os.path.realpath(link) if os.path.exists(link) else "missing")
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, profile=PROFILE + "carrier.guard: some-guard\n")
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
@@ -3157,7 +3196,7 @@ def verify_setup(runner, verbose=False):
     if SYMLINKS:
         # a link under a skill's OLD name whose folder the rename moved away: the update removes it and
         # takes the name off the list; the new name is linked by the install
-        with tmpdir() as root, tmpdir() as gone:
+        for root, gone in throwaway(2):
             build_project(root)
             run_setup(runner, root, "--tool", "claude", "--from", source)
             stale = os.path.join(root, ".claude", "skills", "dca-review")
@@ -3170,7 +3209,7 @@ def verify_setup(runner, verbose=False):
                   "and the name leaves the list",
                   not os.path.lexists(stale) and "dca-review" not in listed and "removed the link" in output,
                   f"exists {os.path.lexists(stale)}; listed {'dca-review' in listed}; {[l for l in output.splitlines() if 'dca-review' in l][:2]}")
-        with tmpdir() as root, tmpdir() as gone:
+        for root, gone in throwaway(2):
             build_project(root)
             os.makedirs(os.path.join(root, ".codex", "skills"))
             os.symlink(os.path.join(gone, "renamed-plugin", "skills", "e2e-testing"),
@@ -3180,7 +3219,7 @@ def verify_setup(runner, verbose=False):
             check("renames: a link into a folder that no longer exists is pruned and the skill linked afresh",
                   os.path.isfile(os.path.join(link, "SKILL.md")) and "no longer exists" in output,
                   os.readlink(link) if os.path.islink(link) else "no link")
-    with tmpdir() as root:
+    for root in throwaway():
         # adding a tool to an installed project from another pipeline version is an update nobody asked for
         build_project(root)
         run_setup(runner, root, "--tool", "none", "--from", source)
@@ -3194,7 +3233,7 @@ def verify_setup(runner, verbose=False):
               code == 2 and "update first" in output and open(gate_copy, encoding="utf-8").read() == older
               and not os.path.exists(os.path.join(root, ".codex", "skills")), f"exit {code}; {output.strip()[-200:]}")
     if SYMLINKS:
-        with tmpdir() as root:
+        for root in throwaway():
             # a folder of the project's own that carries a pipeline skill's name, beside skills of its own
             build_project(root)
             write_file(root, ".claude/skills/stage-plan/SKILL.md", "---\nname: stage-plan\ndescription: ours\n---\n")
@@ -3204,7 +3243,7 @@ def verify_setup(runner, verbose=False):
             check("setup: a project's own skill folder with a pipeline skill's name is kept and named",
                   os.path.isdir(own) and not os.path.islink(own) and "ours" in open(os.path.join(own, "SKILL.md")).read()
                   and "kept the project's own .claude/skills/stage-plan" in output, output.strip()[-300:])
-    with tmpdir() as root, tmpdir() as market:
+    for root, market in throwaway(2):
         # a copy install whose method skills were copied by hand (dca-new, a bench base): not the install's, so
         # never replaced unasked — an identical one is taken over, a different one is named with `--adopt`, and an
         # adopted one follows the method plugin from then on
@@ -3240,7 +3279,7 @@ def verify_setup(runner, verbose=False):
     if SYMLINKS:
         # an update from a newer version in the plugin cache: the links into the older one are the install's own
         for tool, extra in (("codex", ""), ("claude", "carrier.build: e2e-testing\n")):
-            with tmpdir() as root, tmpdir() as home:
+            for root, home in throwaway(2):
                 cache = os.path.join(home, ".claude", "plugins", "cache", "m")
                 def version(number, craft):
                     write_file(os.path.join(cache, "dca-factory", number), ".claude-plugin/plugin.json", "{}")
@@ -3258,7 +3297,7 @@ def verify_setup(runner, verbose=False):
                 check(f"update: {tool}'s links into an older cache version follow the newer one, the carrier's too",
                       code == 0 and "/9.1.0/" in where["factory-run"] and "/0.7.0/" in where["e2e-testing"]
                       and "kept the project's own" not in output, f"exit {code}; {where}")
-        with tmpdir() as root, tmpdir() as home:
+        for root, home in throwaway(2):
             # the links point into a version since removed from the cache, and nothing ignores them
             cache = os.path.join(home, ".claude", "plugins", "cache", "m")
             for number in ("9.0.0", "9.1.0"):
@@ -3289,7 +3328,7 @@ def verify_setup(runner, verbose=False):
         return open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else []
 
     if SYMLINKS:
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root)
             write_file(root, ".claude/skills/factory-run/SKILL.md", "---\nname: factory-run\ndescription: PROJECT OWN\n---\n")
             code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
@@ -3306,7 +3345,7 @@ def verify_setup(runner, verbose=False):
                   ".claude/skills/stage-plan" in ignore_lines(root) and ".claude/skills/factory-run" not in ignore_lines(root)
                   and ".claude/skills" not in ignore_lines(root) and ".claude/skills/" not in ignore_lines(root),
                   ignore_lines(root)[:5])
-        with tmpdir() as root, tmpdir() as home:
+        for root, home in throwaway(2):
             cache = os.path.join(home, ".claude", "plugins", "cache", "m")
             write_file(os.path.join(cache, "dca-factory", "9.0.0"), ".claude-plugin/plugin.json", "{}")
             shutil.copytree(source, os.path.join(cache, "dca-factory", "9.0.0", "skills"), symlinks=True)
@@ -3333,7 +3372,7 @@ def verify_setup(runner, verbose=False):
             check("update: --copy switches back to copies and drops the ignore lines",
                   code == 0 and os.path.isdir(plan) and not os.path.islink(plan) and "mode: copy" in manifest_of(root)
                   and ".claude/skills/stage-plan" not in ignore_lines(root), f"exit {code}; {ignore_lines(root)}")
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root)
             run_setup(runner, root, "--tool", "none", "--from", source)
             os.makedirs(os.path.join(root, ".claude", "skills"))
@@ -3344,7 +3383,7 @@ def verify_setup(runner, verbose=False):
             check("status: --brief names a skill link that points nowhere and the update that relinks it",
                   "gone-skill points nowhere" in result.stdout and "/factory-update" in result.stdout,
                   result.stdout.strip()[-300:] + result.stderr.strip()[-200:])
-    with tmpdir() as root:
+    for root in throwaway():
         # a copy from before the list: taken over only byte for byte, an edited one is the project's
         build_project(root)
         run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
@@ -3357,7 +3396,7 @@ def verify_setup(runner, verbose=False):
               code == 0 and "edited by the project" in open(os.path.join(skills, "stage-plan", "SKILL.md"), encoding="utf-8").read()
               and "kept the project's own .claude/skills/stage-plan" in output and "stage-plan" not in manifest_of(root)
               and "stage-build" in manifest_of(root), f"exit {code}; {output.strip()[-300:]}")
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
         check("install: for Claude Code the report names the second listing under the plugin's namespace",
@@ -3368,7 +3407,7 @@ def verify_setup(runner, verbose=False):
                               encoding="utf-8", errors="replace")
         return done.returncode, done.stdout.strip()
 
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, profile=PROFILE + 'model.claude.tidy: "haiku"\nmodel.claude: sonnet\n'
                                              "carrier.build: dca-core:dca-modelling\nreview.ddd: review-ddd\n")
         run_setup(runner, root, "--tool", "none", "--from", source)
@@ -3503,7 +3542,7 @@ def verify_places(args):
                               encoding="utf-8", errors="replace")
 
     # ids are unique project-wide: a second story under the same id is refused, naming both files
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, ("STORY-2", []), extra_sources=(
             ("project/epics/other/epic.md", EPIC.replace("id: sample", "id: other")),
             ("project/epics/other/STORY-2/story.md", story("STORY-2").replace("epic: sample", "epic: other"))))
@@ -3522,7 +3561,7 @@ def verify_places(args):
                              f"{listing.strip()[-300:]}"))
 
     # the run folder is protocol: deleted after two deliveries, nothing about state changes
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, ("STORY-2", ["STORY-1"]), ("STORY-3", ["STORY-2"]),
                         story=delivered_story(STORY, "2026-09-21T10:00:00Z"),
                         extra_sources=(("project/epics/sample/STORY-2/story.md",
@@ -3547,7 +3586,7 @@ def verify_places(args):
 
     # code in the checkout that no run folder claims: nothing starts on top of it — unless a story was delivered
     # after HEAD, whose code waits for its commit
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, ("STORY-2", []), extra_sources=((".gitignore", "green/\n"),))
         for command in (["init", "-q"], ["add", "-A"],
                         ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
@@ -3568,7 +3607,7 @@ def verify_places(args):
                              f"clean {clean[1]!r}; gone {gone[1]!r}; stray {stray[1]!r}; since {delivered_since[1]!r}"))
 
     # the gate's one write into a story keeps everything else byte for byte, line endings included
-    with tmpdir() as root:
+    for root in throwaway():
         crlf = STORY.replace("\n", "\r\n")
         path = os.path.join(root, "story.md")
         with open(path, "w", encoding="utf-8", newline="") as handle:
@@ -3587,7 +3626,7 @@ def verify_places(args):
                              f"{written[:160]!r}"))
 
     # an older layout is named and not read: the story gate fails on it, the backlog check notes it
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         os.makedirs(os.path.join(root, ".agents", "factory"), exist_ok=True)
         os.replace(os.path.join(root, "dca-factory.profile.yaml"), os.path.join(root, OLD_PROFILE))
@@ -3603,7 +3642,7 @@ def verify_places(args):
                              planned.stdout.strip()[-400:]))
 
     # the migration: once, idempotent, and the project's own files under tasks/ untouched
-    with tmpdir() as root:
+    for root in throwaway():
         old_layout(root)
         foreign_before = {p: open(os.path.join(root, p), "rb").read() for p in ("tasks/prd.md", "tasks/notes/todo.txt")}
         first = cli(root, "--migrate-layout")
@@ -3636,7 +3675,7 @@ def verify_places(args):
 
     # contract 16: a story is a folder — the flat layout of before is named, not read, and `update` moves each story
     # with its decisions and findings into a folder named after its id, through git where the files are tracked
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, tests=None)
         os.replace(os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md"),
                    os.path.join(root, "project", "epics", "sample", "STORY-1.md"))
@@ -3678,7 +3717,7 @@ def verify_places(args):
 
     def epic_story(sid, name):
         return story(sid).replace("epic: sample", f"epic: {name}")
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, extra_sources=(
             ("project/epics/alpha/epic.md", epic("alpha")),
             ("project/epics/alpha/ZZZ-1/story.md", epic_story("ZZZ-1", "alpha")),
@@ -3697,7 +3736,7 @@ def verify_places(args):
                              and "depends on epic alpha (0 of 1 delivered)" in first[3]
                              and second[1] == "AAA-1 plan" and second[0].get("BBB-1", ("",))[0] == "ready",
                              f"{first[3].strip()} || {second[3].strip()}"))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, extra_sources=(
             ("project/epics/alpha/epic.md", epic("alpha", ["nowhere"])),
             ("project/epics/alpha/ZZZ-1/story.md", epic_story("ZZZ-1", "alpha")),
@@ -3716,7 +3755,7 @@ def verify_places(args):
                              f"{checked.stdout.strip()[-400:]} || {listing.strip()}"))
 
     # one architecture command: the profile's and the conventions' compared, a difference named, never fixed
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         write_file(root, ".agents/dca/conventions.md", "## Resolved configuration\n\nverify_command: ./gradlew archTest\n")
         with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
@@ -3743,11 +3782,20 @@ def main(argv=None):
     parser.add_argument("--gate", default=DEFAULT_GATE)
     parser.add_argument("--cli", default=DEFAULT_CLI, help="the CLI beside the gate (default: beside --gate)")
     parser.add_argument("--runner", default=DEFAULT_RUNNER)
-    parser.add_argument("--group", choices=("all", "checks", "runner", "setup"), default="all",
-                        help="run one group only: the gate's and the schedule's checks, the runner, the install")
+    parser.add_argument("--group", choices=("all", "checks", "runner", "worktree", "setup"), default="all",
+                        help="run one group only: the gate's and the schedule's checks, the runner, the worktrees "
+                             "and the parallel run, the install")
+    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, metavar="N",
+                        help=f"processes side by side, the fixtures of every group spread over them "
+                             f"(default {DEFAULT_JOBS}: the machine's cores, at most 6; 1 runs in this process, in order)")
+    parser.add_argument("--shard", metavar="I/N", help=argparse.SUPPRESS)
+    parser.add_argument("--results", metavar="FILE", help=argparse.SUPPRESS)
     parser.add_argument("--junit", metavar="FILE", help="write every case as a JUnit XML report")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
+    if args.shard:
+        index, count = (int(n) for n in args.shard.split("/"))
+        SHARD[:] = [index, count]
     # The runner's cases describe the stages one by one; shared stages are the default since 0.64, so the
     # suite runs separate stages unless a case asks for shared ones (`--shared-builder`) or clears these.
     os.environ.setdefault("FACTORY_SHARED_BUILDER", "0")
@@ -3765,10 +3813,96 @@ def main(argv=None):
         print(f"verify: no cli at {args.cli} — the gate and the cli are one release, in one folder")
         return 2
     try:
+        if args.jobs > 1 and not args.shard:
+            return run_shards(args)
         return run_groups(args)
     finally:
+        if args.results:
+            with open(args.results, "w", encoding="utf-8") as handle:
+                json.dump([(group, name, bool(ok), str(detail)) for group, name, ok, detail in RESULTS], handle)
         if args.junit:
             write_junit(args.junit)
+
+
+GROUPS = ("checks", "runner", "worktree", "setup")
+
+
+def run_shards(args):
+    """Every group's fixtures over `--jobs` processes: one process per group and shard, at most `--jobs` at once.
+    A shard's output is shown when it is done; a case every shard runs (one without a fixture) is shown and
+    counted once."""
+    groups = GROUPS if args.group == "all" else (args.group,)
+    queue = [(group, index) for group in groups for index in range(args.jobs)]
+    running, outputs, started = [], {}, time.monotonic()
+    common = [sys.executable, os.path.abspath(__file__), "--gate", args.gate, "--cli", args.cli,
+              "--runner", args.runner, "--jobs", "1"] + (["-v"] if args.verbose else [])
+    print(f"verify: {len(groups)} group(s) in {args.jobs} shard(s) each, {args.jobs} at a time")
+    while queue or running:
+        while queue and len(running) < args.jobs:
+            group, index = queue.pop(0)
+            results = tempfile.NamedTemporaryFile(prefix=f"verify-{group}-{index}-", suffix=".json", delete=False)
+            results.close()
+            # the shard's output goes to a file, not a pipe: a pipe fills up and the shard would wait on it
+            log = open(results.name + ".log", "w+", encoding="utf-8", errors="replace")
+            process = subprocess.Popen(common + ["--group", group, "--shard", f"{index}/{args.jobs}",
+                                                 "--results", results.name],
+                                       stdout=log, stderr=subprocess.STDOUT)
+            running.append((group, index, results.name, process, log))
+        for entry in list(running):
+            group, index, path, process, log = entry
+            if process.poll() is None:
+                continue
+            running.remove(entry)
+            log.seek(0)
+            output = log.read()
+            log.close()
+            try:
+                os.unlink(log.name)
+            except OSError:
+                pass
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    found = [tuple(row) for row in json.load(handle)]
+            except (OSError, ValueError):
+                found = []
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+            known = {(g, n) for g, n, _ok, _d in RESULTS}
+            fresh = [row for row in found if (row[0], row[1]) not in known]
+            RESULTS.extend(fresh)
+            names = {n for _g, n, _ok, _d in fresh}
+            print(f"\n── {group} {index + 1}/{args.jobs}")
+            for line in output.splitlines():
+                if line.startswith("  ok    ") and line[8:] not in names:
+                    continue                       # a case every shard runs, shown by the first
+                if line.startswith("verify: ") and " cases behaved" in line:
+                    continue                       # the shard's count; the groups are counted below
+                if line.startswith("verify: the factory behaves") or line.startswith("verify: FAILED"):
+                    continue
+                print(line)
+            if process.returncode != 0 and all(row[2] for row in found):
+                # not a case that failed — the shard itself broke off (a traceback, a missing file)
+                RESULTS.append((group, f"{group} shard {index + 1}/{args.jobs} ended with exit {process.returncode}",
+                                False, output[-800:]))
+                print(f"  FAIL  shard ended with exit {process.returncode}: {output[-400:]}")
+        if running:
+            time.sleep(0.2)
+    print()
+    failed = 0
+    for group in groups:
+        rows = [row for row in RESULTS if row[0] == group]
+        bad = sum(1 for row in rows if not row[2])
+        failed += bad
+        print(f"verify: {len(rows) - bad}/{len(rows)} {group} cases behaved as specified")
+    print(f"verify: {int(time.monotonic() - started)} s")
+    if failed:
+        print(f"\nverify: FAILED — {failed} case(s)")
+        return 1
+    print("\nverify: the factory behaves as specified")
+    return 0
 
 
 def write_junit(path):
@@ -3793,7 +3927,7 @@ def write_junit(path):
 
 
 def run_groups(args):
-    if args.group in ("runner", "setup"):
+    if args.group in ("runner", "worktree", "setup"):
         return run_runner_groups(args, [], args.group)
 
     both_green = ["com.example.WidgetPageTest#showsTheThing",
@@ -4748,7 +4882,7 @@ def run_groups(args):
 
     failures = []
     for case, fixture in cases:
-        with tmpdir() as root:
+        for root in throwaway():
             # `prepare` runs the CLI's marks or a git command over the fixture before the gate; `after`
             # looks at what the gate left behind and returns the problems it finds.
             fixture = dict(fixture)
@@ -4798,7 +4932,7 @@ def run_groups(args):
     # what waits on a human comes first. Read from files only — a record's state is never stored.
     print()
     inbox_failures = []
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, **with_decisions(
             ("STORY-1-01", DECISION),
             ("STORY-1-02", DECISION.replace("STORY-1-01", "STORY-1-02") + "\n## Answer\nanswer: a\n"),
@@ -4827,7 +4961,7 @@ def run_groups(args):
                              "STORY-9-01" in one_story.stdout and "STORY-1-01" not in one_story.stdout
                              and "1 record · 1 waits for you" in one_story.stdout,
                              one_story.stdout.strip().splitlines()[-1:]))
-        for name, ok, detail in expectations:
+        for name, ok, detail in drain(expectations):
             print(f"  {'ok   ' if ok else 'FAIL '} {name}")
             note_result(name, ok, detail)
             if not ok:
@@ -4839,26 +4973,26 @@ def run_groups(args):
     print()
     change_failures = []
     expectations = []
-    with tmpdir() as root:
+    for root in throwaway():
         change_project(root, "compile: true\n")
         code, output = run_change(args.gate, root)
         verdicts = checks_by_verdict(output)
         expectations.append(("change: without `required:` nothing is mandatory, and what it skipped is named",
                              code == 0 and "test" in verdicts["skip"] and "nothing is mandatory" in output,
                              output.strip().splitlines()[-3:]))
-    with tmpdir() as root:
+    for root in throwaway():
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test architecture\n")
         code, output = run_change(args.gate, root)
         expectations.append(("change: a required check the profile does not declare fails",
                              code == 1 and "architecture" in checks_by_verdict(output)["fail"]
                              and "`architecture` is required" in output, output.strip().splitlines()[-3:]))
-    with tmpdir() as root:
+    for root in throwaway():
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", state="empty")
         code, output = run_change(args.gate, root)
         expectations.append(("change: a required test command that ran no test fails, though it exited 0",
                              code == 1 and "no report written by this run shows an executed test" in output,
                              output.strip().splitlines()[-3:]))
-    with tmpdir() as root:
+    for root in throwaway():
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n")
         code, output = run_change(args.gate, root)
         expectations.append(("change: a required suite that ran and passed passes",
@@ -4890,7 +5024,7 @@ def run_groups(args):
         expectations.append(("change: a narrowed scope names a required check it left out, never passes it",
                              code == 0 and "test" in checks_by_verdict(output)["skip"]
                              and "a later scope (CI) has to run it" in output, output.strip().splitlines()[-3:]))
-    with tmpdir() as root:
+    for root in throwaway():
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", repository=True)
         # staged: broken; working tree: the fix, not staged
         write_file(root, "src/state", "broken\n")
@@ -4916,7 +5050,7 @@ def run_groups(args):
         state_before = open(os.path.join(root, "src", "state"), encoding="utf-8").read()
         expectations.append(("change: checking leaves the user's files as they were",
                              state_before == "broken\n", state_before))
-    with tmpdir() as root:
+    for root in throwaway():
         # the hook is the same command; `git commit -a` hands it a temporary index
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", repository=True)
         os.makedirs(os.path.join(root, ".githooks"), exist_ok=True)
@@ -4944,7 +5078,7 @@ def run_groups(args):
                              accepted.returncode == 0 and log[:1] == ["fixed"] and "broken" not in log
                              and "ran 1 case(s)" in accepted.stderr,
                              f"log {log}; {(accepted.stdout + accepted.stderr).strip().splitlines()[-3:]}"))
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -4955,7 +5089,7 @@ def run_groups(args):
     # --- parity: every implementation proves every mandatory scenario, from its own reports -------
     print()
     parity_failures = []
-    with tmpdir() as root:
+    for root in throwaway():
         reports = {
             "complete": ("one/TEST-x.xml", junit(("The reader sees the thing", "passed"),
                                                  ("An empty list shows v1.0 of nothing", "passed"),
@@ -5005,7 +5139,7 @@ def run_groups(args):
             ("parity: the verdict names the contract's digest, and one failure fails the whole check",
              completed.returncode == 1 and "sha256" in output, output.strip().splitlines()[-1:]),
         ]
-    with tmpdir() as root:
+    for root in throwaway():
         os.makedirs(os.path.join(root, "one"))
         write_file(root, "scenarios.md", SCENARIOS + "\n## scenario.thing.untitled\n**Title:** Bold is not the line\n")
         write_file(root, "one/TEST-x.xml", junit(("The reader sees the thing", "passed"),
@@ -5016,7 +5150,7 @@ def run_groups(args):
         expectations.append(("parity: a scenario without its `Title:` line fails the contract, not left out",
                              completed.returncode == 1 and "gate:fail contract" in completed.stdout
                              and "scenario.thing.untitled" in completed.stdout, completed.stdout.strip()[-300:]))
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -5027,7 +5161,7 @@ def run_groups(args):
     # --- the red proof is about one version of a test ------------------------------------------------
     print()
     proof_failures, expectations = [], []
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_gate(args.gate, root, "test")
         ledger = open(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".tests-red"), encoding="utf-8").read()
@@ -5055,14 +5189,14 @@ def run_groups(args):
         code, output = run_gate(args.gate, root, "build")
         expectations.append(("red-proof: the same change passes on an answered decision of the test stage",
                              "red-proof" in checks_by_verdict(output)["pass"], [l for l in output.splitlines() if "red-proof" in l]))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, green=both_green, ledger=both_green)
         code, output = run_gate(args.gate, root, "build")
         expectations.append(("red-proof: a red record without digests (an older gate) is skipped and named",
                              code == 0 and "red-proof" in checks_by_verdict(output)["skip"],
                              [l for l in output.splitlines() if "red-proof" in l]))
     # WP-79 C10: the plan's criteria lines come with the keys; the stage gives the levels.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         done = subprocess.run([sys.executable, args.cli, "--plan-skeleton", "STORY-1"], cwd=root,
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -5084,7 +5218,7 @@ def run_groups(args):
                              f"exit {again.returncode}; {again.stdout.strip()[:120]}"))
     # 0.57.0: the test stage's skeleton carries one `gate:invariants` row per rule the plan names; the stage fills in
     # the tests only, so format, numbering and a forgotten rule cannot be refused.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, tests=None, extra_sources=PLAN_AND_TEST + (
             (".dca-factory/runs/STORY-1/.verify/changed-test.txt", "added\tsrc/test/java/com/example/WidgetNameTest.java\n"),))
         tests_md = os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md")
@@ -5103,7 +5237,7 @@ def run_groups(args):
                              and text_again == text,
                              f"exit {done.returncode}; {done.stdout.strip()[-160:]}; {text[-400:]!r}"))
     # WP-79 A4: the hand-over's file list is the pipeline's to write, from the record the gate reads.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, green=both_green, ledger=both_green, extra_sources=(
             (".dca-factory/runs/STORY-1/.verify/changed-build.txt",
              "added\tsrc/main/Thing.java\nmodified\tsrc/main/Other.java\n"),))
@@ -5140,7 +5274,7 @@ def run_groups(args):
                              f"exit {code}; {out.strip()[:160]}"))
     # Inside a shared builder's window there is no record yet: the tree against the story's base, minus
     # what the earlier hand-overs list — the union the gate checks.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, green=both_green, ledger=both_green)
         env = dict(os.environ, GIT_AUTHOR_NAME="f", GIT_AUTHOR_EMAIL="f@x", GIT_COMMITTER_NAME="f",
                    GIT_COMMITTER_EMAIL="f@x")
@@ -5163,7 +5297,7 @@ def run_groups(args):
                              and ".dca-factory" not in text,
                              f"exit {done.returncode}; {(done.stdout + done.stderr).strip()[:160]}; {text!r}"))
     # WP-79 A3: the runner's own record of its suite runs, keyed by the tree and signed with its key.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, green=both_green, ledger=both_green)
         keyed = dict(os.environ, FACTORY_SUITES_KEY="fixture-key")
         log = os.path.join(root, "build", "runner-calls.log")
@@ -5214,7 +5348,7 @@ def run_groups(args):
                              f"exit {code}; calls {calls()} (was {second})"))
     # A build stage that edited a test and put it back: the file changed within the window (back), the
     # hand-over does not list it, and it is the version the ledger holds — a restoration, not a change.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         run_gate(args.gate, root, "test")
         os.makedirs(os.path.join(root, "green"), exist_ok=True)
@@ -5241,7 +5375,7 @@ def run_groups(args):
                              code == 1 and "files-listed" in checks_by_verdict(output)["fail"]
                              and "red-proof" in checks_by_verdict(output)["fail"],
                              [l for l in output.splitlines() if "files-listed" in l or "red-proof" in l]))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
                                              (".dca-factory/runs/STORY-1/.verify/journal.tsv",
                                               "t\tstage-start\tplan\ttool=x\nt\tstage-end\tplan\texit=0\n"
@@ -5254,44 +5388,45 @@ def run_groups(args):
     page_test = "src/test-pages/java/com/example/WidgetPageTest.java"
     old_page = "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"
     new_page = "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() { /* asserts the word too */ } }\n"
-    def strengthened(with_break):
-        with tmpdir() as root:
-            extra = [(page_test, new_page), (".dca-factory/runs/STORY-1/build.md", "## Changed\n"),
-                     ("unrelated.txt", "a\n")]
-            if with_break:
-                extra.append((".dca-factory/runs/STORY-1/breaks/com.example.WidgetPageTest--showsTheThing.patch",
-                              with_break))
-            build_project(root, green=both_green, extra_sources=tuple(extra))
-            digest_old = hashlib.sha256(old_page.encode("utf-8")).hexdigest()
-            unit = os.path.join(root, "src/test/java/com/example/WidgetUnitTest.java")
-            digest_unit = hashlib.sha256(open(unit, "rb").read()).hexdigest()
-            write_file(root, ".dca-factory/runs/STORY-1/.tests-red",
-                       f"com.example.WidgetPageTest#showsTheThing\t{digest_old}\n"
-                       f"com.example.WidgetUnitTest#showsNothingWhenEmpty\t{digest_unit}\n")
-            code, output = run_gate(args.gate, root, "test")
-            ledger = open(os.path.join(root, ".dca-factory/runs/STORY-1/.tests-red"), encoding="utf-8").read()
-            return code, output, ledger
-    code, output, ledger = strengthened(None)
-    expectations.append(("judge sent back: a test changed after its build met it, green without a break, is refused "
-                         "at the test gate", code == 1 and "break-proof" in checks_by_verdict(output)["fail"],
-                         [l for l in output.splitlines() if "break-proof" in l or "tests-red" in l][:4]))
-    old_digest = hashlib.sha256(old_page.encode("utf-8")).hexdigest()
-    expectations.append(("judge sent back: a refused break leaves the earlier red proof in the record, so the next run "
-                         "can prove the new version instead of a test never seen red",
-                         f"com.example.WidgetPageTest#showsTheThing\t{old_digest}" in ledger
-                         and "com.example.WidgetUnitTest#showsNothingWhenEmpty" in ledger,
-                         ledger.splitlines()))
-    code, output, ledger = strengthened(BREAK_THE_THING)
-    new_digest = hashlib.sha256(new_page.encode("utf-8")).hexdigest()
-    expectations.append(("judge sent back: the same test with a break that turns it red passes, and the red record "
-                         "holds its new version", code == 0 and "break-proof" in checks_by_verdict(output)["pass"]
-                         and new_digest in ledger,
-                         [l for l in output.splitlines() if "break-proof" in l or "tests-red" in l][:4]))
-    code, output, ledger = strengthened(BREAK_NOTHING)
-    expectations.append(("judge sent back: a break the strengthened test does not notice is refused",
-                         code == 1 and "break-proof" in checks_by_verdict(output)["fail"] and "stays green" in output,
-                         [l for l in output.splitlines() if "break-proof" in l][:3]))
-    with tmpdir() as root:
+    for _ in one_shard():
+        def strengthened(with_break):
+            with tmpdir() as root:
+                extra = [(page_test, new_page), (".dca-factory/runs/STORY-1/build.md", "## Changed\n"),
+                         ("unrelated.txt", "a\n")]
+                if with_break:
+                    extra.append((".dca-factory/runs/STORY-1/breaks/com.example.WidgetPageTest--showsTheThing.patch",
+                                  with_break))
+                build_project(root, green=both_green, extra_sources=tuple(extra))
+                digest_old = hashlib.sha256(old_page.encode("utf-8")).hexdigest()
+                unit = os.path.join(root, "src/test/java/com/example/WidgetUnitTest.java")
+                digest_unit = hashlib.sha256(open(unit, "rb").read()).hexdigest()
+                write_file(root, ".dca-factory/runs/STORY-1/.tests-red",
+                           f"com.example.WidgetPageTest#showsTheThing\t{digest_old}\n"
+                           f"com.example.WidgetUnitTest#showsNothingWhenEmpty\t{digest_unit}\n")
+                code, output = run_gate(args.gate, root, "test")
+                ledger = open(os.path.join(root, ".dca-factory/runs/STORY-1/.tests-red"), encoding="utf-8").read()
+                return code, output, ledger
+        code, output, ledger = strengthened(None)
+        expectations.append(("judge sent back: a test changed after its build met it, green without a break, is refused "
+                             "at the test gate", code == 1 and "break-proof" in checks_by_verdict(output)["fail"],
+                             [l for l in output.splitlines() if "break-proof" in l or "tests-red" in l][:4]))
+        old_digest = hashlib.sha256(old_page.encode("utf-8")).hexdigest()
+        expectations.append(("judge sent back: a refused break leaves the earlier red proof in the record, so the next run "
+                             "can prove the new version instead of a test never seen red",
+                             f"com.example.WidgetPageTest#showsTheThing\t{old_digest}" in ledger
+                             and "com.example.WidgetUnitTest#showsNothingWhenEmpty" in ledger,
+                             ledger.splitlines()))
+        code, output, ledger = strengthened(BREAK_THE_THING)
+        new_digest = hashlib.sha256(new_page.encode("utf-8")).hexdigest()
+        expectations.append(("judge sent back: the same test with a break that turns it red passes, and the red record "
+                             "holds its new version", code == 0 and "break-proof" in checks_by_verdict(output)["pass"]
+                             and new_digest in ledger,
+                             [l for l in output.splitlines() if "break-proof" in l or "tests-red" in l][:4]))
+        code, output, ledger = strengthened(BREAK_NOTHING)
+        expectations.append(("judge sent back: a break the strengthened test does not notice is refused",
+                             code == 1 and "break-proof" in checks_by_verdict(output)["fail"] and "stays green" in output,
+                             [l for l in output.splitlines() if "break-proof" in l][:3]))
+    for root in throwaway():
         build_project(root)
         def back_to(text):
             write_file(root, ".dca-factory/runs/STORY-1/judge.md", text)
@@ -5313,34 +5448,35 @@ def run_groups(args):
     # A shared builder runs its own gates inside its open window, before any changed-files record exists. The
     # gate reads the story's changes against its base tree instead, so the builder sees an unlisted file while
     # it can still list it — not only the runner, afterwards.
-    def builder_window(listed):
-        with tmpdir() as root:
-            build_project(root, green=both_green, ledger=both_green)
-            write_file(root, ".gitignore", "build/\n")      # test reports, as a real project ignores them
-            in_git(root)
-            subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
-            subprocess.run(["git", "-c", "user.name=v", "-c", "user.email=v@v", "commit", "-qm", "base"], cwd=root,
-                           capture_output=True)
-            subprocess.run([sys.executable, args.gate, "--record-base", "--story", "STORY-1"], cwd=root, capture_output=True)
-            write_file(root, "src/main/Thing.java", "class Thing {}\n")
-            write_file(root, "src/main/State.java", "enum State { OPEN }\n")
-            write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv",
-                       "2026-09-29T14:05:22.000Z\tstage-start\tbuilder\ttool=claude\n")
-            rows = "".join(f"| `{p}` | new |\n" for p in listed)
-            write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Changed\n| File | Why |\n|---|---|\n" + rows)
-            return run_gate(args.gate, root, "build")
-    code, output = builder_window(["src/main/Thing.java"])
-    expectations.append(("builder window: the gate inside an open shared-builder window checks the hand-overs against "
-                         "the story's changes so far, and names the unlisted file",
-                         "files-listed" in checks_by_verdict(output)["fail"] and "src/main/State.java" in output,
-                         [l for l in output.splitlines() if "files-listed" in l]))
-    code, output = builder_window(["src/main/Thing.java", "src/main/State.java"])
-    expectations.append(("builder window: with every changed file listed, the check passes inside the window",
-                         "files-listed" in checks_by_verdict(output)["pass"],
-                         [l for l in output.splitlines() if "files-listed" in l]))
+    for _ in one_shard():
+        def builder_window(listed):
+            with tmpdir() as root:
+                build_project(root, green=both_green, ledger=both_green)
+                write_file(root, ".gitignore", "build/\n")      # test reports, as a real project ignores them
+                in_git(root)
+                subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+                subprocess.run(["git", "-c", "user.name=v", "-c", "user.email=v@v", "commit", "-qm", "base"], cwd=root,
+                               capture_output=True)
+                subprocess.run([sys.executable, args.gate, "--record-base", "--story", "STORY-1"], cwd=root, capture_output=True)
+                write_file(root, "src/main/Thing.java", "class Thing {}\n")
+                write_file(root, "src/main/State.java", "enum State { OPEN }\n")
+                write_file(root, ".dca-factory/runs/STORY-1/.verify/journal.tsv",
+                           "2026-09-29T14:05:22.000Z\tstage-start\tbuilder\ttool=claude\n")
+                rows = "".join(f"| `{p}` | new |\n" for p in listed)
+                write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Changed\n| File | Why |\n|---|---|\n" + rows)
+                return run_gate(args.gate, root, "build")
+        code, output = builder_window(["src/main/Thing.java"])
+        expectations.append(("builder window: the gate inside an open shared-builder window checks the hand-overs against "
+                             "the story's changes so far, and names the unlisted file",
+                             "files-listed" in checks_by_verdict(output)["fail"] and "src/main/State.java" in output,
+                             [l for l in output.splitlines() if "files-listed" in l]))
+        code, output = builder_window(["src/main/Thing.java", "src/main/State.java"])
+        expectations.append(("builder window: with every changed file listed, the check passes inside the window",
+                             "files-listed" in checks_by_verdict(output)["pass"],
+                             [l for l in output.splitlines() if "files-listed" in l]))
     # The gate's brief report: what passed is one line, what did not stays verbatim — for a stage that runs its
     # own gate and reads the report into its context.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, green=both_green, ledger=both_green)
         done = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "build", "--brief"],
                               cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -5362,7 +5498,7 @@ def run_groups(args):
                              lines[:8]))
     # The contract the cli prints is the gate's own: the selector pattern and the table marker are the constants
     # the checks read, so the text cannot say one thing while the gate checks another.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         gate_names = gate_module(args.gate)
         def contract(stage):
@@ -5405,7 +5541,7 @@ def run_groups(args):
                              and code_x == 2 and "--contract takes one of" in text_x,
                              (text_p[:120], text_j[:120], text_d[:120], text_x[:120])))
     # 0.54.0: a second delivery adds no row twice; the findings file is no story; --findings lists the open rows
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
             (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | Defect | Fix |\n|---|---|---|---|---|\n| clean-code | src/main/Thing.java:3 | minor | a name that says nothing | rename it |\n| ddd | src/main/Thing.java:9 | minor | an event in the present tense | past tense |\n"),))
         run_gate(args.gate, root, "document")
@@ -5425,7 +5561,7 @@ def run_groups(args):
                              and listed.count("STORY-1\tminor\tsrc/main/Thing.java") == 2 and "2 open finding(s)" in listed,
                              (text[-300:], listed[:200], [l for l in backlog.splitlines() if "findings" in l])))
     # WP-80 B: the skeleton carries one `## Glossary` row per proposed term, as the plan wrote it.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md",
              "# Plan\n\n## Glossary proposals\n- Titel (title): the text of a task\n- Liste: the tasks in order\n"),))
@@ -5443,7 +5579,7 @@ def run_groups(args):
                              (done.stdout.strip()[:160], text[:400])))
     # The document skeleton: every changed path and run file under `## Paths`, root-relative; a skeleton the stage
     # fills passes the document gate; a bare name typed beside it is still refused.
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, green=both_green, ledger=both_green, document=DOCUMENT)
         run_folder = os.path.join(root, ".dca-factory", "runs", "STORY-1")
         os.remove(os.path.join(run_folder, "document.md"))
@@ -5478,7 +5614,7 @@ def run_groups(args):
                              code == 1 and "documented" in checks_by_verdict(output)["fail"] and "WidgetUnitTest.java:1" in output,
                              [l for l in output.splitlines() if "documented" in l]))
     expectations += verify_places(args)
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -5487,7 +5623,7 @@ def run_groups(args):
     failures += [(name, [], "") for name in proof_failures]
 
     # --- the two usage formats the runner reads, in the shape the tools really write ------------------
-    with tmpdir() as root:
+    for root in throwaway():
         claude_out = os.path.join(root, "claude.json")
         with open(claude_out, "w", encoding="utf-8") as handle:
             handle.write('{"type":"result","result":"ok","total_cost_usd":0.023707,"usage":{"input_tokens":10},'
@@ -5638,7 +5774,7 @@ def run_groups(args):
              and "✗ Exit code 1 — FAILED: TaskTest" in lines and any(l.startswith("■ done") and "1 denied" in l for l in lines),
              lines),
         ]
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -5646,7 +5782,7 @@ def run_groups(args):
             failures.append((name, [], ""))
 
     # --- usage inside a session: the tool's own log, read for the window between two marks ------------
-    with tmpdir() as root:
+    for root in throwaway():
         home = os.path.join(root, "claude-home")
         session = "0000-session"
         log_dir = os.path.join(home, "projects", "-some-project")
@@ -5729,7 +5865,7 @@ def run_groups(args):
             ("usage from a whole old log: a Codex session is read to its last total",
              whole.startswith("model=codex-model\tinput=1000\tcache_read=2000\tcache_write=0\toutput=40"), whole),
         ]
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -5737,7 +5873,7 @@ def run_groups(args):
             failures.append((name, [], ""))
 
     # --- status: an epic is listed from its own file, also before its first story -------------------
-    with tmpdir() as root:
+    for root in throwaway():
         write_file(root, "project/epics/reminders/epic.md",
                    "---\nid: reminders\ntitle: Remind the reader\ngoal: fewer forgotten books\nmetric: ReminderSent\n"
                    "discovery: project/discovery/forgetting/discovery.md\n---\n# Remind the reader\n")
@@ -5782,7 +5918,7 @@ def run_groups(args):
                              product.get("present") and "Surfaces" in product.get("empty", [])
                              and "How it works" in product.get("missing", [])
                              and product.get("sections") == ["What and for whom", "Surfaces", "Qualities"], product))
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -5790,7 +5926,7 @@ def run_groups(args):
             failures.append((name, [], ""))
 
     # --- status: what runs, what waits, every story, the cost — in one look -------------------------
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, ("STORY-2", []), extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_ASKING),
             ("project/epics/sample/STORY-1/decisions/01.md", DECISION),
@@ -5886,7 +6022,7 @@ def run_groups(args):
             ("status of one story: its passes and what waits", "Passes" in story_view and "1  first delivery" in story_view,
              story_view),
         ]
-    with tmpdir() as root:
+    for root in throwaway():
         # switched off: the gate records the stage and reads no session log
         journal = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "journal.tsv")
         os.makedirs(os.path.dirname(journal))
@@ -5908,7 +6044,7 @@ def run_groups(args):
                              text=True, encoding="utf-8").stdout
         expectations.append(("usage in a session: `sessionUsage: off` in the profile does the same for the project",
                              "switched off" in out, out.strip()))
-    with tmpdir() as root:
+    for root in throwaway():
         # Codex: found by the id in its file name; no other session's log is opened
         codex_home = os.path.join(root, "codex-home")
         day = os.path.join(codex_home, "sessions", "2026", "09", "23")
@@ -5929,7 +6065,7 @@ def run_groups(args):
         plan = usage_json(args.gate, root, "S-1", dict(os.environ, CODEX_HOME=codex_home)).get("plan", {})
         expectations.append(("usage in a session: a Codex session is found by its id alone",
                              plan.get("runs") == 1 and plan.get("measured") == 1 and plan.get("output") == 7, plan))
-    with tmpdir() as root:
+    for root in throwaway():
         # a union merge: one branch read the window, the other still points at the log; lines interleave
         journal = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "journal.tsv")
         os.makedirs(os.path.dirname(journal))
@@ -5949,7 +6085,7 @@ def run_groups(args):
         expectations.append(("status after a union merge: a stage is running only if its start is the latest "
                              "event by time, not by line", "Nothing is running." in status_out,
                              status_out[:400]))
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -5957,7 +6093,7 @@ def run_groups(args):
             failures.append((name, [], ""))
 
     # --- one worker per checkout: the claim, and what the schedule does with a running stage -----------
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         claim = lambda owner, *more: subprocess.run([sys.executable, args.cli, "--claim", owner], cwd=root,
@@ -5977,7 +6113,7 @@ def run_groups(args):
              lock_in_git, os.listdir(os.path.join(root, ".git"))[:6]),
             ("claim: the holder gives it back", not os.path.exists(os.path.join(root, ".git", "dca-factory-worker.lock")), ""),
         ]
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         environment = dict(os.environ, CLAUDE_CODE_SESSION_ID="listening-session")
@@ -6007,7 +6143,7 @@ def run_groups(args):
                              encoding="utf-8").stdout
         expectations.append(("listening: a long silence reads as a loop that has probably ended",
                              "probably ended" in old, old[-400:]))
-    with tmpdir() as root:
+    for root in throwaway():
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         backlog_project(root, ("STORY-2", []), extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
@@ -6021,7 +6157,7 @@ def run_groups(args):
         expectations.append(("schedule: a start with no sign of life is taken as interrupted, and the story is "
                              "named again", "possibly interrupted" in completed.stdout
                              and "next: STORY-1" in completed.stdout, completed.stdout.strip().splitlines()[-1:]))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         subprocess.run([sys.executable, args.cli, "--claim", "someone-else"], cwd=root, capture_output=True)
@@ -6031,7 +6167,7 @@ def run_groups(args):
         expectations.append(("claim: a session's stage mark is refused while another worker holds the checkout",
                              out.returncode == 3 and not os.path.exists(
                                  os.path.join(root, ".dca-factory", "runs", "STORY-1", ".verify", "journal.tsv")), out.stdout))
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -6069,7 +6205,7 @@ def run_groups(args):
             ("a clause about what is stored, at the adapter level: refused", full.replace(":10 | port |", ":10 | adapter |"), "15",
              "fail", "what is stored"),
             ("a contract 14 profile is not asked for clauses", "", "14", None, "")):
-        with tmpdir() as root:
+        for root in throwaway():
             write_file(root, "story.md", clause_story)
             write_file(root, test_rel, clause_test)
             write_file(root, "runs/S-1/tests.md", "# Tests\n\n## Clauses\n<!-- gate:clauses -->\n| criterion | n | clause | "
@@ -6082,7 +6218,7 @@ def run_groups(args):
             if verdict == "pass":
                 ok = ok and seen.get("clauses", {}).get("refuses-get") == [[1, "Then the answer is 405"], [2, "And the widget stays unchanged"]]
             expectations.append((f"clauses: {label}", ok, seen))
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -6118,7 +6254,7 @@ def run_groups(args):
              "- {{WHAT_CHANGES}}\n", listing.format(backing="the story's changed expectation"), None, "fail"),
             ("B: the plan asked once, the row cites the answered decision — the change passes",
              "", listing.format(backing="decision STORY-1-01"), DECISION + ANSWER, "pass")):
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root, story=STORY.replace("\n## Assumptions", story_extra + "\n## Assumptions"),
                           extra_sources=((unit, old_test),))
             for command in (["init", "-q"], ["add", "-A"],
@@ -6158,7 +6294,7 @@ def run_groups(args):
              lambda t: t.replace("isEmpty()", "size() == 0 || true"),
              CONFLICT.replace("stage: test", "stage: plan") + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n"),
              "fail")):
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root, extra_sources=((unit, old_test),))
             for command in (["init", "-q"], ["add", "-A"],
                             ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
@@ -6200,7 +6336,7 @@ def run_groups(args):
              lambda t: grown(t).replace("isOk()", "is2xxSuccessful()"), "fail"),
             ("around the assertions, but an assertion removed — refused",
              lambda t: grown(t).replace("        .andExpect(status().isOk())\n", ""), "fail")):
-        with tmpdir() as root:
+        for root in throwaway():
             build_project(root, extra_sources=((page, page_test),))
             for command in (["init", "-q"], ["add", "-A"],
                             ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
@@ -6214,7 +6350,7 @@ def run_groups(args):
             expectations.append((f"tests-kept: {label}", verdict == expected and (noted or expected == "fail"),
                                  f"verdict {verdict}, noted {noted}; "
                                  + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root, extra_sources=((unit, old_test),))
         for command in (["init", "-q"], ["add", "-A"],
                         ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
@@ -6230,7 +6366,7 @@ def run_groups(args):
         expectations.append(("tests-kept: a baseline blob that is gone is skipped and named, not passed in silence",
                              "gate:skip tests-kept" in output and "pruned" in output,
                              "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
-    with tmpdir() as root:
+    for root in throwaway():
         # a test changed and committed after the baseline — by someone else: a run commits nothing mid-story
         build_project(root, extra_sources=((unit, old_test),))
         for command in (["init", "-q"], ["add", "-A"],
@@ -6245,7 +6381,7 @@ def run_groups(args):
         verdict, output = kept_verdict(root)
         expectations.append(("tests-kept: a test committed since the baseline changed outside the story and is not its",
                              verdict == "pass", "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
-    with tmpdir() as root:
+    for root in throwaway():
         # the same commit made inside a stage's window is the stage's: held to the baseline
         build_project(root, extra_sources=((unit, old_test),))
         for command in (["init", "-q"], ["add", "-A"],
@@ -6262,12 +6398,12 @@ def run_groups(args):
         verdict, output = kept_verdict(root)
         expectations.append(("tests-kept: a test a stage changed and committed inside its window is still refused",
                              verdict == "fail", "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         verdict, output = kept_verdict(root)
         expectations.append(("tests-kept: outside a git repository the check is skipped and named",
                              verdict == "skip", verdict))
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -6279,7 +6415,7 @@ def run_groups(args):
     print()
     schedule_failures = []
     expectations = []
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, ("STORY-2", ["STORY-1"]), ("STORY-3", []), ("STORY-4", ["STORY-5"]),
                         ("STORY-5", ["STORY-4"]), ("STORY-6", ["STORY-9"]), ("STORY-7", []),
                         story=delivered_story(STORY, "2026-09-23T00:00:00Z"),
@@ -6312,7 +6448,7 @@ def run_groups(args):
             ("schedule: the next story runs past one that waits at its plan stage",
              nxt == "STORY-2 plan" and wait == "yes", f"next: {nxt}, wait: {wait}"),
         ]
-    with tmpdir() as root:
+    for root in throwaway():
         # STORY-1 got past its plan stage and waits on a question from its test stage: its tests are
         # in the working tree, so an independent story may not start on top of them.
         backlog_project(root, ("STORY-2", []),
@@ -6332,7 +6468,7 @@ def run_groups(args):
         expectations.append(("schedule: once answered, the holder resumes at the stage that asked",
                              rows.get("STORY-1") == ("resumable", "test") and nxt == "STORY-1 test",
                              f"{rows.get('STORY-1')}, next: {nxt}"))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
                                              (".dca-factory/runs/STORY-1/tests.md", TESTS),
                                              (".dca-factory/runs/STORY-1/build.md", "## Changed\n"),
@@ -6346,7 +6482,7 @@ def run_groups(args):
         expectations.append(("schedule: three rounds stop the story, and nothing waits for them",
                              rows.get("STORY-1", ("",))[0] == "stopped" and nxt.startswith("none")
                              and wait == "no", f"{rows.get('STORY-1')}, next: {nxt}, wait: {wait}"))
-    with tmpdir() as root:
+    for root in throwaway():
         # the marks the gates leave: the plan gate records the story it let through, the document gate
         # that it passed — and the schedule reads both
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
@@ -6364,7 +6500,7 @@ def run_groups(args):
         expectations.append(("schedule: the document gate's pass is what makes a story delivered",
                              rows.get("STORY-1") == ("delivered", None) and story_delivered(root),
                              rows.get("STORY-1")))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),))
         subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -6377,7 +6513,7 @@ def run_groups(args):
                              unchanged == ("in-progress", "test") and rows.get("STORY-1") == ("in-progress", "plan")
                              and "the story changed after it was planned" in output,
                              f"before the edit {unchanged}, after {rows.get('STORY-1')}"))
-    with tmpdir() as root, tmpdir() as home:
+    for root, home in throwaway(2):
         # a story's last stages end its run, so no later stage of its own freezes their windows — the
         # next writing command does, for every story, once a window has settled
         backlog_project(root)
@@ -6402,7 +6538,7 @@ def run_groups(args):
                              "leaves a young one open",
                              "input=7" in document_line and "session=" not in document_line
                              and "session=" in judge_line and "input=" not in judge_line, journal))
-    with tmpdir() as root, tmpdir() as home:
+    for root, home in throwaway(2):
         # inside a stage the journal is silent; the stage's session log is where its sign of life is
         backlog_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
@@ -6425,7 +6561,7 @@ def run_groups(args):
         expectations.append(("status: with session usage off the log is not read, and that is said",
                              "activity: not read" in off and "gradlew" not in off,
                              [l for l in off.splitlines() if l.startswith("activity")]))
-    with tmpdir() as root, tmpdir() as home:
+    for root, home in throwaway(2):
         # writing a story is measured like a stage, but it is not one: the story does not run, nothing waits
         backlog_project(root)
         session = "0d0d0d0d-aaaa-bbbb-cccc-565656565656"
@@ -6450,7 +6586,7 @@ def run_groups(args):
                                            backlog_row) is not None, backlog_row or detail[-400:]))
         expectations.append(("window: a name that is not backlog or decisions is refused",
                              gate("--window-start", "judge", "--story", "STORY-1").returncode == 2, ""))
-    with tmpdir() as root:
+    for root in throwaway():
         # a shared builder that stopped on the plan's question, then ran again: the second window is the
         # question's, not a repeat a gate refused — the record names `stage: plan`, the window is `builder`
         build_project(root, **with_decisions(("STORY-1-01", DECISION + ANSWER)))
@@ -6466,7 +6602,7 @@ def run_groups(args):
                              "not `a gate refused`",
                              "1 question (STORY-1-01)" in builder_row and "a gate refused" not in builder_row,
                              builder_row or detail[-400:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # a story delivered before the pipeline kept a journal says so once; a long answer wraps, whole
         long_question = "Does " + " ".join(["an archived entry"] * 12) + " count as the thing the reader sees?"
         backlog_project(root, ("STORY-2", []), story=delivered_story(STORY, "2026-09-20T10:00:00Z"), extra_sources=(
@@ -6486,7 +6622,7 @@ def run_groups(args):
         expectations.append(("status: a long answer wraps inside its column and is never cut",
                              "…" not in detail and "count as the thing the reader sees?" in detail
                              and all(len(l) <= 120 for l in detail.splitlines()), detail[-600:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # the observer reads the gate's own records the way the gate writes them: the red ledger as
         # `selector<TAB>digest`, the build's `## Changed` table with its paths in plain cells
         backlog_project(root, extra_sources=(
@@ -6536,7 +6672,7 @@ def run_groups(args):
     delivered = lambda root: story_delivered(root)
     record = lambda root, n: os.path.join(root, record_file(f"STORY-1-accept-{n}"))
 
-    with tmpdir() as root:
+    for root in throwaway():
         accept_fixture(root, "acceptance: all\n", ("STORY-2", []))
         asked = gate_run(root, "--story", "STORY-1", "--stage", "document")
         rows, nxt, wait, _ = schedule_of(args.gate, root)
@@ -6553,7 +6689,7 @@ def run_groups(args):
                              rows.get("STORY-1") == ("resumable", "document") and given.returncode == 0
                              and delivered(root), f"{rows.get('STORY-1')}; exit {given.returncode}"))
 
-    with tmpdir() as root:
+    for root in throwaway():
         accept_fixture(root, "acceptance: all\n")
         gate_run(root, "--story", "STORY-1", "--stage", "document")
         answer(root, "STORY-1-accept-1", "correction: two cards on m")
@@ -6575,13 +6711,13 @@ def run_groups(args):
                              asked_again.returncode == 3 and os.path.isfile(record(root, 2)),
                              asked_again.stdout.strip()[-200:]))
 
-    with tmpdir() as root:
+    for root in throwaway():
         accept_fixture(root, "acceptance: pages\n")
         given = gate_run(root, "--story", "STORY-1", "--stage", "document")
         expectations.append(("acceptance: pages — a project without a browser delivers without asking",
                              given.returncode == 0 and delivered(root), given.stdout.strip()[-200:]))
 
-    with tmpdir() as root:
+    for root in throwaway():
         accept_fixture(root, "acceptance: pages\nbrowser: playwright\ne2eTest: ./gradlew test-pages\n",
                        extra=(("src/test-pages/java/com/example/WidgetPageTest.java",
                                "class WidgetPageTest {\n  void showsTheThing() {}\n}\n"),
@@ -6591,7 +6727,7 @@ def run_groups(args):
         expectations.append(("acceptance: pages — a story whose test the end-user command runs waits for a human",
                              asked.returncode == 3 and not delivered(root), asked.stdout.strip()[-200:]))
 
-    with tmpdir() as root:
+    for root in throwaway():
         accept_fixture(root, "")
         gate_run(root, "--story", "STORY-1", "--stage", "plan")
         gate_run(root, "--story", "STORY-1", "--stage", "document")
@@ -6616,7 +6752,7 @@ def run_groups(args):
                              f"{refused.returncode}/{uncited.returncode}/{taken.returncode}; {rows.get('STORY-1')}; "
                              f"kept {kept}; {taken.stdout.strip()[-200:]}"))
 
-    with tmpdir() as root:
+    for root in throwaway():
         accept_fixture(root, "", ("STORY-2", []), extra=((".dca-factory/runs/STORY-2/plan.md", PLAN_APPLIED),
                                                          (".dca-factory/runs/STORY-2/tests.md", TESTS)))
         gate_run(root, "--story", "STORY-1", "--stage", "document")
@@ -6631,7 +6767,7 @@ def run_groups(args):
                              held.returncode == 1 and "STORY-2 holds the checkout" in held.stdout and delivered(root),
                              held.stdout.strip()[-200:]))
 
-    with tmpdir() as root:
+    for root in throwaway():
         accept_fixture(root, "acceptance: all\n")
         gate_run(root, "--story", "STORY-1", "--stage", "plan")
         gate_run(root, "--story", "STORY-1", "--stage", "document")
@@ -6683,7 +6819,7 @@ def run_groups(args):
             ("discovery: an empty `## Proposed description changes` is refused like empty proposed work",
              (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n## Sources")),), 1,
              "`## Proposed description changes` proposes nothing")):
-        with tmpdir() as root:
+        for root in throwaway():
             topic = "project/discovery/monthly-report/"
             base = {"discovery.md": discovery, "sources/interview-1.md": "Interview 1, a team lead:\n\nWe rebuild it by hand.\n",
                     ".gitignore": "originals/\n"}
@@ -6692,7 +6828,7 @@ def run_groups(args):
             done = subprocess.run([sys.executable, args.gate, "--check-discovery", "monthly-report"], cwd=root,
                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
             expectations.append((label, done.returncode == want_code and want_text in done.stdout, done.stdout.strip()[-300:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # a missing `## Proposed work` is one finding — the position of the description changes is not a second
         topic = "project/discovery/monthly-report/"
         text = discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n"
@@ -6707,7 +6843,7 @@ def run_groups(args):
         expectations.append(("discovery: without `## Proposed work` the missing section is the finding, not the position",
                              done.returncode == 1 and "`## Proposed work`" in done.stdout and "stands between" not in done.stdout,
                              done.stdout.strip()[-300:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # the list: every topic, its proposals and which the backlog already holds, its description changes
         topic = "project/discovery/monthly-report/"
         backlog_project(root, extra_sources=(
@@ -6728,14 +6864,14 @@ def run_groups(args):
                                                                        "change": "team leads of small teams too [S1]", "why": ""}]
                              and "epic monthly-report" in text and "/dca-describe" in text,
                              listed.stdout[-500:]))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root)
         done = subprocess.run([sys.executable, args.gate, "--check-discovery", "nothing-here"], cwd=root,
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
         expectations.append(("discovery: a topic without a report is refused, not passed as empty",
                              done.returncode == 1 and "project/discovery/nothing-here/discovery.md" in done.stdout,
                              done.stdout.strip()[-300:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # the backlog skill checks one story while it is still being written: the plan gate's checks,
         # none of its marks — a baseline taken then would be the wrong one, and the files it leaves
         # under tasks/ make the commit hook refuse the backlog commit
@@ -6751,7 +6887,7 @@ def run_groups(args):
         expectations.append(("backlog check: a story that is not there is refused, not passed as empty",
                              missing.returncode == 1 and "no story STORY-9" in missing.stdout,
                              missing.stdout.strip()[-200:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # a judge's story conflict: waits, resumes where the answer lands, then runs the rest again
         backlog_project(root, extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED), (".dca-factory/runs/STORY-1/tests.md", TESTS),
@@ -6775,7 +6911,7 @@ def run_groups(args):
                              waiting[0] == "waiting" and resumable == ("resumable", "test")
                              and rows.get("STORY-1") == ("in-progress", "build"),
                              f"open {waiting}, answered {resumable}, applied {rows.get('STORY-1')}"))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, ("STORY-2", []), extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
                                                              (".dca-factory/runs/STORY-1/tests.md", TESTS)))
         path = os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md")
@@ -6786,7 +6922,7 @@ def run_groups(args):
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: a superseded story holds the checkout for nobody, tests or not",
                              rows.get("STORY-1", ("",))[0] == "superseded" and nxt == "STORY-2 plan", f"next: {nxt}"))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/.gate-plan.txt", "gate:fail epic\n"),))
         refused = os.path.join(root, ".dca-factory", "runs", "STORY-1", ".gate-plan.txt")
         os.utime(refused, (time.time() - 60, time.time() - 60))
@@ -6800,7 +6936,7 @@ def run_groups(args):
         expectations.append(("schedule: a story the plan gate refused runs from plan again once it was repaired",
                              stopped[0] == "stopped" and rows.get("STORY-1") == ("in-progress", "plan"),
                              f"before {stopped}, after {rows.get('STORY-1')}"))
-    with tmpdir() as root:
+    for root in throwaway():
         os.makedirs(os.path.join(root, ".dca-factory", "runs", "S-1", ".verify"))
         journal = os.path.join(root, ".dca-factory", "runs", "S-1", ".verify", "journal.tsv")
         line = "2026-01-01T00:00:00Z\tusage\tbuild\ttool=claude-session\twindow=2026-01-01T00:00:00Z/2026-01-01T00:01:00Z\tsession=claude:abc\n"
@@ -6813,7 +6949,7 @@ def run_groups(args):
                        encoding="utf-8", env=dict(os.environ, CLAUDE_CONFIG_DIR=home))
         expectations.append(("usage: `--usage` only reads — the journal is not rewritten",
                              open(journal, encoding="utf-8").read() == before, ""))
-    with tmpdir() as root:
+    for root in throwaway():
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         write_file(root, ".git/dca-factory-worker.lock", "")
         taken = subprocess.run([sys.executable, args.cli, "--claim", "someone"], cwd=root, capture_output=True,
@@ -6821,7 +6957,7 @@ def run_groups(args):
         expectations.append(("claim: a claim file that cannot be read yet is aged by its file, not taken over on sight",
                              taken.returncode == 3, taken.stdout.strip()))
     # --- what a story changed: the record and the diff a stage is handed, in a repository without a commit
-    with tmpdir() as root:
+    for root in throwaway():
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
         for name, text in (("src/A.txt", "a\n"), ("src/B.txt", "b\n")):
             os.makedirs(os.path.join(root, "src"), exist_ok=True)
@@ -6862,7 +6998,7 @@ def run_groups(args):
     rows_of = lambda cwd, name: sorted(open(os.path.join(cwd, ".dca-factory", "runs", "S-1", ".verify", name),
                                             encoding="utf-8").read().splitlines()) \
         if os.path.isfile(os.path.join(cwd, ".dca-factory", "runs", "S-1", ".verify", name)) else []
-    with tmpdir() as root:
+    for root in throwaway():
         for name in ("A", "B", "D"):
             write_file(root, f"src/{name}.txt", name.lower() + "\n")
         commit(root)
@@ -6880,7 +7016,7 @@ def run_groups(args):
             ("changes: the story's record says the same, from the tree recorded at its first stage",
              rows_of(root, "changed.txt") == want, rows_of(root, "changed.txt")),
         ]
-    with tmpdir() as root:
+    for root in throwaway():
         write_file(root, "src/A.txt", "a\n")
         commit(root)
         marker(root, "plan", "start")
@@ -6893,7 +7029,7 @@ def run_groups(args):
         expectations.append(("changes: a stage run again keeps the first pass in the story's record and diff",
                              rows_of(root, "changed.txt") == ["added\tsrc/E.txt", "added\tsrc/F.txt"]
                              and "first pass" in diff, rows_of(root, "changed.txt")))
-    with tmpdir() as root:
+    for root in throwaway():
         write_file(root, "other/X.txt", "x\n")
         write_file(root, "project/src/A.txt", "a\n")
         commit(root)
@@ -6908,7 +7044,7 @@ def run_groups(args):
                              and rows_of(project, "changed.txt") == ["modified\tsrc/A.txt"]
                              and "+a, changed" in diff and "X.txt" not in diff,
                              f"{rows_of(project, 'changed-build.txt')} / {rows_of(project, 'changed.txt')}"))
-    with tmpdir() as root:
+    for root in throwaway():
         mark = lambda edge: subprocess.run([sys.executable, args.gate, f"--stage-{edge}", "plan", "--story", "S-1"],
                                            cwd=root, capture_output=True, text=True, encoding="utf-8",
                                            env=dict(os.environ, FACTORY_SESSION_USAGE="off"))
@@ -6917,7 +7053,7 @@ def run_groups(args):
         expectations.append(("changes: outside a repository there is no diff, and the file says so",
                              os.path.isfile(diff) and "no diff" in open(diff, encoding="utf-8").read(), ""))
 
-    with tmpdir() as root:
+    for root in throwaway():
         write_file(root, ".dca-factory/runs/S-1/judge.md", "## Verdict\nverdict: changes-requested\n")
         started = subprocess.run([sys.executable, args.cli, "--stage-start", "judge", "--story", "S-1"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8",
@@ -6927,7 +7063,7 @@ def run_groups(args):
                              and not os.path.exists(os.path.join(root, ".dca-factory", "runs", "S-1", "judge.md"))
                              and ".judge-previous.md" in started.stdout, started.stdout.strip()))
     # --- the project description before the first story, checked without a story -------------------
-    with tmpdir() as root:
+    for root in throwaway():
         check = lambda: subprocess.run([sys.executable, args.gate, "--project"], cwd=root,
                                        capture_output=True, text=True, encoding="utf-8")
         none = check()
@@ -6943,7 +7079,7 @@ def run_groups(args):
                              and "/factory-setup" in none.stdout,
                              f"exits {none.returncode}/{only_product.returncode}/{incomplete.returncode}/"
                              f"{complete.returncode}; {none.stdout.strip()}"))
-    with tmpdir() as root:
+    for root in throwaway():
         # the layout before `project/`: named with the move, never read
         write_file(root, "backlog/product.md", PRODUCT)
         write_file(root, "backlog/sample/epic.md", EPIC)
@@ -6958,7 +7094,7 @@ def run_groups(args):
                              and "backlog/ at the root is now project/epics/" in planned and "gate:fail layout" in planned
                              and "no story 'STORY-1' under project/epics" in planned,
                              f"{brief.strip()} | {planned.strip()[-200:]}"))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, extra_sources=(("project/epics/sample/STORY-2/story.md",
                                                story("STORY-2").replace(" (happy path):", ":")),))
         checked = subprocess.run([sys.executable, args.gate, "--check-backlog"], cwd=root, capture_output=True,
@@ -6966,7 +7102,7 @@ def run_groups(args):
         expectations.append(("check-backlog: a story without a happy path is named, as the plan gate would",
                              "happy-path" in checked and "STORY-2" in checked and "0 scenarios marked" in checked,
                              checked[-500:]))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, extra_sources=(("project/epics/sample/STORY-2/story.md",
                                                story("STORY-2").replace("depends_on: []",
                                                                         "depends_on: []\npublishes: SomethingAdded")),))
@@ -6974,7 +7110,7 @@ def run_groups(args):
                                  text=True, encoding="utf-8").stdout
         expectations.append(("check-backlog: a `publishes:` the epic's metric does not name is refused before the run",
                              "gate:fail STORY-2 outcome" in checked and "SomethingAdded" in checked, checked[-500:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # an adopted story: to adopt, then delivered (adopted); a story depending on it waits for the adoption
         backlog_project(root, ("STORY-2", ["STORY-1"]),
                         story=STORY.replace("status: approved", "status: adopted"))
@@ -6994,7 +7130,7 @@ def run_groups(args):
                              after[-500:]))
         expectations.append(("status: an adopted story counts as delivered in its epic's header",
                              "1 of 2 delivered" in after, after[-500:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # a killed runner leaves a stage-start without an end; a delivered story stays delivered, not running
         started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         backlog_project(root, story=delivered_story(STORY),
@@ -7007,7 +7143,7 @@ def run_groups(args):
         expectations.append(("schedule: a delivered story with an open stage in its journal is delivered, not running",
                              rows.get("STORY-1", ("", ""))[0] == "delivered" and "Nothing is running." in shown
                              and "1 of 1 delivered" in shown, listing + shown[-400:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # `--start`: where `run --story` begins without --from — the story's state, never plan by default
         backlog_project(root, ("STORY-2", ["STORY-1"]), extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n"), (".dca-factory/runs/STORY-1/tests.md", TESTS)))
@@ -7029,7 +7165,7 @@ def run_groups(args):
              ("plan.md", "tests.md", "build.md", "tidy.md", "document.md"), ("judge.md",), "build"),
             ("a build run again after `changes-requested` resumes at tidy, not at build once more",
              ("plan.md", "tests.md", "tidy.md", "judge.md"), ("build.md",), "tidy")):
-        with tmpdir() as root:
+        for root in throwaway():
             files = {"plan.md": "# Plan\n", "tests.md": TESTS, "build.md": "# Build\n", "tidy.md": "# Tidy\n",
                      "judge.md": "## Verdict\nverdict: " + ("changes-requested" if "judge.md" in newer
                                                              or "changes" in label else "pass") + "\n",
@@ -7040,7 +7176,7 @@ def run_groups(args):
             start = subprocess.run([sys.executable, args.cli, "--story", "STORY-1", "--start"], cwd=root,
                                    capture_output=True, text=True, encoding="utf-8").stdout
             expectations.append((f"start: {label}", f"start: {want}" in start, start))
-    with tmpdir() as root:
+    for root in throwaway():
         # the document gate refused for `story-pass`: build.md is an earlier pass's, so the story runs on from the
         # build — running the document stage again changes nothing it could fix (bench 2026-10-02)
         files = (("plan.md", "# Plan\n", 1000), ("build.md", "# Build\n", 1100), ("tests.md", TESTS, 1200),
@@ -7053,7 +7189,7 @@ def run_groups(args):
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("start: a refused document gate over an earlier pass's build resumes at build, "
                              "not at document", "start: build" in start, start))
-    with tmpdir() as root:
+    for root in throwaway():
         # WP-84 V1: the document gate found no outcome event in the code — the build adds it, not the document stage
         files = (("plan.md", "# Plan\n", 1000), ("tests.md", TESTS, 1100), ("build.md", "# Build\n", 1200),
                  ("tidy.md", "# Tidy\n", 1300), ("judge.md", "## Verdict\nverdict: pass\n", 1400),
@@ -7066,7 +7202,7 @@ def run_groups(args):
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("start: a document gate that found no outcome event resumes at build",
                              "start: build" in start, start))
-    with tmpdir() as root:
+    for root in throwaway():
         # in git, the scratch copy is what git sees — a package named `tasks` comes along
         build_project(root, story=ADOPTED, profile=PACKAGED_PROFILE, tests=TESTS + CHARACTERIZED,
                       extra_sources=PACKAGED_SOURCES)
@@ -7077,14 +7213,14 @@ def run_groups(args):
         expectations.append(("adopt: in git, a break that changes nothing is refused where the code sits in a "
                              "package named `tasks`", code == 1 and "stays green under its break" in output,
                              output[-500:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # a program missing on the PATH is the environment, not the story
         build_project(root, profile=PROFILE.replace("compile: true", "compile: dca-no-such-tool --version"))
         code, output = run_gate(args.gate, root, "test")
         expectations.append(("environment: a command whose program is not on the PATH fails as `environment`, named",
                              code != 0 and "environment" in checks_by_verdict(output)["fail"]
                              and "dca-no-such-tool" in output, output[-600:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # a refusal left from an earlier round does not undo a delivery
         backlog_project(root, story=delivered_story(STORY),
                         extra_sources=((".dca-factory/runs/STORY-1/document.md", "# Document\n"),
@@ -7092,7 +7228,7 @@ def run_groups(args):
         rows = schedule_of(args.gate, root)[0]
         expectations.append(("schedule: a delivered story stays delivered when an earlier round left a refusal behind",
                              rows.get("STORY-1", ("", ""))[0] == "delivered", rows))
-    with tmpdir() as root:
+    for root in throwaway():
         # an answer that changes a test resumes at the test stage, whichever stage asked
         backlog_project(root, extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED), (".dca-factory/runs/STORY-1/tests.md", TESTS),
@@ -7102,7 +7238,7 @@ def run_groups(args):
         rows = schedule_of(args.gate, root)[0]
         expectations.append(("decisions: an answer that says `applies: test` resumes the story at the test stage",
                              rows.get("STORY-1", ("", ""))[1] == "test", rows))
-    with tmpdir() as root:
+    for root in throwaway():
         # the plan asked, the answer changes a test: the plan runs again first and lists the tests that change
         backlog_project(root, extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_ASKING),
@@ -7111,7 +7247,7 @@ def run_groups(args):
         rows = schedule_of(args.gate, root)[0]
         expectations.append(("decisions: a plan's question answered `applies: test` re-plans before the test stage",
                              rows.get("STORY-1", ("", ""))[1] == "plan", rows))
-    with tmpdir() as root:
+    for root in throwaway():
         # a journey: after its test it goes to the judge, and an epic delivered with an open journey is named
         journey = (story("JOURNEY-1", ("STORY-1",)).replace("status: approved\n", "status: approved\nkind: journey\n")
                    .replace(" (happy path):", ":"))
@@ -7123,7 +7259,7 @@ def run_groups(args):
         rows, _nxt, _wait, listing = schedule_of(args.gate, root)
         expectations.append(("schedule: a journey whose test is written goes to the judge — no build, no tidy",
                              rows.get("JOURNEY-1", ("", ""))[1] == "judge", listing))
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, epic=EPIC + "\n## Journey\n\n- open: which flow must never break\n",
                         story=delivered_story(STORY), extra_sources=((".dca-factory/runs/STORY-1/document.md", "# Document\n"),))
         view = subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog"], cwd=root,
@@ -7140,7 +7276,7 @@ def run_groups(args):
              "journey   sample: delivered, unguarded — the epic names no journey — /factory-backlog journey sample"),
             ("an epic that decided against a journey (`- none:`) is not named", 
              EPIC + "\n## Journey\n\n- none: a single page, the story's own end-to-end test walks it\n", None)):
-        with tmpdir() as root:
+        for root in throwaway():
             backlog_project(root, epic=epic, story=delivered_story(STORY),
                             extra_sources=((".dca-factory/runs/STORY-1/document.md", "# Document\n"),))
             view = subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog"], cwd=root,
@@ -7148,7 +7284,7 @@ def run_groups(args):
             expectations.append((f"status: {label}",
                                  (want in view) if want else ("unguarded" not in view and "journey   sample" not in view),
                                  view[-600:]))
-    with tmpdir() as root:
+    for root in throwaway():
         # 0.63.0: the hint's action names the backlog skill's form with the epic — json, md and text alike
         backlog_project(root, epic=EPIC, story=delivered_story(STORY),
                         extra_sources=((".dca-factory/runs/STORY-1/document.md", "# Document\n"),))
@@ -7163,7 +7299,7 @@ def run_groups(args):
                              and "`/factory-backlog journey sample`" in status("--format", "md")
                              and "/factory-backlog journey sample" in status(),
                              (hints, status("--format", "md")[-300:])))
-    with tmpdir() as root:
+    for root in throwaway():
         # a draft waits for its release: the hint names the release form with the story
         backlog_project(root, story=STORY.replace("status: approved", "status: draft"))
         try:
@@ -7174,7 +7310,7 @@ def run_groups(args):
         expectations.append(("status: a draft's hint is `/factory-backlog release <story>`",
                              [w.get("action", {}).get("skill") for w in waiting if w.get("story") == "STORY-1"]
                              == ["/factory-backlog release STORY-1"], waiting))
-    with tmpdir() as root:
+    for root in throwaway():
         # before anything is there: the runner's help explains the factory from the plugin's gate
         shown = subprocess.run([BASH, args.runner, "help", "--format", "json"], cwd=root, capture_output=True,
                                text=True, encoding="utf-8")
@@ -7189,7 +7325,7 @@ def run_groups(args):
                              and [f["number"] for f in fresh["flow"]] == [1, 2, 3, 4, 5, 6, 7]
                              and {f["step"]: f["shell"] for f in fresh["flow"]}["set up"] == "setup",
                              f"exit {shown.returncode}; {shown.stdout[:200]} {shown.stderr[:200]}"))
-    with tmpdir() as root:
+    for root in throwaway():
         build_project(root)
         brief = subprocess.run([sys.executable, args.cli, "--status", "--brief"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
@@ -7234,7 +7370,7 @@ def run_groups(args):
                          "context, the surface and the technical fit",
                          all(w in backlog_skill for w in ("--project", "three files of the", "technical fit",
                                                           "designed map", "/factory-setup")), ""))
-    for name, ok, detail in expectations:
+    for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
         if not ok:
@@ -7332,7 +7468,7 @@ def verify_worktrees(runner, verbose=False):
 
     # one slot: a story that waits with code in its worktree does not stop the next; answered, it resumes there,
     # meets the other story's change in a file both touched, and the integrate step makes both hold
-    with tmpdir() as root:
+    for root in throwaway():
         log, env = fixture(root, [("STORY-2", [])], asks="STORY-1")
         code, output = run_runner(runner, root, "run", env=env)
         ran = lines(log)
@@ -7387,7 +7523,7 @@ def verify_worktrees(runner, verbose=False):
               f"{output.strip().splitlines()[-8:]}")
 
     # a waiting story the person sets superseded: the next run removes its worktree and branch, nothing of it on main
-    with tmpdir() as root:
+    for root in throwaway():
         log, env = fixture(root, [], asks="STORY-1")
         run_runner(runner, root, "run", env=env)
         story = os.path.join(root, "project/epics/sample/STORY-1/story.md")
@@ -7406,7 +7542,7 @@ def verify_worktrees(runner, verbose=False):
 
     # two slots: two independent stories at once, each in its worktree, every line named by its story; the one that
     # depends on another starts once that one is on the main line
-    with tmpdir() as root:
+    for root in throwaway():
         log, env = fixture(root, [("STORY-2", []), ("STORY-3", ["STORY-1"])])
         code, output = run_runner(runner, root, "run", "--parallel", "2", env=env)
         ran = lines(log)
@@ -7425,7 +7561,7 @@ def verify_worktrees(runner, verbose=False):
 
     # a story that waits with code nobody else touched moves onto the main line before it resumes: its next stage
     # sees what the other story delivered, and the integration needs no hand
-    with tmpdir() as root:
+    for root in throwaway():
         log, env = fixture(root, [("STORY-2", [])], asks="STORY-1")
         env["FIXTURE_SHARED"] = "0"
         run_runner(runner, root, "run", env=env)
@@ -7442,7 +7578,7 @@ def verify_worktrees(runner, verbose=False):
 
     # the integrate gate holds the merged tree to the checks: where the main line's change breaks the story, the gate
     # refuses, the build stage runs again in the worktree as a round, and the story is integrated after it
-    with tmpdir() as root:
+    for root in throwaway():
         check_sh = ("#!/bin/sh\n[ -f src/main/STORY-1.txt ] && grep -qx STORY-2 src/main/STORY-2.txt 2>/dev/null "
                     "&& [ ! -f src/main/adapted ] && { echo 'STORY-1 does not fit STORY-2 yet'; exit 1; }\nexit 0\n")
         log, env = fixture(root, [("STORY-2", [])], asks="STORY-1", profile="compile: sh check.sh\n",
@@ -7466,24 +7602,22 @@ def verify_worktrees(runner, verbose=False):
               f"exit {code}; builds {len(builds)}; {output.strip().splitlines()[-8:]}")
 
     # how many at once: the profile's `parallel:`, FACTORY_PARALLEL over it, and a value that is no number stops the run
-    with tmpdir() as root:
+    for root, second, third in throwaway(3):
         log, env = fixture(root, [], profile="compile: true\nparallel: 2\n")
         _c, out_profile = run_runner(runner, root, "run", env=env)
-    with tmpdir() as root:
-        log, env = fixture(root, [], profile="compile: true\nparallel: 2\n")
-        _c, out_env = run_runner(runner, root, "run", env=dict(env, FACTORY_PARALLEL="3"))
-    with tmpdir() as root:
-        log, env = fixture(root, [], profile="compile: true\nparallel: two\n")
-        code_bad, out_bad = run_runner(runner, root, "run", env=env)
-    check("parallel: the profile's `parallel:` sets the slots, FACTORY_PARALLEL overrides it, and one that is no whole "
-          "number stops the run",
-          "(slots: 2)" in out_profile and "(slots: 3)" in out_env
-          and code_bad == 2 and "parallel takes a whole number" in out_bad,
-          f"{out_profile.strip()[-200:]} | {out_env.strip()[-200:]} | {code_bad}: {out_bad.strip()[-200:]}")
+        log, env = fixture(second, [], profile="compile: true\nparallel: 2\n")
+        _c, out_env = run_runner(runner, second, "run", env=dict(env, FACTORY_PARALLEL="3"))
+        log, env = fixture(third, [], profile="compile: true\nparallel: two\n")
+        code_bad, out_bad = run_runner(runner, third, "run", env=env)
+        check("parallel: the profile's `parallel:` sets the slots, FACTORY_PARALLEL overrides it, and one that is no whole "
+              "number stops the run",
+              "(slots: 2)" in out_profile and "(slots: 3)" in out_env
+              and code_bad == 2 and "parallel takes a whole number" in out_bad,
+              f"{out_profile.strip()[-200:]} | {out_env.strip()[-200:]} | {code_bad}: {out_bad.strip()[-200:]}")
 
     # the schedule with slots: what this runner runs counts, and between stories of one epic the one whose context
     # no running story changes goes first
-    with tmpdir() as root:
+    for root in throwaway():
         backlog_project(root, ("STORY-2", []), ("STORY-4", []))
         path = os.path.join(root, "project/epics/sample/STORY-4/story.md")
         with open(path, encoding="utf-8") as handle:
@@ -7517,6 +7651,9 @@ def run_runner_groups(args, failures, group):
             print()
             CURRENT_GROUP[0] = "runner"
             runner_failures = verify_runner(args.runner, args.verbose)
+        if group in ("all", "worktree"):
+            print()
+            CURRENT_GROUP[0] = "worktree"
             runner_failures += verify_worktrees(args.runner, args.verbose)
         if group in ("all", "setup"):
             print()

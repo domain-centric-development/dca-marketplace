@@ -27,7 +27,7 @@
 #   factory.sh update [--from <skill folder>] [--copy|--link] [--adopt <skill>,…|all]   the newest pipeline found,
 #                    same tools; --adopt takes over a copy of a method skill the install did not make; the mode
 #                                            the project has, or the one named
-#   factory.sh verify --story <id> | --fixtures   observe a delivered story | check the machinery
+#   factory.sh verify --story <id> | --fixtures [--group <g>] [--jobs <n>]   observe a delivered story | check the machinery
 #   factory.sh check [--staged] [--checks "<c> …"] | --parity <config>   for the commit hook and CI
 #
 # `run` exits 0 when the story ran through, 3 when it stopped for a decision, 4 at --max-stages,
@@ -3015,11 +3015,11 @@ case "$command" in
           echo "factory: no observer at .agents/factory/observe.py — 'factory.sh update' copies it there" >&2; exit 2; }
         exec "$PY" .agents/factory/observe.py --story "$2" ;;
       --fixtures)
-        [ $# -eq 1 ] || usage
+        shift
         skills=$(plugin_skills) && [ -f "$skills/factory-verify/scripts/verify.py" ] || {
           echo "factory: no pipeline found whose fixtures could run — FACTORY_PLUGIN_DIR names one" >&2; exit 2; }
         echo "factory: the machinery of $skills"
-        exec "$PY" "$skills/factory-verify/scripts/verify.py" ;;
+        exec "$PY" "$skills/factory-verify/scripts/verify.py" "$@" ;;
       *) usage ;;
     esac ;;
 esac
