@@ -86,7 +86,7 @@ from .contract import (
     NOTHING, place, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
     record_path, records_of, resolve_profile, resume_stage, section_of, SELECTOR, set_places, SHARED_WINDOWS, shown,
     STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, stamp_applied, story_digest, story_files, story_folder,
-    story_id_of, story_kind, TECH_HEADINGS, VERSION)
+    story_id_of, story_kind, TECH_HEADINGS, unknown_profile_keys, VERSION)
 from .reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
@@ -810,7 +810,12 @@ def check_contract(result, profile):
     Undeclared is the normal case and no finding: a profile with today's keys is what the template
     writes. A *higher* number than this gate knows is a refusal — the project has keys this script
     would ignore, and ignoring a key silently is how a check disappears without anyone noticing.
+    A key outside the profile's schema (`PROFILE_KEYS`, `PROFILE_FAMILIES`) is a note, named with the nearest
+    known key: nobody reads it, which is worth knowing and no reason to stop a story.
     """
+    for key, near in unknown_profile_keys(profile):
+        result.note("profile", f"`{key}:` is no key the pipeline reads — ignored"
+                               + (f"; did you mean `{near}:`?" if near else ""))
     declared = str(profile.get("contract", "")).strip()
     if not declared:
         result.note("contract", f"profile declares no `contract:` — read as {CONTRACT} "

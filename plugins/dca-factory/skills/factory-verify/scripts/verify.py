@@ -4873,6 +4873,16 @@ def run_groups(args):
         (Case("contract: a contract that is not a number is refused", "plan", 1,
               must_fail=("contract",)),
          dict(profile="contract: latest\n" + PROFILE)),
+        # A key outside the profile's schema is read by nobody: named with the nearest known key, never a refusal.
+        (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
+              must_pass=("contract",),
+              text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
+         dict(profile="contract: 17\nrequried: compile\n" + PROFILE)),
+        (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
+              absent=("no key the pipeline reads",)),
+         dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
+                                "carrier.discover: product-discovery\nmodel.claude.tidy: haiku\nknowledge.read: a.md\n"
+                                "stageTimeout: 30m\nhttp.stub: none\nadopt.breakProof: all\n")),
 
         # --- the shape the selector depends on ------------------------------
         # The documented limit, as a case: a selector resolves through a source file *named after
