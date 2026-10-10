@@ -5,6 +5,10 @@ description: Plan stage of a factory run — turns one backlog story into an imp
 
 # Plan one story
 
+First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
+runner started, one session that carries several stages, a repeat round, the shell, the gate. The
+runner's prompt names its path and repeats none of it.
+
 Input: the story file, the project description — `project/product.md`, `project/tech.md` and
 `project/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — the conventions
 file the project's instruction file names (its ``- conventions: `<path>` `` line; the layout, the

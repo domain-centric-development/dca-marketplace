@@ -5,6 +5,10 @@ description: Build stage of a factory run — writes the production code that tu
 
 # Build one story
 
+First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
+runner started, one session that carries several stages, a repeat round, the shell, the gate. The
+runner's prompt names its path and repeats none of it.
+
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/runs/<story>/tests.md`, the product
 description's `## Look and feel` and `## Qualities` (`project/product.md`, or where the profile's
 `product:` points), and — in a repeat round — the gate or judge report. Nothing

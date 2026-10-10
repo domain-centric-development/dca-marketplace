@@ -1,9 +1,93 @@
 # What every stage holds to — said once
 
-The six stage skills (`stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stage-judge`,
-`stage-document`) share these rules. Each skill names them in one line and points here; a shared
-builder that carries four stages reads them once, not four times. The stage-specific part — which
+The stage skills (`stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stage-judge`,
+`stage-document`, `stage-integrate`) share these rules. Each skill says to read this file first; a shared
+builder that carries four stages reads it once, not four times. The stage-specific part — which
 profile key names the carrier, which `stage:` a decision record carries — stays in the skill.
+
+The runner's prompt names the skill, the story and where things are — the paths, the commands, the
+reports of an earlier round — and nothing else. What a session does with them is said here.
+
+## A session the runner started
+
+A prompt that begins with *Apply the stage-… skill*, *Carry out these stages* or *Review the change*
+comes from the pipeline's runner. Then:
+
+- The runner holds the checkout for this session: the worker named at session start is the one that
+  started you, not a second writer.
+- The run folder the prompt names is where every hand-over goes. The evidence folder it names — the
+  journal, the diff, the gate's reports — is written by the gate and the runner and only read by you, as
+  the pipeline and the skills are.
+- What the gate checks in a stage's file, in a page, is `factory-cli.py --contract <stage>`, the command
+  the prompt names. Read that, never the gate's source.
+- Where the prompt names a knowledge skill's catalog, open its `index.md` first. Where it names nodes to
+  read once before you write code, read them before the first line: they hold what you would otherwise
+  look up in a dependency's sources or a package cache, which is never the place.
+- Where the prompt names this story's own worktree and the main checkout, you work in the worktree, on
+  its branch: change the code there, never in the main checkout. The story with its decisions, the run
+  folder, the pipeline and the skills are linked from the main checkout; write a decision record or a
+  hand-over at the path you are given.
+- A guard the prompt names is the profile's `carrier.guard` (*The guard beside the carrier*, below).
+
+## A stage on its own
+
+A prompt that names one skill — *Apply the stage-<stage> skill* — asks for that one stage (or step).
+Do it yourself in this session; do not delegate it. Do not run other stages. Read only the story and
+the files the skill names as its input, and write its output file in the run folder.
+
+## One session, several stages
+
+A prompt that says *Carry out these stages* names them in order. Apply each stage's skill in turn, in
+this one session, reading only the story and the files that stage's skill names as its input, and
+writing its output file in the run folder. Run only the stages the prompt names.
+
+- After the test, build and tidy stages run that stage's gate — the command the prompt names, with
+  `--stage <stage> --brief` — and fix exactly what it names before the next stage, at most three
+  attempts per stage.
+- Before you write `plan.md`, run the plan skeleton the prompt names: it writes the plan's headings and
+  one line per criterion key — give each its level, never retype the story's text.
+- Before you write `tests.md`, `build.md` or `tidy.md`, run the files skeleton the prompt names: it
+  writes the file's list of changed files from the tree (or adds the missing ones to a file you wrote).
+  Fill in the rest, never the list, and run the stage's gate only when the file is filled — never on
+  the bare skeleton.
+- Each hand-over says what the next stage needs and nothing a reader has elsewhere;
+  `--contract <stage>` names its measure.
+- Stop at once when a stage ends in a `## needs-human` section.
+- Where the stages include build: if a test cannot pass for a reason in its own code (a helper, a
+  locator), not in what it asserts, write `build.md` with the finding first, then go back to the test
+  stage in this session — repair the test without changing what it asserts, write its break, run the
+  test gate — and build again. A change to what a test asserts stays a needs-human question.
+- Where the stages are judge and document: apply the stage-judge skill first and write `judge.md` with
+  its verdict. Then — only when it says `verdict: pass` — run the document skeleton the prompt names and
+  apply the stage-document skill: fill the skeleton's tables, cite paths from its `## Paths` section in
+  exactly that form, run the document gate the prompt names and fix exactly what it names, at most
+  three attempts. With any other verdict stop after `judge.md`; write no `document.md`. Change no code.
+
+## A repeat round
+
+The prompt names what an earlier round left; each is an input of this one.
+
+- *The gate refused this stage before* (or *stage <stage>*): its report — read it and fix exactly what
+  it names in that stage, nothing else.
+- *The <gate> gate refused the story and sent it back to* this stage (or *stage <stage>*): fix in that
+  stage exactly what its report names, nothing else.
+- *The build stage sent the story back*: `build.md` names a defect in a test's own code — the test
+  stage repairs exactly that, without changing what the test asserts, and writes the test's break
+  (see the contract).
+- *The judge asked for changes*: each stage fixes exactly the confirmed defects in `judge.md` that are
+  its own — a test that asserts too little is the test stage's, with its break (see the contract); the
+  code is the build's — nothing else.
+- *The previous verdict*: the judge accounts for each defect it confirmed under `## Previous round` —
+  fixed (with the evidence) or withdrawn (with the reason) — before judging anew.
+
+## A review the runner started
+
+A prompt that says *Review the change … from the <perspective> perspective* names the review skill, the
+diff, its inputs and the report's path. Apply the skill to the diff — open a whole file only where the
+diff's context does not carry the question. Write the report in the skill's own format: `## Findings`
+with must-fix, should-fix and nits, every finding with the file and line it stands on and a one-line
+fix; say plainly when you found nothing. Change no other file and no code; you are one of several
+reviewers, a judge reads the reports.
 
 ## Ask, do not recall — but only a source the project named
 
@@ -88,11 +172,18 @@ to edit your file after the gate ran, and never a reason to run the gate again.
 
 The runner lets a stage run, without asking, the gate, the cli, the commands the stack profile declares,
 and the ordinary reading tools — `cd`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `grep`, `diff`, `pwd`, and
-`git status`, `git diff`, `git log`, `git ls-files`, `git apply --check` (how a break patch is tried). Nothing that
-writes: list files with Glob, search with Grep, write with Write (it makes the folders). Everything else asks, and in an unattended run nobody answers:
+`git status`, `git diff`, `git log`, `git ls-files`, `git apply --check` (how a break patch is tried); the
+prompt names the list. Nothing that writes: list files with Glob, search with Grep, write with Write (it makes the folders). Everything else asks, and in an unattended run nobody answers:
 the call is refused and the turn is lost. A file is changed with the editor tools, never with a script
 fed on stdin (`python3 -` and a heredoc) — that is the one habit the bench saw refused three times per
 story. In a session the same tools are the ones a person answers "yes" to without looking twice.
+
+Every command is checked part by part before it runs, and nobody is there to grant one: a loop, a
+variable or `$(…)`, a part outside that list and a path outside the project are refused, each a turn
+spent. Run one plain command per call from the project root, never a `cd` to an absolute path; read
+files with Read — several in parallel calls, never a loop over them. Every turn sends this whole
+session again, so put the calls that do not wait for each other's result into one turn: the files you
+read, the searches you run, the files you write that do not depend on one another.
 
 ## The formatter runs last
 

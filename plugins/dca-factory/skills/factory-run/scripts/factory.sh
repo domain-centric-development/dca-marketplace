@@ -1876,41 +1876,23 @@ run_shared_builder() {                      # run_shared_builder <story> <tool> 
   [ "${#range[@]}" -gt 0 ] || return 0
   local list; list=$(IFS=+; echo "${range[*]}")
   local prompt="Carry out these stages of the delivery pipeline for backlog story $story, one after another, \
-in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//') — apply each stage's skill in turn, \
-reading only the story and the files that stage's skill names as its input, and writing its output file under \
-$RUNS/$story/. After the test, build and tidy stages run that stage's gate, \
-\`$PY $GATE --story $story --stage <stage> --brief\`, and fix exactly what it names before the next stage, at most \
-three attempts per stage. Before you write tests.md, build.md or tidy.md, run \`$PY $CLI --files-skeleton $story <stage>\`: \
-it writes the file's list of changed files from the tree (or adds the missing ones to a file you wrote); fill in the rest, \
-never the list, and run the stage's gate only when the file is filled — never on the bare skeleton. A gate:note is \
-information, never a reason to edit a hand-over or run the gate again. Before you write plan.md, run \`$PY $CLI --plan-skeleton $story\`: it writes the plan's headings and one \
-line per criterion key — give each its level, never retype the story's text. The gate is your test run: run single tests \
-while you work, then the stage's gate — do not run the whole suite yourself before it, the gate runs the same commands, \
-and write nothing about the gate into a hand-over: its report is the record. At the test stage a type with nothing a \
-criterion observes is written whole; whatever a criterion observes, throws. \
-Each hand-over says what the next stage needs and nothing a reader has elsewhere; \`--contract <stage>\` names its measure. Stop at once when a stage ends in a needs-human section. Do not run the judge or the \
-document stage. This session was started by the pipeline's runner, which holds the checkout for it: the worker \
-named at session start is the one that started you, not a second writer. $(where_things_are "$tool" builder "$story")"
+in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//'). The gate: \
+\`$PY $GATE --story $story --stage <stage> --brief\`; the skeletons: \`$PY $CLI --files-skeleton $story <stage>\`, \
+\`$PY $CLI --plan-skeleton $story\`. $(where_things_are "$tool" builder "$story")"
   local guard; guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
-  [ -n "$guard" ] && prompt="$prompt In the build and tidy stages apply the $guard skill (the profile's carrier.guard) to every file you write."
-  [[ " ${range[*]} " == *" build "* ]] && prompt="$prompt If in the build stage a test cannot pass for a reason in its \
-own code (a helper, a locator), not in what it asserts: write build.md with the finding first, then go back to the test \
-stage in this session — repair the test without changing what it asserts, write its break, run the test gate — and build \
-again. A change to what a test asserts stays a needs-human question."
+  [ -n "$guard" ] && prompt="$prompt The guard (the profile's carrier.guard): the $guard skill."
   if [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
-    prompt="$prompt The build stage sent the story back: $RUNS/$story/build.md names a defect in a test's own code — \
-repair exactly that in the test stage, without changing what the test asserts, and write the test's break."
+    prompt="$prompt The build stage sent the story back: $RUNS/$story/build.md."
   fi
   local refused
   for refused in "${range[@]}"; do
-    [ -f "$RUNS/$story/.gate-$refused.txt" ] && prompt="$prompt The gate refused stage $refused before; its report is \
-$RUNS/$story/.gate-$refused.txt — read it and fix exactly what it names in that stage, nothing else."
+    [ -f "$RUNS/$story/.gate-$refused.txt" ] && prompt="$prompt The gate refused stage $refused before: \
+$RUNS/$story/.gate-$refused.txt."
   done
   # a gate after the shared range — the document gate's `outcome` or `story-pass` — sent the story back to <from>
   prompt="$prompt$(later_refusals "$story" "${range[${#range[@]}-1]}" "stage $from")"
   if [ -f "$RUNS/$story/judge.md" ] && [ "$(verdict_of "$story")" = changes-requested ]; then
-    prompt="$prompt The judge asked for changes: $RUNS/$story/judge.md — each stage fixes exactly the confirmed defects \
-that are its own (a test that asserts too little is the test stage's, with its break; the code is the build's)."
+    prompt="$prompt The judge asked for changes: $RUNS/$story/judge.md."
   fi
   echo "── stage $list  (tool: $tool, one shared context)"
   if [ -n "$dry" ]; then
@@ -2026,13 +2008,9 @@ run_reviews() {                             # run_reviews <story> <tool> <dry> [
   for i in "${!names[@]}"; do
     name=${names[$i]}; carrier=${carriers[$i]}
     prompt="Review the change of backlog story $story from the $name perspective: apply the \`$carrier\` skill to the diff \
-$(evidence "$story")/story.diff — open a whole file only where the diff's context does not carry the question — with the \
-story and its epic (epic.md beside it), $RUNS/$story/plan.md, tests.md and build.md and the product and technical description as its input. Write your \
-report to $folder/$name.md in the skill's own format: \`## Findings\` with must-fix, should-fix and nits, every finding \
-with the file and line it stands on and a one-line fix; say plainly when you found nothing. Change no other file and no \
-code; you are one of several reviewers, a judge reads the reports. This session was started by the pipeline's runner, \
-which holds the checkout for it: the worker named at session start is the one that started you, not a second writer. \
-$(where_things_are "$tool" "review:$name" "$story")"
+$(evidence "$story")/story.diff, as *A review the runner started* in the rules every stage holds to says. Its input \
+beside the diff: the story and its epic (epic.md beside it), $RUNS/$story/plan.md, tests.md and build.md, and the \
+product and technical description. Your report: $folder/$name.md. $(where_things_are "$tool" "review:$name" "$story")"
     prompts+=("$prompt")
   done
   if [ -n "$dry" ]; then
@@ -2078,17 +2056,11 @@ run_shared_verifier() {                     # run_shared_verifier <story> <tool>
   [ "$kind" = adopt ] || range+=(document)  # an adoption documents nothing: its verifier is the judge alone
   local list; list=$(IFS=+; echo "${range[*]}")
   local document=""
-  [ "$kind" != adopt ] && document=" Then — only when your judge file says \`verdict: pass\` — run \
-\`$PY ${CLI#"$PWD/"} --document-skeleton $story\` and apply the stage-document skill: fill the skeleton's tables, cite paths \
-from its \`## Paths\` section in exactly that form, run the document gate \`$PY $GATE --story $story --stage document --brief\` \
-and fix exactly what it names, at most three attempts. With any other verdict stop after judge.md; write no document.md."
+  [ "$kind" != adopt ] && document=" The skeleton: \`$PY ${CLI#"$PWD/"} --document-skeleton $story\`; the document \
+gate: \`$PY $GATE --story $story --stage document --brief\`."
   local prompt="Carry out these stages of the delivery pipeline for backlog story $story, one after another, \
-in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//') — apply each stage's skill in turn, \
-reading only the story and the files that stage's skill names as its input, and writing its output file under \
-$RUNS/$story/. Apply the stage-judge skill first and write judge.md with its verdict.$document \
-Do not run the plan, test, build or tidy stage, and change no code. This session was started by the pipeline's \
-runner, which holds the checkout for it: the worker named at session start is the one that started you, not a \
-second writer. $(where_things_are "$tool" verifier "$story")"
+in this one session: $(printf 'stage-%s, ' "${range[@]}" | sed 's/, $//').$document \
+$(where_things_are "$tool" verifier "$story")"
   echo "── stage $list  (tool: $tool, one shared context)"
   if [ -n "$dry" ]; then
     echo "   would run: $prompt"
@@ -2218,7 +2190,17 @@ reset_rounds() {                            # reset_rounds <story>
 # named in its prompt. Measured on a builder session: about twenty `find`/`ls` and four reads of the gate's
 # source, for facts the runner has in hand.
 where_things_are() {                        # where_things_are <tool> <stage|"the stage"> <story>
-  local tool=$1 stage=$2 story=$3 knowledge="" catalog="" dir
+  local tool=$1 stage=$2 story=$3 knowledge="" catalog="" common="" dir
+  # The rules every session the runner starts holds to, in the skill text rather than the prompt: the project's
+  # copy of the pipeline's skill first, the runner's own beside it otherwise.
+  dir=$(skill_dir_of "$tool")
+  for dir in "${dir:-.claude/skills}" .claude/skills .codex/skills .opencode/skills .agents/skills; do
+    [ -f "$dir/factory-run/reference/stage-common.md" ] && { common="$dir/factory-run/reference/stage-common.md"; break; }
+  done
+  if [ -z "$common" ] && [ -f "$(dirname "${BASH_SOURCE[0]}")/../reference/stage-common.md" ]; then
+    common="$(cd "$(dirname "${BASH_SOURCE[0]}")/../reference" && pwd)/stage-common.md"; common=${common#"$PWD/"}
+  fi
+  [ -n "$common" ] && common=" The rules every stage holds to: $common."
   knowledge=$(cli --get knowledge 2>/dev/null | awk '{print $1}')
   if [ -n "$knowledge" ]; then
     dir=$(skill_dir_of "$tool")
@@ -2226,7 +2208,7 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
       [ -d "$dir/$knowledge/catalog" ] && { catalog="$dir/$knowledge/catalog/"; break; }
     done
     local at=$catalog
-    [ -n "$catalog" ] && catalog=" The $knowledge skill's catalog is at $catalog (its index.md first)."
+    [ -n "$catalog" ] && catalog=" The $knowledge skill's catalog: $catalog."
     # The nodes the profile names to read once before writing code (`knowledge.read`), as paths: told only "the
     # catalog", a stage read seven templates, reached for a jar and grepped six nodes for what one lists
     # (bench 2026-10-06).
@@ -2235,25 +2217,16 @@ where_things_are() {                        # where_things_are <tool> <stage|"th
       for path in $(cli --get knowledge.read 2>/dev/null | tr ',' ' '); do
         [ -f "$at$path" ] && read="${read:+$read, }$at$path"
       done
-      [ -n "$read" ] && catalog="$catalog Before you write code, read once: $read — what you would otherwise look \
-up in a dependency's sources or a package cache, which is never the place."
+      [ -n "$read" ] && catalog="$catalog Before you write code, read once: $read."
     fi
   fi
   # named as the allow-list names it: the project's copy, relative to the root — in a story's worktree the main
   # checkout's, through the worktree's link. A path the list does not name is a refused call.
   local cli_path=${CLI#"$PWD/"}
   [ -f .agents/factory/factory-cli.py ] && cli_path=.agents/factory/factory-cli.py
-  printf '%s' "Where things are: the stack profile is $PROFILE; this story's run folder is $RUNS/$story/, its evidence \
-folder $(evidence "$story")/ — the journal, the diff, the gate's reports, written by the gate and the runner and only read \
-by you, as the pipeline and the skills are; what the gate checks in a stage's file, in a page, is \`$PY $cli_path --contract <stage>\` — read that, never the gate's \
-source.$catalog \
-The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL. List files with \
-Glob, search with Grep, change a file with the editor tools (Write makes its folders); a script fed on stdin (python3 -) is refused and costs a turn. Every command is checked part \
-by part before it runs, and nobody is there to grant one: a loop, a variable or \$(…), a part outside that list and \
-a path outside the project are refused, each a turn spent. Run one plain command per call from the project root, \
-never a cd to an absolute path; read files with Read — several in parallel calls, never a loop over them. \
-Every turn sends this whole session again, so put the calls that do not wait for each other's result into one turn: \
-the files you read, the searches you run, the files you write that do not depend on one another."
+  printf '%s' "Where things are: the stack profile is $PROFILE; the story's run folder $RUNS/$story/; its evidence \
+folder $(evidence "$story")/; what the gate checks in a stage's file: \`$PY $cli_path --contract <stage>\`.$common$catalog \
+The shell you have without asking: the gate, the cli, the profile's commands, and $STAGE_SHELL."
 }
 
 start_stage() {                             # start_stage <story> -> the stage the story's files say it runs from
@@ -2266,7 +2239,7 @@ later_refusals() {                          # later_refusals <story> <stage> <wh
   local later seen=0
   for later in "${STAGES[@]}"; do
     [ "$later" = "$2" ] && { seen=1; continue; }
-    [ "$seen" = 1 ] && [ -f "$RUNS/$1/.gate-$later.txt" ] && printf ' The %s gate refused the story and sent it back to %s; its report is %s/%s/.gate-%s.txt — fix in that stage exactly what it names, nothing else.' \
+    [ "$seen" = 1 ] && [ -f "$RUNS/$1/.gate-$later.txt" ] && printf ' The %s gate refused the story and sent it back to %s: %s/%s/.gate-%s.txt.' \
       "$later" "$3" "$RUNS" "$1" "$later"
   done
   return 0
@@ -2274,17 +2247,14 @@ later_refusals() {                          # later_refusals <story> <stage> <wh
 
 worktree_sentence() {
   [ -n "${FACTORY_HOME:-}" ] || return 0
-  printf ' %s' "You work in this story's own worktree, $PWD, on its branch: change the code here, never in the main \
-checkout ($FACTORY_HOME). The story with its decisions, the run folder, the pipeline and the skills are linked from \
-the main checkout; write a decision record or a hand-over at the path you are given."
+  printf ' %s' "This story's own worktree: $PWD; the main checkout: $FACTORY_HOME."
 }
 
 prompt_for() {                              # prompt_for <stage> <story>
   local stage=$1 story=$2 repeat=""
   # A repeat round that cannot see why the gate refused works blind, and every stage skill says to
   # work only on what the gate confirmed. So the refusal is named as an input, not remembered.
-  [ -f "$RUNS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before; its \
-report is $RUNS/$story/.gate-$stage.txt — read it and fix exactly what it names, nothing else."
+  [ -f "$RUNS/$story/.gate-$stage.txt" ] && repeat=" The gate refused this stage before: $RUNS/$story/.gate-$stage.txt."
   # A later gate may have sent the story back to this stage — the document gate's `outcome` to the build,
   # its `story-pass` to the stage whose file it read as an earlier pass's. Its report is this stage's input
   # too; without it the stage repeats what was refused. Said to the stage the story starts from alone.
@@ -2292,32 +2262,23 @@ report is $RUNS/$story/.gate-$stage.txt — read it and fix exactly what it name
   local later; later=$(later_refusals "$story" "$stage" "this stage")
   [ -n "$later" ] && [ "$stage" = "$(start_stage "$story")" ] && repeat="$repeat$later"
   if [ "$stage" = test ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
-    repeat="$repeat The build stage sent the story back: $RUNS/$story/build.md names a defect in a test's own code. \
-Repair exactly that without changing what the test asserts, and write the test's break (see the contract)."
+    repeat="$repeat The build stage sent the story back: $RUNS/$story/build.md."
   fi
   if { [ "$stage" = test ] || [ "$stage" = build ]; } && [ -f "$RUNS/$story/judge.md" ] \
      && [ "$(verdict_of "$story")" = changes-requested ]; then
-    repeat="$repeat The judge asked for changes: $RUNS/$story/judge.md — fix exactly the confirmed defects that are this \
-stage's (a test that asserts too little is the test stage's; write its break, see the contract), nothing else."
+    repeat="$repeat The judge asked for changes: $RUNS/$story/judge.md."
   fi
-  [ "$stage" = judge ] && [ -f "$RUNS/$story/.judge-previous.md" ] && repeat=" This is a repeat round: \
-the previous verdict is $RUNS/$story/.judge-previous.md. Account for each defect it confirmed under \
-'## Previous round' — fixed (with the evidence) or withdrawn (with the reason) — before judging anew."
+  [ "$stage" = judge ] && [ -f "$RUNS/$story/.judge-previous.md" ] && repeat=" This is a repeat round; the previous \
+verdict: $RUNS/$story/.judge-previous.md."
   # The guard the profile names holds the invariants while code is edited: said in the prompt of the two
   # stages that write production code, so no build or tidy stage starts without it in view.
   local guard=""
   case "$stage" in build|tidy)
     guard=$(cli --get carrier.guard 2>/dev/null | awk '{print $1}')
-    [ -n "$guard" ] && guard=" Apply the $guard skill (the profile's carrier.guard) to every file you write." ;;
+    [ -n "$guard" ] && guard=" The guard (the profile's carrier.guard): the $guard skill." ;;
   esac
-  local skeleton=""
-  [ "$stage" = document ] && skeleton=" The pipeline wrote $RUNS/$story/document.md as a skeleton: fill its tables and \
-cite paths from its \`## Paths\` section in exactly that form."
-  printf '%s' "Apply the stage-$stage skill for backlog story $story. \
-Read only the story and the files the skill names as its input, and write its output file under \
-$RUNS/$story/. Do the stage yourself in this session; do not delegate it. Do not run other stages. \
-This session was started by the pipeline's runner, which holds the checkout for it: the worker named at \
-session start is the one that started you, not a second writer.$(worktree_sentence) $(where_things_are "$TOOL_IN_FLIGHT" "$stage" "$story")$skeleton$guard$repeat"
+  printf '%s' "Apply the stage-$stage skill for backlog story $story.$(worktree_sentence) \
+$(where_things_are "$TOOL_IN_FLIGHT" "$stage" "$story")$guard$repeat"
 }
 
 # Every journal line goes through the cli, which numbers it under the journal's lock: the runner composes the line,
@@ -2804,9 +2765,8 @@ integrate_story() {                         # integrate_story <story> <tool> <dr
 
 integrate_prompt() {                        # integrate_prompt <story> <conflicted files>
   printf '%s' "Apply the stage-integrate skill for backlog story $1. Merging the main line into this story's branch \
-stopped on conflicts in: $2. Their list is $(evidence "$1")/conflicts. Resolve them in this worktree so both changes \
-hold, write $RUNS/$1/integrate.md, and run no git add, commit, merge, rebase or checkout: the runner commits. Do the \
-step yourself in this session; do not delegate it.$(worktree_sentence) $(where_things_are "$TOOL_IN_FLIGHT" integrate "$1")"
+stopped on conflicts in: $2. Their list: $(evidence "$1")/conflicts.$(worktree_sentence) \
+$(where_things_are "$TOOL_IN_FLIGHT" integrate "$1")"
 }
 
 # Every story in its worktree: made or brought up to date and linked, under the lock; the stages run in it with
