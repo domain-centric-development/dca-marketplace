@@ -3550,7 +3550,6 @@ class Stage(typing.NamedTuple):
     sizes: tuple = ()         #: the hand-overs whose size its gate weighs against the criteria
     lists: bool = False       #: its hand-over lists the files it changed, and its gate holds it to that list
     guarded: bool = False     #: it writes production code, under the profile's guard skill (`carrier.guard`)
-    answers_judge: bool = False  #: a judge's `changes-requested` names defects it may fix (a test's, the code's)
     suite: bool = False       #: its gate runs the policy's required suites whole
     in_order: bool = True     #: a step of the story's run order (adopt and integrate are steps after it)
 
@@ -3560,9 +3559,8 @@ ALL_KINDS = ("story", "journey", "adopt")
 STAGES = (
     Stage("plan", "plan.md", window="builder", kinds=ALL_KINDS),
     Stage("test", "tests.md", window="builder", lists=True, kinds=ALL_KINDS, post_gated=True, tested=True, red=True,
-          answers_judge=True,
           sizes=("plan.md", "tests.md")),
-    Stage("build", "build.md", window="builder", lists=True, guarded=True, answers_judge=True, post_gated=True, commands=("architecture", "format"),
+    Stage("build", "build.md", window="builder", lists=True, guarded=True, post_gated=True, commands=("architecture", "format"),
           tested=True, suite=True, sizes=("build.md",)),
     # The tidy stage changes no behaviour, so its whole claim is that everything still holds: the same commands
     # as the build stage, run again after the refactor.

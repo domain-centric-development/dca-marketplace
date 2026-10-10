@@ -39,7 +39,9 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
    finish while the gate names something red — and write nothing about the gate into your file: its
    report is the record.
 6. In a repeat round, work only on what the gate or the judge confirmed. Do not take the
-   opportunity to refactor elsewhere.
+   opportunity to refactor elsewhere. Where `judge.md` in the run folder says
+   `verdict: changes-requested`, fix exactly the confirmed defects that are this stage's — the code;
+   a test that asserts too little is the test stage's — nothing else.
 7. `formatFix:` runs last, before you finish (`factory-run/reference/stage-common.md`).
 
 ## Ask, do not recall

@@ -167,6 +167,8 @@ test covers.
 
 ## A round sent back to this stage
 
+Where `judge.md` in the run folder says `verdict: changes-requested`, fix exactly the confirmed defects
+that are this stage's — a test that asserts too little, with its break (see the contract) — nothing else.
 When the judge's verdict says `back: test` (`.dca-factory/runs/<story>/judge.md`), fix exactly the test
 defects it confirmed: add the assertion the criterion names, nothing else. When the build stage wrote
 `back: test` (`.dca-factory/runs/<story>/build.md`), a test cannot pass because of its own code — a

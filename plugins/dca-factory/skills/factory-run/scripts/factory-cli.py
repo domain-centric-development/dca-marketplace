@@ -730,7 +730,7 @@ def stage_names(kind=None, window=None, every=False):
 def stages_shell(places=()):
     """The table as the runner reads it once at its start, one bash assignment per line: the run order, the steps
     after it, each shared window's stages, which gate runs before and which after its stage, the stages whose gate
-    runs the mapped tests without the suite, the stages under the guard and those a judge's changes go to, which kind runs which row, the hand-over each stage writes — and the
+    runs the mapped tests without the suite, the stages under the guard, which kind runs which row, the hand-over each stage writes — and the
     places asked for, quoted. Every name is the table's, checked to be a plain word; nothing is read from a file."""
     names = [s.name for s in STAGES] + list(SHARED_WINDOWS) + list(ALL_KINDS)
     bad = [name for name in names if not STAGE_WORD.fullmatch(name)]
@@ -745,8 +745,7 @@ def stages_shell(places=()):
     lines += [array("PRE_GATED", [s.name for s in STAGES if s.in_order and s.gated and not s.post_gated]),
               array("POST_GATED", [s.name for s in STAGES if s.in_order and s.post_gated]),
               array("RED_STAGES", [s.name for s in STAGES if s.in_order and s.tested and not s.suite]),
-              array("GUARDED_STAGES", [s.name for s in STAGES if s.guarded]),
-              array("JUDGED_STAGES", [s.name for s in STAGES if s.answers_judge])]
+              array("GUARDED_STAGES", [s.name for s in STAGES if s.guarded])]
     lines.append("KIND_STAGES=' " + " ".join(f"{kind}:{s.name}" for s in STAGES for kind in s.kinds) + " '")
     lines.append("STAGE_FILES=' " + " ".join(f"{name}:{file}" for name, file in STAGE_FILES.items()) + " '")
     lines += [f"PLACE_{key.upper()}={shlex.quote(place(key))}" for key in places]

@@ -2281,10 +2281,6 @@ prompt_for() {                              # prompt_for <stage> <story>
   if [ "$stage" = test ] && [ "$(cli --back-to "$story" --stage build 2>/dev/null)" = test ]; then
     repeat="$repeat The build stage sent the story back: $RUNS/$story/build.md."
   fi
-  if [[ " ${JUDGED_STAGES[*]:-} " == *" $stage "* ]] && [ -f "$RUNS/$story/judge.md" ] \
-     && [ "$(verdict_of "$story")" = changes-requested ]; then
-    repeat="$repeat The judge asked for changes: $RUNS/$story/judge.md."
-  fi
   [ "$stage" = judge ] && [ -f "$RUNS/$story/.judge-previous.md" ] && repeat=" This is a repeat round; the previous \
 verdict: $RUNS/$story/.judge-previous.md."
   # The guard the profile names holds the invariants while code is edited: named in the prompt of every stage
