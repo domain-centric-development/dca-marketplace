@@ -698,6 +698,25 @@ stacks whose tests carry no dotted identity at all — Jest's `describe`/`it` st
 package-level functions. Each of those is one more shape, to be added for a concrete stack when
 one asks for it, never in the abstract.
 
+## Several factories on one backlog
+
+Two colleagues with a clone each and one backlog: `claim_remote: origin` in the stack profile keeps them off one
+story, with git alone. Before a story runs, the runner claims it on that remote — an empty commit on the remote
+main line whose trailers say who and which story (`Factory-Claim:`, `Factory-Story:`), pushed create-only as
+`story/<id>` (`claim_branch_prefix:` names another prefix). git applies the first such push and rejects the second:
+the factory that loses skips the story and journals who has it; the schedule shows it as *claimed elsewhere*. A
+remote that refuses the push for another reason — a branch rule — or a claim under this id for another story (an id
+collision) stops for a person. `/factory-backlog` takes a new story's id from `factory-cli.py --free-id <PREFIX>`.
+
+The factory never pushes `main`. A story integrates against the remote main line, is delivered on its branch —
+the three state lines and the spec merge in its one commit, the claim's trailers kept — and the branch is pushed
+with a lease on this factory's last push; the story shows as *published* until a person merges it (a merge
+request, or a push). Any factory's next look sees it delivered on the remote main line and deletes the branch.
+`factory.sh release <story>` gives a claim up (`--force` another's); `factory.sh integrate <story>` takes a
+published branch whose merge request lost the race back to before its delivery and delivers it again against the
+new main line — the spec is merged again, never resolved by text. A stale claim stays until a person releases it.
+Cooperation, not security: anyone with push rights can delete a branch.
+
 ## Versions, and what a version answers
 
 The gate is **copied** into a project, so two questions come apart that a single version number

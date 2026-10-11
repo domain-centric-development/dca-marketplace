@@ -18,6 +18,8 @@ what they say.
     factory-cli.py --deliver-by-hand <story> --by <who> a story built by hand: delivered, claimed
     factory-cli.py --prove <story>                      a claimed delivery checked through the adopt path
     factory-cli.py --spec-check                         every delivered story's criteria stand in the living spec
+    factory-cli.py --claim-story <story> | --claims-refresh | --release-claim <story> [--force]   claims on a remote
+    factory-cli.py --free-id <PREFIX>                   the next story id no factory uses
     factory-cli.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
     factory-cli.py --usage-from <format> <file>         one invocation's usage from a tool's raw output
     factory-cli.py --stage-start|--stage-end <stage> --story <id>    a stage run inside a session
@@ -54,7 +56,7 @@ import time
 from datetime import datetime, timezone
 from .contract import (
     ALL_KINDS, CONTRACT, decision_files, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
-    EPIC_FILE, epic_folder, evidence_dir, find_story, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
+    EPIC_FILE, epic_folder, evidence_dir, factory_home, find_story, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
     location, needs_human_ids, open_findings, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
     story_id_of, story_kind, TECH_HEADINGS, VERSION)
@@ -62,6 +64,8 @@ from .reports import (
     claude_session_logs, codex_session_log, FOLLOW_ARGS, parse_time, part_of_call, session_usage_allowed, _short,
     stream_denials, stream_parts, tokens_of, USAGE_FIELDS, usage_from, WINDOWS)
 from .state import (
+    cached_claims, story_title, claim_config_here, claim_story, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
+    remote_main,
     acceptance_records, accepted, accepted_criteria, back_in, claim, claim_path, freeze_all, gate_passed_on_record,
     has_worktree,
     is_acceptance, journal_append, journal_events, journal_usage, journal_writer, listener_line, mark_listening,
@@ -567,6 +571,10 @@ HELP_COMMANDS = (
     ("check the backlog", "the plan gate's checks over every open story, writing nothing", "/factory-backlog",
      "backlog --check"),
     ("the inbox", "the open questions and acceptances, and how to answer them", "/factory-decisions", "decisions"),
+    ("give up a claim", "with `claim_remote:` — a story's claim on the remote taken back (another's with --force)", "",
+     "release <story>"),
+    ("deliver again", "with `claim_remote:` — a published story whose merge request lost the race, merged again",
+     "", "integrate <story>"),
     ("the profile", "what detection finds against the stack profile", "/factory-setup", "setup --check"),
     ("observe a story", "what a delivered story changed, measured from its files", "/factory-verify <story>",
      "verify --story <story>"),
@@ -899,6 +907,12 @@ def story_attention(cwd, story_id, story, profile):
         return "running", "running", make_action()
     if state == "delivered":
         return "done", f"delivered, {detail}" if detail else "delivered", make_action()
+    if state == "published":
+        return "look", "published — waits for its merge", make_action(
+            text="open the merge request from its branch; once merged, any factory's next look releases the claim",
+            shell=f"{RUNNER} integrate {story_id}  (only after another merge request landed first)")
+    if state == "claimed":
+        return "none", "claimed elsewhere", make_action(text=detail, shell=f"{RUNNER} release {story_id} --force")
     if str(story.get("kind", "")) == "adopt" and state in ("ready", "in-progress", "resumable"):
         return "none", "to adopt", make_action(text=detail)
     if state == "blocked":
@@ -1800,7 +1814,7 @@ def reopen(cwd, runs, epics, story_id):
     return 0
 
 
-def deliver_by_hand(cwd, runs, epics, story_id, who):
+def deliver_by_hand(cwd, runs, epics, story_id, who, force=False):
     """A story a person built: `status: delivered`, `delivered:` (UTC), `delivered_by: hand:<who>`. Works where the
     factory never ran. The delivery is claimed, not proven — `--prove` checks it later through the adopt path. A
     delivered story is not delivered a second time: a change of delivered behaviour is a new story."""
@@ -1818,6 +1832,17 @@ def deliver_by_hand(cwd, runs, epics, story_id, who):
     if status == "superseded":
         print(f"deliver-by-hand: {story_id} is superseded — nothing to deliver")
         return 1
+    config = claim_config_here(cwd)
+    if config:
+        refresh_claims(cwd, runs, config, claim_target(cwd), say=lambda _line: None)
+        held = cached_claims(runs).get(story_id)
+        if held and not held["own"]:
+            if not force:
+                print(f"deliver-by-hand: {story_id} is claimed by {held['who']} ({held['host']}) since {held['since']} — "
+                      f"another factory builds it; `--force` delivers it anyway")
+                return 1
+            with contextlib.suppress(OSError):
+                journal_append(runs, story_id, "note", "deliver-by-hand", f"over-claim={held['who']}", "forced=1")
     # The spec takes the story's new criteria, without test lines — unproven until `--prove`. A story that changes or
     # removes what holds needs a plan to derive its delta: that is `--prove`'s adopt path, not this helper.
     _front, body = read_front_matter(story_path)
@@ -1842,6 +1867,66 @@ def deliver_by_hand(cwd, runs, epics, story_id, who):
     print(f"deliver-by-hand: {shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
           f"`delivered_by: hand:{who}` — delivered, claimed. Commit it with the trailer `Story: {story_id}`; "
           f"`factory-cli.py --prove {story_id}` turns the claim into proof.")
+    return 0
+
+
+def claim_target(cwd):
+    """The branch the main checkout is on — the remote's branch of that name is the shared main line."""
+    return git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip() or "main"
+
+
+def claim_command(cwd, runs, epics, story_id):
+    """`--claim-story`: claim one story on the remote (WP-93). 0 claimed or own, 3 another factory has it, 4 needs a
+    person; 0 and nothing pushed where the profile names no `claim_remote:`."""
+    config = claim_config_here(cwd)
+    if not config:
+        return 0
+    path = find_story(epics, story_id)
+    front, body = read_front_matter(path)
+    epic = str(front.get("epic") or os.path.basename(epic_folder(path))).strip()
+    title = story_title(front, body) or story_id
+    code = claim_story(cwd, runs, config, claim_target(cwd), story_id, epic, title)
+    if code == 3:
+        with contextlib.suppress(OSError):
+            held = cached_claims(runs).get(story_id, {})
+            journal_append(runs, story_id, "note", "claimed-elsewhere", f"by={held.get('who', '?')}",
+                           f"since={held.get('since', '?')}")
+    return code
+
+
+def undeliver_branch(cwd, runs, epics, story_id):
+    """WP-93 F: a published branch whose merge request lost the race goes back to before its delivery — the spec's
+    scenarios and journeys as the remote main line has them, the story's state lines out and its status as before —
+    so the integrate step merges the remote main line and the delivering function merges again under the new rules.
+    The spec is never resolved by text."""
+    config = claim_config_here(cwd)
+    if not config or not has_worktree(story_id, cwd):
+        print(f"integrate: {story_id} has no published branch in this checkout")
+        return 1
+    path = worktree_of(story_id, cwd)
+    fetch_remote(cwd, config["remote"])
+    main = remote_main(config["remote"], claim_target(cwd))
+    spec_rel = os.path.relpath(place("spec") if os.path.isabs(place("spec")) else os.path.join(cwd, place("spec")), cwd)
+    changed = [p for p in git(path, "diff", "--name-only", f"{main}...HEAD", "--", spec_rel)[1].splitlines()
+               if p.endswith(("scenarios.md", "journeys.md"))]
+    for rel in changed:
+        if git(path, "cat-file", "-e", f"{main}:{rel}")[0] == 0:
+            git(path, "checkout", main, "--", rel)
+        else:
+            git(path, "rm", "--quiet", "--", rel)
+    story_rel = os.path.relpath(find_story(epics, story_id), factory_home() or cwd)
+    local_story = os.path.join(path, story_rel)
+    before = os.path.join(evidence_dir(runs, story_id), "published-status")
+    status = read_text(before).strip() if os.path.isfile(before) else "approved"
+    write_story_fields(local_story, status=status or "approved", delivered=None, delivered_by=None)
+    git(path, "add", "-A", "--", *(changed + [story_rel]))
+    git(path, *(["-c", "user.name=dca-factory", "-c", "user.email=dca-factory@localhost"]
+                if not git(path, "config", "user.email")[1].strip() else []),
+        "commit", "--no-verify", "--quiet", "-m", f"wip({story_id}): before it is delivered again")
+    with contextlib.suppress(OSError):
+        os.remove(os.path.join(evidence_dir(runs, story_id), PUBLISHED))
+    print(f"integrate: {story_id}'s delivery taken back on its branch ({len(changed)} spec file(s) as {main} has them) "
+          f"— the integrate step merges {main} and delivers it again")
     return 0
 
 
@@ -2183,6 +2268,16 @@ def main(argv):
     parser.add_argument("--deliver-by-hand", metavar="STORY",
                         help="mark a story a person built as delivered by hand (claimed), and exit; needs --by")
     parser.add_argument("--by", metavar="WHO", help="with --deliver-by-hand: who delivers")
+    parser.add_argument("--claim-story", metavar="STORY",
+                        help="claim a story on the profile's `claim_remote:` (exit 3: another factory has it, 4: a person looks)")
+    parser.add_argument("--claims-refresh", action="store_true",
+                        help="fetch the claims of the profile's `claim_remote:`, release the delivered ones, and exit")
+    parser.add_argument("--release-claim", metavar="STORY", help="delete this factory's claim on a story; --force for another's")
+    parser.add_argument("--force", action="store_true",
+                        help="with --release-claim: another factory's claim; with --deliver-by-hand: over another's claim")
+    parser.add_argument("--free-id", metavar="PREFIX", help="the next story id `<PREFIX>-<n>` no factory uses")
+    parser.add_argument("--undeliver-branch", metavar="STORY",
+                        help="take a published story's delivery back on its branch, before it is integrated again")
     parser.add_argument("--spec-check", action="store_true",
                         help="whether every criterion of a delivered story stands in its spec (exit 1 when one does not)")
     parser.add_argument("--prove", metavar="STORY",
@@ -2431,11 +2526,27 @@ def main(argv):
     if args.reopen:
         return reopen(cwd, args.runs, args.epics, args.reopen)
     if args.deliver_by_hand:
-        return deliver_by_hand(cwd, args.runs, args.epics, args.deliver_by_hand, args.by)
+        return deliver_by_hand(cwd, args.runs, args.epics, args.deliver_by_hand, args.by, args.force)
     if args.prove:
         return prove(cwd, args.runs, args.epics, args.prove)
     if args.spec_check:
         return spec_check(cwd, args.runs, args.epics)
+    if args.claim_story:
+        return claim_command(cwd, args.runs, args.epics, args.claim_story)
+    if args.claims_refresh:
+        config = claim_config_here(cwd)
+        return refresh_claims(cwd, args.runs, config, claim_target(cwd)) if config else 0
+    if args.release_claim:
+        config = claim_config_here(cwd)
+        if not config:
+            print("release: the profile names no `claim_remote:` — there is no claim to release")
+            return 1
+        return release_claim(cwd, args.runs, config, args.release_claim, args.force)
+    if args.free_id:
+        print(free_id(cwd, args.epics, claim_config_here(cwd), claim_target(cwd), args.free_id))
+        return 0
+    if args.undeliver_branch:
+        return undeliver_branch(cwd, args.runs, args.epics, args.undeliver_branch)
     if args.listening or args.claim or args.release is not None:
         freeze_all(args.runs)
     if args.listening:

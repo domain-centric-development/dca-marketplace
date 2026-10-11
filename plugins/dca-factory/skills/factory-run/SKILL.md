@@ -330,6 +330,13 @@ it. `factory-cli.py --prove <story>` sets it `status: adopted`, and the next run
 above — the gate then writes `delivered_by: gate`. Neither is the way to change a delivered story: a change of
 delivered behaviour is a new story.
 
+## Several factories on one backlog
+
+With `claim_remote:` in the profile the runner claims each story on that remote before it runs it, skips one
+another factory claimed, and publishes a delivered story on its branch instead of moving `main`. Running a story's
+stages in a session yourself, claim it first: `python3 .agents/factory/factory-cli.py --claim-story <id>` — exit 3
+means another factory has it: stop and say who.
+
 ## A journey item
 
 A backlog item with `kind: journey` (`factory-cli.py --story <id> --kind` prints it) is a guard over

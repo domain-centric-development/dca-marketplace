@@ -78,6 +78,7 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
+    DEFAULTS, PLACES,
     runs_top,
     ANSWER_FIELDS, answered_decisions, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
@@ -94,6 +95,7 @@ from .spec import (
     delta_problems, derived, journeys_path, merge, read_delta, read_spec, render_spec, scenarios_path, story_entries,
     touches)
 from .state import (
+    claim_config_here, PUBLISHED, remote_main,
     ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, backlog_digest,
     current_stage_files, git_tree, is_acceptance, journal_append, last_ended, listed_files, MODEL_PROCESSES,
     NOT_OBSERVED, observe_writes, OWNED_CHANGED, owned_changes, owned_end, PRODUCT_HEADINGS, record_base,
@@ -3532,8 +3534,13 @@ def _adopt(run):
 def _integrated(run):
     check_integrated(run.result, run.cwd, run.runs, run.story_id)
     # The spec as the main line holds it now: a key another story added meanwhile, or a criterion it changed, is a
-    # question to a person — never a silent last-writer-wins (WP-98 R3).
-    check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
+    # question to a person — never a silent last-writer-wins (WP-98 R3). With claims on a remote the main line is the
+    # remote's, merged into this worktree (WP-93 D).
+    if claim_config_here(factory_home() or run.cwd):
+        with places_in(run.cwd):
+            check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
+    else:
+        check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
 
 
 @check("tests-mapped", stages=lambda s: s.tested)
@@ -3689,7 +3696,11 @@ def _adopt_passed(run):
 
 @on_pass("integrate")
 def _integrate_passed(run):
-    integrate_into_home(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs)
+    config = claim_config_here(factory_home() or run.cwd)
+    if config:
+        publish_story(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs, config)
+    else:
+        integrate_into_home(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs)
 
 
 def main(argv):
@@ -3851,6 +3862,14 @@ def integration_target(runs, story_id):
     return read_text(path).strip() if os.path.isfile(path) else ""
 
 
+def merge_target(runs, story_id, cwd=None):
+    """What a story integrates against: the main checkout's branch — or, where the profile claims stories on a remote
+    (WP-93), that branch as the remote has it, fetched: the main line every factory shares."""
+    target = integration_target(runs, story_id)
+    config = claim_config_here(factory_home() or cwd)
+    return remote_main(config["remote"], target) if config and target else target
+
+
 def check_integrated(result, cwd, runs, story_id):
     """The story's branch carries the main line and nothing half-merged: no unmerged path, no conflict marker in
     a file the story's commit changes, and its commit sits on the target's tip — a target that moved since is
@@ -3859,11 +3878,11 @@ def check_integrated(result, cwd, runs, story_id):
         result.fail("integrate", f"the integrate gate runs in the story's worktree, with {HOME_VARIABLE} naming the "
                                  f"main checkout — the runner's integrate step starts it")
         return
-    target = integration_target(runs, story_id)
-    if not target:
+    if not integration_target(runs, story_id):
         result.fail("integrate", f"no target recorded for {story_id} (<evidence>/<story>/target) — the worktree was not made "
                                  f"by the runner")
         return
+    target = merge_target(runs, story_id, cwd)
     code, unmerged = git(cwd, "diff", "--name-only", "--diff-filter=U")
     if unmerged.strip():
         result.fail("conflicts", "unmerged: " + ", ".join(unmerged.split()) + " — the merge is not finished")
@@ -4027,6 +4046,59 @@ def merge_spec(result, story_path, story_id, front, runs):
     result.ok("spec", f"{shown(target)}: {sum(v == 'adds' for v in found.values())} added, "
                       f"{sum(v == 'changes' for v in found.values())} changed, {len(delta['removes'])} removed"
                       + (f", {len(delta['renames'])} rule(s) renamed" if delta["renames"] else ""))
+
+
+@contextlib.contextmanager
+def places_in(cwd):
+    """The epics and the spec read from this worktree, not the main checkout — where the remote main line is what
+    the story was merged with (WP-93 D)."""
+    home = factory_home() or cwd
+    saved = dict(PLACES)
+    try:
+        for key in ("epics", "spec"):
+            own = saved.get(key) or DEFAULTS[key]
+            PLACES[key] = os.path.join(cwd, os.path.relpath(own if os.path.isabs(own) else os.path.join(home, own), home))
+        yield
+    finally:
+        PLACES.clear()
+        PLACES.update(saved)
+
+
+def publish_story(result, cwd, story_path, story_id, front, runs, config):
+    """WP-93 D: the factory never moves `main`. The delivering function writes into the story's worktree — the story's
+    three state lines and the merge into the spec —, the squashed commit takes them, and the story branch is pushed
+    with a lease on what this factory pushed last: only its own claim can be overwritten. A person merges it; the
+    remote main line then says delivered for every factory."""
+    home = factory_home() or cwd
+    rel_story = os.path.relpath(story_path, home)
+    local_story = os.path.join(cwd, rel_story)
+    spec_rel = os.path.relpath(place("spec") if os.path.isabs(place("spec")) else os.path.join(home, place("spec")), home)
+    with places_in(cwd):
+        before = read_front_matter(local_story)[0]
+        mark = os.path.join(evidence_dir(runs, story_id), "published-status")
+        with open(mark, "w", encoding="utf-8") as handle:
+            handle.write(str(before.get("status", "")).strip() + "\n")
+        deliver(result, local_story, story_id, before, runs)
+    git(cwd, "add", "-A", "--", spec_rel, os.path.dirname(rel_story))
+    if git(cwd, *(["-c", "user.name=dca-factory", "-c", "user.email=dca-factory@localhost"]
+                  if not git(cwd, "config", "user.email")[1].strip() else []),
+           "commit", "--amend", "--no-edit", "--no-verify", "--quiet")[0] != 0:
+        result.fail("published", f"the delivery could not be added to {story_id}'s commit")
+        return
+    remote, prefix = config["remote"], config["prefix"]
+    ref = f"refs/heads/{prefix}{story_id}"
+    known = git(cwd, "rev-parse", "--verify", "--quiet", f"refs/remotes/{remote}/{prefix}{story_id}")
+    lease = f"--force-with-lease={ref}:{known[1].strip()}" if known[0] == 0 else f"--force-with-lease={ref}:"
+    code, out = git(cwd, "push", "--porcelain", lease, remote, f"HEAD:{ref}")
+    if code != 0:
+        result.fail("published", f"{remote} refused {prefix}{story_id}: {' '.join(out.split())[:300]} — another "
+                                 f"factory's commit is there, or a branch rule; needs-human")
+        return
+    head = git(cwd, "rev-parse", "HEAD")[1].strip()
+    with open(os.path.join(evidence_dir(runs, story_id), PUBLISHED), "w", encoding="utf-8") as handle:
+        handle.write(head + "\n")
+    result.ok("published", f"{prefix}{story_id} on {remote} carries the story as one commit {head[:12]} — delivered on "
+                           f"its branch; `main` is not moved: a person merges it (merge request or push)")
 
 
 def deliver(result, story_path, story_id, front, runs):

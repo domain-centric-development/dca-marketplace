@@ -131,6 +131,11 @@
 # parallel     how many stories the runner runs at once, each in its worktree (default 1). A slot counts a
 #              story with a running stage; one that waits for an answer or an acceptance holds none.
 #              `factory.sh run --parallel <n>` and FACTORY_PARALLEL override the line for one run
+# claim_remote the remote whose branches keep several factories off one story (WP-93), e.g. `origin`. Before a
+#              story runs, it is claimed there as `story/<id>` with a create-only push; another factory's claim
+#              skips it. A delivered story is published on that branch for a person to merge — `main` is
+#              never pushed. Without the line nothing is pushed. Cooperation, not security
+# claim_branch_prefix  the claim branches' prefix where the code host's branch rules want another (default story/)
 # stageTimeout how long one stage's tool may run (90, 90s, 30m, 2h; no limit by default) before the runner
 #              stops it; FACTORY_STAGE_TIMEOUT overrides the line for one run
 # reviews      perspectives the judge stage covers *in addition to* its built-in ones
@@ -141,7 +146,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 19
+contract: 20
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}
@@ -156,6 +161,7 @@ formatFix: {{FORMAT_FIX_COMMAND}}
 #stages: separate
 #parallel: 2
 #stageTimeout: 45m
+#claim_remote: origin
 #run: <how a person starts the application>
 #knowledge: <the catalog skill a stage cites>
 #knowledge.read: <paths inside that catalog a stage reads once before it writes code, comma-separated>

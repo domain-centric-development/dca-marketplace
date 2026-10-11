@@ -19,6 +19,8 @@
 #                    default, --shared-builder/--shared-verifier share one half over `stages: separate`
 #   factory.sh status [--story <id>] [--usage] [--refusals] [--brief]   what runs, what waits, every story, the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
+#   factory.sh release <story> [--force]     give up a story's claim on the remote (`claim_remote:`); --force: another's
+#   factory.sh integrate <story>             a published story whose merge request lost the race: delivered again
 #   factory.sh follow [--story <id>] [--process <name>] [--once [--lines <n>]] [--all] [--format text|json]
 #                    what the stage in flight does, one line per tool call, as it happens; --process one
 #                    process (builder, verifier, review-ddd, …), --all every process of a story; starts nothing
@@ -1739,6 +1741,17 @@ case "$command" in
       *) read_command --status --part backlog "$@" ;;
     esac ;;
   decisions) read_command --list-decisions "$@" ;;
+  release)
+    # A claim on the remote given up by hand (WP-93): this factory's, or with --force another's.
+    [ $# -ge 1 ] || usage
+    read_command --release-claim "$@" ;;
+  integrate)
+    # A published story whose merge request lost the race (WP-93 F): its delivery taken back on its branch, then the
+    # integrate step against the remote main line again — the spec merged again, never resolved by text.
+    [ $# -eq 1 ] || usage
+    [ -f "$GATE" ] || { echo "factory: no gate at $GATE — run 'factory.sh setup' from the plugin" >&2; exit 2; }
+    "$PY" "$CLI" --undeliver-branch "$1" || exit $?
+    exec bash "$0" run --story "$1" --from integrate ;;
   follow) read_command --follow "$@" ;;
   discover)
     # The discovery report's check; the report itself is written in a session, by `factory-discover`.

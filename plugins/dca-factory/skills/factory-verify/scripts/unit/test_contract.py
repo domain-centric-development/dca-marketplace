@@ -52,10 +52,10 @@ class Profile(unittest.TestCase):
     def test_keys_are_flat_quotes_go_comments_are_skipped(self):
         with tempfile.TemporaryDirectory() as root:
             path = write(os.path.join(root, "p.yaml"),
-                         "# profile\ncontract: 19\ntest: \"gradle test --tests '{class}' -q\"\nformat: 'spotless'\n"
+                         "# profile\ncontract: 20\ntest: \"gradle test --tests '{class}' -q\"\nformat: 'spotless'\n"
                          "model.claude.build: opus\nnot a key\n")
             self.assertEqual(contract.read_profile(path), {
-                "contract": "19", "test": "gradle test --tests '{class}' -q", "format": "spotless",
+                "contract": "20", "test": "gradle test --tests '{class}' -q", "format": "spotless",
                 "model.claude.build": "opus"})
 
     def test_a_double_quoted_value_keeps_a_single_quote_at_its_end(self):

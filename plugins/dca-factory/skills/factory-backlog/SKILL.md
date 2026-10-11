@@ -172,6 +172,10 @@ that smuggles the decision in.
    team decided itself belongs in the criteria or in a plan, not here. A story whose criterion
    contradicts one of its own open assumptions is not ready — the judge will stop the run for it,
    so resolve it now: either the assumption is answered, or the criterion is not yet a criterion.
+8a. **Give a new story an id no factory uses.** Where the profile names `claim_remote:` (several factories on one
+   backlog), take the id from `python3 .agents/factory/factory-cli.py --free-id <PREFIX>` — it fetches and skips
+   every id the remote main line, its `Story:` history or a remote claim uses; otherwise the next number of the
+   epic's prefix. Never reuse the id of a delivered story, also one whose folder is gone.
 9. **Leave `status: draft` unless the human releases it.** The gate refuses to plan a draft story,
    which is the one check no script can replace. Say plainly that the story is waiting for their
    release, and set `approved` only when they say so.

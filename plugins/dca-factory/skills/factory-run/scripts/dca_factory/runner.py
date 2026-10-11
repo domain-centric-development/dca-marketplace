@@ -29,12 +29,14 @@ from .contract import (
 from .reports import (
     tokens_of, usage_lines)
 from .state import (
+    CLAIM_TRAILERS, claim_config_here, fetch_remote,
     back_in, claim, freeze_all, gate_passed_on_record, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
 from .spec import (
     context_folder, derived, merge, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
+    merge_target,
     read_mapping, spec_target,
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
     integration_target, INVARIANTS_MARKER, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
@@ -294,6 +296,10 @@ def squash_story(path, runs, story_id, target, front, body):
         scope = re.sub(r"[^a-z0-9]+", "-", str(front.get("context", "")).lower()).strip("-") or "story"
         kind = "feat" if story_kind(front) == "story" else "test"
         message = f"{kind}({scope}): {story_title(front, body) or story_id}\n\nStory: {story_id}\n"
+        claimed = os.path.join(evidence_dir(runs, story_id), CLAIM_TRAILERS)
+        if os.path.isfile(claimed):
+            # The claim's trailers survive the squash: the published branch still says who has the story (WP-93).
+            message += read_text(claimed).strip() + "\n"
         done = git(path, *git_identity(path), "commit", "--no-verify", "--quiet", "-m", message)
         if done[0] != 0:
             print(f"factory: the story's commit could not be made — {done[1]}", file=sys.stderr)
@@ -333,7 +339,10 @@ def integrate_prepare(cwd, runs, epics, story_id):
     if not has_worktree(story_id, cwd):
         print(f"factory: {story_id} has no worktree to integrate", file=sys.stderr)
         return 1
-    target = integration_target(runs, story_id)
+    config = claim_config_here(cwd)
+    if config:
+        fetch_remote(cwd, config["remote"])
+    target = merge_target(runs, story_id, cwd)
     front, body = read_front_matter(find_story(epics, story_id))
     restore_places(path)
     stage_story(path, runs, story_id)
@@ -358,7 +367,7 @@ def integrate_finish(cwd, runs, epics, story_id):
     """After the conflicts were resolved in the worktree: no marker left in a conflicted file, the merge committed,
     the story squashed. Exit 1, naming the files, while a marker is left."""
     path = worktree_of(story_id, cwd)
-    target = integration_target(runs, story_id)
+    target = merge_target(runs, story_id, cwd)
     listed = os.path.join(evidence_dir(runs, story_id), CONFLICTS_FILE)
     files = [line.strip() for line in read_text(listed).splitlines() if line.strip()] if os.path.isfile(listed) else []
     left = []
@@ -2504,7 +2513,10 @@ class Run:
             finally:
                 self.drop_lock()
             if code == 0:
-                print(f"factory: story {story} is integrated and delivered.")
+                if claim_config_here(self.home):
+                    print(f"factory: story {story} is delivered on its branch and published — a person merges it.")
+                else:
+                    print(f"factory: story {story} is integrated and delivered.")
                 return 0
             report = f"{self.runs}/{story}/.gate-integrate.txt"
             fails = [line for line in (read_text(report).splitlines() if os.path.isfile(report) else [])
@@ -2541,6 +2553,17 @@ class Run:
         with the run folder named absolutely and FACTORY_HOME naming this checkout; delivered, its worktree goes."""
         if dry:
             return self.run_stages(story, tool, start, dry)
+        # Several factories on one backlog (WP-93): the story is claimed on the remote before anything runs —
+        # another factory's claim skips it, a branch rule or an id collision stops for a person.
+        if claim_config_here(self.home):
+            code, out = self.cli("--claim-story", story, quiet=False)
+            if out:
+                print(out)
+            if code == 3:
+                return 0
+            if code != 0:
+                err(f"factory: {story} could not be claimed — needs-human (see above).")
+                return 1
         self.take_lock()
         try:
             _, out = self.cli("--worktree-prepare", story, quiet=False)
@@ -2629,6 +2652,11 @@ class Run:
             if os.path.isfile(self.stop_file):
                 print(f"factory: {self.stop_file} exists — the backlog run stops here. Remove it to run again.")
                 return 0
+            if claim_config_here(self.home) and not dry:
+                _c, claimed = self.cli("--claims-refresh", quiet=False)
+                if claimed and claimed != getattr(self, "last_claims", ""):
+                    print(claimed)
+                self.last_claims = claimed
             code, out = self.cli("--schedule", "--slots", "1", merge=True)
             if code != 0:
                 err(out)
