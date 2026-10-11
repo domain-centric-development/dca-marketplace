@@ -30,8 +30,8 @@ Files: `NNNN-kebab-case-title.md` (zero-padded to 4 digits), e.g.
 
 Index: `docs/adr/README.md` — auto-regenerated table of all ADRs.
 
-An alternative path can be set in the conventions file the project instructions name (a
-``- conventions: `<path>` `` line in `AGENTS.md`).
+An alternative path can be set in the configuration file the project instructions name (a
+``- configuration: `<file>` `` line in `AGENTS.md`).
 
 ## ADR template
 
@@ -209,7 +209,7 @@ offer to generate this meta-ADR first.
 
 ## Project conventions
 
-The conventions file the project instructions name (a ``- conventions: `<path>` `` line in
+The configuration file the project instructions name (a ``- configuration: `<file>` `` line in
 `AGENTS.md`) may set:
 
 - Alternative ADR path (`docs/decisions/`, etc.)

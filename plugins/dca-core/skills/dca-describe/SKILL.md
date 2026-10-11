@@ -6,8 +6,8 @@ description: Writes the project description with the person who decides what is 
 # Describe the project
 
 Input: the person who decides what is built, and — in a project that has code — the code.
-Output: `project/product.md`, `project/tech.md`, `project/domain.md`, and a section in `AGENTS.md`
-that names them. You write no story, no plan and no code.
+Output: `project/product.md`, `project/tech.md`, `project/domain.md` — or where `dca.profile.yaml` puts
+them — and a section in `AGENTS.md` that names them. You write no story, no plan and no code.
 
 The three files hold **intent**: what is to be built, written before the code. What exists and why —
 architecture documentation, decision records, generated maps — belongs in `docs/`, after the code.
@@ -16,9 +16,15 @@ could show goes to `docs/`.
 
 ## Do
 
-1. **Look before you ask.** Read `AGENTS.md`: a section between `<!-- dca-describe: start -->` and
-   `<!-- dca-describe: end -->` names where the files are; use those places. Read what already
-   exists there. A file that is complete stays as it is unless the person wants to change it — you
+1. **Look before you ask.** The places come from `dca.profile.yaml` at the project root, flat
+   `key: value` lines, every key optional: `root:` (default `project/`) and, each overridable on its
+   own, `overview:` (default `<root>/product.md`), `tech:` (`<root>/tech.md`) and `domain:`
+   (`<root>/domain.md`); where the file or a key is missing, the defaults. Where the person wants the
+   description elsewhere, write `root:` — or the one key — into `dca.profile.yaml`, keeping its other
+   lines. An `AGENTS.md` section of this skill that names a place the file does not hold (a project
+   described before the file existed) has that place written into `dca.profile.yaml` once — its
+   `- product:` line as `overview:`, `- tech:` as `tech:`, `- domain:` as `domain:` — a default
+   place needs no line. Read what already exists there. A file that is complete stays as it is unless the person wants to change it — you
    check it, you do not rewrite it.
 2. **One question per heading, from the catalogue.** The headings are fixed by the templates in
    `templates/` — the product's six, the technical description's six, the domain's contexts, relationships and one glossary table per context — and
@@ -61,7 +67,7 @@ could show goes to `docs/`.
    generated from the code (`docs/architecture/context-map.md` in a DCA project) is not a designed
    map and stays where it is.
 7. **Write the instruction line.** Add — or replace — this section in `AGENTS.md`, with the places
-   the files actually have:
+   resolved from `dca.profile.yaml` as step 1 says:
 
    ```markdown
    <!-- dca-describe: start -->
@@ -81,7 +87,8 @@ could show goes to `docs/`.
    <!-- dca-describe: end -->
    ```
 
-   The `- product:`, `- tech:` and `- domain:` lines are read by other tools, so keep their form.
+   The section is the agents' pointer to the files, not a source: tools read the places from
+   `dca.profile.yaml`, and a place changes there first, then here. Keep the lines' form.
    Only this block is yours; the rest of `AGENTS.md` is the project's. Where the project keeps a `CLAUDE.md` without
    `@AGENTS.md`, say that Claude Code does not read the section then.
 8. **Say what comes next.** A project without code: the project skeleton (`/dca-new`). A project

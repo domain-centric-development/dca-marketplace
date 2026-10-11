@@ -145,7 +145,7 @@ Leave touched code a little cleaner than you found it. Bounds:
 
 This skill does **not** auto-reformat. It works alongside whatever formatter
 the project has configured. Read
-the conventions file the project instructions name (a ``- conventions: `<path>` `` line in
+the configuration file the project instructions name (a ``- configuration: `<file>` `` line in
 `AGENTS.md`), or `AGENTS.md` itself, for the project's formatter command (e.g. `./gradlew spotlessApply`, `dotnet format`); offer to run it at the end of a
 larger edit, but don't reformat invisibly mid-edit.
 

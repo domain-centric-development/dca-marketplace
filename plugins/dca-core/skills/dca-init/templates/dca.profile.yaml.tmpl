@@ -1,10 +1,6 @@
-# DCA conventions
-
+# The method's configuration — every key optional; a key that is absent takes its default.
 {{catalogPathLine}}
 building_blocks_api: the catalog's `guide/language-mappings/building-blocks.md` (the markers, their members, both languages) — the `catalog/` folder beside the `dca-knowledge` skill; never a jar or a package cache
-
-## Resolved configuration
-
 language: {{language}}
 base_package_or_namespace: {{basePackageOrNamespace}}
 framework_preset: {{frameworkPreset}}
@@ -19,7 +15,4 @@ repository_suffix: {{repositorySuffix}}
 controller_suffix: {{controllerSuffix}}
 rest_controller_suffix: {{restControllerSuffix}}
 verify_command: {{verifyCommand}}
-
-## Naming
-
 failure_suffix: Exception

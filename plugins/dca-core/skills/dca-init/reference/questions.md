@@ -60,5 +60,5 @@ call. The summary before the questions names them.
 - answer goes to: the test next to the architecture test; `docs/architecture/context-map.md`
 
 ### INIT-CATALOG
-- *never asked* — rule: the catalog vendored with the plugin; a live catalog is `catalog_path:` in the conventions file, set by hand
-- answer goes to: the conventions file
+- *never asked* — rule: the catalog vendored with the plugin; a live catalog is `catalog_path:` in `dca.profile.yaml`, set by hand
+- answer goes to: `dca.profile.yaml`

@@ -210,8 +210,8 @@ class. Not a new factory per test method: that is the same context rebuild the J
 
 ## Recorded
 
-An `## Integration tests` section in the conventions file, with the source set, the command and the
-reset convention: `integration: src/test-integration`, `integrationTest: ./gradlew test-integration`
+Three lines in `dca.profile.yaml` at the project root — the source set, the command and the reset
+convention: `integration: src/test-integration`, `integrationTest: ./gradlew test-integration`
 (Maven: `./mvnw test`; .NET: `integration: tests/<Name>.IntegrationTests`, `integrationTest: dotnet test
 tests/<Name>.IntegrationTests`) and `reset: each test empties the tables it writes in @BeforeEach
 (IntegrationTest base class); never a context per test`. A delivery pipeline's setup detects the task, the added test source or the project

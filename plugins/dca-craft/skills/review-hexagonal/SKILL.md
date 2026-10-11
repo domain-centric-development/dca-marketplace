@@ -196,8 +196,8 @@ that the decision sits in exactly one place per context:
 ## How to read the project
 
 1. The project's conventions, searched in this order: an explicit path given
-   to you, the conventions file the project instructions name (a
-   ``- conventions: `<path>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`.
+   to you, the configuration file the project instructions name (a
+   ``- configuration: `<file>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`.
    They tell you the actual suffix conventions (`*UseCase` vs
    `*ApplicationService`, `*Resource` vs `*Controller`), the adapter folder
    names (`incoming` vs `in`) and the types or annotations the project uses

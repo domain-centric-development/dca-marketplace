@@ -5,7 +5,7 @@ description: |
   packages — `dev.domaincentric:dca-building-blocks` + `dca-spring` and `dca-archunit` (+
   `dca-archunit-spring-modulith` with Modulith), or `DomainCentric.BuildingBlocks` +
   `DomainCentric.ArchRules.Xunit` — one thin architecture test that runs the DCA rule catalog, the
-  context declarations, the conventions file and the method's section of `AGENTS.md`. Use when the user
+  context declarations, the method's configuration `dca.profile.yaml` and its section of `AGENTS.md`. Use when the user
   wants DCA in a codebase that already builds — e.g. "set up DCA governance", "add the DCA architecture
   rules", "init DCA in this project", "/dca-init". Inspects the project first, maps its layout onto
   `DcaLayout`, migrates or aliases existing marker-like interfaces, and never overwrites existing files.
@@ -96,7 +96,7 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
    Read each hit: which rules does it enforce, which conventions do its constants reveal
    (`APPLICATION_SERVICE_SUFFIX = "ApplicationService"` is a decision), which source set does it live in. A
    project that already extends `DcaArchitectureTest` has DCA — do not install a second test; refresh the
-   `AGENTS.md` section (decision G) and the conventions file, and hand a further rule set to `dca-add rules`.
+   `AGENTS.md` section (decision G) and `dca.profile.yaml`, and hand a further rule set to `dca-add rules`.
    Hand-written rules that a catalog set duplicates: recommend leaving that set out (`dca.rules.sets`) rather
    than enforcing the same thing twice.
 
@@ -104,8 +104,8 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
    `infrastructure/`, or `service/`, `controller/`, `repository/`, `usecase/`, `port/`); records vs Lombok;
    `@RestController` vs `@Controller`; existing `package-info.java` / context marker classes with
    `@BoundedContext` / `@SharedKernel` (reuse, never duplicate); the root packages of the bounded contexts if
-   none are declared yet. Where `AGENTS.md` carries the `dca-describe` section, read the designed domain it
-   names (`project/domain.md` by default) — its contexts are the first proposal for the context roots.
+   none are declared yet. Read the designed domain where `dca.profile.yaml` puts it (`domain:`, by default
+   `project/domain.md`) — its contexts are the first proposal for the context roots.
 
 6. **Existing marker-like interfaces and annotations (critical).**
 
@@ -181,7 +181,7 @@ C. **Rule sets** (INIT-RULES) — multi-select; the answer is the `dca.rules.set
    It is the one place for that knowledge: `dca-add rules` reads the same file when a set is added later.
    Strictness varies by subdomain: core contexts run the full catalog, supporting and generic contexts may run
    the structural baseline only — record that in a pattern-selection ADR. The subdomain types come from the
-   designed map (the `- domain:` line of the `dca-describe` section, `project/domain.md` by default); where it
+   designed map (`domain:` in `dca.profile.yaml`, `project/domain.md` by default); where it
    has none, ask. A single rule the team rejects
    becomes `dca.rules.off` + `dca.rule.<id>.reason`; one they are working towards `dca.rules.warn`. Both stay
    visible in the report — prefer that over a silent gap. Existing violations the team accepts as a baseline
@@ -191,11 +191,11 @@ D. **Suffix conventions** (INIT-SUFFIX where the code uses two) — DCA's defaul
    interface, `*Controller` for MVC (server-rendered) controllers and `*Resource` for REST adapters (.NET
    default `Controller` for both). `*ApplicationService` / `*Service` → `withUseCaseSuffix(...)`; `*Page` /
    `*Handler` for MVC controllers → `withControllerSuffix(...)`; `*Controller` / `*Endpoint` for REST →
-   `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention, and the
-   conventions file records the resolved suffixes (`use_case_suffix:` and the others) so that whoever names a
+   `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention, and
+   `dca.profile.yaml` records the resolved suffixes (`use_case_suffix:` and the others) so that whoever names a
    new element reads them there, before the suite runs.
    The failure suffix is the project's choice, not the suite's: a domain or use-case failure is named by the
-   rule it breaks, and `failure_suffix:` under `## Naming` says what follows — `Exception` by default, as Java
+   rule it breaks, and `failure_suffix:` says what follows — `Exception` by default, as Java
    and .NET expect, `none` where the team names failures without it (`InsufficientStock`). On a retrofit,
    read it from the existing failures; where they use both, ask.
 
@@ -212,7 +212,7 @@ F. **Context map** (INIT-CONTEXT-MAP, never asked) — `ContextMapDocumentationT
 
 G. **Project instructions (`AGENTS.md`)** (INIT-CATALOG, never asked) — the method's section, read by every
    tool, always written. `dca-knowledge` resolves the catalog vendored with this plugin; a live catalog is
-   `catalog_path:` in the conventions file, set by hand, pointing at a locally regenerable
+   `catalog_path:` in `dca.profile.yaml`, set by hand, pointing at a locally regenerable
    `dca-knowledge-catalog/bundle` (verify it holds `index.md` and `log.md`).
 
 ### Phase 3 — Generation
@@ -255,7 +255,7 @@ file outside the DCA part: dependencies, the architecture source set or project,
    `dev.domaincentric.dca.archunit.springmodulith.DcaSpringModulithTest` next to `ArchitectureTest`,
    overriding `layout()` the same way; the dependency comes from the `test-architecture.gradle` / `pom`
    snippet.
-8. The conventions file and the `AGENTS.md` section, as below (`{{verifyCommand}}` = `./gradlew
+8. `dca.profile.yaml` and the `AGENTS.md` section, as below (`{{verifyCommand}}` = `./gradlew
    test-architecture` or `mvn test`).
 
 **.NET**
@@ -279,28 +279,33 @@ file outside the DCA part: dependencies, the architecture source set or project,
    repository root (`{{solutionName}}.slnx`, or `.sln` before .NET 10). xUnit 2 cannot skip at run time, so
    where Java reports the first run as skipped, the .NET test writes the map and fails once with "commit it";
    the report names that.
-8. The conventions file and the `AGENTS.md` section, as below (`{{verifyCommand}}` = `dotnet test
+8. `dca.profile.yaml` and the `AGENTS.md` section, as below (`{{verifyCommand}}` = `dotnet test
    tests/{{solutionName}}.ArchitectureTests`).
 
-**Conventions file and `AGENTS.md` section (both languages)**
+**`dca.profile.yaml` and `AGENTS.md` section (both languages)**
 
-- `templates/agents/conventions.md.tmpl` → `.agents/dca/conventions.md` (`{{conventionsPath}}`) — its
-  `building_blocks_api:` line points a session at the catalog node that documents the markers, so no
-  session hunts for the library's jar to read a signature — with the
-  resolved-configuration section — the suffix lines from decision D, or from the `DcaLayout` the project
-  already has (`reference/resolved-configuration.md`); `catalog_path` only with decision G's live catalog. A
-  project that already has `.claude/dca/conventions.md` keeps that file and writes to it; the section then
-  names that path. A project whose conventions file predates the suffix lines gets them on the next `dca-init`
-  run, read from its `DcaLayout`.
+- `templates/dca.profile.yaml.tmpl` → `dca.profile.yaml` at the project root: flat `key: value` lines, every
+  key optional, a missing key takes its default. Write the template's keys and keep every other line
+  already there — other skills record their keys in the same file. Its `building_blocks_api:` line points a
+  session at the catalog node that documents the markers, so no session hunts for the library's jar; the
+  resolved configuration (`reference/resolved-configuration.md`) carries the suffixes from decision D or the
+  existing `DcaLayout`; `catalog_path` only with decision G's live catalog. A file that lacks the suffix lines
+  gets them on the next run, read from its `DcaLayout`.
+- **Migration.** A project with the old conventions file (`.agents/dca/conventions.md`, or
+  `.claude/dca/conventions.md`) gets its `key: value` lines moved into `dca.profile.yaml` on this run — a key
+  already in `dca.profile.yaml` keeps its value, headings and blank lines are dropped — then the old file is
+  removed and the `AGENTS.md` line ``- conventions: `<path>` `` becomes ``- configuration: `dca.profile.yaml` ``.
+  A delivery pipeline's `factory.sh update` does the same in code. Say in the summary that the file moved.
 - `templates/agents/AGENTS-dca-section.md.tmpl` → the block between `<!-- dca-core: start -->` and
   `<!-- dca-core: end -->` in `AGENTS.md`: added where there is none, replaced where there is one, never
   duplicated. Only this block is the skill's; the rest of `AGENTS.md` — the `dca-describe` section, a delivery
   pipeline's block, the project's own text — stays as it is. Create `AGENTS.md` where the project has none.
-- The section carries the line the general skills read — ``- conventions: `<path>` `` — and the skills by
+- The section carries the line the general skills read — ``- configuration: `dca.profile.yaml` ``, a fixed
+  name, the agents' pointer to the file — and the skills by
   role from Phase 1 item 7, each only where it is installed; a role with nothing installed is left out.
   `{{reviewSkills}}` lists the installed ones of `review-ddd`, `review-hexagonal`, `review-clean-code` and
-  `dca-audit`. The `- conventions:` and `- <role>:` lines are read by other tools (general skills take the
-  conventions file from them, a delivery pipeline its carrier names), so keep their form.
+  `dca-audit`. The `- configuration:` and `- <role>:` lines are read by other tools (general skills find the
+  configuration through them, a delivery pipeline its carrier names), so keep their form.
 - Why the section exists: a person developing by hand in a session has the same information and the same
   means as a stage of a delivery pipeline — the conventions, the skill that carries each craft, the check.
   The pipeline's own configuration is its view of the same installed skills, so the two never name
@@ -356,15 +361,15 @@ The report's Open section already names what is missing; the skills that close i
 - a browser suite that only runs against an application started beforehand → `dca-add browser`, which
   changes its base test to start the application itself;
 - no formatter in the build → `dca-add formatter`;
-- no project description (`AGENTS.md` has no `dca-describe` section, or the files it names are missing) →
+- no project description (the files `dca.profile.yaml` or the defaults name are missing) →
   `dca-describe`.
 
 ## For the other skills
 
 `dca-new`, `dca-audit`, `dca-modelling` and `dca-discipline` read the project's conventions from the
-generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, suffixes) and from the
-conventions file the `AGENTS.md` section names — `.agents/dca/conventions.md` by default, falling back to
-`.claude/dca/conventions.md`. There is no constants class to consult.
+generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, suffixes) and from
+`dca.profile.yaml` at the project root; where it is missing or a key is absent, the defaults. There is no
+constants class to consult.
 
 ## Reference materials
 
@@ -372,7 +377,7 @@ conventions file the `AGENTS.md` section names — `.agents/dca/conventions.md` 
   regenerate with `python3 scripts/render-rule-catalog.py` from the marketplace root)
 - `reference/module-selection-guide.md` — which rule sets to pick for which project and subdomain; also read by
   `dca-add rules`
-- `reference/resolved-configuration.md` — the resolved-configuration section of the conventions file, shared
+- `reference/resolved-configuration.md` — the resolved-configuration keys of `dca.profile.yaml`, shared
   with `dca-new`
 - `reference/placeholders.md` — the templates' placeholders, where each value comes from
 - `reference/in-memory-transactions.md` — the transaction manager a Spring project without a data starter needs
@@ -420,7 +425,7 @@ while another module’s infrastructure remains private.
 
 ## Resolved configuration
 
-Read the shared resolved-configuration contract, `reference/resolved-configuration.md`. This skill writes the
-section for every project; `dca-new` reads and refreshes it from the resolved preset before filling
+Read the shared resolved-configuration contract, `reference/resolved-configuration.md`. This skill writes its
+keys into `dca.profile.yaml` for every project; `dca-new` reads and refreshes them from the resolved preset before filling
 annotation/import placeholders. `none` uses explicit constructor wiring and `Configuration.java.tmpl`, without
 framework imports.

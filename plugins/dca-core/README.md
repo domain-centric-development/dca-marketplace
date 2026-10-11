@@ -18,7 +18,7 @@ The verbs follow one another — describe → new → init → add:
 
 `/dca-init` adds the published packages and generates **one** architecture test that runs the whole
 rule catalog against your layout — nothing else to wire — and writes the method's section into
-`AGENTS.md`: the conventions file and the installed skills by role, so a person developing by hand
+`AGENTS.md`: the pointer to `dca.profile.yaml` and the installed skills by role, so a person developing by hand
 has what a pipeline stage has. After that the daily work: `/dca-modelling` builds the domain types,
 `/dca-discipline` applies the invariants while you edit, `/dca-audit` audits what a static rule
 cannot (aggregate design, use-case granularity, port semantics, naming drift), and `/dca-knowledge`
@@ -56,18 +56,29 @@ glossary and the designed map the method's skills write through, `/e2e-testing` 
 runner `/dca-add browser` sets up, and `/review-ddd`, `/review-hexagonal`, `/review-clean-code` give
 the outside view beside `/dca-audit`.
 
-## Conventions overlay
+## Configuration: `dca.profile.yaml`
 
-The project's conventions live in its architecture test: the `DcaLayout` passed
+The project's layout lives in its architecture test: the `DcaLayout` passed
 to `DcaArchitectureTest` (base package or root namespace, layer folder names
 such as `incoming` vs `in`, suffixes such as `*UseCase` vs `*ApplicationService`
 and `*Resource` vs `*Controller`) and the rule selection in
-`dca-archunit.properties`. Skills read those first. The conventions file
-`/dca-init` names in `AGENTS.md` (by default `.agents/dca/conventions.md`)
-adds what the test cannot express:
-- Glossary paths
-- `catalog_path` — location of the OKF knowledge bundle for `/dca-knowledge`
-- Naming decisions the team made beyond the layout (e.g. part-record suffixes)
+`dca-archunit.properties`. Skills read those first. Everything else the method
+configures stands in one file at the project root, `dca.profile.yaml` — flat
+`key: value` lines, every key optional; a project without it runs on the
+defaults. `/dca-init` writes it and points at it from `AGENTS.md`
+(``- configuration: `dca.profile.yaml` ``); `/dca-add` and `/dca-describe` add
+their keys to it.
+
+| Keys | What they hold | Written by |
+|---|---|---|
+| `root` (default `project/`), `overview`, `tech`, `domain`, `epics`, `discovery` (default `<root>/product.md`, `<root>/tech.md`, `<root>/domain.md`, `<root>/epics`, `<root>/discovery`) | where the project description and its backlog are; each place overridable on its own | `/dca-describe`, where the person wants them elsewhere |
+| `language`, `base_package_or_namespace`, `framework_preset`, `framework_origin`, `injectable_annotation`, `transactional_annotation`, `transaction_mode`, `operation_containers`, `verify_command` | the resolved framework configuration | `/dca-init` |
+| `use_case_suffix`, `input_port_suffix`, `repository_suffix`, `controller_suffix`, `rest_controller_suffix`, `failure_suffix` | the naming the suite holds the project to, and the failure suffix | `/dca-init` |
+| `catalog_path`, `building_blocks_api` | a live catalog for `/dca-knowledge`; the catalog node of the markers | by hand; `/dca-init` |
+| `format`, `formatFix`, `browser`, `selector`, `appStart`, `integration`, `integrationTest`, `reset`, `http.stub`, `coverage`, `coverageReport` | the capabilities added later and their commands | `/dca-add` |
+
+A project with the earlier conventions file (`.agents/dca/conventions.md`)
+has its lines moved into `dca.profile.yaml` by the next `/dca-init`.
 
 ## The vendored knowledge catalog
 

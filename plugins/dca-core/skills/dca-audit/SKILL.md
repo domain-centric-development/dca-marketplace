@@ -23,10 +23,9 @@ brownfield project after `dca-init` installed the rules ("where does this code s
 method, and which rules can we switch on?"), and the reader of a change before it is committed.
 
 It assumes `dca-init` may or may not have run. If it ran, the review reads the project's `DcaLayout`
-from the architecture test and the conventions file for naming conventions — the file the project
-instructions name (a ``- conventions: `<path>` `` line in `AGENTS.md`, which `dca-init` writes),
-`.agents/dca/conventions.md` otherwise (or `.claude/dca/conventions.md` where only that exists);
-without either it falls back to defaults. Java and C# are reviewed against the same checklist —
+from the architecture test and the naming conventions from `dca.profile.yaml` at the project root
+(the `AGENTS.md` line ``- configuration: `dca.profile.yaml` ``, which `dca-init` writes, points at it);
+where it is missing or a key is absent, the defaults. Java and C# are reviewed against the same checklist —
 `reference/naming-conventions.md` carries the language mapping.
 
 ## The method's view beside the general ones
@@ -414,9 +413,8 @@ The markers are the library's (`dev.domaincentric.dca.buildingblocks.…` / `Dom
 
 This makes the review match the project's actual conventions, not DCA defaults.
 
-**The designed map and the glossary.** The designed context map is where the project instructions name
-it (a ``- domain: `<path>` `` line in `AGENTS.md`, typically `project/domain.md`), `docs/context-map.md`
-otherwise; the glossaries are where the `ubiquitous-language` skill puts them. Read the map's subdomain
+**The designed map and the glossary.** The designed context map is where `dca.profile.yaml` puts it
+(`domain:`, by default `project/domain.md`), `docs/context-map.md` where neither exists; the glossaries are where the `ubiquitous-language` skill puts them. Read the map's subdomain
 column to calibrate strictness, and check the strategic declarations against it — see *Declared
 relationships against the designed map* in `reference/checklist.md`.
 

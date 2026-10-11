@@ -39,8 +39,10 @@ Today the list is seven entries:
 
 1. **The project.** Build system (`build.gradle(.kts)`, `pom.xml`, `*.sln` / `*.slnx` / `*.csproj`), the
    architecture test (`extends DcaArchitectureTest` / `: DcaArchitectureTest`) and its
-   `dca-archunit.properties`, and the conventions file the `AGENTS.md` line ``- conventions: `<path>` `` names
-   (`.agents/dca/conventions.md` by default). A directory without a build file: stop and point to `dca-new`.
+   `dca-archunit.properties`, and `dca.profile.yaml` at the project root (the `AGENTS.md` line
+   ``- configuration: `dca.profile.yaml` `` points at it) — flat `key: value` lines, where this skill records
+   what it adds; a missing file is created with the first line. A directory without a build file: stop and
+   point to `dca-new`.
 2. **Already there?** A capability that is present is not added twice: report what is there and stop.
 3. **Never overwrite a file.** A target that exists is edited in place — the lines the capability needs,
    nothing else — or, where that is not possible, the user decides *overwrite / skip / abort* (default skip).
@@ -138,7 +140,7 @@ a delivery stage, which may touch only its own files, run the fix command withou
    | Maven | `./mvnw spotless:check` | `./mvnw spotless:apply` |
    | .NET | `dotnet format --verify-no-changes` | `dotnet format` |
 
-   Record both in the conventions file, as `format:` and `formatFix:` lines, where the general skills look for
+   Record both in `dca.profile.yaml`, as `format:` and `formatFix:` lines, where the general skills look for
    the formatter. A delivery pipeline's profile carries the same two keys: the gate and the commit hook run the
    check, the stages that write code run the fix before they finish.
 
@@ -160,7 +162,7 @@ What this skill checks afterwards, because a runner that cannot fail is worse th
 
 - the smoke test is green;
 - it fails when the start page's `<title>` is emptied — try it once, then restore the title;
-- the conventions file records the three answers, one line each, where the report and the general skills
+- `dca.profile.yaml` records the three answers, one line each, where the report and the general skills
   read them: `browser:` (the runner), `selector:` (the stable-selector attribute) and `appStart: started by
   the suite on a free port`;
 - the `AGENTS.md` section of `dca-init` names `e2e-testing` for browser tests; where it does not, run
@@ -181,8 +183,8 @@ here, so a project without it stops at its first story's plan. The setup per sta
    can tell from a test's path which command runs it.
 3. **One smoke test** that starts the wired application. Run it green, break it the way the reference says, see it red (the context does not start),
    restore it, see it green.
-4. **Record it** in the conventions file's `## Integration tests` section: the source set or project and
-   its command.
+4. **Record it** in `dca.profile.yaml`: `integration:` (the source set or project), `integrationTest:` (its
+   command) and `reset:` (how a test starts clean).
 
 ## `http-stub`
 
@@ -203,7 +205,7 @@ The setup per stack is in `reference/http-stub.md`: WireMock for Java (Gradle, M
    the stub: a property set from the stub's URL (`@DynamicPropertySource` in Spring, the
    `WebApplicationFactory` configuration in ASP.NET Core). The reference shows both; no adapter is written
    here.
-5. **Record it**: `http.stub: wiremock` / `wiremock-net` in the conventions file, where the general skills
+5. **Record it**: `http.stub: wiremock` / `wiremock-net` in `dca.profile.yaml`, where the general skills
    and a delivery pipeline's profile read it.
 
 ## `coverage`
@@ -223,15 +225,14 @@ stack is in `reference/coverage.md`: JaCoCo for Gradle and Maven, coverlet with 
    green must never fail on a number.
 4. **Shown to work:** the domain's types in the report with covered lines; one unit test of a guard commented
    out shows that branch missed; the test restored.
-5. **Record it** in the conventions file's `## Coverage` section: `coverage:` (the command) and
-   `coverageReport:` (the report's path).
+5. **Record it** in `dca.profile.yaml`: `coverage:` (the command) and `coverageReport:` (the report's path).
 
 ## After each capability
 
 **Record it in the technical description.** A capability is a technical decision the person took with you, so
 the project's technical description follows it: one line under its `## Stack` heading — the capability in the
-person's words, then the tool and its version, e.g. `Browser tests: Playwright 1.56` — in the file the `AGENTS.md` section between
-`<!-- dca-describe: start -->` and `<!-- dca-describe: end -->` names (by default `project/tech.md`). A line that
+person's words, then the tool and its version, e.g. `Browser tests: Playwright 1.56` — in the file
+`dca.profile.yaml` names as `tech:` (by default `<root>/tech.md`, `root:` by default `project/`). A line that
 is already there is updated, not repeated. Where the description says something the capability contradicts — "no
 end-user tests", another formatter — ask which is right and change the description through `/dca-describe`
 instead of writing over it. Where the project has no technical description yet, write none and say that

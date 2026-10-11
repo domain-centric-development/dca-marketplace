@@ -14,7 +14,7 @@ Objects that hide the DOM, assertions on what a user can see.
 Before writing a test, gather the facts — never assume a layout:
 
 1. **The project's conventions**, searched in this order: an explicit path given to you, the
-   conventions file the project instructions name (a ``- conventions: `<path>` `` line in
+   configuration file the project instructions name (a ``- configuration: `<file>` `` line in
    `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`. Look for
    the end-user test source set, the base URL and how the application is started for tests, any
    existing base test or base page class, the stable-selector attribute (`data-test`,

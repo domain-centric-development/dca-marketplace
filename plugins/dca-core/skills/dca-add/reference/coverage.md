@@ -92,5 +92,5 @@ and see that guard's branch reported missed. Restore the test.
 
 ## Recorded
 
-A `## Coverage` section in the conventions file: `coverage: <the command>` and `coverageReport: <the report's
-path>`, and the sentence that there is no threshold. The general skills read it there.
+Two lines in `dca.profile.yaml` at the project root: `coverage: <the command>` and `coverageReport: <the
+report's path>`. There is no threshold, so no line names one. The general skills read them there.

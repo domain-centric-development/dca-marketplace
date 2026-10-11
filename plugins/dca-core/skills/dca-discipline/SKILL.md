@@ -239,9 +239,9 @@ Before any write or edit, Claude:
 The same table applies to the C# folders in PascalCase (`Domain/`, `Application/{UseCase}/`,
 `Adapter/Incoming/`, `Adapter/Outgoing/`, `Infrastructure/`).
 
-## Conventions overlay
+## Project configuration
 
-Read the project's conventions file — the one the `AGENTS.md` line ``- conventions: `<path>` `` names, `.agents/dca/conventions.md` by default (`.claude/dca/conventions.md` in older projects) — for:
+Read `dca.profile.yaml` at the project root (the `AGENTS.md` line ``- configuration: `dca.profile.yaml` `` points at it) — flat `key: value` lines, every key optional — for:
 
 - The actual base package / root namespace; markers come from the library
   (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`)
@@ -250,11 +250,11 @@ Read the project's conventions file — the one the `AGENTS.md` line ``- convent
   `DcaLayout` builder in the architecture test
 - The naming suffixes the architecture suite holds the project to (`use_case_suffix:`,
   `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`, `rest_controller_suffix:`),
-  and the failure suffix the project chose (`failure_suffix:` under `## Naming`)
+  and the failure suffix the project chose (`failure_suffix:`)
 - Project-specific exceptions (e.g. "Bean Validation annotations allowed in
   domain")
 
-If no conventions file: use the DCA defaults the guide's rules state (`dca-knowledge` cites them).
+Where the file is missing or a key is absent: the DCA defaults the guide's rules state (`dca-knowledge` cites them).
 
 ## What this skill does NOT do
 

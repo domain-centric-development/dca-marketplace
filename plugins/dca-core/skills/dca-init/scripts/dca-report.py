@@ -26,6 +26,15 @@ PROOF_WORDS = {"start": "starts, `/` answers", "suites": "every suite green",
                "smoke": "the smoke test red with an empty title", "architecture": "the architecture test"}
 NONE = "—"
 
+# The method's configuration: one file at the project root, flat `key: value`, every key optional. A project
+# that has not run `dca-init` since keeps its keys in the conventions file this one replaced; they are read
+# from there, below the configuration's own.
+METHOD_PROFILE = "dca.profile.yaml"
+OLD_CONVENTIONS = (".agents/dca/conventions.md", ".claude/dca/conventions.md")
+METHOD_ROOT = "project/"
+# The description's place keys, the `AGENTS.md` line an unmigrated project names each with, the file under `root:`.
+PLACES = {"overview": ("product", "product.md"), "tech": ("tech", "tech.md"), "domain": ("domain", "domain.md")}
+
 
 def files(root, suffixes=None, names=None):
     """Every file below root outside the build outputs, sorted — the order is part of the report."""
@@ -64,7 +73,7 @@ def git(root, *args):
 
 
 def agents_lines(root):
-    """The `- key: `value`` lines of AGENTS.md: the description's places, the conventions file, the skills by role."""
+    """The `- key: `value`` lines of AGENTS.md: the description's places, the configuration, the skills by role."""
     text = read(os.path.join(root, "AGENTS.md"))
     lines = {}
     for key, value in re.findall(r"^- ([a-z][a-z ]*): `([^`]+)`", text, re.MULTILINE):
@@ -72,13 +81,41 @@ def agents_lines(root):
     return text, lines
 
 
-def conventions(root, lines):
-    for path in (lines.get("conventions"), ".agents/dca/conventions.md", ".claude/dca/conventions.md"):
+def flat(text):
+    """Flat `key: value` lines; a `#` line, a heading and a value-less key are skipped, one pair of quotes dropped."""
+    values = {}
+    for key, value in re.findall(r"^([A-Za-z_][\w.]*):[ \t]*(.*?)[ \t]*$", text, re.MULTILINE):
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if value.strip("`"):
+            values.setdefault(key, value.strip("`"))
+    return values
+
+
+def configuration(root, lines):
+    """(`dca.profile.yaml`'s keys, the old conventions file still on disk or ""). The configuration's own keys win;
+    an unmigrated project's conventions file — the one its `AGENTS.md` line names, else the default places —
+    fills what the configuration lacks."""
+    conf = flat(read(os.path.join(root, METHOD_PROFILE)))
+    for path in (lines.get("conventions"), *OLD_CONVENTIONS):
         if path and os.path.isfile(os.path.join(root, path)):
-            text = read(os.path.join(root, path))
-            keys = dict(re.findall(r"^([A-Za-z_]+):[ \t]*(.*?)[ \t]*$", text, re.MULTILINE))
-            return path, {k: v.strip("`") for k, v in keys.items() if v}
-    return "", {}
+            for key, value in flat(read(os.path.join(root, path))).items():
+                conf.setdefault(key, value)
+            return conf, path
+    return conf, ""
+
+
+def place(root, conf, lines, key):
+    """Where the description file `key` is: the configuration's key, else under its `root:`; a project without
+    `dca.profile.yaml` keeps the place its `AGENTS.md` section names; else the default."""
+    line, under = PLACES[key]
+    if conf.get(key):
+        return conf[key]
+    if conf.get("root"):
+        return conf["root"].rstrip("/") + "/" + under
+    if not os.path.isfile(os.path.join(root, METHOD_PROFILE)) and lines.get(line):
+        return lines[line]
+    return METHOD_ROOT + under
 
 
 def stack(root):
@@ -148,7 +185,7 @@ def packages(root, kind, builds):
     return found
 
 
-def dca_part(root, kind, builds, lines, conv_path):
+def dca_part(root, kind, builds, lines, old_path):
     sources = files(root, (".java", ".cs"))
     texts = {p: read(p) for p in sources}
     arch = [rel(root, p) for p, t in texts.items() if re.search(r"(extends|:)\s*DcaArchitectureTest\b", t)]
@@ -169,14 +206,15 @@ def dca_part(root, kind, builds, lines, conv_path):
               if any(re.search(pattern, t) for t in texts.values())]
     agents, _lines = agents_lines(root)
     section = "<!-- dca-core: start -->" in agents
-    roles = [f"{k} `{v}`" for k, v in lines.items() if k not in ("conventions", "product", "tech", "domain")] if section else []
+    roles = [f"{k} `{v}`" for k, v in lines.items() if k not in ("conventions", "configuration", "product", "tech", "domain")] if section else []
     return [("packages", ", ".join(packages(root, kind, builds)) or NONE),
             ("architecture test", ", ".join(arch) or NONE),
             ("rule sets", rules),
             ("contexts declared", f"{len(contexts)}: {', '.join(contexts)}" if contexts else "0"),
             ("shared kernel", "yes" if kernel else "no"),
             ("extra tests", ", ".join(extras) or NONE),
-            ("conventions file", conv_path or NONE),
+            ("configuration", METHOD_PROFILE if os.path.isfile(os.path.join(root, METHOD_PROFILE))
+             else (f"{old_path} (not moved yet)" if old_path else NONE)),
             ("AGENTS.md section", "present" if section else "missing"),
             ("skills by role", ", ".join(roles) or NONE)], dict(arch=arch, warn=warn, contexts=contexts, extras=extras,
                                                             section=section)
@@ -220,23 +258,25 @@ def report(root, mode, generator="", proof=None):
     root = os.path.abspath(root)
     proof = proof or {}
     agents, lines = agents_lines(root)
-    conv_path, conv = conventions(root, lines)
+    conv, old_path = configuration(root, lines)
     st = stack(root)
     kind, builds = st["kind"], st["builds"]
-    dca, facts = dca_part(root, kind, builds, lines, conv_path)
+    dca, facts = dca_part(root, kind, builds, lines, old_path)
     fmt, has_formatter = formatter(root, kind, builds, conv)
     brw, has_runner, pages = browser(root, kind, builds, conv)
     gitf, gitfacts = git_part(root)
     checks = PROOF_CHECKS[mode]
     proofs = [(PROOF_WORDS[c], proof.get(c, NONE)) for c in checks]
     open_items = []
-    described = [k for k in ("product", "tech") if os.path.isfile(os.path.join(root, lines.get(k, f"project/{k}.md")))]
+    described = [k for k in ("overview", "tech") if os.path.isfile(os.path.join(root, place(root, conv, lines, k)))]
     if len(described) < 2:
         open_items.append("no project description — /dca-describe")
     if not kind:
         open_items.append("no build file — /dca-new project")
     elif not facts["arch"]:
         open_items.append("no architecture test — /dca-init")
+    if old_path:
+        open_items.append(f"{old_path} not moved into {METHOD_PROFILE} — /dca-init")
     if kind and not has_formatter:
         open_items.append("no formatter — /dca-add formatter")
     if kind and pages and not has_runner:
@@ -313,10 +353,10 @@ def self_test():
                             ' testArchitectureImplementation("dev.domaincentric:dca-archunit:0.6.0")\n'
                             ' testImplementation("com.microsoft.playwright:playwright:1.55.0") }\n'
                             'spotless { java { palantirJavaFormat() } }\n',
-        "AGENTS.md": "<!-- dca-core: start -->\n- conventions: `.agents/dca/conventions.md`\n- build: `dca-modelling`\n<!-- dca-core: end -->\n"
+        "AGENTS.md": "<!-- dca-core: start -->\n- configuration: `dca.profile.yaml`\n- build: `dca-modelling`\n<!-- dca-core: end -->\n"
                      "<!-- dca-describe: start -->\n- product: `project/product.md`\n- tech: `project/tech.md`\n<!-- dca-describe: end -->\n",
         "project/product.md": "# P\n", "project/tech.md": "# T\n",
-        ".agents/dca/conventions.md": "format: ./gradlew spotlessCheck\nformatFix: ./gradlew spotlessApply\nselector: data-test\n",
+        "dca.profile.yaml": "# the method's configuration\nformat: ./gradlew spotlessCheck\nformatFix: './gradlew spotlessApply'\nselector: data-test\n",
         "src/test-architecture/java/a/ArchitectureTest.java": "class ArchitectureTest extends DcaArchitectureTest {}\n",
         "src/test-architecture/resources/dca-archunit.properties": "dca.rules.warn=DCA-STR-012\n",
         "src/main/java/a/cart/package-info.java": '@BoundedContext(name = "Cart")\npackage a.cart;\n',
@@ -332,7 +372,9 @@ def self_test():
     check("the whole catalog with a warn entry", field(one, "DCA part", "rule sets") == "the whole catalog; on warn: DCA-STR-012")
     check("contexts named", field(one, "DCA part", "contexts declared") == "1: Cart")
     check("formatter style read", field(one, "Formatter", "tool") == "Spotless, palantirJavaFormat()")
-    check("formatter commands from the conventions file", field(one, "Formatter", "fix") == "./gradlew spotlessApply")
+    check("formatter commands from dca.profile.yaml", field(one, "Formatter", "fix") == "./gradlew spotlessApply")
+    check("the configuration named", field(one, "DCA part", "configuration") == "dca.profile.yaml")
+    check("the configuration line is no role", field(one, "DCA part", "skills by role") == "build `dca-modelling`")
     check("browser runner and selector", field(one, "Browser runner", "runner") == "Playwright"
           and field(one, "Browser runner", "selector attribute") == "data-test")
     check("generator and proof from the caller", field(one, "Generator", "generator") == "start.spring.io"
@@ -366,6 +408,30 @@ def self_test():
     check("the same fields in Java and .NET, and on an empty directory",
           names(report(java, "init")) == names(net) == names(report(empty, "init")))
     check("json round-trips", json.loads(json.dumps(net))["sections"][0]["name"] == "Stack")
+
+    old = project({
+        "AGENTS.md": "<!-- dca-core: start -->\n- conventions: `.claude/dca/conventions.md`\n<!-- dca-core: end -->\n"
+                     "<!-- dca-describe: start -->\n- product: `docs/product.md`\n- tech: `docs/tech.md`\n<!-- dca-describe: end -->\n",
+        "docs/product.md": "# P\n", "docs/tech.md": "# T\n",
+        ".claude/dca/conventions.md": "# DCA conventions\n\n## Coverage\n\nformat: dotnet format --verify-no-changes\nformatFix: dotnet format\n",
+    })
+    unmoved = report(old, "init")
+    opens = [v for _k, v in unmoved["sections"][-1]["fields"]]
+    check("an unmigrated conventions file still read", field(unmoved, "Formatter", "fix") == "dotnet format")
+    check("an unmigrated conventions file named as open", ".claude/dca/conventions.md not moved into dca.profile.yaml — /dca-init" in opens)
+    check("an unmigrated section's places still read", "no project description — /dca-describe" not in opens)
+    moved = project({
+        "dca.profile.yaml": "root: product/\ntech: docs/tech.md\nformatFix: from the profile\n",
+        ".agents/dca/conventions.md": "formatFix: from the old file\nselector: data-testid\n",
+        "product/product.md": "# P\n", "docs/tech.md": "# T\n",
+    })
+    both = report(moved, "init")
+    check("the configuration wins over the old file", field(both, "Formatter", "fix") == "from the profile"
+          and field(both, "Browser runner", "selector attribute") == "data-testid")
+    check("root: moves a place, a key of its own wins",
+          "no project description — /dca-describe" not in [v for _k, v in both["sections"][-1]["fields"]])
+    check("the default places without a configuration",
+          place(empty, {}, {}, "domain") == "project/domain.md" and place(moved, {"root": "x"}, {}, "overview") == "x/product.md")
 
     for name in failures:
         print(f"dca-report self-test: FAIL {name}")

@@ -17,6 +17,5 @@ example.
 | `{{productionProjects}}`, `{{assemblyAnchors}}` | detected (.NET) | `../../src/Acme.Shop.Cart/Acme.Shop.Cart.csproj`, `Cart.CartContext` |
 | `{{contextMapPath}}` | decision F | `docs/architecture/context-map.md` |
 | `{{verifyCommand}}` | build system | `./gradlew test-architecture` |
-| `{{conventionsPath}}` | existing file or default | `.agents/dca/conventions.md` |
 | `{{build}}`, `{{guard}}`, `{{glossary}}`, `{{map}}`, `{{browserTests}}`, `{{review}}`, `{{reviewSkills}}` | Phase 1 item 7 | `true`; `` `review-ddd`, `dca-audit` `` |
 | `{{catalogPath}}` | decision G (`live catalog`) | `~/…/dca-knowledge-catalog/bundle` |

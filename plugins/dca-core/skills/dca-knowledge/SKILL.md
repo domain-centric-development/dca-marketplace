@@ -36,9 +36,8 @@ text themselves, so a citation needs no path outside the catalog.
 
 Resolve the catalog path in this order; stop at the first that exists:
 
-1. `catalog_path` in the conventions file — the one the `AGENTS.md` line ``- conventions: `<path>` `` names,
-   `.agents/dca/conventions.md` by default (`.claude/dca/conventions.md` in older projects). An explicit
-   override wins.
+1. `catalog_path:` in `dca.profile.yaml` at the project root (the `AGENTS.md` line
+   ``- configuration: `dca.profile.yaml` `` points at it). An explicit override wins.
 2. **The `catalog/` folder beside this skill file** — the copy that ships with the skill and travels with it:
    `${CLAUDE_PLUGIN_ROOT}/skills/dca-knowledge/catalog/` for a plugin install, `.claude/skills/dca-knowledge/catalog/`
    (or `.codex/skills/…`, `.opencode/skills/…`) where the skill was copied or linked into the project. This is

@@ -33,8 +33,8 @@ code:
 src/{RootNamespace}.{Context}/Domain/glossary.md    # .NET (one project per context)
 ```
 
-An alternative path can be set in the conventions file the project instructions name (a
-``- conventions: `<path>` `` line in `AGENTS.md`). Where the glossaries already exist
+An alternative path can be set in the configuration file the project instructions name (a
+``- configuration: `<file>` `` line in `AGENTS.md`). Where the glossaries already exist
 elsewhere, use their place and say so; never start a second glossary beside one.
 
 A project may describe its designed contexts before they have code, with a section of words per context.
@@ -229,7 +229,7 @@ Cross-context audit:
 
 ## Project conventions
 
-Read the conventions file the project instructions name (a ``- conventions: `<path>` `` line in
+Read the configuration file the project instructions name (a ``- configuration: `<file>` `` line in
 `AGENTS.md`), or `AGENTS.md` itself, for:
 
 - Custom glossary location (e.g. `docs/glossary/{context}.md` instead of

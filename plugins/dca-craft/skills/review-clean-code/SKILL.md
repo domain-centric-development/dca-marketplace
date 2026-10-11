@@ -128,8 +128,8 @@ consider...". Don't suggest drive-by refactors elsewhere.
 ## How to read the project
 
 1. The project's conventions, searched in this order: an explicit path given
-   to you, the conventions file the project instructions name (a
-   ``- conventions: `<path>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md` —
+   to you, the configuration file the project instructions name (a
+   ``- configuration: `<file>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md` —
    may set a formatter command to recommend running at the end (e.g.
    `./gradlew spotlessApply`, `dotnet format`).
 

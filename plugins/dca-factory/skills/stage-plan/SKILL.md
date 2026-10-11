@@ -1,6 +1,6 @@
 ---
 name: stage-plan
-description: Plan stage of a factory run — turns one backlog story into an implementation plan with numbered acceptance criteria and names the architecture elements that change. Use when a story is to be planned before any test or code is written, when the orchestrator hands over a story, or on "/stage-plan". Reads the story, the project description (product, technical decisions, designed domain), the stack profile, the conventions file the project's instructions name, the project's glossary and generated context map and its existing tests — nothing else. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
+description: Plan stage of a factory run — turns one backlog story into an implementation plan with numbered acceptance criteria and names the architecture elements that change. Use when a story is to be planned before any test or code is written, when the orchestrator hands over a story, or on "/stage-plan". Reads the story, the project description (product, technical decisions, designed domain), the stack profile, the method's configuration `dca.profile.yaml`, the project's glossary and generated context map and its existing tests — nothing else. Internal stage of the pipeline — factory-run starts it; by hand only to redo this one stage of a story that has the ones before.
 ---
 
 # Plan one story
@@ -10,9 +10,10 @@ runner started, one session that carries several stages, a repeat round, the she
 runner's prompt names its path and repeats none of it.
 
 Input: the story file, the project description — `project/product.md`, `project/tech.md` and
-`project/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — the conventions
-file the project's instruction file names (its ``- conventions: `<path>` `` line; the layout, the
-naming suffixes and the resolved configuration the architecture suite holds the code to), and the
+`project/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — the method's
+configuration `dca.profile.yaml` at the project root (the instruction file's ``- configuration: `dca.profile.yaml` ``
+line points at it; the layout, the naming suffixes and the resolved configuration the architecture suite holds the
+code to; where it is missing or a key is absent, the defaults), and the
 glossary and the context map generated from the code (`contextMap:`) where the project has them.
 Nothing else — not the chat history, not an earlier run.
 Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test and no production code.
@@ -50,7 +51,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
 5. Name the elements that change, in the project's own vocabulary: aggregates, value objects,
    domain events, use cases with their ports, adapters, read models. Say for each whether it is
    new or changed, and where it belongs — layer and package/namespace as this project lays them
-   out, not as any sample does. A name carries the suffix the conventions file declares for its
+   out, not as any sample does. A name carries the suffix `dca.profile.yaml` declares for its
    kind (a use case, its input port, a repository, a controller): the architecture suite refuses
    any other, and a plan the build has to rename is a plan that was not read.
 6. Respect the architecture the project has adopted: the domain free of framework types, ports

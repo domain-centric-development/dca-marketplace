@@ -34,7 +34,7 @@ has pages: …") and its answer is dropped where the condition turns out false.
 - question: Where the stack is Java: which formatting style does Spotless apply?
 - options: `googleJavaFormat()` · `palantirJavaFormat()` · `eclipse()`
 - default: `googleJavaFormat()`
-- answer goes to: the build file (the Spotless step); the commands as `format:` and `formatFix:` in the conventions file
+- answer goes to: the build file (the Spotless step); the commands as `format:` and `formatFix:` in `dca.profile.yaml`
 
 ### NEW-FORMAT-DOTNET
 - look up: an `.editorconfig` already in the directory
@@ -42,7 +42,7 @@ has pages: …") and its answer is dropped where the condition turns out false.
 - question: Where the stack is .NET: `dotnet format` takes its rules from `.editorconfig`. Take the SDK's file (`dotnet new editorconfig`) as it is, or go through its severities first?
 - options: as it is · go through the severities
 - default: as it is
-- answer goes to: `.editorconfig`; the commands as `format:` and `formatFix:` in the conventions file
+- answer goes to: `.editorconfig`; the commands as `format:` and `formatFix:` in `dca.profile.yaml`
 
 ### NEW-BROWSER-RUNNER
 - look up: a browser-test dependency or source set (none exists in an empty directory)
@@ -50,17 +50,17 @@ has pages: …") and its answer is dropped where the condition turns out false.
 - question: Where the product has pages: which browser runner do the end-user tests use?
 - options: Playwright in the project's language · another runner (name it)
 - default: Playwright in the project's language
-- answer goes to: the build file; `browser:` in the conventions file
+- answer goes to: the build file; `browser:` in `dca.profile.yaml`
 
 ### NEW-SELECTOR
-- look up: the conventions file (`selector:`)
+- look up: `dca.profile.yaml` (`selector:`)
 - asked: when DESC-SURFACES names pages, or is itself open in this pass
 - question: Where the product has pages: which attribute marks the elements the tests reach for?
 - options: `data-test` · `data-testid` · another attribute
 - default: `data-test`
-- answer goes to: `selector:` in the conventions file
+- answer goes to: `selector:` in `dca.profile.yaml`
 
 ### NEW-APP-START
 - *never asked* — rule: the browser suite starts the application itself, in the test and on a free port,
   so it runs with nothing started beforehand — in CI and in a delivery pipeline's gate as on a laptop
-- answer goes to: `appStart: started by the suite on a free port` in the conventions file
+- answer goes to: `appStart: started by the suite on a free port` in `dca.profile.yaml`

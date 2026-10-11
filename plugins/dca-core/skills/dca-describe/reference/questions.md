@@ -21,7 +21,8 @@ A question that depends on an answer still open in the same pass is asked with i
 placeholder. A heading drafted — from existing code, or from what the person said with the call — counts
 as open until the person confirms it: its question is asked word for word all the same, with the draft
 offered as the first option. The
-paths are the defaults; the `dca-describe` section of `AGENTS.md` names the places a project uses.
+paths are the defaults; `dca.profile.yaml` (`root:`, `overview:`, `tech:`, `domain:`) holds the places a
+project uses where they differ.
 
 ## Product — `project/product.md`
 

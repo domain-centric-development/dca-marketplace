@@ -49,8 +49,9 @@ in parallel, each in its own context — overlaps are real findings, divergences
 
 ## Where a project's conventions are
 
-The skills read the conventions file the project instructions (`AGENTS.md`) name, and the designed
-context map and the glossary where those instructions place them. Without such a line they fall
+The skills read the configuration file the project instructions (`AGENTS.md`) name in a
+``- configuration: `<file>` `` line — flat `key: value` lines — and the designed context map and the
+glossary where that file or those instructions place them. Without such a line they fall
 back to sensible defaults — `docs/context-map.md` for the designed map, `glossary.md` beside each
 context's code — and to what the code itself shows.
 
@@ -59,7 +60,8 @@ context's code — and to what the code itself shows.
 With [dca-core](../dca-core/) installed, the method's skills use these as their craft: the modelling
 skill enters a new term through `/ubiquitous-language`, the description skill writes the designed map
 through `/context-map`, and `dca-audit` adds the method's audit beside the three general
-perspectives here. The pointers run that way only: nothing here depends on dca-core, and a check in
+perspectives here. dca-core's configuration file is `dca.profile.yaml`; its `AGENTS.md` section names
+it in the ``- configuration:`` line these skills read. The pointers run that way only: nothing here depends on dca-core, and a check in
 the marketplace keeps DCA artifacts out of this plugin's skills and agents.
 
 ## What this plugin deliberately does NOT include

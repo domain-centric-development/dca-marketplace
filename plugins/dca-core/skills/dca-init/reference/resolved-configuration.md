@@ -1,11 +1,11 @@
 # Resolved configuration shared by dca-init and dca-new
 
-`dca-init` writes a `## Resolved configuration` section in the conventions overlay for every project,
-including projects using the vendored catalog. The overlay is `.agents/dca/conventions.md` — harness-neutral,
-which is why every skill resolves it first — unless the project already has `.claude/dca/conventions.md`, in
-which case that file is kept and written to. `dca-new` reads this section and the current architecture test
-and properties before rendering. Preserve unrelated conventions. If dependencies or overrides changed, refresh
-this section from the actual resolved preset report; never infer Spring from Java alone.
+`dca-init` writes the resolved configuration as flat `key: value` lines into `dca.profile.yaml` at the
+project root for every project, including projects using the vendored catalog. The file is harness-neutral,
+which is why every skill reads it; every key is optional and an absent one takes its default. `dca-new` reads
+these keys and the current architecture test and properties before rendering. Keep every other line of the
+file. If dependencies or overrides changed, refresh these keys from the actual resolved preset report; never
+infer Spring from Java alone.
 
 Record: language, base package/root namespace, actual framework preset and detection/explicit origin, exact
 injectable and transactional annotation FQNs (or empty), transaction mode (declarative/explicit/none), configured
@@ -18,9 +18,9 @@ The suffixes are the ones the architecture test holds the project to — `use_ca
 from the existing `DcaLayout`'s `with*Suffix(...)` / `With*Suffix(...)` calls on a retrofit; without a call, the
 library's default (`UseCase`, `InputPort`, `Repository`, `Controller`, `Resource`; .NET `Controller` for both
 controller kinds). They are written here so that a plan, a modelling skill or a delivery stage names a new element
-correctly before the architecture suite runs — the suite is the check, this section is what the writer reads.
+correctly before the architecture suite runs — the suite is the check, these keys are what the writer reads.
 
-Beside it, `## Naming` holds what no suite resolves: `failure_suffix:` (`Exception` by default, or `none`) —
+Beside them, `failure_suffix:` holds what no suite resolves (`Exception` by default, or `none`):
 the suffix of every domain and use-case failure, whose name is the rule it breaks. Keep a value the team set.
 
 For Java use-case templates:

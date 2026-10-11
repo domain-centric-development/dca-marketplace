@@ -22,7 +22,7 @@ main conversation keeps only the closing report.
 
 Before writing any code, gather context:
 
-1. **Read the project's conventions, searched in this order: an explicit path given to you, the conventions file the `AGENTS.md` line ``- conventions: `<path>` `` names, `.agents/dca/conventions.md`, `.claude/dca/conventions.md`, `AGENTS.md`, `CLAUDE.md`.** Take from it:
+1. **Read the project's conventions, searched in this order: an explicit path given to you, `dca.profile.yaml` at the project root (the `AGENTS.md` line ``- configuration: `dca.profile.yaml` `` points at it), `AGENTS.md`, `CLAUDE.md`; where a key is absent, the defaults.** Take from it:
    - The language: Java/Spring or .NET/C# — the markers are the same building
      blocks in two spellings (`AggregateRoot` / `IAggregateRoot`,
      `BaseAggregateRoot` / `AggregateRootBase`, `Value` / `IValue`, `Id` / `IId`,
@@ -35,10 +35,10 @@ Before writing any code, gather context:
    - Marker FQNs — from `dev.domaincentric.dca.buildingblocks.…` or
      `DomainCentric.BuildingBlocks.…` unless the project keeps its own
    - Layer folder names (`incoming`/`outgoing` vs `in`/`out`)
-   - Suffix conventions (e.g. `*UseCase` vs `*ApplicationService`) — from the conventions file's
+   - Suffix conventions (e.g. `*UseCase` vs `*ApplicationService`) — from `dca.profile.yaml`'s
      `use_case_suffix:`, `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`,
      `rest_controller_suffix:` lines first; then the `DcaLayout` builder in the architecture test;
-     the existing code last. A failure is named by the rule it breaks, with the conventions file's
+     the existing code last. A failure is named by the rule it breaks, with `dca.profile.yaml`'s
      `failure_suffix:` (`Exception` when the line is missing)
    - Whether the project uses Lombok or pure Java records; in C#, `sealed record`
      for values and events, `readonly record struct` for ids
@@ -276,6 +276,6 @@ Verification
 
 This skill is **project-agnostic**.
 Every concrete mention of package names, marker base classes, test frameworks,
-and folder names comes from the project's `conventions.md` or live inspection
+and folder names comes from the project's `dca.profile.yaml` or live inspection
 — never from hardcoded examples. When the project hasn't established a
 convention, propose one and ask before committing.

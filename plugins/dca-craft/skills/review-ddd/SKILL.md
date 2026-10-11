@@ -115,16 +115,17 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
 Before reviewing, gather context:
 
 1. Read the project's conventions, searched in this order: an explicit path
-   given to you, the conventions file the project instructions name (a
-   ``- conventions: `<path>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`.
+   given to you, the configuration file the project instructions name (a
+   ``- configuration: `<file>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`.
    They tell you the project's suffix conventions, the types or annotations
    it uses to mark aggregates, entities and values, the glossary paths and
    the adapter folder names.
 2. If glossaries exist, read the one for each context that the diff
    touches. Cite specific entries when flagging.
-3. If a context map exists, read it. The designed map is where the project
-   instructions name it (a ``- domain: `<path>` `` line in `AGENTS.md`,
-   typically `project/domain.md`), `docs/context-map.md` otherwise; a map
+3. If a context map exists, read it. The designed map is where the
+   configuration file names it (`domain:`), else where the project
+   instructions do (a ``- domain: `<path>` `` line in `AGENTS.md`, typically
+   `project/domain.md`), `docs/context-map.md` otherwise; a map
    generated from the code, where the project keeps one, shows what was
    built. Use them to judge whether cross-context imports are designed (and
    thus expected) or smuggled in.

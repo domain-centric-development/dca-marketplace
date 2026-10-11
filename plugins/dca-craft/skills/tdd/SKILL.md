@@ -71,14 +71,14 @@ Cycle length: minutes, not hours. If a cycle takes >15 min, the step is too big.
 ## Conventions
 
 Read the project's conventions, searched in this order: an explicit path given to you,
-the conventions file the project instructions name (a ``- conventions: `<path>` `` line in
+the configuration file the project instructions name (a ``- configuration: `<file>` `` line in
 `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`. Take from them:
 
 - Test source set paths (`src/test/`, `src/test-integration/`, etc.)
 - Test framework choice (JUnit 5 vs. Spock; xUnit in .NET)
 - Project-specific naming for test classes
 
-If no conventions file: default to JUnit 5 in `src/test/java/` (Java) or xUnit
+Where none of them says: default to JUnit 5 in `src/test/java/` (Java) or xUnit
 in `tests/{Root}.UnitTests/` (.NET), mirror the production package/namespace
 structure, suffix test classes with `Test`.
 

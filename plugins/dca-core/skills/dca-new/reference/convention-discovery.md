@@ -1,7 +1,7 @@
 # Convention discovery
 
-Part of the `dca-new` skill: what every code mode reads before it writes — the project's `DcaLayout`, the
-conventions file and the rule selection, or a scan of the code where no architecture test exists.
+Part of the `dca-new` skill: what every code mode reads before it writes — the project's `DcaLayout`,
+`dca.profile.yaml` and the rule selection, or a scan of the code where no architecture test exists.
 
 ```bash
 # 1. The project's DcaLayout — the architecture test is the single source of the layout conventions
@@ -18,8 +18,8 @@ call is a deviation from the DCA default:
 - `withDomainSubpackage`, `withApplicationSubpackage`, `withAdapterSubpackage` (rare) → layer names
 
 The marker types are the library's (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`).
-The conventions file — the one the `AGENTS.md` line ``- conventions: `<path>` `` names, `.agents/dca/conventions.md`
-by default, `.claude/dca/conventions.md` in older projects — may override any of it. Also read
+`dca.profile.yaml` at the project root (the `AGENTS.md` line ``- configuration: `dca.profile.yaml` `` points at
+it) may override any of it; where it is missing or a key is absent, the defaults. Also read
 `dca-archunit.properties` (test class path / next to the test assembly) — a rule set switched off there tells
 you which patterns the project deliberately does not use (e.g. no `tactical` → do not lay out a rich aggregate
 without asking).
