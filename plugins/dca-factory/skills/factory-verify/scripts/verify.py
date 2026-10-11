@@ -4708,6 +4708,20 @@ def run_groups(args):
         (Case("test: every criterion mapped and red passes", "test", 0,
               must_pass=("tests-mapped", "tests-exist", "compiles", "tests-red")),
          dict()),
+        # WP-100: a criterion's integrated test runs through the real input port
+        (Case("tests-real: an integrated test of a criterion that mocks its input port is refused", "test", 1,
+              must_fail=("tests-real",), text=("ShowWidgetInputPort",)),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),))),
+        (Case("tests-real: the plan's `integration (adapter: …)` level stubs the input port by design and passes", "test", 0,
+              must_pass=("tests-real",)),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (adapter: WidgetPage)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n")))),
+        (Case("tests-real: an integrated test that replaces a repository, and a unit test that mocks the port, pass",
+              "test", 0, must_pass=("tests-real",)),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private WidgetRepository widgets; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             ("src/test/java/com/example/WidgetUnitTest.java", "class WidgetUnitTest { @Mock ShowWidgetInputPort port; void showsNothingWhenEmpty() {} }\n")))),
         (Case("test: a tests.md without `## Files` is refused once the stage's changes are recorded", "test", 1,
               must_fail=("files-listed",)),
          dict(tests=TESTS.split("\n## Files")[0] + "\n", extra_sources=(
@@ -4980,7 +4994,7 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 20\nrequried: compile\n" + PROFILE)),
+         dict(profile="contract: 21\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"

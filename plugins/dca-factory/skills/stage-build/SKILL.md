@@ -22,6 +22,9 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
    the smallest that also meets the product description's `## Look and feel` and `## Qualities`, where
    the change has a surface. A page built to no stated look is correct only where the product
    description states none.
+1a. **A refusal shown on a page is bound to its field** where the product description's `## Qualities` names
+   accessibility: the message beside the field and tied to it (`aria-describedby`, `aria-invalid`, or the
+   stack's equivalent), the entered value kept where the product says so.
 2. Follow the plan's change list. An element the plan did not name is a sign the plan was wrong:
    note it in the build file rather than quietly extending the design. The same holds for a **guard in a
    domain type** — a null check, a trim, a range, a uniqueness rule — that the plan's `## Invariants`

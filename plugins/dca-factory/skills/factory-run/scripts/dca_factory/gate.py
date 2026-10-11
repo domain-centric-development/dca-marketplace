@@ -78,7 +78,7 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    DEFAULTS, PLACES,
+    DEFAULTS, METHOD_PROFILE, PLACES, read_flat,
     runs_top,
     ANSWER_FIELDS, answered_decisions, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
@@ -332,6 +332,14 @@ def plan_levels(runs, story_id):
     """The keys the plan gave `browser-only` — a `Then` only a browser can observe, with its reason."""
     text = read_text(os.path.join(runs, story_id, "plan.md")) if os.path.isfile(os.path.join(runs, story_id, "plan.md")) else ""
     return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*browser-only", text, re.M)}
+
+
+def adapter_level_keys(runs, story_id):
+    """The keys the plan gave `integration (adapter: …)` — an incoming adapter's translation, tested against a stubbed
+    input port by design (stage-test)."""
+    text = read_text(os.path.join(runs, story_id, "plan.md")) if os.path.isfile(os.path.join(runs, story_id, "plan.md")) else ""
+    return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*integration\s*\(\s*adapter",
+                                            text, re.M)}
 
 
 def check_plan_levels(result, runs, story_id):
@@ -657,6 +665,59 @@ def check_levels(result, profile, runs, story_id, front, body, mapping, located)
                               "`level: browser-only (<why>)`: " + "; ".join(wrong))
     else:
         result.ok("levels", "every end-user test belongs to the happy path or a browser-only scenario")
+
+
+#: How a test declares a test double, across the common stacks — the profile's `mockMarkers:` (comma-separated)
+#: replaces the list for a stack it does not cover.
+MOCK_MARKERS = ("@MockitoBean", "@MockBean", "@Mock", "Mockito.mock(", "mock(", "new Mock<", "Substitute.For<",
+                "A.Fake<", "MagicMock(", "create_autospec(", "jest.mock(", "vi.mock(")
+
+
+def mocked_ports(text, markers, suffixes):
+    """The port types a test file declares as doubles: a marker followed, within the same declaration, by a type
+    whose name ends in one of `suffixes`."""
+    found = set()
+    for marker in markers:
+        for match in re.finditer(re.escape(marker), text):
+            window = text[match.end():match.end() + 160].split(";", 1)[0].split("{", 1)[0]
+            for name in re.findall(r"\b([A-Z]\w*)\b", window):
+                if name.endswith(tuple(suffixes)):
+                    found.add(name)
+    return sorted(found)
+
+
+def check_tests_real(result, profile, cwd, mapping, located, front, runs, story_id):
+    """WP-100: a criterion's test above the unit level runs through the real use case — it does not declare a double
+    of an input port. "The list stays unchanged" checked against a stub proves the stub. A unit test mocks what it
+    wants; an output port (a repository, a gateway) may be replaced at any level; and a criterion the plan gave
+    `integration (adapter: …)` tests the adapter's translation against a stubbed input port by design."""
+    if not mapping or not located:
+        return
+    adapter_keys = adapter_level_keys(runs, story_id)
+    named = str(profile.get("mockMarkers", "")).strip()
+    markers = [m.strip() for m in named.split(",") if m.strip()] if named else list(MOCK_MARKERS)
+    method = read_flat(os.path.join(factory_home() or cwd, METHOD_PROFILE))
+    suffixes = {str(method.get("input_port_suffix", "")).strip() or "InputPort", "UseCase"}
+    wrong = []
+    for key, selectors in sorted(mapping.items()):
+        if key in adapter_keys:
+            continue
+        for selector in selectors:
+            path = located.get(selector)
+            if not path or command_for(profile, path)[0] in (None, "test"):
+                continue
+            with contextlib.suppress(OSError, UnicodeDecodeError):
+                with open(os.path.join(cwd, path), encoding="utf-8") as handle:
+                    doubles = mocked_ports(handle.read(), markers, suffixes)
+                if doubles:
+                    wrong.append(f"{key} ({path}: {', '.join(doubles)})")
+    if wrong:
+        result.fail("tests-real", "a criterion's integrated or end-to-end test replaces the input port it is about — "
+                                  "it proves the double, not the use case; let it run through the real one and "
+                                  "replace only what lies outside (a repository, an external system): "
+                                  + "; ".join(sorted(set(wrong))))
+    else:
+        result.ok("tests-real", "every integrated and end-to-end test of a criterion runs through the real input port")
 
 
 BREAK_IGNORE = (".git", "build", "bin", "obj", "target", "node_modules", ".gradle", "TestResults", "out")
@@ -3575,6 +3636,12 @@ def _spec_delta(run):
 @check("spec-tests", stages=("document", "adopt", "integrate"))
 def _spec_tests(run):
     check_spec_tests(run.result, run.cwd, run.runs, run.story_id, run.front, run.mapping)
+
+
+@check("tests-real", stages=("test", "adopt"))
+def _tests_real(run):
+    if contract_of(run.profile) >= 21:
+        check_tests_real(run.result, run.profile, run.cwd, run.mapping, run.located, run.front, run.runs, run.story_id)
 
 
 @check("size", stages=lambda s: s.sizes)

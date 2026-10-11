@@ -231,10 +231,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 20
+CONTRACT = 21
 
 
-VERSION = "0.76.1"
+VERSION = "0.77.0"
 
 
 def split_front(text):
@@ -328,6 +328,8 @@ def read_profile(path):
 PROFILE_KEYS = frozenset((
     # several factories on one backlog (WP-93): the remote whose branches are the claims, and their prefix
     "claim_remote", "claim_branch_prefix",
+    # what declares a test double, where the built-in list does not cover the stack (WP-100)
+    "mockMarkers",
     # the commands and how the gate selects and reads a single test
     "compile", "test", "e2eTest", "architecture", "format", "formatFix",
     "filterFlag", "filterFormat", "filterJoin", "testReport", "testEvidence",

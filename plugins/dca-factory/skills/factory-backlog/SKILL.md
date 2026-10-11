@@ -128,6 +128,9 @@ that smuggles the decision in.
      characters" is four (200 accepted, 201 refused, 1 accepted, an empty value refused), "at most 5" is two
      (5 accepted, 6 refused). A limit with only its refusal written leaves its acceptance untested, and the
      gate can only hold the tests to the scenarios there are;
+   - **malformed address:** an address that carries an id (`/tasks/{id}/…`) gets a scenario for an id that is
+     not even well-formed, answered as the product answers an unknown one — not by the framework's default
+     error;
    - **position and order:** a rule about where an item stands — the order of a list, its place after a
      change — gets a scenario that changes an item in the middle, not only at the ends;
    - **defaults:** one stated value, and where the user sees it;

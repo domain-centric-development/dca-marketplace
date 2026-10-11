@@ -135,6 +135,9 @@
 #              story runs, it is claimed there as `story/<id>` with a create-only push; another factory's claim
 #              skips it. A delivered story is published on that branch for a person to merge — `main` is
 #              never pushed. Without the line nothing is pushed. Cooperation, not security
+# mockMarkers  how a test declares a double, comma-separated, where the built-in list (Mockito, Moq, NSubstitute,
+#              FakeItEasy, unittest.mock, Jest, Vitest) does not cover the stack — the test gate refuses a criterion's
+#              integrated or end-to-end test that doubles its input port (`tests-real`)
 # claim_branch_prefix  the claim branches' prefix where the code host's branch rules want another (default story/)
 # stageTimeout how long one stage's tool may run (90, 90s, 30m, 2h; no limit by default) before the runner
 #              stops it; FACTORY_STAGE_TIMEOUT overrides the line for one run
@@ -146,7 +149,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 20
+contract: 21
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}

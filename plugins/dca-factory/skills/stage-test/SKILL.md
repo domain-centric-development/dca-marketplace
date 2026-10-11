@@ -60,6 +60,13 @@ files written. You write **no** production behaviour.
 2c. **An end-user test's display name is its scenario's title, verbatim** — the `Title:` line under the
    scenario's heading, else its key in words ("Shows empty state"). Two implementations of one story then
    name the test alike; the test gate refuses an end-user test without it.
+2d. **Every test starts from a state it sets itself, and asserts an element.** A suite that shares one application
+   and one store empties what its tests write before each test — the base class does it, through the reset the
+   profile's `reset:` names, the end-user suite included; a scenario that begins "the list is empty" is then
+   true. An assertion names what it is about — a selector, a role, a field, a row — never the page's whole
+   text: `contains("disabled")` is true whenever any element is disabled. A test of a criterion above the unit
+   level runs through the real input port, except at the plan's `integration (adapter: …)` level; the test gate
+   refuses the double (`tests-real`).
 3. **A unit test for every invariant the plan's `## Invariants` names** — each rule, the guards
    included: a required value refused when absent, a trimmed one refused untrimmed, a range at both
    bounds. The test drives the domain type alone, no framework, and is its own — never a criterion's

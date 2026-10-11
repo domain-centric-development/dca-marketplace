@@ -44,7 +44,9 @@ knowledge is in `reference/setup.md`; this is the order.
 3. **Wire the build** as `reference/setup.md` shows for the build tool — its own source set or test
    project, the browser installed by the build, one command that runs the suite and writes a report.
 4. **Write the base test**: the application started on a free port, a fresh browser context per test,
-   the fake clock installed and paused at a fixed start. An external system the application calls is a
+   the fake clock installed and paused at a fixed start, and the application's store emptied before each
+   test where the suite shares one application — through the application's own reset, so a flow that
+   begins with "nothing is there yet" can be written at all. An external system the application calls is a
    stub the suite starts before the application, its address handed in through configuration
    (`reference/setup.md`, "External systems"). A base-URL property may point the same tests at a
    deployment; without it the suite starts its own application.
@@ -101,6 +103,10 @@ A test verifies one business-meaningful flow end to end. "A guest completes an o
 form and the list" is three tests, and "test every button on this page" is a unit-test concern.
 
 If you cannot summarise a test in one sentence, split it.
+
+**Assert the element, not the page.** An assertion reads the element the flow is about — by its stable
+selector, its role, its field — never the page's whole text: "disabled" or "done" somewhere on the page is
+true whenever anything else is.
 
 **Each test brings its own state.** A test passes alone, first, last and in any order. It starts from
 a state it sets up itself — an empty store through the application's own reset, or data unique to
