@@ -365,7 +365,7 @@ update_project() {                          # update_project <explicit skill fol
     echo "factory: the stack profile declares contract $declared — raise it to 'contract: $after_contract' once" >&2
     echo "factory:   the profile uses what that contract describes; the gate reads it as older until then." >&2
   fi
-  # the layout before `project/` is not read by the new gate; the move is said here as well
+  # an older layout (`project/`, `project/backlog/`, …) is not read by the new gate; the move is said here as well
   cli --schedule 2>/dev/null | sed -n 's/^layout: /factory: /p' >&2
   echo "factory: review and commit the changed files — the update commits nothing. 'factory.sh setup --check'"
   echo "factory:   names what the project gained since, as profile lines to confirm; the update writes none."
@@ -768,7 +768,7 @@ install_project() {                         # install_project <tool> <skill fold
   # The profile first: the carriers it names are linked by this same run, so the first `run` does not
   # stop in the carrier check, and the per-skill branch for Claude's directory below sees them.
   must "create .agents/factory and .githooks" mkdir -p .agents/factory .githooks
-  # An older layout first — the profile under .agents/factory/, project/backlog/, a decisions store, run
+  # An older layout first — the profile under .agents/factory/, product/backlog/, a decisions store, run
   # artefacts under tasks/ — so the profile below is found where it now lives and not written twice.
   cli --migrate-layout | grep -v "^migrate: nothing to move" | sed 's/^migrate: /factory: migrated /'
   [ -f "$PROFILE" ] || write_profile "$from"
@@ -1084,8 +1084,10 @@ check_dca_setup() {                        # check_dca_setup <skill folder>
   fi
 }
 
+# The method's configuration: `dca.profile.yaml` at the root (WP-99); the conventions file of an older install
+# until `factory.sh update` or `dca-init` moves it there.
 conventions_file() {
-  for candidate in .agents/dca/conventions.md .claude/dca/conventions.md; do
+  for candidate in dca.profile.yaml .agents/dca/conventions.md .claude/dca/conventions.md; do
     [ -f "$candidate" ] && { echo "$candidate"; return; }
   done
   echo ""
@@ -1156,7 +1158,7 @@ PRUNED = {".git", ".gradle", ".idea", ".vs", "build", "bin", "obj", "target", "d
           "node_modules", ".venv", "venv", "__pycache__", ".agents", ".claude", ".codex", ".opencode", ".dca-factory"}
 DEPTH = 4
 #: The project description's default places — the gate's defaults, so no key is needed for them.
-LOCATIONS = {"product": "project/product.md", "tech": "project/tech.md", "domain": "project/domain.md"}
+LOCATIONS = {"product": "product/overview.md", "tech": "product/tech.md", "domain": "product/domain.md"}
 #: Which check or stage a profile key switches on — what `--check` says beside a proposed line.
 SWITCHES = {
     "knowledge": "every stage cites that catalog instead of recalling",
@@ -1263,10 +1265,12 @@ def detect():
                     continue
                 values[key] = value.replace("{match_dir}", os.path.dirname(match or "") or ".") \
                     .replace("{match}", match or "").replace("{python}", python)
-    # A command the project's conventions file states wins over the preset's, so the profile is not a
-    # second truth: the first backticked command there that the preset's pattern matches.
+    # A command the method's configuration states wins over the preset's, so the profile is not a second
+    # truth: the first value there (or backticked command, in an older conventions file) the preset's pattern matches.
     if conventions and os.path.isfile(conventions) and derived:
-        stated = re.findall(r"`([^`\n]+)`", open(conventions, encoding="utf-8").read())
+        text = open(conventions, encoding="utf-8").read()
+        stated = re.findall(r"`([^`\n]+)`", text) + [line.split(":", 1)[1].strip().strip("`") for line in text.splitlines()
+                                                     if ":" in line and not line.lstrip().startswith("#")]
         for key, pattern in derived.items():
             hit = next((s for s in stated if re.search(pattern, s, re.I)), None)
             if hit:
@@ -1286,16 +1290,15 @@ def detect():
         found = re.search(r"^building_blocks_api:[^`\n]*`([^`\n]+)`", open(conventions, encoding="utf-8").read(), re.M)
         if found:
             values["knowledge.read"] = found.group(1)
-    # Where the project description is, from the method's line in AGENTS.md — the line is the source,
-    # the profile the factory's view of it. A default location needs no key.
-    if os.path.isfile("AGENTS.md"):
-        text = open("AGENTS.md", encoding="utf-8").read()
-        start, end = "<!-- dca-describe: start -->", "<!-- dca-describe: end -->"
-        if start in text and end in text:
-            block = text.split(start, 1)[1].split(end, 1)[0]
-            for key, path in re.findall(r"^\s*-\s*(product|tech|domain):\s*`([^`]+)`", block, re.M):
-                if path != LOCATIONS[key]:
-                    values[key] = path
+    # Where the project description is, the factory reads from the method's configuration (`dca.profile.yaml`)
+    # itself, layered under its profile — nothing is copied here.
+    # What the method's configuration already gives — the architecture command — is not proposed for the factory's
+    # profile: it reads it from there, and a copy would be a second truth.
+    if os.path.isfile("dca.profile.yaml"):
+        method = {line.split(":", 1)[0].strip(): line.split(":", 1)[1].strip().strip("`")
+                  for line in open("dca.profile.yaml", encoding="utf-8") if ":" in line and not line.lstrip().startswith("#")}
+        if method.get("verify_command") and values.get("architecture", "").strip() == method["verify_command"]:
+            values.pop("architecture")
     return values, applied, governance
 
 def norm(value):
@@ -1633,10 +1636,6 @@ setup_check() {                             # setup_check [brief]
   fi
   presets "$dir" check "$PROFILE" ${brief:+brief}
   local code=$?
-  # One architecture command, checked: the profile's `architecture:` was copied from the conventions file at
-  # setup, and nothing merges them — changed on one side, the gate and the method's review run different
-  # commands. Named, never fixed: the person decides which is right.
-  cli --drift ${brief:+--brief} || true
   return $code
 }
 

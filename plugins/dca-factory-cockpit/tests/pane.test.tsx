@@ -11,12 +11,12 @@ const STATUS = {
   running: [],
   epics: [
     { epic: 'books', rows: [ROW], delivered: 0, total: 1, tokens: 1_500_000, seconds: 120, title: 'Keep track of books', goal: 'one list', metric: 'BookAdded', discovery: '' },
-    { epic: 'reminders', rows: [], delivered: 0, total: 0, tokens: 0, seconds: 0, title: 'Remind the reader', goal: '', metric: 'ReminderSent', discovery: 'project/discovery/forgetting/discovery.md' },
+    { epic: 'reminders', rows: [], delivered: 0, total: 0, tokens: 0, seconds: 0, title: 'Remind the reader', goal: '', metric: 'ReminderSent', discovery: 'product/discovery/forgetting/discovery.md' },
   ],
   description: [
-    { part: 'product', path: 'project/product.md', present: true, missing: ['How it works'], empty: [], sections: ['What and for whom', 'For whom'], required: [] },
-    { part: 'tech', path: 'project/tech.md', present: false, missing: [], empty: [], sections: [], required: [] },
-    { part: 'domain', path: 'project/domain.md', present: false, missing: [], empty: [], sections: [], required: [] },
+    { part: 'product', path: 'product/overview.md', present: true, missing: ['How it works'], empty: [], sections: ['What and for whom', 'For whom'], required: [] },
+    { part: 'tech', path: 'product/tech.md', present: false, missing: [], empty: [], sections: [], required: [] },
+    { part: 'domain', path: 'product/domain.md', present: false, missing: [], empty: [], sections: [], required: [] },
   ],
   rows: [ROW],
   next: { text: 'Nothing else starts until add-book has its answer.', action: { text: '', skill: '', shell: '' } },
@@ -29,16 +29,16 @@ const STATUS = {
 }
 const DISCOVERY = {
   topics: [{
-    topic: 'forgetting', report: 'project/discovery/forgetting/discovery.md', title: 'Readers forget what they meant to read',
+    topic: 'forgetting', report: 'product/discovery/forgetting/discovery.md', title: 'Readers forget what they meant to read',
     proposals: [
       { id: 'reminders', intent: 'remind', goal: 'fewer forgotten books', metric: 'ReminderSent', domain_contact: 'open', epic: 'reminders' },
       { id: 'reading-goals', intent: 'goals', goal: 'a yearly goal', metric: 'GoalSet', domain_contact: 'open', epic: '' },
     ],
-    description_changes: [{ target: 'product.md — For whom', change: 'also readers on paper', why: '' }],
+    description_changes: [{ target: 'overview.md — For whom', change: 'also readers on paper', why: '' }],
   }],
 }
 const DECISIONS = {
-  records: [{ id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'project/epics/books/add-book/decisions/01.md' }],
+  records: [{ id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'product/epics/books/add-book/decisions/01.md' }],
 }
 const STORY = {
   story: 'add-book', context: 'reading', criteria: 3, accepted_by: '',
@@ -46,16 +46,16 @@ const STORY = {
   stages: { plan: { runs: 1, seconds: 120, tokens: 1_500_000, cost: 1.25, models: ['claude-opus-5-5'] } },
 }
 const FILES: Record<string, string> = {
-  [`${ROOT}/project/epics/books/add-book/decisions/01.md`]: [
+  [`${ROOT}/product/epics/books/add-book/decisions/01.md`]: [
     '---', 'id: add-book-01', 'story: add-book', 'stage: plan', 'asked: 2026-09-23T17:27:00Z', '---', '',
     '# Which list?', '', '## Question', 'Which list takes a new book?', '',
     '## Options', '- a: the reading list', '- b: the shelf,', '  read or not', '',
     '## Recommendation', 'b — a book is owned before it is read', '',
   ].join('\n'),
-  [`${ROOT}/project/product.md`]: '# Product\n\n## What\n\n## For whom\n',
-  [`${ROOT}/project/epics/books/epic.md`]: '---\ntitle: Keep track of books\ngoal: one list\nmetric: BookAdded\n---\n',
-  [`${ROOT}/project/epics/reminders/epic.md`]: '---\nid: reminders\ntitle: Remind the reader\ndiscovery: project/discovery/forgetting/discovery.md\n---\n',
-  [`${ROOT}/project/discovery/forgetting/discovery.md`]: [
+  [`${ROOT}/product/overview.md`]: '# Product\n\n## What\n\n## For whom\n',
+  [`${ROOT}/product/epics/books/epic.md`]: '---\ntitle: Keep track of books\ngoal: one list\nmetric: BookAdded\n---\n',
+  [`${ROOT}/product/epics/reminders/epic.md`]: '---\nid: reminders\ntitle: Remind the reader\ndiscovery: product/discovery/forgetting/discovery.md\n---\n',
+  [`${ROOT}/product/discovery/forgetting/discovery.md`]: [
     '# Readers forget what they meant to read',
     '',
     '## Proposed work',
@@ -80,8 +80,8 @@ const FILES: Record<string, string> = {
   ].join('\n'),
 }
 const DIRS: Record<string, { name: string; kind: 'file' | 'dir' }[]> = {
-  [`${ROOT}/project/epics`]: [{ name: 'books', kind: 'dir' }, { name: 'reminders', kind: 'dir' }],
-  [`${ROOT}/project/discovery`]: [{ name: 'forgetting', kind: 'dir' }],
+  [`${ROOT}/product/epics`]: [{ name: 'books', kind: 'dir' }, { name: 'reminders', kind: 'dir' }],
+  [`${ROOT}/product/discovery`]: [{ name: 'forgetting', kind: 'dir' }],
   [`${ROOT}/.dca-factory/runs/add-book`]: [{ name: 'plan.md', kind: 'file' }],
 }
 
@@ -150,9 +150,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'back' })
     expect(await pane.find({ text: 'epic reminders' })).toBeDefined()
     await pane.press({ key: 'release-forgetting-reading-goals' })
-    expect(sent.at(-1)).toBe('/dca-factory:factory-backlog epic reading-goals --from project/discovery/forgetting/discovery.md')
+    expect(sent.at(-1)).toBe('/dca-factory:factory-backlog epic reading-goals --from product/discovery/forgetting/discovery.md')
     await pane.press({ key: 'describe-forgetting-0' })
-    expect(sent.at(-1)).toBe('/dca-core:dca-describe product.md — For whom: also readers on paper')
+    expect(sent.at(-1)).toBe('/dca-core:dca-describe overview.md — For whom: also readers on paper')
     sent.length = 0
 
     // describe: the description files with their sections

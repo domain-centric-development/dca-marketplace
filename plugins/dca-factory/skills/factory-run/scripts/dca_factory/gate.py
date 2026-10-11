@@ -20,7 +20,7 @@ file; a flag that moved there is handed over, so an older caller still gets its 
                                                        and what a stage changed (with --story)
 
 Options:
-    --epics <dir>       where the epics and stories are (default: the profile's `epics:`, else project/epics)
+    --epics <dir>       where the epics and stories are (default: the profile's `epics:`, else product/epics)
     --runs <dir>        the run artefacts (default: the profile's `runs:`, else .dca-factory/runs)
     --root <dir>        the project's root (default: .)
     --profile <file>    stack profile (default: dca-factory.profile.yaml in the project root)
@@ -52,7 +52,7 @@ Checks by stage:
            section names one, an open one stops the story, an answered one is applied by the
            stage that asked and then stamped `## Applied` here
 
-Where things are — one owner per place: `project/` is the people's (the description, the epics with
+Where things are — one owner per place: `product/` is the people's (the description, the epics with
 their stories, each story a folder with its decisions), `.agents/factory/` is the installed pipeline,
 the profile at the root is the person's, and `.dca-factory/` is the run's protocol (hand-overs, marks,
 the journal), disposable at any time: what is delivered stands in the story itself (`status:
@@ -90,6 +90,9 @@ from .contract import (
 from .reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
+from .spec import (
+    delta_problems, derived, journeys_path, merge, read_delta, read_spec, render_spec, scenarios_path, story_entries,
+    touches)
 from .state import (
     ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, backlog_digest,
     current_stage_files, git_tree, is_acceptance, journal_append, last_ended, listed_files, MODEL_PROCESSES,
@@ -1030,27 +1033,6 @@ def check_described(result, cwd, profile, key, headings, what):
 #: Where the method keeps the project's conventions; `verify_command:` there is the architecture command the
 #: profile's `architecture:` was copied from at setup. Two files, two owners — the method's and the factory's —
 #: and nothing merges them, so the pair is compared and a difference is named.
-CONVENTIONS_FILES = (".agents/dca/conventions.md", ".claude/dca/conventions.md")
-
-
-def conventions_drift(cwd, profile):
-    """One line when the profile's `architecture:` and the conventions' `verify_command:` differ; None when
-    they agree or one side has nothing to compare. Named, never fixed: the person decides which is right."""
-    path = find_first(cwd, CONVENTIONS_FILES)
-    declared = str(profile.get("architecture", "")).strip()
-    if not path or not declared:
-        return None
-    stated = ""
-    for line in read_text(os.path.join(cwd, path)).splitlines():
-        if line.split(":", 1)[0].strip() == "verify_command":
-            stated = line.split(":", 1)[1].strip().strip("`")
-            break
-    if not stated or stated == declared:
-        return None
-    return (f"architecture: the profile runs `{declared}`, {path} says `verify_command: {stated}` — the gate "
-            f"and the method's review would run different commands; make one of the two right")
-
-
 def check_project(result, cwd, profile):
     """The two mandatory parts of the project description: the product and the technical decisions.
     The designed context map (`domain:`) is read by the context check and stays optional here."""
@@ -1382,7 +1364,7 @@ DISCOVERY_FIELDS = ("intent", "goal", "metric")
 DESCRIPTION_CHANGES = "Proposed description changes"
 
 
-DESCRIPTION_FILES = ("product.md", "tech.md", "domain.md")
+DESCRIPTION_FILES = ("overview.md", "tech.md", "domain.md")
 
 
 def discovery_items(text, section):
@@ -1406,7 +1388,7 @@ READ_ON = re.compile(r"\bread \d{4}-\d{2}-\d{2}\b")
 
 
 def check_discovery(result, cwd, profile, topic):
-    """`project/discovery/<topic>/discovery.md`: the sections in order, every citation a listed source, every
+    """`product/discovery/<topic>/discovery.md`: the sections in order, every citation a listed source, every
     source resolving — an excerpt under the topic's folder, a project file, or a URL with the date it was read —
     every proposed body of work with intent, goal and metric, and the topic's `originals/` ignored by git."""
     folder = os.path.join(location(profile, "discovery"), topic).replace(os.sep, "/")
@@ -3549,6 +3531,9 @@ def _adopt(run):
 @check("integrate", stages=("integrate",))
 def _integrated(run):
     check_integrated(run.result, run.cwd, run.runs, run.story_id)
+    # The spec as the main line holds it now: a key another story added meanwhile, or a criterion it changed, is a
+    # question to a person — never a silent last-writer-wins (WP-98 R3).
+    check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
 
 
 @check("tests-mapped", stages=lambda s: s.tested)
@@ -3573,6 +3558,16 @@ def _test_design(run):
     check_clauses(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.body, run.mapping,
                   run.located)
     check_titles(run.result, run.profile, run.cwd, run.front, run.body, run.mapping, run.located)
+
+
+@check("spec-delta", stages=("test",))
+def _spec_delta(run):
+    check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
+
+
+@check("spec-tests", stages=("document", "adopt", "integrate"))
+def _spec_tests(run):
+    check_spec_tests(run.result, run.cwd, run.runs, run.story_id, run.front, run.mapping)
 
 
 @check("size", stages=lambda s: s.sizes)
@@ -3734,11 +3729,11 @@ def main(argv):
     parser.add_argument("--project", action="store_true",
                         help="check the project description — product and technical — alone, and exit")
     parser.add_argument("--check-discovery", metavar="TOPIC",
-                        help="check the discovery report of one topic (project/discovery/<topic>/) and exit")
+                        help="check the discovery report of one topic (product/discovery/<topic>/) and exit")
     parser.add_argument("--check-backlog", action="store_true",
                         help="the plan gate's backlog checks over every story that is not done (or --story), "
                              "writing nothing, and exit")
-    parser.add_argument("--epics", help="where the epics and stories are (default: the profile's `epics:`, else project/epics)")
+    parser.add_argument("--epics", help="where the epics and stories are (default: the profile's `epics:`, else product/epics)")
     parser.add_argument("--runs", help="the run artefacts (default: the profile's `runs:`, else .dca-factory/runs)")
     parser.add_argument("--profile", help=f"the stack profile (default: {PROFILE_FILE} at the project root)")
     parser.add_argument("--root", default=".", help="the project's root directory")
@@ -3915,11 +3910,131 @@ def integrate_into_home(result, cwd, story_path, story_id, front, runs):
     deliver(result, story_path, story_id, front, runs)
 
 
+def spec_target(front):
+    """The spec file a story changes: its context's `scenarios.md`, or `journeys.md` for a journey item; None for a
+    story that names no context."""
+    if story_kind(front) == "journey":
+        return journeys_path()
+    return scenarios_path(front["context"]) if str(front.get("context", "")).strip() else None
+
+
+def spec_backing(cwd, story_id, body, story_path=None):
+    """What backs a change of what holds: the story's `## Changed expectations` in a person's words, or a decision a
+    human answered for this story. "" where nothing does."""
+    if any(l.strip().startswith(("-", "*")) and human_line(l.strip()[1:].strip())
+           for l in section_of(body, "changed expectations") or []):
+        return "the story's `## Changed expectations`"
+    try:
+        answered = [str(f["id"]).strip() for _p, f, _b, state, a in records_of(story_id, story_path)
+                    if state in ("answered", "applied") and not (is_acceptance(f) and accepted(a))]
+    except GateError:
+        answered = []
+    return f"decision {', '.join(answered)}" if answered else ""
+
+
+def check_spec_delta(result, cwd, runs, story_id, story_path, front, body):
+    """WP-98: the plan's `## Spec delta` against the story and the spec as it stands. What follows from comparing them
+    the gate derives; what the plan names must agree with it, a removal must name a criterion the spec holds, a
+    renamed rule must leave nothing under its old text, and every change or removal of what holds needs a person's
+    sentence behind it — the plan stage asks where there is none."""
+    plan_path = os.path.join(runs, story_id, "plan.md")
+    if not os.path.isfile(plan_path):
+        return
+    target = spec_target(front)
+    if not target:
+        return
+    story, (_pre, spec) = story_entries(body), read_spec(target)
+    delta = read_delta(read_text(plan_path))
+    problems = delta_problems(story, spec, delta)
+    if problems:
+        result.fail("spec-delta", f"{shown(plan_path)} `## Spec delta` against {shown(target)}: " + "; ".join(problems))
+        return
+    touched = touches(story, spec, delta)
+    if touched:
+        backing = spec_backing(cwd, story_id, body, story_path)
+        if not backing:
+            result.fail("spec-delta", f"the story changes or removes what holds ({', '.join(touched)} in {shown(target)}) "
+                                      f"and no person said so — no `## Changed expectations` in the story, no answered "
+                                      f"decision. The plan stage asks (one record naming the keys); the answer backs it.")
+            return
+        result.ok("spec-delta", f"{', '.join(touched)} changed or removed in {shown(target)}, backed by {backing}")
+        return
+    found = derived(story, spec)
+    result.ok("spec-delta", f"{sum(v == 'adds' for v in found.values())} added, {sum(v == 'holds' for v in found.values())} "
+                            f"held in {shown(target)} — nothing that holds changes")
+
+
+def moved_tests(runs, story_id):
+    """{key: [selector]} from tests.md's `## Moved tests` table — a test of the spec this story renamed or moved."""
+    path = os.path.join(runs, story_id, "tests.md")
+    moved = {}
+    for line in (section_of(read_text(path), "moved tests") or []) if os.path.isfile(path) else []:
+        row = MAPPING_ROW.match(line.strip())
+        if row and row.group(1) not in ("criterion", "key", "---") and SELECTOR.match(row.group(2).strip()):
+            moved.setdefault(row.group(1), []).append(row.group(2).strip())
+    return moved
+
+
+def check_spec_tests(result, cwd, runs, story_id, front, mapping):
+    """WP-98 M3: every `Test:` line of the spec the story changes still names a test that is there — one this story
+    renamed or moved is named under tests.md's `## Moved tests` (or is the story's own criterion), and the gate
+    writes the new selector at delivery."""
+    target = spec_target(front)
+    if not target:
+        return
+    _pre, spec = read_spec(target)
+    own = set(mapping or {}) | set(moved_tests(runs, story_id))
+    wanted = {item["key"]: item["tests"] for item in spec if item["tests"] and item["key"] not in own}
+    if not wanted:
+        return
+    probe = Result()
+    check_exists(probe, cwd, wanted)
+    missing = [message.split(" — ")[0] for state, _c, message in probe.entries if state == "fail"]
+    if missing:
+        result.fail("spec-tests", f"{shown(target)} names a test that is gone: {'; '.join(missing)} — a test this story "
+                                  f"renamed or moved goes under tests.md's `## Moved tests` (| <key> | <Class>#<method> |)")
+    else:
+        result.ok("spec-tests", f"every test line of {shown(target)} names a test that is there")
+
+
+def merge_spec(result, story_path, story_id, front, runs):
+    """The delivering gate's merge (WP-98): the story's delta into its spec, by key, with the test lines from tests.md
+    — deterministic, nothing a stage writes. The story is history from here on."""
+    _front, body = read_front_matter(story_path)
+    target = spec_target(front)
+    if not target:
+        return
+    preamble, spec = read_spec(target)
+    plan = os.path.join(runs, story_id, "plan.md")
+    delta = read_delta(read_text(plan)) if os.path.isfile(plan) else read_delta("")
+    try:
+        mapping = read_mapping(runs, story_id)[1]
+    except GateError:
+        mapping = {}
+    tests = dict(mapping)
+    tests.update(moved_tests(runs, story_id))
+    story = story_entries(body)
+    merged = merge(spec, story, delta, tests)
+    for item in merged:
+        if item["key"] in tests and item["key"] not in {s["key"] for s in story}:
+            item["tests"] = tests[item["key"]]
+    title = "Journeys" if story_kind(front) == "journey" else str(front.get("context", "")).strip() or "Spec"
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    text = render_spec(preamble, merged, title)
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    found = derived(story, spec)
+    result.ok("spec", f"{shown(target)}: {sum(v == 'adds' for v in found.values())} added, "
+                      f"{sum(v == 'changes' for v in found.values())} changed, {len(delta['removes'])} removed"
+                      + (f", {len(delta['renames'])} rule(s) renamed" if delta["renames"] else ""))
+
+
 def deliver(result, story_path, story_id, front, runs):
     """The one write a delivering gate makes into a story — the document gate, the adopt gate and, in a story's
     worktree, the integrate gate all call it. One end state: built or adopted, the story reads `status:
     delivered`, `delivered:` and `delivered_by: gate`; an adopted story is no longer `adopted` (that was its
     input: "the code exists, check it"). The judge's confirmed defects that did not block are kept beside it."""
+    merge_spec(result, story_path, story_id, front, runs)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by="gate")
     result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "

@@ -49,11 +49,11 @@ def write(path, text):
 
 
 class Project:
-    """A project in a temporary folder: `project/epics/` and `.dca-factory/runs/` under it, absolute paths."""
+    """A project in a temporary folder: `product/epics/` and `.dca-factory/runs/` under it, absolute paths."""
 
     def __init__(self, root):
         self.root = root
-        self.epics = os.path.join(root, "project", "epics")
+        self.epics = os.path.join(root, "product", "epics")
         self.runs = os.path.join(root, ".dca-factory", "runs")
         os.makedirs(self.epics)
         os.makedirs(self.runs)

@@ -7,18 +7,21 @@ one orchestrator. How it grew, version by version: [`CHANGELOG.md`](CHANGELOG.md
 
 ```
 dca-factory.profile.yaml   the stack profile — the person's, committed; the one fixed path
-project/                   what is to be built (a person writes it)
-  product.md               what, for whom, surfaces, qualities, what it is not
+dca.profile.yaml           the method's configuration — places and conventions, every key optional
+product/                   what is to be built and what holds (people write it, the gate keeps the spec)
+  overview.md              what, for whom, surfaces, qualities, what it is not
   tech.md                  stack, frontend approach, persistence, runtime, integrations, version policy
   domain.md                the designed cut: contexts, subdomain types, relationship patterns and why
+  spec/                    what holds: journeys.md · <context>/scenarios.md · <context>/glossary.md
   epics/<epic>/epic.md · <story>/story.md · <story>/decisions/<nn>.md · <story>/findings.md
+  discovery/<topic>/       research and proposed epics
 .agents/factory/           the installed pipeline (gate, cli, runner, hook) — factory-update owns it whole
 .dca-factory/runs/<story>/ the run's protocol: hand-overs, marks, journal — disposable
 .dca-factory/worktrees/<story>/  the runner's checkout for one story, on its branch story/<id> — gone once integrated
 docs/                      what exists and why — written after the code; generated maps live here
 ```
 
-One owner per place. `project/` is the people's: the description, the epics with their stories and,
+One owner per place. `product/` is the people's: the description, the epics with their stories and,
 in each story's folder, its decisions (questions a stage asked, a human's answers, acceptances). A story
 carries its own state — `status: draft | approved | adopted | superseded` is the person's line;
 `status: delivered`, `delivered:` and `delivered_by: gate` are the gate's, built or adopted alike. A story a
@@ -26,13 +29,22 @@ person built is delivered by hand — `factory-cli.py --deliver-by-hand <story> 
 `delivered_by: hand:<who>`, a claim the views show as such — and `factory-cli.py --prove <story>` has the adopt
 path check it. `.dca-factory/` is
 protocol: delete it at any time and the factory still knows what is delivered and what was decided;
-what is lost is history — hand-overs, the journal, the tokens. Every place is the profile's to move
-(`epics:`, `runs:`, `product:`, `tech:`, `domain:`); the profile itself stays where it is, because it
-is where the others are read from.
+what is lost is history — hand-overs, the journal, the tokens. Every place has its default and is moved
+in the method's `dca.profile.yaml` (`root:`, `overview:`, `tech:`, `domain:`, `spec:`, `epics:`, `discovery:`);
+the factory's profile names a place only where the factory deliberately differs (`runs:` is its own).
 
-`project/` holds intent, written before the code and read as a story's input; `docs/` holds what
+**Stories are changes; the spec is what holds.** `product/spec/<context>/scenarios.md` holds every
+criterion that holds today in the story's own shape — a scenario under its rule, or a line — with one
+`Test: <selector>` line each, and no state. The plan stage derives a story's delta against it
+(`## Spec delta`: added, changed, removed, a renamed rule); the test gate checks it, and every change or
+removal of what holds needs a person's sentence — the story's `## Changed expectations` or an answered
+decision. The gate that delivers merges the delta, after the acceptance where there is one. Nothing
+else writes a spec's scenarios; the delivered story is history from then on. `factory-cli.py
+--spec-check` holds every delivered story's criteria to the spec.
+
+`product/` holds intent, written before the code and read as a story's input; `docs/` holds what
 exists, written after the code by people and by `stage-document`. Where the two meet — the designed
-`project/domain.md` against a map generated from the code — a difference is a finding, not a
+`product/domain.md` against a map generated from the code — a difference is a finding, not a
 duplicate.
 
 ## A foundation once, then the cycle
@@ -115,11 +127,11 @@ dca-factory.profile.yaml     your build and test commands, one per test source s
 
 ## The project description, before the first story
 
-The description skill writes `project/product.md` and `project/tech.md` with you, one question per
+The description skill writes `product/overview.md` and `product/tech.md` with you, one question per
 heading: what is built and for whom, through which surfaces, how it works (where state lives, what
 is persisted), how it looks, the qualities it needs, what it will not do — and the stack, the
 frontend approach, the persistence, where it runs, what it talks to, how versions are chosen. The
-designed domain, `project/domain.md`, is optional. Decisions only, no code design. It also writes a
+designed domain, `product/domain.md`, is optional. Decisions only, no code design. It also writes a
 line into `AGENTS.md` that makes every implementation — a stage or a person in a session — read the
 three files first. `/factory-backlog` writes nothing while product or tech is missing, and reads
 all three before it writes a story; `stage-plan` plans within them and `stage-judge` reports a
@@ -137,7 +149,7 @@ sources and proposes epics, each with its outcome event, and the backlog takes t
 (Installed as a plugin, the skills are namespaced: `/dca-factory:factory-backlog`. The bare
 `factory.sh` and gate commands below are the same in every tool.)
 
-Say what the behaviour is. It writes `project/epics/<epic>/epic.md` and one story, asks for the four
+Say what the behaviour is. It writes `product/epics/<epic>/epic.md` and one story, asks for the four
 epic fields rather than inventing them (`intent`, `goal`, `metric`, `domain_contact`), and leaves
 the story `status: draft` until you release it — the one check no script can replace.
 
@@ -528,13 +540,13 @@ what must be true before the next one starts.
 | `stage-document` | the change → `.dca-factory/runs/<story>/document.md`: glossary, context map and reader documentation follow the code |
 | `stage-integrate` | a merge conflict between a story's worktree and the main line → the conflicted files, both changes holding, and `.dca-factory/runs/<story>/integrate.md`; the runner commits, squashes and gates the result |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
-| `factory-discover` | before the backlog: a problem or a wished deliverable becomes `project/discovery/<topic>/discovery.md` — problem, users and evidence, options, outcome, risks, proposed epics each with its outcome event — from a fixed question catalogue, with every claim citing a source (web with the date read, a project file, an anonymised excerpt under `sources/`; the originals stay in a git-ignored `originals/`). Applies the `product-discovery` craft (`carrier.discover:`); `factory.sh discover --check <topic>` checks the report; writes an epic only once the person releases a proposal, through `factory-backlog`, linked by `discovery:` |
+| `factory-discover` | before the backlog: a problem or a wished deliverable becomes `product/discovery/<topic>/discovery.md` — problem, users and evidence, options, outcome, risks, proposed epics each with its outcome event — from a fixed question catalogue, with every claim citing a source (web with the date read, a project file, an anonymised excerpt under `sources/`; the originals stay in a git-ignored `originals/`). Applies the `product-discovery` craft (`carrier.discover:`); `factory.sh discover --check <topic>` checks the report; writes an epic only once the person releases a proposal, through `factory-backlog`, linked by `discovery:` |
 | `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
 | — `<story>/findings.md` | the judge's confirmed minors, kept in the story's folder when it is delivered (the run folder is disposable, these are not): one row per finding with file, line, fix and `Status`; `factory-cli.py --findings` lists the open ones, the status brief counts them |
 | — `decisions/` | the questions a run may not answer, one file each under `<story>/decisions/<nn>.md` in the story's folder, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
-| `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies; migrates an older layout once (profile to the root, `project/backlog/` → `project/epics/`, each story into a folder of its own, records into their stories' folders, run artefacts out of `tasks/`, the delivery mark into the story) and prints every move. Reports the versions and the profile's contract line; commits nothing |
+| `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies; migrates an older layout once (profile to the root, `product/backlog/` → `product/epics/`, each story into a folder of its own, records into their stories' folders, run artefacts out of `tasks/`, the delivery mark into the story) and prints every move. Reports the versions and the profile's contract line; commits nothing |
 | `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`factory.sh status [--story <id>]`). Reads files; changes and starts nothing |
-| `factory-decisions` | the inbox for those records: lists what waits on a human (`factory.sh decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer. A structural answer — a new bounded context, a new relationship, a surface an actor lacks — also brings `project/domain.md` and the product description in line |
+| `factory-decisions` | the inbox for those records: lists what waits on a human (`factory.sh decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer. A structural answer — a new bounded context, a new relationship, a surface an actor lacks — also brings `product/domain.md` and the product description in line |
 | `factory-help` | the factory explained in one fixed view (`factory.sh help`): the flow from describing the project to accepting a story with this project's place in it, every command for agent and shell, the marks, the files, what to do next. Reads files; changes and starts nothing |
 | `factory-verify` | checks the pipeline itself: every gate check against throwaway fixtures, the runner's stage order, verdict handling and install shapes, and — when asked — one tiny story delivered end to end. Reports; it repairs nothing |
 
@@ -712,7 +724,7 @@ guessing.
 
 None is baked in. Everything project-specific comes from two places the project owns: the
 **stack profile** (`dca-factory.profile.yaml` — build and test commands, `format:` and
-`formatFix:`, `browser:`, `acceptance:` and `run:`, the carriers) and `project/` with the
+`formatFix:`, `browser:`, `acceptance:` and `run:`, the carriers) and `product/` with the
 **description, backlog**, beside the glossaries and the context map. A skill that would break in a project without a
 particular domain concept would be wrong.
 

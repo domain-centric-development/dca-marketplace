@@ -21,7 +21,7 @@ depends on an answer still open in the same pass is asked with its condition in 
 has pages: …") and its answer is dropped where the condition turns out false.
 
 ### NEW-BASE
-- look up: `project/tech.md → ## Stack` naming a base package or root namespace
+- look up: `product/tech.md → ## Stack` naming a base package or root namespace
 - asked: when not found
 - question: Which base package (Java) or root namespace (.NET) does the code live under?
 - options: the default

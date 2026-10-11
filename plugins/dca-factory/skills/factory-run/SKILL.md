@@ -14,9 +14,9 @@ them apart is what makes a run reproducible.
 
 | Thing | Where | Missing? |
 |---|---|---|
-| the project description | `project/product.md`, `project/tech.md` (and the optional designed map `project/domain.md`), or where the profile points | `/factory-setup` writes it with the person, through the project's description skill; stop and say so |
-| the story | `project/epics/<epic>/<story>/story.md`, or under the profile's `epics:` | offer to write one (`/factory-backlog`) and stop |
-| the epic | `project/epics/<epic>/epic.md` | same |
+| the project description | `product/overview.md`, `product/tech.md` (and the optional designed map `product/domain.md`), or where the profile points | `/factory-setup` writes it with the person, through the project's description skill; stop and say so |
+| the story | `product/epics/<epic>/<story>/story.md`, or under the profile's `epics:` | offer to write one (`/factory-backlog`) and stop |
+| the epic | `product/epics/<epic>/epic.md` | same |
 | the stack profile | `dca-factory.profile.yaml` | create it from the template by detecting the build (see below) |
 | an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with the method's setup skill (in a DCA project `/dca-init`), and the factory never calls a skill that writes code. Without one, the build gate skips the architecture check and names it |
 | the gate | `.agents/factory/story-gate.py` — it decides; `factory-cli.py` beside it shows and coordinates (status, schedule, marks, the checkout) | the installer writes both (step 1 below) |

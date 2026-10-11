@@ -59,7 +59,7 @@ existing project: point to `dca-init` instead.
 ### 1. The decisions come from the project description
 
 Read the technical and the product description where `dca.profile.yaml` puts them (`tech:`, `overview:`;
-`project/tech.md` and `project/product.md` by default, also where the file is missing). Where there is none, its entries are all open and asked in the one pass below; `dca-describe` then
+`product/tech.md` and `product/overview.md` by default, also where the file is missing). Where there is none, its entries are all open and asked in the one pass below; `dca-describe` then
 writes the description from those answers and never invents one. Take from it:
 
 - **the stack** — Spring Boot (Gradle or Maven, the Java line) or .NET (the SDK line);
@@ -128,7 +128,7 @@ the lines it lacks. Commit nothing — the first commit is the person's, after t
 
 Run `dca-init` on the fresh skeleton. It adds the building blocks and rule packages, the architecture test with
 `DCA-STR-012` on `warn` (no domain code yet — empty means green), `dca.profile.yaml` and the method's
-section of `AGENTS.md`. Hand it the contexts `project/domain.md` names, so their roots are declared from the
+section of `AGENTS.md`. Hand it the contexts the designed domain names (`domain:`, `product/domain.md` by default), so their roots are declared from the
 start.
 
 ### 5. The formatter: `dca-add formatter`
@@ -196,7 +196,7 @@ the user before generating. Generate code that matches what's already there.
 **User intent:** "Add a new bounded context called `orders`."
 
 > Pattern choice per subdomain decides whether to lay out the full tactical structure — read the subdomain
-> type in the designed map (`domain:` in `dca.profile.yaml`, `project/domain.md` by default) and check for a
+> type in the designed map (`domain:` in `dca.profile.yaml`, `product/domain.md` by default) and check for a
 > pattern-selection ADR (e.g. `docs/adr/`) before creating a full DDD context; supporting/generic subdomains
 > may warrant a simpler layout. A context the designed map does not carry is a question about the description
 > (`dca-describe`), not something to add silently.
@@ -237,10 +237,12 @@ the user before generating. Generate code that matches what's already there.
    (`templates/bounded-context/Context.cs.tmpl`) and the DI extension `Add{Context}Context()` in `Infrastructure/`
    (`ContextRegistration.cs.tmpl`); tell the user to call it from the host's `Program.cs`.
 5. **Add Gradle module** if multi-module: create `build.gradle.kts` from `templates/bounded-context/build.gradle.kts.tmpl` and add `include("{context}")` to `settings.gradle.kts`.
-6. **Move the context's glossary.** Where the designed domain (`domain:` in `dca.profile.yaml`, `project/domain.md` by
+6. **Move the context's glossary.** Where the designed domain (`domain:` in `dca.profile.yaml`, `product/domain.md` by
    default) has a `### {context}` section under `## Glossary`, write its rows as entries of the new context's
-   glossary through `ubiquitous-language` — at the place its *Glossary location* names — and replace the section
-   with one line naming that file. Moved, not copied: one place per word.
+   glossary through `ubiquitous-language` — at `<spec>/<context>/glossary.md` (`spec:` in `dca.profile.yaml`,
+   `product/spec/<context>/glossary.md` by default, `<context>` the context's name in lowercase, words joined by
+   `-`), never beside the domain code — and replace the section with one line naming that file. Moved, not
+   copied: one place per word.
 7. **Verify:** run the architecture tests if they exist. The new (empty) context should not break anything.
 
 ---

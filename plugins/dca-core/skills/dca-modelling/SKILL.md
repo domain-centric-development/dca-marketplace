@@ -47,8 +47,9 @@ Before writing any code, gather context:
    - Existing aggregates: how is identity established? Lombok? Records?
    - Existing events: any base class? `eventId`/`occurredOn`/`version` fields?
    - Existing repositories: do they extend a base interface or stand alone?
-3. **Inspect the bounded context's glossary** (`{context}/domain/glossary.md`)
-   if it exists — adopt those terms verbatim, and the operations too: a use
+3. **Inspect the bounded context's glossary** (`<spec>/<context>/glossary.md`:
+   `spec:` in `dca.profile.yaml`, `product/spec/<context>/glossary.md` by
+   default) if it exists — adopt those terms verbatim, and the operations too: a use
    case, a command and a domain event are named from the operation's code word
    (`PlaceOrder`, `OrderPlaced`). A term or an operation that is not in it — or
    a context without a glossary — is entered through `ubiquitous-language`

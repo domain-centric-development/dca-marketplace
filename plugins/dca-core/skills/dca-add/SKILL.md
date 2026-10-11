@@ -232,7 +232,7 @@ stack is in `reference/coverage.md`: JaCoCo for Gradle and Maven, coverlet with 
 **Record it in the technical description.** A capability is a technical decision the person took with you, so
 the project's technical description follows it: one line under its `## Stack` heading — the capability in the
 person's words, then the tool and its version, e.g. `Browser tests: Playwright 1.56` — in the file
-`dca.profile.yaml` names as `tech:` (by default `<root>/tech.md`, `root:` by default `project/`). A line that
+`dca.profile.yaml` names as `tech:` (by default `<root>/tech.md`, `root:` by default `product/`). A line that
 is already there is updated, not repeated. Where the description says something the capability contradicts — "no
 end-user tests", another formatter — ask which is right and change the description through `/dca-describe`
 instead of writing over it. Where the project has no technical description yet, write none and say that

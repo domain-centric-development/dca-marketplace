@@ -11,8 +11,9 @@ project. Output: what was missing, and one line for everything that was already 
 
 ```
 dca-factory.profile.yaml   the stack profile — the person's, committed
-project/                   what is to be built (a person writes it)
-  product.md · tech.md · domain.md
+dca.profile.yaml           the method's configuration (optional; the defaults otherwise)
+product/                   what is to be built and what holds (a person writes it, the gate keeps the spec)
+  overview.md · tech.md · domain.md · spec/<context>/scenarios.md · spec/<context>/glossary.md
   epics/<epic>/epic.md · <story>/story.md · <story>/decisions/<nn>.md
 .agents/factory/           the installed pipeline (gate, cli, runner, hook)
 .dca-factory/runs/<story>/ the run's protocol: hand-overs, marks, journal — disposable
@@ -23,14 +24,14 @@ docs/                      what exists and why — written after the code, some 
 
 1. **The project description.** Run `python3 .agents/factory/story-gate.py --project` where the
    gate is installed; otherwise look for the files the `AGENTS.md` section
-   `<!-- dca-describe: start -->` names, `project/product.md` and `project/tech.md` by default.
+   `<!-- dca-describe: start -->` names, `product/overview.md` and `product/tech.md` by default.
    Missing or incomplete → use the project's description skill where it is installed — the skill
    whose description says it writes the project description (in a DCA project `dca-describe`) —
    and let it write the files with the person. Where no such skill is installed, say so, name
    the skill and the headings the guide gives the description (product: what and for whom,
    surfaces, how it works, look and feel, qualities, not part of the product; tech: stack, frontend
    approach, persistence, runtime, integrations, version policy), and write no template yourself.
-   The designed domain (`project/domain.md`) is optional here.
+   The designed domain (`product/domain.md`) is optional here.
 2. **Git.** `git rev-parse --is-inside-work-tree`. Not a repository → offer `git init` and run it on
    the person's confirmation. The pipeline's commit hook and its worker lock live in `.git`; the
    setup script stops without one, so a repository is never created behind anyone's back.

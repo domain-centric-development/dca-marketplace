@@ -17,6 +17,7 @@ what they say.
     factory-cli.py --reopen <story>                     take a delivered story back for a correction
     factory-cli.py --deliver-by-hand <story> --by <who> a story built by hand: delivered, claimed
     factory-cli.py --prove <story>                      a claimed delivery checked through the adopt path
+    factory-cli.py --spec-check                         every delivered story's criteria stand in the living spec
     factory-cli.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
     factory-cli.py --usage-from <format> <file>         one invocation's usage from a tool's raw output
     factory-cli.py --stage-start|--stage-end <stage> --story <id>    a stage run inside a session
@@ -67,8 +68,10 @@ from .state import (
     mark_stage, mark_window, OWNED_CHANGED, owned_end, PRODUCT_HEADINGS, read_claim, record_owned, release,
     resolve_window, run_stories, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
     verdict_in, worktree_of, write_story_fields)
+from .spec import (
+    derived, merge, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
-    conventions_drift, criteria_of, DESCRIPTION_CHANGES, description_part, discovery_items, perspectives_of, story_ids)
+    criteria_of, DESCRIPTION_CHANGES, spec_target, description_part, discovery_items, perspectives_of, story_ids)
 from .tools import (
     isolation_args, TOOL, tool_invocation, unprobed_flags)
 from .runner import (
@@ -389,9 +392,6 @@ def status_brief(cwd, epics, runs, session_start=False):
         print(f"factory: no project description ({', '.join(location(profile, k) for k in undescribed)}) — /factory-setup")
     elif not states:
         print("factory: the backlog is empty — /factory-backlog writes the first epic and story")
-    drift = conventions_drift(cwd, profile)
-    if drift:
-        print(f"factory: {drift}")
     if session_start and os.environ.get("FACTORY_WORKER"):
         # A stage the runner started: the hook runs in its session too, and the claim it names is the
         # runner's — this session's own. Said plainly, or a careful model takes itself for a second writer.
@@ -662,7 +662,9 @@ def help_model(cwd, epics, runs):
         nxt = status_view["next"]
     files = [("description", ", ".join(location(profile, k) for k in ("product", "tech", "domain")),
               "what is built, on which stack, in which contexts"),
-             ("epics", epics.replace(os.sep, "/") + "/", "an epic.md per epic, a folder per story with its story.md; a delivered story says so itself"),
+             ("spec", location(profile, "spec").rstrip("/") + "/",
+              "what holds: per context scenarios.md with a test line each, and its glossary.md; journeys.md"),
+             ("epics", epics.replace(os.sep, "/") + "/", "the changes: an epic.md per epic, a folder per story with its story.md; a delivered story says so itself"),
              ("stack profile", (profile_path or PROFILE_FILE).replace(os.sep, "/"),
               "the project's commands and the skills each stage uses"),
              ("decisions", f"{epics.replace(os.sep, '/')}/<epic>/<story>/{DECISIONS_DIR}/",
@@ -1816,12 +1818,64 @@ def deliver_by_hand(cwd, runs, epics, story_id, who):
     if status == "superseded":
         print(f"deliver-by-hand: {story_id} is superseded — nothing to deliver")
         return 1
+    # The spec takes the story's new criteria, without test lines — unproven until `--prove`. A story that changes or
+    # removes what holds needs a plan to derive its delta: that is `--prove`'s adopt path, not this helper.
+    _front, body = read_front_matter(story_path)
+    target = spec_target(front)
+    preamble, spec = read_spec(target) if target else ([], [])
+    story = story_entries(body) if target else []
+    changing = [key for key, verb in derived(story, spec).items() if verb == "changes"]
+    if changing:
+        print(f"deliver-by-hand: {story_id} changes what holds ({', '.join(changing)} in {shown(target)}) — the delta of a "
+              f"change is planned: `factory-cli.py --prove {story_id}` once it is delivered, or run it through the factory")
+        return 1
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by=f"hand:{who}")
+    added = [item for item in story if item["key"] not in {s["key"] for s in spec}]
+    if added:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write(render_spec(preamble, merge(spec, story, read_delta(""), {}), str(front.get("context", "")).strip()
+                                     or "Spec"))
+        print(f"deliver-by-hand: {len(added)} criterion(s) into {shown(target)}, without a test line — unproven until "
+              f"`--prove`")
     print(f"deliver-by-hand: {shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
           f"`delivered_by: hand:{who}` — delivered, claimed. Commit it with the trailer `Story: {story_id}`; "
           f"`factory-cli.py --prove {story_id}` turns the claim into proof.")
     return 0
+
+
+def spec_check(cwd, runs, epics):
+    """Story and spec agree (WP-98), in one direction: every criterion of a delivered story that is still there stands
+    in its spec — unless a later delivered story's plan removed it. Whether a scenario came from a story is not asked:
+    a delivered story may be gone. Prints one line per disagreement; exit 1 when there is one."""
+    delivered = []
+    for story_path in story_files(epics):
+        try:
+            front, body = read_front_matter(story_path)
+        except GateError:
+            continue
+        if is_delivered(front) and spec_target(front):
+            delivered.append((delivered_on(front), story_id_of(story_path), front, body))
+    removed, problems = {}, []
+    for when, story_id, front, _body in delivered:
+        plan = os.path.join(runs, story_id, "plan.md")
+        if os.path.isfile(plan):
+            for key in read_delta(read_text(plan))["removes"]:
+                removed.setdefault((spec_target(front), key), []).append(when)
+    for when, story_id, front, body in sorted(delivered):
+        target = spec_target(front)
+        held = {item["key"] for item in read_spec(target)[1]}
+        for item in story_entries(body):
+            later = [w for w in removed.get((target, item["key"]), []) if w >= when]
+            if item["key"] not in held and not later:
+                problems.append(f"{story_id}: `{item['key']}` is delivered and not in {shown(target)}")
+    for line in problems:
+        print(f"spec: {line}")
+    if not problems:
+        print(f"spec: every criterion of the {len(delivered)} delivered stor{'y' if len(delivered) == 1 else 'ies'} "
+              f"stands in its spec")
+    return 1 if problems else 0
 
 
 #: Where `--prove` keeps the claim it took out of the story: one line in the story's evidence.
@@ -2129,6 +2183,8 @@ def main(argv):
     parser.add_argument("--deliver-by-hand", metavar="STORY",
                         help="mark a story a person built as delivered by hand (claimed), and exit; needs --by")
     parser.add_argument("--by", metavar="WHO", help="with --deliver-by-hand: who delivers")
+    parser.add_argument("--spec-check", action="store_true",
+                        help="whether every criterion of a delivered story stands in its spec (exit 1 when one does not)")
     parser.add_argument("--prove", metavar="STORY",
                         help="take a claimed delivery back to `status: adopted`, so the adopt path checks it, and exit")
     parser.add_argument("--reopen", metavar="STORY",
@@ -2164,9 +2220,6 @@ def main(argv):
                         help="the decision ids a stage file's needs-human section names; exit 1 when it asks nobody")
     parser.add_argument("--open-decisions", metavar="STORY",
                         help="the decision records that name the story and carry no answer, one path per line")
-    parser.add_argument("--drift", action="store_true",
-                        help="name a difference between the profile's architecture command and the conventions file's "
-                             "(exit 1), or nothing (exit 0); with --brief the same one line")
     parser.add_argument("--stages", action="store_true",
                         help="the gate's stage table: the run order, space-separated (--for-kind, --window, --all "
                              "narrow or widen it); with --shell the bash lines the runner reads once at its start "
@@ -2225,7 +2278,7 @@ def main(argv):
                         help="after the conflicts were resolved: commit the merge and squash; exit 1 while a marker is left")
     parser.add_argument("--migrate-layout", action="store_true",
                         help="move an older layout to one owner per place — what `factory.sh update` runs once — and exit")
-    parser.add_argument("--epics", help="where the epics and stories are (default: the profile's `epics:`, else project/epics)")
+    parser.add_argument("--epics", help="where the epics and stories are (default: the profile's `epics:`, else product/epics)")
     parser.add_argument("--runs", help="the run artefacts (default: the profile's `runs:`, else .dca-factory/runs)")
     parser.add_argument("--profile", help=f"the stack profile (default: FACTORY_PROFILE, else {PROFILE_FILE} at the root)")
     parser.add_argument("--root", default=".", help="the project's root directory")
@@ -2279,11 +2332,6 @@ def main(argv):
         return document_skeleton(args.runs, args.document_skeleton, cwd)
     if args.migrate_layout:
         return migrate_layout(cwd)
-    if args.drift:
-        drift = conventions_drift(cwd, read_profile(profile_path))
-        if drift:
-            print(f"factory: {drift}")
-        return 1 if drift else 0
     if args.place:
         if args.place not in DEFAULTS:
             parser.error(f"--place takes one of {', '.join(DEFAULTS)}")
@@ -2386,6 +2434,8 @@ def main(argv):
         return deliver_by_hand(cwd, args.runs, args.epics, args.deliver_by_hand, args.by)
     if args.prove:
         return prove(cwd, args.runs, args.epics, args.prove)
+    if args.spec_check:
+        return spec_check(cwd, args.runs, args.epics)
     if args.listening or args.claim or args.release is not None:
         freeze_all(args.runs)
     if args.listening:

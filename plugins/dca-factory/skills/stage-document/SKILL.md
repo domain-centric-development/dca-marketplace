@@ -25,7 +25,8 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 
 1. Read the plan's glossary proposals and the diff's new names. Every **domain** identifier the
    story introduced — an aggregate, a value object, an event, a use case, a domain term in a result
-   — needs an entry in the bounded context's glossary; a use case is no glossary type of its own —
+   — needs an entry in the bounded context's glossary (`product/spec/<context>/glossary.md`, the one file under
+   `spec/` you write — the context's `scenarios.md` is the gate's); a use case is no glossary type of its own —
    it is an `Operations` line on the term it acts on — the domain word with the code word in
    parentheses, as the plan proposed it — or a `Concept` where it names a term nobody had. Add the missing ones in the project's own
    words, taking the definition from the plan's proposal where there is one — through the skill the
@@ -40,7 +41,7 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    --contract glossary` says the rule and the entry's shape).
 2. Update the context maps when the story changed how contexts relate — a new upstream, a new
    translation site, a relationship that changed kind. The designed map (`domain:` in the profile,
-   `project/domain.md` by default) through the skill the profile names as `carrier.domain:`, where
+   `product/domain.md` by default) through the skill the profile names as `carrier.domain:`, where
    the story built what it designs; a map generated from the code by running what generates it,
    never by hand. A story that *needs* a new context or
    relationship should never have reached this stage; if you find one, write `## needs-human`
@@ -55,15 +56,14 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    document must exist — check it, do not remember it. A documented path that does not resolve is
    worse than no documentation: it survives, gets cited, and sends the next reader nowhere.
    Write every path **as it resolves from the project root**, in your file and in the document you
-   write — `src/main/java/com/example/billing/domain/glossary.md`, not the package- or
-   namespace-relative shorthand `billing/domain/glossary.md`. A shorthand a reader has to complete
+   write — `product/spec/billing/glossary.md`, not a shorthand such as `billing/glossary.md`. A shorthand a reader has to complete
    is not a path: it reads like one, it cannot be opened, and it is indistinguishable from a typo.
    Add the line or the section separately (`file.md:149`, `Book.cs:28-31`) — the location is
    allowed and is not part of the file name.
 5. Record what you did *not* document and why — one line each: a decision that belongs in an
    architecture decision record rather than a README, a term the domain contact has to define first,
    an open assumption the story never resolved. A document you read and left as it was is one line
-   (`project/domain.md` — unchanged, single context), not a paragraph on what you read to know it.
+   (`product/domain.md` — unchanged, single context), not a paragraph on what you read to know it.
 
 ## Ask, do not recall
 

@@ -153,8 +153,8 @@ def cli_in(root):
 
 
 PACKAGE = "dca_factory"
-MODULES = ("contract", "reports", "state", "gate", "tools", "runner", "cli")
-GATE_SIDE = ("contract", "reports", "state", "gate")        # what decides; tools, runner and cli show and start
+MODULES = ("contract", "reports", "state", "spec", "gate", "tools", "runner", "cli")
+GATE_SIDE = ("contract", "reports", "state", "spec", "gate")        # what decides; tools, runner and cli show and start
 
 
 def package_dir(beside):
@@ -597,7 +597,7 @@ def record_file(name):
     """Where a record with this id lives in the fixture: `<story>/decisions/<nn>.md` in the story's folder."""
     match = re.match(r"^(.*?)-(accept-\d+|\d+)$", name)
     story, nn = (match.group(1), match.group(2)) if match else (name, name)
-    return f"project/epics/sample/{story}/decisions/{nn}.md"
+    return f"product/epics/sample/{story}/decisions/{nn}.md"
 
 
 def delivered_story(text, stamp="2026-09-26T07:40:00Z", by="gate"):
@@ -611,7 +611,7 @@ def delivered_story(text, stamp="2026-09-26T07:40:00Z", by="gate"):
 
 def story_delivered(root, story_id="STORY-1", epic="sample"):
     """Whether the story says it is delivered — the gate's mark, read off the file."""
-    path = os.path.join(root, "project", "epics", epic, story_id, "story.md")
+    path = os.path.join(root, "product", "epics", epic, story_id, "story.md")
     if not os.path.isfile(path):
         return False
     front = open(path, encoding="utf-8").read().split("\n---", 1)[0]
@@ -620,7 +620,7 @@ def story_delivered(root, story_id="STORY-1", epic="sample"):
 
 def mark_delivered(root, story_id="STORY-1", stamp="2026-09-26T07:40:00Z", epic="sample"):
     """Write the gate's delivered mark into the fixture's story."""
-    path = os.path.join(root, "project", "epics", epic, story_id, "story.md")
+    path = os.path.join(root, "product", "epics", epic, story_id, "story.md")
     with open(path, encoding="utf-8") as handle:
         text = handle.read()
     with open(path, "w", encoding="utf-8") as handle:
@@ -629,7 +629,7 @@ def mark_delivered(root, story_id="STORY-1", stamp="2026-09-26T07:40:00Z", epic=
 
 def undeliver(root, story_id="STORY-1", epic="sample"):
     """Take the delivered mark out of the fixture's story again — what a reopen does to the front matter."""
-    path = os.path.join(root, "project", "epics", epic, story_id, "story.md")
+    path = os.path.join(root, "product", "epics", epic, story_id, "story.md")
     with open(path, encoding="utf-8") as handle:
         text = handle.read()
     text = re.sub(r"^status: delivered$", "status: approved", text, flags=re.M)
@@ -731,7 +731,7 @@ def backlog_project(root, *stories, **more):
     """A fixture backlog: STORY-1 plus `(id, depends_on)` stories, no stage file, a profile whose
     only command is `compile: true` — the gates then check files and records, not test runs, so a
     stand-in tool can take several stories through every stage."""
-    sources = [(f"project/epics/sample/{sid}/story.md", story(sid, deps)) for sid, deps in stories]
+    sources = [(f"product/epics/sample/{sid}/story.md", story(sid, deps)) for sid, deps in stories]
     build_project(root, tests=None, profile="compile: true\n",
                   extra_sources=tuple(sources) + tuple(more.pop("extra_sources", ())), **more)
     return root
@@ -820,8 +820,8 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
         with open(full, "w", encoding="utf-8") as handle:
             handle.write(content)
 
-    write("project/epics/sample/epic.md", epic)
-    write("project/epics/sample/STORY-1/story.md", story)
+    write("product/epics/sample/epic.md", epic)
+    write("product/epics/sample/STORY-1/story.md", story)
     write("dca-factory.profile.yaml", profile)
     write("AGENTS.md", "# AGENTS.md\n\nA fixture.\n")
     write("README.md", "A fixture project.\n")
@@ -842,7 +842,7 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
             if not os.path.isfile(os.path.join(root, ".dca-factory/runs/STORY-1", name)):
                 write(".dca-factory/runs/STORY-1/" + name, content)
         if not os.path.isfile(os.path.join(root, ".dca-factory/evidence/STORY-1/.story-digest")):
-            write(".dca-factory/evidence/STORY-1/.story-digest", story_digest(os.path.join(root, "project/epics/sample/STORY-1/story.md")))
+            write(".dca-factory/evidence/STORY-1/.story-digest", story_digest(os.path.join(root, "product/epics/sample/STORY-1/story.md")))
         write(".dca-factory/runs/STORY-1/document.md", document)
     if rounds is not None:
         write(".dca-factory/evidence/STORY-1/.rounds", str(rounds))
@@ -1314,10 +1314,10 @@ def verify_runner(runner, verbose=False):
     # the story's file, is stopped at the end of its window, the story is held, and a person's confirmation frees it
     for label, write in (
             ("answers its own question",
-             'mkdir -p project/epics/sample/STORY-1/decisions; cat "$FIXTURE_RECORD" > project/epics/sample/STORY-1/decisions/01.md'),
+             'mkdir -p product/epics/sample/STORY-1/decisions; cat "$FIXTURE_RECORD" > product/epics/sample/STORY-1/decisions/01.md'),
             ("writes `status: delivered` into its story",
-             'sed "s/^status: approved/status: delivered/" project/epics/sample/STORY-1/story.md > s.tmp; '
-             'mv s.tmp project/epics/sample/STORY-1/story.md')):
+             'sed "s/^status: approved/status: delivered/" product/epics/sample/STORY-1/story.md > s.tmp; '
+             'mv s.tmp product/epics/sample/STORY-1/story.md')):
         for root in throwaway():
             build_project(root)
             copy_scripts(runner, root)
@@ -1350,9 +1350,9 @@ def verify_runner(runner, verbose=False):
         gate = [sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--story", "STORY-1"]
         subprocess.run(gate + ["--owned", "start", "plan"], cwd=root, capture_output=True)
         ended = subprocess.run(gate + ["--owned", "end", "plan"], cwd=root, capture_output=True, text=True)
-        write_file(root, "project/epics/sample/STORY-1/decisions/01.md", DECISION + ANSWER)
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md", DECISION + ANSWER)
         subprocess.run(gate + ["--owned", "start", "test"], cwd=root, capture_output=True)
-        with open(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"), "a",
+        with open(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md"), "a",
                   encoding="utf-8") as handle:
             handle.write("\n## Applied\nat: 2026-10-10T10:00:00Z\nstage: test\n")
         applied = subprocess.run(gate + ["--owned", "end", "test"], cwd=root, capture_output=True, text=True)
@@ -1728,7 +1728,7 @@ def verify_runner(runner, verbose=False):
                           if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
                 prompts_file = os.path.join(root, "test-prompts.txt")
                 prompts = open(prompts_file, encoding="utf-8").read().strip().splitlines() if os.path.isfile(prompts_file) else []
-                asked = os.path.isdir(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions"))
+                asked = os.path.isdir(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions"))
                 return code, output, starts, story_delivered(root), prompts, asked
         code, output, starts, delivered, prompts, asked = buildback_run()
         check("build sent back: `back: test` in build.md runs the test stage again, then the build — no human asked, "
@@ -1953,8 +1953,8 @@ def verify_runner(runner, verbose=False):
     for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)
-        asking = ('mkdir -p .dca-factory/runs/STORY-1 project/epics/sample/STORY-1/decisions; '
-                  'cat "$FIXTURE_DECISION" > project/epics/sample/STORY-1/decisions/01.md; '
+        asking = ('mkdir -p .dca-factory/runs/STORY-1 product/epics/sample/STORY-1/decisions; '
+                  'cat "$FIXTURE_DECISION" > product/epics/sample/STORY-1/decisions/01.md; '
                   'cat "$FIXTURE_PLAN" > .dca-factory/runs/STORY-1/plan.md')
         with open(os.path.join(root, "decision.md"), "w", encoding="utf-8") as handle:
             handle.write(DECISION)
@@ -1965,7 +1965,7 @@ def verify_runner(runner, verbose=False):
                                        "FIXTURE_DECISION": shell_path(os.path.join(root, "decision.md")),
                                        "FIXTURE_PLAN": shell_path(os.path.join(root, "plan.md"))})
         check("runner: a stage that asks a question names the record and the command that resumes",
-              code == 3 and "project/epics/sample/STORY-1/decisions/01.md" in output
+              code == 3 and "product/epics/sample/STORY-1/decisions/01.md" in output
               and "run --story STORY-1 — it resumes at plan" in output,
               [l for l in output.splitlines() if "decision" in l][:3])
         # and with the question still open, the next run does not start a stage
@@ -2051,8 +2051,8 @@ def verify_runner(runner, verbose=False):
     # The stand-in writes each stage's file; STORY-1's plan stage asks until its record is answered.
     stand_in_backlog = """#!/bin/sh
 echo "$FACTORY_STORY $FACTORY_STAGE" >> invocations.log
-d=".dca-factory/runs/$FACTORY_STORY"; rec=project/epics/sample/STORY-1/decisions/01.md
-mkdir -p "$d" project/epics/sample/STORY-1/decisions
+d=".dca-factory/runs/$FACTORY_STORY"; rec=product/epics/sample/STORY-1/decisions/01.md
+mkdir -p "$d" product/epics/sample/STORY-1/decisions
 case "$FACTORY_STAGE" in
   plan)
     if [ "$FACTORY_STORY" = STORY-1 ] && ! grep -q '^## Answer' "$rec" 2>/dev/null; then
@@ -2088,7 +2088,7 @@ exit 0
         return open(path, encoding="utf-8").read().split("\n")[:-1] if os.path.isfile(path) else []
 
     def answer(root):
-        with open(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"), "a",
+        with open(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md"), "a",
                   encoding="utf-8") as handle:
             handle.write(ANSWER)
 
@@ -2101,11 +2101,11 @@ exit 0
         folder = os.path.join(root, ".dca-factory", "runs", "STORY-2")
         check("acceptance: the runner stops with exit 3 at the document gate's question, counting no round",
               code == 3 and not story_delivered(root, "STORY-2")
-              and os.path.isfile(os.path.join(root, "project", "epics", "sample", "STORY-2", "decisions", "accept-1.md"))
+              and os.path.isfile(os.path.join(root, "product", "epics", "sample", "STORY-2", "decisions", "accept-1.md"))
               and not os.path.isfile(os.path.join(folder, ".gate-document.txt"))
               and not os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-2", ".rounds")),
               f"exit {code}; {output.strip().splitlines()[-2:]}")
-        with open(os.path.join(root, "project", "epics", "sample", "STORY-2", "decisions", "accept-1.md"), "a",
+        with open(os.path.join(root, "product", "epics", "sample", "STORY-2", "decisions", "accept-1.md"), "a",
                   encoding="utf-8") as h:
             h.write("\n## Answer\nanswer: accepted\nby: a-human\nat: 2026-09-25T15:00:00Z\n")
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", env=env)
@@ -2144,7 +2144,7 @@ exit 0
         check("backlog: after the answer the story resumes at the stage that asked, then its dependant runs",
               code == 0 and ran == [f"STORY-1 {s}" for s in six] + [f"STORY-3 {s}" for s in six],
               f"exit {code}, invocations {ran}, last lines: {output.strip().splitlines()[-4:]}")
-        record = open(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"),
+        record = open(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md"),
                       encoding="utf-8").read()
         check("backlog: the resumed stage's answer is stamped applied", "## Applied" in record)
         code, output = run_runner(runner, root, "run", env=env)
@@ -2254,7 +2254,7 @@ exit 0
             handle.write(CONFLICT.replace("STORY-1", "STORY-2"))
         stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
             "  judge) printf '## Verdict\\nverdict: pass\\n' > \"$d/judge.md\" ;;",
-            "  judge) mkdir -p project/epics/sample/STORY-2/decisions; cat fixture/conflict.md > project/epics/sample/STORY-2/decisions/01.md; "
+            "  judge) mkdir -p product/epics/sample/STORY-2/decisions; cat fixture/conflict.md > product/epics/sample/STORY-2/decisions/01.md; "
             "cat fixture/judge-conflict.md > \"$d/judge.md\" ;;")
         with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
             handle.write(stand_in)
@@ -2703,16 +2703,16 @@ exit 0
         return subprocess.run([sys.executable, cli_of(runner), "--tool-invocation", tool, *extra], capture_output=True,
                               text=True, encoding="utf-8", errors="replace",
                               env={**os.environ, "FACTORY_ISOLATION": "off", **(env or {})}).stdout.strip()
-    linked = ("--writable", "/home/p/project/epics", "--readable", "/home/p/.agents/factory",
+    linked = ("--writable", "/home/p/product/epics", "--readable", "/home/p/.agents/factory",
               "--protect", "/home/p/.agents/factory", "--protect", "/home/p/.dca-factory/evidence")
     claude_line, codex_line = invocation("claude", *linked), invocation("codex", *linked)
     checkout_line = invocation("claude", "--protect", "/home/p/.agents/factory")
     check("runner: Claude reads the pipeline and the evidence through --add-dir and may not edit them; Codex gets "
           "the writable folders alone; in the checkout the deny rules stand all the same",
-          "--add-dir /home/p/project/epics" in claude_line and "--add-dir /home/p/.agents/factory" in claude_line
+          "--add-dir /home/p/product/epics" in claude_line and "--add-dir /home/p/.agents/factory" in claude_line
           and "Edit(//home/p/.agents/factory/**)" in claude_line
           and "Edit(//home/p/.dca-factory/evidence/**)" in claude_line
-          and "--add-dir /home/p/project/epics" in codex_line and ".agents/factory" not in codex_line
+          and "--add-dir /home/p/product/epics" in codex_line and ".agents/factory" not in codex_line
           and "--disallowedTools" not in codex_line
           and "--add-dir" not in checkout_line and "Edit(//home/p/.agents/factory/**)" in checkout_line
           and claude_line.endswith('"$prompt"') and codex_line.endswith('"$prompt"'),
@@ -2786,7 +2786,7 @@ exit 0
           and block.get("edit", {}).get(".dca-factory/evidence/**") == "deny"
           and not any(key.startswith("/") for key in block.get("edit", {}))
           and block.get("edit", {}).get("*") == "allow"
-          and block.get("external_directory", {}).get("/home/p/project/epics/**") == "allow"
+          and block.get("external_directory", {}).get("/home/p/product/epics/**") == "allow"
           and block.get("external_directory", {}).get("/home/p/.agents/factory/**") == "deny",
           [off, on, mine])
 
@@ -3415,7 +3415,7 @@ def verify_setup(runner, verbose=False):
               code == 0 and "1 story(ies) checked" in output, output.strip().splitlines()[-2:])
         code, output = run_runner(project_runner(root), root, "discover", "--check", "nothing-here")
         check("verbs: `discover --check <topic>` is the discovery report's check through the gate",
-              code == 1 and "gate:fail discovery" in output and "project/discovery/nothing-here/discovery.md" in output,
+              code == 1 and "gate:fail discovery" in output and "product/discovery/nothing-here/discovery.md" in output,
               output.strip().splitlines()[-2:])
         code, output = run_runner(project_runner(root), root, "discover")
         check("verbs: `discover` without --check is a usage error — the report is written in a session", code == 2,
@@ -3526,16 +3526,15 @@ def verify_setup(runner, verbose=False):
                   and not any(l.startswith("reviews:") and ("ddd" in l or "hexagonal" in l) for l in lines)),
               [l for l in lines if l.startswith(("review", "reviews"))])
     for root in throwaway():
-        write_file(root, "AGENTS.md", "# A project\n\n<!-- dca-describe: start -->\n## Project description\n\n"
-                   "- product: `docs/what.md` — the product\n- tech: `project/tech.md` — the stack\n"
-                   "<!-- dca-describe: end -->\n")
+        write_file(root, "dca.profile.yaml", "overview: docs/what.md\nverify_command: ./gradlew archTest\n")
         run_setup(runner, root, "--tool", "none", "--from", lone)
         lines = active_lines(profile_of(root)) or []
-        check("places: a place the description's AGENTS.md line names becomes a profile key; a default one does not",
-              "product: docs/what.md" in lines and not any(l.startswith("tech:") for l in lines), lines)
+        check("places: setup copies nothing of `dca.profile.yaml` into the factory's profile — no place, no "
+              "architecture command it states; the factory reads them from there",
+              not any(l.startswith(("product:", "tech:", "architecture: ./gradlew archTest")) for l in lines), lines)
         agents = open(os.path.join(root, "AGENTS.md"), encoding="utf-8").read()
         check("places: the pipeline's AGENTS.md block carries no location line of its own",
-              "project/product.md" not in agents.split("<!-- dca-factory: start -->")[1], agents[-400:])
+              "product/overview.md" not in agents.split("<!-- dca-factory: start -->")[1], agents[-400:])
     # WP-63 7a: renamed skills — the run stops on an old name, update removes an unedited old copy
     for root in throwaway():
         build_project(root, profile=PROFILE + "carrier.build: ddd-modelling\nreview.domain: review-domain\n")
@@ -3829,15 +3828,15 @@ def verify_setup(runner, verbose=False):
         write_file(root, ".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: `changes-requested`\n")
         write_file(root, ".dca-factory/runs/STORY-1/build.md", "# Build\n\n## needs-human\n- decision: STORY-1-01. The browser…\n")
         write_file(root, ".dca-factory/runs/STORY-1/tidy.md", "# Tidy\n\n## needs-human\n(none)\n")
-        write_file(root, "project/epics/sample/STORY-1/decisions/01.md", "---\nid: STORY-1-01\nstory: STORY-1\nstage: build\n---\n\n# Q?\n")
-        write_file(root, "project/epics/sample/STORY-1/decisions/02.md",
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md", "---\nid: STORY-1-01\nstory: STORY-1\nstage: build\n---\n\n# Q?\n")
+        write_file(root, "product/epics/sample/STORY-1/decisions/02.md",
                    "---\nid: STORY-1-02\nstory: STORY-1\nstage: plan\n---\n\n# Q?\n\n## Answer\nanswer: yes\nby: x\nat: y\n")
         asks = cli(root, "--needs-human", ".dca-factory/runs/STORY-1/build.md", "--story", "STORY-1")
         check("cli: --verdict, --needs-human and --open-decisions read the stage files and the records as the gate does",
               cli(root, "--verdict", "STORY-1")[1] == "changes-requested" and cli(root, "--verdict", "STORY-9")[1] == ""
-              and asks == (0, "STORY-1-01\tbuild\tproject/epics/sample/STORY-1/decisions/01.md")
+              and asks == (0, "STORY-1-01\tbuild\tproduct/epics/sample/STORY-1/decisions/01.md")
               and cli(root, "--needs-human", ".dca-factory/runs/STORY-1/tidy.md")[0] == 1
-              and cli(root, "--open-decisions", "STORY-1")[1].split("\n") == ["project/epics/sample/STORY-1/decisions/01.md"],
+              and cli(root, "--open-decisions", "STORY-1")[1].split("\n") == ["product/epics/sample/STORY-1/decisions/01.md"],
               f"{asks}; {cli(root, '--open-decisions', 'STORY-1')}")
         # the project's own runner copy runs with the cli and the package beside its gate: two entry points of one
         # package, so one release by construction
@@ -3965,8 +3964,8 @@ def old_layout(root, delivered="2026-09-20T10:00:00Z"):
     write_file(root, "project/backlog/sample/epic.md", EPIC)
     write_file(root, "project/backlog/sample/STORY-1.md", STORY)
     write_file(root, "project/backlog/sample/STORY-2.md", story("STORY-2", ["STORY-1"]))
-    write_file(root, "project/product.md", PRODUCT)
-    write_file(root, "project/tech.md", TECH)
+    write_file(root, "product/overview.md", PRODUCT)
+    write_file(root, "product/tech.md", TECH)
     write_file(root, OLD_PROFILE, "contract: 9\ncompile: true\nbacklog: project/backlog\n")
     write_file(root, ".agents/factory/decisions/STORY-1-01.md", DECISION + ANSWER)
     write_file(root, ".agents/factory/decisions/STORY-1-accept-1.md",
@@ -4003,12 +4002,12 @@ def verify_places(args):
     # ids are unique project-wide: a second story under the same id is refused, naming both files
     for root in throwaway():
         backlog_project(root, ("STORY-2", []), extra_sources=(
-            ("project/epics/other/epic.md", EPIC.replace("id: sample", "id: other")),
-            ("project/epics/other/STORY-2/story.md", story("STORY-2").replace("epic: sample", "epic: other"))))
+            ("product/epics/other/epic.md", EPIC.replace("id: sample", "id: other")),
+            ("product/epics/other/STORY-2/story.md", story("STORY-2").replace("epic: sample", "epic: other"))))
         checked = gate_run(root, "--check-backlog")
         planned = gate_run(root, "--story", "STORY-2", "--stage", "plan")
         rows, nxt, _w, listing = schedule_of(args.gate, root)
-        both = ("project/epics/other/STORY-2/story.md", "project/epics/sample/STORY-2/story.md")
+        both = ("product/epics/other/STORY-2/story.md", "product/epics/sample/STORY-2/story.md")
         expectations.append(("ids: a story id used twice is refused by the backlog check, the plan gate and the schedule, "
                              "naming both files",
                              checked.returncode == 1 and all(p in checked.stdout for p in both) and "not unique" in checked.stdout
@@ -4023,7 +4022,7 @@ def verify_places(args):
     for root in throwaway():
         backlog_project(root, ("STORY-2", ["STORY-1"]), ("STORY-3", ["STORY-2"]),
                         story=delivered_story(STORY, "2026-09-21T10:00:00Z"),
-                        extra_sources=(("project/epics/sample/STORY-2/story.md",
+                        extra_sources=(("product/epics/sample/STORY-2/story.md",
                                         delivered_story(story("STORY-2", ["STORY-1"]), "2026-09-22T10:00:00Z")),
                                        (".dca-factory/runs/STORY-1/document.md", DOCUMENT),
                                        (".dca-factory/runs/STORY-2/document.md", DOCUMENT),
@@ -4089,6 +4088,7 @@ def verify_places(args):
         build_project(root)
         os.makedirs(os.path.join(root, ".agents", "factory"), exist_ok=True)
         os.replace(os.path.join(root, "dca-factory.profile.yaml"), os.path.join(root, OLD_PROFILE))
+        os.rename(os.path.join(root, "product"), os.path.join(root, "project"))
         os.rename(os.path.join(root, "project", "epics"), os.path.join(root, "project", "backlog"))
         planned = gate_run(root, "--story", "STORY-1", "--stage", "plan")
         checked = gate_run(root, "--check-backlog")
@@ -4096,7 +4096,7 @@ def verify_places(args):
                              "with the update that migrates it, and the story gate does not run on them",
                              planned.returncode == 1 and "gate:fail layout" in planned.stdout
                              and "factory.sh update" in planned.stdout and "dca-factory.profile.yaml" in planned.stdout
-                             and "project/backlog/ is now project/epics/" in planned.stdout
+                             and "project/backlog/ is now product/epics/" in planned.stdout
                              and "gate:note layout" in checked.stdout,
                              planned.stdout.strip()[-400:]))
 
@@ -4108,24 +4108,24 @@ def verify_places(args):
         digest_after_first = tree_digest(root)
         second = cli(root, "--migrate-layout")
         rows, nxt, _w, listing = schedule_of(args.gate, root)
-        story_1 = open(os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md"), encoding="utf-8").read()
+        story_1 = open(os.path.join(root, "product", "epics", "sample", "STORY-1", "story.md"), encoding="utf-8").read()
         profile = open(os.path.join(root, "dca-factory.profile.yaml"), encoding="utf-8").read()
         digest_2 = open(os.path.join(root, ".dca-factory", "evidence", "STORY-2", ".story-digest"), encoding="utf-8").read().strip()
         expectations.append(("migrate: the profile moves to the root with `epics:` and the contract, project/backlog/ becomes "
-                             "project/epics/, each record lands beside its story, the run artefacts move and the delivery "
+                             "product/epics/, each record lands beside its story, the run artefacts move and the delivery "
                              "goes into the story — the project's own files under tasks/ untouched, a second run moves nothing",
                              first.returncode == 0 and "status: delivered\ndelivered: 2026-09-20T10:00:00Z" in story_1
-                             and "epics: project/epics" in profile and "backlog:" not in profile
+                             and "epics: product/epics" in profile and "backlog:" not in profile
                              and f"contract: {gate_module(args.gate).CONTRACT}" in profile
                              and not os.path.exists(os.path.join(root, OLD_PROFILE))
-                             and os.path.isfile(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"))
-                             and os.path.isfile(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "accept-1.md"))
+                             and os.path.isfile(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md"))
+                             and os.path.isfile(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "accept-1.md"))
                              and not os.path.exists(os.path.join(root, ".agents", "factory", "decisions"))
                              and os.path.isfile(os.path.join(root, ".dca-factory", "runs", "STORY-1", "document.md"))
                              and not os.path.exists(os.path.join(root, ".dca-factory", "runs", "STORY-1", ".delivered"))
                              and not os.path.exists(os.path.join(root, "tasks", "STORY-1"))
                              and all(open(os.path.join(root, p), "rb").read() == c for p, c in foreign_before.items())
-                             and digest_2 == story_digest(os.path.join(root, "project", "epics", "sample", "STORY-2", "story.md"))
+                             and digest_2 == story_digest(os.path.join(root, "product", "epics", "sample", "STORY-2", "story.md"))
                              and ".dca-factory/evidence/**/journal.tsv merge=union"
                              in open(os.path.join(root, ".gitattributes"), encoding="utf-8").read()
                              and "nothing to move" in second.stdout and tree_digest(root) == digest_after_first
@@ -4163,12 +4163,12 @@ def verify_places(args):
     # with its decisions and findings into a folder named after its id, through git where the files are tracked
     for root in throwaway():
         build_project(root, tests=None)
-        os.replace(os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md"),
-                   os.path.join(root, "project", "epics", "sample", "STORY-1.md"))
-        os.rmdir(os.path.join(root, "project", "epics", "sample", "STORY-1"))
-        write_file(root, "project/epics/sample/STORY-1.decisions/01.md", DECISION + ANSWER)
-        write_file(root, "project/epics/sample/STORY-1.findings.md", "| 1 | ddd | a.java:1 | minor | d | f | open |\n")
-        write_file(root, "project/epics/sample/legacy-name.md", story("STORY-2"))
+        os.replace(os.path.join(root, "product", "epics", "sample", "STORY-1", "story.md"),
+                   os.path.join(root, "product", "epics", "sample", "STORY-1.md"))
+        os.rmdir(os.path.join(root, "product", "epics", "sample", "STORY-1"))
+        write_file(root, "product/epics/sample/STORY-1.decisions/01.md", DECISION + ANSWER)
+        write_file(root, "product/epics/sample/STORY-1.findings.md", "| 1 | ddd | a.java:1 | minor | d | f | open |\n")
+        write_file(root, "product/epics/sample/legacy-name.md", story("STORY-2"))
         for command in (["init", "-q"], ["add", "-A"],
                         ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
             subprocess.run(["git", *command], cwd=root, capture_output=True)
@@ -4178,7 +4178,7 @@ def verify_places(args):
         second = cli(root, "--migrate-layout")
         moved = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True).stdout
         rows, nxt, _w, listing = schedule_of(args.gate, root)
-        folder = os.path.join(root, "project", "epics", "sample")
+        folder = os.path.join(root, "product", "epics", "sample")
         expectations.append(("layout: flat story files are named as the older layout and not read; the update moves each "
                              "into a folder named after its id with its decisions and findings, through git, once",
                              planned.returncode == 1 and "flat layout" in planned.stdout
@@ -4191,7 +4191,7 @@ def verify_places(args):
                              and not os.path.exists(os.path.join(folder, "STORY-1.md"))
                              and not os.path.exists(os.path.join(folder, "STORY-1.decisions"))
                              and not os.path.exists(os.path.join(folder, "legacy-name.md"))
-                             and "R  project/epics/sample/STORY-1.md -> project/epics/sample/STORY-1/story.md" in moved
+                             and "R  product/epics/sample/STORY-1.md -> product/epics/sample/STORY-1/story.md" in moved
                              and "nothing to move" in second.stdout
                              and rows.get("STORY-1", ("",))[0] in ("ready", "resumable", "in-progress") and "STORY-2" in rows,
                              f"plan {planned.stdout.strip()[-200:]} | {first.stdout.strip()[-400:]} | {moved} | {rows}"))
@@ -4205,14 +4205,14 @@ def verify_places(args):
         return story(sid).replace("epic: sample", f"epic: {name}")
     for root in throwaway():
         backlog_project(root, extra_sources=(
-            ("project/epics/alpha/epic.md", epic("alpha")),
-            ("project/epics/alpha/ZZZ-1/story.md", epic_story("ZZZ-1", "alpha")),
-            ("project/epics/beta/epic.md", epic("beta")),
-            ("project/epics/beta/AAA-1/story.md", epic_story("AAA-1", "beta")),
-            ("project/epics/gamma/epic.md", epic("gamma", ["alpha"])),
-            ("project/epics/gamma/BBB-1/story.md", epic_story("BBB-1", "gamma"))))
-        os.remove(os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md"))
-        os.rmdir(os.path.join(root, "project", "epics", "sample", "STORY-1"))
+            ("product/epics/alpha/epic.md", epic("alpha")),
+            ("product/epics/alpha/ZZZ-1/story.md", epic_story("ZZZ-1", "alpha")),
+            ("product/epics/beta/epic.md", epic("beta")),
+            ("product/epics/beta/AAA-1/story.md", epic_story("AAA-1", "beta")),
+            ("product/epics/gamma/epic.md", epic("gamma", ["alpha"])),
+            ("product/epics/gamma/BBB-1/story.md", epic_story("BBB-1", "gamma"))))
+        os.remove(os.path.join(root, "product", "epics", "sample", "STORY-1", "story.md"))
+        os.rmdir(os.path.join(root, "product", "epics", "sample", "STORY-1"))
         first = schedule_of(args.gate, root)
         mark_delivered(root, "ZZZ-1", epic="alpha")
         second = schedule_of(args.gate, root)
@@ -4224,12 +4224,12 @@ def verify_places(args):
                              f"{first[3].strip()} || {second[3].strip()}"))
     for root in throwaway():
         backlog_project(root, extra_sources=(
-            ("project/epics/alpha/epic.md", epic("alpha", ["nowhere"])),
-            ("project/epics/alpha/ZZZ-1/story.md", epic_story("ZZZ-1", "alpha")),
-            ("project/epics/beta/epic.md", epic("beta", ["gamma"])),
-            ("project/epics/beta/AAA-1/story.md", epic_story("AAA-1", "beta")),
-            ("project/epics/gamma/epic.md", epic("gamma", ["beta"])),
-            ("project/epics/gamma/BBB-1/story.md", epic_story("BBB-1", "gamma"))))
+            ("product/epics/alpha/epic.md", epic("alpha", ["nowhere"])),
+            ("product/epics/alpha/ZZZ-1/story.md", epic_story("ZZZ-1", "alpha")),
+            ("product/epics/beta/epic.md", epic("beta", ["gamma"])),
+            ("product/epics/beta/AAA-1/story.md", epic_story("AAA-1", "beta")),
+            ("product/epics/gamma/epic.md", epic("gamma", ["beta"])),
+            ("product/epics/gamma/BBB-1/story.md", epic_story("BBB-1", "gamma"))))
         checked = gate_run(root, "--check-backlog")
         rows, nxt, _w, listing = schedule_of(args.gate, root)
         expectations.append(("epics: an epic that depends on no epic there is or sits on a cycle is refused by the backlog "
@@ -4240,26 +4240,27 @@ def verify_places(args):
                              and all(rows.get(sid, ("",))[0] == "blocked" for sid in ("ZZZ-1", "AAA-1", "BBB-1")),
                              f"{checked.stdout.strip()[-400:]} || {listing.strip()}"))
 
-    # one architecture command: the profile's and the conventions' compared, a difference named, never fixed
+    # one configuration of the method below the factory's (WP-99): `dca.profile.yaml` gives the architecture
+    # command and the places the factory's profile does not name; the factory's profile wins where it names one
     for root in throwaway():
         build_project(root)
-        write_file(root, ".agents/dca/conventions.md", "## Resolved configuration\n\nverify_command: ./gradlew archTest\n")
+        write_file(root, "dca.profile.yaml", "root: docs/product/\nepics: work/epics\nverify_command: ./gradlew archTest\n")
+        profile_path = os.path.join(root, "dca-factory.profile.yaml")
+        with open(profile_path, encoding="utf-8") as handle:
+            kept = [l for l in handle if not l.startswith("architecture:")]
+        with open(profile_path, "w", encoding="utf-8") as handle:
+            handle.writelines(kept)
+        layered = {key: cli(root, "--get", key).stdout.strip() for key in ("architecture", "product", "epics", "tech")}
         with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
-            handle.write("architecture: ./gradlew test-architecture\n")
-        differs = cli(root, "--drift")
-        brief = cli(root, "--status", "--brief")
-        write_file(root, ".agents/dca/conventions.md",
-                   "## Resolved configuration\n\nverify_command: ./gradlew test-architecture\n")
-        same = cli(root, "--drift")
-        brief_same = cli(root, "--status", "--brief")
-        expectations.append(("drift: `architecture:` in the profile and `verify_command:` in the conventions file are compared — "
-                             "a difference is named by --drift and by status --brief with both commands, equal ones are silent",
-                             differs.returncode == 1 and "./gradlew archTest" in differs.stdout
-                             and "./gradlew test-architecture" in differs.stdout
-                             and ".agents/dca/conventions.md" in brief.stdout and "archTest" in brief.stdout
-                             and same.returncode == 0 and same.stdout.strip() == "" and "archTest" not in brief_same.stdout
-                             and "verify_command" not in brief_same.stdout,
-                             f"{differs.stdout.strip()} | {brief.stdout.strip()[-300:]}"))
+            handle.write("architecture: ./gradlew test-architecture\ntech: elsewhere/tech.md\n")
+        own = {key: cli(root, "--get", key).stdout.strip() for key in ("architecture", "tech", "product")}
+        expectations.append(("configuration: `dca.profile.yaml` gives the architecture command and the places, `root:` "
+                             "moving every place it does not name; the factory's profile wins where it names one",
+                             layered == {"architecture": "./gradlew archTest", "product": "docs/product/overview.md",
+                                         "epics": "work/epics", "tech": "docs/product/tech.md"}
+                             and own == {"architecture": "./gradlew test-architecture", "tech": "elsewhere/tech.md",
+                                         "product": "docs/product/overview.md"},
+                             f"{layered} | {own}"))
     return expectations
 
 
@@ -4502,31 +4503,31 @@ def run_groups(args):
         (Case("plan: three rounds stop the run", "plan", 1, must_fail=("rounds",)),
          dict(rounds=3)),
         (Case("plan: no project description is a note, not a failure", "plan", 0,
-              text=("no product description at project/product.md", "no technical description at project/tech.md")),
+              text=("no product description at product/overview.md", "no technical description at product/tech.md")),
          dict()),
         (Case("plan: a complete product and technical description pass", "plan", 0, must_pass=("product", "tech")),
-         dict(extra_sources=(("project/product.md", PRODUCT), ("project/tech.md", TECH)))),
+         dict(extra_sources=(("product/overview.md", PRODUCT), ("product/tech.md", TECH)))),
         (Case("plan: a technical description with an empty heading is refused", "plan", 1,
               must_fail=("tech",), text=("empty `## Persistence`",)),
-         dict(extra_sources=(("project/tech.md", TECH.replace("One relational database.", "<!-- where -->")),))),
+         dict(extra_sources=(("product/tech.md", TECH.replace("One relational database.", "<!-- where -->")),))),
         (Case("plan: a `tech:` that names no file is refused", "plan", 1, must_fail=("tech",)),
          dict(profile=PROFILE + "tech: docs/tech.md\n")),
         (Case("plan: the designed map is read first — a context designed and not built yet passes", "plan", 0,
-              must_pass=("context-map",), text=("is on project/domain.md",)),
+              must_pass=("context-map",), text=("is on product/domain.md",)),
          dict(context_map="# Context map\n\n| Context |\n|---|\n| Something else |\n",
-              extra_sources=(("project/domain.md", "# Designed\n\n| Context |\n|---|\n| Widgets |\n"),))),
+              extra_sources=(("product/domain.md", "# Designed\n\n| Context |\n|---|\n| Widgets |\n"),))),
         (Case("plan: a context the designed map lacks is refused, whatever the generated map says", "plan", 1,
               must_fail=("context-map",)),
-         dict(extra_sources=(("project/domain.md", "# Designed\n\n| Context |\n|---|\n| Something else |\n"),))),
+         dict(extra_sources=(("product/domain.md", "# Designed\n\n| Context |\n|---|\n| Something else |\n"),))),
         (Case("plan: a `domain:` that names no file is refused", "plan", 1, must_fail=("context-map",)),
          dict(profile=PROFILE + "domain: docs/designed.md\n")),
         (Case("plan: a product scope with an empty heading is refused, comments do not count", "plan", 1,
               must_fail=("product",), text=("empty `## Look and feel`",)),
-         dict(extra_sources=(("project/product.md", PRODUCT.replace(
+         dict(extra_sources=(("product/overview.md", PRODUCT.replace(
              "Plain, readable, the project's own stylesheet.", "<!-- style direction -->")),))),
         (Case("plan: a product scope missing a heading is refused", "plan", 1,
               must_fail=("product",), text=("missing `## Qualities`",)),
-         dict(extra_sources=(("project/product.md", PRODUCT.replace("## Qualities", "## Quality")),))),
+         dict(extra_sources=(("product/overview.md", PRODUCT.replace("## Qualities", "## Quality")),))),
         (Case("plan: a `product:` that names no file is refused", "plan", 1, must_fail=("product",)),
          dict(profile=PROFILE + "product: docs/product.md\n")),
         # --- a model per stage, bound to a tool -------------------------------
@@ -4550,6 +4551,35 @@ def run_groups(args):
         (Case("test: a scenario's key is what the test stage binds", "test", 0,
               must_pass=("tests-mapped", "tests-red")),
          dict(story=STORY_SCENARIOS, profile=PROFILE + "contract: 14\n")),
+        # WP-98: the plan's spec delta against the living spec — a change of what holds needs a person's sentence
+        (Case("spec: a story that changes a criterion the spec holds, with no `## Changed expectations` and no "
+              "answered decision, is refused at the test gate", "test", 1, must_fail=("spec-delta",),
+              text=("no person said so",)),
+         dict(extra_sources=(("product/spec/widgets/scenarios.md", "# Widgets\n\n- shows-the-thing: The reader sees the old thing.\nTest: com.example.WidgetPageTest#showsTheThing\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- changes shows-the-thing\n")))),
+        (Case("spec: the same change backed by the story's `## Changed expectations` passes the spec check", "test", 0,
+              must_pass=("spec-delta",), text=("backed by the story's `## Changed expectations`",)),
+         dict(story=STORY.replace("## Assumptions", "## Changed expectations\n\n- The reader sees the thing, no longer the "
+                                                   "old thing.\n\n## Assumptions"),
+              extra_sources=(("product/spec/widgets/scenarios.md", "# Widgets\n\n- shows-the-thing: The reader sees the old thing.\nTest: com.example.WidgetPageTest#showsTheThing\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- changes shows-the-thing\n")))),
+        (Case("spec: a delta that removes a criterion the spec does not hold is refused", "test", 1,
+              must_fail=("spec-delta",), text=("`removes gone` — the spec has no `gone`",)),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- removes gone\n"),))),
+        (Case("spec: the delivering gate merges the story into its context's spec with a test line per criterion",
+              "document", 0, must_pass=("delivered", "spec")),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              after=lambda root: [] if os.path.isfile(os.path.join(root, "product/spec/widgets/scenarios.md")) and all(
+                  line in open(os.path.join(root, "product/spec/widgets/scenarios.md"), encoding="utf-8").read() for line in
+                  ("- shows-nothing-when-empty: With nothing recorded", "Test: com.example.WidgetUnitTest#showsNothingWhenEmpty",
+                   "Test: com.example.WidgetPageTest#showsTheThing")) and "(happy path)" not in open(
+                  os.path.join(root, "product/spec/widgets/scenarios.md"), encoding="utf-8").read()
+              else ["product/spec/widgets/scenarios.md does not hold both criteria with their test lines"])),
+        (Case("spec: a test line of the spec whose test is gone stops the delivering gate", "document", 1,
+              must_fail=("spec-tests",), text=("names a test that is gone",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=(("product/spec/widgets/scenarios.md",
+                              "# Widgets\n\n- older-thing: An older thing holds.\nTest: com.example.GoneTest#older\n"),))),
         (Case("plan: a rule without a scenario is refused", "plan", 1, must_fail=("gate",),
               text=("has no scenario",)),
          dict(story=STORY_SCENARIOS.replace("### Rule: An empty record is not an error\n",
@@ -4636,7 +4666,7 @@ def run_groups(args):
               must_pass=("tests-green", "adopt-judged", "delivered"), must_skip=("break-proof",)),
          dict(story=ADOPTED, green=both_green, extra_sources=((".dca-factory/runs/STORY-1/judge.md", "# Judge\n\nverdict: pass\n"),),
               after=lambda root: [] if re.search(r"^status: delivered\ndelivered: \S+\ndelivered_by: gate$", open(
-                  os.path.join(root, "project/epics/sample/STORY-1/story.md"), encoding="utf-8").read(), re.M)
+                  os.path.join(root, "product/epics/sample/STORY-1/story.md"), encoding="utf-8").read(), re.M)
               else ["the adopted story does not read `status: delivered` … `delivered_by: gate`"])),
         (Case("adopt: without a judge's pass nothing is adopted", "adopt", 1, must_fail=("adopt-judged",)),
          dict(story=ADOPTED, green=both_green)),
@@ -4950,7 +4980,7 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 18\nrequried: compile\n" + PROFILE)),
+         dict(profile="contract: 19\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
@@ -4979,7 +5009,7 @@ def run_groups(args):
          with_decisions(plan=PLAN_ASKING)),
         (Case("decisions: an open record blocks the story and says where to answer", "test", 1,
               must_fail=("decisions",),
-              text=("STORY-1-01 is open", "project/epics/sample/STORY-1/decisions/01.md", "`by:` and `at:`")),
+              text=("STORY-1-01 is open", "product/epics/sample/STORY-1/decisions/01.md", "`by:` and `at:`")),
          with_decisions(("STORY-1-01", DECISION), plan=PLAN_ASKING)),
         (Case("decisions: a stage that writes on after the id on its decision line still names that record", "test", 1,
               must_fail=("decisions",), text=("STORY-1-01 is open",)),
@@ -5012,7 +5042,7 @@ def run_groups(args):
          with_decisions(("STORY-1-01", DECISION + ANSWER), plan=PLAN_ASKING)),
         (Case("decisions: a judge's story conflict answered for the plan stage lets the plan gate through",
               "plan", 0, text=("the plan stage runs next and applies it",)),
-         dict(extra_sources=(("project/epics/sample/STORY-1/decisions/01.md",
+         dict(extra_sources=(("product/epics/sample/STORY-1/decisions/01.md",
                               CONFLICT.replace("stage: test", "stage: plan") + ANSWER),
                              (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED.replace("Decision STORY-1-01 answered b: ", "")),
                              (".dca-factory/runs/STORY-1/judge.md", JUDGE_CONFLICT)))),
@@ -5107,11 +5137,11 @@ def run_groups(args):
         # code published `TaskAdded`, and nothing compared them (TODO #117)
         # WP-85: an epic that came from a discovery links its report, and the link resolves
         (Case("plan: an epic's `discovery:` link to a report that is there passes", "plan", 0, must_pass=("epic",)),
-         dict(epic=EPIC.replace("domain_contact:", "discovery: project/discovery/sample/discovery.md\ndomain_contact:"),
-              extra_sources=(("project/discovery/sample/discovery.md", "# Discovery\n"),))),
+         dict(epic=EPIC.replace("domain_contact:", "discovery: product/discovery/sample/discovery.md\ndomain_contact:"),
+              extra_sources=(("product/discovery/sample/discovery.md", "# Discovery\n"),))),
         (Case("plan: an epic's `discovery:` link to a report that is not there is refused", "plan", 1,
-              must_fail=("epic",), text=("project/discovery/sample/discovery.md",)),
-         dict(epic=EPIC.replace("domain_contact:", "discovery: project/discovery/sample/discovery.md\ndomain_contact:"))),
+              must_fail=("epic",), text=("product/discovery/sample/discovery.md",)),
+         dict(epic=EPIC.replace("domain_contact:", "discovery: product/discovery/sample/discovery.md\ndomain_contact:"))),
         (Case("plan: a story's `publishes:` is the epic's outcome event", "plan", 0, must_pass=("outcome",)),
          dict(story=STORY.replace("depends_on: []", "depends_on: []\npublishes: SomethingHappened"))),
         (Case("plan: a story that publishes an event the epic's metric does not name is refused", "plan", 1,
@@ -5196,7 +5226,7 @@ def run_groups(args):
         (Case("test: a story running again for a human's correction keeps the tests it had met, green",
               "test", 0, must_pass=("tests-red",), text=("expectation changed on decision STORY-1-accept-1",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
-             ("project/epics/sample/STORY-1/decisions/accept-1.md",
+             ("product/epics/sample/STORY-1/decisions/accept-1.md",
               "---\nid: STORY-1-accept-1\nstory: STORY-1\nstage: document\nkind: acceptance\n"
               "asked: 2026-09-25T15:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n\n## Answer\n"
               "answer: correction: two cards on m\nby: a-human\nat: 2026-09-25T15:10:00Z\n"),))),
@@ -5279,7 +5309,7 @@ def run_groups(args):
          dict(green=both_green, ledger=both_green, document=DOCUMENT,
               story=delivered_story(STORY, "2026-09-27T10:00:00Z"),
               after=lambda root: [] if "delivered: 2026-09-27T10:00:00Z" in open(
-                  os.path.join(root, "project/epics/sample/STORY-1/story.md"), encoding="utf-8").read() else ["delivered: was rewritten"])),
+                  os.path.join(root, "product/epics/sample/STORY-1/story.md"), encoding="utf-8").read() else ["delivered: was rewritten"])),
         (Case("build: green with the test stage's record passes", "build", 0,
               must_pass=("tests-green", "architecture"),
               text=("via `test.pages:`", "via `test:`")),
@@ -5327,8 +5357,8 @@ def run_groups(args):
                                                          "`delivered_by: gate`")),
          dict(green=both_green, ledger=both_green, document=DOCUMENT,
               extra_sources=((".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | Defect | Fix |\n|---|---|---|---|---|\n| clean-code | src/main/Thing.java:3 | minor | a name that says nothing | rename it |\n| ddd | src/main/Thing.java:9 | minor | an event in the present tense | past tense |\n"),),
-              after=lambda root: [] if os.path.isfile(os.path.join(root, "project/epics/sample/STORY-1/findings.md"))
-              and open(os.path.join(root, "project/epics/sample/STORY-1/findings.md"), encoding="utf-8").read().count("| open |") == 2
+              after=lambda root: [] if os.path.isfile(os.path.join(root, "product/epics/sample/STORY-1/findings.md"))
+              and open(os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read().count("| open |") == 2
               else ["no STORY-1/findings.md with two open rows in the story's folder"])),
         # WP-81: one review file per perspective; a missing one is a note, a malformed one is refused.
         (Case("document: three review files in the skills' format pass the reviews check", "document", 0,
@@ -5487,7 +5517,7 @@ def run_groups(args):
             ("STORY-1-04", DECISION.replace("STORY-1-01", "STORY-1-04") + ANSWER
              + "\n## Applied\nat: 2026-09-22T21:30:00Z\nstage: plan\n"),
             ("STORY-9-01", DECISION.replace("STORY-1", "STORY-9")),
-            extra_sources=(("project/epics/sample/STORY-9/story.md", story("STORY-9")),)))
+            extra_sources=(("product/epics/sample/STORY-9/story.md", story("STORY-9")),)))
         listing = subprocess.run([sys.executable, args.cli, "--list-decisions"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
         inbox = json.loads(subprocess.run([sys.executable, args.cli, "--list-decisions", "--format", "json"], cwd=root,
@@ -5728,8 +5758,8 @@ def run_groups(args):
         expectations.append(("red-proof: a test changed after it was seen failing fails the build gate",
                              code == 1 and "red-proof" in checks_by_verdict(output)["fail"]
                              and "WidgetPageTest.java" in output, [l for l in output.splitlines() if "red-proof" in l]))
-        os.makedirs(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions"), exist_ok=True)
-        with open(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"), "w", encoding="utf-8") as handle:
+        os.makedirs(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions"), exist_ok=True)
+        with open(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md"), "w", encoding="utf-8") as handle:
             handle.write(CONFLICT + ANSWER)
         with open(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"), "a", encoding="utf-8") as handle:
             handle.write("\nDecision STORY-1-01 answered b: the expectation of shows-the-thing changed.\n")
@@ -6079,7 +6109,7 @@ def run_groups(args):
         expectations.append(("contract: --contract test prints the table marker, the selector pattern the gate matches and the "
                              "Files section", code_t == 0 and "<!-- gate:tests -->" in text_t
                              and repr(gate_names.SELECTOR.pattern) in text_t and repr(gate_names.MAPPING_ROW.pattern) in text_t
-                             and "## Files" in text_t and ".tests-red" in text_t and len(text_t) < 3300,   # contract 15's clauses row
+                             and "## Files" in text_t and ".tests-red" in text_t and len(text_t) < 3400,   # contract 15's clauses row, contract 19's moved tests
                              text_t[:300]))
         expectations.append(("contract: plan, judge and document print their shapes; an unknown stage is refused",
                              code_p == 0 and "level: e2e | integration | browser-only" in text_p
@@ -6092,11 +6122,11 @@ def run_groups(args):
         build_project(root, green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
             (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | Defect | Fix |\n|---|---|---|---|---|\n| clean-code | src/main/Thing.java:3 | minor | a name that says nothing | rename it |\n| ddd | src/main/Thing.java:9 | minor | an event in the present tense | past tense |\n"),))
         run_gate(args.gate, root, "document")
-        write_file(root, "project/epics/sample/STORY-1/story.md",
-                   open(os.path.join(root, "project/epics/sample/STORY-1/story.md"), encoding="utf-8").read()
+        write_file(root, "product/epics/sample/STORY-1/story.md",
+                   open(os.path.join(root, "product/epics/sample/STORY-1/story.md"), encoding="utf-8").read()
                    .replace("status: delivered", "status: approved"))
         run_gate(args.gate, root, "document")
-        path = os.path.join(root, "project/epics/sample/STORY-1/findings.md")
+        path = os.path.join(root, "product/epics/sample/STORY-1/findings.md")
         text = open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
         listed = subprocess.run([sys.executable, cli_of(args.gate), "--findings"], cwd=root, capture_output=True,
                                 text=True, encoding="utf-8", errors="replace").stdout
@@ -6417,13 +6447,13 @@ def run_groups(args):
 
     # --- status: an epic is listed from its own file, also before its first story -------------------
     for root in throwaway():
-        write_file(root, "project/epics/reminders/epic.md",
+        write_file(root, "product/epics/reminders/epic.md",
                    "---\nid: reminders\ntitle: Remind the reader\ngoal: fewer forgotten books\nmetric: ReminderSent\n"
-                   "discovery: project/discovery/forgetting/discovery.md\n---\n# Remind the reader\n")
+                   "discovery: product/discovery/forgetting/discovery.md\n---\n# Remind the reader\n")
         # a second empty epic whose `discovery:` is a list — sorted after the first, so the next step stays the same
-        write_file(root, "project/epics/zz-digest/epic.md",
+        write_file(root, "product/epics/zz-digest/epic.md",
                    "---\nid: zz-digest\ntitle: A weekly digest\ngoal: more books finished\nmetric: DigestSent\n"
-                   "discovery:\n  - project/discovery/forgetting/discovery.md\n  - project/discovery/habits/discovery.md\n"
+                   "discovery:\n  - product/discovery/forgetting/discovery.md\n  - product/discovery/habits/discovery.md\n"
                    "---\n# A weekly digest\n")
         shown_status = lambda *more: subprocess.run([sys.executable, args.cli, "--status", *more], cwd=root,
                                                     capture_output=True, text=True, encoding="utf-8").stdout
@@ -6433,7 +6463,7 @@ def run_groups(args):
             ("status: an epic without a story is listed from its epic.md, with its title, goal, outcome and discovery",
              len(listed) == 1 and listed[0]["total"] == 0 and listed[0]["title"] == "Remind the reader"
              and listed[0]["metric"] == "ReminderSent"
-             and listed[0]["discovery"] == "project/discovery/forgetting/discovery.md", listed),
+             and listed[0]["discovery"] == "product/discovery/forgetting/discovery.md", listed),
             ("status: the next step of an empty epic is cutting its stories, in the backlog skill's argument form",
              model.get("next", {}).get("action", {}).get("skill") == "/factory-backlog stories reminders", model.get("next")),
             ("status: the project description as it stands — a missing part says so, with the headings it needs",
@@ -6442,7 +6472,7 @@ def run_groups(args):
              and "Surfaces" in model["description"][0]["required"], model.get("description")),
             ("status: a list-valued front-matter field of an epic is joined with commas, never its Python form",
              [e.get("discovery") for e in model.get("epics", []) if e.get("epic") == "zz-digest"]
-             == ["project/discovery/forgetting/discovery.md, project/discovery/habits/discovery.md"],
+             == ["product/discovery/forgetting/discovery.md, product/discovery/habits/discovery.md"],
              [e.get("discovery") for e in model.get("epics", [])]),
             ("status: the backlog of an epic without a story says No story yet and shows no sums",
              "No story yet." in shown_status("--part", "backlog")
@@ -6453,7 +6483,7 @@ def run_groups(args):
              and "No story yet — `/factory-backlog stories reminders`." in shown_status("--format", "md"),
              shown_status()[-400:]),
         ]
-        write_file(root, "project/product.md", "# Product\n\n## What and for whom\n\nA list.\n\n## Surfaces\n\n"
+        write_file(root, "product/overview.md", "# Product\n\n## What and for whom\n\nA list.\n\n## Surfaces\n\n"
                                                "<!-- the pages -->\n\n## Qualities\n\nFast.\n")
         product = json.loads(shown_status("--format", "json") or "{}").get("description", [{}])[0]
         expectations.append(("status: a part of the description that is there names its missing and its empty headings "
@@ -6472,7 +6502,7 @@ def run_groups(args):
     for root in throwaway():
         backlog_project(root, ("STORY-2", []), extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_ASKING),
-            ("project/epics/sample/STORY-1/decisions/01.md", DECISION),
+            ("product/epics/sample/STORY-1/decisions/01.md", DECISION),
             (".dca-factory/evidence/STORY-2/journal.tsv",
              "2026-09-23T10:00:00Z\tstage-start\tplan\ttool=x\n2026-09-23T10:01:00Z\tstage-end\tplan\texit=0\n"
              "2026-09-23T10:01:00Z\tusage\tplan\ttool=x\tmodel=m\tinput=10\tcache_read=0\tcache_write=0\toutput=90\tcost=0.01\n"
@@ -6491,7 +6521,7 @@ def run_groups(args):
              part(out, "Waiting for you", "Backlog") + story2),
             ("status: what needs a person is listed first, with the story and what to do",
              re.search(r"\? STORY-1\s+waiting for your answer\n\s+agent\s+/factory-decisions\n\s+shell\s+write the answer "
-                       r"into project/epics/sample/STORY-1/decisions/01\.md", part(out, "Waiting for you", "Running")) is not None,
+                       r"into product/epics/sample/STORY-1/decisions/01\.md", part(out, "Waiting for you", "Running")) is not None,
              part(out, "Waiting for you", "Running")),
             ("status: one row per story, grouped under its epic; its tokens by class, per epic and in total, with the cost",
              "sample" in part(out, "Backlog", "Tokens") and "STORY-1" in part(out, "Backlog", "Tokens")
@@ -6806,8 +6836,8 @@ def run_groups(args):
             with open(os.path.join(root, ".dca-factory", "runs", "STORY-1", "plan.md"), "w", encoding="utf-8") as handle:
                 handle.write(PLAN_APPLIED + "\n" + plan_extra)
             if record:
-                os.makedirs(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions"), exist_ok=True)
-                with open(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"), "w",
+                os.makedirs(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions"), exist_ok=True)
+                with open(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md"), "w",
                           encoding="utf-8") as handle:
                     handle.write(record)
             with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
@@ -6849,8 +6879,8 @@ def run_groups(args):
                 with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
                     handle.write(change(old_test))
             if decided:
-                os.makedirs(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions"), exist_ok=True)
-                with open(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"), "w",
+                os.makedirs(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions"), exist_ok=True)
+                with open(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md"), "w",
                           encoding="utf-8") as handle:
                     handle.write(CONFLICT + ANSWER if decided is True else decided)
                 with open(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"), "w", encoding="utf-8") as handle:
@@ -6963,11 +6993,11 @@ def run_groups(args):
                         extra_sources=((".dca-factory/runs/STORY-1/document.md", DOCUMENT),
                                        (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
                                        (".dca-factory/runs/STORY-3/plan.md", PLAN_ASKING.replace("STORY-1", "STORY-3")),
-                                       ("project/epics/sample/STORY-3/decisions/01.md",
+                                       ("product/epics/sample/STORY-3/decisions/01.md",
                                         DECISION.replace("STORY-1", "STORY-3"))))
-        with open(os.path.join(root, "project", "epics", "sample", "STORY-7", "story.md"), "w", encoding="utf-8") as handle:
+        with open(os.path.join(root, "product", "epics", "sample", "STORY-7", "story.md"), "w", encoding="utf-8") as handle:
             handle.write(story("STORY-7", status="draft"))
-        with open(os.path.join(root, "project", "epics", "README.md"), "w", encoding="utf-8") as handle:
+        with open(os.path.join(root, "product", "epics", "README.md"), "w", encoding="utf-8") as handle:
             handle.write("# Backlog\n\nOne folder per epic.\n")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations += [
@@ -6995,14 +7025,14 @@ def run_groups(args):
         backlog_project(root, ("STORY-2", []),
                         extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
                                        (".dca-factory/runs/STORY-1/tests.md", TESTS + "\n## needs-human\ndecision: STORY-1-01\n"),
-                                       ("project/epics/sample/STORY-1/decisions/01.md",
+                                       ("product/epics/sample/STORY-1/decisions/01.md",
                                         DECISION.replace("stage: plan", "stage: test"))))
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: a waiting story with code in the tree holds the checkout",
                              nxt.startswith("none") and "STORY-1 holds unfinished code" in nxt
                              and rows.get("STORY-2") == ("ready", "plan") and wait == "yes",
                              f"next: {nxt}"))
-        with open(os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md"), "a",
+        with open(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md"), "a",
                   encoding="utf-8") as handle:
             handle.write(ANSWER)
         rows, nxt, wait, output = schedule_of(args.gate, root)
@@ -7048,7 +7078,7 @@ def run_groups(args):
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         unchanged = rows.get("STORY-1")
-        with open(os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md"), "a", encoding="utf-8") as handle:
+        with open(os.path.join(root, "product", "epics", "sample", "STORY-1", "story.md"), "a", encoding="utf-8") as handle:
             handle.write("- answered: archived things are hidden (the-expert, 2026-09-23).\n")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: a story edited after its plan runs from plan again",
@@ -7151,7 +7181,7 @@ def run_groups(args):
         backlog_project(root, ("STORY-2", []), story=delivered_story(STORY, "2026-09-20T10:00:00Z"), extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED), (".dca-factory/runs/STORY-1/tests.md", TESTS),
             (".dca-factory/runs/STORY-1/document.md", DOCUMENT),
-            ("project/epics/sample/STORY-1/decisions/01.md", DECISION.replace(
+            ("product/epics/sample/STORY-1/decisions/01.md", DECISION.replace(
                 "# Does an archived thing count?", "# " + long_question) + ANSWER)))
         overview = subprocess.run([sys.executable, args.cli, "--status"], cwd=root, capture_output=True,
                                   text=True, encoding="utf-8").stdout
@@ -7211,7 +7241,7 @@ def run_groups(args):
         with open(os.path.join(root, record_file(rid)), "a", encoding="utf-8") as h:
             h.write(f"\n## Answer\nanswer: {text}\nby: a-human\nat: 2026-09-25T15:00:00Z\n")
 
-    story_file = lambda root: os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md")
+    story_file = lambda root: os.path.join(root, "product", "epics", "sample", "STORY-1", "story.md")
     delivered = lambda root: story_delivered(root)
     record = lambda root, n: os.path.join(root, record_file(f"STORY-1-accept-{n}"))
 
@@ -7275,7 +7305,7 @@ def run_groups(args):
         gate_run(root, "--story", "STORY-1", "--stage", "plan")
         gate_run(root, "--story", "STORY-1", "--stage", "document")
         refused = cli_run(root, "--reopen", "STORY-1")
-        write_file(root, "project/epics/sample/STORY-1/decisions/accept-1.md",
+        write_file(root, "product/epics/sample/STORY-1/decisions/accept-1.md",
                    "---\nid: STORY-1-accept-1\nstory: STORY-1\nstage: document\nkind: acceptance\n"
                    "asked: 2026-09-25T15:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n")
         answer(root, "STORY-1-accept-1", "correction: eight products")
@@ -7299,7 +7329,7 @@ def run_groups(args):
         accept_fixture(root, "", ("STORY-2", []), extra=((".dca-factory/runs/STORY-2/plan.md", PLAN_APPLIED),
                                                          (".dca-factory/runs/STORY-2/tests.md", TESTS)))
         gate_run(root, "--story", "STORY-1", "--stage", "document")
-        write_file(root, "project/epics/sample/STORY-1/decisions/accept-1.md",
+        write_file(root, "product/epics/sample/STORY-1/decisions/accept-1.md",
                    "---\nid: STORY-1-accept-1\nstory: STORY-1\nstage: document\nkind: acceptance\n"
                    "asked: 2026-09-25T15:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n")
         answer(root, "STORY-1-accept-1", "correction: eight products")
@@ -7317,10 +7347,10 @@ def run_groups(args):
         answer(root, "STORY-1-accept-1", "accepted")
         gate_run(root, "--story", "STORY-1", "--stage", "document")
         text = open(story_file(root), encoding="utf-8").read()
-        write_file(root, "project/epics/sample/STORY-1/story.md",
+        write_file(root, "product/epics/sample/STORY-1/story.md",
                    text.replace("The reader sees the thing.", "The reader sees two things.")
                    + "- answered: two things (a-human, STORY-1-accept-2).\n")
-        write_file(root, "project/epics/sample/STORY-1/decisions/accept-2.md",
+        write_file(root, "product/epics/sample/STORY-1/decisions/accept-2.md",
                    "---\nid: STORY-1-accept-2\nstory: STORY-1\nstage: document\nkind: acceptance\n"
                    "asked: 2026-09-25T16:00:00Z\ndigest: none\n---\n\n# Accept STORY-1?\n")
         answer(root, "STORY-1-accept-2", "correction: two things")
@@ -7329,7 +7359,7 @@ def run_groups(args):
                              wish.returncode == 1 and "new wish" in wish.stdout and delivered(root),
                              wish.stdout.strip()[-200:]))
 
-    # WP-85: a discovery report under project/discovery/<topic>/ — the shape, the sources, the proposed work
+    # WP-85: a discovery report under product/discovery/<topic>/ — the shape, the sources, the proposed work
     discovery = DISCOVERY
     for label, files, want_code, want_text in (
             ("discovery: a report in shape, every claim's source resolving, passes", (), 0, "gate:pass discovery"),
@@ -7345,25 +7375,25 @@ def run_groups(args):
              (("discovery.md", discovery.replace("- metric: ReportSent\n", "")),), 1, "metric"),
             ("discovery: a topic whose originals/ git does not ignore is refused", ((".gitignore", None),), 1, "originals/"),
             ("discovery: a proposed description change naming its file and its change passes",
-             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n- change: team leads of small teams too [S1]\n\n## Sources")),), 0,
+             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### overview.md — For whom\n- change: team leads of small teams too [S1]\n\n## Sources")),), 0,
              "1 proposed description change(s)"),
             ("discovery: a proposed description change that names no description file is refused",
              (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### the users\n- change: team leads of small teams too [S1]\n\n## Sources")),), 1,
-             "names none of product.md"),
+             "names none of overview.md"),
             ("discovery: a proposed description change without its change is refused",
-             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n- why: the interviews\n\n## Sources")),), 1,
+             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### overview.md — For whom\n- why: the interviews\n\n## Sources")),), 1,
              "says no `- change:`"),
             ("discovery: proposed description changes stand between the proposed work and the sources",
-             (("discovery.md", discovery.replace("## Proposed work", "## Proposed description changes\n\n### product.md — For whom\n- change: team leads of small teams too [S1]\n\n## Proposed work")),), 1,
+             (("discovery.md", discovery.replace("## Proposed work", "## Proposed description changes\n\n### overview.md — For whom\n- change: team leads of small teams too [S1]\n\n## Proposed work")),), 1,
              "stands between"),
             ("discovery: a proposed description change whose field is written `- Change:` is read all the same",
-             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n- Change: team leads of small teams too [S1]\n\n## Sources")),), 0,
+             (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### overview.md — For whom\n- Change: team leads of small teams too [S1]\n\n## Sources")),), 0,
              "1 proposed description change(s)"),
             ("discovery: an empty `## Proposed description changes` is refused like empty proposed work",
              (("discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n## Sources")),), 1,
              "`## Proposed description changes` proposes nothing")):
         for root in throwaway():
-            topic = "project/discovery/monthly-report/"
+            topic = "product/discovery/monthly-report/"
             base = {"discovery.md": discovery, "sources/interview-1.md": "Interview 1, a team lead:\n\nWe rebuild it by hand.\n",
                     ".gitignore": "originals/\n"}
             base.update(dict(files))
@@ -7373,8 +7403,8 @@ def run_groups(args):
             expectations.append((label, done.returncode == want_code and want_text in done.stdout, done.stdout.strip()[-300:]))
     for root in throwaway():
         # a missing `## Proposed work` is one finding — the position of the description changes is not a second
-        topic = "project/discovery/monthly-report/"
-        text = discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n"
+        topic = "product/discovery/monthly-report/"
+        text = discovery.replace("## Sources", "## Proposed description changes\n\n### overview.md — For whom\n"
                                                "- change: team leads of small teams too [S1]\n\n## Sources")
         text = text.split("## Proposed work", 1)[0] + "## Proposed description changes" \
             + text.split("## Proposed description changes", 1)[1]
@@ -7388,10 +7418,10 @@ def run_groups(args):
                              done.stdout.strip()[-300:]))
     for root in throwaway():
         # the list: every topic, its proposals and which the backlog already holds, its description changes
-        topic = "project/discovery/monthly-report/"
+        topic = "product/discovery/monthly-report/"
         backlog_project(root, extra_sources=(
-            (topic + "discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### product.md — For whom\n- change: team leads of small teams too [S1]\n\n## Sources")),
-            ("project/epics/monthly-report/epic.md", "---\nid: monthly-report\ntitle: The report\n---\n# The report\n")))
+            (topic + "discovery.md", discovery.replace("## Sources", "## Proposed description changes\n\n### overview.md — For whom\n- change: team leads of small teams too [S1]\n\n## Sources")),
+            ("product/epics/monthly-report/epic.md", "---\nid: monthly-report\ntitle: The report\n---\n# The report\n")))
         listed = subprocess.run([sys.executable, args.cli, "--discover-list", "--format", "json"], cwd=root,
                                 capture_output=True, text=True, encoding="utf-8", errors="replace")
         model = json.loads(listed.stdout or "{}")
@@ -7403,7 +7433,7 @@ def run_groups(args):
                              "the others say how to release them",
                              len(topics) == 1 and proposals.get("monthly-report", {}).get("epic") == "monthly-report"
                              and all(p["metric"] for p in proposals.values())
-                             and topics[0]["description_changes"] == [{"target": "product.md — For whom",
+                             and topics[0]["description_changes"] == [{"target": "overview.md — For whom",
                                                                        "change": "team leads of small teams too [S1]", "why": ""}]
                              and "epic monthly-report" in text and "/dca-describe" in text,
                              listed.stdout[-500:]))
@@ -7412,7 +7442,7 @@ def run_groups(args):
         done = subprocess.run([sys.executable, args.gate, "--check-discovery", "nothing-here"], cwd=root,
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
         expectations.append(("discovery: a topic without a report is refused, not passed as empty",
-                             done.returncode == 1 and "project/discovery/nothing-here/discovery.md" in done.stdout,
+                             done.returncode == 1 and "product/discovery/nothing-here/discovery.md" in done.stdout,
                              done.stdout.strip()[-300:]))
     for root in throwaway():
         # the backlog skill checks one story while it is still being written: the plan gate's checks,
@@ -7436,10 +7466,10 @@ def run_groups(args):
             (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED), (".dca-factory/runs/STORY-1/tests.md", TESTS),
             (".dca-factory/runs/STORY-1/build.md", "## Changed\n"), (".dca-factory/runs/STORY-1/tidy.md", "## Moves\n"),
             (".dca-factory/runs/STORY-1/judge.md", JUDGE_CONFLICT),
-            ("project/epics/sample/STORY-1/decisions/01.md", CONFLICT)))
+            ("product/epics/sample/STORY-1/decisions/01.md", CONFLICT)))
         rows, nxt, wait, output = schedule_of(args.gate, root)
         waiting = rows.get("STORY-1")
-        record = os.path.join(root, "project", "epics", "sample", "STORY-1", "decisions", "01.md")
+        record = os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md")
         with open(record, "a", encoding="utf-8") as handle:
             handle.write(ANSWER)
         rows, nxt, wait, output = schedule_of(args.gate, root)
@@ -7457,7 +7487,7 @@ def run_groups(args):
     for root in throwaway():
         backlog_project(root, ("STORY-2", []), extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
                                                              (".dca-factory/runs/STORY-1/tests.md", TESTS)))
-        path = os.path.join(root, "project", "epics", "sample", "STORY-1", "story.md")
+        path = os.path.join(root, "product", "epics", "sample", "STORY-1", "story.md")
         with open(path, encoding="utf-8") as handle:
             text = handle.read().replace("status: approved", "status: superseded")
         with open(path, "w", encoding="utf-8") as handle:
@@ -7467,14 +7497,14 @@ def run_groups(args):
                              rows.get("STORY-1", ("",))[0] == "superseded" and nxt == "STORY-2 plan", f"next: {nxt}"))
     for root in throwaway():
         backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/.gate-plan.txt", "gate:fail epic\n"),))
-        epic = os.path.join(root, "project", "epics", "sample", "epic.md")
+        epic = os.path.join(root, "product", "epics", "sample", "epic.md")
         complete = open(epic, encoding="utf-8").read()
-        write_file(root, "project/epics/sample/epic.md", complete.replace("goal: They can see it\n", ""))
+        write_file(root, "product/epics/sample/epic.md", complete.replace("goal: They can see it\n", ""))
         refusal = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8")
         rows, nxt, wait, output = schedule_of(args.gate, root)
         stopped = rows.get("STORY-1")
-        write_file(root, "project/epics/sample/epic.md", complete)          # repaired after the refusal
+        write_file(root, "product/epics/sample/epic.md", complete)          # repaired after the refusal
         rows, nxt, wait, output = schedule_of(args.gate, root)
         expectations.append(("schedule: a story the plan gate refused runs from plan again once it was repaired",
                              refusal.returncode == 1 and stopped[0] == "stopped"
@@ -7611,11 +7641,11 @@ def run_groups(args):
         check = lambda: subprocess.run([sys.executable, args.gate, "--project"], cwd=root,
                                        capture_output=True, text=True, encoding="utf-8")
         none = check()
-        write_file(root, "project/product.md", PRODUCT)
+        write_file(root, "product/overview.md", PRODUCT)
         only_product = check()
-        write_file(root, "project/tech.md", TECH.replace("## Runtime\n\nA container.\n", "## Runtime\n\n"))
+        write_file(root, "product/tech.md", TECH.replace("## Runtime\n\nA container.\n", "## Runtime\n\n"))
         incomplete = check()
-        write_file(root, "project/tech.md", TECH)
+        write_file(root, "product/tech.md", TECH)
         complete = check()
         expectations.append(("project: `--project` exits 3 while a part is missing, 1 when a heading is empty, 0 "
                              "when both stand", (none.returncode, only_product.returncode, incomplete.returncode,
@@ -7634,12 +7664,12 @@ def run_groups(args):
         planned = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("layout: a backlog at the project root is named with the move to project/, and not read",
-                             "backlog/ at the root is now project/epics/" in brief and "backlog/product.md" in brief
-                             and "backlog/ at the root is now project/epics/" in planned and "gate:fail layout" in planned
-                             and "no story 'STORY-1' under project/epics" in planned,
+                             "backlog/ at the root is now product/epics/" in brief and "backlog/product.md" in brief
+                             and "backlog/ at the root is now product/epics/" in planned and "gate:fail layout" in planned
+                             and "no story 'STORY-1' under product/epics" in planned,
                              f"{brief.strip()} | {planned.strip()[-200:]}"))
     for root in throwaway():
-        backlog_project(root, extra_sources=(("project/epics/sample/STORY-2/story.md",
+        backlog_project(root, extra_sources=(("product/epics/sample/STORY-2/story.md",
                                                story("STORY-2").replace(" (happy path):", ":")),))
         checked = subprocess.run([sys.executable, args.gate, "--check-backlog"], cwd=root, capture_output=True,
                                  text=True, encoding="utf-8").stdout
@@ -7647,7 +7677,7 @@ def run_groups(args):
                              "happy-path" in checked and "STORY-2" in checked and "0 scenarios marked" in checked,
                              checked[-500:]))
     for root in throwaway():
-        backlog_project(root, extra_sources=(("project/epics/sample/STORY-2/story.md",
+        backlog_project(root, extra_sources=(("product/epics/sample/STORY-2/story.md",
                                                story("STORY-2").replace("depends_on: []",
                                                                         "depends_on: []\npublishes: SomethingAdded")),))
         checked = subprocess.run([sys.executable, args.gate, "--check-backlog"], cwd=root, capture_output=True,
@@ -7853,7 +7883,7 @@ def run_groups(args):
         backlog_project(root, extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED), (".dca-factory/runs/STORY-1/tests.md", TESTS),
             (".dca-factory/runs/STORY-1/build.md", "# Build\n\n## needs-human\ndecision: STORY-1-01\n"),
-            ("project/epics/sample/STORY-1/decisions/01.md", CONFLICT.replace("stage: test", "stage: build")
+            ("product/epics/sample/STORY-1/decisions/01.md", CONFLICT.replace("stage: test", "stage: build")
              + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n"))))
         rows = schedule_of(args.gate, root)[0]
         expectations.append(("decisions: an answer that says `applies: test` resumes the story at the test stage",
@@ -7862,7 +7892,7 @@ def run_groups(args):
         # the plan asked, the answer changes a test: the plan runs again first and lists the tests that change
         backlog_project(root, extra_sources=(
             (".dca-factory/runs/STORY-1/plan.md", PLAN_ASKING),
-            ("project/epics/sample/STORY-1/decisions/01.md", CONFLICT.replace("stage: test", "stage: plan")
+            ("product/epics/sample/STORY-1/decisions/01.md", CONFLICT.replace("stage: test", "stage: plan")
              + ANSWER.replace("answer: b\n", "answer: b\napplies: test\n"))))
         rows = schedule_of(args.gate, root)[0]
         expectations.append(("decisions: a plan's question answered `applies: test` re-plans before the test stage",
@@ -7873,7 +7903,7 @@ def run_groups(args):
                    .replace(" (happy path):", ":"))
         backlog_project(root, epic=EPIC + "\n## Journey\n\n- open: which flow must never break\n",
                         story=delivered_story(STORY), extra_sources=(
-            ("project/epics/sample/JOURNEY-1/story.md", journey),
+            ("product/epics/sample/JOURNEY-1/story.md", journey),
             (".dca-factory/runs/STORY-1/document.md", "# Document\n"),
             (".dca-factory/runs/JOURNEY-1/plan.md", "# Plan\n"), (".dca-factory/runs/JOURNEY-1/tests.md", "# Tests\n")))
         rows, _nxt, _wait, listing = schedule_of(args.gate, root)
@@ -7951,9 +7981,9 @@ def run_groups(args):
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("status: the brief names a missing project description with /factory-setup",
                              "no project description" in brief and "/factory-setup" in brief, brief.strip()))
-        write_file(root, "project/product.md", PRODUCT)
-        write_file(root, "project/tech.md", TECH)
-        shutil.rmtree(os.path.join(root, "project", "epics"))
+        write_file(root, "product/overview.md", PRODUCT)
+        write_file(root, "product/tech.md", TECH)
+        shutil.rmtree(os.path.join(root, "product", "epics"))
         brief = subprocess.run([sys.executable, args.cli, "--status", "--brief"], cwd=root,
                                capture_output=True, text=True, encoding="utf-8").stdout
         expectations.append(("status: the brief names an empty backlog with /factory-backlog",
@@ -8008,7 +8038,7 @@ echo "$FACTORY_STORY $FACTORY_STAGE $(pwd -P)" >> "$FIXTURE_LOG"
 [ "$FACTORY_STAGE" = plan ] && printf '%s' "$FACTORY_PROMPT" > "$FIXTURE_LOG.prompt"
 d=".dca-factory/runs/$FACTORY_STORY"
 e=".dca-factory/evidence/$FACTORY_STORY"
-rec="project/epics/sample/$FACTORY_STORY/decisions/01.md"
+rec="product/epics/sample/$FACTORY_STORY/decisions/01.md"
 mkdir -p "$d"
 case "$FACTORY_STAGE" in
   review:*) mkdir -p "$d/reviews"
@@ -8145,10 +8175,10 @@ def verify_worktrees(runner, verbose=False):
               and read(root, "src/main/STORY-2.txt") == "STORY-2\n"
               and "STORY-1" in worktrees and "STORY-2" not in worktrees
               and not git_out(root, "branch", "--list", "story/STORY-2").strip()
-              and os.path.isfile(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"))
+              and os.path.isfile(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"))
               and "src/" not in git_out(root, "status", "--porcelain"),
               f"exit {code}; {rows}; {worktrees}; {subjects}; {output.strip().splitlines()[-6:]}")
-        with open(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+        with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
             handle.write(ANSWER)
         cli = cli_of(os.path.join(root, ".agents", "factory", "story-gate.py"))
         session = subprocess.run([sys.executable, cli, "--schedule"], cwd=root, capture_output=True, text=True,
@@ -8181,9 +8211,9 @@ def verify_worktrees(runner, verbose=False):
     for root in throwaway():
         log, env = fixture(root, [], asks="STORY-1")
         run_runner(runner, root, "run", env=env)
-        story = os.path.join(root, "project/epics/sample/STORY-1/story.md")
+        story = os.path.join(root, "product/epics/sample/STORY-1/story.md")
         waited = "STORY-1" in git_out(root, "worktree", "list")
-        text = read(root, "project/epics/sample/STORY-1/story.md")
+        text = read(root, "product/epics/sample/STORY-1/story.md")
         with open(story, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(re.sub(r"(?m)^status: .*$", "status: superseded", text, count=1))
         code, output = run_runner(runner, root, "run", env=env)
@@ -8220,7 +8250,7 @@ def verify_worktrees(runner, verbose=False):
         log, env = fixture(root, [("STORY-2", [])], asks="STORY-1")
         env["FIXTURE_SHARED"] = "0"
         run_runner(runner, root, "run", env=env)
-        with open(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+        with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
             handle.write(ANSWER)
         code, output = run_runner(runner, root, "run", env=env)
         ran = lines(log)
@@ -8240,7 +8270,7 @@ def verify_worktrees(runner, verbose=False):
                            extra=(("check.sh", check_sh),))
         env["FIXTURE_SHARED"] = "0"
         run_runner(runner, root, "run", env=env)
-        with open(os.path.join(root, "project/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+        with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
             handle.write(ANSWER)
         # the main line moved while STORY-1 waited, and the story keeps its base: a file of its own is in the way
         with open(os.path.join(root, ".dca-factory/worktrees/STORY-1/src/main/STORY-2.txt"), "w", encoding="utf-8") as h:
@@ -8276,7 +8306,7 @@ def verify_worktrees(runner, verbose=False):
     # no running story changes goes first
     for root in throwaway():
         backlog_project(root, ("STORY-2", []), ("STORY-4", []))
-        path = os.path.join(root, "project/epics/sample/STORY-4/story.md")
+        path = os.path.join(root, "product/epics/sample/STORY-4/story.md")
         with open(path, encoding="utf-8") as handle:
             text = handle.read()
         with open(path, "w", encoding="utf-8") as handle:

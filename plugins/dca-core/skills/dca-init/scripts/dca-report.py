@@ -31,9 +31,14 @@ NONE = "—"
 # from there, below the configuration's own.
 METHOD_PROFILE = "dca.profile.yaml"
 OLD_CONVENTIONS = (".agents/dca/conventions.md", ".claude/dca/conventions.md")
-METHOD_ROOT = "project/"
+METHOD_ROOT = "product/"
 # The description's place keys, the `AGENTS.md` line an unmigrated project names each with, the file under `root:`.
-PLACES = {"overview": ("product", "product.md"), "tech": ("tech", "tech.md"), "domain": ("domain", "domain.md")}
+# `spec` is the living spec's folder: one folder per context, its glossary the one file a skill writes there.
+PLACES = {"overview": ("product", "overview.md"), "tech": ("tech", "tech.md"), "domain": ("domain", "domain.md"),
+          "spec": ("spec", "spec")}
+GLOSSARY = "glossary.md"
+# Where a context's glossary lay beside its domain code: `<…>/domain/glossary.md` (Java), `<…>/Domain/glossary.md` (.NET).
+GLOSSARY_IN_CODE = re.compile(r"(?:^|/)[Dd]omain/glossary\.md$")
 
 
 def files(root, suffixes=None, names=None):
@@ -118,6 +123,23 @@ def place(root, conf, lines, key):
     return METHOD_ROOT + under
 
 
+def context_folder(context):
+    """A context's folder in the spec: its name lowercase, words joined by `-` (`Product Catalog` → `product-catalog`)."""
+    return re.sub(r"[^a-z0-9]+", "-", context.strip().lower()).strip("-")
+
+
+def glossaries(root, conf, lines, contexts):
+    """(the glossary field, the glossaries still beside the domain code): the place `<spec>/<context>/glossary.md`,
+    and how many of the declared contexts have one there."""
+    spec = place(root, conf, lines, "spec").rstrip("/")
+    present = [c for c in contexts if os.path.isfile(os.path.join(root, spec, context_folder(c), GLOSSARY))]
+    value = f"{spec}/<context>/{GLOSSARY}"
+    if contexts:
+        value += f"; {len(present)} of {len(contexts)} contexts"
+    in_code = [rel(root, p) for p in files(root, names={GLOSSARY}) if GLOSSARY_IN_CODE.search(rel(root, p))]
+    return value, in_code
+
+
 def stack(root):
     gradle = next((p for p in (os.path.join(root, n) for n in ("build.gradle.kts", "build.gradle")) if os.path.isfile(p)), "")
     pom = os.path.join(root, "pom.xml") if os.path.isfile(os.path.join(root, "pom.xml")) else ""
@@ -185,7 +207,7 @@ def packages(root, kind, builds):
     return found
 
 
-def dca_part(root, kind, builds, lines, old_path):
+def dca_part(root, kind, builds, lines, conf, old_path):
     sources = files(root, (".java", ".cs"))
     texts = {p: read(p) for p in sources}
     arch = [rel(root, p) for p, t in texts.items() if re.search(r"(extends|:)\s*DcaArchitectureTest\b", t)]
@@ -207,17 +229,19 @@ def dca_part(root, kind, builds, lines, old_path):
     agents, _lines = agents_lines(root)
     section = "<!-- dca-core: start -->" in agents
     roles = [f"{k} `{v}`" for k, v in lines.items() if k not in ("conventions", "configuration", "product", "tech", "domain")] if section else []
+    glossary, in_code = glossaries(root, conf, lines, contexts)
     return [("packages", ", ".join(packages(root, kind, builds)) or NONE),
             ("architecture test", ", ".join(arch) or NONE),
             ("rule sets", rules),
             ("contexts declared", f"{len(contexts)}: {', '.join(contexts)}" if contexts else "0"),
             ("shared kernel", "yes" if kernel else "no"),
             ("extra tests", ", ".join(extras) or NONE),
+            ("glossaries", glossary),
             ("configuration", METHOD_PROFILE if os.path.isfile(os.path.join(root, METHOD_PROFILE))
              else (f"{old_path} (not moved yet)" if old_path else NONE)),
             ("AGENTS.md section", "present" if section else "missing"),
             ("skills by role", ", ".join(roles) or NONE)], dict(arch=arch, warn=warn, contexts=contexts, extras=extras,
-                                                            section=section)
+                                                            section=section, in_code=in_code)
 
 
 def formatter(root, kind, builds, conv):
@@ -261,7 +285,7 @@ def report(root, mode, generator="", proof=None):
     conv, old_path = configuration(root, lines)
     st = stack(root)
     kind, builds = st["kind"], st["builds"]
-    dca, facts = dca_part(root, kind, builds, lines, old_path)
+    dca, facts = dca_part(root, kind, builds, lines, conv, old_path)
     fmt, has_formatter = formatter(root, kind, builds, conv)
     brw, has_runner, pages = browser(root, kind, builds, conv)
     gitf, gitfacts = git_part(root)
@@ -277,6 +301,10 @@ def report(root, mode, generator="", proof=None):
         open_items.append("no architecture test — /dca-init")
     if old_path:
         open_items.append(f"{old_path} not moved into {METHOD_PROFILE} — /dca-init")
+    if facts["in_code"]:
+        count = len(facts["in_code"])
+        open_items.append(f"{count} {'glossary' if count == 1 else 'glossaries'} beside the domain code, not in "
+                          f"{place(root, conv, lines, 'spec').rstrip('/')}/<context>/ — factory.sh update, or git mv")
     if kind and not has_formatter:
         open_items.append("no formatter — /dca-add formatter")
     if kind and pages and not has_runner:
@@ -354,8 +382,8 @@ def self_test():
                             ' testImplementation("com.microsoft.playwright:playwright:1.55.0") }\n'
                             'spotless { java { palantirJavaFormat() } }\n',
         "AGENTS.md": "<!-- dca-core: start -->\n- configuration: `dca.profile.yaml`\n- build: `dca-modelling`\n<!-- dca-core: end -->\n"
-                     "<!-- dca-describe: start -->\n- product: `project/product.md`\n- tech: `project/tech.md`\n<!-- dca-describe: end -->\n",
-        "project/product.md": "# P\n", "project/tech.md": "# T\n",
+                     "<!-- dca-describe: start -->\n- product: `product/overview.md`\n- tech: `product/tech.md`\n<!-- dca-describe: end -->\n",
+        "product/overview.md": "# P\n", "product/tech.md": "# T\n", "product/spec/cart/glossary.md": "### Cart\n",
         "dca.profile.yaml": "# the method's configuration\nformat: ./gradlew spotlessCheck\nformatFix: './gradlew spotlessApply'\nselector: data-test\n",
         "src/test-architecture/java/a/ArchitectureTest.java": "class ArchitectureTest extends DcaArchitectureTest {}\n",
         "src/test-architecture/resources/dca-archunit.properties": "dca.rules.warn=DCA-STR-012\n",
@@ -371,6 +399,7 @@ def self_test():
     check("packages with versions", field(one, "DCA part", "packages") == "dca-building-blocks 0.2.0, dca-archunit 0.6.0")
     check("the whole catalog with a warn entry", field(one, "DCA part", "rule sets") == "the whole catalog; on warn: DCA-STR-012")
     check("contexts named", field(one, "DCA part", "contexts declared") == "1: Cart")
+    check("the glossary place and the contexts that have one", field(one, "DCA part", "glossaries") == "product/spec/<context>/glossary.md; 1 of 1 contexts")
     check("formatter style read", field(one, "Formatter", "tool") == "Spotless, palantirJavaFormat()")
     check("formatter commands from dca.profile.yaml", field(one, "Formatter", "fix") == "./gradlew spotlessApply")
     check("the configuration named", field(one, "DCA part", "configuration") == "dca.profile.yaml")
@@ -395,6 +424,7 @@ def self_test():
         "src/Shop.Web/Cart/CartContext.cs": '[BoundedContext("Cart")] public sealed class CartContext {}',
         "src/Shop.Web/SharedKernel/SharedKernelContext.cs": "[SharedKernel] public sealed class SharedKernelContext {}",
         "src/Shop.Web/Pages/Index.cshtml": "<title>x</title>",
+        "src/Shop.Web/Cart/Domain/glossary.md": "### Cart\n",
         ".editorconfig": "root = true\n",
     })
     net = report(dotnet, "init", proof={"architecture": "green"})
@@ -403,6 +433,9 @@ def self_test():
     check("shared kernel found", field(net, "DCA part", "shared kernel") == "yes")
     check(".NET formatter", field(net, "Formatter", "tool") == "dotnet format, .editorconfig")
     check("pages without a runner named", any("browser runner" in v for _k, v in net["sections"][-1]["fields"]))
+    check("a glossary beside the domain code named as open", field(net, "DCA part", "glossaries") == "product/spec/<context>/glossary.md; 0 of 1 contexts"
+          and "1 glossary beside the domain code, not in product/spec/<context>/ — factory.sh update, or git mv"
+          in [v for _k, v in net["sections"][-1]["fields"]])
     check("init names an existing project", field(net, "Generator", "generator") == "— (an existing project)")
     names = lambda m: [(x["name"], [f for f, _v in x["fields"] if x["name"] != "Open"]) for x in m["sections"]]
     check("the same fields in Java and .NET, and on an empty directory",
@@ -423,7 +456,7 @@ def self_test():
     moved = project({
         "dca.profile.yaml": "root: product/\ntech: docs/tech.md\nformatFix: from the profile\n",
         ".agents/dca/conventions.md": "formatFix: from the old file\nselector: data-testid\n",
-        "product/product.md": "# P\n", "docs/tech.md": "# T\n",
+        "product/overview.md": "# P\n", "docs/tech.md": "# T\n",
     })
     both = report(moved, "init")
     check("the configuration wins over the old file", field(both, "Formatter", "fix") == "from the profile"
@@ -431,7 +464,9 @@ def self_test():
     check("root: moves a place, a key of its own wins",
           "no project description — /dca-describe" not in [v for _k, v in both["sections"][-1]["fields"]])
     check("the default places without a configuration",
-          place(empty, {}, {}, "domain") == "project/domain.md" and place(moved, {"root": "x"}, {}, "overview") == "x/product.md")
+          place(empty, {}, {}, "domain") == "product/domain.md" and place(moved, {"root": "x"}, {}, "overview") == "x/overview.md"
+          and place(empty, {}, {}, "spec") == "product/spec" and place(moved, {"root": "x", "spec": "y"}, {}, "spec") == "y")
+    check("a context's folder in the spec", context_folder("Product Catalog") == "product-catalog" and context_folder("Inventory") == "inventory")
 
     for name in failures:
         print(f"dca-report self-test: FAIL {name}")

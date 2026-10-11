@@ -39,7 +39,7 @@ A press sends the matching slash command into the session through `$.command.run
 reloading the plugin stops that worker; the runner gives its claim on the workspace back. One worker at a time:
 a second press while one starts does nothing.
 
-The cockpit reads the factory every 20 s, after every turn and after every write under `project/` — in the
+The cockpit reads the factory every 20 s, after every turn and after every write under `product/` — in the
 background, so no tool result and no turn waits for it. One reading runs at a time; one asked for meanwhile is
 served right after it. With the pane closed only the status is read, for the status line; a story's journal and
 hand-overs are read again only when its row changed or a stage of it runs.

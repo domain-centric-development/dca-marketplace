@@ -4,16 +4,23 @@ The backlog is markdown with front matter, one file per item — an epic's `epic
 without any tooling. No database, no JSON as the source. A generated `index.json` may exist for
 tools; it is derived and gitignored.
 
-It lives beside the project description, under `project/` — what is to be built, written by people
-before the code. The installed pipeline lives under `.agents/factory/`, a run's protocol under
+It lives beside the project description and the living spec, under `product/` — what is to be built and what
+holds, written by people before the code (the spec's scenarios by the gate that delivers). The installed pipeline lives under `.agents/factory/`, a run's protocol under
 `.dca-factory/runs/`, and what exists and why under `docs/`:
 
 ```
 dca-factory.profile.yaml   the stack profile
-project/
-  product.md               the product description
+dca.profile.yaml           the method's configuration: the places below and the conventions
+product/
+  overview.md              the product description
   tech.md                  the technical decisions
   domain.md                the designed domain (optional)
+  spec/                    what holds — changed only through deliveries (below)
+    journeys.md            flows across contexts, each with its test line
+    <context>/
+      scenarios.md         the rules and criteria that hold, each with its test line
+      glossary.md          the context's language
+  discovery/<topic>/       research and proposed epics
   epics/
     <epic>/
       epic.md              the epic
@@ -26,7 +33,7 @@ project/
 Stories stay with their epic for life; they never move between folders. *Backlog* is a view:
 `factory.sh backlog` lists every story with its state and the next one that can run — approved, not
 delivered, its dependencies met. The stack profile's `product:`, `tech:`, `domain:`, `epics:` and
-`runs:` name other places; without them these are the places. An older layout — `project/backlog/`,
+`runs:` name other places; without them these are the places. An older layout — `product/backlog/`,
 a profile under `.agents/factory/`, records under `.agents/factory/decisions/`, run artefacts under
 `tasks/` — is named by the gate and moved once by `factory.sh update`; nothing reads it as a fallback.
 
@@ -37,7 +44,7 @@ person who decides what is built, through the project's description skill (`/fac
 it), and changed only through it afterwards — no stage edits them. The headings are fixed in this
 spelling so the gate can read them; the text under them is in the project's language.
 
-`product.md`:
+`overview.md`:
 
 | Heading | Says |
 |---|---|
@@ -86,7 +93,7 @@ Front matter, every field non-empty; the gate refuses an epic without `intent`, 
 | `metric` | the **outcome event** that measures it: a domain or integration event whose publication in production is the evidence. Not a story count, not a burndown |
 | `domain_contact` | who answers domain questions for this epic |
 
-Optional: `discovery` — the report the epic came from (`project/discovery/<topic>/discovery.md`, written by
+Optional: `discovery` — the report the epic came from (`product/discovery/<topic>/discovery.md`, written by
 `factory-discover`); the gate refuses a link to a report that is not there.
 
 Optional: `depends_on` — the epics that must be delivered before this epic's stories start, by id; `[]` or no
@@ -160,16 +167,18 @@ Body sections:
   stage, and the gate refuses one that is green before it. Behaviour that must keep working is
   what the existing tests guard; it is not a criterion.
   The **key** is lowercase, hyphenated and names the behaviour (`shows-empty-state`), because it
-  is committed: the test stage records it next to the test that proves it. A running number
+  is committed: the test stage records it next to the test that proves it, and the living spec keeps
+  it for good — a key is unique within its context and names one behaviour of it. A running number
   would point at nothing once the list is reordered.
 - `## Out of scope` — optional: one line per behaviour the story deliberately does not deliver,
   with the story or the reason that owns it. The plan does not plan it; the judge reports a change
   that implements it.
 - `## Changed expectations` — optional: when the story changes behaviour the system already has,
   one line per expectation that no longer holds, in the project's language (what is seen now, what
-  is seen after). No story ids, no file names — nobody has to know which story or which hand wrote
-  a test. Released with the story, it is the human's authority for the plan to change the tests
-  that follow from it; without it, a plan that finds such tests asks. A human's correction at
+  is seen after). No story ids, no file names, no keys — nobody has to know which story or which hand
+  wrote a test or a criterion: the plan finds which criteria of the spec the story changes or removes.
+  Released with the story, it is the human's authority for the plan to change what holds and the tests
+  that follow from it; without it, a plan that finds such a change asks. A human's correction at
   acceptance lands here too, in the same story, when it takes back something the story delivered.
 - `## Assumptions` — the asynchronous channel to the domain contact: one line per assumption,
   `open:` or `answered:`. An assumption is a question, never a decision the team took itself. When an answer
@@ -210,6 +219,38 @@ read it as **delivered, claimed**; the schedule never runs it. `factory-cli.py -
 path then checks it — every criterion on a green test, a break for every test it writes, a fresh judge — and the
 adopt gate delivers it with `delivered_by: gate`. A delivered story is not delivered a second time: a change of
 delivered behaviour is a new story with `## Changed expectations`.
+
+## The living spec
+
+A story is a change; `product/spec/` (the configuration's `spec:`) holds what is true today. Per bounded
+context `<spec>/<context>/scenarios.md` — `<context>` the story's `context:`, lowercase, words joined by
+`-` — carries every criterion that holds, in the story's own shape: a scenario under its `### Rule:`, or a
+line; criteria without a rule before the first rule. No status, no ticks, no happy-path mark, no story id.
+Under each criterion one `Test: <selector>` line, written by the gate alone from the story's `tests.md`; a
+criterion without one, or with a red test, is unproven, readable without the factory. Journeys stand in
+`<spec>/journeys.md`, keyed by the flow; a `kind: journey` item merges there. `glossary.md` beside a
+context's scenarios is its language, kept by the glossary skill and the document stage — the one file under
+`spec/` a skill writes.
+
+- **The delta.** The plan stage reads the context's spec and writes `## Spec delta` in `plan.md`:
+  `- adds <key>`, `- changes <key>`, `- holds <key>` (word for word what the spec has), `- removes <key>: <why>`
+  and `- rule "<old>" → "<new>"`. What follows from comparing story and spec the gate derives itself; a
+  removal and a renamed rule only the plan can say.
+- **The check** (test gate, `spec-delta`): every key named agrees with what the comparison says, a removed
+  key stands in the spec, a renamed rule leaves no criterion under its old text, and every change or removal
+  of what holds is backed by the story's `## Changed expectations` or an answered decision — otherwise the
+  plan stage asks. Keys are unique per context: a new key the spec holds otherwise is a change.
+- **The merge**, when the story is delivered — after its acceptance where the profile asks for one: the
+  document gate, the adopt gate, or in a story's worktree the integrate gate, which checks the delta again
+  against the main line as it stands (a criterion another story changed meanwhile is a refusal). Added,
+  replaced, removed, renamed by key; a rule left without a criterion goes. A test of the spec this story
+  renamed or moved goes under `tests.md`'s `## Moved tests` (`| <key> | <Class>#<method> |`); the delivering
+  gate refuses a spec test line that names a test no longer there (`spec-tests`).
+- **By hand.** `--deliver-by-hand` merges a story's new criteria without test lines; a story that changes
+  what holds needs a plan to derive its delta — `--prove` runs it through the adopt path.
+- **Agreement.** `factory-cli.py --spec-check` names every criterion of a delivered story that is not in its
+  spec, unless a later story removed it. Whether a criterion came from a story is not asked: a delivered
+  story is history and may be gone; the spec holds.
 
 Which stories are delivered, by the gate or by a hand, and which are open follows from the front matter
 alone — `grep -l '^status: delivered' …/story.md`, `grep -h '^delivered_by:'` — without the factory.

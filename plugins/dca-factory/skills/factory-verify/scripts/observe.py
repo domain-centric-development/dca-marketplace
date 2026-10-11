@@ -487,7 +487,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="observe one real factory run")
     parser.add_argument("--story", required=True)
     parser.add_argument("--runs", help="the run artefacts (default: the profile's `runs:`, else .dca-factory/runs)")
-    parser.add_argument("--epics", help="where the stories are (default: the profile's `epics:`, else project/epics)")
+    parser.add_argument("--epics", help="where the stories are (default: the profile's `epics:`, else product/epics)")
     parser.add_argument("--root", default=".")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)

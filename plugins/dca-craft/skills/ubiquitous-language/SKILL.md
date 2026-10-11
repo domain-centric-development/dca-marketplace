@@ -25,17 +25,20 @@ enters a term through it rather than writing its own entry shape.
 
 ## Glossary location
 
-Default: one `glossary.md` per bounded context, co-located with the domain
-code:
+One `glossary.md` per bounded context, in the project's living spec beside the context's scenarios:
 
 ```
-{basePackagePath}/{context}/domain/glossary.md      # Java
-src/{RootNamespace}.{Context}/Domain/glossary.md    # .NET (one project per context)
+{spec}/{context}/glossary.md        # default: product/spec/{context}/glossary.md
 ```
 
-An alternative path can be set in the configuration file the project instructions name (a
-``- configuration: `<file>` `` line in `AGENTS.md`). Where the glossaries already exist
-elsewhere, use their place and say so; never start a second glossary beside one.
+`{spec}` is the `spec:` key of the configuration file the project instructions name (a
+``- configuration: `<file>` `` line in `AGENTS.md`), `product/spec` where the file or the key is absent.
+`{context}` is the context's name in lowercase, words joined by `-` (`Product Catalog` →
+`product-catalog`). The glossary is the one file of the spec a skill writes; the context's scenarios
+beside it change only through a delivery. A project that names its own glossary place in that
+configuration keeps it. Where glossaries still stand beside the domain code, a migration moves them —
+the delivery pipeline's update where the project has one, by hand with `git mv` otherwise; never start
+a second glossary beside one.
 
 A project may describe its designed contexts before they have code, with a section of words per context.
 Until the context's glossary file exists, that section is its glossary. The first entry written to the
@@ -232,8 +235,8 @@ Cross-context audit:
 Read the configuration file the project instructions name (a ``- configuration: `<file>` `` line in
 `AGENTS.md`), or `AGENTS.md` itself, for:
 
-- Custom glossary location (e.g. `docs/glossary/{context}.md` instead of
-  inline)
+- Custom glossary location (the `spec:` key, or a place of its own instead
+  of `{spec}/{context}/glossary.md`)
 - Custom glossary format (e.g. mandatory `Examples:` section)
 - Project-wide forbidden suffixes beyond the defaults
 

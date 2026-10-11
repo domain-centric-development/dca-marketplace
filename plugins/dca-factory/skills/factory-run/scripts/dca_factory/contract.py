@@ -27,7 +27,7 @@ DOC_BUDGET_BYTES = 32 * 1024
 
 
 CONTEXT_MAP_CANDIDATES = (
-    "project/domain.md",
+    "product/domain.md",
     "docs/context-map.md",
     "docs/architecture/context-map.md",
     "context-map.md",
@@ -38,20 +38,59 @@ INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md")
 
 
 #: Every place the factory reads and writes, from the profile with its default: the project description
-#: and the epics with their stories under `project/` (the people's), the run artefacts under
+#: and the epics with their stories, the living spec and the discovery under `product/` (the people's), the run artefacts under
 #: `.dca-factory/` (the run's protocol). The profile itself is the one fixed path — `dca-factory.profile.yaml`
 #: at the project root — because it is where the others are read from.
 DEFAULTS = {
-    "product": "project/product.md",
-    "tech": "project/tech.md",
-    "domain": "project/domain.md",
-    "epics": "project/epics",
+    "product": "product/overview.md",
+    "tech": "product/tech.md",
+    "domain": "product/domain.md",
+    "epics": "product/epics",
     "runs": ".dca-factory/runs",
-    "discovery": "project/discovery",
+    "discovery": "product/discovery",
+    "spec": "product/spec",
 }
 
 
 PROFILE_FILE = "dca-factory.profile.yaml"
+
+
+#: The method's configuration (WP-99): one file at the project root, flat `key: value`, every key optional — the
+#: places of the project description and the conventions every DCA skill reads. The factory's profile layers on it:
+#: default → `dca.profile.yaml` → `dca-factory.profile.yaml` → a flag.
+METHOD_PROFILE = "dca.profile.yaml"
+
+
+#: The method's place keys and the factory's key each feeds, with the file or folder under `root:` it defaults to.
+METHOD_PLACES = (("overview", "product", "overview.md"), ("tech", "tech", "tech.md"), ("domain", "domain", "domain.md"),
+                 ("epics", "epics", "epics"), ("discovery", "discovery", "discovery"), ("spec", "spec", "spec"))
+
+
+#: The method's root of the project description, where `dca.profile.yaml` names none.
+METHOD_ROOT = "product/"
+
+
+def method_profile_path(cwd=None):
+    """`dca.profile.yaml` of this project — in a story's worktree the main checkout's, like the factory profile."""
+    base = factory_home() if in_worktree(cwd) else (cwd or os.getcwd())
+    return os.path.join(base, METHOD_PROFILE)
+
+
+def method_layer(method):
+    """What the method's configuration gives the factory's profile: a place for every key it names, or that its
+    `root:` moves — and `architecture:` from its `verify_command:`. The factory's profile wins over each."""
+    layer = {}
+    root = str(method.get("root", "")).strip().replace("\\", "/")
+    for method_key, factory_key, under in METHOD_PLACES:
+        own = str(method.get(method_key, "")).strip().replace("\\", "/")
+        if own:
+            layer[factory_key] = own
+        elif root:
+            layer[factory_key] = root.rstrip("/") + "/" + under
+    verify = str(method.get("verify_command", "")).strip().strip("`")
+    if verify:
+        layer["architecture"] = verify
+    return layer
 
 
 #: The places as this process resolved them once — a flag wins, then the profile's key, then the default —
@@ -192,10 +231,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 18
+CONTRACT = 19
 
 
-VERSION = "0.74.0"
+VERSION = "0.75.0"
 
 
 def split_front(text):
@@ -250,18 +289,35 @@ def unquoted(value):
     return value[1:-1] if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'" else value
 
 
-def read_profile(path):
-    """Flat `key: value` profile. Missing file is not an error — every command
-    is then reported as not declared."""
+def read_flat(path):
+    """A flat `key: value` file; {} where there is none."""
     if not path or not os.path.isfile(path):
         return {}
-    profile = {}
+    values = {}
     for raw in read_text(path).splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or ":" not in line:
             continue
         key, value = line.split(":", 1)
-        profile[key.strip()] = unquoted(value.strip())
+        values[key.strip()] = unquoted(value.strip())
+    return values
+
+
+def read_profile(path):
+    """Flat `key: value` profile, layered on the method's configuration beside it (`dca.profile.yaml`): a place
+    or the architecture command the factory's profile does not name comes from there. Missing file is not an
+    error — every command is then reported as not declared."""
+    if path and os.path.basename(path) == PROFILE_FILE:
+        method = read_flat(os.path.join(os.path.dirname(path) or ".", METHOD_PROFILE))
+    elif not path:
+        method = read_flat(method_profile_path())
+    else:
+        method = {}
+    if not path or not os.path.isfile(path):
+        return dict(method_layer(method)) if method else {}
+    profile = read_flat(path)
+    for key, value in method_layer(method).items():
+        profile.setdefault(key, value)
     return profile
 
 
@@ -577,7 +633,7 @@ def story_kind(front):
 
 
 def location(profile, key):
-    """Where the profile puts one part of the project description, or its default under `project/`."""
+    """Where the profile puts one part of the project description, or its default under `product/`."""
     return str(profile.get(key, "")).strip().replace("\\", "/") or DEFAULTS[key]
 
 
@@ -589,9 +645,12 @@ def layout_hint(cwd, profile):
     if profile.get("backlog") and not profile.get("epics"):
         old.append("`backlog:` in the profile is now `epics:`")
     if os.path.isdir(os.path.join(cwd, "backlog")) and not os.path.isdir(os.path.join(cwd, "project")):
-        old.append("backlog/ at the root is now project/epics/ (and backlog/product.md project/product.md)")
+        old.append("backlog/ at the root is now product/epics/ (and backlog/product.md product/overview.md)")
     if os.path.isdir(os.path.join(cwd, "project", "backlog")) and not os.path.isdir(os.path.join(cwd, place("epics"))):
         old.append(f"project/backlog/ is now {place('epics')}/")
+    if os.path.isdir(os.path.join(cwd, "project")) and not os.path.isdir(os.path.join(cwd, "product")) \
+            and place("epics").replace("\\", "/").endswith("product/epics"):
+        old.append("project/ is now product/ (and project/product.md product/overview.md)")
     if os.path.isfile(os.path.join(cwd, ".agents", "factory", "factory.profile.yaml")) \
             and not os.path.isfile(os.path.join(cwd, PROFILE_FILE)):
         old.append(f".agents/factory/factory.profile.yaml is now {PROFILE_FILE} at the project root")

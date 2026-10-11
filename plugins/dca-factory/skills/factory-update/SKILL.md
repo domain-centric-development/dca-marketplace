@@ -25,11 +25,15 @@ a report of what changed. You commit nothing; the human reviews and commits.
 2. **Report the migration, where there was one.** A project from before the layout with one owner per
    place is moved once, and every move is printed (`factory: migrated …`): the stack profile from
    `.agents/factory/` to `dca-factory.profile.yaml` at the root, its `backlog:` line to `epics:`,
-   `project/backlog/` to `project/epics/`, each decision record from `.agents/factory/decisions/` to
+   `product/backlog/` to `product/epics/`, each decision record from `.agents/factory/decisions/` to
    `<story>/decisions/` in its story's folder, each flat story file into a folder of its own, each `tasks/<story>/` that carries factory marks to
    `.dca-factory/runs/<story>/` — anything else under `tasks/` is the project's and stays — and the
-   delivery mark into the story as `status: delivered` and `delivered:`. Show the moves; a second run
-   moves nothing. A `backlog/` at the project root from before `project/` is named, not moved.
+   delivery mark into the story as `status: delivered` and `delivered:`; `project/` to `product/` and
+   `product.md` to `overview.md` (contract 19), each context's glossary out of the code into
+   `product/spec/<context>/glossary.md`, every delivered story merged into its context's spec in delivery order
+   (a story without a test mapping named), a delivered story's `delivered_by:` line, and an older conventions file
+   into `dca.profile.yaml`. Show the moves; a second run moves nothing. A `backlog/` at the project root is named,
+   not moved.
 3. **Report what else it says, in this order:** the versions (`updated A → B`), the file contract,
    and whether the stack profile's `contract:` line has to be raised (the migration raises it when
    it rewrites the profile anyway; otherwise that is the human's edit — the profile belongs to the
@@ -47,7 +51,7 @@ a report of what changed. You commit nothing; the human reviews and commits.
    question; one the person edited on purpose stays theirs.
 5. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, `.gitignore`, the
    `AGENTS.md` section, `.dca-factory-skills` in each skill folder, the skill copies where the
-   project keeps copies — and after a migration the moved files: the profile at the root, `project/epics/`
+   project keeps copies — and after a migration the moved files: the profile at the root, `product/epics/`
    with the records beside the stories, and `.dca-factory/runs/` where the project commits its history.
 6. **Name what was renamed.** The method plugins renamed skills (`review-domain` → `review-ddd`,
    `review-boundaries` → `review-hexagonal`, `review-craft` → `review-clean-code`, `ddd-modelling` →

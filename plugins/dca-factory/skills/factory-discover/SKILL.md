@@ -9,7 +9,7 @@ Input: a problem or a wished deliverable in the person's words, the project desc
 technical decisions, designed domain), the epics that exist and what they delivered, and the documents
 the person hands over. Output: `<discovery>/<topic>/discovery.md` with its `sources/`, and — once the
 person releases one — an epic in the backlog contract that links its report. The place is the profile's
-`discovery:`, by default `project/discovery`. You write no story, no plan and no code.
+`discovery:`, by default `product/discovery`. You write no story, no plan and no code.
 
 The craft — framing a problem, evidence, options, an outcome that can be observed, research with
 sources — is the carrier's: the profile's `carrier.discover:` names the skill, by default
@@ -62,7 +62,7 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
    question a list of deliverables does not ask. A target goes into `goal:` only where the person can
    measure it. Where the findings change what the project description says — other users, a new "what it is
    not", a new quality — add `## Proposed description changes` before `## Sources`: one
-   `### <product.md | tech.md | domain.md> — <section>` per change, with `- change:` (cited) and `- why:`.
+   `### <overview.md | tech.md | domain.md> — <section>` per change, with `- change:` (cited) and `- why:`.
    Leave the section out when nothing changes.
 6. **Check it with the gate:** `bash .agents/factory/factory.sh discover --check <topic>` — the
    sections, every citation listed, every source resolving, every proposal with intent, goal and metric,

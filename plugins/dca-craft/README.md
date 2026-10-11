@@ -52,8 +52,8 @@ in parallel, each in its own context — overlaps are real findings, divergences
 The skills read the configuration file the project instructions (`AGENTS.md`) name in a
 ``- configuration: `<file>` `` line — flat `key: value` lines — and the designed context map and the
 glossary where that file or those instructions place them. Without such a line they fall
-back to sensible defaults — `docs/context-map.md` for the designed map, `glossary.md` beside each
-context's code — and to what the code itself shows.
+back to sensible defaults — `docs/context-map.md` for the designed map, one glossary per context at
+`product/spec/<context>/glossary.md` (the `spec:` key moves the folder) — and to what the code itself shows.
 
 ## Pairing with dca-core
 

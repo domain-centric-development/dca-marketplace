@@ -75,8 +75,8 @@ test('a progress fills its share of the cells, none for an empty whole', () => {
   expect(filledCells(9, 5, 10)).toBe(10)
 })
 
-test('a write under project/ or the run folder refreshes the view, a write elsewhere does not', () => {
-  expect(touchesFactory({ tool: 'Write', file_path: '/p/project/epics/books/epic.md' } as { tool: string })).toBe(true)
+test('a write under product/ or the run folder refreshes the view, a write elsewhere does not', () => {
+  expect(touchesFactory({ tool: 'Write', file_path: '/p/product/epics/books/epic.md' } as { tool: string })).toBe(true)
   expect(touchesFactory({ tool: 'Edit', file_path: '/p/.dca-factory/runs/a/plan.md' } as { tool: string })).toBe(true)
   expect(touchesFactory({ tool: 'Write', file_path: '/p/src/Main.java' } as { tool: string })).toBe(false)
 })

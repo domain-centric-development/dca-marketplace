@@ -21,7 +21,7 @@ import sys
 import threading
 import time
 from .contract import (
-    ALL_KINDS, CONTRACT, DECISIONS_DIR, DEFAULTS, evidence_dir, evidence_rel, find_story, FINDINGS_FILE, flat_stories,
+    ALL_KINDS, CONTRACT, DECISIONS_DIR, DEFAULTS, METHOD_PROFILE, METHOD_ROOT, read_flat, evidence_dir, evidence_rel, find_story, FINDINGS_FILE, flat_stories,
     delivered_by, delivered_on, GateError, git, is_delivered, legacy_story_digest, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, resolve_profile, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_FILES, STAGE_ORDER, STAGES,
     STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of, story_kind, worktree_places, decisions_store,
@@ -32,7 +32,10 @@ from .state import (
     back_in, claim, freeze_all, gate_passed_on_record, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
+from .spec import (
+    context_folder, derived, merge, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
+    read_mapping, spec_target,
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
     integration_target, INVARIANTS_MARKER, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
     read_invariant_rows, scenario_clauses, TESTS_BASELINE)
@@ -480,6 +483,132 @@ def migrate_delivery(cwd, epics, runs, say):
             say(f"{shown(planned)}: the planned digest taken anew with today's function")
 
 
+def migrate_spec(cwd, epics, runs, say):
+    """The living spec from what is delivered (WP-98): every delivered story merged into its context's spec — or a
+    journey item into `journeys.md` — in the order of its `delivered:` time, its test lines from its `tests.md` where
+    the run folder kept one; a story without a mapping is merged without test lines and named. A story whose criteria
+    the spec holds already is left alone, so a second run changes nothing."""
+    delivered = []
+    for story_path in story_files(epics):
+        try:
+            front, body = read_front_matter(story_path)
+        except GateError:
+            continue
+        if is_delivered(front) and spec_target(front):
+            delivered.append((delivered_on(front), story_id_of(story_path), story_path, front, body))
+    for _when, story_id, story_path, front, body in sorted(delivered):
+        target = spec_target(front)
+        preamble, spec = read_spec(target)
+        story = story_entries(body)
+        found = derived(story, spec)
+        if not story or all(verb == "holds" for verb in found.values()):
+            continue
+        try:
+            tests = read_mapping(runs, story_id)[1]
+        except GateError:
+            tests = {}
+        plan = os.path.join(runs, story_id, "plan.md")
+        delta = read_delta(read_text(plan)) if os.path.isfile(plan) else read_delta("")
+        title = "Journeys" if story_kind(front) == "journey" else str(front.get("context", "")).strip()
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write(render_spec(preamble, merge(spec, story, delta, tests), title))
+        untested = [item["key"] for item in story if not tests.get(item["key"])]
+        say(f"{shown(story_path)} → {shown(target)} ({len(story)} criterion(s))"
+            + (f" — without a test line: {', '.join(untested)}" if untested else ""))
+
+
+#: Where a context's glossary lay beside its domain code before the spec held it.
+GLOSSARY_IN_CODE = re.compile(r"(?:^|/)(?:src/(?:main/java/)?)?(?:.*/)?([^/]+)/[Dd]omain/glossary\.md$")
+
+
+def migrate_glossaries(cwd, say):
+    """Each context's glossary out of the code into the spec (WP-98): `<…>/<context>/domain/glossary.md` (Java's
+    package path) and `src/<Root>.<Context>/Domain/glossary.md` (.NET) move to `<spec>/<context>/glossary.md`. A spec
+    glossary that exists already is kept, and the one in the code named."""
+    skip = {"build", "out", "bin", "obj", "target", "node_modules"}
+    spec_rel = os.path.relpath(place("spec"), cwd).replace(os.sep, "/")
+    for root, dirs, files in os.walk(cwd):
+        dirs[:] = [d for d in dirs if d not in skip and not d.startswith(".")]
+        if "glossary.md" not in files:
+            continue
+        rel = os.path.relpath(os.path.join(root, "glossary.md"), cwd).replace(os.sep, "/")
+        if rel.startswith(spec_rel + "/"):
+            continue
+        match = GLOSSARY_IN_CODE.search(rel)
+        if not match:
+            continue
+        context = match.group(1).rsplit(".", 1)[-1]
+        dst = os.path.join(spec_rel, context_folder(context), "glossary.md")
+        if os.path.exists(os.path.join(cwd, dst)):
+            print(f"migrate: kept {rel} — {dst} exists already")
+            continue
+        say(f"{rel} → {dst} ({move_path(cwd, rel, dst)})")
+
+
+#: Where `dca-init` wrote the method's conventions before `dca.profile.yaml` (WP-99).
+OLD_CONVENTIONS = (os.path.join(".agents", "dca", "conventions.md"), os.path.join(".claude", "dca", "conventions.md"))
+
+
+def migrate_configuration(cwd, say):
+    """The method's configuration into one file (WP-99): the conventions file's `key: value` lines and the places the
+    `AGENTS.md` description section names other than the defaults go into `dca.profile.yaml` — a key the file has
+    already is kept —, the old file goes, and the `AGENTS.md` line that pointed at it points at the new one. Once."""
+    target = os.path.join(cwd, METHOD_PROFILE)
+    have = read_flat(target)
+    lines = []
+    for rel in OLD_CONVENTIONS:
+        path = os.path.join(cwd, rel)
+        if not os.path.isfile(path):
+            continue
+        found, prose = [], []
+        for raw in read_text(path).splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            key = line.split(":", 1)[0].strip() if ":" in line else ""
+            if not key or " " in key:
+                prose.append(line)
+                continue
+            found.append((key, line.split(":", 1)[1].strip()))
+        if prose:
+            # A file with more than `key: value` lines is a person's: it stays, and the move is named.
+            say(f"{rel.replace(os.sep, '/')} kept — it holds lines that are no `key: value` "
+                f"({prose[0][:60]!r}); move them into {METHOD_PROFILE} by hand")
+            continue
+        for key, value in found:
+            if key not in have:
+                have[key] = value
+                lines.append(f"{key}: {value}")
+        os.remove(path)
+        with contextlib.suppress(OSError):
+            os.rmdir(os.path.dirname(path))
+        say(f"{rel.replace(os.sep, '/')} → {METHOD_PROFILE} (its lines; the file removed)")
+    agents = os.path.join(cwd, "AGENTS.md")
+    text = read_text(agents) if os.path.isfile(agents) else ""
+    start, end = "<!-- dca-describe: start -->", "<!-- dca-describe: end -->"
+    if start in text and end in text:
+        block = text.split(start, 1)[1].split(end, 1)[0]
+        defaults = {"product": ("overview", METHOD_ROOT + "product.md"), "tech": ("tech", METHOD_ROOT + "tech.md"),
+                    "domain": ("domain", METHOD_ROOT + "domain.md")}
+        for key, path in re.findall(r"^\s*-\s*(product|tech|domain):\s*`([^`]+)`", block, re.M):
+            method_key, default = defaults[key]
+            if path != default and method_key not in have:
+                have[method_key] = path
+                lines.append(f"{method_key}: {path}")
+                say(f"AGENTS.md's `- {key}:` place → {METHOD_PROFILE} `{method_key}: {path}`")
+    if lines:
+        existing = read_text(target) if os.path.isfile(target) else "# The method's configuration — every key optional, the defaults otherwise.\n"
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write(existing.rstrip("\n") + "\n" + "\n".join(lines) + "\n")
+    pointer = re.compile(r"^- conventions: `[^`]*`.*$", re.M)
+    if text and pointer.search(text):
+        with open(agents, "w", encoding="utf-8") as handle:
+            handle.write(pointer.sub(f"- configuration: `{METHOD_PROFILE}` — the method's places and conventions: layout, "
+                                     f"suffixes, the resolved framework configuration", text, count=1))
+        say(f"AGENTS.md: the `- conventions:` line points at {METHOD_PROFILE}")
+
+
 def migrate_layout(cwd):
     """`factory.sh update`'s one move to the layout with one owner per place: the profile to the root
     (`backlog:` → `epics:`), `project/backlog/` → `project/epics/`, each story into a folder of its own with its
@@ -519,11 +648,39 @@ def migrate_layout(cwd):
             handle.write(text)
         say(f"{profile_path}: " + ", ".join(changed))
         profile = read_profile(profile_path)
+    # `project/` → `product/`, `product.md` → `overview.md` (contract 19): the places a profile names under `project/`
+    # follow, in the factory's profile and in the method's; a place outside it is the project's own and stays.
+    for path in (profile_path, os.path.join(cwd, METHOD_PROFILE)):
+        if path and os.path.isfile(path):
+            text = read_text(path)
+            moved_text = re.sub(r"^(\s*[A-Za-z_.]+:\s*)project/", r"\1product/", text, flags=re.M)
+            moved_text = re.sub(r"^(\s*[A-Za-z_.]+:\s*)product/product\.md", r"\1product/overview.md", moved_text, flags=re.M)
+            if moved_text != text:
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(moved_text)
+                say(f"{shown(path)}: places under project/ now under product/")
+    profile = read_profile(profile_path)
     set_places(profile)
+    if os.path.isdir("project") and place("epics").replace("\\", "/").endswith("product/epics"):
+        if not os.path.exists("product"):
+            say(f"project/ → product/ ({move_path(cwd, 'project', 'product')})")
+        else:
+            for name in sorted(os.listdir("project")):
+                src, dst = os.path.join("project", name), os.path.join("product", "epics" if name == "backlog" else name)
+                if os.path.exists(dst):
+                    print(f"migrate: kept {src.replace(os.sep, '/')} — {dst.replace(os.sep, '/')} exists already")
+                    continue
+                say(f"{src.replace(os.sep, '/')} → {dst.replace(os.sep, '/')} ({move_path(cwd, src, dst)})")
+            if not os.listdir("project"):
+                os.rmdir("project")
+    old_overview, overview = os.path.join("product", "product.md"), place("product")
+    if os.path.isfile(old_overview) and not os.path.exists(overview) \
+            and overview.replace("\\", "/").endswith("product/overview.md"):
+        say(f"product/product.md → {shown(overview)} ({move_path(cwd, old_overview, overview)})")
     epics, runs = place("epics"), place("runs")
-    old_epics = os.path.join("project", "backlog")
-    if os.path.isdir(old_epics) and not os.path.isdir(epics) and epics == DEFAULTS["epics"]:
-        say(f"project/backlog/ → {epics}/ ({move_path(cwd, old_epics, epics)})")
+    old_epics = os.path.join("product", "backlog")
+    if os.path.isdir(old_epics) and not os.path.isdir(epics) and epics.replace("\\", "/").endswith(DEFAULTS["epics"]):
+        say(f"product/backlog/ → {shown(epics)}/ ({move_path(cwd, old_epics, epics)})")
     # A story is a folder (contract 16): `<epic>/<story>.md` → `<epic>/<story>/story.md`, its `.decisions/`
     # folder → `<story>/decisions/`, its `.findings.md` → `<story>/findings.md`. The folder takes the story's id.
     for src in flat_stories(epics):
@@ -607,6 +764,9 @@ def migrate_layout(cwd):
             say("tasks/ removed — it held nothing but the factory's run artefacts")
     migrate_evidence(cwd, runs, say)
     migrate_delivery(cwd, epics, runs, say)
+    migrate_configuration(cwd, say)
+    migrate_glossaries(cwd, say)
+    migrate_spec(cwd, epics, runs, say)
     attributes = ".gitattributes"
     if os.path.isfile(attributes):
         text = read_text(attributes)
@@ -662,6 +822,11 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
 - `## Invariants`: one line per aggregate, entity, value object or domain service `## Changes` names —
   `- <Element>: <rule>; <rule>` with its guards (required, trimmed, in range), or `- <Element>: none — <why>`.
   The test gate reads it (`invariants`): each named rule needs a unit test in tests.md's `## Notes`
+- `## Spec delta`: the story against its context's spec (`product/spec/<context>/scenarios.md`) — the skeleton writes
+  `- adds <key>` / `- holds <key>` / `- changes <key>` as the comparison says; add `- removes <key>: <why>` for a
+  criterion the story takes away and `- rule "<old>" → "<new>"` for a renamed rule (every criterion under it named or
+  removed). The test gate reads it (`spec-delta`): a change or removal of what holds needs the story's
+  `## Changed expectations` or an answered decision — where neither says it, ask (`## needs-human`)
 - `## Changed tests` (only when the story contradicts an existing test): `| <path from the project root> | <backing line or decision id> |`
 - `## Files`: `- <path from the project root> — <changes|read>: <why>` (the path in backticks) — the next stages open these first
 - `## Glossary proposals`: `- <term>: <definition>` — the document gate checks each term landed in a glossary or is named open
@@ -683,6 +848,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   plan gave `level: browser-only`; every other scenario's test lives in a `test.<name>:` source set
 - titles: an end-user test's display name is the scenario's `Title:` line verbatim, else its key in words
   (`shows-empty-state` → "Shows empty state"); never the key itself in a name, display name or comment
+- `## Moved tests` (a spec test this story renamed): `| <key> | <selector> |` (`spec-tests`)
 - one process per test command; each selector is read from its report by name
 - red: every selector in the table fails before any production code — the gate writes `{evidence}/.tests-red`
   (`<selector>\t<sha256 of the test file>`); the build gate refuses a test changed after it was seen red (`red-proof`)
@@ -953,7 +1119,7 @@ def invariants_skeleton(runs, story_id):
 
 
 PLAN_SKELETON = ("# Plan — {story}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"
-                 "| --- | --- | --- | --- | --- |\n\n## Acceptance criteria\n{rows}\n\n## Invariants\n\n## Files\n\n## Glossary proposals\n\n"
+                 "| --- | --- | --- | --- | --- |\n\n## Acceptance criteria\n{rows}\n\n## Spec delta\n{delta}\n\n## Invariants\n\n## Files\n\n## Glossary proposals\n\n"
                  "## Open assumptions\n")
 
 
@@ -973,9 +1139,15 @@ def plan_skeleton(runs, story_id, cwd="."):
         print(f"factory: {error}", file=sys.stderr)
         return 1
     rows = "\n".join(f"- {key}  →  level: " for key, _text in criteria)
+    # The spec delta as far as it follows from the story and the spec: added, held, changed by key. A removal and
+    # a renamed rule are the plan stage's to add — and a change it finds that the story does not say, its question.
+    front, body = read_front_matter(story_path)
+    target_spec = spec_target(front)
+    found = derived(story_entries(body), read_spec(target_spec)[1]) if target_spec else {}
+    delta = "\n".join(f"- {verb} {key}" for key, verb in found.items())
     os.makedirs(folder, exist_ok=True)
     with open(target, "w", encoding="utf-8") as handle:
-        handle.write(PLAN_SKELETON.format(story=story_id, rows=rows))
+        handle.write(PLAN_SKELETON.format(story=story_id, rows=rows, delta=delta))
     print(f"factory: {runs}/{story_id}/plan.md — the skeleton with {len(criteria)} criterion key(s) under `## Acceptance criteria`")
     return 0
 

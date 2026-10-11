@@ -21,10 +21,10 @@ A question that depends on an answer still open in the same pass is asked with i
 placeholder. A heading drafted — from existing code, or from what the person said with the call — counts
 as open until the person confirms it: its question is asked word for word all the same, with the draft
 offered as the first option. The
-paths are the defaults; `dca.profile.yaml` (`root:`, `overview:`, `tech:`, `domain:`) holds the places a
+paths are the defaults; `dca.profile.yaml` (`root:`, `overview:`, `tech:`, `domain:`, `spec:`) holds the places a
 project uses where they differ.
 
-## Product — `project/product.md`
+## Product — `product/overview.md`
 
 ### DESC-WHAT
 - look up: `## What and for whom`
@@ -32,7 +32,7 @@ project uses where they differ.
 - question: What is built, and for whom? Name the product in two or three sentences and its actors — who uses it, and for what.
 - options: —
 - default: —
-- answer goes to: `project/product.md → ## What and for whom`
+- answer goes to: `product/overview.md → ## What and for whom`
 
 ### DESC-SURFACES
 - look up: `## Surfaces`
@@ -40,7 +40,7 @@ project uses where they differ.
 - question: How does each actor reach the product — pages, notifications, an HTTP API, a command line, a tool — and on which devices?
 - options: —
 - default: —
-- answer goes to: `project/product.md → ## Surfaces`
+- answer goes to: `product/overview.md → ## Surfaces`
 
 ### DESC-HOW
 - look up: `## How it works`
@@ -48,7 +48,7 @@ project uses where they differ.
 - question: How does the main flow go, where does state live (the client, the server, both), and what is persisted?
 - options: —
 - default: —
-- answer goes to: `project/product.md → ## How it works`
+- answer goes to: `product/overview.md → ## How it works`
 
 ### DESC-LOOK
 - look up: `## Look and feel`
@@ -56,7 +56,7 @@ project uses where they differ.
 - question: How should it look — style direction, language, accessibility level, a design system where there is one?
 - options: —
 - default: —
-- answer goes to: `project/product.md → ## Look and feel`
+- answer goes to: `product/overview.md → ## Look and feel`
 
 ### DESC-SIZES
 - look up: the size table under `## Look and feel`
@@ -64,7 +64,7 @@ project uses where they differ.
 - question: Where the product has pages: which page sizes is it designed for? The defaults are s up to 480 px (phones upright), m up to 768 px (small tablets, phones on their side), l up to 1180 px (tablets) and xl above (laptops and desktops).
 - options: the defaults · other limits
 - default: the defaults
-- answer goes to: `project/product.md → ## Look and feel`, the size table
+- answer goes to: `product/overview.md → ## Look and feel`, the size table
 
 ### DESC-QUALITIES
 - look up: `## Qualities`
@@ -72,7 +72,7 @@ project uses where they differ.
 - question: Which qualities does the product need — security and authorisation, privacy, performance, availability — as this product needs them?
 - options: —
 - default: —
-- answer goes to: `project/product.md → ## Qualities`
+- answer goes to: `product/overview.md → ## Qualities`
 
 ### DESC-NOT
 - look up: `## Not part of the product`
@@ -80,9 +80,9 @@ project uses where they differ.
 - question: What will the product not do?
 - options: —
 - default: —
-- answer goes to: `project/product.md → ## Not part of the product`
+- answer goes to: `product/overview.md → ## Not part of the product`
 
-## Technical decisions — `project/tech.md`
+## Technical decisions — `product/tech.md`
 
 ### DESC-STACK
 - look up: `## Stack`
@@ -90,7 +90,7 @@ project uses where they differ.
 - question: Which language, framework and build tool — and why, where it is not obvious?
 - options: Java with Spring Boot and Gradle · Java with Spring Boot and Maven · C# with ASP.NET Core
 - default: —
-- answer goes to: `project/tech.md → ## Stack` (a capability added later — formatter, browser tests, HTTP stub, coverage — adds its own line under the same heading)
+- answer goes to: `product/tech.md → ## Stack` (a capability added later — formatter, browser tests, HTTP stub, coverage — adds its own line under the same heading)
 
 ### DESC-FRONTEND
 - look up: `## Frontend approach`
@@ -98,7 +98,7 @@ project uses where they differ.
 - question: Server-rendered pages, a client application, or no frontend — and what does that exclude?
 - options: server-rendered pages, no client framework · a client application · no frontend
 - default: —
-- answer goes to: `project/tech.md → ## Frontend approach`
+- answer goes to: `product/tech.md → ## Frontend approach`
 
 ### DESC-PERSISTENCE
 - look up: `## Persistence`
@@ -106,7 +106,7 @@ project uses where they differ.
 - question: Where is state kept — one database, files, in memory until a later story — and what does the product not use?
 - options: in memory until a later story · one relational database · files
 - default: —
-- answer goes to: `project/tech.md → ## Persistence`
+- answer goes to: `product/tech.md → ## Persistence`
 
 ### DESC-RUNTIME
 - look up: `## Runtime`
@@ -114,7 +114,7 @@ project uses where they differ.
 - question: Where and how does it run — a container, a platform, a desktop, a device — and what does it need there?
 - options: —
 - default: —
-- answer goes to: `project/tech.md → ## Runtime`
+- answer goes to: `product/tech.md → ## Runtime`
 
 ### DESC-INTEGRATIONS
 - look up: `## Integrations`
@@ -122,7 +122,7 @@ project uses where they differ.
 - question: Which external systems does the product talk to, in which direction, what is sent and received — each field with its type — and what counts as unavailable?
 - options: none
 - default: —
-- answer goes to: `project/tech.md → ## Integrations`
+- answer goes to: `product/tech.md → ## Integrations`
 
 ### DESC-VERSIONS
 - look up: `## Version policy`
@@ -130,9 +130,9 @@ project uses where they differ.
 - question: How are dependency versions chosen and kept current?
 - options: the generator's current defaults, kept current by hand · pinned, raised deliberately · the latest release
 - default: the generator's current defaults, kept current by hand
-- answer goes to: `project/tech.md → ## Version policy`
+- answer goes to: `product/tech.md → ## Version policy`
 
-## Designed domain — `project/domain.md`
+## Designed domain — `product/domain.md`
 
 ### DESC-CONTEXTS
 - look up: the `## Bounded contexts` table
@@ -140,7 +140,7 @@ project uses where they differ.
 - question: Which bounded contexts does the product have — each with its responsibility and its subdomain type (core, supporting, generic)?
 - options: one context for now
 - default: —
-- answer goes to: `project/domain.md → ## Bounded contexts`
+- answer goes to: `product/domain.md → ## Bounded contexts`
 
 ### DESC-RELATIONSHIPS
 - look up: the `## Relationships` table
@@ -148,12 +148,12 @@ project uses where they differ.
 - question: Where there is more than one context: how do the contexts depend on each other — which is upstream, which downstream, with which pattern, which translation and for which reason?
 - options: —
 - default: —
-- answer goes to: `project/domain.md → ## Relationships`
+- answer goes to: `product/domain.md → ## Relationships`
 
 ### DESC-GLOSSARY
-- look up: the `## Glossary` section — a `### <context>` table per designed context, or the context's own glossary where it has code; drafts per context from the lookup of how its field names its operations (SKILL step 5), each with its source
+- look up: the `## Glossary` section — a `### <context>` table per designed context, or the context's own glossary (`product/spec/<context>/glossary.md`) where it has code; drafts per context from the lookup of how its field names its operations (SKILL step 5), each with its source
 - asked: when open, once per designed context
 - question: What happens in each context — the main events, in the past tense and in your words? For each: which operation causes it, on which term, and what does a person look at to decide — and what do you call looking at it (a read has no event, so its verb is asked on its own)? Give every word the code should use, and where a word could name more than one effect — creating or adding a thing, deleting or cancelling it — say which.
 - options: none yet — each story asks for the words it needs
 - default: —
-- answer goes to: `project/domain.md → ## Glossary → ### <context>`, or the context's own glossary where it already has one
+- answer goes to: `product/domain.md → ## Glossary → ### <context>`, or the context's own glossary (`product/spec/<context>/glossary.md`) where it already has one

@@ -42,7 +42,7 @@ silently.
 instructions name (a ``- configuration: `<file>` `` line in `AGENTS.md`)
 places it with its `domain:` key; without one, a project description section
 of the instructions names it as ``- domain: `<path>` `` (typically
-`project/domain.md`). Where neither names it, the default is
+`product/domain.md`). Where neither names it, the default is
 `docs/context-map.md`. Never write a second designed map beside the one named,
 and never take the path from a configuration the instructions do not name.
 

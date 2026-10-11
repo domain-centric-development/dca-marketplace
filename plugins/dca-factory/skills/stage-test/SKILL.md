@@ -10,7 +10,7 @@ runner started, one session that carries several stages, a repeat round, the she
 runner's prompt names its path and repeats none of it.
 
 Input: the story, `.dca-factory/runs/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
-product description (`project/product.md`, or where the profile's `product:` points) where the plan
+product description (`product/overview.md`, or where the profile's `product:` points) where the plan
 says a criterion touches them. Nothing else. Open the files the plan's
 `## Files` names first — the pattern to mirror, the fixture to reuse; search only for the rest.
 Output: the test sources, plus `.dca-factory/runs/<story>/tests.md` with a `## Files` section naming the test

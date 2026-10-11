@@ -414,8 +414,11 @@ The markers are the library's (`dev.domaincentric.dca.buildingblocks.…` / `Dom
 This makes the review match the project's actual conventions, not DCA defaults.
 
 **The designed map and the glossary.** The designed context map is where `dca.profile.yaml` puts it
-(`domain:`, by default `project/domain.md`), `docs/context-map.md` where neither exists; the glossaries are where the `ubiquitous-language` skill puts them. Read the map's subdomain
-column to calibrate strictness, and check the strategic declarations against it — see *Declared
+(`domain:`, by default `product/domain.md`), `docs/context-map.md` where neither exists; the glossaries are
+in the spec, one per context at `<spec>/<context>/glossary.md` (`spec:` in `dca.profile.yaml`,
+`product/spec/<context>/glossary.md` by default) — where the `ubiquitous-language` skill puts them. A glossary
+still beside the domain code is named as a finding: a migration moves it (`factory.sh update` in a project
+with a delivery pipeline, `git mv` otherwise). Read the map's subdomain column to calibrate strictness, and check the strategic declarations against it — see *Declared
 relationships against the designed map* in `reference/checklist.md`.
 
 **Doctrine behind a finding.** When a finding needs the reason, consult `dca-knowledge` (the vendored

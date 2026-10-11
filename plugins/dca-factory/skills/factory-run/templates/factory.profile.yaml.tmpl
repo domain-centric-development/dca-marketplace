@@ -99,16 +99,16 @@
 #              (Gradle: `./gradlew test --rerun`), since only a report from this run counts. Gradle's
 #              `--rerun` is a task option: it reruns the one task named before it, so a line with several
 #              tasks needs one `--rerun` per task, or `--rerun-tasks` for all of them
-# product      the product description (default: project/product.md) — what is built, for whom, its
+# product      the product description (default: product/overview.md) — what is built, for whom, its
 #              surfaces, how it works, how it looks. Mandatory before the first story, with `tech`
-# tech         the technical description (default: project/tech.md) — stack, frontend approach,
+# tech         the technical description (default: product/tech.md) — stack, frontend approach,
 #              persistence, runtime, integrations, version policy
-# domain       the designed context map (default: project/domain.md) — contexts, subdomain types,
+# domain       the designed context map (default: product/domain.md) — contexts, subdomain types,
 #              relationships and why. Optional; read first by the plan gate's context check
 #              The three are written with the person by /factory-setup (through the project's
 #              description skill); `setup` writes a key only where the project instructions name
 #              another place. A key that names no file fails the gate
-# epics        where the epics and stories are (default: project/epics). A story carries its own state:
+# epics        where the epics and stories are (default: product/epics). A story carries its own state:
 #              `status: draft | approved | adopted | superseded` is the person's, `status: delivered` and
 #              `delivered:` are written by the gate alone. In each story's folder, `<story>/decisions/` holds
 #              its questions and acceptances
@@ -141,7 +141,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 18
+contract: 19
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}

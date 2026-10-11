@@ -9,8 +9,8 @@ First read `factory-run/reference/stage-common.md` — the rules every stage hol
 runner started, one session that carries several stages, a repeat round, the shell, the gate. The
 runner's prompt names its path and repeats none of it.
 
-Input: the story file, the project description — `project/product.md`, `project/tech.md` and
-`project/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — the method's
+Input: the story file, the project description — `product/overview.md`, `product/tech.md` and
+`product/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — the method's
 configuration `dca.profile.yaml` at the project root (the instruction file's ``- configuration: `dca.profile.yaml` ``
 line points at it; the layout, the naming suffixes and the resolved configuration the architecture suite holds the
 code to; where it is missing or a key is absent, the defaults), and the
@@ -34,7 +34,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    from the table under `## Look and feel`); a criterion names a size, never a pixel value, and one
    naming a size the table lacks is a question; the technical description's `## Persistence`, `## Frontend approach`
    and `## Integrations` answer how an element you name is built. Plan within them: an element that
-   contradicts `project/tech.md` — a second persistence, a client framework on server-rendered
+   contradicts `product/tech.md` — a second persistence, a client framework on server-rendered
    pages, an integration it does not list — is not planned. A question they already answer is not
    a question for the human; one they leave open, or a story that contradicts them, is — through
    `## needs-human`, like any other. Without a description, say so in the plan and plan from the
@@ -135,6 +135,14 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
      to tests and writes the missing ones with a break each;
    - either way, the third option is to change the story so it asks for what the page does not do yet.
    A scenario the story changes is step 9's, not this one.
+9b. **Derive the spec delta.** Read the story's context's spec (`product/spec/<context>/scenarios.md`, the
+   context lowercase and hyphenated; a context without one holds nothing yet). The skeleton's `## Spec delta`
+   already says, key by key, what the comparison finds: `adds` (the spec lacks it), `holds` (word for word
+   there) or `changes` (there, otherwise). Add what only you can see: `- removes <key>: <why>` for a criterion
+   of the spec the story takes away, and `- rule "<old>" → "<new>"` where the story rewords a rule — then every
+   criterion under the old rule is either one of the story's or removed. A change or removal must follow from
+   the story's `## Changed expectations`; where it does not, it is a change of agreed behaviour nobody said —
+   one decision record naming the keys, as in step 9, and stop.
 10. Name business terms **and operations** in the criteria that are not in the glossary yet, as
    proposals with a one-line definition — an operation as `<domain word> (<code word>): <what it does
    to which term>`. Name use cases, commands and events from the operation's code word. The code word

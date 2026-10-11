@@ -67,7 +67,7 @@ their number do not.
 - answer goes to: `depends_on:` in the new `epic.md` (`[]` for none)
 
 ### WISH-CONTEXT
-- look up: the designed map (`project/domain.md`) — one context only means no question
+- look up: the designed map (`product/domain.md`) — one context only means no question
 - asked: when the map carries more than one context
 - question: Which bounded context does the behaviour belong to?
 - options: the contexts of the designed map, in its order, the one the draft names first

@@ -21,7 +21,7 @@ Each entry has the same fields:
 - answer goes to: `## Options`
 
 ### DISC-USERS
-- look up: `project/product.md → ## What and for whom`
+- look up: `product/overview.md → ## What and for whom`
 - question: Who has the problem — which actors, how many, in which situation?
 - answer goes to: `## Users and evidence`
 
@@ -41,7 +41,7 @@ Each entry has the same fields:
 - answer goes to: `## Outcome`
 
 ### DISC-LIMITS
-- look up: `project/tech.md`, `project/product.md → ## Not part of the product`
+- look up: `product/tech.md`, `product/overview.md → ## Not part of the product`
 - question: What is out of bounds — time, budget, technology, rules a solution must not break?
 - answer goes to: `## Risks and open questions`
 

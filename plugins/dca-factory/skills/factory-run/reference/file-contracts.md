@@ -7,9 +7,9 @@ fresh context, in a subagent or in a separate process without changing the resul
 | Stage | Reads | Writes |
 |---|---|---|
 The run folder is `.dca-factory/runs/` unless the stack profile's `runs:` names another place; the
-stories are under `project/epics/` unless `epics:` does.
+stories are under `product/epics/` unless `epics:` does.
 
-| `stage-plan` | the story, the project description (`product.md`, `tech.md`, `domain.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `.dca-factory/runs/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration (port) \| integration (adapter: <Adapter>) \| browser-only (<why>)`, and `## Invariants`, one line per domain type it changes; the test gate reads `browser-only` and the invariants |
+| `stage-plan` | the story, the project description (`overview.md`, `tech.md`, `domain.md`), the story's context's spec (`product/spec/<context>/scenarios.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `.dca-factory/runs/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration (port) \| integration (adapter: <Adapter>) \| browser-only (<why>)`, and `## Invariants`, one line per domain type it changes; the test gate reads `browser-only` and the invariants |
 | `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table, the `gate:invariants` table: one row per rule of the plan's `## Invariants`, each with its own unit test, and — contract 15 — the `gate:clauses` table: one row per `Then` and each `And` after it, with the line that asserts it and its level; a clause about what is stored never at `adapter`) |
 | `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `.dca-factory/runs/<story>/build.md` |
 | `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `.dca-factory/runs/<story>/tidy.md` |
@@ -272,7 +272,7 @@ line. A `## needs-human` without one has asked nobody, and the next gate refuses
 
 The question a stage may not answer, kept as a file of its own so the answer has a place to land
 and a second session — or the same one tomorrow, or another tool — finds it without any
-transcript. It lives in the folder of the story it belongs to, `project/epics/<epic>/<story>/decisions/<nn>.md`
+transcript. It lives in the folder of the story it belongs to, `product/epics/<epic>/<story>/decisions/<nn>.md`
 (an acceptance as `accept-<n>.md`), because a human's answer is human-written state and belongs in
 the people's place; committed with the story. The record's `id:` is `<story>-<nn>` (`<story>-accept-<n>`),
 which is how stages, the gate and the inbox cite it, and the file is found by that name: a record

@@ -67,7 +67,7 @@ dca-marketplace/
 - **dca-core** — `/dca-describe`, `/dca-new`, `/dca-init`, `/dca-add`, `/dca-modelling`, `/dca-discipline`,
   `/dca-audit`, `/dca-knowledge`; no agents. Every skill speaks both languages: Java/Spring (`UseCase<I,O>`,
   packages, `package-info.java`) and .NET/C# (`IUseCase<TIn,TOut>`, namespaces, a `[BoundedContext]` marker
-  class). The verbs follow one another: describe (the project description under `project/`) → new (a skeleton
+  class). The verbs follow one another: describe (the project description under `product/`) → new (a skeleton
   from a generator, or one more element) → init (the DCA part of an existing project) → add (one capability).
   `dca-core` may use a `dca-craft` skill; the other direction is what `scripts/check-skills.py` forbids.
 - **dca-factory** — the *delivery* layer, kept apart from the method on purpose (three layers, three owners:
@@ -85,7 +85,7 @@ dca-marketplace/
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
   discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`, which checks and then hands the run to `dca_factory/runner.py`) is optional, the git
   pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile
-  (`dca-factory.profile.yaml` at the project root) and `project/` — the description (product, tech, designed
+  (`dca-factory.profile.yaml` at the project root) and `product/` — the description (product, tech, designed
   domain) and the epics with their stories, each story carrying its state and its decisions beside it —
   beside the glossaries and the generated context map. Run artefacts go to `.dca-factory/runs/`, which is
   protocol and disposable; `.agents/factory/` is the installed pipeline alone.

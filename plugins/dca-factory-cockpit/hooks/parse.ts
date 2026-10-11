@@ -110,7 +110,7 @@ export function touchesFactory(call: { tool: string }): boolean {
     (call.tool === 'Bash' && text.includes('factory')) ||
     (call.tool === 'Skill' && /factory-|stage-|dca-describe/.test(text)) ||
     // what the skills write: the description, the backlog, the discovery reports, the run folders
-    (writes && /project\/|\.dca-factory\//.test(text))
+    (writes && /product\/|project\/|\.dca-factory\//.test(text))
   )
 }
 

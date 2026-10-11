@@ -49,7 +49,7 @@ if a target path is occupied, stop and ask.
 
 A directory without a build file (`build.gradle(.kts)`, `pom.xml`, `*.sln`, `*.slnx`, `*.csproj`) has nothing
 to add DCA to. Stop, write nothing, and point to `dca-new project`, which creates the skeleton from a generator
-and then runs this skill. The same holds for a directory that holds only a project description (`project/`,
+and then runs this skill. The same holds for a directory that holds only a project description (`product/`,
 `AGENTS.md`) — that is the starting point of `dca-new`, not of this skill.
 
 ### Phase 1 — Inspection
@@ -105,7 +105,7 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
    `@RestController` vs `@Controller`; existing `package-info.java` / context marker classes with
    `@BoundedContext` / `@SharedKernel` (reuse, never duplicate); the root packages of the bounded contexts if
    none are declared yet. Read the designed domain where `dca.profile.yaml` puts it (`domain:`, by default
-   `project/domain.md`) — its contexts are the first proposal for the context roots.
+   `product/domain.md`) — its contexts are the first proposal for the context roots.
 
 6. **Existing marker-like interfaces and annotations (critical).**
 
@@ -181,7 +181,7 @@ C. **Rule sets** (INIT-RULES) — multi-select; the answer is the `dca.rules.set
    It is the one place for that knowledge: `dca-add rules` reads the same file when a set is added later.
    Strictness varies by subdomain: core contexts run the full catalog, supporting and generic contexts may run
    the structural baseline only — record that in a pattern-selection ADR. The subdomain types come from the
-   designed map (`domain:` in `dca.profile.yaml`, `project/domain.md` by default); where it
+   designed map (`domain:` in `dca.profile.yaml`, `product/domain.md` by default); where it
    has none, ask. A single rule the team rejects
    becomes `dca.rules.off` + `dca.rule.<id>.reason`; one they are working towards `dca.rules.warn`. Both stay
    visible in the report — prefer that over a silent gap. Existing violations the team accepts as a baseline
@@ -296,6 +296,11 @@ file outside the DCA part: dependencies, the architecture source set or project,
   already in `dca.profile.yaml` keeps its value, headings and blank lines are dropped — then the old file is
   removed and the `AGENTS.md` line ``- conventions: `<path>` `` becomes ``- configuration: `dca.profile.yaml` ``.
   A delivery pipeline's `factory.sh update` does the same in code. Say in the summary that the file moved.
+- **Glossaries beside the code.** A context's glossary lives in the spec, `<spec>/<context>/glossary.md`
+  (`spec:` in `dca.profile.yaml`, `product/spec` by default; `<context>` the context's name in lowercase,
+  words joined by `-`). One still beside the domain code (`…/domain/glossary.md`, `…/Domain/glossary.md`) is
+  named in the report's Open section; a migration moves it — `factory.sh update` in a project with a
+  delivery pipeline, otherwise `git mv` to its place in the spec on the person's confirmation.
 - `templates/agents/AGENTS-dca-section.md.tmpl` → the block between `<!-- dca-core: start -->` and
   `<!-- dca-core: end -->` in `AGENTS.md`: added where there is none, replaced where there is one, never
   duplicated. Only this block is the skill's; the rest of `AGENTS.md` — the `dca-describe` section, a delivery

@@ -1534,7 +1534,7 @@ def slotted(stories, order, holders, slots, busy, cwd, hint):
 
 
 #: What people write and the pipeline installs: a change there is not code a story left behind.
-PEOPLE_OWNED = ("project/", ".agents/", ".claude/", ".codex/", ".opencode/", ".githooks/", "docs/")
+PEOPLE_OWNED = ("product/", "project/", ".agents/", ".claude/", ".codex/", ".opencode/", ".githooks/", "docs/")
 
 
 def unclaimed_changes(cwd, runs, stories):

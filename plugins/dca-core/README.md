@@ -11,7 +11,7 @@ The verbs follow one another — describe → new → init → add:
 
 | Where you start | Skill |
 |---|---|
-| nothing written yet | `/dca-describe` — the project description under `project/`, with you |
+| nothing written yet | `/dca-describe` — the project description under `product/`, with you |
 | an empty directory | `/dca-new` — a running skeleton from the stack's generator, then git, the DCA part, a formatter, and a browser runner where there are pages |
 | an existing project | `/dca-init` — the DCA part only |
 | one capability later | `/dca-add rules <module>` · `freeze` · `formatter` · `browser` · `integration-tests` · `http-stub` · `coverage` |
@@ -37,7 +37,7 @@ Formatter, Browser runner, Proof, Git, Open — with every field present and `�
 
 | Skill | Purpose | When it triggers |
 |---|---|---|
-| `/dca-describe` | Writes the project description with the person — `project/product.md`, `project/tech.md`, `project/domain.md` (through `/context-map`) — and the `AGENTS.md` line that makes every implementation read them first; drafts from the code where there is code, never invents an answer; `/dca-describe <change>` changes one statement in your words | Before the first code or story, when the description is missing, or when one decision changes |
+| `/dca-describe` | Writes the project description with the person — `product/overview.md`, `product/tech.md`, `product/domain.md` (through `/context-map`) — and the `AGENTS.md` line that makes every implementation read them first; drafts from the code where there is code, never invents an answer; `/dca-describe <change>` changes one statement in your words | Before the first code or story, when the description is missing, or when one decision changes |
 | `/dca-new` | `project` from an empty directory (generator, git, `/dca-init`, `/dca-add formatter`, `/dca-add browser`); `context`, `usecase`, `aggregate`, `store`, `domainservice` lay out one more element, Java or C#. Invoked by a person only | Starting a project; adding DCA structure |
 | `/dca-init` | Adds the published packages (Java: `dca-building-blocks` + `dca-archunit`; .NET: `DomainCentric.BuildingBlocks` + `DomainCentric.ArchRules.Xunit`), one architecture test with the project's `DcaLayout`, a `dca-archunit.properties`, and the method's section in `AGENTS.md` | Introducing DCA into an existing Java or .NET codebase |
 | `/dca-add` | One capability into an existing setup: another rule module, freezing existing violations, a formatter (formatted once, whole), a browser runner, an integration level, an HTTP stub, test coverage over every suite | A capability the project gains later |
@@ -71,14 +71,23 @@ their keys to it.
 
 | Keys | What they hold | Written by |
 |---|---|---|
-| `root` (default `project/`), `overview`, `tech`, `domain`, `epics`, `discovery` (default `<root>/product.md`, `<root>/tech.md`, `<root>/domain.md`, `<root>/epics`, `<root>/discovery`) | where the project description and its backlog are; each place overridable on its own | `/dca-describe`, where the person wants them elsewhere |
+| `root` (default `product/`), `overview`, `tech`, `domain`, `spec`, `epics`, `discovery` (default `<root>/overview.md`, `<root>/tech.md`, `<root>/domain.md`, `<root>/spec`, `<root>/epics`, `<root>/discovery`) | where the project description, the living spec and the backlog are; each place overridable on its own | `/dca-describe`, where the person wants them elsewhere |
 | `language`, `base_package_or_namespace`, `framework_preset`, `framework_origin`, `injectable_annotation`, `transactional_annotation`, `transaction_mode`, `operation_containers`, `verify_command` | the resolved framework configuration | `/dca-init` |
 | `use_case_suffix`, `input_port_suffix`, `repository_suffix`, `controller_suffix`, `rest_controller_suffix`, `failure_suffix` | the naming the suite holds the project to, and the failure suffix | `/dca-init` |
 | `catalog_path`, `building_blocks_api` | a live catalog for `/dca-knowledge`; the catalog node of the markers | by hand; `/dca-init` |
 | `format`, `formatFix`, `browser`, `selector`, `appStart`, `integration`, `integrationTest`, `reset`, `http.stub`, `coverage`, `coverageReport` | the capabilities added later and their commands | `/dca-add` |
 
+`spec` is the living spec: per bounded context `<spec>/<context>/scenarios.md` (what holds — written
+only by a delivery, through a pipeline's gate or by hand, never by a skill) and
+`<spec>/<context>/glossary.md` (the context's language — the one file there that skills write, through
+`/ubiquitous-language`), and `<spec>/journeys.md` for the flows across contexts. `<context>` is the
+context's name in lowercase, words joined by `-` (`Product Catalog` → `product-catalog`).
+
 A project with the earlier conventions file (`.agents/dca/conventions.md`)
-has its lines moved into `dca.profile.yaml` by the next `/dca-init`.
+has its lines moved into `dca.profile.yaml` by the next `/dca-init`. Glossaries
+still beside the domain code are moved into the spec by a migration —
+`factory.sh update` in a project with a delivery pipeline, `git mv` otherwise;
+`/dca-init`'s report names them.
 
 ## The vendored knowledge catalog
 

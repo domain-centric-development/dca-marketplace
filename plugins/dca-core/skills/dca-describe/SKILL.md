@@ -1,25 +1,28 @@
 ---
 name: dca-describe
-description: Writes the project description with the person who decides what is built — the product (what, for whom, surfaces, how it works, how it looks, qualities, what it is not), the technical decisions (stack, frontend approach, persistence, runtime, integrations, version policy) and the designed domain (bounded contexts, subdomain types, relationships and why, the glossary of terms and operations with their code words) — under project/, and the AGENTS.md line that makes every implementation read them first. Use before the first line of code or the first story, when a project has code but no description, when a description is incomplete, on "/dca-describe", or on "/dca-describe <change>" to change one statement in the person's words. Never invents an answer; writes no code and no story.
+description: Writes the project description with the person who decides what is built — the product (what, for whom, surfaces, how it works, how it looks, qualities, what it is not), the technical decisions (stack, frontend approach, persistence, runtime, integrations, version policy) and the designed domain (bounded contexts, subdomain types, relationships and why, the glossary of terms and operations with their code words) — under product/, and the AGENTS.md line that makes every implementation read them first. Use before the first line of code or the first story, when a project has code but no description, when a description is incomplete, on "/dca-describe", or on "/dca-describe <change>" to change one statement in the person's words. Never invents an answer; writes no code and no story.
 ---
 
 # Describe the project
 
 Input: the person who decides what is built, and — in a project that has code — the code.
-Output: `project/product.md`, `project/tech.md`, `project/domain.md` — or where `dca.profile.yaml` puts
-them — and a section in `AGENTS.md` that names them. You write no story, no plan and no code.
+Output: `product/overview.md`, `product/tech.md`, `product/domain.md` — or where `dca.profile.yaml` puts
+them — and a section in `AGENTS.md` that names them; the glossary of a context that has its own file is
+written into `product/spec/<context>/glossary.md` (`spec:` in `dca.profile.yaml`) through
+`ubiquitous-language`. You write no story, no plan and no code, and nothing else under `spec/`: a context's
+`scenarios.md` and `journeys.md` change only through a delivery.
 
 The three files hold **intent**: what is to be built, written before the code. What exists and why —
 architecture documentation, decision records, generated maps — belongs in `docs/`, after the code.
-The rule of thumb: an intention that need not be built yet goes to `project/`; a statement the code
+The rule of thumb: an intention that need not be built yet goes to `product/`; a statement the code
 could show goes to `docs/`.
 
 ## Do
 
 1. **Look before you ask.** The places come from `dca.profile.yaml` at the project root, flat
-   `key: value` lines, every key optional: `root:` (default `project/`) and, each overridable on its
-   own, `overview:` (default `<root>/product.md`), `tech:` (`<root>/tech.md`) and `domain:`
-   (`<root>/domain.md`); where the file or a key is missing, the defaults. Where the person wants the
+   `key: value` lines, every key optional: `root:` (default `product/`) and, each overridable on its
+   own, `overview:` (default `<root>/overview.md`), `tech:` (`<root>/tech.md`), `domain:`
+   (`<root>/domain.md`) and `spec:` (`<root>/spec`, the glossaries' folder); where the file or a key is missing, the defaults. Where the person wants the
    description elsewhere, write `root:` — or the one key — into `dca.profile.yaml`, keeping its other
    lines. An `AGENTS.md` section of this skill that names a place the file does not hold (a project
    described before the file existed) has that place written into `dca.profile.yaml` once — its
@@ -44,7 +47,7 @@ could show goes to `docs/`.
    cannot tell: what it is for and for whom, the qualities, what it is not, the version policy, the
    subdomain types and the reasons. The person confirms each file before it counts.
 5. **The domain through the map's craft.** Where the `context-map` skill is installed, write
-   `project/domain.md` through it: it holds the relationship patterns, the subdomain types and the
+   `product/domain.md` through it: it holds the relationship patterns, the subdomain types and the
    questions to ask when a context or a relationship is added. Otherwise write it from
    `templates/domain.md.tmpl` with the same questions. The designed map is optional where a project
    has one context; say so rather than inventing a second.
@@ -58,12 +61,15 @@ could show goes to `docs/`.
    draft counts as open until the person confirms it.
    **The glossary is per context, and every entry has one place.** Each designed context gets its own
    `### <context>` section under `## Glossary`. A context that already has code and a glossary file of its
-   own gets its entries there — through the `ubiquitous-language` skill, where installed — and its section
-   is one line naming that file. When a context's code is created later, its section moves into the
-   context's glossary (`dca-new context` does it): moved, not copied, never two places for one word.
+   own — `product/spec/<context>/glossary.md`, `<context>` the context's name in lowercase with words
+   joined by `-` — gets its entries there, through the `ubiquitous-language` skill where installed, and its
+   section is one line naming that file. When a context's code is created later, its section moves into
+   that file (`dca-new context` does it): moved, not copied, never two places for one word. A glossary
+   still beside the domain code is moved by a migration — `factory.sh update` in a project with a delivery
+   pipeline, by hand with `git mv` otherwise.
 6. **One designed map, never two.** A designed map written earlier at `docs/context-map.md` — or
    under another name the project used — is moved, not copied: propose
-   `git mv docs/context-map.md project/domain.md` and do it on the person's confirmation. A map
+   `git mv docs/context-map.md product/domain.md` and do it on the person's confirmation. A map
    generated from the code (`docs/architecture/context-map.md` in a DCA project) is not a designed
    map and stays where it is.
 7. **Write the instruction line.** Add — or replace — this section in `AGENTS.md`, with the places
@@ -77,13 +83,13 @@ could show goes to `docs/`.
    delivery pipeline or by hand — and treat a contradiction between them and a change as a finding,
    not as something to fix in the code:
 
-   - product: `project/product.md` — what is built, for whom, surfaces, how it works, how it looks,
+   - product: `product/overview.md` — what is built, for whom, surfaces, how it works, how it looks,
      qualities, what it is not
-   - tech: `project/tech.md` — stack, frontend approach, persistence, runtime, integrations,
+   - tech: `product/tech.md` — stack, frontend approach, persistence, runtime, integrations,
      version policy
-   - domain: `project/domain.md` — the designed bounded contexts, their subdomain types and
-     relationships, and the glossary of their terms and operations; the map generated from the code
-     shows what was built
+   - domain: `product/domain.md` — the designed bounded contexts, their subdomain types and
+     relationships, and the glossary of their terms and operations until a context has its own
+     (`product/spec/<context>/glossary.md`); the map generated from the code shows what was built
    <!-- dca-describe: end -->
    ```
 
@@ -98,7 +104,7 @@ could show goes to `docs/`.
 
 `/dca-describe <change>` changes one statement in the person's words — "the shop also sells gift cards",
 "we move from H2 to PostgreSQL" — or applies a released description change from a discovery report, written as
-`<product.md | tech.md | domain.md> — <section>: <change>`. Find the heading it belongs to, show the line as it
+`<overview.md | tech.md | domain.md> — <section>: <change>`. Find the heading it belongs to, show the line as it
 stands and as it would read, and write it on the person's yes; ask only what the change leaves open, and say
 which other heading it touches (a new persistence touches `## Runtime` too). `/dca-describe` without an argument
 looks every heading up and asks the open ones. One exception writes without this skill: a capability's own line

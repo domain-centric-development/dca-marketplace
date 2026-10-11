@@ -3,6 +3,7 @@
     contract   what a project file says: places, front matter, profile, stories, decisions, the stage table
     reports    what a run left to read: test reports, a command's outcome, tree snapshots, a tool's usage
     state      where a story stands: the journal, the owned files, the story state, the schedule, the claim
+    spec       what holds: the living spec per context, the story's criteria as entries, the delta, the merge
     gate       what decides: the checks, their registry, the stamps a passed stage writes
     tools      an agent tool as a record, probed once against its binary
     runner     what the runner asks between stages: its tables, a story's worktree, the skeletons

@@ -83,7 +83,7 @@ page, an endpoint, a consumer — the context does not have, and with it a decis
 it. Explaining one takes more than the record:
 
 1. **Try the map there is first.** Read the designed map (`domain:` in the stack profile,
-   `project/domain.md` by default) and the one generated from the code. A new context is the
+   `product/domain.md` by default) and the one generated from the code. A new context is the
    expensive answer, and most questions do not need it: the behaviour may belong to a context that
    already owns the language, or be a second use case in one. Say why the existing contexts do
    *not* fit — a different lifecycle, a different language for the same word, a different team, an
@@ -186,6 +186,6 @@ at: 2026-09-22T21:04:00Z
 rationale: archived is history, not inventory.
 ```
 
-"Written to `project/epics/<epic>/US-3/decisions/01.md`. The plan stage asked; a running worker picks it
+"Written to `product/epics/<epic>/US-3/decisions/01.md`. The plan stage asked; a running worker picks it
 up by itself, otherwise `/factory-run US-3` resumes it at the plan stage — it re-plans with the
 answer, and the gate stamps the record applied."

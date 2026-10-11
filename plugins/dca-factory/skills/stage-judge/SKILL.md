@@ -12,7 +12,7 @@ runner's prompt names its path and repeats none of it.
 Input: the story and its epic (`epic.md` beside it), `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
 `.dca-factory/evidence/<story>/story.diff`, which the pipeline writes; open a whole file only where the
 diff's context does not carry the question, and explore no further than a finding needs — the
-product and the technical description (`project/product.md`, `project/tech.md`, or where the
+product and the technical description (`product/overview.md`, `product/tech.md`, or where the
 profile's `product:` and `tech:` point) — **the review files** `.dca-factory/runs/<story>/reviews/<perspective>.md`,
 one per perspective, written by the reviewers the pipeline started before you (each in a context of
 its own, at the same time) — and, in a repeat round, the previous verdict,

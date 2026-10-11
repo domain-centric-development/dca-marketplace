@@ -8,8 +8,8 @@ description: Writes and checks the backlog a delivery run reads — an epic with
 Input: what the human tells you, plus the project description — the product, the technical
 decisions and the designed domain — and the glossaries. Output: `<backlog>/<epic>/epic.md`,
 `<backlog>/<epic>/<story>/story.md` (a folder per story, named after its id), or a correction to one of them. The places are the stack profile's
-`product:`, `tech:`, `domain:` and `backlog:`, by default `project/product.md`, `project/tech.md`,
-`project/domain.md` and `project/epics`.
+`product:`, `tech:`, `domain:` and `backlog:`, by default `product/overview.md`, `product/tech.md`,
+`product/domain.md` and `product/epics`.
 You write no plan, no test and no code. Run the pipeline separately once the item stands.
 
 ## Arguments
@@ -46,7 +46,7 @@ If the human insists on a story anyway, write it with `status: draft` and a firs
 `- open: the project description is not written yet — /factory-setup` — and never approve it while
 the gate still reports it missing. Once the description stands, write within it: a story that needs
 a surface the product description does not list, state kept where `## How it works` says otherwise,
-something `project/tech.md` excludes, or a context the designed map does not carry is a question
+something `product/tech.md` excludes, or a context the designed map does not carry is a question
 about the description — ask it now, while the person is here, and change the description first
 (through the description skill or the context-map skill where they are installed) — not a story
 that smuggles the decision in.
@@ -62,7 +62,7 @@ that smuggles the decision in.
    the intent invents one. If the human has not stated them, ask — one question per missing field,
    in their words, not a form. A placeholder is worse than a missing file, because the gate passes
    it.
-2a. **An epic from a discovery report** (`project/discovery/<topic>/discovery.md`, a proposal the person
+2a. **An epic from a discovery report** (`product/discovery/<topic>/discovery.md`, a proposal the person
    released): take its `intent`, `goal` and `metric` as the report writes them, add `discovery:` with the
    report's path, and ask only what it leaves `open` — the domain contact, the journey. Where the problem itself
    is unclear and no report exists, offer `/factory-discover <topic>` before writing an epic.
@@ -76,7 +76,7 @@ that smuggles the decision in.
    production is the evidence. A story count, a burndown or "feature shipped" is not a metric. If
    the project publishes no such event yet, say so in the epic: the event is then part of the work.
 4. **Name the bounded context, and check the map.** A story's `context` must be a context the
-   designed map (`project/domain.md`) already carries — designed, even where it is not built yet. If the behaviour would need a new context or a new relationship
+   designed map (`product/domain.md`) already carries — designed, even where it is not built yet. If the behaviour would need a new context or a new relationship
    between contexts, do not write the story: say that it is a scoping question and what it would
    need. That decision is not one a story may smuggle in.
 5. **Write criteria as observable behaviour, with keys** — as scenarios by default: the story's
@@ -114,7 +114,7 @@ that smuggles the decision in.
    - **surface and actor:** does a trigger or an outcome need an entry point, a page or a message
      `## Surfaces` does not list, or an actor `## What and for whom` does not name? Who may reach
      it? (Ask *whether* a way exists, never *which* one to build.)
-   - **technical fit:** does the story need what `project/tech.md` excludes — a second persistence,
+   - **technical fit:** does the story need what `product/tech.md` excludes — a second persistence,
      a client framework where pages are server-rendered — or what the stack cannot do? That is a
      question about the technical description, not a detail of the story;
    - **external dependency:** a system neither the designed map nor `## Integrations` carries is a

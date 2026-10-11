@@ -35,7 +35,8 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
 - The same concept is named **consistently**. `OrderLine` in one file,
   `OrderItem` in another → finding.
 - A glossary exists for each context (where the project's conventions put
-  it; one `glossary.md` beside each context's domain code otherwise). If
+  it; `product/spec/<context>/glossary.md` otherwise, the folder moved by the
+  configuration's `spec:` key). If
   present, code identifiers should match. If absent, flag once at the top
   of the report: "consider /ubiquitous-language to start a glossary".
 
@@ -121,11 +122,12 @@ Before reviewing, gather context:
    it uses to mark aggregates, entities and values, the glossary paths and
    the adapter folder names.
 2. If glossaries exist, read the one for each context that the diff
-   touches. Cite specific entries when flagging.
+   touches (`<spec>/<context>/glossary.md`, `<spec>` the configuration's
+   `spec:` key, `product/spec` by default). Cite specific entries when flagging.
 3. If a context map exists, read it. The designed map is where the
    configuration file names it (`domain:`), else where the project
    instructions do (a ``- domain: `<path>` `` line in `AGENTS.md`, typically
-   `project/domain.md`), `docs/context-map.md` otherwise; a map
+   `product/domain.md`), `docs/context-map.md` otherwise; a map
    generated from the code, where the project keeps one, shows what was
    built. Use them to judge whether cross-context imports are designed (and
    thus expected) or smuggled in.

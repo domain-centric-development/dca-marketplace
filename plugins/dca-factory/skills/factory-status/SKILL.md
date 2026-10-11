@@ -6,7 +6,7 @@ description: Shows where the delivery pipeline stands in this project — which 
 # Show where the pipeline stands
 
 Input: the project's files — the story journals under `.dca-factory/evidence/<story>/`, the decision records
-under `<story>/decisions/` in each story's folder, the backlog under `project/epics/`. Output: an answer in the session. You write nothing,
+under `<story>/decisions/` in each story's folder, the backlog under `product/epics/`. Output: an answer in the session. You write nothing,
 start nothing and answer nothing on anyone's behalf.
 
 The brief also counts the judge's **open findings** — confirmed minors the pipeline kept in `<story>/findings.md`
@@ -42,7 +42,7 @@ place. They block nothing; a person closes a row (`done`, `wont-fix`) or a later
 4. **Name the part of the factory that is missing.** Also run
    `bash .agents/factory/factory.sh status --brief`: its lines say when the project description is
    missing (`/factory-setup`), when the backlog is empty (`/factory-backlog`), when the backlog still
-   sits at the project root (the move to `project/`), and when detection finds something the stack
+   sits at the project root (the move to `product/`), and when detection finds something the stack
    profile does not declare (`setup --check`). Name what it says with the skill that fixes it.
 5. **Read the live lines for what they are.** A stage *running* started and has no end in the journal;
    its `activity:` line says how long ago its session log last grew and its last tool call — the sign

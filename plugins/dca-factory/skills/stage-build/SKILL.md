@@ -10,7 +10,7 @@ runner started, one session that carries several stages, a repeat round, the she
 runner's prompt names its path and repeats none of it.
 
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/runs/<story>/tests.md`, the product
-description's `## Look and feel` and `## Qualities` (`project/product.md`, or where the profile's
+description's `## Look and feel` and `## Qualities` (`product/overview.md`, or where the profile's
 `product:` points), and — in a repeat round — the gate or judge report. Nothing
 else. Open the files the plan's and the tests' `## Files` name first; search the tree only for what
 they do not answer.
