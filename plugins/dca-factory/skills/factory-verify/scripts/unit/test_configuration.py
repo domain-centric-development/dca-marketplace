@@ -51,6 +51,14 @@ class Migration(unittest.TestCase):
             runner.migrate_configuration(p.root, again.append)
             self.assertEqual(again, [])
 
+    def test_a_section_naming_the_default_places_writes_no_place(self):
+        with project() as p:
+            write(os.path.join(p.root, "AGENTS.md"),
+                  "<!-- dca-describe: start -->\n- product: `product/overview.md` — x\n- tech: `project/tech.md` — y\n"
+                  "<!-- dca-describe: end -->\n")
+            runner.migrate_configuration(p.root, lambda _: None)
+            self.assertFalse(os.path.exists(os.path.join(p.root, contract.METHOD_PROFILE)))
+
 
 if __name__ == "__main__":
     unittest.main()

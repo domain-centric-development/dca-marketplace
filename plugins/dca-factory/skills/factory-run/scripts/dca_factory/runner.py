@@ -598,7 +598,7 @@ def migrate_configuration(cwd, say):
     start, end = "<!-- dca-describe: start -->", "<!-- dca-describe: end -->"
     if start in text and end in text:
         block = text.split(start, 1)[1].split(end, 1)[0]
-        defaults = {"product": ("overview", METHOD_ROOT + "product.md"), "tech": ("tech", METHOD_ROOT + "tech.md"),
+        defaults = {"product": ("overview", METHOD_ROOT + "overview.md"), "tech": ("tech", METHOD_ROOT + "tech.md"),
                     "domain": ("domain", METHOD_ROOT + "domain.md")}
         for key, path in re.findall(r"^\s*-\s*(product|tech|domain):\s*`([^`]+)`", block, re.M):
             method_key, default = defaults[key]
