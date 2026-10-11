@@ -683,6 +683,18 @@ def migrate_layout(cwd):
                 say(f"{src.replace(os.sep, '/')} → {dst.replace(os.sep, '/')} ({move_path(cwd, src, dst)})")
             if not os.listdir("project"):
                 os.rmdir("project")
+    # The description section of AGENTS.md is the agents' pointer: its places follow the move.
+    if os.path.isfile("AGENTS.md") and os.path.isdir("product"):
+        text = read_text("AGENTS.md")
+        start, end = "<!-- dca-describe: start -->", "<!-- dca-describe: end -->"
+        if start in text and end in text:
+            head, rest = text.split(start, 1)
+            block, tail = rest.split(end, 1)
+            moved_block = block.replace("project/product.md", "product/overview.md").replace("`project/", "`product/")
+            if moved_block != block:
+                with open("AGENTS.md", "w", encoding="utf-8") as handle:
+                    handle.write(head + start + moved_block + end + tail)
+                say("AGENTS.md: the description section names product/")
     old_overview, overview = os.path.join("product", "product.md"), place("product")
     if os.path.isfile(old_overview) and not os.path.exists(overview) \
             and overview.replace("\\", "/").endswith("product/overview.md"):

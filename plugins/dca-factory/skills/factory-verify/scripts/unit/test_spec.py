@@ -145,5 +145,21 @@ class HandAndMigration(unittest.TestCase):
             self.assertEqual(self.quiet(cli.spec_check, p.root, p.runs, p.epics)[0], 0)
 
 
+class Layout(unittest.TestCase):
+
+    def test_the_description_section_of_agents_md_follows_the_move_to_product(self):
+        with project() as p:
+            os.rename(os.path.join(p.root, "product"), os.path.join(p.root, "project"))
+            write(os.path.join(p.root, "project", "product.md"), "# P\n")
+            write(os.path.join(p.root, "AGENTS.md"), "<!-- dca-describe: start -->\n- product: `project/product.md` — x\n"
+                                                     "- tech: `project/tech.md` — y\n<!-- dca-describe: end -->\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                runner.migrate_layout(p.root)
+            text = read(os.path.join(p.root, "AGENTS.md"))
+            self.assertIn("`product/overview.md`", text)
+            self.assertIn("`product/tech.md`", text)
+            self.assertTrue(os.path.isfile(os.path.join(p.root, "product", "overview.md")))
+
+
 if __name__ == "__main__":
     unittest.main()
