@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "503afc506a12edae81ede658cdd17c2de4b4963d28a29825d85d25f4fd6dfda7",
+  "bundle_sha256": "1876f3dddacd2cbba4d8ef30276cb3fc28e864c63ef7e74a70ca42ba7e2c899b",
   "counts": {
     "Decision": 31,
     "Guide": 21,
@@ -10,7 +10,7 @@
     "Recipe": 22,
     "Reference": 128,
     "Rule": 130,
-    "Section": 203,
+    "Section": 205,
     "Template": 49
   },
   "digest_algorithm": "sha256:sorted-path-NUL-resource-normalized-content-NUL",
@@ -30,17 +30,15 @@
   },
   "sources": {
     "dca-dotnet": {
-      "dirty": true,
-      "revision": "a1c95bed54500fdbae994395a7ce5a182a31a4f9",
+      "revision": "6db591487f187f9524fba4ae36727558b8c0a948",
       "source_sha256": "6983bdabf63570f02d3206dcd91295aed6659613d6ff1537975ba986730e3c3f"
     },
     "dca-guide": {
-      "revision": "da0bb126e79322651448aa2d0daf6c0d08818e60",
-      "source_sha256": "7528da166a6b188b435e5dca7bf2d9966d57c5aa4756878e9a48a5a14c3fd2de"
+      "revision": "1171c1cf92337e616c1a68d1d31d681ef83e2106",
+      "source_sha256": "33507d29f2f32e4ca35ad5ad186631c6934105e49f7b45e96d990ea54234d5f3"
     },
     "dca-java": {
-      "dirty": true,
-      "revision": "b85dfe46a519e8af9154ee729d4160a9e93dbb30",
+      "revision": "b905bcd6daf806f5b733e87ff1879b4f669b65fa",
       "source_sha256": "0fcafe2dd2873af6917292f6ba3a2f98e5b2cfb2c979897c82738c7bf5dc0c6e"
     },
     "dca-knowledge-catalog": {
