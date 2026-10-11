@@ -593,7 +593,8 @@ def migrate_configuration(cwd, say):
                     "domain": ("domain", METHOD_ROOT + "domain.md")}
         for key, path in re.findall(r"^\s*-\s*(product|tech|domain):\s*`([^`]+)`", block, re.M):
             method_key, default = defaults[key]
-            if path != default and method_key not in have:
+            older = "project/" + ("product.md" if key == "product" else f"{key}.md")
+            if path not in (default, older) and method_key not in have:
                 have[method_key] = path
                 lines.append(f"{method_key}: {path}")
                 say(f"AGENTS.md's `- {key}:` place → {METHOD_PROFILE} `{method_key}: {path}`")
