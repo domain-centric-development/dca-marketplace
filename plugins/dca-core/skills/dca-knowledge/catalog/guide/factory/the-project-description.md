@@ -10,7 +10,7 @@ Before the first story, two files describe what is to be built and a third, opti
 the designed cut. They are written with the person who decides, one question per heading, and nothing
 in them is invented: a stage that reads an invented look builds it.
 
-**The product** — `overview.md`:
+**The product** — `product.md`:
 
 | Heading | Says |
 |---|---|
