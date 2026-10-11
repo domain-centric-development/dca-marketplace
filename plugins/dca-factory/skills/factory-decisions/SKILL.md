@@ -16,7 +16,9 @@ was not given to you.
 The record's contract is in `factory-run/reference/file-contracts.md`, *Decision records*; read it
 once per project. The state of a record is read off the file: no `## Answer` is **open**; one with
 `answer:`, `by:` and `at:` is **answered**; a gate-written `## Applied` is **applied**; an
-`## Answer` missing the name or the time is a **draft**, and a draft unblocks nothing.
+`## Answer` missing the name or the time is a **draft**, and a draft unblocks nothing. When the gate stamps
+`## Applied`, it also writes the answer into the story — `- answered: <the chosen option's text, or the answer
+verbatim> (<record id>)` under `## Assumptions`; write neither yourself.
 
 ## Do
 
@@ -117,7 +119,8 @@ accepts — no role is checked; the answer is theirs, on their confirmation, as 
   the story (step 8). The story's commit follows — the code, the tests and `.dca-factory/runs/<story>/`.
 - **A correction** — what the human wants different, in their words: write `answer: correction:
   <their words>`, then bring it into **the same story** through the backlog skill's rules: changed or
-  new criteria, one `answered:` line under `## Assumptions` naming the record id, and under
+  new criteria, one `- answered: <the human's words> (<record id>)` line under `## Assumptions` — the
+  same line the gate writes for a decision's answer once it is applied — and under
   `## Changed expectations` what the story had delivered that no longer holds. The story then runs
   again from plan — the schedule sees it changed — in its own `.dca-factory/runs/<story>/`, holding the checkout
   until it is accepted.

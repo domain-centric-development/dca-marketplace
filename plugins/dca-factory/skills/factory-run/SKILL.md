@@ -319,7 +319,16 @@ scenario's behaviour lives and which existing test covers it; the test stage map
 characterization test with its break for a scenario without one, and changes no production code and no
 existing test; its gate expects every mapped test **green**. The judge confirms each test asserts its
 scenario. The adopt gate checks it all again, applies every break to a scratch copy, and delivers the
-story. A judge's `changes-requested` or a refused adopt gate sends it back to the test stage.
+story — `status: delivered`, `delivered_by: gate`, the same end state as a built story. A judge's
+`changes-requested` or a refused adopt gate sends it back to the test stage.
+
+## A story delivered by hand
+
+A person who built a story themselves marks it `factory-cli.py --deliver-by-hand <story> --by <who>`
+(`status: delivered`, `delivered:`, `delivered_by: hand:<who>`): delivered, claimed; the schedule never runs
+it. `factory-cli.py --prove <story>` sets it `status: adopted`, and the next run checks it as an adopted story
+above — the gate then writes `delivered_by: gate`. Neither is the way to change a delivered story: a change of
+delivered behaviour is a new story.
 
 ## A journey item
 

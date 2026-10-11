@@ -52,10 +52,10 @@ class Profile(unittest.TestCase):
     def test_keys_are_flat_quotes_go_comments_are_skipped(self):
         with tempfile.TemporaryDirectory() as root:
             path = write(os.path.join(root, "p.yaml"),
-                         "# profile\ncontract: 17\ntest: \"gradle test --tests '{class}' -q\"\nformat: 'spotless'\n"
+                         "# profile\ncontract: 18\ntest: \"gradle test --tests '{class}' -q\"\nformat: 'spotless'\n"
                          "model.claude.build: opus\nnot a key\n")
             self.assertEqual(contract.read_profile(path), {
-                "contract": "17", "test": "gradle test --tests '{class}' -q", "format": "spotless",
+                "contract": "18", "test": "gradle test --tests '{class}' -q", "format": "spotless",
                 "model.claude.build": "opus"})
 
     def test_a_double_quoted_value_keeps_a_single_quote_at_its_end(self):
@@ -83,11 +83,29 @@ class StoryFields(unittest.TestCase):
         self.assertEqual(contract.story_kind({"status": "approved"}), "story")
         self.assertEqual(contract.story_kind({}), "story")
 
-    def test_delivered_by_status_or_by_a_date(self):
+    def test_delivered_is_the_status_alone(self):
         self.assertTrue(contract.is_delivered({"status": "Delivered"}))
-        self.assertTrue(contract.is_delivered({"status": "adopted", "delivered": "2026-10-10"}))
-        self.assertFalse(contract.is_delivered({"status": "adopted", "delivered": []}))
+        self.assertTrue(contract.is_delivered({"status": "delivered", "delivered_by": "hand:ana"}))
+        self.assertFalse(contract.is_delivered({"status": "adopted", "delivered": "2026-10-10"}))
         self.assertFalse(contract.is_delivered({"status": "approved"}))
+
+    def test_front_matter_is_read_by_lines(self):
+        with project() as p:
+            front, body = contract.read_front_matter(p.story("S-1", text="---\ntitle: a --- b\nid: S-1\n---\n# T\n"))
+        self.assertEqual(front, {"title": "a --- b", "id": "S-1"})
+        self.assertEqual(body, "\n# T\n")
+
+    def test_the_story_digest_reads_by_lines_and_ignores_the_state_lines(self):
+        with project() as p:
+            plain = p.story("S-1", text="---\nid: S-1\ntitle: a --- b\nstatus: approved\nnotes:\n  status: kept\n---\nbody\n")
+            before = contract.story_digest(plain)
+            with open(plain, "w", encoding="utf-8", newline="") as handle:
+                handle.write("---\r\nid: S-1\r\ntitle: a --- b\r\nstatus: delivered\r\ndelivered: 2026-10-11T00:00:00Z\r\n"
+                             "delivered_by: hand:ana\r\nnotes:\r\n  status: kept\r\n---\r\nbody\r\n")
+            self.assertEqual(contract.story_digest(plain), before)
+            with open(plain, "w", encoding="utf-8") as handle:
+                handle.write("---\nid: S-1\ntitle: a --- b\nstatus: approved\nnotes:\n  status: changed\n---\nbody\n")
+            self.assertNotEqual(contract.story_digest(plain), before)
 
     def test_a_story_id_is_its_id_else_its_folder(self):
         with project() as p:

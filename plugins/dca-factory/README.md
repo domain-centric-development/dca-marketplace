@@ -20,8 +20,11 @@ docs/                      what exists and why — written after the code; gener
 
 One owner per place. `project/` is the people's: the description, the epics with their stories and,
 in each story's folder, its decisions (questions a stage asked, a human's answers, acceptances). A story
-carries its own state — `status: draft | approved | adopted | superseded` is the person's line,
-`status: delivered` and `delivered:` are the gate's, written by nothing else. `.dca-factory/` is
+carries its own state — `status: draft | approved | adopted | superseded` is the person's line;
+`status: delivered`, `delivered:` and `delivered_by: gate` are the gate's, built or adopted alike. A story a
+person built is delivered by hand — `factory-cli.py --deliver-by-hand <story> --by <who>` writes
+`delivered_by: hand:<who>`, a claim the views show as such — and `factory-cli.py --prove <story>` has the adopt
+path check it. `.dca-factory/` is
 protocol: delete it at any time and the factory still knows what is delivered and what was decided;
 what is lost is history — hand-overs, the journal, the tokens. Every place is the profile's to move
 (`epics:`, `runs:`, `product:`, `tech:`, `domain:`); the profile itself stays where it is, because it

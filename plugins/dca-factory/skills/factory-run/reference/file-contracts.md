@@ -128,12 +128,17 @@ window's end compares, and a change leaves `.owned-changed`: the story is stoppe
 until `factory-cli.py --owned-confirm <story>`. The gate's own writes (delivered, reopened, `## Applied`) are
 not a change. Nothing the factory needs
 *after* a run lives in either. Whether a story is delivered stands
-in the story itself: the document gate — or the adopt gate — writes `status: delivered` and
-`delivered: <UTC time>` into its front matter when it passes (an adopted story keeps `status: adopted`
-and gains the date). No stage, no skill and no person writes those two lines; `draft → approved` is
-the person's, `→ delivered` the gate's. The plan gate's story digest leaves the two lines out, so a
-delivery never reads as "the story changed after it was planned". A reopen (`--reopen`, on an answered
-correction the story cites) takes them out again and moves the delivered pass's hand-overs to
+in the story itself: the gate that delivers — the document gate, the adopt gate, or in a story's worktree the
+integrate gate, all through one function — writes `status: delivered`, `delivered: <UTC time>` and
+`delivered_by: gate` into its front matter when it passes; built or adopted, the three lines are the same (one
+end state). No stage and no skill writes them; `draft → approved` is the person's, `→ delivered` the gate's — or
+a person's who delivered the story by hand (`delivered_by: hand:<who>`, `--deliver-by-hand`), a claim the views
+show as such until `--prove` has the adopt path check it. The plan gate's story digest leaves the three lines
+out — the front matter read by lines, a `---` inside a line is text — so a delivery never reads as "the story
+changed after it was planned". When the gate stamps an answer `## Applied`, it writes the answer into the story
+as an `answered:` line under `## Assumptions` and takes the planned digest anew in the same write; any other
+change after plan still re-plans. A reopen (`--reopen`, on an answered
+correction the story cites) takes the lines out again and moves the delivered pass's hand-overs to
 `.dca-factory/evidence/<story>/pass-<n>/`, so the first pass stays readable beside the next.
 
 `.dca-factory/evidence/<story>/suites.tsv` is the runner's record of the suite runs its own gates made: one row per passing

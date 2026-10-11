@@ -22,14 +22,14 @@ import threading
 import time
 from .contract import (
     ALL_KINDS, CONTRACT, DECISIONS_DIR, DEFAULTS, evidence_dir, evidence_rel, find_story, FINDINGS_FILE, flat_stories,
-    GateError, git, is_delivered, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
+    delivered_by, delivered_on, GateError, git, is_delivered, legacy_story_digest, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, resolve_profile, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_FILES, STAGE_ORDER, STAGES,
-    STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_kind, worktree_places, decisions_store,
+    STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of, story_kind, worktree_places, decisions_store,
     needs_human_ids)
 from .reports import (
     tokens_of, usage_lines)
 from .state import (
-    back_in, claim, freeze_all, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
+    back_in, claim, freeze_all, gate_passed_on_record, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
 from .gate import (
@@ -447,6 +447,39 @@ def adopted_on(run_folder, delivered_file):
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(os.path.getmtime(delivered_file)))
 
 
+def migrate_delivery(cwd, epics, runs, say):
+    """The delivered state as contract 18 has it: one end state — an adopted story with a `delivered:` date reads
+    `status: delivered` —, a `delivered_by:` line on every delivered story — `gate` where a delivering gate's pass
+    is on record (`gate_passed_on_record`), else `hand:unknown`, named; a line a person wrote is left as it is —,
+    and the planned digest of a story in flight taken anew with today's `story_digest` where it was taken with the
+    old one (contract 17 split on the first `---` anywhere)."""
+    for story_path in story_files(epics):
+        try:
+            front, _body = read_front_matter(story_path)
+        except GateError:
+            continue
+        story_id = story_id_of(story_path)
+        status = str(front.get("status", "")).strip().lower()
+        if status == "adopted" and delivered_on(front):
+            write_story_fields(story_path, status="delivered")
+            say(f"{shown(story_path)}: `status: adopted` with a `delivered:` date is `status: delivered` (one end state)")
+            front, _body = read_front_matter(story_path)
+        if is_delivered(front):
+            if not delivered_by(front):
+                reason = gate_passed_on_record(cwd, runs, story_id, story_path)
+                by = "gate" if reason else "hand:unknown"
+                write_story_fields(story_path, delivered_by=by)
+                say(f"{shown(story_path)}: `delivered_by: {by}`"
+                    + (f" ({reason})" if reason else " — no delivering gate's pass on record; `factory-cli.py "
+                                                     f"--prove {story_id}` turns the claim into proof"))
+            continue
+        planned = os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)
+        if os.path.isfile(planned) and read_text(planned).strip() == legacy_story_digest(story_path) \
+                and legacy_story_digest(story_path) != story_digest(story_path):
+            write_mark(runs, story_id, STORY_DIGEST, story_digest(story_path))
+            say(f"{shown(planned)}: the planned digest taken anew with today's function")
+
+
 def migrate_layout(cwd):
     """`factory.sh update`'s one move to the layout with one owner per place: the profile to the root
     (`backlog:` → `epics:`), `project/backlog/` → `project/epics/`, each story into a folder of its own with its
@@ -558,7 +591,7 @@ def migrate_layout(cwd):
                 value = read_text(delivered_file).strip()
                 if not is_delivered(front):
                     if value == "adopted":
-                        write_story_fields(story_path, delivered=adopted_on(dst, delivered_file))
+                        write_story_fields(story_path, status="delivered", delivered=adopted_on(dst, delivered_file))
                     else:
                         write_story_fields(story_path, status="delivered", delivered=value)
                     front, _body = read_front_matter(story_path)
@@ -573,6 +606,7 @@ def migrate_layout(cwd):
             os.rmdir(tasks)
             say("tasks/ removed — it held nothing but the factory's run artefacts")
     migrate_evidence(cwd, runs, say)
+    migrate_delivery(cwd, epics, runs, say)
     attributes = ".gitattributes"
     if os.path.isfile(attributes):
         text = read_text(attributes)
@@ -1731,7 +1765,7 @@ class Run:
         if self.gate("adopt", story) == 0:
             if os.environ.get("FACTORY_HOME"):
                 return self.integrate_story(story, tool, dry)
-            print(f"factory: story {story} is adopted.")
+            print(f"factory: story {story} is delivered (adopted: checked, nothing built).")
             return 0
         if self.environment_refused("adopt", story):
             return 1

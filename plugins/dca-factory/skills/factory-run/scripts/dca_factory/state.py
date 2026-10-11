@@ -17,11 +17,11 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ADOPT_ORDER, CRITERION, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_on, depends_on, duplicate_ids,
+    ADOPT_ORDER, CRITERION, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
     EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest, find_story,
     GateError, git, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint, MAX_ROUNDS, needs_human_ids,
     OWNED_DIGEST, place, PLACES_REL, POST_GATED, PROFILE_FILE, read_front_matter, read_profile, read_text, records_of,
-    resolve_profile, resume_stage, section_of, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_digest,
+    resolve_profile, resume_stage, section_of, SHARED_WINDOWS, shown, split_front, STAGE_FILES, STAGE_ORDER, STATE_KEYS, story_digest,
     STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
 from .reports import (
     claude_session_logs, codex_session_log, current_session, parse_time, PROCESS_RANKS, session_usage,
@@ -144,17 +144,19 @@ PRODUCT_HEADINGS = (
 
 def write_story_fields(path, **fields):
     """Set — or with None remove — flat keys in a story's front matter; everything else stays byte for byte.
-    The gate's one write into a story: `status: delivered` and `delivered:` at the gate that delivers it, and
-    their removal when a reopen takes the story back."""
+    The gate's one write into a story: `status: delivered`, `delivered:` and `delivered_by:` at the gate that
+    delivers it, and their removal when a reopen or `--prove` takes the story back. The front matter is read by
+    lines (`split_front`): a `---` inside a line is text."""
     if not os.path.isfile(path):
         raise GateError(f"{path}: file not found")
     with open(path, encoding="utf-8", newline="") as handle:      # the line endings as they are
         text = handle.read()
-    parts = text.split("---", 2)
-    if len(parts) < 3:
+    if split_front(text) is None:
         raise GateError(f"{path}: no front matter to write into")
-    newline = "\r\n" if "\r\n" in parts[1] else "\n"
-    lines = parts[1].split(newline)
+    newline = "\r\n" if "\r\n" in text.split("\n", 1)[0] + "\n" else "\n"
+    raw = text.splitlines(keepends=True)
+    close = next(i for i in range(1, len(raw)) if raw[i].rstrip("\r\n") == "---")
+    lines = [line.rstrip("\r\n") for line in raw[1:close]]
     is_key = lambda line, key: not line.startswith((" ", "\t", "-")) and line.split(":", 1)[0].strip().lower() == key
     for key, value in fields.items():
         index = next((i for i, line in enumerate(lines) if is_key(line, key)), None)
@@ -164,10 +166,11 @@ def write_story_fields(path, **fields):
         elif index is not None:
             lines[index] = f"{key}: {value}"
         else:
-            after = next((i for i, line in enumerate(lines) if is_key(line, "status")), None)
-            lines.insert(after + 1 if after is not None else max(len(lines) - 1, 1), f"{key}: {value}")
+            # A state line goes after the last state line there is (`status`, `delivered`, …), else at the end.
+            after = max((i for i, line in enumerate(lines) if any(is_key(line, k) for k in STATE_KEYS)), default=None)
+            lines.insert(after + 1 if after is not None else len(lines), f"{key}: {value}")
     with open(path, "w", encoding="utf-8", newline="") as handle:
-        handle.write("---" + newline.join(lines) + "---" + parts[2])
+        handle.write(raw[0] + "".join(line + newline for line in lines) + raw[close] + "".join(raw[close + 1:]))
     rebaseline_owned(path)
 
 
@@ -232,6 +235,57 @@ def owned_changes(runs, story_id, story_path=None):
             before[part] = digest
     now = owned_parts(story_path or owned_story_path(story_id))
     return sorted(part for part in set(before) | set(now) if before.get(part) != now.get(part))
+
+
+OPTION_LINE = re.compile(r"^(?:[-*]\s*)?\(?([A-Za-z0-9]{1,3})[.):]\s+(.*)$")
+
+
+def answer_sentence(body, answer):
+    """The sentence an answered record leaves in its story — deterministic: where the answer names an option of the
+    record's `## Options` by its label (`a`, `B`, `option b`), that option's first line; else the answer itself.
+    One line, markup and runs of white space taken out."""
+    given = " ".join(str(answer.get("answer", "")).split())
+    label = re.sub(r"^(?:option\s+)", "", given, flags=re.I).strip(" .):*")
+    if re.fullmatch(r"[A-Za-z0-9]{1,3}", label or ""):
+        for line in section_of(body, "options") or []:
+            match = OPTION_LINE.match(line.strip())
+            if match and match.group(1).lower() == label.lower():
+                given = match.group(2)
+                break
+    return " ".join(given.replace("**", "").split())
+
+
+def write_answered(story_path, runs, rid, sentence):
+    """One `- answered: <sentence> (<id>)` line under the story's `## Assumptions` — the gate's write when it stamps
+    an answer applied; the section is made where the story has none. The line corrects the story so far that it
+    can be carried out; it is not a requirement of its own and is never merged into a spec. In the same write the
+    planned digest (`.story-digest`) and an open window's owned digest take the new text, so the gate's own line
+    does not read as "the story changed after it was planned"; any other change still does."""
+    with open(story_path, encoding="utf-8", newline="") as handle:
+        text = handle.read()
+    if f"({rid})" in text:
+        return False
+    newline = "\r\n" if "\r\n" in text else "\n"
+    line = f"- answered: {sentence} ({rid})"
+    lines = text.split(newline)
+    start = next((i for i, l in enumerate(lines) if l.strip().lower().startswith("## assumptions")), None)
+    if start is None:
+        while lines and not lines[-1].strip():
+            lines.pop()
+        lines += ["", "## Assumptions", "", line, ""]
+    else:
+        end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+        last = max((i for i in range(start + 1, end) if lines[i].strip()), default=start)
+        lines.insert(last + 1, line)
+        if last == start:
+            lines.insert(last + 1, "")
+    with open(story_path, "w", encoding="utf-8", newline="") as handle:
+        handle.write(newline.join(lines))
+    story_id = story_id_of(story_path)
+    if os.path.isfile(os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)):
+        write_mark(runs, story_id, STORY_DIGEST, story_digest(story_path))
+    rebaseline_owned(story_path)
+    return True
 
 
 def rebaseline_owned(story_path):
@@ -629,6 +683,39 @@ def acceptance_state(cwd, story_id, story_path):
     return ("accepted" if accepted(answer) else "correction"), rid
 
 
+#: The reports of a gate that delivers.
+DELIVERING_REPORT = re.compile(r"^gate-(document|adopt|integrate)\.\d+\.txt$")
+
+
+def gate_passed_on_record(cwd, runs, story_id, story_path=None):
+    """Whether a delivering gate's pass is on record for this story — the one rule the views and the migration read:
+    the newest document, adopt or integrate report in the evidence folder ends `gate:pass story`, or the story's
+    newest acceptance record is accepted (the document gate delivered on it). Returns the reason, or "" where none.
+    It is a view of the run, not a truth: without `.dca-factory/` nothing is on record, and nothing that holds is
+    lost (the proof that holds is the spec's test line per scenario)."""
+    evidence = evidence_dir(runs, story_id)
+    reports = sorted((name for name in (os.listdir(evidence) if os.path.isdir(evidence) else [])
+                      if DELIVERING_REPORT.match(name)), key=lambda name: os.path.getmtime(os.path.join(evidence, name)))
+    if reports:
+        lines = read_text(os.path.join(evidence, reports[-1])).strip().splitlines()
+        if lines and lines[-1].startswith("gate:pass story"):
+            return f"{reports[-1]} passed"
+    try:
+        records = acceptance_records(cwd, story_id, story_path)
+    except GateError:
+        records = []
+    if records and records[-1][2] in ("answered", "applied") and accepted(records[-1][3]):
+        return f"{records[-1][0]} accepted"
+    return ""
+
+
+def delivery_claim(front):
+    """How a delivered story's delivery reads: "" where the gate delivered it, `claimed by hand:<who>` where a person
+    did. Read from the story alone — deleting `.dca-factory/` changes nothing; the proof that holds is the spec's."""
+    by = delivered_by(front)
+    return f"claimed by {by}" if by.startswith("hand") else ""
+
+
 ACCEPTED_TESTS = re.compile(r"\s+—\s+`[^`]*`$")
 
 
@@ -737,7 +824,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     # Delivered is delivered: the gate wrote it into the story, and nothing under the run folder — a refusal
     # left from an earlier round, a deleted folder — changes that.
     if is_delivered(front):
-        return "delivered", None, "adopted" if status == "adopted" else ""
+        return "delivered", None, delivery_claim(front)
     if status and status not in ("approved", "adopted"):
         return "unreleased", None, f"status {status} — a human releases it first"
     folder, evidence = os.path.join(runs, story_id), evidence_dir(runs, story_id)

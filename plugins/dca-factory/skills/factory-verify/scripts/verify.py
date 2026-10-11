@@ -600,12 +600,13 @@ def record_file(name):
     return f"project/epics/sample/{story}/decisions/{nn}.md"
 
 
-def delivered_story(text, stamp="2026-09-26T07:40:00Z"):
-    """The story as the gate leaves it once delivered: `status: delivered` and `delivered:` — an adopted story
-    keeps its status and gains the date."""
-    if "status: adopted" in text:
-        return text.replace("status: adopted", f"status: adopted\ndelivered: {stamp}")
-    return text.replace("status: approved", f"status: delivered\ndelivered: {stamp}")
+def delivered_story(text, stamp="2026-09-26T07:40:00Z", by="gate"):
+    """The story as the gate leaves it once delivered: `status: delivered`, `delivered:` and `delivered_by:` —
+    built or adopted, one end state."""
+    for status in ("status: adopted", "status: approved"):
+        if status in text:
+            return text.replace(status, f"status: delivered\ndelivered: {stamp}\ndelivered_by: {by}")
+    return text
 
 
 def story_delivered(root, story_id="STORY-1", epic="sample"):
@@ -613,8 +614,8 @@ def story_delivered(root, story_id="STORY-1", epic="sample"):
     path = os.path.join(root, "project", "epics", epic, story_id, "story.md")
     if not os.path.isfile(path):
         return False
-    front = open(path, encoding="utf-8").read().split("---", 2)[1]
-    return bool(re.search(r"^status:\s*delivered\s*$", front, re.M) or re.search(r"^delivered:\s*\S", front, re.M))
+    front = open(path, encoding="utf-8").read().split("\n---", 1)[0]
+    return bool(re.search(r"^status:\s*delivered\s*$", front, re.M))
 
 
 def mark_delivered(root, story_id="STORY-1", stamp="2026-09-26T07:40:00Z", epic="sample"):
@@ -632,7 +633,7 @@ def undeliver(root, story_id="STORY-1", epic="sample"):
     with open(path, encoding="utf-8") as handle:
         text = handle.read()
     text = re.sub(r"^status: delivered$", "status: approved", text, flags=re.M)
-    text = re.sub(r"^delivered:.*\n", "", text, flags=re.M)
+    text = re.sub(r"^delivered(_by)?:.*\n", "", text, flags=re.M)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(text)
 
@@ -793,11 +794,20 @@ class Case:
 
 
 def story_digest(path):
-    """The story's digest as the plan gate records it: `status:` and `delivered:` left out."""
-    text = open(path, encoding="utf-8").read()
-    parts = text.split("---", 2)
-    kept = [l for l in parts[1].splitlines() if l.split(":", 1)[0].strip().lower() not in ("status", "delivered")]
-    return hashlib.sha256(("---" + "\n".join(kept) + "\n---" + parts[2]).encode("utf-8")).hexdigest()
+    """The story's digest as the plan gate records it, written here apart from the gate's: LF line endings; the
+    front matter the lines between a first line `---` and the next line `---`; in it, an unindented `status:`,
+    `delivered:` or `delivered_by:` line left out; SHA-256 over the rest."""
+    lines, out, inside = open(path, encoding="utf-8").read().split("\n"), [], None
+    for number, line in enumerate(lines):
+        if number == 0 and line == "---":
+            inside = True
+        elif inside and line == "---":
+            inside = False
+        elif inside and not line.startswith((" ", "\t", "-")) \
+                and line.split(":", 1)[0].strip().lower() in ("status", "delivered", "delivered_by"):
+            continue
+        out.append(line)
+    return hashlib.sha256("\n".join(out).encode("utf-8")).hexdigest()
 
 
 def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
@@ -4621,9 +4631,13 @@ def run_groups(args):
          dict(story=ADOPTED)),
         (Case("test: an adopted story's tests are green at the test gate", "test", 0, must_pass=("tests-green",)),
          dict(story=ADOPTED, green=both_green)),
-        (Case("adopt: every scenario on a green existing test and a judge's pass adopts the story", "adopt", 0,
-              must_pass=("tests-green", "adopt-judged"), must_skip=("break-proof",)),
-         dict(story=ADOPTED, green=both_green, extra_sources=((".dca-factory/runs/STORY-1/judge.md", "# Judge\n\nverdict: pass\n"),))),
+        (Case("adopt: every scenario on a green existing test and a judge's pass adopts the story — one end state: "
+              "`status: delivered`, `delivered_by: gate`", "adopt", 0,
+              must_pass=("tests-green", "adopt-judged", "delivered"), must_skip=("break-proof",)),
+         dict(story=ADOPTED, green=both_green, extra_sources=((".dca-factory/runs/STORY-1/judge.md", "# Judge\n\nverdict: pass\n"),),
+              after=lambda root: [] if re.search(r"^status: delivered\ndelivered: \S+\ndelivered_by: gate$", open(
+                  os.path.join(root, "project/epics/sample/STORY-1/story.md"), encoding="utf-8").read(), re.M)
+              else ["the adopted story does not read `status: delivered` … `delivered_by: gate`"])),
         (Case("adopt: without a judge's pass nothing is adopted", "adopt", 1, must_fail=("adopt-judged",)),
          dict(story=ADOPTED, green=both_green)),
         (Case("adopt: a red test is not adopted", "adopt", 1, must_fail=("tests-green",)),
@@ -4936,7 +4950,7 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 17\nrequried: compile\n" + PROFILE)),
+         dict(profile="contract: 18\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
@@ -5309,7 +5323,8 @@ def run_groups(args):
               document=DOCUMENT.replace("`docs/context-map.md:3` — the context's own description", ""))),
         # 0.54.0: the judge's confirmed defects that did not block are kept beside the story at delivery.
         (Case("document: the judge's confirmed minors land in <story>/findings.md when the story is delivered", "document", 0,
-              must_pass=("delivered", "findings"), text=("2 confirmed finding(s) kept in", "2 open there")),
+              must_pass=("delivered", "findings"), text=("2 confirmed finding(s) kept in", "2 open there",
+                                                         "`delivered_by: gate`")),
          dict(green=both_green, ledger=both_green, document=DOCUMENT,
               extra_sources=((".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | Defect | Fix |\n|---|---|---|---|---|\n| clean-code | src/main/Thing.java:3 | minor | a name that says nothing | rename it |\n| ddd | src/main/Thing.java:9 | minor | an event in the present tense | past tense |\n"),),
               after=lambda root: [] if os.path.isfile(os.path.join(root, "project/epics/sample/STORY-1/findings.md"))
@@ -7640,7 +7655,7 @@ def run_groups(args):
         expectations.append(("check-backlog: a `publishes:` the epic's metric does not name is refused before the run",
                              "gate:fail STORY-2 outcome" in checked and "SomethingAdded" in checked, checked[-500:]))
     for root in throwaway():
-        # an adopted story: to adopt, then delivered (adopted); a story depending on it waits for the adoption
+        # an adopted story: to adopt, then delivered (one end state); a story depending on it waits for the adoption
         backlog_project(root, ("STORY-2", ["STORY-1"]),
                         story=STORY.replace("status: approved", "status: adopted"))
         first = subprocess.run([sys.executable, args.cli, "--status", "--part", "backlog"], cwd=root,
@@ -7655,8 +7670,8 @@ def run_groups(args):
                              "to adopt" in first and rows.get("STORY-2", ("", ""))[0] == "blocked", listing))
         expectations.append(("adopt: after the judge's pass only the adopt gate is left",
                              judged.get("STORY-1", ("", ""))[1] == "adopt", judged))
-        expectations.append(("adopt: once adopted it reads 'delivered (adopted)'", "delivered (adopted)" in after,
-                             after[-500:]))
+        expectations.append(("adopt: once adopted it reads 'delivered' — built or adopted, one end state",
+                             "delivered" in after and "(adopted)" not in after and "to adopt" not in after, after[-500:]))
         expectations.append(("status: an adopted story counts as delivered in its epic's header",
                              "1 of 2 delivered" in after, after[-500:]))
     for root in throwaway():

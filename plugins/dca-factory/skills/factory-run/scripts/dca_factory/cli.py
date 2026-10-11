@@ -15,6 +15,8 @@ what they say.
     factory-cli.py --story <id> --start | --kind        where a run begins | `story`, `journey` or `adopt`
     factory-cli.py --resolve "<argument>"               what /factory-run <argument> means
     factory-cli.py --reopen <story>                     take a delivered story back for a correction
+    factory-cli.py --deliver-by-hand <story> --by <who> a story built by hand: delivered, claimed
+    factory-cli.py --prove <story>                      a claimed delivery checked through the adopt path
     factory-cli.py --usage [--story <id>] [--total]     tokens per story and stage, from the journals
     factory-cli.py --usage-from <format> <file>         one invocation's usage from a tool's raw output
     factory-cli.py --stage-start|--stage-end <stage> --story <id>    a stage run inside a session
@@ -50,7 +52,7 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, decision_files, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_on,
+    ALL_KINDS, CONTRACT, decision_files, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
     EPIC_FILE, epic_folder, evidence_dir, find_story, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
     location, needs_human_ids, open_findings, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
@@ -59,7 +61,8 @@ from .reports import (
     claude_session_logs, codex_session_log, FOLLOW_ARGS, parse_time, part_of_call, session_usage_allowed, _short,
     stream_denials, stream_parts, tokens_of, USAGE_FIELDS, usage_from, WINDOWS)
 from .state import (
-    acceptance_records, accepted, accepted_criteria, back_in, claim, claim_path, freeze_all, has_worktree,
+    acceptance_records, accepted, accepted_criteria, back_in, claim, claim_path, freeze_all, gate_passed_on_record,
+    has_worktree,
     is_acceptance, journal_append, journal_events, journal_usage, journal_writer, listener_line, mark_listening,
     mark_stage, mark_window, OWNED_CHANGED, owned_end, PRODUCT_HEADINGS, read_claim, record_owned, release,
     resolve_window, run_stories, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
@@ -893,7 +896,7 @@ def story_attention(cwd, story_id, story, profile):
     if state == "running":
         return "running", "running", make_action()
     if state == "delivered":
-        return "done", "delivered (adopted)" if detail == "adopted" else "delivered", make_action()
+        return "done", f"delivered, {detail}" if detail else "delivered", make_action()
     if str(story.get("kind", "")) == "adopt" and state in ("ready", "in-progress", "resumable"):
         return "none", "to adopt", make_action(text=detail)
     if state == "blocked":
@@ -1789,9 +1792,72 @@ def reopen(cwd, runs, epics, story_id):
                   f"wish: a new story with `## Changed expectations`, not this one reopened")
             return 1
     kept = keep_pass(os.path.join(runs, story_id))
-    write_story_fields(story_path, status="approved", delivered=None)
+    write_story_fields(story_path, status="approved", delivered=None, delivered_by=None)
     print(f"reopen: {story_id} taken back for {rid} — it runs again from plan; the delivered pass is kept as "
           f"{shown(kept) if kept else 'nothing (no run folder)'}, and the story no longer says delivered")
+    return 0
+
+
+def deliver_by_hand(cwd, runs, epics, story_id, who):
+    """A story a person built: `status: delivered`, `delivered:` (UTC), `delivered_by: hand:<who>`. Works where the
+    factory never ran. The delivery is claimed, not proven — `--prove` checks it later through the adopt path. A
+    delivered story is not delivered a second time: a change of delivered behaviour is a new story."""
+    who = " ".join(str(who or "").split())
+    if not who:
+        print("deliver-by-hand: `--by <who>` names the person who delivers — the line is their claim")
+        return 1
+    story_path = find_story(epics, story_id)
+    front, _body = read_front_matter(story_path)
+    if is_delivered(front):
+        print(f"deliver-by-hand: {story_id} is delivered already ({delivered_by(front) or 'before delivered_by'}) — "
+              f"a change of its behaviour is a new story with `## Changed expectations`")
+        return 1
+    status = str(front.get("status", "")).strip().lower()
+    if status == "superseded":
+        print(f"deliver-by-hand: {story_id} is superseded — nothing to deliver")
+        return 1
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by=f"hand:{who}")
+    print(f"deliver-by-hand: {shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
+          f"`delivered_by: hand:{who}` — delivered, claimed. Commit it with the trailer `Story: {story_id}`; "
+          f"`factory-cli.py --prove {story_id}` turns the claim into proof.")
+    return 0
+
+
+#: Where `--prove` keeps the claim it took out of the story: one line in the story's evidence.
+CLAIM_FILE = "claim"
+
+
+def prove(cwd, runs, epics, story_id):
+    """A claimed delivery checked through the adopt path: the story becomes `status: adopted` — the code exists,
+    check it, build nothing — and loses its delivered lines (`delivered_on` would keep it delivered and
+    unscheduled). The claim is kept as one line of the evidence. The adopt gate then maps every criterion to a
+    green test, proves the tests the adoption writes with a break, has a fresh judge read them, and writes
+    `status: delivered`, `delivered_by: gate`. Not the way to deliver an edit: a change is a new story."""
+    story_path = find_story(epics, story_id)
+    front, _body = read_front_matter(story_path)
+    if not is_delivered(front):
+        print(f"prove: {story_id} is not delivered — `--prove` checks a claimed delivery; an open story runs as it is")
+        return 1
+    by = delivered_by(front)
+    if by == "gate" and gate_passed_on_record(cwd, runs, story_id, story_path):
+        print(f"prove: {story_id} is delivered by the gate with its pass on record — nothing to prove")
+        return 1
+    holders = checkout_holders(cwd, epics, runs, exclude=story_id)
+    if holders:
+        print(f"prove: {', '.join(holders)} holds the checkout with unfinished code — one story at a time; "
+              f"prove {story_id} once it is delivered")
+        return 1
+    evidence = evidence_dir(runs, story_id)
+    os.makedirs(evidence, exist_ok=True)
+    with open(os.path.join(evidence, CLAIM_FILE), "a", encoding="utf-8") as handle:
+        handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\tdelivered_by={by or 'unknown'}"
+                     f"\tdelivered={delivered_on(front)}\n")
+    kept = keep_pass(os.path.join(runs, story_id))
+    write_story_fields(story_path, status="adopted", delivered=None, delivered_by=None)
+    print(f"prove: {story_id} is `status: adopted` — the adopt path checks it (`factory.sh run --story {story_id}`); "
+          f"the claim ({by or 'unknown'}) is kept in {shown(os.path.join(evidence, CLAIM_FILE))}"
+          + (f", the earlier pass as {shown(kept)}" if kept else ""))
     return 0
 
 
@@ -2060,6 +2126,11 @@ def main(argv):
     parser.add_argument("--stage-end", metavar="STAGE",
                         help="mark its end and record what it used, read from the session's own log")
     parser.add_argument("--session-log", help="with --stage-end: the session log to read, where it is not found")
+    parser.add_argument("--deliver-by-hand", metavar="STORY",
+                        help="mark a story a person built as delivered by hand (claimed), and exit; needs --by")
+    parser.add_argument("--by", metavar="WHO", help="with --deliver-by-hand: who delivers")
+    parser.add_argument("--prove", metavar="STORY",
+                        help="take a claimed delivery back to `status: adopted`, so the adopt path checks it, and exit")
     parser.add_argument("--reopen", metavar="STORY",
                         help="take a delivered story back for a human's correction (an answered acceptance "
                              "record the story cites), and exit")
@@ -2311,6 +2382,10 @@ def main(argv):
         return start(cwd, args.epics, args.runs, args.story, args.slots)
     if args.reopen:
         return reopen(cwd, args.runs, args.epics, args.reopen)
+    if args.deliver_by_hand:
+        return deliver_by_hand(cwd, args.runs, args.epics, args.deliver_by_hand, args.by)
+    if args.prove:
+        return prove(cwd, args.runs, args.epics, args.prove)
     if args.listening or args.claim or args.release is not None:
         freeze_all(args.runs)
     if args.listening:

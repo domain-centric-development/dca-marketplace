@@ -192,10 +192,23 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 17
+CONTRACT = 18
 
 
-VERSION = "0.73.3"
+VERSION = "0.74.0"
+
+
+def split_front(text):
+    """(front lines, body) by lines: the front matter is the lines between a first line `---` and the next line
+    `---` — a `---` inside a line is text. None where the text has no closed front matter. The body is everything
+    after the closing `---`, its line ending first, as written."""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != "---":
+        return None
+    for index in range(1, len(lines)):
+        if lines[index].rstrip("\r\n") == "---":
+            return [line.rstrip("\r\n") for line in lines[1:index]], "".join([lines[index][3:]] + lines[index + 1:])
+    return None
 
 
 def read_front_matter(path):
@@ -207,11 +220,12 @@ def read_front_matter(path):
     text = read_text(path)
     if not text.startswith("---"):
         raise GateError(f"{path}: no front matter (the file must start with ---)")
-    parts = text.split("---", 2)
-    if len(parts) < 3:
+    split = split_front(text)
+    if split is None:
         raise GateError(f"{path}: front matter is not closed by ---")
+    front_lines, body = split
     data, key = {}, None
-    for raw in parts[1].splitlines():
+    for raw in front_lines:
         line = raw.rstrip()
         if not line.strip() or line.lstrip().startswith("#"):
             continue
@@ -228,7 +242,7 @@ def read_front_matter(path):
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1].strip()
         data[key] = value if value else []
-    return data, parts[2]
+    return data, body
 
 
 def unquoted(value):
@@ -491,9 +505,10 @@ def shown(path):
 
 
 def is_delivered(front):
-    """Delivered is a gate's verdict, written into the story: `status: delivered`, or on an adopted story
-    (whose status stays `adopted`) a `delivered:` date."""
-    return str(front.get("status", "")).strip().lower() == "delivered" or bool(delivered_on(front))
+    """Delivered is one state, written into the story: `status: delivered` — by the gate that delivered it, or by
+    a person who delivered it by hand (`delivered_by: hand:<who>`). Built or adopted makes no difference once
+    delivered (one end state)."""
+    return str(front.get("status", "")).strip().lower() == "delivered"
 
 
 def delivered_on(front):
@@ -501,9 +516,33 @@ def delivered_on(front):
     return value.strip() if isinstance(value, str) else ""
 
 
+def delivered_by(front):
+    """Who claims the delivery: `gate`, `hand:<who>`, or "" for a story delivered before the line existed."""
+    value = front.get("delivered_by", "")
+    return value.strip() if isinstance(value, str) else ""
+
+
+#: The lines of a story's front matter the gate and a hand delivery write; a story's digest leaves them out, so
+#: a delivery does not read as "the story changed after it was planned".
+STATE_KEYS = ("status", "delivered", "delivered_by")
+
+
 def story_digest(path):
-    """The story as planned, `status:` and `delivered:` left out — those two the gate writes, and a delivery
-    must not read as "the story changed after it was planned"."""
+    """The story as planned: SHA-256 over the file with LF line endings and the state lines (`STATE_KEYS`) of its
+    front matter left out — the front matter read by lines (`split_front`), an indented line never a key."""
+    text = read_text(path).replace("\r\n", "\n")
+    split = split_front(text)
+    if split is not None:
+        front_lines, body = split
+        kept = [line for line in front_lines
+                if line.startswith((" ", "\t", "-")) or line.split(":", 1)[0].strip().lower() not in STATE_KEYS]
+        text = "---\n" + "".join(line + "\n" for line in kept) + "---" + body
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def legacy_story_digest(path):
+    """`story_digest` as contract 17 had it — split on the first `---` anywhere. Read by the migration alone, to
+    take a planned story's mark anew with today's function."""
     text = read_text(path)
     parts = text.split("---", 2)
     if len(parts) >= 3:

@@ -95,7 +95,7 @@ from .state import (
     current_stage_files, git_tree, is_acceptance, journal_append, last_ended, listed_files, MODEL_PROCESSES,
     NOT_OBSERVED, observe_writes, OWNED_CHANGED, owned_changes, owned_end, PRODUCT_HEADINGS, record_base,
     record_changes, record_owned, run_owned, snapshot_reason, stage_open, STORY_DIGEST, tree_changes, verdict_in,
-    window_open, write_mark, write_story_fields)
+    answer_sentence, window_open, write_answered, write_mark, write_story_fields)
 
 
 def check_owned(result, runs, story_id, story_path):
@@ -2577,8 +2577,11 @@ def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None):
                 )
             else:
                 stamp_applied(path, stage)
+                story = story_path or find_story(place("epics"), story_id)
+                written = write_answered(story, runs, rid, answer_sentence(body, answer))
                 result.ok("decisions", f"{rid} applied by stage {stage} ({answer.get('answer')!r} "
-                                       f"by {answer.get('by')}) — stamped in {rel}")
+                                       f"by {answer.get('by')}) — stamped in {rel}"
+                                       + (f", the answer an `answered:` line in {shown(story)}" if written else ""))
         else:
             result.ok("decisions", f"{rid} applied ({answer.get('answer')!r} by {answer.get('by')})")
     if not records and not any(state == "fail" and check == "decisions"
@@ -3675,15 +3678,7 @@ def _document_passed(run):
         result.ok("integrate", f"every check passed — {story_id} is delivered once its worktree is integrated "
                                f"into the main checkout (the runner's integrate step)")
         return
-    # The one write into a story the gate makes: delivered is its verdict, kept where the story is.
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    write_story_fields(story_path, status="delivered", delivered=stamp)
-    result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`")
-    # The judge's confirmed defects that did not block: kept beside the story, not in the run folder alone.
-    added, open_now = record_findings(story_path, story_id, run.front, run.runs)
-    if added or open_now:
-        result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
-                              f"{open_now} open there")
+    deliver(result, story_path, story_id, run.front, run.runs)
 
 
 @on_pass("adopt")
@@ -3694,9 +3689,7 @@ def _adopt_passed(run):
         run.result.ok("integrate", f"every check passed — {run.story_id} is adopted once its tests are integrated "
                                    f"into the main checkout (the runner's integrate step)")
         return
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    write_story_fields(run.story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built
-    run.result.ok("delivered", f"{shown(run.story_path)} carries `delivered: {stamp}` — adopted")
+    deliver(run.result, run.story_path, run.story_id, run.front, run.runs)
 
 
 @on_pass("integrate")
@@ -3919,12 +3912,18 @@ def integrate_into_home(result, cwd, story_path, story_id, front, runs):
                                 f"`factory.sh run --story {story_id} --from integrate`")
         return
     result.ok("integrated", f"{target} took the story's commit {head[:12]}")
+    deliver(result, story_path, story_id, front, runs)
+
+
+def deliver(result, story_path, story_id, front, runs):
+    """The one write a delivering gate makes into a story — the document gate, the adopt gate and, in a story's
+    worktree, the integrate gate all call it. One end state: built or adopted, the story reads `status:
+    delivered`, `delivered:` and `delivered_by: gate`; an adopted story is no longer `adopted` (that was its
+    input: "the code exists, check it"). The judge's confirmed defects that did not block are kept beside it."""
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    if story_kind(front) == "adopt":
-        write_story_fields(story_path, delivered=stamp)      # `status: adopted` stays: adopted, never built
-    else:
-        write_story_fields(story_path, status="delivered", delivered=stamp)
-    result.ok("delivered", f"{shown(story_path)} carries `delivered: {stamp}`")
+    write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by="gate")
+    result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
+                           f"`delivered_by: gate`")
     added, open_now = record_findings(story_path, story_id, front, runs)
     if added or open_now:
         result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "

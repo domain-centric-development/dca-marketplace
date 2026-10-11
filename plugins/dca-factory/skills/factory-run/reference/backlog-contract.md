@@ -113,8 +113,9 @@ Front matter:
 | `epic` | the epic's `id`; its `epic.md` must exist |
 | `context` | the bounded context the story changes. It must exist on the designed map (`domain.md`), or on the one generated from the code where there is no designed map — a story that would need a new context or a new context relationship is not a story, it is a question about the project description |
 | `title` | short name |
-| `status` | `draft` while it is still being written, `approved` once a human released it for building, `adopted` when it describes behaviour the project already has — adopted, never built (below) — `superseded` when another story replaced it, `delivered` once the document gate passed it — and where the runner gave the story a worktree, once the integrate gate put it on the main line. The person writes `draft → approved`; the gate alone writes `→ delivered`, and takes it back on a reopen. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
-| `delivered` | the UTC time the gate delivered the story, written with `status: delivered` (an adopted story keeps `status: adopted` and gains this line). Never written by hand; the story's digest leaves it out |
+| `status` | `draft` while it is still being written, `approved` once a human released it for building, `adopted` when it describes behaviour the project already has — adopted, never built (below) — `superseded` when another story replaced it, `delivered` once the document or the adopt gate passed it — and where the runner gave the story a worktree, once the integrate gate put it on the main line — or once a person delivered it by hand (`delivered_by: hand:<who>`, below). Built or adopted, a delivered story reads `status: delivered` (one end state). The person writes `draft → approved`; `→ delivered` is the gate's, or a person's who delivered by hand; a reopen or `--prove` takes it back. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
+| `delivered` | the UTC time the story was delivered, written with `status: delivered`. The story's digest leaves it out |
+| `delivered_by` | who claims the delivery (contract 18): `gate`, written by the gate that delivered it, or `hand:<who>`, written by a person who built it by hand (`factory-cli.py --deliver-by-hand <story> --by <who>` writes the three lines). A claim, not a proof: the files are the person's. `factory-cli.py --prove <story>` turns a hand's claim into a gate's delivery through the adopt path. The story's digest leaves it out |
 | `publishes` | optional (contract 14): the epic's outcome event, on the story after which it can happen — the step that completes the flow. Its name is a word of the epic's `metric:` (the plan gate's `outcome`); at the document gate the production code declares a type of that name and a file the story changed — the aggregate that raises it, or the use case that publishes it — refers to it (`outcome`). One event, or a list |
 | `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by their epic's place (its `depends_on:`, then its id) and then by id; an unknown id or a cycle blocks the story and is named |
 
@@ -171,7 +172,11 @@ Body sections:
   that follow from it; without it, a plan that finds such tests asks. A human's correction at
   acceptance lands here too, in the same story, when it takes back something the story delivered.
 - `## Assumptions` — the asynchronous channel to the domain contact: one line per assumption,
-  `open:` or `answered:`. An assumption is a question, never a decision the team took itself.
+  `open:` or `answered:`. An assumption is a question, never a decision the team took itself. When an answer
+  to a decision record is applied, the gate writes it here as `- answered: <the chosen option's text, or the
+  answer verbatim> (<record id>)`; a correction at acceptance writes the same line. The line corrects the story
+  so far that it can be carried out — it is no requirement of its own; an answer that changes behaviour
+  changes a criterion.
 
 ## Journey item
 
@@ -189,10 +194,25 @@ plan, test and judge map every scenario to a test that exists and is **green**, 
 itself (a *characterization* test, listed under `## Characterization` in `tests.md`) comes with a break —
 `.dca-factory/runs/<story>/breaks/<Class>--<method>.patch`, a minimal change to the production code that turns exactly
 this test red — and the adopt gate applies each break to a scratch copy, requires red, and delivers the
-story (`delivered:` with the time goes into the story; its status stays `adopted`). The working tree is never touched. `adopt.breakProof: all` in the
+story (`status: delivered`, `delivered:` and `delivered_by: gate` go into the story — `adopted` was its input,
+"the code exists: check it, build nothing", and a delivered story reads the same, built or adopted). The working tree is never touched. `adopt.breakProof: all` in the
 profile asks for a break for every mapped test, not only the written ones. A story is adopted whole or not
 at all: the adoption writes the tests that are missing. A `depends_on` on an adopted story is met once it
-is adopted, not by its status alone; afterwards its tests are guarded like any delivered story's.
+is delivered; afterwards its tests are guarded like any delivered story's.
+
+## Delivered by hand
+
+A story a person built — by hand, with another tool, where the factory never ran — is delivered by hand:
+`status: delivered`, `delivered:` (UTC) and `delivered_by: hand:<who>`, written by hand or by
+`factory-cli.py --deliver-by-hand <story> --by <who>`, committed with the trailer `Story: <id>`. The views
+read it as **delivered, claimed**; the schedule never runs it. `factory-cli.py --prove <story>` sets it
+`status: adopted` and removes the three lines (the claim is kept in the story's evidence as `claim`); the adopt
+path then checks it — every criterion on a green test, a break for every test it writes, a fresh judge — and the
+adopt gate delivers it with `delivered_by: gate`. A delivered story is not delivered a second time: a change of
+delivered behaviour is a new story with `## Changed expectations`.
+
+Which stories are delivered, by the gate or by a hand, and which are open follows from the front matter
+alone — `grep -l '^status: delivered' …/story.md`, `grep -h '^delivered_by:'` — without the factory.
 
 ## Brownfield
 
