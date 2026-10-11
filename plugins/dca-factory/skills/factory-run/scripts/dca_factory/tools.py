@@ -35,6 +35,7 @@ class Tool(typing.NamedTuple):
     permission_env: str = ""  #: the environment variable a permission block is passed in
     isolation_env: tuple = () #: environment variables that do the same where the tool has no flag: (name, value),
                               #: `{empty}` an empty folder of the pipeline's own
+    effort: tuple = ()        #: how the tool takes a reasoning effort, `{level}` the value: flag words; () — none
     plugins: bool = False     #: it loads the method skills from its plugins, so its skill folder holds the pipeline's
 
 
@@ -50,14 +51,14 @@ TOOLS = (
          isolation=(("--setting-sources", "project"), ("--strict-mcp-config",), ("--tools", "{stage_tools}"),
                     ("--exclude-dynamic-system-prompt-sections",)),
          usage="claude-json", skills=".claude/skills", model_flag="--model", args_env="FACTORY_CLAUDE_ARGS",
-         add_dirs="all", deny=True, allow_list=True, plugins=True),
+         add_dirs="all", deny=True, allow_list=True, effort=("--effort", "{level}"), plugins=True),
     # The user's config.toml (MCP servers, profiles, a model) stays out; the login does not. stdin is closed by the
     # runner: `codex exec` also reads a prompt from stdin, and an unattended run has none.
     Tool("codex", ("codex", "exec", "--json", "-s", "workspace-write", "-c",
                    "sandbox_workspace_write.network_access=true"),
          help=("codex", "exec", "--help"), isolation=(("--ignore-user-config",),),
          usage="codex-jsonl", skills=".codex/skills", model_flag="-m", args_env="FACTORY_CODEX_ARGS",
-         add_dirs="writable"),
+         add_dirs="writable", effort=("-c", 'model_reasoning_effort="{level}"')),
     # `opencode run` otherwise attaches to a background service started with another configuration: the permission
     # block, the isolation and the model would be that process's. A config folder of its own keeps the person's
     # opencode.json, plugins and MCP servers out; the login lives in the data folder and stays (probed 2.0.20).
@@ -173,7 +174,7 @@ def permission_block(allowed, protected, linked, cwd=None, home=None):
     return json.dumps({"permission": {"bash": bash, "edit": edit, "external_directory": external}})
 
 
-def tool_command(tool, model="", writable=(), readable=(), protected=(), allowed=""):
+def tool_command(tool, model="", writable=(), readable=(), protected=(), allowed="", effort=""):
     """What starts one stage with this tool: the variables it is started with and its arguments, the prompt not
     among them — the caller appends it."""
     # a variable the person set is theirs and wins — a config folder that carries their local providers, say
@@ -195,6 +196,8 @@ def tool_command(tool, model="", writable=(), readable=(), protected=(), allowed
     argv += isolation_args(tool)
     if model:
         argv += [tool.model_flag, model]
+    if effort and tool.effort:
+        argv += [word.replace("{level}", effort) for word in tool.effort]
     argv += shlex.split(os.environ.get(tool.args_env, ""))
     return env, argv
 

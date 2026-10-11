@@ -1788,7 +1788,7 @@ esac
 while [ $# -gt 0 ]; do
   case "$1" in
     --story) story=$2; shift 2 ;;
-    --tool) tool=$2; shift 2 ;;
+    --tool) tool=$2; export FACTORY_TOOL_EXPLICIT=1; shift 2 ;;
     --from) case "$command" in setup|update) source_dir=$2 ;; *) from=$2 ;; esac; shift 2 ;;
     --copy) copy_mode=1; shift ;;
     --link) LINK_MODE=1; shift ;;

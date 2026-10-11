@@ -65,5 +65,45 @@ class Readers(unittest.TestCase):
             self.assertEqual(run.used_tokens("S-2"), 0)
 
 
+class ToolAndEffortPerUnit(unittest.TestCase):
+    """WP-95 items 7 and 8: the tool and the effort a unit runs with, from the profile; `--tool` overrides."""
+
+    def setUp(self):
+        for name in ("FACTORY_TOOL_EXPLICIT", "FACTORY_TOOL_CMD", "FACTORY_CLAUDE_ARGS", "FACTORY_CODEX_ARGS"):
+            os.environ.pop(name, None)
+
+    tearDown = setUp
+
+    def test_the_unit_names_its_tool_then_the_profile_default_then_the_runs(self):
+        with project() as p:
+            write(os.path.join(p.root, contract.PROFILE_FILE),
+                  "tool: claude\ntool.verifier: codex\ntool.review: opencode\ntool.review.ddd: codex\n")
+            run = a_run(p)
+            self.assertEqual(run.tool_for("builder", "claude"), "claude")
+            self.assertEqual(run.tool_for("verifier", "claude"), "codex")
+            self.assertEqual(run.tool_for("review:ddd", "claude"), "codex")
+            self.assertEqual(run.tool_for("review:hexagonal", "claude"), "opencode")
+            self.assertEqual(run.tools_of_run("claude"), ["claude", "codex", "opencode"])
+            os.environ["FACTORY_TOOL_EXPLICIT"] = "1"
+            self.assertEqual(run.tool_for("verifier", "claude"), "claude")
+
+    def test_the_effort_per_unit_is_passed_as_the_tool_takes_it_or_named_as_not_applied(self):
+        from dca_factory import tools
+        with project() as p:
+            write(os.path.join(p.root, contract.PROFILE_FILE),
+                  "effort.claude: medium\neffort.claude.tidy: low\neffort.opencode: high\n")
+            run = a_run(p)
+            self.assertEqual(run.effort_choice("claude", "tidy"), ("low", ""))
+            self.assertEqual(run.effort_choice("claude", "build"), ("medium", ""))
+            self.assertEqual(run.effort_choice("codex", "build"), ("", ""))
+            self.assertIn("takes none", run.effort_choice("opencode", "build")[1])
+            os.environ["FACTORY_CLAUDE_ARGS"] = "--effort max"
+            self.assertIn("overridden", run.effort_choice("claude", "build")[1])
+            _env, argv = tools.tool_command(tools.TOOL["claude"], effort="low")
+            self.assertEqual(argv[argv.index("--effort") + 1], "low")
+            _env, argv = tools.tool_command(tools.TOOL["codex"], effort="high")
+            self.assertIn('model_reasoning_effort="high"', argv)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -82,6 +82,15 @@
 #              bound to a tool: a profile is shared, and a model name means nothing to another tool —
 #              the gate refuses an unqualified model key. Unset: the tool's default. A --model/-m
 #              in FACTORY_<TOOL>_ARGS overrides it for one person, and the run says so
+# tool         the tool a run starts its units with where `factory.sh run --tool` names none;
+#              tool.<unit> per unit — tool.builder, tool.verifier, tool.review.<perspective> (tool.review for
+#              all), with `stages: separate` tool.<stage>, and tool.integrate. A unit is one process: in the
+#              shared default plan to tidy is the builder, judge with document the verifier. `--tool` names
+#              one tool for every unit of a run. Every tool named here is checked before the first stage
+# effort.<tool>.<unit>  the reasoning effort (low, medium, high, xhigh, max) <tool> runs <unit> at —
+#              the units of `tool.<unit>`; effort.<tool> that tool's default. Claude takes `--effort`,
+#              Codex `model_reasoning_effort`; a tool without one is named, never silently dropped. An
+#              effort in FACTORY_<TOOL>_ARGS overrides it for one person. Fill in only what was measured
 # contract     the gate file contract this profile was written for (see below)
 # sessionUsage `off` to keep the gate out of the tools' session logs (~/.claude, ~/.codex): stages run
 #              inside a session are then recorded as unknown. Default on; FACTORY_SESSION_USAGE=off

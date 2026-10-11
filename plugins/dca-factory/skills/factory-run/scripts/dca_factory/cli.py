@@ -61,7 +61,7 @@ from .contract import (
     record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
     story_id_of, story_kind, TECH_HEADINGS, VERSION)
 from .reports import (
-    claude_session_logs, codex_session_log, FOLLOW_ARGS, parse_time, part_of_call, session_usage_allowed, _short,
+    FOLLOW_ARGS, READERS, reader_of, session_reader, parse_time, part_of_call, session_usage_allowed, _short,
     stream_denials, stream_parts, tokens_of, USAGE_FIELDS, usage_from, WINDOWS)
 from .state import (
     cached_claims, story_title, claim_config_here, claim_story, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
@@ -77,7 +77,7 @@ from .spec import (
 from .gate import (
     criteria_of, DESCRIPTION_CHANGES, spec_target, description_part, discovery_items, perspectives_of, story_ids)
 from .tools import (
-    isolation_args, TOOL, tool_invocation, unprobed_flags)
+    isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
 from .runner import (
     contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
     command_heads, first_word, model_for, needs_human_lines, open_decision_files, PASS_MARKS, plan_skeleton, run_main,
@@ -332,7 +332,7 @@ def usage_report(runs, story_filter=None, total_only=False, cwd=".", epics=None,
 def dangling_skill_links(cwd):
     """The entries of the tools' skill directories that are links to nothing, as relative paths."""
     found = []
-    for folder in (".claude/skills", ".codex/skills", ".opencode/skills"):
+    for folder in [tool.skills for tool in TOOLS]:
         path = os.path.join(cwd, folder)
         if os.path.islink(path) and not os.path.exists(path):
             found.append(folder)
@@ -449,16 +449,10 @@ def activity_logs(cwd, owner, since):
     subagents where the claim names a session, else the tool's logs for this project directory that
     changed since the stage started (a runner's stage process has a session of its own)."""
     kind, _, session_id = (owner or "").partition(":")
-    if kind == "claude-session":
-        return claude_session_logs(session_id)
-    if kind == "codex-session":
-        found = codex_session_log(session_id)
-        return [found] if found else []
-    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    folder = os.path.join(home, "projects", re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(cwd)))
-    floor = since.timestamp() if since else 0
-    return [path for path in glob.glob(os.path.join(folder, "**", "*.jsonl"), recursive=True)
-            if os.path.getmtime(path) >= floor]
+    reader = session_reader(kind)
+    if reader:
+        return reader.session_logs(session_id)
+    return [path for reader in READERS.values() for path in reader.project_logs(cwd, since)]
 
 
 def last_tool_call(path):
@@ -817,6 +811,10 @@ def story_facts(cwd, runs, story_id, front=None):
                                                   cost=0.0, priced=0, requested=set(), not_applied=0))
             entry["runs"] += 1
             passes[-1]["runs"] += 1
+            if fields.get("tool"):
+                entry.setdefault("tools", set()).add(fields["tool"])
+            if fields.get("effort") and not str(fields["effort"]).startswith("no"):
+                entry.setdefault("efforts", set()).add(fields["effort"])
             if fields.get("model_requested"):
                 entry["requested"].add(fields["model_requested"])
             if str(fields.get("model_applied", "")).startswith("no"):
@@ -1573,7 +1571,9 @@ def token_cells(entry, measured):
 def stage_cells(model):
     """One row per stage and a total. A model column only where the stages ran on different models or a
     requested one did not reach a stage — otherwise the one model is named in the caption."""
-    per_stage = len(model["models"]) > 1 or bool(model["not_applied"])
+    tools_used = {t for e in model["stages"].values() for t in e.get("tools", ())}
+    per_stage = len(model["models"]) > 1 or bool(model["not_applied"]) or len(tools_used) > 1 \
+        or any(e.get("efforts") for e in model["stages"].values())
     any_why = any(e.get("why") for e in model["stages"].values())
     rows = []
     for stage in sorted(model["stages"], key=stage_rank):
@@ -1590,6 +1590,10 @@ def stage_cells(model):
             ran = ", ".join(sorted(e["models"])) or "—"
             if e["not_applied"]:
                 ran += f" (requested {', '.join(sorted(e['requested']))}: not applied)"
+            if len(tools_used) > 1 and e.get("tools"):
+                ran += f" · {', '.join(sorted(e['tools']))}"
+            if e.get("efforts"):
+                ran += f" · effort {', '.join(sorted(e['efforts']))}"
             cells.append(ran)
         if any_why:
             cells.append(e.get("why", ""))
@@ -2036,88 +2040,44 @@ def carriers(profile):
 
 
 def follow_render(event, denied=frozenset()):
-    """The lines one event of a tool's stream stands for — [] for an event that shows nothing. `denied` holds the
-    ids of the calls the stream's result names as denied permission: known once the process ended, so a running
-    one shows such a call as any failed call, by the reason the tool gave."""
-    if not isinstance(event, dict):
-        return []
-    kind = event.get("type")
-    if kind == "user":
+    """The lines one common event stands for — [] for an event that shows nothing. `denied` holds the ids of the
+    calls the stream's result names as denied permission: known once the process ended, so a running one shows such
+    a call as any failed call, by the reason the tool gave. One rendering for every tool: the readers turn each
+    format into the same events."""
+    kind = event.get("kind")
+    if kind == "session":
+        return [f"· session started{(' — ' + event['model']) if event.get('model') else ''}"]
+    if kind == "call":
+        given = event.get("input") or {}
         lines = []
-        for part in (event.get("message") or {}).get("content") or []:
-            if not (isinstance(part, dict) and part.get("type") == "tool_result" and part.get("is_error")):
-                continue
-            said = part.get("content")
-            if isinstance(said, list):
-                said = " ".join(str(p.get("text", "")) for p in said if isinstance(p, dict))
-            said = " — ".join([line.strip() for line in str(said or "").splitlines() if line.strip()][:2]) or "failed"
-            lines.append(f"✗ {'denied: ' if part.get('tool_use_id') in denied else ''}{_short(said, 120)}")
-        return lines
-    # Claude: system / assistant / user / result
-    if kind == "system" and event.get("subtype") == "init":
-        return [f"· session started{(' — ' + str(event['model'])) if event.get('model') else ''}"]
-    if kind == "assistant":
-        lines = []
-        for part in (event.get("message") or {}).get("content") or []:
-            if not isinstance(part, dict):
-                continue
-            if part.get("type") == "tool_use":
-                given = part.get("input") or {}
-                stage = part_of_call(part) if isinstance(given, dict) else None
-                if stage:
-                    lines.append(f"── {stage}")                     # a shared process begins this stage
-                    if part.get("name") == "Skill":
-                        continue
-                arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
-                lines.append(f"▸ {part.get('name', 'tool')} {_short(arg, 100)}".rstrip())
-            elif part.get("type") == "text" and str(part.get("text", "")).strip():
-                lines.append(f"  {_short(part['text'])}")
-        return lines
+        stage = part_of_call(event)
+        if stage:
+            lines.append(f"── {stage}")                             # a shared process begins this stage
+            if event.get("name") == "Skill":
+                return lines
+        arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
+        return lines + [f"▸ {event.get('name', 'tool')} {_short(arg, 100)}".rstrip()]
+    if kind == "error":
+        said = " — ".join([line.strip() for line in str(event.get("text") or "").splitlines() if line.strip()][:2]) \
+            or "failed"
+        return [f"✗ {'denied: ' if event.get('id') in denied else ''}{_short(said, 120)}"]
+    if kind == "text" and str(event.get("text", "")).strip():
+        return [f"  {_short(event['text'])}"]
     if kind == "result":
-        bits = [f"{event['num_turns']} turns" if event.get("num_turns") is not None else "",
-                f"${float(event['total_cost_usd']):.2f}" if event.get("total_cost_usd") is not None else "",
+        bits = [f"{event['turns']} turns" if event.get("turns") is not None else "",
+                f"${float(event['cost']):.2f}" if event.get("cost") is not None else "",
                 f"{int(event['duration_ms']) // 1000}s" if event.get("duration_ms") else "",
-                f"{len(event['permission_denials'])} denied" if event.get("permission_denials") else ""]
-        state = "stopped: " + str(event.get("subtype")) if event.get("is_error") else "done"
+                f"{len(event['denied'])} denied" if event.get("denied") else ""]
+        state = "stopped: " + event["failed"] if event.get("failed") else "done"
         return [f"■ {state}" + (" — " + ", ".join(b for b in bits if b) if any(bits) else "")]
-    # Codex: item events
-    item = event.get("item") or {}
-    if kind in ("item.started", "item.completed") and isinstance(item, dict):
-        if item.get("type") == "command_execution" and kind == "item.started":
-            return [f"▸ Bash {_short(item.get('command', ''), 100)}"]
-        if item.get("type") in ("agent_message", "assistant_message") and kind == "item.completed":
-            return [f"  {_short(item.get('text', ''))}"]
-        if item.get("type") == "file_change" and kind == "item.completed":
-            names = [c.get("path", "") for c in item.get("changes") or [] if isinstance(c, dict)]
-            return [f"▸ Edit {_short(', '.join(names), 100)}"]
-        return []
-    if kind == "turn.completed":
-        return ["■ turn done"]
-    # OpenCode: parts
-    part = event.get("part") or {}
-    if kind == "tool_use" or (isinstance(part, dict) and part.get("type") == "tool"):
-        state = part.get("state") or {}
-        given = state.get("input") or {}
-        arg = next((given[k] for k in ("filePath",) + FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
-        return [f"▸ {part.get('tool', 'tool')} {_short(arg, 100)}".rstrip()]
-    if kind == "text" and isinstance(part, dict) and str(part.get("text", "")).strip():
-        return [f"  {_short(part['text'])}"]
-    if kind == "step_finish":
-        return []
     return []
 
 
-def follow_lines(text):
-    events, lines, ended, denied = [], [], False, set()
-    for raw_line in text.splitlines():
-        try:
-            events.append(json.loads(raw_line))
-        except ValueError:
-            continue
-    for event in events:
-        if isinstance(event, dict) and event.get("type") == "result":
-            ended = True
-            denied |= {d.get("tool_use_id") for d in event.get("permission_denials") or [] if isinstance(d, dict)}
+def follow_lines(text, fmt=None):
+    events = reader_of(text, fmt).events(text)
+    ended = any(e["kind"] == "result" for e in events)
+    denied = {call_id for e in events if e["kind"] == "result" for call_id, _n, _i in e.get("denied") or []}
+    lines = []
     for event in events:
         lines += follow_render(event, denied)
     return lines, ended

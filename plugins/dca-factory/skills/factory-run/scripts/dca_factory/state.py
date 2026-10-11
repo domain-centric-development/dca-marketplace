@@ -24,7 +24,7 @@ from .contract import (
     resolve_profile, resume_stage, section_of, SHARED_WINDOWS, shown, split_front, STAGE_FILES, STAGE_ORDER, STATE_KEYS, story_digest,
     STORY_BRANCH, STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
 from .reports import (
-    claude_session_logs, codex_session_log, current_session, parse_time, PROCESS_RANKS, session_usage,
+    current_session, log_kind, parse_time, session_reader, PROCESS_RANKS, session_usage,
     session_usage_allowed, tokens_of, USAGE_FIELDS, usage_fields, WINDOWS)
 
 
@@ -967,7 +967,7 @@ def mark_window(cwd, runs, story_id, name, edge, session_log=None):
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
     kind, session_id = current_session()
     if session_log:
-        kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
+        kind = log_kind(session_log)
     freeze_all(runs)
     with journal_writer(runs, story_id) as handle:
         if edge == "start":
@@ -1004,7 +1004,7 @@ def mark_stage(cwd, runs, story_id, stage, edge, session_log=None):
         return 3                               # another worker holds the checkout: this stage does not start
     freeze_all(runs)                          # the earlier stages' logs have caught up by now
     if session_log:
-        kind = "claude-session" if "/.claude/" in session_log.replace(os.sep, "/") else "codex-session"
+        kind = log_kind(session_log)
     allowed = session_usage_allowed(cwd)
     with journal_writer(runs, story_id) as handle:
         if edge == "start":
@@ -1109,10 +1109,9 @@ def resolve_window(fields):
     start, _, end = fields.get("window", "").partition("/")
     paths = [p for p in fields.get("log", "").split(",") if p]
     tool, _, session_id = fields.get("session", "").partition(":")
-    if session_id and tool == "claude":
-        paths = claude_session_logs(session_id)
-    elif session_id and tool == "codex":
-        paths = [p for p in [codex_session_log(session_id)] if p]
+    reader = session_reader(f"{tool}-session") if session_id else None
+    if reader:
+        paths = reader.session_logs(session_id)
     return session_usage(kind, paths, parse_time(start), parse_time(end)) if paths else None
 
 

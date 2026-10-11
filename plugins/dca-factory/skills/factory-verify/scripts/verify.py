@@ -1194,6 +1194,30 @@ def verify_runner(runner, verbose=False):
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         check("isolation: a carrier the project does not hold stops the run before the first stage, named",
               code == 2 and "no-such-craft" in output and "── stage" not in output, output[-300:])
+    # WP-95: a tool per unit — without --tool the profile's `tool.verifier` starts the verifier, `--tool` names one for all
+    for root in throwaway():
+        build_project(root, profile=PROFILE + "tool.verifier: codex\ntool.judge: codex\n")
+        copy_scripts(runner, root)
+        os.makedirs(os.path.join(root, "bin"), exist_ok=True)
+        for name in ("claude", "codex"):
+            write_file(root, f"bin/{name}", "#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(root, "bin", name), 0o755)
+        path = os.path.join(root, "bin") + os.pathsep + os.environ.get("PATH", "")
+        quiet_env = {k: v for k, v in os.environ.items() if k != "FACTORY_TOOL_EXPLICIT"}
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--dry-run", "--shared-builder",
+                                  "--shared-verifier", env=dict(quiet_env, PATH=path))
+        separate = run_runner(runner, root, "run", "--story", "STORY-1", "--dry-run", "--separate-stages",
+                              env=dict(quiet_env, PATH=path))[1]
+        both = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run", "--shared-builder",
+                          "--shared-verifier", env=dict(quiet_env, PATH=path))[1]
+        check("tool per unit: the profile's `tool.verifier` starts judge and document with that tool, the builder with "
+              "the run's; with separate stages `tool.judge` is the judge's alone; `--tool` names one tool for every unit",
+              "plan+test+build+tidy  (tool: claude" in output and "judge+document  (tool: codex" in output
+              and "judge+document  (tool: claude" in both and "── stage judge  (tool: codex" in separate
+              and "── stage document  (tool: claude" in separate,
+              [l for l in output.splitlines() if l.startswith(("── stage", "factory:"))][:8]
+              + [l for l in both.splitlines() if l.startswith("── stage")][:3]
+              + [l for l in separate.splitlines() if l.startswith(("── stage", "factory:"))][:9])
     # a model per stage: the one flag it becomes, per tool, and who wins against the person's own flags
     def models_of(output):
         rows, stage = {}, None

@@ -1,0 +1,8 @@
+{"type": "step_start", "timestamp": 1760176800000, "part": {"type": "step-start"}}
+{"type": "tool_use", "timestamp": 1760176801000, "part": {"type": "tool", "tool": "skill", "callID": "o1", "state": {"status": "completed", "input": {"name": "stage-plan", "skill": "stage-plan"}}}}
+{"type": "tool_use", "timestamp": 1760176802000, "part": {"type": "tool", "tool": "write", "callID": "o2", "state": {"status": "completed", "input": {"filePath": ".dca-factory/runs/S-1/plan.md"}}}}
+{"type": "text", "timestamp": 1760176803000, "part": {"type": "text", "text": "Plan written."}}
+{"type": "step_finish", "timestamp": 1760176804000, "part": {"type": "step-finish", "tokens": {"input": 900, "output": 60, "reasoning": 20, "cache": {"read": 400, "write": 100}}, "cost": 0.01}}
+{"type": "tool_use", "timestamp": 1760176805000, "part": {"type": "tool", "tool": "read", "callID": "o3", "state": {"status": "completed", "input": {"filePath": ".opencode/skills/stage-test/SKILL.md"}}}}
+{"type": "tool_use", "timestamp": 1760176806000, "part": {"type": "tool", "tool": "bash", "callID": "o4", "state": {"status": "error", "input": {"command": "npm test"}, "error": "exit 1"}}}
+{"type": "step_finish", "timestamp": 1760176807000, "part": {"type": "step-finish", "tokens": {"input": 1500, "output": 90, "reasoning": 0, "cache": {"read": 800, "write": 0}}, "cost": 0.02}}

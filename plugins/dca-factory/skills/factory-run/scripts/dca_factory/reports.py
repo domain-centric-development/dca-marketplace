@@ -294,97 +294,105 @@ def reported_names(paths):
 USAGE_FIELDS = ("input", "cache_read", "cache_write", "output")
 
 
+def _claude_usage(raw):
+    # `--output-format stream-json` writes one event per line and ends with a `result` event; the
+    # older `--output-format json` wrote that event alone. Either way the result event is read.
+    data = None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        text, events = "", 0
+        for line in raw.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(event, dict):
+                continue
+            events += 1
+            if event.get("type") == "result":
+                data = event
+            elif event.get("type") == "assistant":
+                parts = (event.get("message") or {}).get("content") or []
+                said = "".join(str(p.get("text", "")) for p in parts if isinstance(p, dict) and p.get("type") == "text")
+                text = said or text
+        if data is None:
+            # a stream cut off before its result: its last answer, never the stream itself on screen;
+            # output that is no stream at all (a tool that failed to start) is shown as it is
+            return None, text if events else raw
+    if not isinstance(data, dict):
+        return None, raw
+    models = data.get("modelUsage") or {}
+    if not models:
+        return None, str(data.get("result", ""))
+    usage = {"model": ",".join(sorted(models)),
+             "input": sum(int(m.get("inputTokens", 0)) for m in models.values()),
+             "cache_read": sum(int(m.get("cacheReadInputTokens", 0)) for m in models.values()),
+             "cache_write": sum(int(m.get("cacheCreationInputTokens", 0)) for m in models.values()),
+             "output": sum(int(m.get("outputTokens", 0)) for m in models.values())}
+    if data.get("total_cost_usd") is not None:
+        usage["cost"] = f"{float(data['total_cost_usd']):.4f}"
+    return usage, str(data.get("result", ""))
+
+
+def _codex_usage(raw):
+    usage, seen, text = {k: 0 for k in USAGE_FIELDS}, False, ""
+    for line in raw.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if event.get("type") == "turn.completed" and isinstance(event.get("usage"), dict):
+            seen = True
+            u = event["usage"]
+            cached = int(u.get("cached_input_tokens", 0))
+            usage["input"] += int(u.get("input_tokens", 0)) - cached       # input counts the cached part
+            usage["cache_read"] += cached
+            usage["cache_write"] += int(u.get("cache_write_input_tokens", 0))
+            usage["output"] += int(u.get("output_tokens", 0))
+        item = event.get("item") or {}
+        if event.get("type") == "item.completed" and item.get("type") in ("agent_message", "assistant_message"):
+            text = str(item.get("text", text))
+    return (usage if seen else None), text
+
+
+def _opencode_usage(raw):
+    # `opencode run --format json`: one event per line; every model step ends in a `step_finish`
+    # whose part carries that step's tokens, and the answer arrives as `text` parts. A local model
+    # has no price (cost 0), which is reported as no price rather than as free.
+    usage, seen, text, cost = {k: 0 for k in USAGE_FIELDS}, False, [], 0.0
+    for line in raw.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        part = event.get("part") or {}
+        if event.get("type") == "text" and part.get("text"):
+            text.append(str(part["text"]))
+        if event.get("type") == "step_finish" and isinstance(part.get("tokens"), dict):
+            seen = True
+            t = part["tokens"]
+            cache = t.get("cache") or {}
+            usage["input"] += int(t.get("input", 0) or 0)
+            usage["cache_read"] += int(cache.get("read", 0) or 0)
+            usage["cache_write"] += int(cache.get("write", 0) or 0)
+            usage["output"] += int(t.get("output", 0) or 0) + int(t.get("reasoning", 0) or 0)
+            cost += float(part.get("cost", 0) or 0)
+    if seen and cost > 0:
+        usage["cost"] = f"{cost:.4f}"
+    return (usage if seen else None), "".join(text).strip()
+
+
 def parse_usage(fmt, path):
-    """({model, input, cache_read, cache_write, output, cost} or None, the final message text)."""
+    """({model, input, cache_read, cache_write, output, cost} or None, the final message text) — the reader of the
+    format answers."""
     try:
         with open(path, encoding="utf-8", errors="replace") as handle:
             raw = handle.read()
     except OSError:
         return None, ""
-    if fmt == "claude-json":
-        # `--output-format stream-json` writes one event per line and ends with a `result` event; the
-        # older `--output-format json` wrote that event alone. Either way the result event is read.
-        data = None
-        try:
-            data = json.loads(raw)
-        except ValueError:
-            text, events = "", 0
-            for line in raw.splitlines():
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    continue
-                if not isinstance(event, dict):
-                    continue
-                events += 1
-                if event.get("type") == "result":
-                    data = event
-                elif event.get("type") == "assistant":
-                    parts = (event.get("message") or {}).get("content") or []
-                    said = "".join(str(p.get("text", "")) for p in parts if isinstance(p, dict) and p.get("type") == "text")
-                    text = said or text
-            if data is None:
-                # a stream cut off before its result: its last answer, never the stream itself on screen;
-                # output that is no stream at all (a tool that failed to start) is shown as it is
-                return None, text if events else raw
-        if not isinstance(data, dict):
-            return None, raw
-        models = data.get("modelUsage") or {}
-        if not models:
-            return None, str(data.get("result", ""))
-        usage = {"model": ",".join(sorted(models)),
-                 "input": sum(int(m.get("inputTokens", 0)) for m in models.values()),
-                 "cache_read": sum(int(m.get("cacheReadInputTokens", 0)) for m in models.values()),
-                 "cache_write": sum(int(m.get("cacheCreationInputTokens", 0)) for m in models.values()),
-                 "output": sum(int(m.get("outputTokens", 0)) for m in models.values())}
-        if data.get("total_cost_usd") is not None:
-            usage["cost"] = f"{float(data['total_cost_usd']):.4f}"
-        return usage, str(data.get("result", ""))
-    if fmt == "codex-jsonl":
-        usage, seen, text = {k: 0 for k in USAGE_FIELDS}, False, ""
-        for line in raw.splitlines():
-            try:
-                event = json.loads(line)
-            except ValueError:
-                continue
-            if event.get("type") == "turn.completed" and isinstance(event.get("usage"), dict):
-                seen = True
-                u = event["usage"]
-                cached = int(u.get("cached_input_tokens", 0))
-                usage["input"] += int(u.get("input_tokens", 0)) - cached       # input counts the cached part
-                usage["cache_read"] += cached
-                usage["cache_write"] += int(u.get("cache_write_input_tokens", 0))
-                usage["output"] += int(u.get("output_tokens", 0))
-            item = event.get("item") or {}
-            if event.get("type") == "item.completed" and item.get("type") in ("agent_message", "assistant_message"):
-                text = str(item.get("text", text))
-        return (usage if seen else None), text
-    if fmt == "opencode-json":
-        # `opencode run --format json`: one event per line; every model step ends in a `step_finish`
-        # whose part carries that step's tokens, and the answer arrives as `text` parts. A local model
-        # has no price (cost 0), which is reported as no price rather than as free.
-        usage, seen, text, cost = {k: 0 for k in USAGE_FIELDS}, False, [], 0.0
-        for line in raw.splitlines():
-            try:
-                event = json.loads(line)
-            except ValueError:
-                continue
-            part = event.get("part") or {}
-            if event.get("type") == "text" and part.get("text"):
-                text.append(str(part["text"]))
-            if event.get("type") == "step_finish" and isinstance(part.get("tokens"), dict):
-                seen = True
-                t = part["tokens"]
-                cache = t.get("cache") or {}
-                usage["input"] += int(t.get("input", 0) or 0)
-                usage["cache_read"] += int(cache.get("read", 0) or 0)
-                usage["cache_write"] += int(cache.get("write", 0) or 0)
-                usage["output"] += int(t.get("output", 0) or 0) + int(t.get("reasoning", 0) or 0)
-                cost += float(part.get("cost", 0) or 0)
-        if seen and cost > 0:
-            usage["cost"] = f"{cost:.4f}"
-        return (usage if seen else None), "".join(text).strip()
-    return None, raw
+    reader = READERS.get(fmt)
+    return reader.usage(raw) if reader else (None, raw)
 
 
 def parse_time(text):
@@ -515,13 +523,23 @@ def usage_fields(usage):
 
 
 def current_session():
-    """(kind, id) of the session this command runs in, from the tool's own environment variable."""
-    if os.environ.get("CLAUDE_CODE_SESSION_ID"):
-        return "claude-session", os.environ["CLAUDE_CODE_SESSION_ID"]
-    codex = os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID")
-    if codex:
-        return "codex-session", codex
+    """(kind, id) of the session this command runs in, from the tool's own environment variable — each reader says
+    which variable is its tool's."""
+    for reader in READERS.values():
+        session_id = reader.session_kind and reader.session_of_env()
+        if session_id:
+            return reader.session_kind, session_id
     return "in-session", ""
+
+
+def session_reader(kind):
+    """The reader whose session logs a journal's `tool=<kind>` names."""
+    return next((r for r in READERS.values() if r.session_kind and r.session_kind == kind), None)
+
+
+def log_kind(path):
+    """The session kind of a log a person names by path."""
+    return next((r.session_kind for r in READERS.values() if r.session_kind and r.owns_log(path)), "in-session")
 
 
 #: Work on a story outside its stages: writing it (the backlog skill) and answering its questions (the
@@ -594,61 +612,36 @@ def part_of_call(block):
     return found.group(1) if found else None
 
 
-def stream_parts(path):
+def stream_parts(path, fmt=None):
     """[{stage, start, end, input, cache_read, cache_write, output, weight}] of one shared process's stream,
-    in the order its stages began, and the process's reported cost (None when the stream has no result).
+    in the order its stages began, and the process's reported cost (None when the stream has no result) — read from
+    the common events, so every tool's stream gives its parts.
 
-    An answer's own usage in the stream carries its input and cache tokens, but its output only as counted when
-    the answer began; the final output is the process's alone. So the process's output is split over the parts
-    by what each part wrote — its text, its tool calls' input and its thinking — an estimate, like the cost."""
+    An answer's own usage carries its input and cache tokens, but its output only as counted when the answer
+    began; the final output is the process's alone. So the process's output is split over the parts by what each
+    part wrote — its text, its tool calls' input and its thinking — an estimate, like the cost."""
     parts, current, answers, cost, output_total = [], None, {}, None, None
-    try:
-        lines = read_text(path).splitlines()
-    except (OSError, GateError):
-        return [], None
-    for raw in lines:
-        try:
-            event = json.loads(raw)
-        except ValueError:
+    for event in stream_events(path, fmt):
+        moment = event.get("at")
+        if event["kind"] == "result":
+            cost = event.get("cost") if event.get("cost") is not None else cost
+            output_total = event.get("output") if event.get("output") is not None else output_total
             continue
-        if not isinstance(event, dict):
-            continue
-        moment = parse_time(str(event.get("timestamp", ""))) if event.get("timestamp") else None
-        if event.get("type") == "result":
-            if event.get("total_cost_usd") is not None:
-                cost = float(event["total_cost_usd"])
-            models = event.get("modelUsage") or {}
-            if models:
-                output_total = sum(int(m.get("outputTokens", 0)) for m in models.values() if isinstance(m, dict))
-            elif isinstance(event.get("usage"), dict):
-                output_total = int(event["usage"].get("output_tokens", 0))
-            continue
-        if event.get("type") != "assistant":
-            continue
-        message = event.get("message") or {}
-        for block in message.get("content") or []:
-            stage = part_of_call(block) if isinstance(block, dict) and block.get("type") == "tool_use" else None
+        if event["kind"] == "call":
+            stage = part_of_call(event)
             if stage and (current is None or current["stage"] != stage):
                 if current is not None and moment:
                     current["end"] = moment              # a part lasts until the next one begins
-                current = dict(stage=stage, start=moment, end=moment, answers=set())
+                current = dict(stage=stage, start=moment, end=moment)
                 parts.append(current)
         if moment and current is not None:
             current["end"] = moment
-        usage = message.get("usage") or {}
-        key = message.get("id") or f"anon-{len(answers)}"
-        seen = answers.setdefault(key, {"part": current, "usage": {}, "written": 0})
-        for block in message.get("content") or []:
-            if isinstance(block, dict):
-                seen["written"] += len(str(block.get("text", ""))) + len(str(block.get("thinking", ""))) \
-                    + (len(json.dumps(block.get("input"))) if block.get("type") == "tool_use" else 0)
-        for field, value in usage.items():
-            if isinstance(value, (int, float)):
+        if event["kind"] == "answer":
+            key = event.get("id") or f"anon-{len(answers)}"
+            seen = answers.setdefault(key, {"part": current, "usage": {}, "written": 0})
+            seen["written"] += int(event.get("written") or 0)
+            for field, value in (event.get("usage") or {}).items():
                 seen["usage"][field] = max(seen["usage"].get(field, 0), value)
-        if isinstance(usage.get("cache_creation"), dict):
-            for field, value in usage["cache_creation"].items():
-                if isinstance(value, (int, float)):
-                    seen["usage"][field] = max(seen["usage"].get(field, 0), value)
     if not parts:
         return [], cost
     for part in parts:
@@ -656,16 +649,16 @@ def stream_parts(path):
     for seen in answers.values():
         part = seen["part"] or parts[0]          # what the process did before it loaded the first stage
         u = seen["usage"]
-        write = int(u.get("cache_creation_input_tokens", 0))
-        write_1h = int(u.get("ephemeral_1h_input_tokens", 0))
+        write = int(u.get("cache_write", 0))
+        write_1h = int(u.get("cache_write_1h", 0))
         write_5m = max(write - write_1h, 0)
-        part["input"] += int(u.get("input_tokens", 0))
-        part["cache_read"] += int(u.get("cache_read_input_tokens", 0))
+        part["input"] += int(u.get("input", 0))
+        part["cache_read"] += int(u.get("cache_read", 0))
         part["cache_write"] += write
-        part["output"] += int(u.get("output_tokens", 0))
+        part["output"] += int(u.get("output", 0))
         part["written"] += seen["written"]
-        part["weight"] += (PART_WEIGHTS["input"] * int(u.get("input_tokens", 0))
-                           + PART_WEIGHTS["cache_read"] * int(u.get("cache_read_input_tokens", 0))
+        part["weight"] += (PART_WEIGHTS["input"] * int(u.get("input", 0))
+                           + PART_WEIGHTS["cache_read"] * int(u.get("cache_read", 0))
                            + PART_WEIGHTS["cache_write_5m"] * write_5m + PART_WEIGHTS["cache_write_1h"] * write_1h)
     written = sum(p["written"] for p in parts)
     reported = output_total if output_total is not None else sum(p["output"] for p in parts)
@@ -673,49 +666,25 @@ def stream_parts(path):
         if written and reported >= sum(p["output"] for p in parts):
             part["output"] = round(reported * part["written"] / written)
         part["weight"] += PART_WEIGHTS["output"] * part["output"]
-        part.pop("answers", None)
         part.pop("written", None)
     return parts, cost
 
 
-def stream_denials(path):
-    """[{stage, tool, command}] — the calls a Claude stream's result names as denied permission, in the order they
-    were made, each with the shared stage it fell in ('' outside one). A headless stage has nobody to grant a
-    permission: the tool refuses the call, and the stage spends a turn on another way."""
-    try:
-        text = read_text(path)
-    except (OSError, GateError):
-        return []
-    events = []
-    try:
-        whole = json.loads(text)                   # `--output-format json`: the result event alone
-        events = [whole] if isinstance(whole, dict) else []
-    except ValueError:
-        for raw in text.splitlines():
-            try:
-                event = json.loads(raw)
-            except ValueError:
-                continue
-            if isinstance(event, dict):
-                events.append(event)
+def stream_denials(path, fmt=None):
+    """[{stage, tool, command}] — the calls a stream's result names as denied permission, in the order they were
+    made, each with the shared stage it fell in ('' outside one). A headless stage has nobody to grant a permission:
+    the tool refuses the call, and the stage spends a turn on another way. A format that reports no denials gives
+    none."""
     where, current, denied = {}, "", []
-    for event in events:
-        if event.get("type") == "assistant":
-            for block in (event.get("message") or {}).get("content") or []:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    found = PART_SKILL.search(str((block.get("input") or {}).get("skill", ""))) \
-                        if block.get("name") == "Skill" and isinstance(block.get("input"), dict) else None
-                    if found:
-                        current = found.group(1)
-                    where[block.get("id")] = current
-        elif event.get("type") == "result":
-            for one in event.get("permission_denials") or []:
-                if not isinstance(one, dict):
-                    continue
-                given = one.get("tool_input") or {}
+    for event in stream_events(path, fmt):
+        if event["kind"] == "call":
+            stage = part_of_call(event)
+            current = stage or current
+            where[event.get("id")] = current
+        elif event["kind"] == "result":
+            for call_id, name, given in event.get("denied") or []:
                 arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
-                denied.append(dict(stage=where.get(one.get("tool_use_id"), ""), tool=str(one.get("tool_name", "")),
-                                   command=_short(str(arg), 160)))
+                denied.append(dict(stage=where.get(call_id, ""), tool=name, command=_short(str(arg), 160)))
     return denied
 
 
@@ -733,3 +702,278 @@ def _short(text, width=110):
     here = os.getcwd() + os.sep
     text = text.replace(here, "")                     # a path inside the project, as the project names it
     return text if len(text) <= width else text[: width - 1] + "…"
+
+
+# --- readers: one per tool output format ------------------------------------------------------------------
+# A tool is a record to start (tools.py) and a reader to read: what one invocation used, what it did as common
+# events, and — for a stage run by hand inside a session — where that session's log is. Everything that shows a
+# stage (its parts, its denials, `follow`, the usage line) reads the events, never a format. A new tool is its
+# record, its reader and the recorded streams that hold both to a real output.
+#
+# The common events, one dict each, `kind` first:
+#   session  model                                   the process began
+#   call     name, input, id                         a tool call — `name` in the Claude spelling (Read, Bash, Edit,
+#                                                    Write, Skill, …), `input` with `file_path` / `command` / `skill`
+#   error    id, text                                a call that failed
+#   text     text                                    what the model said
+#   answer   id, usage, written                      one model answer's tokens (input, cache_read, cache_write,
+#                                                    cache_write_1h, output) and how much it wrote
+#   result   cost, turns, duration_ms, output, denied, failed
+#                                                    the process ended; `denied` [(id, name, input)]
+# Every event may carry `at` (a datetime) where the format has a time.
+
+
+def _json_lines(raw):
+    try:
+        whole = json.loads(raw)                    # a single JSON document: the result event alone
+        return [whole] if isinstance(whole, dict) else []
+    except ValueError:
+        pass
+    events = []
+    for line in raw.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events
+
+
+def _at(event):
+    return parse_time(str(event.get("timestamp", ""))) if event.get("timestamp") else None
+
+
+class Reader:
+    """One output format. `usage(raw)` → (usage or None, final text); `events(raw)` → the common events;
+    `session_logs(id)` and `session_of_env()` for a hand session — a tool without session logs answers none."""
+    fmt = ""
+    session_kind = ""
+
+    def usage(self, raw):
+        return None, raw
+
+    def events(self, raw):
+        return []
+
+    def session_logs(self, session_id=None):
+        return []
+
+    def session_of_env(self):
+        return ""
+
+    def owns_log(self, path):
+        return False
+
+    def session_usage(self, paths, start=None, end=None):
+        return None
+
+    def project_logs(self, cwd, since=None):
+        """The logs a stage process of this tool writes for the project, changed since `since` — where the tool keeps
+        them per project folder; [] otherwise."""
+        return []
+
+
+class ClaudeReader(Reader):
+    fmt, session_kind = "claude-json", "claude-session"
+
+    def usage(self, raw):
+        return _claude_usage(raw)
+
+    def events(self, raw):
+        out = []
+        for event in _json_lines(raw):
+            kind, at = event.get("type"), _at(event)
+            if kind == "system" and event.get("subtype") == "init":
+                out.append({"kind": "session", "model": str(event.get("model", "")), "at": at})
+            elif kind == "assistant":
+                message = event.get("message") or {}
+                written = 0
+                for block in message.get("content") or []:
+                    if not isinstance(block, dict):
+                        continue
+                    written += len(str(block.get("text", ""))) + len(str(block.get("thinking", ""))) \
+                        + (len(json.dumps(block.get("input"))) if block.get("type") == "tool_use" else 0)
+                    if block.get("type") == "tool_use":
+                        given = block.get("input") if isinstance(block.get("input"), dict) else {}
+                        out.append({"kind": "call", "name": str(block.get("name", "tool")), "input": given,
+                                    "id": block.get("id"), "at": at})
+                    elif block.get("type") == "text" and str(block.get("text", "")).strip():
+                        out.append({"kind": "text", "text": str(block["text"]), "at": at})
+                usage, raw_usage = {}, message.get("usage") or {}
+                for field, name in (("input", "input_tokens"), ("cache_read", "cache_read_input_tokens"),
+                                    ("cache_write", "cache_creation_input_tokens"), ("output", "output_tokens")):
+                    if isinstance(raw_usage.get(name), (int, float)):
+                        usage[field] = int(raw_usage[name])
+                creation = raw_usage.get("cache_creation") if isinstance(raw_usage.get("cache_creation"), dict) else {}
+                if isinstance(creation.get("ephemeral_1h_input_tokens"), (int, float)):
+                    usage["cache_write_1h"] = int(creation["ephemeral_1h_input_tokens"])
+                out.append({"kind": "answer", "id": message.get("id"), "usage": usage, "written": written, "at": at})
+            elif kind == "user":
+                for part in (event.get("message") or {}).get("content") or []:
+                    if isinstance(part, dict) and part.get("type") == "tool_result" and part.get("is_error"):
+                        said = part.get("content")
+                        if isinstance(said, list):
+                            said = " ".join(str(p.get("text", "")) for p in said if isinstance(p, dict))
+                        out.append({"kind": "error", "id": part.get("tool_use_id"), "text": str(said or ""), "at": at})
+            elif kind == "result":
+                models = event.get("modelUsage") or {}
+                output = sum(int(m.get("outputTokens", 0)) for m in models.values() if isinstance(m, dict)) if models \
+                    else (int(event["usage"].get("output_tokens", 0)) if isinstance(event.get("usage"), dict) else None)
+                denied = [(d.get("tool_use_id"), str(d.get("tool_name", "")), d.get("tool_input") or {})
+                          for d in event.get("permission_denials") or [] if isinstance(d, dict)]
+                out.append({"kind": "result", "cost": float(event["total_cost_usd"])
+                            if event.get("total_cost_usd") is not None else None, "turns": event.get("num_turns"),
+                            "duration_ms": event.get("duration_ms"), "output": output, "denied": denied,
+                            "failed": str(event.get("subtype")) if event.get("is_error") else "", "at": at})
+        return out
+
+    def session_logs(self, session_id=None):
+        return claude_session_logs(session_id)
+
+    def session_of_env(self):
+        return os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+
+    def owns_log(self, path):
+        return "/.claude/" in path.replace(os.sep, "/") or bool(os.environ.get("CLAUDE_CONFIG_DIR")) \
+            and os.path.abspath(path).startswith(os.path.abspath(os.environ["CLAUDE_CONFIG_DIR"]))
+
+    def session_usage(self, paths, start=None, end=None):
+        return session_usage("claude-session", paths, start, end)
+
+    def project_logs(self, cwd, since=None):
+        home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+        folder = os.path.join(home, "projects", re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(cwd)))
+        floor = since.timestamp() if since else 0
+        return [path for path in glob.glob(os.path.join(folder, "**", "*.jsonl"), recursive=True)
+                if os.path.getmtime(path) >= floor]
+
+
+class CodexReader(Reader):
+    fmt, session_kind = "codex-jsonl", "codex-session"
+
+    def usage(self, raw):
+        return _codex_usage(raw)
+
+    def events(self, raw):
+        out, turn = [], 0
+        for event in _json_lines(raw):
+            kind, item, at = event.get("type"), event.get("item") or {}, _at(event)
+            if kind == "thread.started":
+                out.append({"kind": "session", "model": "", "at": at})
+            elif kind == "item.started" and item.get("type") == "command_execution":
+                out.append({"kind": "call", "name": "Bash", "input": {"command": str(item.get("command", ""))},
+                            "id": item.get("id"), "at": at})
+            elif kind == "item.completed" and item.get("type") == "command_execution" \
+                    and item.get("exit_code") not in (None, 0):
+                out.append({"kind": "error", "id": item.get("id"),
+                            "text": str(item.get("aggregated_output", "") or f"exit {item.get('exit_code')}"), "at": at})
+            elif kind == "item.completed" and item.get("type") == "file_change":
+                names = ", ".join(str(c.get("path", "")) for c in item.get("changes") or [] if isinstance(c, dict))
+                out.append({"kind": "call", "name": "Edit", "input": {"file_path": names}, "id": item.get("id"), "at": at})
+            elif kind == "item.completed" and item.get("type") in ("agent_message", "assistant_message"):
+                out.append({"kind": "text", "text": str(item.get("text", "")), "at": at})
+            elif kind == "turn.completed" and isinstance(event.get("usage"), dict):
+                u = event["usage"]
+                cached = int(u.get("cached_input_tokens", 0))
+                turn += 1
+                out.append({"kind": "answer", "id": f"turn-{turn}", "at": at, "written": 0,
+                            "usage": {"input": int(u.get("input_tokens", 0)) - cached, "cache_read": cached,
+                                      "cache_write": int(u.get("cache_write_input_tokens", 0)),
+                                      "output": int(u.get("output_tokens", 0))}})
+            elif kind == "turn.failed":
+                out.append({"kind": "result", "cost": None, "turns": turn, "duration_ms": None, "output": None,
+                            "denied": [], "failed": str((event.get("error") or {}).get("message", "failed")), "at": at})
+        if out and out[-1]["kind"] != "result" and any(e["kind"] == "answer" for e in out):
+            out.append({"kind": "result", "cost": None, "turns": turn, "duration_ms": None, "output": None,
+                        "denied": [], "failed": "", "at": None})
+        return out
+
+    def session_logs(self, session_id=None):
+        found = codex_session_log(session_id)
+        return [found] if found else []
+
+    def session_of_env(self):
+        return os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID", "")
+
+    def owns_log(self, path):
+        return "/.codex/" in path.replace(os.sep, "/")
+
+    def session_usage(self, paths, start=None, end=None):
+        return session_usage("codex-session", paths, start, end)
+
+
+#: OpenCode names its tools in lower case and its arguments in camel case; the common events use the Claude
+#: spelling, so one rule — a part begins at a Skill or a read of `stage-<x>/SKILL.md` — holds for every tool.
+OPENCODE_TOOLS = {"read": "Read", "bash": "Bash", "edit": "Edit", "write": "Write", "glob": "Glob", "grep": "Grep",
+                  "skill": "Skill", "list": "Glob", "webfetch": "WebFetch", "todowrite": "TodoWrite"}
+
+
+class OpencodeReader(Reader):
+    fmt = "opencode-json"
+
+    def usage(self, raw):
+        return _opencode_usage(raw)
+
+    def events(self, raw):
+        out, steps, cost, seen = [], 0, 0.0, False
+        for event in _json_lines(raw):
+            kind, part = event.get("type"), event.get("part") or {}
+            at = datetime.fromtimestamp(event["timestamp"] / 1000, timezone.utc) \
+                if isinstance(event.get("timestamp"), (int, float)) else _at(event)
+            if kind == "step_start" and steps == 0:
+                out.append({"kind": "session", "model": "", "at": at})
+            if kind == "tool_use" or part.get("type") == "tool":
+                state = part.get("state") or {}
+                given = dict(state.get("input") or {}) if isinstance(state.get("input"), dict) else {}
+                for spelling in ("filePath", "path"):        # OpenCode 2.0 reads `path`, earlier `filePath`
+                    if spelling in given and "file_path" not in given:
+                        given["file_path"] = given.pop(spelling)
+                name = str(part.get("tool", "tool"))
+                out.append({"kind": "call", "name": OPENCODE_TOOLS.get(name.lower(), name), "input": given,
+                            "id": part.get("callID") or part.get("id"), "at": at})
+                if state.get("status") == "error":
+                    out.append({"kind": "error", "id": part.get("callID") or part.get("id"),
+                                "text": str(state.get("error", "failed")), "at": at})
+            elif kind == "text" and str(part.get("text", "")).strip():
+                out.append({"kind": "text", "text": str(part["text"]), "at": at})
+            elif kind == "step_finish" and isinstance(part.get("tokens"), dict):
+                seen, steps = True, steps + 1
+                tokens, cache = part["tokens"], part["tokens"].get("cache") or {}
+                cost += float(part.get("cost", 0) or 0)
+                out.append({"kind": "answer", "id": f"step-{steps}", "at": at, "written": 0,
+                            "usage": {"input": int(tokens.get("input", 0) or 0),
+                                      "cache_read": int(cache.get("read", 0) or 0),
+                                      "cache_write": int(cache.get("write", 0) or 0),
+                                      "output": int(tokens.get("output", 0) or 0) + int(tokens.get("reasoning", 0) or 0)}})
+        if seen:
+            out.append({"kind": "result", "cost": cost if cost > 0 else None, "turns": steps, "duration_ms": None,
+                        "output": None, "denied": [], "failed": "", "at": None})
+        return out
+
+
+#: The readers by the format a tool record names (`Tool.usage`).
+READERS = {reader.fmt: reader for reader in (ClaudeReader(), CodexReader(), OpencodeReader())}
+
+
+def reader_of(raw, fmt=None):
+    """The reader of a stream: the one named, else the one whose events the first lines look like."""
+    if fmt in READERS:
+        return READERS[fmt]
+    for event in _json_lines(raw)[:20]:
+        kind = str(event.get("type", ""))
+        if kind in ("system", "assistant", "user", "result"):
+            return READERS["claude-json"]
+        if kind.startswith(("thread.", "item.", "turn.")):
+            return READERS["codex-jsonl"]
+        if "part" in event or kind in ("step_start", "step_finish", "tool_use", "text"):
+            return READERS["opencode-json"]
+    return READERS["claude-json"]
+
+
+def stream_events(path, fmt=None):
+    try:
+        raw = read_text(path)
+    except (OSError, GateError):
+        return []
+    return reader_of(raw, fmt).events(raw)

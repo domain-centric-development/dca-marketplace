@@ -234,7 +234,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 21
 
 
-VERSION = "0.77.0"
+VERSION = "0.78.0"
 
 
 def split_front(text):
@@ -330,6 +330,8 @@ PROFILE_KEYS = frozenset((
     "claim_remote", "claim_branch_prefix",
     # what declares a test double, where the built-in list does not cover the stack (WP-100)
     "mockMarkers",
+    # the tool a run starts its units with where `--tool` names none (WP-95); `tool.<unit>` per unit
+    "tool",
     # the commands and how the gate selects and reads a single test
     "compile", "test", "e2eTest", "architecture", "format", "formatFix",
     "filterFlag", "filterFormat", "filterJoin", "testReport", "testEvidence",
@@ -347,7 +349,7 @@ PROFILE_KEYS = frozenset((
 #: Key families: `<prefix><name>`, with an open list of names — a test command (`test.integration`), what a
 #: command covers (`covers.test`), a carrier (`carrier.build`), a perspective's reviewer (`review.ddd`), a model
 #: (`model.claude`, `model.claude.tidy`; the model check holds tool and stage).
-PROFILE_FAMILIES = ("test.", "covers.", "carrier.", "review.", "model.")
+PROFILE_FAMILIES = ("test.", "covers.", "carrier.", "review.", "model.", "tool.", "effort.")
 
 
 def unknown_profile_keys(profile):
