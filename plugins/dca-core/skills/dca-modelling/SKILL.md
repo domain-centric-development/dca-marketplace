@@ -173,7 +173,9 @@ Don't impose patterns the project doesn't use.
   `StockError` or `OrderHttpException`. No `Error`/`Fault`/`Failure` suffix, no
   `Http`/`Status`/`Response` in the name.
 - Carry the facts the rule compared as fields with accessors (`requested()`,
-  `available()`), so a caller reacts to data rather than to a message.
+  `available()`), so a caller reacts to data rather than to a message. The
+  message is for the log, never what a person reads: the incoming adapter
+  words the refusal from the type and the values, so a page can translate it.
 - Place a domain failure beside the model that raises it; there is no
   `domain/exception/` package. Place a use-case failure with its use case, or in
   `application/shared` when several raise it or a port declares it.

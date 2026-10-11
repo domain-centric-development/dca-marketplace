@@ -199,6 +199,12 @@ When writing or editing code that refuses:
   something only the repository can answer. A failure the store detects is
   declared in the application layer beside the port whose contract it is, and
   raised by the adapter implementing it.
+- **Never show the exception's message.** The failure carries the rule and
+  its values; the sentence a page or an answer shows is the incoming
+  adapter's, from the type and the values (a text per failure, a message key
+  its translations resolve). `getMessage()` / `.Message` passed to a page or a
+  problem document ties the user's language to the domain's and rules out a
+  translation; the message is for the log.
 - **Never put a transport decision in the type.** No `@ResponseStatus` or other
   framework metadata on the exception, and no `Error`/`Fault`/`Failure` suffix,
   no `Http`/`Status`/`Response` in the name (`DCA-ERR-004`, `DCA-ERR-005`).

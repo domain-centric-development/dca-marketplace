@@ -181,6 +181,10 @@ that the decision sits in exactly one place per context:
   a context's failure has taken that context's decision.
 - The answer is a problem document (`ProblemDetail` / `ProblemDetails`), not a
   home-grown error DTO.
+- **The words are the adapter's.** A page or an answer that shows the
+  exception's message (`getMessage()`, `.Message`) lets an inner layer write the
+  user's sentence and rules out a translation. The adapter words the refusal
+  from the failure's type and values; the message is for the log.
 - **The status follows the failure, not the base type.** Mapping every domain
   failure to one status and every application failure to another is the
   common mistake: a line missing from an order is a rule of the model and
