@@ -199,10 +199,6 @@ When writing or editing code that refuses:
   something only the repository can answer. A failure the store detects is
   declared in the application layer beside the port whose contract it is, and
   raised by the adapter implementing it.
-- **Never put the user's wording in the type.** The failure carries the rule
-  and its values; the sentence a page shows ("Please enter a title of 1 to 200
-  characters") is the incoming adapter's — a page that shows `getMessage()`
-  makes the domain speak the user interface's language.
 - **Never put a transport decision in the type.** No `@ResponseStatus` or other
   framework metadata on the exception, and no `Error`/`Fault`/`Failure` suffix,
   no `Http`/`Status`/`Response` in the name (`DCA-ERR-004`, `DCA-ERR-005`).

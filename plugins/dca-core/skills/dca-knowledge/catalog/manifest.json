@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "d918c286778cebe9d2eb922a3969a0b363de3b32e6081818ac45320225932e1b",
+  "bundle_sha256": "503afc506a12edae81ede658cdd17c2de4b4963d28a29825d85d25f4fd6dfda7",
   "counts": {
     "Decision": 31,
     "Guide": 21,
@@ -9,7 +9,7 @@
     "Process": 1,
     "Recipe": 22,
     "Reference": 128,
-    "Rule": 127,
+    "Rule": 130,
     "Section": 203,
     "Template": 49
   },
@@ -17,8 +17,8 @@
   "format": "dca-bundle-manifest-v1",
   "library_versions": {
     "dotnet": {
-      "DomainCentric.ArchRules": "0.6.0",
-      "DomainCentric.ArchRules.Xunit": "0.6.0",
+      "DomainCentric.ArchRules": "0.7.0-SNAPSHOT",
+      "DomainCentric.ArchRules.Xunit": "0.7.0-SNAPSHOT",
       "DomainCentric.BuildingBlocks": "0.2.1"
     },
     "java": {
@@ -30,16 +30,18 @@
   },
   "sources": {
     "dca-dotnet": {
+      "dirty": true,
       "revision": "a1c95bed54500fdbae994395a7ce5a182a31a4f9",
-      "source_sha256": "ef76cbffb2969852278249aca7ed477204291ea1a6613de7d09d5c865d20ff72"
+      "source_sha256": "6983bdabf63570f02d3206dcd91295aed6659613d6ff1537975ba986730e3c3f"
     },
     "dca-guide": {
       "revision": "da0bb126e79322651448aa2d0daf6c0d08818e60",
       "source_sha256": "7528da166a6b188b435e5dca7bf2d9966d57c5aa4756878e9a48a5a14c3fd2de"
     },
     "dca-java": {
+      "dirty": true,
       "revision": "b85dfe46a519e8af9154ee729d4160a9e93dbb30",
-      "source_sha256": "6cb33939273a25acff7692f475a59a9bc69d3b210c8a11931311be7be3ba7aad"
+      "source_sha256": "0fcafe2dd2873af6917292f6ba3a2f98e5b2cfb2c979897c82738c7bf5dc0c6e"
     },
     "dca-knowledge-catalog": {
       "note": "own repository: the carrying commit is the revision; content digest only",
