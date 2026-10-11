@@ -147,7 +147,8 @@ Body sections:
     The gate refuses a rule without a scenario, a scenario without exactly one trigger (an `And`
     after the `When` is a second one; two triggers are two scenarios) or without a `Then`, a step
     outside a scenario, an unknown step and a key used twice. Concrete values belong in the steps:
-    they are what turns a range or a default into a question someone answers;
+    they are what turns a range or a default into a question someone answers. Every limit a rule names
+    has a scenario on each side of it — the limit accepted, the first value past it refused;
   - **lines**: one `- <key>: <criterion>` line each, the shorter form.
 
   Criteria are observable end-user behaviour, small enough that one agent run delivers the whole

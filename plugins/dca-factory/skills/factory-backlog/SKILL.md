@@ -123,8 +123,13 @@ that smuggles the decision in.
      codes, what counts as unavailable) goes into the description and the configuration once, never
      into the story. A shape the description leaves open is a question now: two implementations fill
      it differently;
-   - **inputs:** format, allowed range, boundaries, and what happens at them — a scenario per boundary
-     that matters;
+   - **inputs:** format, allowed range, and what happens at its edges. Every limit a rule names gets two
+     scenarios, one on each side: the limit itself accepted and the first value past it refused — "1 to 200
+     characters" is four (200 accepted, 201 refused, 1 accepted, an empty value refused), "at most 5" is two
+     (5 accepted, 6 refused). A limit with only its refusal written leaves its acceptance untested, and the
+     gate can only hold the tests to the scenarios there are;
+   - **position and order:** a rule about where an item stands — the order of a list, its place after a
+     change — gets a scenario that changes an item in the middle, not only at the ends;
    - **defaults:** one stated value, and where the user sees it;
    - **failure of a dependency:** the behaviour, and after how long a slow answer counts as a failure;
    - **state and lifecycle:** every transition a rule names, including the conflict case where two
