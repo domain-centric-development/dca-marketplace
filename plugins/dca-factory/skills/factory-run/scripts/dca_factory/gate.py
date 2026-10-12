@@ -870,13 +870,21 @@ def copy_for_break(cwd, copy):
                         ignore=lambda folder, names: [n for n in names if n in ignored
                                                       and (os.path.abspath(folder) == top or n in (".git", "node_modules"))])
         return
+    # A story's worktree links the pipeline, the runs and the epics to the checkout's own folders; the index
+    # still lists the files below such a link. The copy takes the link and nothing below it — a file copied
+    # through the link would be copied onto itself.
+    linked = set()
     for name in sorted({n for n in listed.stdout.decode("utf-8", "replace").split("\0") if n}):
         source, target = os.path.join(cwd, name), os.path.join(copy, name)
+        parts = name.split("/")
+        if any("/".join(parts[:i]) in linked for i in range(1, len(parts))):
+            continue
         if not os.path.lexists(source):
             continue                          # deleted in the tree, still in the index
         os.makedirs(os.path.dirname(target), exist_ok=True)
         if os.path.islink(source):
             os.symlink(os.readlink(source), target)
+            linked.add(name)
         elif os.path.isfile(source):
             shutil.copy2(source, target)
 

@@ -8198,6 +8198,23 @@ def run_groups(args):
                              "package named `tasks`", code == 1 and "stays green under its break" in output,
                              output[-500:]))
     for root in throwaway():
+        # in a story's worktree a tracked folder is a link to the checkout's own: the index still lists the files
+        # below it, and the scratch copy takes the link alone
+        build_project(root, story=ADOPTED, green=both_green, tests=TESTS + CHARACTERIZED,
+                      extra_sources=((".dca-factory/runs/STORY-1/judge.md", "verdict: pass\n"),
+                                     (".dca-factory/runs/STORY-1/breaks/com.example.WidgetPageTest--showsTheThing.patch",
+                                      BREAK_THE_THING), ("tools/lib.txt", "a\n")))
+        subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        shared = os.path.join(root, "..", os.path.basename(root) + "-shared")
+        shutil.move(os.path.join(root, "tools"), shared)
+        os.symlink(os.path.abspath(shared), os.path.join(root, "tools"))
+        code, output = run_gate(args.gate, root, "adopt")
+        shutil.rmtree(shared, ignore_errors=True)
+        expectations.append(("adopt: in git, a tracked folder that is a link (a story's worktree) is copied as the link, "
+                             "not file by file onto itself", code == 0 and "red under its break" in output,
+                             output[-600:]))
+    for root in throwaway():
         # a program missing on the PATH is the environment, not the story
         build_project(root, profile=PROFILE.replace("compile: true", "compile: dca-no-such-tool --version"))
         code, output = run_gate(args.gate, root, "test")
