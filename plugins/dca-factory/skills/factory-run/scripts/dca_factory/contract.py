@@ -976,6 +976,10 @@ def git(cwd, *args, env=None):
                                    encoding="utf-8", errors="replace")
     except OSError as error:
         return 1, str(error)
+    # A success answers on stdout alone: git warns on stderr while it succeeds — on Windows "LF will be replaced by
+    # CRLF" beside the hash of `hash-object` — and a warning read as the answer is a blob that does not exist.
+    if completed.returncode == 0:
+        return 0, completed.stdout.strip()
     return completed.returncode, (completed.stdout + completed.stderr).strip()
 
 

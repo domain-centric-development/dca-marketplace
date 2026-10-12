@@ -3587,9 +3587,8 @@ def verify_setup(runner, verbose=False):
         skills_dir = os.path.join(root, ".claude", "skills")
         for skill, body in (("review-craft", "old v0.5.1\n"), ("ddd-modelling", "edited by the project\n")):
             write_file(skills_dir, f"{skill}/SKILL.md", f"---\nname: {skill}\ndescription: x\n---\n{body}")
-        with open(os.path.join(skills_dir, "review-craft", "SKILL.md"), "w", encoding="utf-8") as handle:
-            handle.write(open(os.path.join(cache, "software-craftsmanship", "0.5.1", "skills", "review-craft", "SKILL.md"),
-                              encoding="utf-8").read())
+        shutil.copyfile(os.path.join(cache, "software-craftsmanship", "0.5.1", "skills", "review-craft", "SKILL.md"),
+                        os.path.join(skills_dir, "review-craft", "SKILL.md"))      # byte for byte, on every platform
         code, output = run_runner(project_runner(root), root, "update", "--from", source, env={"HOME": home})
         check("renames: update removes a copy byte for byte the old plugin's newest, and keeps and names an edited one",
               not os.path.exists(os.path.join(skills_dir, "review-craft"))

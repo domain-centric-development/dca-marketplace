@@ -37,7 +37,7 @@ class Readers(unittest.TestCase):
             os.environ["FACTORY_HOME"] = p.root
             try:
                 self.assertIn("the-guard", run.guard_sentence())
-                self.assertEqual(contract.place("runs"), f"{p.root}/.dca-factory/runs")
+                self.assertEqual(contract.place("runs"), p.root.replace(os.sep, "/") + "/.dca-factory/runs")   # places use /
                 self.assertEqual(run.verdict_of("S-1"), "approved")
                 run.journal_line("S-1", "2026-10-10T10:00:00Z\tnote\t-\twhy=from-the-tree")
                 self.assertEqual([e["kind"] for e in state.journal_events(p.runs, "S-1")], ["note"])
