@@ -64,6 +64,8 @@ export const MARK_GLYPH: Record<string, string> = {
   partial: '◆',
   empty: '○',
   journey: '◇',
+  finding: '•',
+  claim: '⚑',
 }
 export const MARK_COLOR: Record<string, string> = {}
 
@@ -84,6 +86,8 @@ export function applyPalette(isLight: boolean): void {
     partial: C.info,
     empty: C.wait,
     journey: C.wait,
+    finding: C.info,
+    claim: C.wait,
   })
 }
 applyPalette(false)

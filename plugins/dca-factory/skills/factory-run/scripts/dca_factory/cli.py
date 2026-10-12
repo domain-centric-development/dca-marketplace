@@ -56,7 +56,7 @@ import time
 from datetime import datetime, timezone
 from .contract import (
     ALL_KINDS, CONTRACT, decision_files, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
-    EPIC_FILE, epic_folder, evidence_dir, factory_home, find_story, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
+    EPIC_FILE, epic_folder, evidence_dir, factory_home, find_story, findings_path, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
     location, needs_human_ids, open_findings, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
     story_id_of, story_kind, TECH_HEADINGS, VERSION)
@@ -361,11 +361,12 @@ def claim_age(since, now=None):
     return (f"{hours} h" if hours < 48 else f"{hours // 24} d"), hours >= STALE_CLAIM_DAYS * 24
 
 
-def foreign_claim_lines(epics, runs):
-    """The claims other factories hold, as the last fetch saw them (no fetch here — a session's start stays quick and
-    offline): who holds which story and for how long, a claim whose story this checkout does not have (an orphan),
-    and a claim on an id this checkout uses for another story (a collision). One line each kind, like the findings."""
-    held, orphans, collisions = [], [], []
+def foreign_claims(epics, runs):
+    """The claims other factories hold, as the last fetch saw them (no fetch here — a session's start and the cockpit
+    stay quick and offline): `held` — who holds which story and for how long, `stale` past three days; `orphan` — a
+    claim whose story this checkout does not have; `collision` — a claim on an id this checkout uses for another
+    story. Each with what a person does about it."""
+    found = []
     for story, c in sorted(cached_claims(runs).items()):
         if c["own"]:
             continue
@@ -373,23 +374,44 @@ def foreign_claim_lines(epics, runs):
             path = find_story(epics, story)
         except GateError:
             path = None
+        age, stale = claim_age(c["since"])
+        entry = dict(story=story, who=c["who"], host=c["host"], since=c["since"], age=age, stale=stale,
+                     title=c["title"])
         if not path:
-            orphans.append(story)
+            found.append(dict(entry, kind="orphan", action=make_action(
+                text="this checkout has no such story — take the claim away",
+                shell=f"{RUNNER} release {story} --force")))
             continue
         front, body = read_front_matter(path)
         epic = str(front.get("epic") or os.path.basename(epic_folder(path))).strip()
         title = story_title(front, body) or story
         if (c["epic"] and c["epic"] != epic) or (c["title"] and c["title"] != title):
-            collisions.append(f"{story} — another factory claimed it for \"{c['title']}\"")
+            found.append(dict(entry, kind="collision", action=make_action(
+                text=f"another factory claimed {story} for \"{c['title']}\" — give yours another id",
+                skill="/factory-backlog", shell=f"python3 .agents/factory/factory-cli.py --free-id {re.sub(r'[-_]?[0-9]+$', '', story)}")))
             continue
-        age, stale = claim_age(c["since"])
-        held.append(f"{story} ({c['who']} on {c['host']}, {age}{' — stale?' if stale else ''})")
+        found.append(dict(entry, kind="held", action=make_action(
+            text="not built here" + ("; a stale claim may be forgotten — ask its holder, or take it away" if stale
+                                     else ""),
+            shell=f"{RUNNER} release {story} --force" if stale else "")))
+    return found
+
+
+def foreign_claim_lines(epics, runs):
+    """The foreign claims as the session's start says them: one line each kind, like the findings."""
+    claims = foreign_claims(epics, runs)
+    held = [f"{c['story']} ({c['who']} on {c['host']}, {c['age']}{' — stale?' if c['stale'] else ''})"
+            for c in claims if c["kind"] == "held"]
     lines = []
     if held:
         lines.append(f"claimed by other factories: {', '.join(held)} — not built here; "
                      f"`factory.sh release <story> --force` takes a stale one away")
-    for story in orphans:
-        lines.append(f"orphan claim {story} — this checkout has no such story; `factory.sh release {story} --force`")
+    for c in claims:
+        if c["kind"] == "orphan":
+            lines.append(f"orphan claim {c['story']} — this checkout has no such story; "
+                         f"`factory.sh release {c['story']} --force`")
+    collisions = [f"{c['story']} — another factory claimed it for \"{c['title']}\"" for c in claims
+                  if c["kind"] == "collision"]
     if collisions:
         lines.append(f"id collision: {'; '.join(collisions)} — give yours another id")
     return lines
@@ -1084,7 +1106,19 @@ def status_model(cwd, epics, runs, live=False):
     description = [description_part(cwd, profile, "product", PRODUCT_HEADINGS),
                    description_part(cwd, profile, "tech", TECH_HEADINGS),
                    description_part(cwd, profile, "domain", ())]
+    # what else waits for a person: the judge's open minors, other factories' claims (WP-104)
+    findings = []
+    for story, where, severity, defect in open_findings(epics_dir):
+        try:
+            path = find_story(epics_dir, story)
+        except GateError:
+            path = None
+        kept = shown(findings_path(path)) if path else FINDINGS_FILE
+        findings.append(dict(story=story, where=where, severity=severity, defect=defect, file=kept,
+                             action=make_action(text=f"fix it in a story, or set its Status to done or wont-fix in {kept}",
+                                                skill=f"/factory-backlog {story}: {defect}")))
     return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
+                findings=findings, claims=foreign_claims(epics_dir, runs),
                 description=description,
                 rows=rows, next=next_line, journeys=journeys,
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],

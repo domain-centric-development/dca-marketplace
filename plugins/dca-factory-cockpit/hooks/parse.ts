@@ -296,3 +296,26 @@ export function recommendedOption(text: string, options: RecordOption[]): string
   const key = first?.[1] ?? ''
   return options.some(option => option.key === key) ? key : null
 }
+
+// A foreign claim a person has to act on: a stale one, an orphan, an id collision — a fresh one held elsewhere is
+// information only. (WP-104)
+export function claimNeedsPerson(claim: { kind: string; stale: boolean }): boolean {
+  return claim.kind !== 'held' || claim.stale
+}
+
+// What the Decide tab counts: the stories and records waiting, and the claims a person must act on. The judge's open
+// minors are listed there too, but not counted — they wait for a later story, not for an answer now.
+export function waitingCount(status: { waiting: unknown[]; claims?: { kind: string; stale: boolean }[] }): number {
+  return status.waiting.length + (status.claims ?? []).filter(claimNeedsPerson).length
+}
+
+// The press a waiting row offers: its own skill where it names one, the story added where the factory names the skill
+// alone (`/factory-decisions`), labelled by what it does; none where the factory says what to do in words only — a
+// story waiting for its merge, a claim to release in a terminal.
+export function waitPress(story: string, action: { text: string; skill: string }): { label: string; command: string } | null {
+  if (!action.skill) return null
+  const command = action.skill.trim().includes(' ') ? action.skill.trim() : `${action.skill.trim()} ${story}`
+  const verb = command.split(' ')[0] ?? ''
+  const label = { '/factory-decisions': 'answer', '/factory-status': 'look', '/factory-run': 'run', '/factory-backlog': 'release' }[verb] ?? 'open'
+  return { label, command }
+}

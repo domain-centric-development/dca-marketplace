@@ -7,7 +7,15 @@ const ROW = {
 }
 const STATUS = {
   project: 'books-app',
-  waiting: [{ mark: 'question', story: 'add-book', what: 'plan asks a question', action: { text: '', skill: '', shell: '' } }],
+  waiting: [
+    { mark: 'question', story: 'add-book', what: 'plan asks a question', action: { text: '', skill: '/factory-decisions', shell: '' } },
+    { mark: 'look', story: 'sort-books', what: 'published — waits for its merge', action: { text: 'open the merge request from its branch', skill: '', shell: '' } },
+  ],
+  findings: [{ story: 'add-book', where: 'src/Book.java:12', severity: 'minor', defect: 'a guard the plan did not name', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a guard the plan did not name', shell: '' } }],
+  claims: [
+    { story: 'lend-book', kind: 'held', who: 'anna@example.org', host: 'laptop-a', age: '6 d', stale: true, title: '', action: { text: 'not built here', skill: '', shell: 'bash .agents/factory/factory.sh release lend-book --force' } },
+    { story: 'old-one', kind: 'orphan', who: 'ben@example.org', host: 'desk-b', age: '2 h', stale: false, title: '', action: { text: 'this checkout has no such story — take the claim away', skill: '', shell: 'bash .agents/factory/factory.sh release old-one --force' } },
+  ],
   running: [],
   epics: [
     { epic: 'books', rows: [ROW], delivered: 0, total: 1, tokens: 1_500_000, seconds: 120, title: 'Keep track of books', goal: 'one list', metric: 'BookAdded', discovery: '' },
@@ -168,6 +176,16 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /Which list\?/ })).toBeDefined()
     await pane.press({ key: 'answer-add-book' })
     expect(sent.at(-1)).toBe('/dca-factory:factory-decisions add-book')
+    // a story waiting for its merge says what to do and offers no answer; other factories' claims show their release
+    // as a command, never a button; the judge's open minors open their file or go to the backlog
+    expect(await pane.find({ text: /waits for its merge — open the merge/ })).toBeDefined()
+    await expect(pane.press({ key: 'answer-sort-books' })).rejects.toThrow()
+    expect(await pane.find({ text: /claimed by other factories/i })).toBeDefined()
+    expect(await pane.find({ text: /6 d — stale\?/ })).toBeDefined()
+    expect(await pane.find({ text: /release old-one --force/ })).toBeDefined()
+    expect(await pane.find({ text: /open findings/i })).toBeDefined()
+    await pane.press({ key: 'finding-story-0' })
+    expect(sent.at(-1)).toBe('/dca-factory:factory-backlog add-book: a guard the plan did not name')
     // the open record offers its options as choices; a press hands the answer to the decisions skill
     await pane.press({ key: 'record-add-book-01' })
     expect(await pane.find({ text: /the stage recommends b/ })).toBeDefined()

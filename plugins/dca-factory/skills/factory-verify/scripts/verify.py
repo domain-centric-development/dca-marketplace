@@ -2555,6 +2555,27 @@ exit 0
               and "release STORY-9 --force" in output and "STORY-5" not in output
               and "A story another factory claimed is not built here" in output,
               [l for l in output.splitlines() if "claim" in l][:4])
+        # WP-104: the cockpit reads the same from the status JSON — the claims with their kind and action, and the
+        # judge's open minors
+        write_file(root, "product/epics/sample/STORY-1/findings.md",
+                   "| # | Perspective | File:line | Severity | Defect | Fix | Status |\n|---|---|---|---|---|---|---|\n"
+                   "| 1 | ddd | src/main/Thing.java:3 | minor | a guard the plan did not name | name it | open |\n"
+                   "| 2 | ddd | src/main/Thing.java:9 | minor | closed already | — | done |\n")
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--format",
+                                  "json")
+        try:
+            view = json.loads(output[output.index("{"):])
+        except ValueError:
+            view = {}
+        kinds = {c.get("story"): c.get("kind") for c in view.get("claims", [])}
+        found = view.get("findings", [])
+        check("status json: the claims of other factories by kind with an action, and the open findings with their file",
+              kinds == {"STORY-1": "held", "STORY-9": "orphan"}
+              and next(c for c in view["claims"] if c["story"] == "STORY-9")["action"]["shell"].endswith(
+                  "release STORY-9 --force")
+              and len(found) == 1 and found[0]["story"] == "STORY-1" and found[0]["severity"] == "minor"
+              and found[0]["file"].endswith("STORY-1/findings.md"),
+              [view.get("claims"), view.get("findings")])
         write_file(root, ".dca-factory/claims.tsv",
                    "STORY-1\tanna@example.org\tlaptop-a\t2026-01-02T03:04:05Z\t0\tother-epic\tSort the list\n")
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief")

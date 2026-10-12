@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filledCells, duration, gateBy, isHistory, isRefusal, isSelfCheck, moment, parseJournal, recommendedOption, recordOptions, rounds, stagesOf, touchesFactory, wrapWords } from '../hooks/parse'
+import { filledCells, duration, gateBy, isHistory, isRefusal, isSelfCheck, moment, parseJournal, recommendedOption, recordOptions, rounds, stagesOf, touchesFactory, waitingCount, waitPress, wrapWords } from '../hooks/parse'
 
 test('a factory command or skill refreshes the view, other calls do not', () => {
   expect(touchesFactory({ tool: 'Bash', command: 'bash .agents/factory/factory.sh run' } as { tool: string })).toBe(true)
@@ -94,4 +94,16 @@ test('reads a decision record\'s options and the one its recommendation names', 
   expect(recommendedOption(record, options)).toBe('b')
   expect(recommendedOption('## Recommendation\nnone of them', options)).toBe(null)
   expect(recordOptions('# no options here')).toEqual([])
+})
+
+test('a waiting row presses its own skill, the story added where the factory names the skill alone; words only, no press', () => {
+  expect(waitPress('s-1', { text: '', skill: '/factory-decisions' })).toEqual({ label: 'answer', command: '/factory-decisions s-1' })
+  expect(waitPress('s-1', { text: 'release it', skill: '/factory-backlog release s-1' })).toEqual({ label: 'release', command: '/factory-backlog release s-1' })
+  expect(waitPress('s-1', { text: 'open the merge request', skill: '' })).toBeNull()
+})
+
+test('Decide counts what waits and the claims a person must act on — a fresh foreign claim and the findings not', () => {
+  const claims = [{ kind: 'held', stale: false }, { kind: 'held', stale: true }, { kind: 'orphan', stale: false }, { kind: 'collision', stale: false }]
+  expect(waitingCount({ waiting: [1, 2], claims })).toBe(5)
+  expect(waitingCount({ waiting: [] })).toBe(0)
 })

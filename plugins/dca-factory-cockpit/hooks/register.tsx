@@ -3,7 +3,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
-import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, keepRefresh, moment, parseJournal, recommendedOption, recordOptions, rowSignature, stagesOf, touchesFactory, type RefreshWish } from './parse'
+import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, keepRefresh, moment, parseJournal, recommendedOption, recordOptions, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -590,8 +590,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             hotkey: one.key,
             isOpen: one.id === current && !open,
             mark:
-              one.id === 'decide' && status.waiting.length > 0
-                ? { text: String(status.waiting.length), color: C.wait }
+              one.id === 'decide' && waitingCount(status) > 0
+                ? { text: String(waitingCount(status)), color: C.wait }
                 : one.id === 'run' && (isRunning() || status.running.length > 0)
                   ? { text: '▶', color: C.accent }
                   : one.id === 'delivered' && status.delivered > 0
@@ -681,7 +681,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       (one.denials ?? []).map(d => ({ where: d.stage && d.stage !== name ? `${name} · ${d.stage}` : name, tool: d.tool, command: d.command })),
     )
     const records = now.decisions.filter(record => record.story === open.id)
-    const waits = status.waiting.some(wait => wait.story === open.id)
+    const waitAt = status.waiting.find(wait => wait.story === open.id)
+    const press = waitAt ? waitPress(waitAt.story, waitAt.action) : null
+    const waits = press !== null
     const shown = events.filter(isHistory).slice(-Math.max(4, rows - 34))
     const mark = row?.mark ?? 'none'
     return page(
@@ -713,7 +715,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' }),
           row && !row.done && !isRunning() && ui.button('run', '▶ Run (worker)', () => void runWorker($, `run ${open.id}`, ['run', '--story', open.id]), { hotkey: 'r', isPrimary: true }),
           row && !row.done && ui.button('session', 'run in this session', () => send($, `/factory-run ${open.id}`), { hotkey: 'e', byClaude: true }),
-          waits && ui.button('answer', 'answer', () => send($, `/factory-decisions ${open.id}`), { hotkey: 'a', isPrimary: true, byClaude: true }),
+          press && ui.button('answer', press.label, () => send($, press.command), { hotkey: 'a', isPrimary: true, byClaude: true }),
           row?.done && ui.button('verify', 'verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v', byClaude: true }),
         ]),
         ui.section('Pipeline'),
@@ -1067,22 +1069,61 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   }
 
   if (current === 'decide') {
+    const claims = status.claims ?? []
+    const findings = status.findings ?? []
     const pending = now.decisions.filter(record => record.state === 'open' || record.state === 'draft')
     const answered = now.decisions.filter(record => !pending.includes(record)).slice(0, Math.max(3, rows - 26))
     return page(
       [
         ui.section('Waiting for you', 'questions a stage may not decide alone, results to look at'),
-        ...(pending.length === 0 && status.waiting.length === 0 ? [<Text color={C.done}>Nothing waits for you.</Text>] : []),
+        ...(pending.length === 0 && waitingCount(status) === 0 ? [<Text color={C.done}>Nothing waits for you.</Text>] : []),
         ...(pending.length > 0 ? [recordTable(pending, null)] : []),
         ...(status.waiting.length > 0
           ? [
               ui.table(
                 [COL.mark, COL.story(idWidth), { name: 'what', width: 24, isWide: true }, COL.action(20)],
-                status.waiting.map(wait => [
-                  ui.mark(wait.mark),
-                  { text: wait.story, bold: true },
-                  { text: wait.what, color: C.muted },
-                  { node: ui.button(`answer-${wait.story}`, 'answer', () => send($, `/factory-decisions ${wait.story}`), { isPrimary: true, byClaude: true }) },
+                status.waiting.map(wait => {
+                  const press = waitPress(wait.story, wait.action)
+                  return [
+                    ui.mark(wait.mark),
+                    { text: wait.story, bold: true },
+                    { text: press ? wait.what : `${wait.what} — ${wait.action.text}`, color: C.muted },
+                    press ? { node: ui.button(`answer-${wait.story}`, press.label, () => send($, press.command), { isPrimary: true, byClaude: true }) } : {},
+                  ]
+                }),
+              ),
+            ]
+          : []),
+        // Other factories' claims (WP-93/104): taking one away is a person's deliberate act in a terminal — the
+        // cockpit shows the command, it offers no button for it.
+        ...(claims.length > 0
+          ? [
+              ui.section('Claimed by other factories', `${claims.filter(claimNeedsPerson).length} for you to look at · from the last fetch`),
+              ui.table(
+                [COL.mark, COL.story(idWidth), { name: 'held by', width: 24 }, { name: 'for', width: 12 }, { name: 'what to do', width: 30, isWide: true }],
+                claims.map(claim => [
+                  ui.mark(claimNeedsPerson(claim) ? 'claim' : 'none'),
+                  { text: claim.story, bold: true },
+                  { text: claim.kind === 'orphan' ? `${claim.who} — orphan` : claim.kind === 'collision' ? `${claim.who} — id collision` : `${claim.who} on ${claim.host}`, color: C.muted },
+                  { text: `${claim.age}${claim.stale ? ' — stale?' : ''}`, color: claim.stale ? C.wait : C.muted },
+                  { text: [claim.action.text, claim.action.shell].filter(Boolean).join(': '), color: C.muted },
+                ]),
+              ),
+            ]
+          : []),
+        // The judge's confirmed minors, kept in each story's findings.md until a person or a later story closes them.
+        ...(findings.length > 0
+          ? [
+              ui.section('Open findings', `${findings.length} from the judge · close one in its file, or fix it in a story`),
+              ui.table(
+                [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.action(10), COL.action(12)],
+                findings.map((finding, index) => [
+                  ui.mark('finding'),
+                  { text: finding.story, bold: true },
+                  { text: finding.where, color: C.muted },
+                  { text: finding.defect, color: C.muted },
+                  { node: ui.link(`finding-file-${index}`, 'findings', () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)) },
+                  { node: ui.button(`finding-story-${index}`, 'as story', () => send($, finding.action.skill), { byClaude: true }) },
                 ]),
               ),
             ]
