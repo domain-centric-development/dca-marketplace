@@ -8214,6 +8214,27 @@ def run_groups(args):
         expectations.append(("adopt: in git, a tracked folder that is a link (a story's worktree) is copied as the link, "
                              "not file by file onto itself", code == 0 and "red under its break" in output,
                              output[-600:]))
+    for home, tree in throwaway(2):
+        # in a story's worktree the spec is the main checkout's: a test a story delivered there meanwhile is not
+        # gone because the worktree, branched before it, lacks it — one gone from both is
+        spec = ("product/spec/widgets/scenarios.md",
+                "# Widgets\n\n- older-thing: An older thing holds.\nTest: com.example.LaterTest#older\n")
+        later = ("src/test/java/com/example/LaterTest.java", "package com.example;\nclass LaterTest { void older() {} }\n")
+        build_project(home, green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(spec, later))
+        build_project(tree, green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(spec,))
+        here = dict(os.environ, FACTORY_HOME=home)
+        done = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "document"], cwd=tree,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", env=here)
+        kept = done.stdout + done.stderr
+        os.remove(os.path.join(home, later[0]))
+        done = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "document"], cwd=tree,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", env=here)
+        gone = done.stdout + done.stderr
+        expectations.append(("spec: in a worktree, a spec test the main line has and the worktree not yet is not gone; "
+                             "one gone from both is",
+                             "spec-tests" not in checks_by_verdict(kept)["fail"]
+                             and "spec-tests" in checks_by_verdict(gone)["fail"],
+                             [l for l in (kept + gone).splitlines() if "spec-tests" in l][:4]))
     for root in throwaway():
         # a program missing on the PATH is the environment, not the story
         build_project(root, profile=PROFILE.replace("compile: true", "compile: dca-no-such-tool --version"))

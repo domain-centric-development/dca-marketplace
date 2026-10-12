@@ -4249,6 +4249,13 @@ def check_spec_tests(result, cwd, runs, story_id, front, mapping):
     probe = Result()
     check_exists(probe, cwd, wanted)
     missing = [message.split(" — ")[0] for state, _c, message in probe.entries if state == "fail"]
+    if missing and in_worktree(cwd):
+        # The spec is the main checkout's; a story delivered there meanwhile names tests this worktree, branched
+        # before it, does not have yet. They are not gone: the integrate gate checks again on the main line.
+        there = Result()
+        check_exists(there, factory_home(), wanted)
+        gone_there = {message.split(":")[0] for state, _c, message in there.entries if state == "fail"}
+        missing = [m for m in missing if m.split(":")[0] in gone_there]
     if missing:
         result.fail("spec-tests", f"{shown(target)} names a test that is gone: {'; '.join(missing)} — a test this story "
                                   f"renamed or moved goes under tests.md's `## Moved tests` (| <key> | <Class>#<method> |)")
