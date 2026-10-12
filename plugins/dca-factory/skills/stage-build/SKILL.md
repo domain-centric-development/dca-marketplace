@@ -31,6 +31,10 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
    does not name: it is code no test asked for, so it stays out; name it in the build file as an
    unplanned invariant (`<Element>: <rule>`), and the judge reads it as the plan's gap it is. Every guard
    the plan names has a unit test already — make it pass, add none beside it.
+   A file the plan's `## Files` says `removed` goes with `git rm <path>` — on the shell you have — and one it
+   says `new` is written; the build gate refuses either left undone (`plan-files`), whatever the build file
+   explains. Where a removal or a new file turns out wrong, that is the plan's error: say so under
+   `## needs-human` rather than leaving the plan's line unmet.
 3. Keep the architecture intact — the same rules the plan worked under: no framework types in the
    domain, ports declared inward and implemented in adapters, no raw cross-context imports, one
    aggregate per transaction, domain events published and cleared where the plan says so.

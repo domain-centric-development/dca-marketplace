@@ -67,6 +67,11 @@ files written. You write **no** production behaviour.
    text: `contains("disabled")` is true whenever any element is disabled. A test of a criterion above the unit
    level runs through the real input port, except at the plan's `integration (adapter: …)` level; the test gate
    refuses the double (`tests-real`).
+2e. **Every assertion could fail.** Ask of each one: with the behaviour absent, would it turn red? An assertion on
+   a mechanism the code does not use (a flash attribute count where the page renders its message from the
+   model), a count of something nothing writes, an absence that holds before the feature exists — each is green
+   whatever the code does. Assert the element the criterion names, in the state it names: "no message" is the
+   message's element absent from the page the user sees, not an empty map beside it.
 3. **A unit test for every invariant the plan's `## Invariants` names** — each rule, the guards
    included: a required value refused when absent, a trimmed one refused untrimmed, a range at both
    bounds. The test drives the domain type alone, no framework, and is its own — never a criterion's

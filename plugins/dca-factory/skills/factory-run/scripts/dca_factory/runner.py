@@ -1236,14 +1236,16 @@ def document_skeleton(runs, story_id, cwd="."):
 # 124 a stage ran past its time limit is reported as a failure (1), 129/130/143 a hang-up, an interrupt, a TERM.
 
 #: The shell a stage may use without asking, beside the gate, the cli and the profile's commands: the ordinary
-#: reading and text tools, and the git verbs that look without changing anything (`git apply --check` is how a
-#: stage tries a break patch). What writes or runs anything stays out — `sed -i`, `xargs`, `find -exec`, a redirect
-#: of `echo`/`printf`, `mkdir`: each allowed head is allowed with every argument (WP-94). Measured on the bench:
-#: without the reading tools a stage hit the allow-list about three times per story, each a wasted turn.
+#: reading and text tools, the git verbs that look without changing anything (`git apply --check` is how a stage
+#: tries a break patch), and `git rm` — how a stage removes a file its plan says `removed`; it takes tracked files
+#: only, which git still holds, and the pipeline's own files are watched by the run (WP-102). What writes or runs
+#: anything else stays out — `rm`, `sed -i`, `xargs`, `find -exec`, a redirect of `echo`/`printf`, `mkdir`: each
+#: allowed head is allowed with every argument (WP-94). Measured on the bench: without the reading tools a stage hit
+#: the allow-list about three times per story, each a wasted turn; without a delete the build left a planned removal.
 STAGE_SHELL_HEADS = ("cd", "ls", "cat", "head", "tail", "wc", "sort", "grep", "diff", "pwd",
-                     "git status", "git diff", "git log", "git ls-files", "git apply --check")
+                     "git status", "git diff", "git log", "git ls-files", "git apply --check", "git rm")
 STAGE_SHELL = ("cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git status, git diff, git log, git ls-files, "
-               "git apply --check")
+               "git apply --check, and git rm (a file the plan removes)")
 
 #: The first line of a snapshot written without a hash: the observer reads such a snapshot as absent, because a
 #: snapshot of empty digests compares equal to every other and would read as "this stage changed nothing".

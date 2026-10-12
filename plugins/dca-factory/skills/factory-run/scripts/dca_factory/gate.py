@@ -37,7 +37,8 @@ Checks by stage:
            every test command the profile's `required:` names, run whole (the stories before this
            one still hold), plus every extra check the profile declares for this stage
            (architecture suite, formatter, …). Without the record the green run is skipped and named, never taken as
-           evidence: a runner that matched no test at all exits 0 exactly like a passing one
+           evidence: a runner that matched no test at all exits 0 exactly like a passing one. Every file
+           the plan's `## Files` says `new` is there, every one it says `removed` is gone (contract 22)
     tidy   the same as build: nothing the refactor touched may have changed what the code does
     document  every path, file and identifier the document stage claims actually exists, every
            row of its glossary table names where its definition came from, and every term the plan
@@ -718,6 +719,43 @@ def check_tests_real(result, profile, cwd, mapping, located, front, runs, story_
                                   + "; ".join(sorted(set(wrong))))
     else:
         result.ok("tests-real", "every integrated and end-to-end test of a criterion runs through the real input port")
+
+
+#: A plan's `## Files` line that says what becomes of the file: `- `<path>` — changes: new …` or `… changes: removed …`.
+PLAN_FILE_LINE = re.compile(r"^\s*[-*]\s*`([^`]+)`\s*[—–-]+\s*changes:\s*(new|removed)\b", re.I)
+
+
+def check_plan_files(result, cwd, runs, story_id):
+    """WP-102: the plan's file list holds after the build — a file it says `removed` is gone, one it says `new` is
+    there. A deviation the build's file explains is still one: the plan changes, or the file does. The bench's
+    build left a placeholder the plan removed, wrote "deleting a file is outside this session's shell", and the
+    judge let it pass as a minor."""
+    path = os.path.join(runs, story_id, "plan.md")
+    lines = section_of(read_text(path), "files") if os.path.isfile(path) else None
+    if lines is None:
+        result.skip("plan-files", "plan.md has no `## Files` section — nothing to hold the build to")
+        return
+    wrong, held = [], 0
+    for line in lines:
+        match = PLAN_FILE_LINE.match(line)
+        if not match or any(c in match.group(1) for c in "*<>{}"):
+            continue
+        rel, change = match.group(1).strip(), match.group(2).lower()
+        present = os.path.lexists(os.path.join(cwd, rel))
+        if change == "removed" and present:
+            wrong.append(f"{rel} (planned removed, still there)")
+        elif change == "new" and not present:
+            wrong.append(f"{rel} (planned new, not there)")
+        else:
+            held += 1
+    if wrong:
+        result.fail("plan-files", "the build did not do what the plan's `## Files` says — remove the file "
+                                  "(`git rm`) or write it, or plan again; an explanation in build.md does not "
+                                  "change the plan: " + "; ".join(wrong))
+    elif held:
+        result.ok("plan-files", f"every file the plan says new or removed is so ({held})")
+    else:
+        result.ok("plan-files", "the plan's `## Files` names no file new or removed")
 
 
 BREAK_IGNORE = (".git", "build", "bin", "obj", "target", "node_modules", ".gradle", "TestResults", "out")
@@ -3642,6 +3680,12 @@ def _spec_tests(run):
 def _tests_real(run):
     if contract_of(run.profile) >= 21:
         check_tests_real(run.result, run.profile, run.cwd, run.mapping, run.located, run.front, run.runs, run.story_id)
+
+
+@check("plan-files", stages=("build",))
+def _plan_files(run):
+    if contract_of(run.profile) >= 22:
+        check_plan_files(run.result, run.cwd, run.runs, run.story_id)
 
 
 @check("size", stages=lambda s: s.sizes)

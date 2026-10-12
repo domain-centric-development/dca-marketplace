@@ -1176,11 +1176,14 @@ def verify_runner(runner, verbose=False):
         check("isolation: every stage gets the same flags, so the prompt prefix is shared across stages",
               len(flags) == 6 and len(set(flags)) == 1, flags)
         shell = [line.split("shell allowed:", 1)[1] for line in output.splitlines() if "shell allowed:" in line]
-        check("shell: the stage's allow-list names the gate, the cli, the reading tools and git's looking verbs — no "
-              "script on stdin, and no head that writes or runs (sed, xargs, find, echo, printf, mkdir)",
+        check("shell: the stage's allow-list names the gate, the cli, the reading tools, git's looking verbs and "
+              "`git rm` for a planned removal — no script on stdin, and no head that writes or runs (rm, sed, xargs, "
+              "find, echo, printf, mkdir)",
               bool(shell) and all(s in shell[0] for s in ("story-gate.py:*)", "factory-cli.py:*)", "Bash(grep:*)",
-                                                             "Bash(cat:*)", "Bash(git apply --check:*)"))
-              and not any(f"Bash({head}:*)" in shell[0] for head in ("sed", "xargs", "find", "echo", "printf", "mkdir"))
+                                                             "Bash(cat:*)", "Bash(git apply --check:*)",
+                                                             "Bash(git rm:*)"))
+              and not any(f"Bash({head}:*)" in shell[0]
+                          for head in ("rm", "sed", "xargs", "find", "echo", "printf", "mkdir"))
               and "python3 -" not in shell[0] and "Bash(python3:*)" not in shell[0], shell[:1])
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   env=dict(os.environ, FACTORY_ISOLATION="off"))
@@ -5018,7 +5021,7 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 21\nrequried: compile\n" + PROFILE)),
+         dict(profile="contract: 22\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
@@ -5276,6 +5279,30 @@ def run_groups(args):
              (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Changed\n\n## Files\n\n- `src/main/Thing.java` — new\n"
                                         "- `src/main/Page.java` — shows it\n")))),
+        # WP-102: the plan's file list holds after the build
+        (Case("plan-files: a file the plan says removed and the build left is refused, named, though build.md "
+              "explains it", "build", 1, must_fail=("plan-files",), text=("src/main/static/index.html",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("src/main/static/index.html", "<p>placeholder</p>\n"),
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n"
+              "- `src/main/static/index.html` — changes: removed, the placeholder\n"),
+             (".dca-factory/runs/STORY-1/build.md", "## Files\n\n- `src/main/static/index.html` — not removed: "
+              "deleting a file is outside this session's shell\n")))),
+        (Case("plan-files: a file the plan says new and the build did not write is refused, named", "build", 1,
+              must_fail=("plan-files",), text=("src/main/Thing.java",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new, "
+              "the thing\n- `src/main/Page.java` — read: the pattern\n"),))),
+        (Case("plan-files: a removed file gone and a new one written pass", "build", 0, must_pass=("plan-files",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("src/main/Thing.java", "class Thing {}\n"),
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new\n"
+              "- `src/main/static/index.html` — changes: removed, the placeholder\n"
+              "- `src/main/Page.java` — changes: shows the thing\n"),))),
+        (Case("plan-files: a plan without `## Files` is skipped and named", "build", 0, must_skip=("plan-files",),
+              text=("plan.md has no `## Files` section",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"),))),
         (Case("build: a changed file the hand-over does not list is refused, named", "build", 1,
               must_fail=("files-listed",), text=("src/main/Page.java",)),
          dict(green=both_green, ledger=both_green, extra_sources=(

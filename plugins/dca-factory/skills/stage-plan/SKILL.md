@@ -207,7 +207,10 @@ your file. The rule in full: `factory-run/reference/stage-common.md`.
 | <path from the project root> | <the story's changed-expectation line, or the decision id> |
 
 ## Files
-- `<path>` — changes: <what>          (every file the plan expects to change, from the project root)
+- `<path>` — changes: <what>          (every file the plan expects to change, from the project root;
+                                       `changes: new — <what>` for a file that does not exist yet,
+                                       `changes: removed — <why>` for one that goes — the build gate
+                                       holds both, `plan-files`)
 - `<path>` — read: <why>              (the pattern to mirror, the fixture to reuse — what a later
                                        stage must read to understand the change; one line each)
 

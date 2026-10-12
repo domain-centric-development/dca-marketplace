@@ -306,8 +306,8 @@ The first message — even "hi" — then gets the state and the choices.
 
 The runner's own processes get a fixed allow-list instead: the gate, the cli, the commands the profile
 declares, and the ordinary reading tools (`grep`, `cat`, `head`, `tail`, `ls`, `diff`,
-`git diff`, `git ls-files`, `git apply --check`, …) — `factory.sh run --dry-run` prints it as `shell allowed`.
-No head that writes or runs is on it (`sed -i`, `xargs`, `find -exec`, `echo >`, `printf >`, `mkdir`, a script on
+`git diff`, `git ls-files`, `git apply --check`, …), and `git rm` for a file the plan removes — `factory.sh run
+--dry-run` prints it as `shell allowed`. No other head that writes or runs is on it (`rm`, `sed -i`, `xargs`, `find -exec`, `echo >`, `printf >`, `mkdir`, a script on
 stdin): a stage lists with Glob, searches with Grep and changes files with the editor tools.
 
 ## How to see where it stands

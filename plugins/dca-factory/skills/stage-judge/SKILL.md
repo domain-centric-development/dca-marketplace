@@ -114,8 +114,17 @@ Then converge:
    did not name it — is a confirmed `minor` against the plan (`plan` perspective), with the rule as its fix; a
    guard in a changed domain type that the plan's `## Invariants` does not name and no unit test covers is
    the same finding, whoever wrote it.
+5b. A **planned change left undone** — a file the plan's `## Files` removes still there, a change it lists not
+   made, a step the build file says it could not take — is a confirmed `major` against the plan (`plan`
+   perspective), never a `minor`: `changes-requested`, whatever reason the build file gives. Where the reason is
+   real, the plan was wrong, and that is a `story-conflict` — not a pass. The build gate refuses a `new` or
+   `removed` line that did not happen (`plan-files`); the rest is yours.
 6. Check the story once more against the criteria: is each one actually met by behaviour, not just
-   by a green test? A test that asserts too little is a **test** defect and belongs in the report.
+   by a green test? A test that asserts too little is a **test** defect and belongs in the report. Before a
+   criterion counts as met, ask of its test's assertion: **could it fail?** With the behaviour absent — the
+   button still there, the message still shown — would it turn red? An assertion on a mechanism the code does
+   not use, a count of something never written, an absence that held before the story is green whatever the
+   code does: a test defect (`back: test`), not a proof.
 
 ## Ask, do not recall
 
