@@ -1114,7 +1114,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         // The judge's confirmed minors, kept in each story's findings.md until a person or a later story closes them.
         ...(findings.length > 0
           ? [
-              ui.section('Open findings', `${findings.length} from the judge · close one in its file, or fix it in a story`),
+              ui.section('Open findings', `${findings.length} from the judge · close one in its file, or hand it to the backlog`),
               ui.table(
                 [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.action(10), COL.action(12)],
                 findings.map((finding, index) => [
@@ -1123,7 +1123,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                   { text: finding.where, color: C.muted },
                   { text: finding.defect, color: C.muted },
                   { node: ui.link(`finding-file-${index}`, 'findings', () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)) },
-                  { node: ui.button(`finding-story-${index}`, 'as story', () => send($, finding.action.skill), { byClaude: true }) },
+                  { node: ui.button(`finding-story-${index}`, 'to backlog', () => send($, finding.action.skill), { byClaude: true }) },
                 ]),
               ),
             ]
