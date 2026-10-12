@@ -72,6 +72,11 @@ ausliefern (`fulfill`)
 ```
 
 Required fields: `Definition`, `Type`; `Operations` as well for an `Aggregate Root`.
+
+A **feature** is a term as well — `**Type:** Feature`: a part of the context's behaviour its people name, which groups
+use cases and, in a project with a living spec, a folder of what holds (`<spec>/<context>/<feature>/scenarios.md`).
+The heading carries the term and, in parentheses, the name as a code package spells it — `### Produktdetails
+(productdetails)` —; the definition says what it groups, `Related terms` its use cases where the code mirrors them.
 Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Operations` (other types), `Notes`.
 
 The heading carries the term as the people who own it say it, and — where the code's word differs —

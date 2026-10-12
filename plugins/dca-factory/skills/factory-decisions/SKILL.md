@@ -113,6 +113,10 @@ passed and the profile's `acceptance:` asks a human to look before the story cou
 The record lists the criteria with their tests and how to start the application (`run:`). A human
 accepts — no role is checked; the answer is theirs, on their confirmation, as always.
 
+Show what holds before and after the story beside the record: `python3 .agents/factory/factory-cli.py --spec-delta <story>` —
+per criterion its verb (added, changed, removed with the plan's reason, moved between features) and its lines before
+and after, a new feature named. Show it as it prints; a person accepts what the spec will say, not only the story.
+
 - **Accepted** — write `answer: accepted`. The document gate then delivers the story in its next run,
   which starts there by itself — `/factory-run <story>` in a session, or the person's `factory.sh run
   --story <story>` in a shell; no stage runs again. Start neither from here: answering is not running

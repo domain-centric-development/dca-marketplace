@@ -19,6 +19,7 @@
 #                    default, --shared-builder/--shared-verifier share one half over `stages: separate`
 #   factory.sh status [--story <id>] [--usage] [--refusals] [--brief]   what runs, what waits, every story, the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
+#   factory.sh spec-delta <story> [--format json]  what holds before and after the story
 #   factory.sh release <story> [--force]     give up a story's claim on the remote (`claim_remote:`); --force: another's
 #   factory.sh integrate <story>             a published story whose merge request lost the race: delivered again
 #   factory.sh follow [--story <id>] [--process <name>] [--once [--lines <n>]] [--all] [--format text|json]
@@ -1741,6 +1742,10 @@ case "$command" in
       *) read_command --status --part backlog "$@" ;;
     esac ;;
   decisions) read_command --list-decisions "$@" ;;
+  spec-delta)
+    # What holds before and after a story (WP-105): what a person accepting it looks at.
+    [ $# -ge 1 ] || usage
+    read_command --spec-delta "$@" ;;
   release)
     # A claim on the remote given up by hand (WP-93): this factory's, or with --force another's.
     [ $# -ge 1 ] || usage

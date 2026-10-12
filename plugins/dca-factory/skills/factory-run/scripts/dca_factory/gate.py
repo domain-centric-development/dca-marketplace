@@ -93,7 +93,8 @@ from .reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
 from .spec import (
-    delta_problems, derived, journeys_path, merge, read_delta, read_spec, render_spec, scenarios_path, story_entries,
+    context_files, delta_problems, derived, feature_name, journeys_path, merge, merge_context, placement_problems,
+    lint_context, read_context, read_delta, read_spec, render_spec, scenarios_path, story_entries,
     touches)
 from .state import (
     claim_config_here, PUBLISHED, remote_main,
@@ -4141,11 +4142,25 @@ def integrate_into_home(result, cwd, story_path, story_id, front, runs):
 
 
 def spec_target(front):
-    """The spec file a story changes: its context's `scenarios.md`, or `journeys.md` for a journey item; None for a
-    story that names no context."""
+    """The spec file a story changes: its feature's `scenarios.md` under its context — the context's own for a story
+    without `feature:` —, or `journeys.md` for a journey item; None for a story that names no context."""
     if story_kind(front) == "journey":
         return journeys_path()
-    return scenarios_path(front["context"]) if str(front.get("context", "")).strip() else None
+    return scenarios_path(front["context"], front.get("feature")) if str(front.get("context", "")).strip() else None
+
+
+def story_spec(front):
+    """(the file the story's criteria go to, what the spec holds where the story's keys are looked up — every
+    criterion of the context with its feature —, the context's features, the story's feature). A journey's is
+    `journeys.md` alone."""
+    target = spec_target(front)
+    if not target:
+        return None, [], set(), ""
+    if story_kind(front) == "journey":
+        return target, [dict(item, feature="") for item in read_spec(target)[1]], set(), ""
+    context = front["context"]
+    return (target, read_context(context), {name for name, _p in context_files(context) if name},
+            feature_name(front.get("feature")))
 
 
 def spec_backing(cwd, story_id, body, story_path=None):
@@ -4170,12 +4185,14 @@ def check_spec_delta(result, cwd, runs, story_id, story_path, front, body):
     plan_path = os.path.join(runs, story_id, "plan.md")
     if not os.path.isfile(plan_path):
         return
-    target = spec_target(front)
+    target, spec, features, feature = story_spec(front)
     if not target:
         return
-    story, (_pre, spec) = story_entries(body), read_spec(target)
+    story = story_entries(body)
     delta = read_delta(read_text(plan_path))
     problems = delta_problems(story, spec, delta)
+    if story_kind(front) != "journey":
+        problems += placement_problems(story, spec, delta, feature, features)
     if problems:
         result.fail("spec-delta", f"{shown(plan_path)} `## Spec delta` against {shown(target)}: " + "; ".join(problems))
         return
@@ -4209,11 +4226,13 @@ def check_spec_tests(result, cwd, runs, story_id, front, mapping):
     """WP-98 M3: every `Test:` line of the spec the story changes still names a test that is there — one this story
     renamed or moved is named under tests.md's `## Moved tests` (or is the story's own criterion), and the gate
     writes the new selector at delivery."""
-    target = spec_target(front)
+    target, spec, _features, _feature = story_spec(front)
     if not target:
         return
-    _pre, spec = read_spec(target)
-    own = set(mapping or {}) | set(moved_tests(runs, story_id))
+    plan = os.path.join(runs, story_id, "plan.md")
+    # a criterion the story takes away takes its test with it (WP-106 B): the delta's removals are not asked for
+    removed = set(read_delta(read_text(plan))["removes"]) if os.path.isfile(plan) else set()
+    own = set(mapping or {}) | set(moved_tests(runs, story_id)) | removed
     wanted = {item["key"]: item["tests"] for item in spec if item["tests"] and item["key"] not in own}
     if not wanted:
         return
@@ -4228,13 +4247,14 @@ def check_spec_tests(result, cwd, runs, story_id, front, mapping):
 
 
 def merge_spec(result, story_path, story_id, front, runs):
-    """The delivering gate's merge (WP-98): the story's delta into its spec, by key, with the test lines from tests.md
-    — deterministic, nothing a stage writes. The story is history from here on."""
+    """The delivering gate's merge (WP-98, WP-105): the story's delta into its context's spec, by key, with the test
+    lines from tests.md — the story's criteria into its feature's file, a moved one out of the file it stood in, a
+    removed one gone wherever it stood; a feature file left without a criterion goes. Deterministic, nothing a stage
+    writes. The story is history from here on."""
     _front, body = read_front_matter(story_path)
-    target = spec_target(front)
+    target, spec, _features, feature = story_spec(front)
     if not target:
         return
-    preamble, spec = read_spec(target)
     plan = os.path.join(runs, story_id, "plan.md")
     delta = read_delta(read_text(plan)) if os.path.isfile(plan) else read_delta("")
     try:
@@ -4244,18 +4264,47 @@ def merge_spec(result, story_path, story_id, front, runs):
     tests = dict(mapping)
     tests.update(moved_tests(runs, story_id))
     story = story_entries(body)
-    merged = merge(spec, story, delta, tests)
-    for item in merged:
-        if item["key"] in tests and item["key"] not in {s["key"] for s in story}:
-            item["tests"] = tests[item["key"]]
-    title = "Journeys" if story_kind(front) == "journey" else str(front.get("context", "")).strip() or "Spec"
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    text = render_spec(preamble, merged, title)
-    with open(target, "w", encoding="utf-8") as handle:
-        handle.write(text)
+    context = str(front.get("context", "")).strip()
+    journey = story_kind(front) == "journey"
+    merged = {"": merge(spec, story, delta, tests)} if journey else merge_context(spec, story, delta, tests, feature)
+    for entries in merged.values():
+        for item in entries:
+            if item["key"] in tests and item["key"] not in {s["key"] for s in story}:
+                item["tests"] = tests[item["key"]]
+    if not journey:
+        # The spec as it will stand, checked before a line is written: a delivery never leaves it malformed.
+        texts = {name: render_spec(read_spec(scenarios_path(context, name))[0], entries,
+                                   f"{context} — {name}" if name else context)
+                 for name, entries in merged.items() if entries or not name}
+        problems = lint_context(context, texts)
+        if problems:
+            result.fail("spec", f"the spec after this story would not hold its shape: {'; '.join(problems[:6])}"
+                                + (" …" if len(problems) > 6 else "") + " — nothing written")
+            return False
+    written = []
+    for name, entries in sorted(merged.items()):
+        path = target if journey else scenarios_path(context, name)
+        if not entries and name:
+            if os.path.isfile(path):
+                os.remove(path)
+                with contextlib.suppress(OSError):
+                    os.rmdir(os.path.dirname(path))
+                written.append(f"{shown(path)} (gone — no criterion left)")
+            continue
+        if not entries and not os.path.isfile(path):
+            continue
+        preamble = read_spec(path)[0]
+        title = "Journeys" if journey else f"{context} — {name}" if name else context or "Spec"
+        text = render_spec(preamble, entries, title)
+        if not os.path.isfile(path) or read_text(path) != text:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+            written.append(shown(path))
     found = derived(story, spec)
-    result.ok("spec", f"{shown(target)}: {sum(v == 'adds' for v in found.values())} added, "
+    result.ok("spec", f"{', '.join(written) or shown(target)}: {sum(v == 'adds' for v in found.values())} added, "
                       f"{sum(v == 'changes' for v in found.values())} changed, {len(delta['removes'])} removed"
+                      + (f", {len(delta['moves'])} moved" if delta["moves"] else "")
                       + (f", {len(delta['renames'])} rule(s) renamed" if delta["renames"] else ""))
 
 
@@ -4319,8 +4368,8 @@ def deliver(result, story_path, story_id, front, runs):
     input: "the code exists, check it"). The judge's confirmed defects that did not block are kept beside it."""
     if story_kind(front) == "task":
         close_findings(result, front)
-    else:
-        merge_spec(result, story_path, story_id, front, runs)
+    elif merge_spec(result, story_path, story_id, front, runs) is False:
+        return
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by="gate")
     result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "

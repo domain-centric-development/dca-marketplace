@@ -23,6 +23,9 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 
 ## Do
 
+0. A feature the plan's `## Spec delta` brings (`adds feature <name>`) gets its glossary entry: the term as its
+   people say it with the folder's name in parentheses, `**Type:** Feature`, what it groups — the delivery refuses the
+   story without it.
 1. Read the plan's glossary proposals and the diff's new names. Every **domain** identifier the
    story introduced — an aggregate, a value object, an event, a use case, a domain term in a result
    — needs an entry in the bounded context's glossary (`product/spec/<context>/glossary.md`, the one file under

@@ -229,6 +229,14 @@ guard, not acceptance). It becomes ready when those stories are delivered, runs 
 document — nothing to build — and its test is green at its test gate. Template:
 `factory-run/templates/backlog/journey.md.tmpl`.
 
+## A feature
+
+A story names the feature it changes — `feature:` beside `context:`, the feature's name as its glossary entry spells
+it in parentheses (`productdetails`); without one its criteria belong to the context as a whole. A feature is a term of
+the context's language: look it up in `product/spec/<context>/glossary.md` (`Type: Feature`) and in the spec's
+folders; a story that needs one the context does not have names it, and its plan brings it in. Criteria of two
+features are two stories: split the story, one feature each.
+
 ## A task
 
 One question decides between a story and a task: **would an actor notice the change?** Yes — a missing or wrong
@@ -242,6 +250,15 @@ question. A finding that makes a test assert more is neither: the test's expecta
 
 A task lives in the epic of the code it touches — for a finding, the epic of the story the finding belongs to.
 Several findings of one kind may go into one task; findings that touch unrelated code are separate tasks.
+
+## Taking a feature away
+
+A feature taken away is a story — an actor sees it gone. Its criterion is the **absence**, in the actor's words and
+observable: "the list offers no export", "the export address answers that there is no such page"; that criterion is
+its happy path and its test is red until the feature is gone. Under `## Changed expectations` say what no longer
+holds, in a person's sentence — it backs the plan's `- removes <key>: <why>` for every scenario of the feature in the
+spec and the deletion of the feature's tests (`## Changed tests`). Where the feature leaves code nobody needs, the plan
+lists it `changes: removed`; the build takes it away.
 
 ## A story from a wish
 

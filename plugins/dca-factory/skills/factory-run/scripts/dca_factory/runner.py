@@ -34,10 +34,10 @@ from .state import (
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
 from .spec import (
-    context_folder, derived, merge, read_delta, read_spec, render_spec, story_entries)
+    context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
     merge_target,
-    read_mapping, spec_target,
+    read_mapping, spec_target, story_spec,
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
     integration_target, INVARIANTS_MARKER, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
     read_invariant_rows, scenario_clauses, TESTS_BASELINE)
@@ -1175,9 +1175,18 @@ def plan_skeleton(runs, story_id, cwd="."):
     # The spec delta as far as it follows from the story and the spec: added, held, changed by key. A removal and
     # a renamed rule are the plan stage's to add — and a change it finds that the story does not say, its question.
     front, body = read_front_matter(story_path)
-    target_spec = spec_target(front)
-    found = derived(story_entries(body), read_spec(target_spec)[1]) if target_spec else {}
+    target_spec, held, features, feature = story_spec(front)
+    story = story_entries(body)
+    found = derived(story, held) if target_spec else {}
     delta = "\n".join(f"- {verb} {key}" for key, verb in found.items())
+    # Where the story's criteria go (WP-105): a feature the context does not have yet is born, a criterion that stands
+    # under another feature moves — both follow from the story and the spec, so the skeleton writes them.
+    if target_spec and story_kind(front) != "journey":
+        where = {item["key"]: item["feature"] for item in held}
+        moves = [f"- moves {item['key']}: {place_name(where[item['key']])} → {place_name(feature)}"
+                 for item in story if item["key"] in where and where[item["key"]] != feature]
+        born = [f"- adds feature {feature}"] if feature and feature not in features else []
+        delta = "\n".join([line for line in (delta,) if line] + born + moves)
     os.makedirs(folder, exist_ok=True)
     with open(target, "w", encoding="utf-8") as handle:
         handle.write(PLAN_SKELETON.format(story=story_id, rows=rows, delta=delta))

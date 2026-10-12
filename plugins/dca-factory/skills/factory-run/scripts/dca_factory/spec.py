@@ -1,4 +1,9 @@
-"""The living spec (WP-98): what holds, one file per bounded context, changed only by a delivery.
+"""The living spec (WP-98, WP-105): what holds, per bounded context and feature, changed only by a delivery.
+
+A context's spec is `<spec>/<context>/scenarios.md` — what belongs to no feature — and one `<feature>/scenarios.md`
+per feature below it (WP-105). A feature is a term of the context's language (its glossary entry, `Type: Feature`);
+a criterion's key is unique across the whole context, so a criterion moves between features without changing its
+key.
 
 A story is a change; `<spec>/<context>/scenarios.md` is the truth it changes. The spec takes a story's criteria in
 the story's own two forms — a scenario (`#### <key>` and its steps) under its `### Rule: <text>` where it has one, or
@@ -28,6 +33,11 @@ CRITERION_HEADING = re.compile(r"^####\s+([a-z0-9][a-z0-9-]*)(?:\s*\(happy path\
 RULE_HEADING = re.compile(r"^###\s+Rule:\s*(.*\S)\s*$", re.I)
 TEST_LINE = re.compile(r"^Test:\s*(.*\S)\s*$")
 DELTA_LINE = re.compile(r"^[-*]\s*(adds|changes|removes|holds)\s+`?([a-z0-9][a-z0-9-]*)`?\s*(?::\s*(.*))?$", re.I)
+MOVE_LINE = re.compile(r"^[-*]\s*moves\s+`?([a-z0-9][a-z0-9-]*)`?\s*:\s*`?([a-z0-9]+)`?\s*(?:→|->)\s*`?([a-z0-9]+)`?\s*$", re.I)
+FEATURE_LINE = re.compile(r"^[-*]\s*adds\s+feature\s+`?([a-z0-9]+)`?\s*$", re.I)
+
+#: What the delta names as the place of what belongs to no feature: the context's own `scenarios.md`.
+CONTEXT_WIDE = "context"
 RENAME_LINE = re.compile(r'^[-*]\s*rule\s+"(.+?)"\s*(?:→|->)\s*"(.+?)"\s*$', re.I)
 
 
@@ -37,8 +47,39 @@ def context_folder(context):
     return re.sub(r"[^a-z0-9]+", "-", str(context or "").strip().lower()).strip("-")
 
 
-def scenarios_path(context):
-    return os.path.join(place("spec"), context_folder(context), SCENARIOS_FILE)
+def feature_name(feature):
+    """A feature as its folder and the code's package spell it: lowercase letters and digits — `Product Details` and
+    `productdetails` are one feature. "" for none."""
+    return re.sub(r"[^a-z0-9]+", "", str(feature or "").strip().lower())
+
+
+def scenarios_path(context, feature=None):
+    """Where a context's criteria of this feature hold — the context's own file for none."""
+    name = feature_name(feature)
+    folder = os.path.join(place("spec"), context_folder(context))
+    return os.path.join(folder, name, SCENARIOS_FILE) if name else os.path.join(folder, SCENARIOS_FILE)
+
+
+def context_files(context):
+    """[(feature, path)] of every spec file of the context that exists: the context's own first ("" — no feature),
+    then each feature folder by name."""
+    folder = os.path.join(place("spec"), context_folder(context))
+    found = [("", os.path.join(folder, SCENARIOS_FILE))] if os.path.isfile(os.path.join(folder, SCENARIOS_FILE)) else []
+    if os.path.isdir(folder):
+        for name in sorted(os.listdir(folder)):
+            path = os.path.join(folder, name, SCENARIOS_FILE)
+            if os.path.isfile(path):
+                found.append((name, path))
+    return found
+
+
+def read_context(context):
+    """Every criterion the context holds, across its files, each with the `feature` it stands under ("" — none)."""
+    entries = []
+    for feature, path in context_files(context):
+        for item in read_spec(path)[1]:
+            entries.append(dict(item, feature=feature))
+    return entries
 
 
 def journeys_path():
@@ -161,10 +202,21 @@ def words(item):
 
 
 def read_delta(plan_text):
-    """The plan's `## Spec delta`: {"adds"|"changes"|"holds": {key}, "removes": {key: reason}, "renames": [(old, new)]}."""
-    delta = {"adds": set(), "changes": set(), "holds": set(), "removes": {}, "renames": []}
+    """The plan's `## Spec delta`: {"adds"|"changes"|"holds": {key}, "removes": {key: reason}, "renames": [(old, new)],
+    "moves": {key: (from, to)}, "features": {name}} — a move names the feature a criterion leaves and the one it goes
+    to (`context` for none), `adds feature <name>` a feature the story brings into being."""
+    delta = {"adds": set(), "changes": set(), "holds": set(), "removes": {}, "renames": [], "moves": {},
+             "features": set()}
     for raw in section_of(plan_text, "spec delta") or []:
         line = raw.strip()
+        moved = MOVE_LINE.match(line)
+        if moved:
+            delta["moves"][moved.group(1)] = (moved.group(2).lower(), moved.group(3).lower())
+            continue
+        born = FEATURE_LINE.match(line)
+        if born:
+            delta["features"].add(feature_name(born.group(1)))
+            continue
         rename = RENAME_LINE.match(line)
         if rename:
             delta["renames"].append((rename.group(1).strip(), rename.group(2).strip()))
@@ -219,6 +271,62 @@ def delta_problems(story, spec, delta):
     return problems
 
 
+def place_name(feature):
+    """A feature as the delta names it: its name, or `context` for what belongs to none."""
+    return feature or CONTEXT_WIDE
+
+
+def placement_problems(story, held, delta, feature, features):
+    """What is wrong with where the story's criteria go (WP-105): a criterion the context holds under another
+    feature moves — the delta says `moves <key>: <from> → <to>` —, a move names what the spec and the story say, and
+    a feature the context does not have yet is born with `adds feature <name>`. `held` is the context's entries with
+    their feature, `features` the context's feature folders."""
+    problems, keys = [], {item["key"] for item in story}
+    where = {item["key"]: item["feature"] for item in held}
+    target = feature_name(feature)
+    for item in story:
+        was = where.get(item["key"])
+        if was is not None and was != target and item["key"] not in delta["moves"]:
+            problems.append(f"`{item['key']}` stands under {place_name(was)} and the story puts it under "
+                            f"{place_name(target)} — `moves {item['key']}: {place_name(was)} → {place_name(target)}`")
+    for key, (source, destination) in sorted(delta["moves"].items()):
+        if key not in where:
+            problems.append(f"`moves {key}` — the spec has no `{key}`")
+        elif key not in keys:
+            problems.append(f"`moves {key}` — the story has no criterion `{key}`")
+        elif source != place_name(where[key]) or destination != place_name(target):
+            problems.append(f"`moves {key}: {source} → {destination}` — it stands under {place_name(where[key])}, and the "
+                            f"story's feature is {place_name(target)}")
+    if target and story and target not in features and target not in delta["features"]:
+        problems.append(f"feature `{target}` is new to the context — `adds feature {target}`")
+    for name in sorted(delta["features"]):
+        if name in features:
+            problems.append(f"`adds feature {name}` — the context has it already")
+        elif name != target:
+            problems.append(f"`adds feature {name}` — the story's feature is {place_name(target)}")
+    return problems
+
+
+def merge_context(held, story, delta, tests, feature):
+    """{feature: [entry]} after the story — every file of the context: a removed criterion gone wherever it stood, a
+    moved one out of its old file, a renamed rule renamed everywhere, the story's criteria merged into the file of its
+    feature. A file left without a criterion maps to []."""
+    target = feature_name(feature)
+    leaving = set(delta["moves"]) | {item["key"] for item in story}
+    files = {}
+    for item in held:
+        files.setdefault(item["feature"], []).append(item)
+    files.setdefault(target, [])
+    merged = {}
+    for name, entries in files.items():
+        if name == target:
+            merged[name] = merge(entries, story, delta, tests)
+        else:
+            kept = [item for item in entries if item["key"] not in leaving]
+            merged[name] = merge(kept, [], delta, {})
+    return merged
+
+
 def touches(story, spec, delta):
     """The keys whose behaviour the story changes or takes away — what a person's sentence has to back."""
     found = derived(story, spec)
@@ -261,3 +369,88 @@ def merge(spec, story, delta, tests):
 
 def selectors_of(entries):
     return {item["key"]: item["tests"] for item in entries if item["tests"]}
+
+
+GLOSSARY_HEADING = re.compile(r"^###\s+(.+?)\s*(?:\((.+?)\))?\s*$")
+TYPE_LINE = re.compile(r"^\*\*Type:\*\*\s*(.+?)\s*$")
+
+
+def glossary_features(context):
+    """The features a context's glossary names: every entry whose `**Type:**` is `Feature`, by the name its folder
+    takes — from the code's word in parentheses where there is one, else from the term."""
+    path = os.path.join(place("spec"), context_folder(context), GLOSSARY_FILE)
+    found, heading = set(), None
+    for line in read_text(path).splitlines() if os.path.isfile(path) else []:
+        match = GLOSSARY_HEADING.match(line)
+        if match:
+            heading = match
+            continue
+        kind = TYPE_LINE.match(line.strip())
+        if kind and heading and kind.group(1).strip().lower().startswith("feature"):
+            found.add(feature_name(heading.group(2) or heading.group(1)))
+    return found
+
+
+def lint_text(text):
+    """What is wrong with one spec file's shape (WP-105): prose before the first criterion or rule (the title is the
+    one line allowed), a rule without a criterion, a scenario without its `When` or its `Then`, a key twice."""
+    problems, seen, rule, rule_has, scenario, steps = [], set(), None, False, None, set()
+
+    def close_scenario():
+        if scenario and not {"when", "then"} <= steps:
+            missing = " and ".join(word.capitalize() for word in ("when", "then") if word not in steps)
+            problems.append(f"scenario `{scenario}` has no `{missing}`")
+
+    started = False
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        heading = RULE_HEADING.match(line)
+        criterion = CRITERION_HEADING.match(line)
+        line_form = LINE_CRITERION.match(line) if not line.startswith((" ", "\t")) else None
+        if heading:
+            close_scenario()
+            if rule is not None and not rule_has:
+                problems.append(f'rule "{rule}" has no criterion')
+            started, rule, rule_has, scenario, steps = True, heading.group(1), False, None, set()
+            continue
+        if criterion or line_form:
+            close_scenario()
+            key = (criterion or line_form).group(1)
+            if key in seen:
+                problems.append(f"`{key}` twice")
+            seen.add(key)
+            started, rule_has = True, True
+            scenario, steps = (key, set()) if criterion else (None, set())
+            continue
+        if not started:
+            if stripped and not stripped.startswith("# "):
+                problems.append(f"text before the first criterion or rule: {stripped[:60]!r}")
+            continue
+        if scenario and stripped.startswith("- "):
+            steps.add(stripped[2:].split(" ", 1)[0].lower())
+    close_scenario()
+    if rule is not None and not rule_has:
+        problems.append(f'rule "{rule}" has no criterion')
+    return problems
+
+
+def lint_context(context, files=None):
+    """Every problem of a context's spec, each naming its file: the shape of each file, a key that stands in two
+    files, a feature folder without a glossary entry of `Type: Feature`. `files` is {feature: text} to check instead
+    of what is on disk — a merge before it is written."""
+    if files is None:
+        files = {name: read_text(path) for name, path in context_files(context)}
+    problems, where = [], {}
+    named = glossary_features(context)
+    for name, text in sorted(files.items()):
+        shown_as = f"{context_folder(context)}/{name + '/' if name else ''}{SCENARIOS_FILE}"
+        problems += [f"{shown_as}: {problem}" for problem in lint_text(text)]
+        for item in parse_spec(text)[1]:
+            if item["key"] in where and where[item["key"]] != name:
+                problems.append(f"{shown_as}: `{item['key']}` stands in {place_name(where[item['key']])} as well")
+            where.setdefault(item["key"], name)
+        if name and name not in named:
+            problems.append(f"{shown_as}: the feature `{name}` has no glossary entry of `Type: Feature` in "
+                            f"{context_folder(context)}/{GLOSSARY_FILE}")
+    return problems

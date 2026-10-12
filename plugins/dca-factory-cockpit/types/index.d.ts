@@ -129,6 +129,15 @@ export type Cockpit = {
   updatedAt: number
 }
 
+// What `factory.sh spec-delta <story> --format json` prints: what holds before and after a story (dca-factory 0.81.0).
+export type SpecDelta = {
+  story: string
+  context: string
+  feature: string
+  features: string[]
+  rows: { key: string; verb: string; before_feature: string | null; after_feature: string | null; before: string[]; after: string[]; reason: string }[]
+}
+
 export type StageOutput = { story: string; stage: string; running: boolean; lines: string[] }
 
 export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'delivered'
@@ -160,6 +169,7 @@ declare module 'claude-code' {
       detail: Detail | null
       fileText: string
       outputLines: string[]
+      specDelta: SpecDelta | null
       worker: Worker
     }
   }

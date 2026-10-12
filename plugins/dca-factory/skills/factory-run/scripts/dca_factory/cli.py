@@ -73,9 +73,10 @@ from .state import (
     resolve_window, run_stories, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
     verdict_in, worktree_of, write_story_fields)
 from .spec import (
+    lint_context,
     derived, merge, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
-    criteria_of, DESCRIPTION_CHANGES, spec_target, description_part, discovery_items, perspectives_of, story_ids)
+    criteria_of, DESCRIPTION_CHANGES, spec_target, story_spec, description_part, discovery_items, perspectives_of, story_ids)
 from .tools import (
     isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
 from .runner import (
@@ -1936,10 +1937,13 @@ def deliver_by_hand(cwd, runs, epics, story_id, who, force=False):
     # The spec takes the story's new criteria, without test lines — unproven until `--prove`. A story that changes or
     # removes what holds needs a plan to derive its delta: that is `--prove`'s adopt path, not this helper.
     _front, body = read_front_matter(story_path)
-    target = spec_target(front)
-    preamble, spec = read_spec(target) if target else ([], [])
+    target, spec, _features, feature = story_spec(front)
+    preamble = read_spec(target)[0] if target else []
+    own = [item for item in spec if item["feature"] == feature] if story_kind(front) != "journey" else spec
     story = story_entries(body) if target else []
-    changing = [key for key, verb in derived(story, spec).items() if verb == "changes"]
+    elsewhere = {item["key"] for item in spec if item["feature"] != feature}
+    changing = [key for key, verb in derived(story, spec).items() if verb == "changes"] \
+        + sorted(item["key"] for item in story if item["key"] in elsewhere)
     if changing:
         print(f"deliver-by-hand: {story_id} changes what holds ({', '.join(changing)} in {shown(target)}) — the delta of a "
               f"change is planned: `factory-cli.py --prove {story_id}` once it is delivered, or run it through the factory")
@@ -1950,7 +1954,7 @@ def deliver_by_hand(cwd, runs, epics, story_id, who, force=False):
     if added:
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, "w", encoding="utf-8") as handle:
-            handle.write(render_spec(preamble, merge(spec, story, read_delta(""), {}), str(front.get("context", "")).strip()
+            handle.write(render_spec(preamble, merge(own, story, read_delta(""), {}), str(front.get("context", "")).strip()
                                      or "Spec"))
         print(f"deliver-by-hand: {len(added)} criterion(s) into {shown(target)}, without a test line — unproven until "
               f"`--prove`")
@@ -2020,6 +2024,66 @@ def undeliver_branch(cwd, runs, epics, story_id):
     return 0
 
 
+def spec_delta_view(runs, epics, story_id):
+    """What holds before and after the story (WP-105): per key of the delta, its verb, the feature it stands under
+    before and after, the criterion's lines before and after — what a person accepting the story looks at, read from
+    the story, its plan and the spec, never parsed by a skill. `adds feature` names a feature the story brings."""
+    story_path = find_story(epics, story_id)
+    front, body = read_front_matter(story_path)
+    target, held, _features, feature = story_spec(front)
+    if not target:
+        return dict(story=story_id, context="", feature="", features=[], rows=[])
+    plan = os.path.join(runs, story_id, "plan.md")
+    delta = read_delta(read_text(plan)) if os.path.isfile(plan) else read_delta("")
+    story = story_entries(body)
+    before = {item["key"]: item for item in held}
+    rows = []
+    for key, verb in derived(story, held).items():
+        after = next(item for item in story if item["key"] == key)
+        old = before.get(key)
+        rows.append(dict(key=key, verb="moves" if key in delta["moves"] and verb == "holds" else verb,
+                         before_feature=old["feature"] if old else None, after_feature=feature,
+                         before=old["lines"] if old else [], after=after["lines"], reason=""))
+    for key, reason in sorted(delta["removes"].items()):
+        old = before.get(key)
+        rows.append(dict(key=key, verb="removes", before_feature=old["feature"] if old else None, after_feature=None,
+                         before=old["lines"] if old else [], after=[], reason=reason))
+    return dict(story=story_id, context=str(front.get("context", "")).strip(), feature=feature,
+                features=sorted(delta["features"]), rows=rows)
+
+
+def print_spec_delta(view, fmt):
+    if fmt == "json":
+        print(json.dumps(view, indent=2))
+        return 0
+    where = lambda f: f if f else "the context" if f == "" else "—"
+    print(f"spec delta of {view['story']} — {view['context'] or 'no context'}"
+          + (f", feature {view['feature']}" if view["feature"] else ""))
+    for name in view["features"]:
+        print(f"  new feature: {name}")
+    for row in view["rows"]:
+        if row["verb"] == "holds":
+            continue
+        head = f"  {row['verb']} {row['key']}"
+        if row["verb"] == "moves" or (row["before_feature"] is not None and row["after_feature"] is not None
+                                       and row["before_feature"] != row["after_feature"]):
+            head += f" ({where(row['before_feature'])} → {where(row['after_feature'])})"
+        print(head + (f" — {row['reason']}" if row["reason"] else ""))
+        for line in row["before"]:
+            print(f"    - {line}")
+        for line in row["after"]:
+            print(f"    + {line}")
+    held = sum(1 for row in view["rows"] if row["verb"] == "holds")
+    if held:
+        print(f"  {held} criterion(s) hold as they are")
+    return 0
+
+
+def spec_place(front):
+    """What a key is unique in: the story's context (every feature of it), or the journeys."""
+    return "journeys" if story_kind(front) == "journey" else str(front.get("context", "")).strip().lower()
+
+
 def spec_check(cwd, runs, epics):
     """Story and spec agree (WP-98), in one direction: every criterion of a delivered story that is still there stands
     in its spec — unless a later delivered story's plan removed it. Whether a scenario came from a story is not asked:
@@ -2037,19 +2101,24 @@ def spec_check(cwd, runs, epics):
         plan = os.path.join(runs, story_id, "plan.md")
         if os.path.isfile(plan):
             for key in read_delta(read_text(plan))["removes"]:
-                removed.setdefault((spec_target(front), key), []).append(when)
+                removed.setdefault((spec_place(front), key), []).append(when)
     for when, story_id, front, body in sorted(delivered):
-        target = spec_target(front)
-        held = {item["key"] for item in read_spec(target)[1]}
+        target, spec, _features, _feature = story_spec(front)
+        held = {item["key"] for item in spec}
         for item in story_entries(body):
-            later = [w for w in removed.get((target, item["key"]), []) if w >= when]
+            later = [w for w in removed.get((spec_place(front), item["key"]), []) if w >= when]
             if item["key"] not in held and not later:
                 problems.append(f"{story_id}: `{item['key']}` is delivered and not in {shown(target)}")
+    # the shape of every context's spec (WP-105): what a delivery checks before it writes, over what stands now
+    spec_root = place("spec")
+    for name in sorted(os.listdir(spec_root)) if os.path.isdir(spec_root) else []:
+        if os.path.isdir(os.path.join(spec_root, name)):
+            problems += lint_context(name)
     for line in problems:
         print(f"spec: {line}")
     if not problems:
         print(f"spec: every criterion of the {len(delivered)} delivered stor{'y' if len(delivered) == 1 else 'ies'} "
-              f"stands in its spec")
+              f"stands in its spec, and every spec file holds its shape")
     return 1 if problems else 0
 
 
@@ -2324,6 +2393,8 @@ def main(argv):
     parser.add_argument("--free-id", metavar="PREFIX", help="the next story id `<PREFIX>-<n>` no factory uses")
     parser.add_argument("--undeliver-branch", metavar="STORY",
                         help="take a published story's delivery back on its branch, before it is integrated again")
+    parser.add_argument("--spec-delta", metavar="STORY",
+                        help="what holds before and after the story — per key its verb, feature and lines (--format json)")
     parser.add_argument("--spec-check", action="store_true",
                         help="whether every criterion of a delivered story stands in its spec (exit 1 when one does not)")
     parser.add_argument("--prove", metavar="STORY",
@@ -2577,6 +2648,8 @@ def main(argv):
         return prove(cwd, args.runs, args.epics, args.prove)
     if args.spec_check:
         return spec_check(cwd, args.runs, args.epics)
+    if args.spec_delta:
+        return print_spec_delta(spec_delta_view(args.runs, args.epics, args.spec_delta), args.format)
     if args.claim_story:
         return claim_command(cwd, args.runs, args.epics, args.claim_story)
     if args.claims_refresh:

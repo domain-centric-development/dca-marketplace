@@ -4710,6 +4710,66 @@ def run_groups(args):
          dict(green=both_green, ledger=both_green, document=DOCUMENT,
               extra_sources=(("product/spec/widgets/scenarios.md",
                               "# Widgets\n\n- older-thing: An older thing holds.\nTest: com.example.GoneTest#older\n"),))),
+        # WP-105: the spec per feature — a new feature is born in the delta, a criterion that changes feature moves,
+        # the delivery writes the feature's file and checks the spec's shape before it writes
+        (Case("spec: a story's feature the context does not have yet is refused without `adds feature`", "test", 1,
+              must_fail=("spec-delta",), text=("`adds feature listing`",)),
+         dict(story=STORY.replace("context: Widgets", "context: Widgets\nfeature: listing"),
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- adds shows-the-thing\n"
+                              "- adds shows-nothing-when-empty\n"),))),
+        (Case("spec: a criterion the context holds elsewhere is refused unless the delta moves it", "test", 1,
+              must_fail=("spec-delta",), text=("`moves shows-the-thing: context → listing`",)),
+         dict(story=STORY.replace("context: Widgets", "context: Widgets\nfeature: listing"),
+              extra_sources=(("product/spec/widgets/scenarios.md", "# Widgets\n\n- shows-the-thing: The reader sees the thing.\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- adds feature listing\n")))),
+        (Case("spec: a new feature and a moved criterion named in the delta pass", "test", 0, must_pass=("spec-delta",)),
+         dict(story=STORY.replace("context: Widgets", "context: Widgets\nfeature: listing"),
+              extra_sources=(("product/spec/widgets/scenarios.md", "# Widgets\n\n- shows-the-thing: The reader sees the thing.\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- adds feature listing\n"
+                              "- moves shows-the-thing: context → listing\n- adds shows-nothing-when-empty\n")))),
+        (Case("spec: delivered, the story's criteria stand in its feature's file and the moved one leaves the context's",
+              "document", 0, must_pass=("delivered", "spec")),
+         dict(story=STORY.replace("context: Widgets", "context: Widgets\nfeature: listing"), green=both_green,
+              ledger=both_green, document=DOCUMENT,
+              extra_sources=(("product/spec/widgets/scenarios.md", "# Widgets\n\n- shows-the-thing: The reader sees the thing.\n"),
+                             ("product/spec/widgets/glossary.md", "# Widgets\n\n### Listing (listing)\n\n**Definition:** The "
+                              "things a reader has, as a list.\n\n**Type:** Feature\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- adds feature listing\n"
+                              "- moves shows-the-thing: context → listing\n- adds shows-nothing-when-empty\n")),
+              after=lambda root: [] if "shows-the-thing" not in open(os.path.join(root, "product/spec/widgets/scenarios.md"),
+                                                                  encoding="utf-8").read()
+              and all(key in open(os.path.join(root, "product/spec/widgets/listing/scenarios.md"), encoding="utf-8").read()
+                      for key in ("shows-the-thing", "shows-nothing-when-empty"))
+              else ["the criteria are not in widgets/listing/scenarios.md, or shows-the-thing stayed in the context's file"])),
+        (Case("spec: a feature without its glossary entry stops the delivery, and nothing is written", "document", 1,
+              must_fail=("spec",), text=("has no glossary entry of `Type: Feature`", "nothing written")),
+         dict(story=STORY.replace("context: Widgets", "context: Widgets\nfeature: listing"), green=both_green,
+              ledger=both_green, document=DOCUMENT,
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- adds feature listing\n"
+                              "- adds shows-the-thing\n- adds shows-nothing-when-empty\n"),),
+              after=lambda root: [] if not os.path.exists(os.path.join(root, "product/spec/widgets/listing"))
+              else ["the feature folder was written though the delivery was refused"])),
+        (Case("spec: prose before the first criterion of a spec file stops the delivery", "document", 1,
+              must_fail=("spec",), text=("text before the first criterion or rule",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=(("product/spec/widgets/scenarios.md",
+                              "# Widgets\n\nSome words nobody keyed.\n\n- older-thing: An older thing holds.\n"),))),
+        # WP-106 B: a feature taken away — the story's criterion is the absence; the scenarios that held leave the spec
+        # with their tests, and the delivery asks for none of them
+        (Case("removal: delivered, the removed criteria leave the spec, and their deleted test is not asked for",
+              "document", 0, must_pass=("delivered", "spec"), absent=("names a test that is gone",)),
+         dict(story=STORY.replace("## Assumptions", "## Changed expectations\n\n- The list no longer offers an export.\n\n"
+                                                   "## Assumptions"),
+              green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=(("product/spec/widgets/scenarios.md",
+                              "# Widgets\n\n- exports-the-list: The reader exports the list.\nTest: com.example.ExportTest#exports\n"
+                              "- export-names-the-file: The export names its file.\nTest: com.example.ExportTest#names\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- adds shows-the-thing\n"
+                              "- adds shows-nothing-when-empty\n- removes exports-the-list: the export goes\n"
+                              "- removes export-names-the-file: the export goes\n")),
+              after=lambda root: [] if "export" not in open(os.path.join(root, "product/spec/widgets/scenarios.md"),
+                                                         encoding="utf-8").read()
+              else ["product/spec/widgets/scenarios.md still holds the export"])),
         (Case("plan: a rule without a scenario is refused", "plan", 1, must_fail=("gate",),
               text=("has no scenario",)),
          dict(story=STORY_SCENARIOS.replace("### Rule: An empty record is not an error\n",
@@ -7037,6 +7097,67 @@ def run_groups(args):
                 handle.write(changed_line(old_test))
             verdict, output = kept_verdict(root)
             expectations.append((f"tests-kept: {label}", verdict == expected,
+                                 f"verdict {verdict}; " + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    # WP-105: what a person accepting a story looks at — what holds before and after, per key; and the spec's shape
+    for root in throwaway():
+        build_project(root, story=STORY.replace("context: Widgets", "context: Widgets\nfeature: listing").replace(
+                          "## Assumptions", "## Changed expectations\n\n- The thing reads anew.\n\n## Assumptions"),
+                      extra_sources=(("product/spec/widgets/scenarios.md",
+                                      "# Widgets\n\n- shows-the-thing: The reader sees the old thing.\n"
+                                      "- gone-thing: A thing that goes.\n"),
+                                     (".dca-factory/runs/STORY-1/plan.md",
+                                      "# Plan\n\n## Spec delta\n- adds feature listing\n- changes shows-the-thing\n"
+                                      "- moves shows-the-thing: context → listing\n- adds shows-nothing-when-empty\n"
+                                      "- removes gone-thing: nobody asks for it\n")))
+        shown_json = subprocess.run([sys.executable, cli_of(args.gate), "--spec-delta", "STORY-1", "--format", "json"],
+                                    cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        try:
+            view = json.loads(shown_json)
+        except ValueError:
+            view = {}
+        verbs = {row["key"]: (row["verb"], row["before_feature"], row["after_feature"]) for row in view.get("rows", [])}
+        expectations.append(("spec delta: per key its verb and its feature before and after, a removal with its reason, "
+                             "the new feature named",
+                             verbs.get("shows-the-thing") == ("changes", "", "listing")
+                             and verbs.get("shows-nothing-when-empty") == ("adds", None, "listing")
+                             and verbs.get("gone-thing") == ("removes", "", None)
+                             and any(r["reason"] == "nobody asks for it" for r in view.get("rows", []))
+                             and view.get("features") == ["listing"], view))
+        shown_text = subprocess.run([sys.executable, cli_of(args.gate), "--spec-delta", "STORY-1"], cwd=root,
+                                    capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        expectations.append(("spec delta: as text, the lines before and after a changed criterion",
+                             "- - shows-the-thing: The reader sees the old thing." in shown_text
+                             and "+ - shows-the-thing: The reader sees the thing." in shown_text
+                             and "new feature: listing" in shown_text, shown_text.splitlines()[:8]))
+        write_file(root, "product/spec/widgets/listing/scenarios.md", "# Widgets — listing\n\n#### half\n- Given a\n")
+        checked = subprocess.run([sys.executable, cli_of(args.gate), "--spec-check"], cwd=root, capture_output=True,
+                                 text=True, encoding="utf-8", errors="replace")
+        expectations.append(("spec check: a scenario without When and Then and a feature without its glossary entry "
+                             "are named, exit 1",
+                             checked.returncode == 1 and "scenario `half` has no `When and Then`" in checked.stdout
+                             and "the feature `listing` has no glossary entry" in checked.stdout,
+                             checked.stdout.splitlines()[-4:]))
+    # WP-106 B: a removal deletes the feature's old test — backed by the story's changed expectation and the plan's
+    # `## Changed tests`, the test gate lets it go; without the backing it is refused
+    for backed in (True, False):
+        for root in throwaway():
+            export_test = os.path.join("src", "test", "java", "com", "example", "ExportTest.java")
+            build_project(root, story=STORY.replace("## Assumptions", ("## Changed expectations\n\n- The list no longer "
+                                                                      "offers an export.\n\n" if backed else "")
+                                                     + "## Assumptions"),
+                          extra_sources=((export_test, "class ExportTest {\n  void exports() { assert exported; }\n}\n"),))
+            for command in (["init", "-q"], ["add", "-A"],
+                            ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+                subprocess.run(["git", *command], cwd=root, capture_output=True)
+            subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+            write_file(root, ".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED + "\n## Changed tests\n| Test file | Backed by |\n"
+                       "| --- | --- |\n| `src/test/java/com/example/ExportTest.java` | the story's changed-expectation line |\n")
+            os.remove(os.path.join(root, export_test))
+            verdict, output = kept_verdict(root)
+            expectations.append((f"removal: the feature's old test deleted {'with' if backed else 'without'} the story's "
+                                 f"changed expectation is {'let go' if backed else 'refused'}",
+                                 verdict == ("pass" if backed else "fail"),
                                  f"verdict {verdict}; " + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
     # WP-106: a task keeps behaviour, so it changes no test that existed before it — whatever it says; and its
     # schedule goes from plan to build, no test stage

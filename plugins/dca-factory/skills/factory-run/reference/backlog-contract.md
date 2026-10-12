@@ -235,9 +235,12 @@ delivered behaviour is a new story with `## Changed expectations`.
 
 ## The living spec
 
-A story is a change; `product/spec/` (the configuration's `spec:`) holds what is true today. Per bounded
-context `<spec>/<context>/scenarios.md` — `<context>` the story's `context:`, lowercase, words joined by
-`-` — carries every criterion that holds, in the story's own shape: a scenario under its `### Rule:`, or a
+A story is a change; `product/spec/` (the configuration's `spec:`) holds what is true today, per bounded context
+and feature: `<spec>/<context>/<feature>/scenarios.md` for each feature — a term of the context's language with a
+glossary entry of `**Type:** Feature`, named as the code's package would spell it (`productdetails`) — and
+`<spec>/<context>/scenarios.md` for what belongs to no feature. `<context>` is the story's `context:`, lowercase,
+words joined by `-`; `<feature>` its `feature:` (none: the context's own file). A story names at most one feature —
+criteria of several are several stories. Every file carries the criteria that hold, in the story's own shape: a scenario under its `### Rule:`, or a
 line; criteria without a rule before the first rule. No status, no ticks, no happy-path mark, no story id.
 Under each criterion one `Test: <selector>` line, written by the gate alone from the story's `tests.md`; a
 criterion without one, or with a red test, is unproven, readable without the factory. Journeys stand in
@@ -246,9 +249,12 @@ context's scenarios is its language, kept by the glossary skill and the document
 `spec/` a skill writes.
 
 - **The delta.** The plan stage reads the context's spec and writes `## Spec delta` in `plan.md`:
-  `- adds <key>`, `- changes <key>`, `- holds <key>` (word for word what the spec has), `- removes <key>: <why>`
-  and `- rule "<old>" → "<new>"`. What follows from comparing story and spec the gate derives itself; a
-  removal and a renamed rule only the plan can say.
+  `- adds <key>`, `- changes <key>`, `- holds <key>` (word for word what the spec has), `- removes <key>: <why>`,
+  `- rule "<old>" → "<new>"`, `- adds feature <name>` for a feature the context does not have yet, and
+  `- moves <key>: <from> → <to>` for a criterion that stands under another feature (`context` for none). What
+  follows from comparing story and spec — the moves and the new feature included — the skeleton writes; a
+  removal and a renamed rule only the plan can say. Keys are unique across the context's files, so a move keeps
+  its key.
 - **The check** (test gate, `spec-delta`): every key named agrees with what the comparison says, a removed
   key stands in the spec, a renamed rule leaves no criterion under its old text, and every change or removal
   of what holds is backed by the story's `## Changed expectations` or an answered decision — otherwise the

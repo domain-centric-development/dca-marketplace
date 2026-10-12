@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
-import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
+import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
 import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, keepRefresh, moment, parseJournal, recommendedOption, recordOptions, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
 
@@ -19,6 +19,8 @@ const tab = atom({ plugin: 'dca-factory-cockpit', key: 'tab' } as const, 'backlo
 const detail = atom({ plugin: 'dca-factory-cockpit', key: 'detail' } as const, null as Detail | null)
 const fileText = atom({ plugin: 'dca-factory-cockpit', key: 'fileText' } as const, '')
 const outputLines = atom({ plugin: 'dca-factory-cockpit', key: 'outputLines' } as const, [] as string[])
+// what the spec will say once the open acceptance's story is delivered — read when the record opens
+const specDelta = atom({ plugin: 'dca-factory-cockpit', key: 'specDelta' } as const, null as SpecDelta | null)
 
 // The recurring cycle; Describe sits beside it with set up and update — written once, changed when things move.
 const TABS: { id: Tab; label: string; key: string }[] = [
@@ -383,8 +385,18 @@ async function openOutput($: EngineInterface, root: string, story: string, proce
 }
 
 async function openFile($: EngineInterface, path: string, title: string, back: Detail | null): Promise<void> {
+  await update($, specDelta, () => null)
   await readFile($, path)
   await update($, detail, () => ({ kind: 'file', path, title, back }) as Detail)
+}
+
+// A decision record; an acceptance brings what the spec will say beside it — a person accepts the spec, not only the story.
+async function openRecord($: EngineInterface, root: string, record: DecisionRecord, back: Detail | null): Promise<void> {
+  await openFile($, `${root}/${record.path}`, record.id, back)
+  if (record.kind === 'acceptance') {
+    const delta = await factoryJson<SpecDelta>($, root, ['spec-delta', record.story, '--format', 'json'])
+    await update($, specDelta, () => delta)
+  }
 }
 
 async function runWorker($: EngineInterface, label: string, args: string[]): Promise<void> {
@@ -485,7 +497,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   // The links every view shares — one way to open a story, a record, a file.
   const storyCell = (row: Row): Cell => ({ node: ui.marked(row.mark, `story-${row.story}`, row.story, () => void openStory($, row.story)) })
   const recordCell = (record: DecisionRecord, back: Detail | null): Cell => ({
-    node: ui.link(`record-${record.id}`, record.id, () => void openFile($, `${now.root}/${record.path}`, record.id, back)),
+    node: ui.link(`record-${record.id}`, record.id, () => void openRecord($, now.root, record, back)),
   })
   // An unguarded epic's own act, beside its hint — the epic's name opens the epic, this writes its journey.
   const guardCell = (hint: FactoryStatus['journeys'][number]): Cell => ({
@@ -519,6 +531,26 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ]
         : []),
       ask(`own-${record.id}`, 'own answer', 'your words — or an option with a reason: b, because …', `/factory-decisions ${record.story} ${record.id}: answer`),
+    ]
+  }
+  // What the spec will say: per criterion the change, where it stands before and after, the new line or the reason.
+  const specRows = async (record: DecisionRecord): Promise<RenderElement[]> => {
+    const delta = await read($, specDelta)
+    if (!delta || delta.story !== record.story) return []
+    const changed = delta.rows.filter(row => row.verb !== 'holds')
+    const where = (feature: string | null) => (feature === null ? '—' : feature || 'the context')
+    return [
+      ui.section('What the spec will say', `${delta.context}${delta.feature ? ` · ${delta.feature}` : ''}${delta.features.length ? ` · new feature ${delta.features.join(', ')}` : ''} · ${delta.rows.length - changed.length} hold as they are`),
+      ui.table(
+        [{ name: 'change', width: 8 }, { name: 'criterion', width: 30 }, { name: 'where', width: 22 }, { name: 'now', width: 30, isWide: true }],
+        changed.map(row => [
+          { text: row.verb, color: row.verb === 'removes' ? C.fail : row.verb === 'adds' ? C.done : C.wait, bold: true },
+          { text: row.key },
+          { text: row.before_feature === row.after_feature ? where(row.after_feature) : `${where(row.before_feature)} → ${where(row.after_feature)}`, color: C.muted },
+          { text: row.verb === 'removes' ? row.reason || 'removed' : row.after.join(' '), color: C.muted },
+        ]),
+        'Nothing the spec holds changes.',
+      ),
     ]
   }
   const ask = (key: string, label: string, placeholder: string, command: string) =>
@@ -662,6 +694,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back)), { hotkey: 'b' }),
           ui.button('edit', '✎ edit', () => void editFile($, open.path), { hotkey: 'e' }),
         ]),
+        ...(record?.kind === 'acceptance' ? await specRows(record) : []),
         ...(record ? choices(record, text) : []),
         ui.framed(ui.file(text, open.path) ?? ui.doc(text)),
       ],

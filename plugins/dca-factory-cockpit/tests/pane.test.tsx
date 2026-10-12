@@ -46,7 +46,17 @@ const DISCOVERY = {
   }],
 }
 const DECISIONS = {
-  records: [{ id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'product/epics/books/add-book/decisions/01.md' }],
+  records: [
+    { id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'product/epics/books/add-book/decisions/01.md' },
+    { id: 'add-book-accept-1', state: 'open', kind: 'acceptance', story: 'add-book', stage: 'document', asked: '2026-09-23T18:00:00Z', text: 'Accept add-book?', path: 'product/epics/books/add-book/decisions/accept-1.md' },
+  ],
+}
+const SPEC_DELTA = {
+  story: 'add-book', context: 'reading', feature: 'shelf', features: ['shelf'],
+  rows: [
+    { key: 'adds-a-book', verb: 'adds', before_feature: null, after_feature: 'shelf', before: [], after: ['- adds-a-book: A new book stands on the shelf.'], reason: '' },
+    { key: 'old-list', verb: 'removes', before_feature: '', after_feature: null, before: ['- old-list: The list shows it.'], after: [], reason: 'the shelf replaces the list' },
+  ],
 }
 const STORY = {
   story: 'add-book', context: 'reading', criteria: 3, accepted_by: '',
@@ -54,6 +64,7 @@ const STORY = {
   stages: { plan: { runs: 1, seconds: 120, tokens: 1_500_000, cost: 1.25, models: ['claude-opus-5-5'] } },
 }
 const FILES: Record<string, string> = {
+  [`${ROOT}/product/epics/books/add-book/decisions/accept-1.md`]: '---\nid: add-book-accept-1\nkind: acceptance\n---\n\n# Accept add-book?\n',
   [`${ROOT}/product/epics/books/add-book/decisions/01.md`]: [
     '---', 'id: add-book-01', 'story: add-book', 'stage: plan', 'asked: 2026-09-23T17:27:00Z', '---', '',
     '# Which list?', '', '## Question', 'Which list takes a new book?', '',
@@ -102,7 +113,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     on('fs.list', async (_, e) => ({ value: (DIRS[e.path] ?? []).map(entry => ({ ...entry, size: 0, mtimeMs: 0, isLink: false })) }))
     on('fs.read', async (_, e) => (FILES[e.path] === undefined ? { deny: 'missing' } : { value: FILES[e.path] as string }))
     on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
-      const out = e.argv.includes('--story') ? STORY : e.argv.includes('decisions') ? DECISIONS : e.argv.includes('--list') ? DISCOVERY : STATUS
+      const out = e.argv.includes('spec-delta') ? SPEC_DELTA : e.argv.includes('--story') ? STORY : e.argv.includes('decisions') ? DECISIONS : e.argv.includes('--list') ? DISCOVERY : STATUS
       return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     })
     on('process.spawn', async function* (_: unknown, e: { argv: readonly string[] }) {
@@ -192,6 +203,12 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /the shelf, read or not/ })).toBeDefined()
     await pane.press({ key: 'option-add-book-01-b' })
     expect(sent.at(-1)).toBe('/dca-factory:factory-decisions add-book add-book-01: answer b')
+    await pane.press({ key: 'back' })
+    // an acceptance shows what the spec will say beside the record: added, removed with its reason, the new feature
+    await pane.press({ key: 'record-add-book-accept-1' })
+    expect(await pane.find({ text: /what the spec will say/i })).toBeDefined()
+    expect(await pane.find({ text: /new feature shelf/ })).toBeDefined()
+    expect(await pane.find({ text: /the shelf replaces the list/ })).toBeDefined()
     await pane.press({ key: 'back' })
 
     // a story: pipeline and history from the journal
