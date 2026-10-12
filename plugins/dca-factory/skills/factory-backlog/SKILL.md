@@ -24,13 +24,14 @@ The same words from a person, a view that sends them, or another tool — one me
 | `/factory-backlog journey <epic>` | the epic is delivered and unguarded: propose its journey (section *A journey*) — the `## Journey` timeline from the delivered stories' operations and events, ending in the outcome event, and the journey item as `status: draft` — or the `- none: <why>` line, if the person decides against one |
 | `/factory-backlog release <story> [<story> …]` | the person releases these drafts: run the question pass (step 6) for each, set `status: approved` where it leaves nothing open, and say which stay drafts and why |
 | `/factory-backlog release <epic>` | the person releases a whole epic: the same for every draft story of it — an id that names a folder under the epics with an `epic.md` is an epic, one that names a story's folder a story |
-| `/factory-backlog <words>` | anything else: what the person wants, in their words — an epic, a story or a correction |
+| `/factory-backlog <story>: <finding>` | a judge's finding to settle (the cockpit sends it so): a story where it changes behaviour, a task where it does not (section *A task*) |
+| `/factory-backlog <words>` | anything else: what the person wants, in their words — an epic, a story, a task or a correction |
 
 A form names the person's decision; it never skips a check. A release with open questions stays a draft until
 they are answered.
 
 The full contract is in `factory-run/reference/backlog-contract.md`; read it before your first
-item in a project. The templates are `factory-run/templates/backlog/{epic,story}.md.tmpl`.
+item in a project. The templates are `factory-run/templates/backlog/{epic,story,task}.md.tmpl`.
 
 ## Before the first item: the project description
 
@@ -227,6 +228,20 @@ that build its steps, one scenario walking the steps to the outcome event (no ha
 guard, not acceptance). It becomes ready when those stories are delivered, runs plan, test, judge and
 document — nothing to build — and its test is green at its test gate. Template:
 `factory-run/templates/backlog/journey.md.tmpl`.
+
+## A task
+
+One question decides between a story and a task: **would an actor notice the change?** Yes — a missing or wrong
+behaviour, a bug, a feature taken away — is a story, with a criterion and a red test (a feature taken away has the
+absence as its criterion). No — dead code, a helper nothing calls, a method a port inherits and nobody uses, a
+placeholder file, copied test helpers, a dependency or build change, a unit test for an invariant that already holds —
+is a task (`kind: task`, `factory-run/templates/backlog/task.md.tmpl`): no criterion, a sentence or two of what changes
+in the code, `closes:` the finding rows it settles. Where a person's words or a finding leave it unclear, ask that one
+question. A finding that makes a test assert more is neither: the test's expectation changes, which is a story's
+`## Changed expectations` or a decision of the test stage.
+
+A task lives in the epic of the code it touches — for a finding, the epic of the story the finding belongs to.
+Several findings of one kind may go into one task; findings that touch unrelated code are separate tasks.
 
 ## A story from a wish
 

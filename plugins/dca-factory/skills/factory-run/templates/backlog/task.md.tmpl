@@ -1,0 +1,18 @@
+---
+id: {{TASK_ID}}
+epic: {{EPIC_ID}}
+kind: task
+status: draft
+context: {{BOUNDED_CONTEXT_IT_TOUCHES}}
+title: {{TASK_TITLE}}
+closes: [{{FINDING_ROWS_OR_NOTHING}}]
+depends_on: []
+---
+
+# {{TASK_TITLE}}
+
+{{WHAT_CHANGES_IN_THE_CODE_AND_WHY_NO_ACTOR_SEES_IT}}
+
+A change no actor sees: no acceptance criterion, no test stage. It runs plan, build, tidy, judge and document, and
+the existing suite, run whole, is its evidence; a test that existed before it stays as it is. Behaviour that changes
+is a story with a red test, not a task.

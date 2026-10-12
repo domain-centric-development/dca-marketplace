@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from .contract import (
     ADOPT_ORDER, CRITERION, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
     EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest, find_story,
-    GateError, git, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint, MAX_ROUNDS, needs_human_ids,
+    GateError, git, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, order_for, layout_hint, MAX_ROUNDS, needs_human_ids,
     OWNED_DIGEST, place, PLACES_REL, POST_GATED, PROFILE_FILE, read_front_matter, read_profile, read_text, records_of,
     resolve_profile, resume_stage, section_of, SHARED_WINDOWS, shown, split_front, STAGE_FILES, STAGE_ORDER, STATE_KEYS, story_digest,
     STORY_BRANCH, STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
@@ -838,8 +838,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     folder, evidence = os.path.join(runs, story_id), evidence_dir(runs, story_id)
     kind = story_kind(front)
 
-    texts = current_stage_files(runs, story_id, ADOPT_ORDER if kind == "adopt" else JOURNEY_ORDER if kind == "journey"
-                                else STAGE_ORDER)
+    texts = current_stage_files(runs, story_id, order_for(kind))
     marks = pass_marks(runs, story_id)
     try:
         records = records_of(story_id, story_path)
@@ -941,7 +940,7 @@ def story_state(cwd, runs, story_id, front, story_path=None):
     journey = story_kind(front) == "journey"
     if verdict_in(texts.get("judge", "")) == "changes-requested":
         return "in-progress", "test" if journey or adopt else "build", "the judge requested changes"
-    order = ADOPT_ORDER if adopt else JOURNEY_ORDER if journey else STAGE_ORDER
+    order = order_for(story_kind(front))
     missing = next(stage for stage in order if stage not in texts)
     return "in-progress", missing, f"{STAGE_FILES[missing]} not written yet"
 

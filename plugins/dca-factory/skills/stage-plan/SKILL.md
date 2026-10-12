@@ -160,6 +160,15 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    stage and by the judge, so every sentence here is read four times. What the story already says is
    not repeated; what a later stage can read in the code is pointed at, not copied.
 
+## Task mode
+
+A `kind: task` changes nothing an actor sees, and has no criterion. The plan says what changes in the code and why
+no behaviour does: `## Context`, `## Changes`, `## Files` (with `changes: new` and `changes: removed` where a file
+comes or goes) and `## Invariants` only where a domain type changes; no `## Acceptance criteria`, no levels, no
+`## Spec delta`, no `## Changed tests` — a test that existed before stays as it is. Name the finding rows the story's
+`closes:` settles and where each one sits. Where the change would alter behaviour after all — an answer, a page, a
+stored value — stop with a `## needs-human`: it is a story, not a task.
+
 ## Adopt mode
 
 A story with `status: adopted` describes behaviour the project already has; nothing is built. The plan

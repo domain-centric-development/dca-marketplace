@@ -81,14 +81,14 @@ from datetime import datetime, timezone
 from .contract import (
     DEFAULTS, METHOD_PROFILE, PLACES, read_flat,
     runs_top,
-    ANSWER_FIELDS, answered_decisions, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
+    ALL_KINDS, ANSWER_FIELDS, answered_decisions, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
-    factory_home, file_digest, find_story, findings_path, GateError, git, HAPPY_MARK, HOME_VARIABLE, in_worktree,
-    INSTRUCTION_FILES, is_delivered, JOURNEY_ORDER, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, needs_human_ids,
+    factory_home, file_digest, find_story, findings_path, findings_rows, GateError, git, HAPPY_MARK, HOME_VARIABLE, in_worktree,
+    INSTRUCTION_FILES, is_delivered, JOURNEY_ORDER, order_for, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, needs_human_ids,
     NOTHING, place, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
     record_path, records_of, resolve_profile, resume_stage, section_of, SELECTOR, set_places, SHARED_WINDOWS, shown,
     STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, stamp_applied, story_digest, story_files, story_folder,
-    story_id_of, story_kind, TECH_HEADINGS, unknown_profile_keys, VERSION)
+    story_id_of, story_kind, TECH_HEADINGS, TESTED_KINDS, unknown_profile_keys, VERSION)
 from .reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
@@ -131,8 +131,9 @@ STEP = re.compile(r"^-\s+(Given|When|Then|And|But)\b\s*(.*)$")
 SCENARIO_KEY = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
-def criteria_of(story_path, body):
-    """Acceptance criteria as (key, text) pairs, read from the `## Acceptance criteria` section.
+def criteria_of(story_path, body, front=None):
+    """Acceptance criteria as (key, text) pairs, read from the `## Acceptance criteria` section — none for a task
+    (`front` given), which has no criterion.
 
     Two forms, mixable. The line form: one `- <key>: <text>` line per criterion. The scenario form:
     `#### <key>` followed by `- Given / When / Then / And / But` steps, optionally grouped under
@@ -225,6 +226,8 @@ def criteria_of(story_path, body):
                    f"lowercase, hyphenated key that names the behaviour, or a `#### <key>` scenario")
     close_scenario()
     close_rule()
+    if not found and story_kind(front or {}) == "task":
+        return []
     if not found:
         raise GateError(
             f"{story_path}: no acceptance criteria — add a `## Acceptance criteria` "
@@ -244,6 +247,95 @@ def contract_of(profile):
     return int(declared) if declared.isdigit() else CONTRACT
 
 
+#: A finding row a task closes: `<story>#<n>`, the row's number in that story's findings.md.
+CLOSES_ROW = re.compile(r"^([A-Za-z0-9][\w.-]*)#(\d+)$")
+
+
+def closes_of(front):
+    """The finding rows a task names under `closes:` — a list, or one line of comma-separated rows."""
+    value = front.get("closes") or []
+    items = value if isinstance(value, list) else str(value).strip("[] ").split(",")
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+def closed_rows(row_id):
+    """(findings file, row) for `<story>#<n>` — the file None where the story or the row is not there."""
+    match = CLOSES_ROW.match(row_id)
+    if not match:
+        return None, None
+    try:
+        story_path = find_story(place("epics"), match.group(1))
+    except GateError:
+        return None, None
+    if not story_path:
+        return None, None
+    path = findings_path(story_path)
+    row = next((r for r in findings_rows(path) if r[0] == match.group(2)), None)
+    return (path if row else None), row
+
+
+def check_task(result, story_path, front, body):
+    """WP-106: a task changes nothing an actor sees — so it has no criterion (a criterion is behaviour, and behaviour
+    is a story's, with a red test), and the finding rows it closes are there and open."""
+    criteria = criteria_of(story_path, body, front)
+    if criteria:
+        result.fail("task", f"{shown(story_path)}: a `kind: task` has acceptance criteria ({', '.join(key for key, _text in criteria)}) "
+                            f"— a criterion is behaviour; behaviour that changes is a story with a red test")
+        return
+    wrong = []
+    for row_id in closes_of(front):
+        path, row = closed_rows(row_id)
+        if not path:
+            wrong.append(f"{row_id} (no such finding row)")
+        elif row[6] != "open":
+            wrong.append(f"{row_id} ({row[6]} already)")
+    if wrong:
+        result.fail("task", f"`closes:` names rows a task cannot close: {'; '.join(wrong)} — `<story>#<n>`, an open row "
+                            f"of that story's findings.md")
+    else:
+        closes = closes_of(front)
+        result.ok("task", "a task: no criterion, the existing suite is its evidence"
+                          + (f"; closes {', '.join(closes)}" if closes else ""))
+
+
+def check_task_suites(result, profile, cwd):
+    """At a task's build and tidy gates: every test command the profile declares, run whole — nothing a test was
+    written for, so everything the stories before delivered has to hold."""
+    keys = [key for key in test_command_keys(profile) if profile.get(key)]
+    if not keys:
+        result.fail("suite", "a task proves itself on the existing suite, and the stack profile declares no test "
+                             "command — declare `test:` (and its siblings)")
+        return
+    seen = set()
+    for key in keys:
+        if profile[key] in seen:
+            continue
+        seen.add(profile[key])
+        before = len(result.entries)
+        run_test_command(result, cwd, profile, key, profile[key], True, True)
+        result.entries[before:] = [(state, "suite", message) for state, _check, message in result.entries[before:]]
+
+
+def close_findings(result, front):
+    """At a task's delivery: the rows it names under `closes:` set to `done` in their findings.md."""
+    closed = []
+    for row_id in closes_of(front):
+        path, row = closed_rows(row_id)
+        if not path or row[6] != "open":
+            continue
+        lines = read_text(path).splitlines()
+        for index, line in enumerate(lines):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")] if line.startswith("|") else []
+            if len(cells) == 7 and cells[0] == row[0]:
+                cells[6] = "done"
+                lines[index] = "| " + " | ".join(cells) + " |"
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+        closed.append(row_id)
+    if closed:
+        result.ok("findings", f"closed {', '.join(closed)} — set to done in their findings.md")
+
+
 def check_happy_path(result, story_path, front, body, profile):
     """Contract 9: exactly one happy path per story, marked in the backlog — never picked by a plan. A
     journey has none: it is a guard, not acceptance, and it names the stories it depends on."""
@@ -256,6 +348,9 @@ def check_happy_path(result, story_path, front, body, profile):
                                    f"under `depends_on:` — it becomes ready when they are delivered")
         else:
             result.ok("journey", f"journey over {', '.join(needs) if isinstance(needs, list) else needs}")
+        return
+    if story_kind(front) == "task":
+        check_task(result, story_path, front, body)
         return
     if story_kind(front) == "adopt":
         result.skip("happy-path", "an adopted story tests nothing new — the levels are the existing tests'")
@@ -1291,7 +1386,7 @@ def check_backlog(cwd, epics, profile, only=None):
             if not context:
                 result.fail("story", f"{path}: front matter has no `context:` — a story names the bounded "
                                      f"context it changes")
-            criteria = criteria_of(path, body)
+            criteria = criteria_of(path, body, front)
             if context:
                 result.ok("story", f"{label} in context {context} with {len(criteria)} criterion(s)")
                 check_context_map(result, cwd, profile, context)
@@ -2010,7 +2105,7 @@ def check_story_pass(result, runs, story_id, story_path, front):
     """The document gate delivers a story, so it asks what delivery rests on: every stage of this pass
     wrote its file after the one before it, the judge passed it, and the story is the one that was planned.
     A document written for an earlier pass, or over a judge who asked for changes, delivers nothing."""
-    order = JOURNEY_ORDER if story_kind(front) == "journey" else STAGE_ORDER
+    order = order_for(story_kind(front))
     folder = os.path.join(runs, story_id)
     texts = current_stage_files(runs, story_id, order)
     gaps = [f"{STAGE_FILES[s]} ({'written for an earlier pass' if os.path.isfile(os.path.join(folder, STAGE_FILES[s])) else 'missing'})"
@@ -3503,6 +3598,7 @@ class Check(typing.NamedTuple):
     stages: tuple
     needs_process: bool
     unrun: typing.Callable       #: the check names a refusal before it leaves unproven
+    kinds: tuple                 #: the story kinds it holds (a task has no criteria, so none of their checks)
 
 
 #: The checks a gate run holds a story to, in this order: every check that needs no process first, and a refusal among
@@ -3511,9 +3607,9 @@ class Check(typing.NamedTuple):
 CHECKS = []
 
 
-def check(name, stages=None, needs_process=False, unrun=None):
+def check(name, stages=None, needs_process=False, unrun=None, kinds=ALL_KINDS):
     """Register a check against the stage table: `stages` names rows (None — every gated stage) or is a predicate
-    over a row."""
+    over a row; `kinds` the story kinds it holds."""
     if stages is None:
         chosen = tuple(s.name for s in STAGES if s.gated)
     elif callable(stages):
@@ -3525,13 +3621,13 @@ def check(name, stages=None, needs_process=False, unrun=None):
         chosen = tuple(stages)
 
     def register(function):
-        CHECKS.append(Check(name, function, chosen, needs_process, unrun or (lambda run: [name])))
+        CHECKS.append(Check(name, function, chosen, needs_process, unrun or (lambda run: [name]), tuple(kinds)))
         return function
     return register
 
 
 def run_checks(run):
-    chosen = [c for c in CHECKS if run.stage.name in c.stages]
+    chosen = [c for c in CHECKS if run.stage.name in c.stages and run.kind in c.kinds]
     for entry in (c for c in chosen if not c.needs_process):
         entry.run(run)
     process = [c for c in chosen if c.needs_process]
@@ -3569,7 +3665,7 @@ def _epic(run):
     check_epic(run.result, run.story_path, run.front, run.args.epics)
 
 
-@check("outcome", stages=("plan",))
+@check("outcome", stages=("plan",), kinds=TESTED_KINDS)
 def _outcome_named(run):
     check_outcome_named(run.result, run.profile, run.story_path, run.front, run.args.epics)
 
@@ -3643,7 +3739,7 @@ def _integrated(run):
         check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
 
 
-@check("tests-mapped", stages=lambda s: s.tested)
+@check("tests-mapped", stages=lambda s: s.tested, kinds=TESTED_KINDS)
 def _mapping(run):
     run.mapping = check_mapping(run.result, run.runs, run.story_id, run.criteria)
     run.located = check_exists(run.result, run.cwd, run.mapping)
@@ -3672,7 +3768,7 @@ def _spec_delta(run):
     check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
 
 
-@check("spec-tests", stages=("document", "adopt", "integrate"))
+@check("spec-tests", stages=("document", "adopt", "integrate"), kinds=TESTED_KINDS)
 def _spec_tests(run):
     check_spec_tests(run.result, run.cwd, run.runs, run.story_id, run.front, run.mapping)
 
@@ -3694,7 +3790,7 @@ def _size(run):
     check_size(run.result, run.runs, run.story_id, run.stage.sizes, len(run.criteria))
 
 
-@check("red-proof", stages=lambda s: s.lists)
+@check("red-proof", stages=lambda s: s.lists, kinds=TESTED_KINDS)
 def _red_proof(run):
     # the red proof compares digests, so it belongs here, before any process
     ledger = red_ledger_path(run.runs, run.story_id)
@@ -3715,6 +3811,9 @@ def whole_suites(run):
        unrun=lambda run: ["compiles", f"tests-{run.expected}"] + (["suite"] if run.stage.suite else []))
 def _tests(run):
     check_compiles(run.result, run.profile, run.cwd)
+    if run.kind == "task":
+        check_task_suites(run.result, run.profile, run.cwd)
+        return
     run.whole_runs = check_test_state(run.result, run.profile, run.cwd, run.mapping, run.expected, run.located,
                                       run.runs, run.story_id, guard=run.kind in ("journey", "adopt"),
                                       whole_for=whole_suites(run), red_proof=False)
@@ -3762,7 +3861,7 @@ def _document_passed(run):
         result.note("story", f"{story_id} is delivered — checked, its marks are left as they are")
         return
     try:
-        if acceptance_applies(run.cwd, run.runs, story_id, run.profile):
+        if run.kind != "task" and acceptance_applies(run.cwd, run.runs, story_id, run.profile):
             verdict, rid = acceptance_state(run.cwd, story_id, story_path)
             if verdict == "accepted":
                 result.ok("acceptance", f"{rid} accepted — the story is delivered")
@@ -3950,7 +4049,7 @@ def main(argv):
         front, body = read_front_matter(story_path)
         story_id = str(front.get("id") or os.path.basename(story_folder(story_path)))
         observe_writes(args.runs, story_id)
-        criteria = criteria_of(story_path, body)
+        criteria = criteria_of(story_path, body, front)
         run = GateRun(result=result, args=args, cwd=cwd, runs=args.runs, stage=STAGE[args.stage], story_id=story_id,
                       story_path=story_path, front=front, body=body, criteria=criteria,
                       profile=read_profile(resolve_profile(args.profile, cwd)))
@@ -4218,7 +4317,10 @@ def deliver(result, story_path, story_id, front, runs):
     worktree, the integrate gate all call it. One end state: built or adopted, the story reads `status:
     delivered`, `delivered:` and `delivered_by: gate`; an adopted story is no longer `adopted` (that was its
     input: "the code exists, check it"). The judge's confirmed defects that did not block are kept beside it."""
-    merge_spec(result, story_path, story_id, front, runs)
+    if story_kind(front) == "task":
+        close_findings(result, front)
+    else:
+        merge_spec(result, story_path, story_id, front, runs)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by="gate")
     result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "

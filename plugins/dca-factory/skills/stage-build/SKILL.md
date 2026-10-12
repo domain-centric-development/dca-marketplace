@@ -50,6 +50,10 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
    `verdict: changes-requested`, fix exactly the confirmed defects that are this stage's — the code;
    a test that asserts too little is the test stage's — nothing else.
 7. `formatFix:` runs last, before you finish (`factory-run/reference/stage-common.md`).
+8. **A task** (`kind: task`) has no test written for it: the existing suite is the measure, and the build gate runs
+   every test command whole. Change what the plan names and nothing an actor sees; change no test that existed
+   before (the gate refuses it), add one where it pins down what the change keeps. A test that goes red is a
+   behaviour you changed — put it back, or say under `## Deviations from the plan` that the task is a story.
 
 ## Ask, do not recall
 

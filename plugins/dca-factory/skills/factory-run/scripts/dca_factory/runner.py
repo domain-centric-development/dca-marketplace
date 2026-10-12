@@ -294,7 +294,7 @@ def squash_story(path, runs, story_id, target, front, body):
         git(path, "reset", "--soft", target)
     if git(path, "diff", "--cached", "--quiet")[0] != 0:
         scope = re.sub(r"[^a-z0-9]+", "-", str(front.get("context", "")).lower()).strip("-") or "story"
-        kind = "feat" if story_kind(front) == "story" else "test"
+        kind = {"story": "feat", "task": "refactor"}.get(story_kind(front), "test")
         message = f"{kind}({scope}): {story_title(front, body) or story_id}\n\nStory: {story_id}\n"
         claimed = os.path.join(evidence_dir(runs, story_id), CLAIM_TRAILERS)
         if os.path.isfile(claimed):
@@ -1145,6 +1145,11 @@ PLAN_SKELETON = ("# Plan — {story}\n\n## Context\n\n## Changes\n| Element | Ki
                  "## Open assumptions\n")
 
 
+#: A task's plan (WP-106): what changes in the code and where — no criteria, no levels, no spec delta.
+TASK_PLAN_SKELETON = ("# Plan — {story}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"
+                      "| --- | --- | --- | --- | --- |\n\n## Invariants\n\n## Files\n\n## Open assumptions\n")
+
+
 def plan_skeleton(runs, story_id, cwd="."):
     """`plan.md` before the plan stage runs: the file's headings and, under `## Acceptance criteria`, one line per
     criterion of the story with its key — the stage gives each its level and never retypes the story's text.
@@ -1156,10 +1161,16 @@ def plan_skeleton(runs, story_id, cwd="."):
         return 0
     try:
         story_path = find_story(place("epics"), story_id)
-        criteria = criteria_of(story_path, read_front_matter(story_path)[1])
+        criteria = criteria_of(story_path, read_front_matter(story_path)[1], read_front_matter(story_path)[0])
     except GateError as error:
         print(f"factory: {error}", file=sys.stderr)
         return 1
+    if story_kind(read_front_matter(story_path)[0]) == "task":
+        os.makedirs(folder, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write(TASK_PLAN_SKELETON.format(story=story_id))
+        print(f"factory: {runs}/{story_id}/plan.md — a task's skeleton: no criteria, no spec delta")
+        return 0
     rows = "\n".join(f"- {key}  →  level: " for key, _text in criteria)
     # The spec delta as far as it follows from the story and the spec: added, held, changed by key. A removal and
     # a renamed rule are the plan stage's to add — and a change it finds that the story does not say, its question.
@@ -1773,7 +1784,7 @@ class Run:
             return False
 
     def kind_of(self, story):
-        """`story`, `journey` or `adopt` — `story` for one that cannot be read."""
+        """`story`, `journey`, `adopt` or `task` — `story` for one that cannot be read."""
         self.profile()
         try:
             return story_kind(read_front_matter(find_story(place("epics"), story))[0])
@@ -2349,7 +2360,8 @@ class Run:
                 continue
             row = STAGE[stage]
             if not self.kind_runs(kind, stage):
-                why = {"journey": "a journey builds nothing", "adopt": "an adopted story is not built"}.get(
+                why = {"journey": "a journey builds nothing", "adopt": "an adopted story is not built",
+                       "task": "a task has no criterion to test — the existing suite is its evidence"}.get(
                     kind, f"a {kind} story does not run it")
                 print(f"── stage {stage}  (skipped: {why})")
                 continue

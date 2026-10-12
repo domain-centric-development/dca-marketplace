@@ -1588,7 +1588,7 @@ def story_model(cwd, epics, runs, story_id, live=False):
     facts = story_facts(cwd, runs, story_id, data.get("front"))
     records = story_records(cwd, story_id, data.get("path"))
     try:
-        criteria = len(criteria_of(data["path"], data["body"]))
+        criteria = len(criteria_of(data["path"], data["body"], data.get("front")))
     except GateError:
         criteria = 0
     accepted_by = next((str(f["id"]).strip() for _p, f, _b, st, a in reversed(records)

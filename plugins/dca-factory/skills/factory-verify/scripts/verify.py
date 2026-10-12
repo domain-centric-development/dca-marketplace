@@ -242,6 +242,45 @@ depends_on: []
 - open: Does an archived thing count?
 """
 
+#: A task (WP-106): no criterion, a finding row of a delivered story it closes.
+TASK = """---
+id: STORY-1
+epic: sample
+kind: task
+status: approved
+context: Widgets
+title: Drop the helper nothing calls
+closes: [STORY-0#1]
+depends_on: []
+---
+
+# Drop the helper nothing calls
+
+The judge found a helper in the widget page that nothing calls; it goes, and nothing a reader sees changes.
+"""
+
+#: The delivered story whose finding the task closes, and that finding.
+TASK_SOURCES = (
+    ("product/epics/sample/STORY-0/story.md", "---\nid: STORY-0\nepic: sample\nstatus: delivered\ncontext: Widgets\n"
+     "title: The first one\ndelivered: 2026-10-01T10:00:00Z\ndelivered_by: gate\n---\n\n# The first one\n"),
+    ("product/epics/sample/STORY-0/findings.md",
+     "| # | Perspective | File:line | Severity | Defect | Fix | Status |\n|---|---|---|---|---|---|---|\n"
+     "| 1 | clean-code | src/main/Page.java:12 | minor | a helper nothing calls | remove it | open |\n"
+     "| 2 | ddd | src/main/Page.java:30 | minor | already handled | — | done |\n"),
+)
+
+#: Every test command run whole, as a build tool runs an unfiltered suite: each test the set has, by its marker.
+WHOLE_RUNNER = ("whole-runner.sh",
+                '#!/bin/sh\n# unfiltered, it runs every test it finds in the set, as a build tool does\n'
+                'set=$1; shift\n'
+                'if [ $# -eq 0 ]; then\n'
+                '  for f in $(find "$set" -name "*.java" | sort); do\n'
+                '    rel=${f#$set/}; cls=$(echo "${rel%.java}" | tr / .)\n'
+                '    for m in $(grep -o "void [A-Za-z0-9_]*(" "$f" | sed "s/void //; s/(//"); do set -- "$@" --select "$cls#$m"; done\n'
+                '  done\n'
+                'fi\n'
+                'exec sh runner.sh "$set" "$@"\n')
+
 #: The same two criteria in the scenario form: keyed Given/When/Then scenarios under Gherkin rules.
 STORY_SCENARIOS = STORY.replace("""- shows-the-thing: The reader sees the thing.
 - shows-nothing-when-empty (happy path): With nothing recorded, the reader sees an empty list, not an error.
@@ -425,6 +464,9 @@ filterFlag: --select
 filterFormat: "{class}#{method}"
 architecture: true
 """
+
+WHOLE_PROFILE = (PROFILE.replace("test: sh runner.sh src/test/java", "test: sh whole-runner.sh src/test/java")
+                 .replace("test.pages: sh runner.sh src/test-pages/java", "test.pages: sh whole-runner.sh src/test-pages/java"))
 
 #: The second shape the selector resolves through, with a real runner rather than a stub: tests
 #: are functions in a module, the module is named by its path, and pytest writes the JUnit XML the
@@ -1163,6 +1205,23 @@ def verify_runner(runner, verbose=False):
         check("stages: the profile's `stages: separate` starts one process per stage", not shared_profile, out_profile[-300:])
         check("stages: a profile `stages:` that is neither shared nor separate stops the run",
               code_bad == 2 and "neither shared nor separate" in out_bad, out_bad[-200:])
+
+    # 1a''. a task (WP-106): the shared builder carries plan, build and tidy — no test stage — and so do separate stages
+    for root in throwaway():
+        build_project(root, story=TASK, tests=None, extra_sources=TASK_SOURCES)
+        copy_scripts(runner, root)
+        plain_env = {k: v for k, v in os.environ.items() if not k.startswith("FACTORY_SHARED_")}
+        output = subprocess.run([BASH, runner, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run"], cwd=root,
+                                capture_output=True, text=True, env=plain_env, encoding="utf-8", errors="replace").stdout
+        shared = [l for l in output.splitlines() if "would run" in l and "Carry out these stages" in l]
+        check("task: the shared builder carries plan, build and tidy, and no test stage",
+              bool(shared) and "stage-plan, stage-build, stage-tidy." in shared[0] and "stage-test" not in shared[0],
+              [l[:240] for l in shared][:1] or output[-300:])
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
+                                  "--separate-stages")
+        check("task: run stage by stage, the test stage is skipped and says why",
+              "── stage test  (skipped: a task has no criterion to test" in output and "── stage build" in output,
+              [l for l in output.splitlines() if l.startswith("── stage")])
 
     # 1a. the stage process sees only the project: the isolation flags, one prefix for every stage
     for root in throwaway():
@@ -5323,6 +5382,31 @@ def run_groups(args):
              (".dca-factory/evidence/STORY-1/changed-build.txt", "added\tsrc/main/Thing.java\nmodified\tsrc/main/Page.java\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Changed\n\n## Files\n\n- `src/main/Thing.java` — new\n"
                                         "- `src/main/Page.java` — shows it\n")))),
+        # WP-106: a task — no criterion, the existing suite run whole, the finding rows it names closed at delivery
+        (Case("task: a task without a criterion that closes an open finding row passes the plan gate", "plan", 0,
+              must_pass=("task",), absent=("happy-path",), text=("closes STORY-0#1",)),
+         dict(story=TASK, tests=None, extra_sources=TASK_SOURCES)),
+        (Case("task: a task with an acceptance criterion is refused — a criterion is behaviour, a story's", "plan", 1,
+              must_fail=("task",), text=("shows-the-thing",)),
+         dict(story=STORY.replace("status: approved", "kind: task\nstatus: approved"), tests=None)),
+        (Case("task: a task that closes a row already done, or one that is not there, is refused", "plan", 1,
+              must_fail=("task",), text=("STORY-0#2 (done already)", "STORY-0#9 (no such finding row)")),
+         dict(story=TASK.replace("closes: [STORY-0#1]", "closes: [STORY-0#2, STORY-0#9]"), tests=None,
+              extra_sources=TASK_SOURCES)),
+        (Case("task: the build gate runs every test command whole, maps nothing and asks for no red proof", "build", 0,
+              must_pass=("suite", "compiles"), absent=("tests-mapped", "tests-green", "red-proof")),
+         dict(story=TASK, tests=None, green=both_green, profile=WHOLE_PROFILE,
+              extra_sources=TASK_SOURCES + (WHOLE_RUNNER,))),
+        (Case("task: a red test anywhere in the suite refuses the task's build gate", "build", 1, must_fail=("suite",)),
+         dict(story=TASK, tests=None, green=both_green[:1], profile=WHOLE_PROFILE,
+              extra_sources=TASK_SOURCES + (WHOLE_RUNNER,))),
+        (Case("task: delivered, it closes the finding rows it names and merges nothing into the spec", "document", 0,
+              must_pass=("delivered", "findings"), text=("closed STORY-0#1",), absent=("acceptance",)),
+         dict(story=TASK, tests=None, document="# Document\n\n## Glossary\n(none)\n", extra_sources=TASK_SOURCES,
+              profile=PROFILE + "acceptance: all\n",
+              after=lambda root: [] if open(os.path.join(root, "product/epics/sample/STORY-0/findings.md"),
+                                            encoding="utf-8").read().count("| done |") == 2
+              and not os.path.isdir(os.path.join(root, "product/spec")) else ["the row is not done, or a spec was written"])),
         # WP-102: the plan's file list holds after the build
         (Case("plan-files: a file the plan says removed and the build left is refused, named, though build.md "
               "explains it", "build", 1, must_fail=("plan-files",), text=("src/main/static/index.html",)),
@@ -6954,6 +7038,26 @@ def run_groups(args):
             verdict, output = kept_verdict(root)
             expectations.append((f"tests-kept: {label}", verdict == expected,
                                  f"verdict {verdict}; " + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    # WP-106: a task keeps behaviour, so it changes no test that existed before it — whatever it says; and its
+    # schedule goes from plan to build, no test stage
+    for root in throwaway():
+        build_project(root, story=TASK, tests=None, extra_sources=TASK_SOURCES + ((unit, old_test),))
+        for command in (["init", "-q"], ["add", "-A"],
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+        write_file(root, ".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Page.java` — changes: the helper goes\n")
+        rows, _nxt, _wait, _out = schedule_of(args.gate, root)
+        expectations.append(("task: planned, a task runs on at build — it has no test stage",
+                             rows.get("STORY-1", ("", ""))[1] == "build", rows))
+        with open(os.path.join(root, unit), "w", encoding="utf-8") as handle:
+            handle.write(changed_line(old_test))
+        output = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "build"], cwd=root,
+                                capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        expectations.append(("task: a task that changes a test that existed before it is refused at the build gate",
+                             "tests-kept" in checks_by_verdict(output)["fail"],
+                             [l for l in output.splitlines() if "tests-kept" in l]))
     for label, change, decided, expected in (
             ("change: a case added to an existing test file keeps what it expected",
              lambda t: t.replace("}\n}", "}\n  void showsOne() { assert list.size() == 1; }\n}"), False, "pass"),

@@ -234,7 +234,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 22
 
 
-VERSION = "0.79.3"
+VERSION = "0.80.0"
 
 
 def split_front(text):
@@ -629,10 +629,12 @@ WINDOW_DIGEST = ".window-digest"
 
 def story_kind(front):
     """`story` (the default), `journey` — a guard over an epic's delivered stories, run as plan, test,
-    judge and document, green at its test gate — or `adopt`: a story with `status: adopted` describes
-    behaviour the project already has; plan, test and judge map it to green tests, the adopt gate delivers it."""
-    if str(front.get("kind", "")).strip().lower() == "journey":
-        return "journey"
+    judge and document, green at its test gate —, `task` — a change no actor sees, run as plan, build, tidy, judge
+    and document on the existing suite — or `adopt`: a story with `status: adopted` describes behaviour the project
+    already has; plan, test and judge map it to green tests, the adopt gate delivers it."""
+    named = str(front.get("kind", "")).strip().lower()
+    if named in ("journey", "task"):
+        return named
     if str(front.get("status", "")).strip().lower() == "adopted":
         return "adopt"
     return "story"
@@ -763,7 +765,7 @@ class Stage(typing.NamedTuple):
     name: str
     file: str = ""            #: the hand-over it writes under the run folder ("" — a gate-only step)
     window: str = ""          #: the shared process that may carry it ("builder", "verifier"), "" — its own
-    kinds: tuple = ("story",) #: the story kinds that run it (story, journey, adopt)
+    kinds: tuple = ("story",) #: the story kinds that run it (story, journey, adopt, task)
     gated: bool = True        #: a gate runs for it (`--stage <name>`)
     post_gated: bool = False  #: that gate runs after its file is written, so a pass vouches for the file
     commands: tuple = ()      #: the profile's extra commands its gate runs, in this order; a key not declared is
@@ -777,21 +779,26 @@ class Stage(typing.NamedTuple):
     in_order: bool = True     #: a step of the story's run order (adopt and integrate are steps after it)
 
 
-ALL_KINDS = ("story", "journey", "adopt")
+ALL_KINDS = ("story", "journey", "adopt", "task")
+
+
+#: A task (WP-106) changes nothing an actor sees — a refactoring, a finding without a change of behaviour, a dependency
+#: or build change: no criterion, so no test stage; the existing suite, run whole, is its evidence.
+TESTED_KINDS = ("story", "journey", "adopt")
 
 
 STAGES = (
     Stage("plan", "plan.md", window="builder", kinds=ALL_KINDS),
-    Stage("test", "tests.md", window="builder", lists=True, kinds=ALL_KINDS, post_gated=True, tested=True, red=True,
+    Stage("test", "tests.md", window="builder", lists=True, kinds=TESTED_KINDS, post_gated=True, tested=True, red=True,
           sizes=("plan.md", "tests.md")),
     Stage("build", "build.md", window="builder", lists=True, guarded=True, post_gated=True, commands=("architecture", "format"),
-          tested=True, suite=True, sizes=("build.md",)),
+          tested=True, suite=True, sizes=("build.md",), kinds=("story", "task")),
     # The tidy stage changes no behaviour, so its whole claim is that everything still holds: the same commands
     # as the build stage, run again after the refactor.
     Stage("tidy", "tidy.md", window="builder", lists=True, guarded=True, post_gated=True, commands=("architecture", "format"),
-          tested=True, suite=True, sizes=("tidy.md",)),
+          tested=True, suite=True, sizes=("tidy.md",), kinds=("story", "task")),
     Stage("judge", "judge.md", window="verifier", kinds=ALL_KINDS, gated=False),
-    Stage("document", "document.md", window="verifier", kinds=("story", "journey"), post_gated=True,
+    Stage("document", "document.md", window="verifier", kinds=("story", "journey", "task"), post_gated=True,
           commands=("architecture",), sizes=("judge.md", "document.md")),
     # Nothing built: the adopt gate delivers an adopted story after its judge.
     Stage("adopt", kinds=("adopt",), in_order=False),
@@ -993,6 +1000,14 @@ JOURNEY_ORDER = stage_order("journey")                       # nothing to build:
 
 
 ADOPT_ORDER = stage_order("adopt")                           # nothing built: the adopt gate delivers it
+
+
+TASK_ORDER = stage_order("task")                             # nothing new to test: the existing suite holds
+
+
+def order_for(kind):
+    """The run order of a story of this kind, from the stage table."""
+    return {"journey": JOURNEY_ORDER, "adopt": ADOPT_ORDER, "task": TASK_ORDER}.get(kind, STAGE_ORDER)
 
 
 def depends_on(front):
