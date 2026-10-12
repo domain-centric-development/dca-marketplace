@@ -704,7 +704,9 @@ Two colleagues with a clone each and one backlog: `claim_remote: origin` in the 
 story, with git alone. Before a story runs, the runner claims it on that remote — an empty commit on the remote
 main line whose trailers say who and which story (`Factory-Claim:`, `Factory-Story:`), pushed create-only as
 `story/<id>` (`claim_branch_prefix:` names another prefix). git applies the first such push and rejects the second:
-the factory that loses skips the story and journals who has it; the schedule shows it as *claimed elsewhere*. A
+the factory that loses skips the story and journals who has it; the schedule shows it as *claimed elsewhere*, and
+a session's start gets a line per kind — who holds which story and how long (*stale?* past three days), an
+orphan claim, an id collision — read from the last fetch, so a hand session knows what not to build. A
 remote that refuses the push for another reason — a branch rule — or a claim under this id for another story (an id
 collision) stops for a person. `/factory-backlog` takes a new story's id from `factory-cli.py --free-id <PREFIX>`.
 

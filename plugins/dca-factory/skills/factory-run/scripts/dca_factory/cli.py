@@ -346,6 +346,55 @@ def dangling_skill_links(cwd):
     return found
 
 
+#: A foreign claim older than this reads as possibly forgotten — a factory that stopped without releasing it.
+STALE_CLAIM_DAYS = 3
+
+
+def claim_age(since, now=None):
+    """`3 h`, `6 d`, and whether it is stale — from the claim's UTC stamp; the stamp itself where it is unreadable."""
+    from datetime import datetime, timezone
+    try:
+        began = datetime.strptime(since, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return since or "?", False
+    hours = max(0, int(((now or datetime.now(timezone.utc)) - began).total_seconds() // 3600))
+    return (f"{hours} h" if hours < 48 else f"{hours // 24} d"), hours >= STALE_CLAIM_DAYS * 24
+
+
+def foreign_claim_lines(epics, runs):
+    """The claims other factories hold, as the last fetch saw them (no fetch here — a session's start stays quick and
+    offline): who holds which story and for how long, a claim whose story this checkout does not have (an orphan),
+    and a claim on an id this checkout uses for another story (a collision). One line each kind, like the findings."""
+    held, orphans, collisions = [], [], []
+    for story, c in sorted(cached_claims(runs).items()):
+        if c["own"]:
+            continue
+        try:
+            path = find_story(epics, story)
+        except GateError:
+            path = None
+        if not path:
+            orphans.append(story)
+            continue
+        front, body = read_front_matter(path)
+        epic = str(front.get("epic") or os.path.basename(epic_folder(path))).strip()
+        title = story_title(front, body) or story
+        if (c["epic"] and c["epic"] != epic) or (c["title"] and c["title"] != title):
+            collisions.append(f"{story} — another factory claimed it for \"{c['title']}\"")
+            continue
+        age, stale = claim_age(c["since"])
+        held.append(f"{story} ({c['who']} on {c['host']}, {age}{' — stale?' if stale else ''})")
+    lines = []
+    if held:
+        lines.append(f"claimed by other factories: {', '.join(held)} — not built here; "
+                     f"`factory.sh release <story> --force` takes a stale one away")
+    for story in orphans:
+        lines.append(f"orphan claim {story} — this checkout has no such story; `factory.sh release {story} --force`")
+    if collisions:
+        lines.append(f"id collision: {'; '.join(collisions)} — give yours another id")
+    return lines
+
+
 def status_brief(cwd, epics, runs, session_start=False):
     """Two lines: what is ready, what waits, who works, what it cost — for a session's start."""
     import contextlib
@@ -376,6 +425,8 @@ def status_brief(cwd, epics, runs, session_start=False):
     listening = listener_line(cwd)
     if listening:
         print(f"factory: {listening}")
+    for line in foreign_claim_lines(epics, runs):
+        print(f"factory: {line}")
     findings = open_findings(epics)
     if findings:
         stories = sorted({f[0] for f in findings})
@@ -418,7 +469,8 @@ def status_brief(cwd, epics, runs, session_start=False):
               "look closer (/factory-status), or learn how the factory works (/factory-help). An instruction that "
               "changes what an actor can see or do is a story: ask once, \"As a story through the factory — to an "
               "existing epic, a new epic — or directly by hand?\", and for the factory run /factory-run with the "
-              "person's words. A session never runs `factory.sh run` — it starts a tool "
+              "person's words. A story another factory claimed is not built here, by hand or otherwise; a "
+              "`published` one waits for a person's merge. A session never runs `factory.sh run` — it starts a tool "
               "process per stage. A managing session writes backlog and decision files only; the worker is the "
               "one writer in the checkout.")
     return 0

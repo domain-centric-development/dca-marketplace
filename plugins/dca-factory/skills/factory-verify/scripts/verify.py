@@ -2539,6 +2539,29 @@ exit 0
         check("priming: with --session-start it adds what the session should do with them",
               code == 0 and "At the person's first message" in output and "/factory-backlog" in output,
               output.strip().splitlines()[-1:])
+        # WP-93 6: a session sees which story another factory holds, by whom and how long — not only a count; a claim
+        # whose story this checkout lacks, and one on an id this checkout uses for another story, each named
+        claims = os.path.join(root, ".dca-factory", "claims.tsv")
+        write_file(root, ".dca-factory/claims.tsv",
+                   "STORY-1\tanna@example.org\tlaptop-a\t2026-01-02T03:04:05Z\t0\t\t\n"
+                   "STORY-9\tben@example.org\tdesk-b\t2026-01-02T03:04:05Z\t0\t\t\n"
+                   "STORY-5\tme@example.org\there\t2026-01-02T03:04:05Z\t1\t\t\n")
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief",
+                                  "--session-start")
+        check("priming: another factory's claims get their own line — story, who on which host, how long, a stale one "
+              "marked; an orphan named with its release; an own claim not; the session is told not to build them",
+              code == 0 and "claimed by other factories: STORY-1 (anna@example.org on laptop-a," in output
+              and "stale?" in output and "orphan claim STORY-9" in output
+              and "release STORY-9 --force" in output and "STORY-5" not in output
+              and "A story another factory claimed is not built here" in output,
+              [l for l in output.splitlines() if "claim" in l][:4])
+        write_file(root, ".dca-factory/claims.tsv",
+                   "STORY-1\tanna@example.org\tlaptop-a\t2026-01-02T03:04:05Z\t0\tother-epic\tSort the list\n")
+        code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief")
+        check("priming: a foreign claim on an id this checkout uses for another story is a collision, not a holder",
+              code == 0 and "id collision: STORY-1 — another factory claimed it for \"Sort the list\"" in output
+              and "claimed by other factories" not in output, [l for l in output.splitlines() if "claim" in l][:3])
+        os.remove(claims)
         # The same hook runs in a stage the runner started; there it must say the claim is the stage's own.
         subprocess.run([sys.executable, cli_in(root), "--claim", "runner:host:1"], cwd=root, capture_output=True)
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief",
