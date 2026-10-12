@@ -136,6 +136,22 @@ class HandAndMigration(unittest.TestCase):
             self.assertEqual(again, [])
 
 
+    def test_the_migration_leaves_a_delivered_story_whose_criteria_stand_in_feature_folders(self):
+        """WP-105: a criterion moved into a feature folder is held there — the update does not merge it back."""
+        with project() as p:
+            contract.set_places({})
+            p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
+            runner.migrate_spec(p.root, p.epics, p.runs, lambda _: None)
+            root_file = os.path.join(p.root, "product", "spec", "widgets", "scenarios.md")
+            preamble, entries = spec.read_spec(root_file)
+            write(os.path.join(p.root, "product", "spec", "widgets", "naming", "scenarios.md"),
+                  spec.render_spec([], entries, "widgets — naming"))
+            os.remove(root_file)
+            said = []
+            runner.migrate_spec(p.root, p.epics, p.runs, said.append)
+            self.assertEqual(said, [])
+            self.assertFalse(os.path.isfile(root_file))
+
     def test_the_spec_check_names_a_delivered_criterion_the_spec_lacks(self):
         with project() as p:
             contract.set_places({})

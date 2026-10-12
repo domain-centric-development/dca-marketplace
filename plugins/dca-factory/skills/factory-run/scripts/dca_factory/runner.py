@@ -506,10 +506,12 @@ def migrate_spec(cwd, epics, runs, say):
         if is_delivered(front) and spec_target(front):
             delivered.append((delivered_on(front), story_id_of(story_path), story_path, front, body))
     for _when, story_id, story_path, front, body in sorted(delivered):
-        target = spec_target(front)
+        target, held, _features, _feature = story_spec(front)
         preamble, spec = read_spec(target)
         story = story_entries(body)
-        found = derived(story, spec)
+        # held anywhere in the context — its own file or a feature's (WP-105): a criterion moved into a feature
+        # folder is not merged back into the file the story names
+        found = derived(story, held)
         if not story or all(verb == "holds" for verb in found.values()):
             continue
         try:
