@@ -16,7 +16,9 @@ import sys
 
 
 def utf8_streams():
-    """The lines carry `—` and `→`; a Windows console's code page cannot encode `→`, and the print raises."""
+    """The lines carry `—` and `→`; a Windows console's code page cannot encode `→`, and the print raises. And every
+    line ends in `\n` alone: on Windows a text stream writes `\r\n`, and whoever reads the output — the runner,
+    factory.sh's `$(…)` — would keep the `\r` on the last field of every line ("plan\r" names no stage)."""
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            stream.reconfigure(encoding="utf-8", errors="replace", newline="\n")

@@ -1680,7 +1680,8 @@ def check_exists(result, cwd, mapping):
                 found = module_files(by_path, cls, method)
                 shape = "the module path"
             if found:
-                located[selector] = os.path.relpath(found[0], cwd)
+                # with `/` on every platform: the changed-files records and the hand-overs name paths that way
+                located[selector] = os.path.relpath(found[0], cwd).replace(os.sep, "/")
                 result.ok(
                     "tests-exist",
                     f"{selector} found in {located[selector]} ({key}, by {shape})",

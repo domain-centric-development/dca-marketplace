@@ -170,7 +170,9 @@ def permission_block(allowed, protected, linked, cwd=None, home=None):
         if not inside.startswith(".."):
             edit[inside.replace(os.sep, "/") + "/**"] = "deny"          # the project's, and a worktree's link of it
         if os.path.relpath(absolute, cwd).startswith(".."):
-            external[absolute.rstrip("/") + "/**"] = "deny"             # the main checkout's, named by its path
+            # named as the folder was given, with `/`: on Windows abspath puts a drive and `\` on a `/home/…` path
+            named = folder if folder.startswith("/") else absolute.replace(os.sep, "/")
+            external[named.rstrip("/") + "/**"] = "deny"                # the main checkout's, named by its path
     return json.dumps({"permission": {"bash": bash, "edit": edit, "external_directory": external}})
 
 

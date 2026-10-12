@@ -35,13 +35,16 @@ class Readers(unittest.TestCase):
             run = a_run(p)
             os.chdir(tree)
             os.environ["FACTORY_HOME"] = p.root
-            self.assertIn("the-guard", run.guard_sentence())
-            self.assertEqual(contract.place("runs"), f"{p.root}/.dca-factory/runs")
-            self.assertEqual(run.verdict_of("S-1"), "approved")
-            run.journal_line("S-1", "2026-10-10T10:00:00Z\tnote\t-\twhy=from-the-tree")
-            self.assertEqual([e["kind"] for e in state.journal_events(p.runs, "S-1")], ["note"])
-            os.chdir(p.root)
-            os.environ.pop("FACTORY_HOME")
+            try:
+                self.assertIn("the-guard", run.guard_sentence())
+                self.assertEqual(contract.place("runs"), f"{p.root}/.dca-factory/runs")
+                self.assertEqual(run.verdict_of("S-1"), "approved")
+                run.journal_line("S-1", "2026-10-10T10:00:00Z\tnote\t-\twhy=from-the-tree")
+                self.assertEqual([e["kind"] for e in state.journal_events(p.runs, "S-1")], ["note"])
+            finally:
+                # out of the tree before it is removed: Windows refuses to delete the working directory
+                os.chdir(p.root)
+                os.environ.pop("FACTORY_HOME")
             run.profile()
             self.assertEqual(contract.place("runs"), ".dca-factory/runs")
 

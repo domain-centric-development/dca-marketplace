@@ -1347,7 +1347,9 @@ class Run:
             code = process.returncode
         else:
             code = self.wait(process)
-        return code, data.decode("utf-8", errors="replace").rstrip("\n") if capture else ""
+        # A Python child on Windows writes its lines with \r\n: read as bytes, the \r would stay on every field.
+        text = data.decode("utf-8", errors="replace").replace("\r\n", "\n") if capture else ""
+        return code, text.rstrip("\n")
 
     def cli(self, *args, quiet=True, merge=False, cwd=None, env=None):
         """The cli beside this runner: (exit code, stdout without its last newlines)."""
@@ -2838,7 +2840,7 @@ class Run:
 
         def pump():
             for line in iter(process.stdout.readline, b""):
-                sys.stdout.write(f"[{story}] {line.decode('utf-8', errors='replace').rstrip(chr(10))}\n")
+                sys.stdout.write(f"[{story}] {line.decode('utf-8', errors='replace').rstrip(chr(13) + chr(10))}\n")
                 sys.stdout.flush()
         thread = threading.Thread(target=pump, daemon=True)
         thread.start()

@@ -684,7 +684,8 @@ def run_change(gate, root, *args):
 
 def write_file(root, path, content):
     os.makedirs(os.path.dirname(os.path.join(root, path)), exist_ok=True)
-    with open(os.path.join(root, path), "w", encoding="utf-8") as handle:
+    # newline="\n": the bytes as given on every platform — a digest a case computes from the text must match the file
+    with open(os.path.join(root, path), "w", encoding="utf-8", newline="\n") as handle:
         handle.write(content)
 
 
@@ -817,7 +818,7 @@ def build_project(root, *, epic=EPIC, story=STORY, tests=TESTS, profile=PROFILE,
     def write(path, content):
         full = os.path.join(root, path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, "w", encoding="utf-8") as handle:
+        with open(full, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(content)
 
     write("product/epics/sample/epic.md", epic)
