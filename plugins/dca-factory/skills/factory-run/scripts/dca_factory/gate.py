@@ -1954,7 +1954,7 @@ def open_suites_record(cwd, runs, story_id, key):
             if row_tree == tree and hmac.compare_digest(
                     signature, suites_signature(key, row_tree, invocation, code, ran_json)):
                 rows[invocation] = (when, int(code), json.loads(ran_json))
-    return {"path": path, "key": key, "tree": tree, "rows": rows}
+    return {"path": path, "key": key, "tree": tree, "rows": rows, "cwd": os.path.realpath(cwd)}
 
 
 def recorded_run(invocation, cwd, profile=None, with_reports=False):
@@ -1964,6 +1964,8 @@ def recorded_run(invocation, cwd, profile=None, with_reports=False):
     it. `ran` is what the reports of the run said was executed (empty when `with_reports` is off), and
     `reused` is the suffix that tells the reader the verdict came from the record."""
     record = SUITES_RECORD
+    if record and record.get("cwd") != os.path.realpath(cwd):
+        record = None                         # another tree — a break's scratch copy — has no record of its own
     if record and record["tree"] and invocation in record["rows"]:
         when, code, ran_rows = record["rows"][invocation]
         return code, "", {(cls, method): outcome for cls, method, outcome in ran_rows}, \
