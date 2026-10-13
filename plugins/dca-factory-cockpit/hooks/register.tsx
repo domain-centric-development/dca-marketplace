@@ -1106,6 +1106,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const findings = status.findings ?? []
     const pending = now.decisions.filter(record => record.state === 'open' || record.state === 'draft')
     const answered = now.decisions.filter(record => !pending.includes(record)).slice(0, Math.max(3, rows - 26))
+    // the engine draws at most 20000 nodes: a long-running backlog holds more findings than one pane can carry
+    const shownFindings = findings.slice(0, Math.max(5, rows - 30))
     return page(
       [
         ui.section('Waiting for you', 'questions a stage may not decide alone, results to look at'),
@@ -1147,10 +1149,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         // The judge's confirmed minors, kept in each story's findings.md until a person or a later story closes them.
         ...(findings.length > 0
           ? [
-              ui.section('Open findings', `${findings.length} from the judge · close one in its file, or hand it to the backlog`),
+              ui.section('Open findings', `${findings.length} from the judge${shownFindings.length < findings.length ? ` · the first ${shownFindings.length} shown` : ''} · close one in its file, or hand it to the backlog`),
               ui.table(
                 [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.action(10), COL.action(12)],
-                findings.map((finding, index) => [
+                shownFindings.map((finding, index) => [
                   ui.mark('finding'),
                   { text: finding.story, bold: true },
                   { text: finding.where, color: C.muted },

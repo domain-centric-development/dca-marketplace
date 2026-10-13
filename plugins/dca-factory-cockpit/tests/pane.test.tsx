@@ -234,3 +234,26 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(closed).toEqual(['factory-cockpit'])
   })
 }
+
+test('a backlog with hundreds of open findings still draws the decide tab', async ($, on) => {
+  const many = Array.from({ length: 300 }, (_, index) => ({ ...STATUS.findings[0], where: `src/Book.java:${index}`, defect: `defect ${index} `.repeat(40) }))
+  on('session.root', async () => ({ value: ROOT }))
+  on('fs.exists', async () => ({ value: true }))
+  on('fs.list', async () => ({ value: [] }))
+  on('fs.read', async () => ({ deny: 'missing' }))
+  on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
+    const out = e.argv.includes('decisions') ? DECISIONS : e.argv.includes('--list') ? { topics: [] } : { ...STATUS, findings: many }
+    return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('clock.now', async () => ({ value: Date.parse('2026-09-23T17:30:00Z') }))
+  on('clock.every', async () => ({ value: { cancel: () => {} } }) as never)
+  on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+  on('ui.status', async () => ({ value: undefined }) as never)
+  on('command.list', async () => ({ value: [] }) as never)
+
+  await $.command.run({ command: 'factory-cockpit', args: '' } as never)
+  const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface: 'terminal', component: 'Pane', requestId: 'factory-cockpit', props: { title: 'Factory', isFocused: true } as never })
+  await pane.press({ key: 'tab-decide' })
+  expect(await pane.find({ text: /300 from the judge · the first \d+ shown/ })).toBeDefined()
+  expect(await pane.find({ text: /defect 299 / })).toBeUndefined()
+})
