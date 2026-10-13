@@ -40,7 +40,7 @@ export type FactoryStatus = {
   next: { text: string; action: Action }
   journeys: { epic: string; text: string; action: Action }[]
   // the judge's open minors and other factories' claims (dca-factory 0.79.3; absent from an older pipeline)
-  findings?: { story: string; where: string; severity: string; defect: string; file: string; action: Action }[]
+  findings?: { story: string; where: string; severity: string; defect: string; perspective?: string; fix?: string; file: string; action: Action }[]
   claims?: {
     story: string
     kind: 'held' | 'orphan' | 'collision'

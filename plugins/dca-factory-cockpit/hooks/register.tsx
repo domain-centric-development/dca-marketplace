@@ -1152,14 +1152,17 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ? [
               ui.section('Open findings', `${findings.length} from the judge${shownFindings.length < findings.length ? ` · the first ${shownFindings.length} shown` : ''} · close one in its file, or hand it to the backlog`),
               ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.act],
+                [COL.mark, COL.story(idWidth), { name: 'seen by', width: 10 }, { name: 'finding', width: 30, isWide: true }, { name: 'fix', width: 24, isWide: true }, { name: 'where', width: 16 }, COL.act],
                 shownFindings.map((finding, index) => [
                   ui.mark('finding'),
                   index > 0 && shownFindings[index - 1]?.story === finding.story
                     ? {}
                     : ui.open(`finding-file-${index}`, finding.story, () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)),
-                  { text: finding.where, color: C.muted },
-                  { text: finding.defect, color: C.muted },
+                  { text: finding.perspective ?? '', color: C.muted },
+                  { text: finding.defect, color: C.bright },
+                  { text: finding.fix && finding.fix !== '—' ? `→ ${finding.fix}` : '', color: C.muted },
+                  // the file's name and line; the path stands in the findings file the story's name opens
+                  { text: finding.where.split('/').pop() ?? finding.where, color: C.muted },
                   ui.press(`finding-story-${index}`, 'to backlog', () => send($, finding.action.skill), { byClaude: true }),
                 ]),
               ),

@@ -12,7 +12,7 @@ const STATUS = {
     { mark: 'look', story: 'sort-books', what: 'published — waits for its merge', action: { text: 'open the merge request from its branch', skill: '', shell: '' } },
   ],
   findings: [
-    { story: 'add-book', where: 'src/Book.java:12', severity: 'minor', defect: 'a guard the plan did not name', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a guard the plan did not name', shell: '' } },
+    { story: 'add-book', where: 'src/Book.java:12', severity: 'minor', defect: 'a guard the plan did not name', perspective: 'ddd', fix: 'name the guard in the plan', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a guard the plan did not name', shell: '' } },
     { story: 'add-book', where: 'src/Book.java:30', severity: 'minor', defect: 'a comment names the old term', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a comment names the old term', shell: '' } },
   ],
   claims: [
@@ -200,6 +200,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /open findings/i })).toBeDefined()
     // a story's findings stand under its name, given once; the name opens the findings file
     await expect(pane.press({ key: 'finding-file-1' })).rejects.toThrow()
+    // the finding stands in front with what to do beside it, the file only by its name
+    expect(await pane.find({ text: /→ name the/ })).toBeDefined()
+    expect(await pane.find({ text: 'Book.java:12' })).toBeDefined()
     await pane.press({ key: 'finding-story-0' })
     expect(sent.at(-1)).toBe('/dca-factory:factory-backlog add-book: a guard the plan did not name')
     // the open record offers its options as choices; a press hands the answer to the decisions skill
