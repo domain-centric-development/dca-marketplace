@@ -134,7 +134,8 @@ export type Field = { label: string; text: string; color?: string; bold?: boolea
 
 // `isWide`: the column takes what is left of the table's width and wraps its text instead of cutting it; `width` is
 // then its least width. Long text — an outcome, a goal, a question — goes in a wide column.
-export type Column = { name: string; width: number; isNumber?: boolean; isWide?: boolean; isElastic?: boolean }
+// `weight`: a wide column's share of what is left against the other wide ones — 2 takes twice what 1 takes.
+export type Column = { name: string; width: number; isNumber?: boolean; isWide?: boolean; isElastic?: boolean; weight?: number }
 // `width`: the cells a node draws, where the node knows it — a press or a link from `ui.press` / `ui.open`.
 export type Cell = { text?: string; color?: string; bold?: boolean; node?: RenderElement; width?: number }
 
@@ -193,15 +194,15 @@ const MIN_WIDE = 12
 const MIN_COLUMN = 6
 
 // Wide columns share what the pane leaves — the fixed columns, the bars between them (3 cells each), the frame (4)
-// and the page's gutter (2) — down to MIN_WIDE. Where the table is still wider than the pane, the widest other
+// and the page's gutter (2) — by their weight, down to MIN_WIDE. Where the table is still wider than the pane, the widest other
 // column gives a cell at a time — an elastic one first — down to MIN_COLUMN, so a narrow pane cuts long entries
 // instead of the table.
 export function sizeColumns(columns: Column[], width: number): Column[] {
   const chrome = (columns.length - 1) * 3 + 4 + 2
   const fixed = columns.filter(column => !column.isWide).reduce((sum, column) => sum + column.width, 0)
-  const wide = columns.filter(column => column.isWide).length
-  const share = wide > 0 ? Math.floor((width - fixed - chrome) / wide) : 0
-  const out = columns.map(column => (column.isWide ? { ...column, width: Math.max(MIN_WIDE, share) } : { ...column }))
+  const weights = columns.filter(column => column.isWide).reduce((sum, column) => sum + (column.weight ?? 1), 0)
+  const share = weights > 0 ? (width - fixed - chrome) / weights : 0
+  const out = columns.map(column => (column.isWide ? { ...column, width: Math.max(MIN_WIDE, Math.floor(share * (column.weight ?? 1))) } : { ...column }))
   let excess = out.reduce((sum, column) => sum + column.width, 0) + chrome - width
   while (excess > 0) {
     // an elastic column (a bar that scales to its cell) gives first, then the widest other

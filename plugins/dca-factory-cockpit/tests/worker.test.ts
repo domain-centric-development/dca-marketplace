@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { components, epicCells, pairsPerRow } from '../hooks/components'
+import { components, epicCells, pairsPerRow, sizeColumns } from '../hooks/components'
 import { LINE_CAP, appendLines, createLatch, displayWidth, exitWord, fit, keepRefresh, rowSignature, wrapWords } from '../hooks/parse'
 
 test('the latch is taken once: a second press while the first starts gets nothing', () => {
@@ -89,4 +89,11 @@ test('a press or a link in a table says how wide it is: label, the ✦ of a pres
   expect(ui.press('k', 'b · recommended', () => {}, { byClaude: true, isPrimary: true }).width).toBe(21)
   expect(ui.press('k', 'apply', () => {}).width).toBe(9)
   expect(ui.open('k', 'findings', () => {}).width).toBe(10)
+})
+
+test('wide columns share what is left by their weight', () => {
+  const [finding, fix] = sizeColumns([{ name: 'finding', width: 30, isWide: true, weight: 2 }, { name: 'fix', width: 24, isWide: true }], 100)
+  // 100 cells less the frame (4), the gutter (2) and one bar (3) leave 91: two thirds and one third
+  expect(finding?.width).toBe(60)
+  expect(fix?.width).toBe(30)
 })

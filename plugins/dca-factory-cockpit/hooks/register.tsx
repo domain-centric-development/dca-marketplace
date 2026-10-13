@@ -1152,7 +1152,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ? [
               ui.section('Open findings', `${findings.length} from the judge${shownFindings.length < findings.length ? ` · the first ${shownFindings.length} shown` : ''} · close one in its file, or hand it to the backlog`),
               ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'seen by', width: 10 }, { name: 'finding', width: 30, isWide: true }, { name: 'fix', width: 24, isWide: true }, { name: 'where', width: 16 }, COL.act],
+                [COL.mark, COL.story(idWidth), { name: 'seen by', width: 10 }, { name: 'finding', width: 30, isWide: true, weight: 2 }, { name: 'fix', width: 24, isWide: true }, { name: 'where', width: 16 }, COL.act],
                 shownFindings.map((finding, index) => [
                   ui.mark('finding'),
                   index > 0 && shownFindings[index - 1]?.story === finding.story
