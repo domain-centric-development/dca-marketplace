@@ -1106,7 +1106,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const pending = now.decisions.filter(record => record.state === 'open' || record.state === 'draft')
     const answered = now.decisions.filter(record => !pending.includes(record)).slice(0, Math.max(3, rows - 26))
     // the engine draws at most 20000 nodes: a long-running backlog holds more findings than one pane can carry
-    const shownFindings = findings.slice(0, Math.max(5, rows - 30))
+    // a story's findings stand together, the story named once: its name opens the findings file
+    const storyOrder = [...new Set(findings.map(finding => finding.story))]
+    const shownFindings = [...findings].sort((a, b) => storyOrder.indexOf(a.story) - storyOrder.indexOf(b.story)).slice(0, Math.max(5, rows - 30))
     return page(
       [
         ui.section('Waiting for you', 'questions a stage may not decide alone, results to look at'),
@@ -1150,13 +1152,14 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ? [
               ui.section('Open findings', `${findings.length} from the judge${shownFindings.length < findings.length ? ` · the first ${shownFindings.length} shown` : ''} · close one in its file, or hand it to the backlog`),
               ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.act, COL.act],
+                [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.act],
                 shownFindings.map((finding, index) => [
                   ui.mark('finding'),
-                  { text: finding.story, bold: true },
+                  index > 0 && shownFindings[index - 1]?.story === finding.story
+                    ? {}
+                    : ui.open(`finding-file-${index}`, finding.story, () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)),
                   { text: finding.where, color: C.muted },
                   { text: finding.defect, color: C.muted },
-                  ui.open(`finding-file-${index}`, 'findings', () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)),
                   ui.press(`finding-story-${index}`, 'to backlog', () => send($, finding.action.skill), { byClaude: true }),
                 ]),
               ),

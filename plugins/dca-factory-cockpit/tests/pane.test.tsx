@@ -11,7 +11,10 @@ const STATUS = {
     { mark: 'question', story: 'add-book', what: 'plan asks a question', action: { text: '', skill: '/factory-decisions', shell: '' } },
     { mark: 'look', story: 'sort-books', what: 'published — waits for its merge', action: { text: 'open the merge request from its branch', skill: '', shell: '' } },
   ],
-  findings: [{ story: 'add-book', where: 'src/Book.java:12', severity: 'minor', defect: 'a guard the plan did not name', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a guard the plan did not name', shell: '' } }],
+  findings: [
+    { story: 'add-book', where: 'src/Book.java:12', severity: 'minor', defect: 'a guard the plan did not name', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a guard the plan did not name', shell: '' } },
+    { story: 'add-book', where: 'src/Book.java:30', severity: 'minor', defect: 'a comment names the old term', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a comment names the old term', shell: '' } },
+  ],
   claims: [
     { story: 'lend-book', kind: 'held', who: 'anna@example.org', host: 'laptop-a', age: '6 d', stale: true, title: '', action: { text: 'not built here', skill: '', shell: 'bash .agents/factory/factory.sh release lend-book --force' } },
     { story: 'old-one', kind: 'orphan', who: 'ben@example.org', host: 'desk-b', age: '2 h', stale: false, title: '', action: { text: 'this checkout has no such story — take the claim away', skill: '', shell: 'bash .agents/factory/factory.sh release old-one --force' } },
@@ -195,6 +198,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /6 d — stale\?/ })).toBeDefined()
     expect(await pane.find({ text: /release old-one --force/ })).toBeDefined()
     expect(await pane.find({ text: /open findings/i })).toBeDefined()
+    // a story's findings stand under its name, given once; the name opens the findings file
+    await expect(pane.press({ key: 'finding-file-1' })).rejects.toThrow()
     await pane.press({ key: 'finding-story-0' })
     expect(sent.at(-1)).toBe('/dca-factory:factory-backlog add-book: a guard the plan did not name')
     // the open record offers its options as choices; a press hands the answer to the decisions skill
