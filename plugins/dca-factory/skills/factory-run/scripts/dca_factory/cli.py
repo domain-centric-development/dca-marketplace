@@ -1109,13 +1109,13 @@ def status_model(cwd, epics, runs, live=False):
                    description_part(cwd, profile, "domain", ())]
     # what else waits for a person: the judge's open minors, other factories' claims (WP-104)
     findings = []
-    for story, where, severity, defect in open_findings(epics_dir):
+    for story, where, severity, defect, perspective, fix in open_findings(epics_dir):
         try:
             path = find_story(epics_dir, story)
         except GateError:
             path = None
         kept = shown(findings_path(path)) if path else FINDINGS_FILE
-        findings.append(dict(story=story, where=where, severity=severity, defect=defect, file=kept,
+        findings.append(dict(story=story, where=where, severity=severity, defect=defect, perspective=perspective, fix=fix, file=kept,
                              action=make_action(text=f"fix it in a story, or set its Status to done or wont-fix in {kept}",
                                                 skill=f"/factory-backlog {story}: {defect}")))
     return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
@@ -2566,7 +2566,7 @@ def main(argv):
         if not rows:
             print("factory: no open finding — the judges confirmed nothing that did not block, or every row is closed")
             return 0
-        for story, where, severity, defect in rows:
+        for story, where, severity, defect, *_ in rows:
             print(f"{story}\t{severity}\t{where}\t{defect}")
         print(f"factory: {len(rows)} open finding(s); set Status to done or wont-fix in the story's {FINDINGS_FILE}")
         return 0

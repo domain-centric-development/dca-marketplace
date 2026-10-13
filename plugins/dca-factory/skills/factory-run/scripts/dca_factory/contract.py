@@ -234,7 +234,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 22
 
 
-VERSION = "0.81.4"
+VERSION = "0.81.5"
 
 
 def split_front(text):
@@ -506,11 +506,12 @@ def record_findings(story_path, story_id, front, runs):
 
 
 def open_findings(epics):
-    """Every open finding under the epics: (story id, file:line, severity, defect), read from the findings files."""
+    """Every open finding under the epics: (story id, file:line, severity, defect, perspective, fix), read from the
+    findings files."""
     out = []
     for story_path in story_files(epics):
         story = story_id_of(story_path)
-        out += [(story, r[2], r[3], r[4]) for r in findings_rows(findings_path(story_path)) if r[6] == "open"]
+        out += [(story, r[2], r[3], r[4], r[1], r[5]) for r in findings_rows(findings_path(story_path)) if r[6] == "open"]
     return out
 
 

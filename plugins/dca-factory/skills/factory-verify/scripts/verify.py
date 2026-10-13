@@ -2628,11 +2628,13 @@ exit 0
             view = {}
         kinds = {c.get("story"): c.get("kind") for c in view.get("claims", [])}
         found = view.get("findings", [])
-        check("status json: the claims of other factories by kind with an action, and the open findings with their file",
+        check("status json: the claims of other factories by kind with an action, and the open findings with their file, "
+              "perspective and fix",
               kinds == {"STORY-1": "held", "STORY-9": "orphan"}
               and next(c for c in view["claims"] if c["story"] == "STORY-9")["action"]["shell"].endswith(
                   "release STORY-9 --force")
               and len(found) == 1 and found[0]["story"] == "STORY-1" and found[0]["severity"] == "minor"
+              and found[0].get("perspective") == "ddd" and found[0].get("fix") == "name it"
               and found[0]["file"].endswith("STORY-1/findings.md"),
               [view.get("claims"), view.get("findings")])
         write_file(root, ".dca-factory/claims.tsv",
