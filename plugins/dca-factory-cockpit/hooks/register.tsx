@@ -500,9 +500,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     node: ui.link(`record-${record.id}`, record.id, () => void openRecord($, now.root, record, back)),
   })
   // An unguarded epic's own act, beside its hint — the epic's name opens the epic, this writes its journey.
-  const guardCell = (hint: FactoryStatus['journeys'][number]): Cell => ({
-    node: ui.button(`guard-${hint.epic}`, 'add guard', () => send($, hint.action.skill || `/factory-backlog journey ${hint.epic}`), { byClaude: true }),
-  })
+  const guardCell = (hint: FactoryStatus['journeys'][number]): Cell =>
+    ui.press(`guard-${hint.epic}`, 'add guard', () => send($, hint.action.skill || `/factory-backlog journey ${hint.epic}`), { byClaude: true })
   // An open record's answers as choices: one button per option, the recommended one first in weight, and a field for
   // the person's own words; an acceptance is accepted or corrected. Each press hands the answer to /factory-decisions,
   // which writes it into the record — the view writes nothing.
@@ -522,9 +521,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ...(options.length > 0
         ? [
             ui.table(
-              [COL.press(options.map(option => (option.key === recommended ? `${option.key} · recommended` : option.key)), true), { name: 'option', width: 40, isWide: true }],
+              [COL.act, { name: 'option', width: 40, isWide: true }],
               options.map(option => [
-                { node: ui.button(`option-${record.id}-${option.key}`, option.key === recommended ? `${option.key} · recommended` : option.key, () => answer(option.key), { isPrimary: option.key === recommended, byClaude: true }) },
+                ui.press(`option-${record.id}-${option.key}`, option.key === recommended ? `${option.key} · recommended` : option.key, () => answer(option.key), { isPrimary: option.key === recommended, byClaude: true }),
                 { text: option.text, color: C.muted },
               ]),
             ),
@@ -851,7 +850,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.table(
           [{ name: 'file', width: 20 }],
           (now.handovers[open.id] ?? []).map(file => [
-            { node: ui.link(`file-${file}`, file, () => void openFile($, handoverPath(now.root, open.id, file), `${open.id} / ${file}`, open)) },
+            ui.open(`file-${file}`, file, () => void openFile($, handoverPath(now.root, open.id, file), `${open.id} / ${file}`, open)),
           ]),
           'No hand-over yet.',
         ),
@@ -859,7 +858,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.table(
           [{ name: 'process', width: 20 }],
           (now.outputs[open.id] ?? []).map(process => [
-            { node: ui.link(`output-${process}`, process, () => void openOutput($, now.root, open.id, process, open)) },
+            ui.open(`output-${process}`, process, () => void openOutput($, now.root, open.id, process, open)),
           ]),
           'No stage has run yet.',
         ),
@@ -888,17 +887,17 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       [
         ui.section('Project description', 'the foundation — written once, changed when the product or the technical situation moves'),
         ui.table(
-          [COL.mark, { name: 'file', width: 12 }, { name: 'sections', width: 30, isWide: true }, { name: 'open', width: 20, isWide: true }, COL.action(7)],
+          [COL.mark, { name: 'file', width: 12 }, { name: 'sections', width: 30, isWide: true }, { name: 'open', width: 20, isWide: true }, COL.act],
           (status.description ?? []).map(part => {
             const path = `${now.root}/${part.path}`
             const name = part.path.split('/').pop() ?? part.part
             const gaps = [...part.missing.map(h => `missing ${h}`), ...part.empty.map(h => `empty ${h}`)]
             return [
               ui.mark(!part.present ? 'missing' : gaps.length > 0 ? 'look' : 'done'),
-              part.present ? { node: ui.link(`doc-${part.part}`, name, () => void openFile($, path, name, null)) } : { text: name, color: C.fail },
+              part.present ? ui.open(`doc-${part.part}`, name, () => void openFile($, path, name, null)) : { text: name, color: C.fail },
               { text: part.present ? part.sections.join(' · ') : 'missing — Describe writes it', color: C.muted },
               { text: gaps.join(' · ') || '—', color: gaps.length > 0 ? C.wait : C.muted },
-              part.present ? { node: ui.link(`edit-${part.part}`, '✎ edit', () => void editFile($, path)) } : {},
+              part.present ? ui.open(`edit-${part.part}`, '✎ edit', () => void editFile($, path)) : {},
             ]
           }),
           'No description view — update the pipeline.',
@@ -927,25 +926,25 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ],
       )}
       {ui.table(
-        [COL.mark, { name: 'proposal', width: 18 }, COL.outcome, { name: 'goal', width: 24, isWide: true }, COL.action(16)],
+        [COL.mark, { name: 'proposal', width: 18 }, COL.outcome, { name: 'goal', width: 24, isWide: true }, COL.act],
         topic.proposals.map(proposal => [
           ui.mark(proposal.epic ? 'done' : 'proposed'),
           { text: proposal.id, bold: true },
           { text: proposal.metric, color: C.info },
           { text: proposal.goal, color: C.muted },
           proposal.epic
-            ? { node: ui.link(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic, back: open })) }
-            : { node: ui.button(`release-${topic.topic}-${proposal.id}`, 'make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true, byClaude: true }) },
+            ? ui.open(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic, back: open }))
+            : ui.press(`release-${topic.topic}-${proposal.id}`, 'make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true, byClaude: true }),
         ]),
         'No proposed work in the report yet.',
       )}
       {topic.description_changes.length > 0 &&
         ui.table(
-          [{ name: 'description', width: 24 }, { name: 'change', width: 30, isWide: true }, COL.press(['apply'], true)],
+          [{ name: 'description', width: 24 }, { name: 'change', width: 30, isWide: true }, COL.act],
           topic.description_changes.map((change, index) => [
             { text: change.target, color: C.wait },
             { text: change.change, color: C.muted },
-            { node: ui.button(`describe-${topic.topic}-${index}`, 'apply', () => send($, `/dca-describe ${change.target}: ${change.change}`), { byClaude: true }) },
+            ui.press(`describe-${topic.topic}-${index}`, 'apply', () => send($, `/dca-describe ${change.target}: ${change.change}`), { byClaude: true }),
           ]),
         )}
     </Box>
@@ -987,7 +986,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ? [
           ui.section('Journeys'),
           ui.table(
-            [COL.mark, COL.epic, { name: 'journey', width: 30, isWide: true }, COL.press(['add guard'], true)],
+            [COL.mark, COL.epic, { name: 'journey', width: 30, isWide: true }, COL.act],
             status.journeys.map(hint => [ui.mark('journey'), { text: hint.epic }, { text: hint.text, color: C.wait }, guardCell(hint)]),
           ),
         ]
@@ -1015,7 +1014,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                 const held = topic.proposals.filter(p => p.epic).length
                 return [
                   ui.mark(held === topic.proposals.length && held > 0 ? 'done' : 'partial'),
-                  { node: ui.link(`topic-${topic.topic}`, topic.topic, () => void showDetail($, { kind: 'topic', topic: topic.topic })) },
+                  ui.open(`topic-${topic.topic}`, topic.topic, () => void showDetail($, { kind: 'topic', topic: topic.topic })),
                   { text: topic.title, color: C.muted },
                   { text: String(topic.proposals.length) },
                   { text: String(held), color: held > 0 ? C.done : C.muted },
@@ -1041,7 +1040,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             const cells = epicCells(epic)
             return [
               cells.mark,
-              { node: ui.link(`epic-${epic.epic}`, epic.title || epic.epic, () => void showDetail($, { kind: 'epic', epic: epic.epic })) },
+              ui.open(`epic-${epic.epic}`, epic.title || epic.epic, () => void showDetail($, { kind: 'epic', epic: epic.epic })),
               { node: ui.progress(epic.delivered, epic.total, 10, C.done, true) },
               cells.count,
               cells.drafts,
@@ -1082,7 +1081,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.table(
           [COL.story(idWidth), { name: 'stage', width: 16 }, { name: 'since', width: 14 }, { name: 'activity', width: 24, isWide: true }],
           status.running.map(running => [
-            { node: ui.link(`running-${running.story}`, running.story, () => void openStory($, running.story)) },
+            ui.open(`running-${running.story}`, running.story, () => void openStory($, running.story)),
             { text: running.part ? `${running.stage} · ${running.part}` : running.stage, color: running.interrupted ? C.fail : C.accent, bold: true },
             { text: running.interrupted ? 'interrupted' : running.ago ?? fmt.when(running.since), color: running.interrupted ? C.fail : C.muted },
             { text: running.activity ?? '—', color: C.muted },
@@ -1116,14 +1115,14 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ...(status.waiting.length > 0
           ? [
               ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'what', width: 24, isWide: true }, COL.action(20)],
+                [COL.mark, COL.story(idWidth), { name: 'what', width: 24, isWide: true }, COL.act],
                 status.waiting.map(wait => {
                   const press = waitPress(wait.story, wait.action)
                   return [
                     ui.mark(wait.mark),
                     { text: wait.story, bold: true },
                     { text: press ? wait.what : `${wait.what} — ${wait.action.text}`, color: C.muted },
-                    press ? { node: ui.button(`answer-${wait.story}`, press.label, () => send($, press.command), { isPrimary: true, byClaude: true }) } : {},
+                    press ? ui.press(`answer-${wait.story}`, press.label, () => send($, press.command), { isPrimary: true, byClaude: true }) : {},
                   ]
                 }),
               ),
@@ -1151,14 +1150,14 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ? [
               ui.section('Open findings', `${findings.length} from the judge${shownFindings.length < findings.length ? ` · the first ${shownFindings.length} shown` : ''} · close one in its file, or hand it to the backlog`),
               ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.action(10), COL.press(['to backlog'], true)],
+                [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.act, COL.act],
                 shownFindings.map((finding, index) => [
                   ui.mark('finding'),
                   { text: finding.story, bold: true },
                   { text: finding.where, color: C.muted },
                   { text: finding.defect, color: C.muted },
-                  { node: ui.link(`finding-file-${index}`, 'findings', () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)) },
-                  { node: ui.button(`finding-story-${index}`, 'to backlog', () => send($, finding.action.skill), { byClaude: true }) },
+                  ui.open(`finding-file-${index}`, 'findings', () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)),
+                  ui.press(`finding-story-${index}`, 'to backlog', () => send($, finding.action.skill), { byClaude: true }),
                 ]),
               ),
             ]
@@ -1188,7 +1187,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ),
       ui.section('Epics'),
       ui.table(
-        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }, COL.press(['add guard'], true)],
+        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }, COL.act],
         status.epics.map(epic => {
           const unguarded = status.journeys.find(hint => hint.epic === epic.epic)
           const cells = epicCells(epic, unguarded)

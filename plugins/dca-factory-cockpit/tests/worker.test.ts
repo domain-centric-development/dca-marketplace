@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { COL, epicCells, pairsPerRow } from '../hooks/components'
+import { components, epicCells, pairsPerRow } from '../hooks/components'
 import { LINE_CAP, appendLines, createLatch, displayWidth, exitWord, fit, keepRefresh, rowSignature, wrapWords } from '../hooks/parse'
 
 test('the latch is taken once: a second press while the first starts gets nothing', () => {
@@ -69,12 +69,7 @@ test('the output keeps whole lines and cuts one that never breaks', () => {
   expect(long[0]?.endsWith('…')).toBe(true)
 })
 
-test('an action column counts the link\'s chevron; labelled pairs fit the pane', () => {
-  expect(COL.action(7).width).toBe(9)
-  // a button's column holds its longest label and the ✦ of a press by Claude: `✦ to backlog` takes 12 cells
-  expect(COL.press(['to backlog'], true).width).toBe(16)
-  expect(COL.press(['a', 'b · recommended'], true).width).toBe(21)
-  expect(COL.press(['apply']).width).toBe(9)
+test('labelled pairs fit the pane', () => {
   expect(pairsPerRow(100)).toBe(2)
   expect(pairsPerRow(80)).toBe(1)
   expect(pairsPerRow(140)).toBe(3)
@@ -85,4 +80,13 @@ test('a story is read again only when its row moved', () => {
   expect(rowSignature(row)).toBe(rowSignature({ ...row }))
   expect(rowSignature(row)).not.toBe(rowSignature({ ...row, stage: 'test' }))
   expect(rowSignature(row)).not.toBe(rowSignature({ ...row, done: true, delivered: '2026-10-03T10:00:00Z' }))
+})
+
+test('a press or a link in a table says how wide it is: label, the ✦ of a press by Claude, frame or chevron', () => {
+  const none = () => null
+  const ui = components({ Box: none, Text: none, Button: none, Input: null, width: 120 } as never)
+  expect(ui.press('k', 'to backlog', () => {}, { byClaude: true }).width).toBe(16)
+  expect(ui.press('k', 'b · recommended', () => {}, { byClaude: true, isPrimary: true }).width).toBe(21)
+  expect(ui.press('k', 'apply', () => {}).width).toBe(9)
+  expect(ui.open('k', 'findings', () => {}).width).toBe(10)
 })

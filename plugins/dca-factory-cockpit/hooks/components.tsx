@@ -46,6 +46,11 @@ export const C = { ...DEEP }
 // The sign of an action Claude carries out in this session: a skill runs, files may change.
 export const BY_CLAUDE = '✦'
 
+// A button. `byClaude` marks one that hands the work to Claude in this session — a skill runs, files may change
+// — with the one sign every such button carries.
+export type ButtonOptions = { hotkey?: string; isPrimary?: boolean; byClaude?: boolean }
+export const pressLabel = (label: string, options: ButtonOptions = {}) => (options.byClaude ? `${BY_CLAUDE} ${label}` : label)
+
 // Every mark the cockpit draws, in one table: the factory's own (what `status` prints for a story) and the
 // cockpit's (what a part of the description, a proposal, a topic or an epic is). One glyph and one colour per kind,
 // so the same thing looks the same in every tab.
@@ -130,7 +135,8 @@ export type Field = { label: string; text: string; color?: string; bold?: boolea
 // `isWide`: the column takes what is left of the table's width and wraps its text instead of cutting it; `width` is
 // then its least width. Long text — an outcome, a goal, a question — goes in a wide column.
 export type Column = { name: string; width: number; isNumber?: boolean; isWide?: boolean; isElastic?: boolean }
-export type Cell = { text?: string; color?: string; bold?: boolean; node?: RenderElement }
+// `width`: the cells a node draws, where the node knows it — a press or a link from `ui.press` / `ui.open`.
+export type Cell = { text?: string; color?: string; bold?: boolean; node?: RenderElement; width?: number }
 
 // The columns every table shares, one width and one alignment each.
 export const COL = {
@@ -151,11 +157,13 @@ export const COL = {
   record: { name: 'record', width: 28 },
   what: { name: 'what', width: 30, isWide: true },
   outcome: { name: 'outcome', width: 18, isWide: true },
-  // a link draws ` ›` after its word: the two cells are counted here, so `✎ edit ›` is never cut
-  action: (width: number): Column => ({ name: '', width: width + 2 }),
-  // a button's column from its labels, the ✦ of a press by Claude counted: a hand-counted width wraps the button
-  press: (labels: string[], byClaude = false): Column => COL.action(Math.max(...labels.map(label => label.length)) + (byClaude ? 2 : 0) + 2),
-} satisfies Record<string, Column | ((width: number) => Column) | ((labels: string[], byClaude?: boolean) => Column)>
+  // a column of presses or links from `ui.press` / `ui.open`: the cells say how wide they are, the column fits them
+  act: { name: '', width: 2 },
+} satisfies Record<string, Column | ((width: number) => Column)>
+
+// The cells a button draws around its label, and a link's chevron after its word.
+export const BUTTON_FRAME = 4
+export const LINK_CHEVRON = 2
 
 // One way to write each kind of value; a dash where there is none.
 export const fmt = {
@@ -241,8 +249,10 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
     columns.map((column, index) => {
       if (column.isWide || column.width === 1) return column
       const cells = rows.map(row => row[index] ?? {})
-      if (cells.some(cell => cell.node)) return column
-      const longest = Math.max(0, ...cells.map(cell => displayWidth(cell.text ?? '')))
+      if (cells.some(cell => cell.node && cell.width === undefined)) return column
+      const longest = Math.max(0, ...cells.map(cell => (cell.node ? (cell.width ?? 0) : displayWidth(cell.text ?? ''))))
+      // a press or a link is never cut: its column keeps its declared width and grows to the widest one
+      if (cells.some(cell => cell.node)) return { ...column, width: Math.max(column.width, longest) }
       const name = Math.ceil(displayWidth(column.name) * (isGrid ? 1 : 1.35))
       return { ...column, width: Math.min(FIT_MAX, Math.max(longest, name, 1)) }
     })
@@ -327,6 +337,10 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
 
   // A word that opens something — a story, a record, a file, a topic. A teal `›` says it can be chosen before the
   // focus is on it, and the row lights under the pointer.
+  const button = (key: string, label: string, onPress: () => void, options: ButtonOptions = {}) => (
+    <Button key={key} label={pressLabel(label, options)} hotkey={options.hotkey} variant={options.isPrimary ? 'primary' : 'secondary'} onPress={onPress} />
+  )
+
   const link = (key: string, label: string, onPress: () => void) => (
     <Box key={`link-${key}`} gap={0} hover={{ backgroundColor: C.line }}>
       <Button key={key} label={label} plain onPress={onPress} />
@@ -457,11 +471,16 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       </Box>
     ),
 
-    // A button. `byClaude` marks one that hands the work to Claude in this session — a skill runs, files may change
-    // — with the one sign every such button carries.
-    button: (key: string, label: string, onPress: () => void, options: { hotkey?: string; isPrimary?: boolean; byClaude?: boolean } = {}) => (
-      <Button key={key} label={options.byClaude ? `${BY_CLAUDE} ${label}` : label} hotkey={options.hotkey} variant={options.isPrimary ? 'primary' : 'secondary'} onPress={onPress} />
-    ),
+    // A button, outside a table.
+    button,
+
+    // A button or a link in a table: the cell carries its width — the label, the ✦ of a press by Claude, the frame or
+    // the chevron — so its column fits it and never wraps a bracket onto the next line.
+    press: (key: string, label: string, onPress: () => void, options: ButtonOptions = {}): Cell => ({
+      node: button(key, label, onPress, options),
+      width: displayWidth(pressLabel(label, options)) + BUTTON_FRAME,
+    }),
+    open: (key: string, label: string, onPress: () => void): Cell => ({ node: link(key, label, onPress), width: displayWidth(label) + LINK_CHEVRON }),
 
     // A framed box for text that is not a table: a file, the worker's output.
     framed: (children: RenderElement | RenderElement[]) => (
