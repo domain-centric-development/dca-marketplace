@@ -71,6 +71,10 @@ test('the output keeps whole lines and cuts one that never breaks', () => {
 
 test('an action column counts the link\'s chevron; labelled pairs fit the pane', () => {
   expect(COL.action(7).width).toBe(9)
+  // a button's column holds its longest label and the ✦ of a press by Claude: `✦ to backlog` takes 12 cells
+  expect(COL.press(['to backlog'], true).width).toBe(16)
+  expect(COL.press(['a', 'b · recommended'], true).width).toBe(21)
+  expect(COL.press(['apply']).width).toBe(9)
   expect(pairsPerRow(100)).toBe(2)
   expect(pairsPerRow(80)).toBe(1)
   expect(pairsPerRow(140)).toBe(3)

@@ -153,7 +153,9 @@ export const COL = {
   outcome: { name: 'outcome', width: 18, isWide: true },
   // a link draws ` ›` after its word: the two cells are counted here, so `✎ edit ›` is never cut
   action: (width: number): Column => ({ name: '', width: width + 2 }),
-} satisfies Record<string, Column | ((width: number) => Column)>
+  // a button's column from its labels, the ✦ of a press by Claude counted: a hand-counted width wraps the button
+  press: (labels: string[], byClaude = false): Column => COL.action(Math.max(...labels.map(label => label.length)) + (byClaude ? 2 : 0) + 2),
+} satisfies Record<string, Column | ((width: number) => Column) | ((labels: string[], byClaude?: boolean) => Column)>
 
 // One way to write each kind of value; a dash where there is none.
 export const fmt = {

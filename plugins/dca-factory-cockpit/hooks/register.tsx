@@ -522,7 +522,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ...(options.length > 0
         ? [
             ui.table(
-              [COL.action(16), { name: 'option', width: 40, isWide: true }],
+              [COL.press(options.map(option => (option.key === recommended ? `${option.key} · recommended` : option.key)), true), { name: 'option', width: 40, isWide: true }],
               options.map(option => [
                 { node: ui.button(`option-${record.id}-${option.key}`, option.key === recommended ? `${option.key} · recommended` : option.key, () => answer(option.key), { isPrimary: option.key === recommended, byClaude: true }) },
                 { text: option.text, color: C.muted },
@@ -941,7 +941,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       )}
       {topic.description_changes.length > 0 &&
         ui.table(
-          [{ name: 'description', width: 24 }, { name: 'change', width: 30, isWide: true }, COL.action(9)],
+          [{ name: 'description', width: 24 }, { name: 'change', width: 30, isWide: true }, COL.press(['apply'], true)],
           topic.description_changes.map((change, index) => [
             { text: change.target, color: C.wait },
             { text: change.change, color: C.muted },
@@ -987,7 +987,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ? [
           ui.section('Journeys'),
           ui.table(
-            [COL.mark, COL.epic, { name: 'journey', width: 30, isWide: true }, COL.action(13)],
+            [COL.mark, COL.epic, { name: 'journey', width: 30, isWide: true }, COL.press(['add guard'], true)],
             status.journeys.map(hint => [ui.mark('journey'), { text: hint.epic }, { text: hint.text, color: C.wait }, guardCell(hint)]),
           ),
         ]
@@ -1151,7 +1151,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ? [
               ui.section('Open findings', `${findings.length} from the judge${shownFindings.length < findings.length ? ` · the first ${shownFindings.length} shown` : ''} · close one in its file, or hand it to the backlog`),
               ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.action(10), COL.action(12)],
+                [COL.mark, COL.story(idWidth), { name: 'where', width: 26 }, { name: 'defect', width: 30, isWide: true }, COL.action(10), COL.press(['to backlog'], true)],
                 shownFindings.map((finding, index) => [
                   ui.mark('finding'),
                   { text: finding.story, bold: true },
@@ -1188,7 +1188,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ),
       ui.section('Epics'),
       ui.table(
-        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }, COL.action(13)],
+        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }, COL.press(['add guard'], true)],
         status.epics.map(epic => {
           const unguarded = status.journeys.find(hint => hint.epic === epic.epic)
           const cells = epicCells(epic, unguarded)
