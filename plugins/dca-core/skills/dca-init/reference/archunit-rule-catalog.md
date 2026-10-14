@@ -10,6 +10,8 @@ Every rule of the two rule libraries `/dca-init` wires into a project, grouped b
 | Java | `dev.domaincentric:dca-archunit` implements the rule |
 | .NET | `DomainCentric.ArchRules` implements the rule; *n/a* names why it has no .NET reading |
 
+A rule marked *(experimental)* runs only where the project opted in — `withExperimental()` / `WithExperimental()` on the rule selection, or `dca.rules.experimental = true` in `dca-archunit.properties`. Without that opt-in it is information, never a finding.
+
 Java: 124 rules in 11 sets. .NET: 129 rules (123 ported + 6 .NET-only), 1 Java rules n/a.
 
 Java: 118 enforced, 6 informational. .NET: 124 enforced, 5 informational. 5 retired identities.

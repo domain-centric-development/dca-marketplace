@@ -80,6 +80,10 @@ def render(java: list[dict] | dict, dotnet: list[dict] | dict) -> str:
         "| Java | `dev.domaincentric:dca-archunit` implements the rule |",
         "| .NET | `DomainCentric.ArchRules` implements the rule; *n/a* names why it has no .NET reading |",
         "",
+        "A rule marked *(experimental)* runs only where the project opted in — `withExperimental()` /"
+        " `WithExperimental()` on the rule selection, or `dca.rules.experimental = true` in"
+        " `dca-archunit.properties`. Without that opt-in it is information, never a finding.",
+        "",
     ]
     java_total = len(java)
     dotnet_total = sum(1 for r in dotnet if r.get("status") != "n/a")
@@ -113,6 +117,8 @@ def render(java: list[dict] | dict, dotnet: list[dict] | dict) -> str:
             else:
                 net = "✓"
             title = cell(r.get("title") or (d or {}).get("title", "")) + (" (informational)" if r.get("status") == "informational" else "")
+            if (r.get("maturity") or (d or {}).get("maturity")) == "experimental":
+                title += " (experimental)"
             rationale = cell(r.get("rationale") or (d or {}).get("rationale", ""))
             selects = cell(r.get("selects") or (d or {}).get("selects", ""))
             checks = cell(r.get("checks") or (d or {}).get("checks", ""))

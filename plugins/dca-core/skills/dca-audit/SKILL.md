@@ -148,7 +148,11 @@ informational. A stale report is not used. The audit reads a report — it never
 **What counts.** With the suite installed, its configuration decides: `dca-archunit.properties` (or the .NET
 configuration) and the architecture test's `additionalSelection()` — a set or rule on `off` is `off` in its
 cell, one on `warn` keeps its mark with `(warn)`, a frozen rule counts only what is not in its baseline.
-Without the suite every rule counts — Block A then answers "what if we switched all of it on today".
+Without the suite every released rule counts — Block A then answers "what if we switched all of it on today".
+An experimental rule (*(experimental)* in the rule catalog, `maturity: experimental` on its node) counts only
+where the project opted in — `withExperimental()` / `WithExperimental()` in the architecture test, or
+`dca.rules.experimental = true` in `dca-archunit.properties`. Check that before citing one; without the
+opt-in it gets no mark and no finding, at most a line under the summary as information.
 
 **Fine where it fails.** A set every rule of which holds in a context is one row with `✓`. A set with a
 failing rule in any context opens: its row shows the count, and below it one row per failing rule — id,

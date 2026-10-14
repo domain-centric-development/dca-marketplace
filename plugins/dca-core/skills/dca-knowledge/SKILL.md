@@ -66,7 +66,7 @@ without reading everything.
 | `Guide` | `guide/` | preamble + `## Sections` index | → child Sections |
 | `Section` | `guide/<g>/` | **full verbatim text** | `## Related mentions (heuristic)` |
 | `Marker` | `marker/<cat>/` | interface signature, `extends`, methods | `## Extends`, `## Governed by` (rules), `## Related mentions in guides (heuristic)` (sections) |
-| `Rule` | `rule/<cat>/` | Java/ArchUnit or C#/ArchUnitNET evidence, `enforced_by`, `status` | `## Applies to markers` |
+| `Rule` | `rule/<cat>/` | Java/ArchUnit or C#/ArchUnitNET evidence, `enforced_by`, `status`, `maturity` | `## Applies to markers` |
 | `Process` | `process/` | how-to (e.g. writing an ADR) | → any |
 | `Reference` | `reference/` | `DcaLayout` (settings, defaults, patterns, framework names) and `DcaArchitecture` (how contexts and module roots are discovered, every query the rules select through) — Java and .NET | ← every rule ("Configured by") |
 | `Recipe`/`Decision`/`Pitfall`/`Template`/`Note` | `recipe/` … `note/` (**extensible zone**) | authored playbooks, design-fork guides, anti-patterns, code skeletons, saved query answers | links into the skeleton |
@@ -75,7 +75,14 @@ without reading everything.
 Resolve against the bundle root, not the current file.
 
 **Frontmatter as filter:** `type`, `tags`, `category`, `status` (rules:
-`enforced`/`informational`/`disabled`). Use these to narrow before reading bodies.
+`enforced`/`informational`/`disabled`), `maturity` (rules: `released`/`experimental`). Use these to
+narrow before reading bodies.
+
+**An experimental rule binds only where the project opted in.** Before you answer "this is enforced" or
+"this is not allowed" from a `maturity: experimental` node, check the project's opt-in —
+`withExperimental()` / `WithExperimental()` in its architecture test, or `dca.rules.experimental = true`
+in `dca-archunit.properties`. Without it, cite the rule as information, say it is experimental, and do not
+present it as a reason to change code.
 
 **Reserved files** (`index.md`, `log.md`) are navigation, not knowledge — read them to
 route, don't cite them as answers.
@@ -107,7 +114,7 @@ Stop expanding once the question is answered. Prefer 2–4 precise node reads ov
 |---|---|
 | `/dca-knowledge ask <question>` (default) | route → locate → read → expand → answer, grounded and cited |
 | `explain <concept>` | the guide's teaching text first, then the marker and rule nodes that realize it |
-| `rules-for <marker>` | the rules governing a marker, with `status` and `enforced_by` |
+| `rules-for <marker>` | the rules governing a marker, with `status`, `maturity` and `enforced_by` |
 | `why <rule>` | the rule's rationale, the markers it applies to, the guide sections that discuss them |
 | `trace <node>` · `find <text>` | one node's edges · a ranked locator over titles and tags |
 | `build <thing>` | the build loop: recipe → decision → template → the recipe's rules → the architecture suite |

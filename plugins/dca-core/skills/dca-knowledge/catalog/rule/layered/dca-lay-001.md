@@ -8,6 +8,7 @@ selects: "Informational - selects nothing. ArchUnit's layered-architecture defin
 checks: Informational - selects nothing and never fails; it carries doctrine only. The dependency direction is enforced by the hexagonal rules.
 enforced_by: "LayeredRules#DCA-LAY-001"
 status: informational
+maturity: released
 rule_set: layered
 implementations: [java, dotnet]
 tags: [layered, archunit]

@@ -8,6 +8,7 @@ selects: "Non-interface, non-record, non-enum classes anywhere under scan assign
 checks: Every field - inherited ones included - is final or static. A non-final instance field is reported; static fields are not part of the object's state and pass.
 enforced_by: "TacticalPatternRules#DCA-TAC-010"
 status: enforced
+maturity: released
 rule_set: tactical
 implementations: [java, dotnet]
 tags: [tactical, archunit]

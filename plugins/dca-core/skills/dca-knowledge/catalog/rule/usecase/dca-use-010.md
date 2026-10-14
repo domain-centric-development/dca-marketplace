@@ -8,6 +8,7 @@ selects: "Classes in <module>.domain.. of every module root."
 checks: No dependency on a class whose simple name ends with Dto.
 enforced_by: "UseCaseRules#DCA-USE-010"
 status: enforced
+maturity: released
 rule_set: usecase
 implementations: [java, dotnet]
 tags: [usecase, archunit]

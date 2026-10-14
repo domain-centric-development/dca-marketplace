@@ -8,6 +8,7 @@ selects: "Non-interface classes anywhere under scan assignable to Store, abstrac
 checks: "The class resides in <module>.adapter.outgoing.. of some module root; an empty selection passes."
 enforced_by: "TacticalPatternRules#DCA-TAC-020"
 status: enforced
+maturity: released
 rule_set: tactical
 implementations: [java, dotnet]
 tags: [tactical, archunit]

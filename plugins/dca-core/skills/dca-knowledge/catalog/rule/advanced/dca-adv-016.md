@@ -8,6 +8,7 @@ selects: "Non-interface classes in <module>.domain.. of every module root that a
 checks: "Every field - declared or inherited from a superclass, static fields included - is final. Field types are not inspected. An empty selection passes."
 enforced_by: "AdvancedPatternRules#DCA-ADV-016"
 status: enforced
+maturity: released
 rule_set: advanced
 implementations: [java, dotnet]
 tags: [advanced, archunit]

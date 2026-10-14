@@ -262,6 +262,12 @@ Read `dca.profile.yaml` at the project root (the `AGENTS.md` line ``- configurat
 
 Where the file is missing or a key is absent: the DCA defaults the guide's rules state (`dca-knowledge` cites them).
 
+**Experimental rules bind only where the project opted in.** A rule whose catalog node says
+`maturity: experimental` is a guard here only when the architecture test calls
+`withExperimental()` / `WithExperimental()` on its rule selection or `dca-archunit.properties` sets
+`dca.rules.experimental = true`. Without that opt-in, mention it as information at most — never
+change code for it and never stop an edit over it.
+
 ## What this skill does NOT do
 
 - **Doesn't audit existing code.** That's `dca-audit` and the reviewer agents.
