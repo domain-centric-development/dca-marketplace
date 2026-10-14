@@ -58,8 +58,8 @@
 # architecture runs the architecture rule suite — the gate runs it in the build stage
 # format       runs the formatter check — the gate runs it in the build and tidy stages
 # formatFix    corrects the formatting (`./gradlew spotlessApply`, `dotnet format`). The stages that write
-#              code — test, build, tidy — run it before they finish; the gate and the commit hook run
-#              only `format:` and change no file
+#              code — test, build, tidy — run it before they finish, and the runner runs it after the
+#              integrate stage resolved a merge; the gate and the commit hook run only `format:` and change no file
 # carrier.<r>  the skill that carries a stage's craft or a role — `carrier.plan`, `carrier.test`,
 #              `carrier.build`, `carrier.tidy`, `carrier.guard` (the invariants build and tidy keep),
 #              `carrier.glossary`, `carrier.domain` (the designed context map), `carrier.discover`; the list is open. A

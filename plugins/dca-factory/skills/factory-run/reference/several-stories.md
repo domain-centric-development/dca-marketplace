@@ -30,8 +30,8 @@ stories run past it.
 next one starts. The worktree links what is state to this checkout — the stories with their decisions, the
 run folder, the pipeline, the skills — and `FACTORY_HOME` names this checkout to the gate and the cli, so
 both read every place from here. A story is delivered when it is integrated: the integrate step merges the
-main line into its branch (the `stage-integrate` agent where git stops on a conflict), squashes it to one
-commit, runs the integrate gate on that tree — the tidy gate's checks once more, no conflict marker left —
+main line into its branch (the `stage-integrate` agent where git stops on a conflict, the profile's
+`formatFix:` over its resolution), squashes it to one commit, runs the integrate gate on that tree — the tidy gate's checks once more, no conflict marker left —
 and fast-forwards this checkout's branch; then its worktree and branch go. `--parallel <n>` runs up to `<n>`
 stories at once. A story the runner started in its worktree is not taken up in a session: run it with
 `factory.sh run --story <id>`.

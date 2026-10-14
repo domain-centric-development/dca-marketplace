@@ -49,4 +49,6 @@ One row per conflicted file. The gate's outcome is not recorded here: its report
 ## Do not
 
 - Do not take one side whole to make a conflict go away.
-- Do not reformat, rename or tidy anything a conflict does not need.
+- Do not reformat, rename or tidy anything a conflict does not need. Where the stack profile declares
+  `formatFix:`, the runner runs it after you, before the merge is committed and gated — the formatting of a
+  resolution is not yours to get right by hand.

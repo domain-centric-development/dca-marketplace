@@ -8777,6 +8777,34 @@ def verify_worktrees(runner, verbose=False):
               "names the next story that can start",
               "STORY-1  stopped" in listing and "STORY-2  blocked" in listing and "next: STORY-3 plan" in listing, listing)
 
+    # #141: the integrate stage's resolution goes through the profile's formatter before the merge is committed and
+    # gated — a resolution the formatter would correct costs no round (WP-111)
+    for root in throwaway():
+        log, env = fixture(root, [("STORY-2", [])], asks="STORY-1",
+                           profile="compile: true\nformat: sh fmt-check.sh\nformatFix: sh fmt-fix.sh\n",
+                           extra=(("fmt-check.sh", "! grep -rq UNFORMATTED src/main\n"),
+                                  ("fmt-fix.sh", 'for f in src/main/*.txt; do grep -v UNFORMATTED "$f" > "$f.fmt"; '
+                                                 'mv "$f.fmt" "$f"; done\n')))
+        script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            "grep -v -e '^<<<<<<< ' -e '^=======$' -e '^>>>>>>> ' \"$f\" > \"$f.resolved\"; mv \"$f.resolved\" \"$f\"",
+            "grep -v -e '^<<<<<<< ' -e '^=======$' -e '^>>>>>>> ' \"$f\" > \"$f.resolved\"; mv \"$f.resolved\" \"$f\"; "
+            "echo UNFORMATTED >> \"$f\"", 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                       capture_output=True)
+        run_runner(runner, root, "run", env=env)
+        with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+            handle.write(ANSWER)
+        code, output = run_runner(runner, root, "run", env=env)
+        shared = read(root, "src/main/shared.txt")
+        check("integrate: the files the integrate stage resolved go through the profile's `formatFix:` before the "
+              "merge is committed — the format check passes, no round is spent",
+              "echo UNFORMATTED" in script and code == 0 and story_delivered(root, "STORY-1")
+              and "UNFORMATTED" not in shared and "line from STORY-1" in shared and "line from STORY-2" in shared
+              and "formatFix" in output and not os.path.isfile(os.path.join(root, ".dca-factory/evidence/STORY-1/.rounds")),
+              f"exit {code}; shared {shared!r}; {output.strip().splitlines()[-8:]}")
+
     # a waiting story the person sets superseded: the next run removes its worktree and branch, nothing of it on main
     for root in throwaway():
         log, env = fixture(root, [], asks="STORY-1")

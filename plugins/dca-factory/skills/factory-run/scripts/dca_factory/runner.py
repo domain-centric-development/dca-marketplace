@@ -36,7 +36,7 @@ from .state import (
 from .spec import (
     context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
-    merge_target,
+    merge_target, run as run_command,
     read_mapping, spec_target, story_spec,
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
     integration_target, INVARIANTS_MARKER, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
@@ -2637,6 +2637,14 @@ class Run:
         if os.path.isfile(record) and self.asks_human(record):
             self.drop_lock()
             return self.stopped_for_human(record, "integrate", story)
+        # The formatter is mechanical: what the resolution left for it is corrected here, not spent as a round.
+        fix = self.profile().get("formatFix", "").strip()
+        if fix:
+            print(f"── formatFix  (the profile's, over what the integrate stage resolved: {fix})")
+            fixed, said = run_command(fix, self.pwd)
+            if fixed != 0:
+                err(f"factory: the profile's formatFix exited {fixed} — the gate's format check decides: "
+                    f"{said.strip()[-300:]}")
         code, out = self.in_home("--integrate-finish", story)
         print(out)
         if code != 0:
