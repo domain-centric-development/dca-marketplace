@@ -1153,15 +1153,21 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ? [
               ui.section('Open findings', `${findings.length} from the judge${shownFindings.length < findings.length ? ` · the first ${shownFindings.length} shown` : ''} · close one in its file, or hand it to the backlog`),
               ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'seen by', width: 10 }, { name: 'finding', width: 30, isWide: true, weight: 2 }, { name: 'fix', width: 24, isWide: true }, { name: 'where', width: 16 }, COL.act],
+                [COL.mark, COL.story(idWidth), { name: 'finding', width: 30, isWide: true, weight: 3 }, { name: 'seen by · in detail → fix', width: 30, isWide: true, weight: 2 }, { name: 'where', width: 16 }, COL.act],
                 shownFindings.map((finding, index) => [
                   ui.mark('finding'),
                   index > 0 && shownFindings[index - 1]?.story === finding.story
                     ? {}
                     : ui.open(`finding-file-${index}`, finding.story, () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)),
-                  { text: finding.perspective ?? '', color: C.muted },
-                  { text: finding.defect, color: C.bright },
-                  { text: finding.fix && finding.fix !== '—' ? `→ ${finding.fix}` : '', color: C.muted },
+                  // the sentence a person understands at once leads (dca-factory 0.84.0); a row without it shows the defect there
+                  { text: finding.plain || finding.defect, color: C.bright },
+                  // who saw it, the reviewer's own account where the sentence stands in front, and the fix
+                  {
+                    text: [[finding.perspective, finding.plain ? finding.defect : ''].filter(Boolean).join(' · '), finding.fix && finding.fix !== '—' ? `→ ${finding.fix}` : '']
+                      .filter(Boolean)
+                      .join(' '),
+                    color: C.muted,
+                  },
                   // the file's name and line; the path stands in the findings file the story's name opens
                   { text: finding.where.split('/').pop() ?? finding.where, color: C.muted },
                   ui.press(`finding-story-${index}`, 'to backlog', () => send($, finding.action.skill), { byClaude: true }),

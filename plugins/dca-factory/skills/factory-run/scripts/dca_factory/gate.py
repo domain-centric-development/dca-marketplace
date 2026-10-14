@@ -81,11 +81,11 @@ from datetime import datetime, timezone
 from .contract import (
     DEFAULTS, METHOD_PROFILE, PLACES, read_flat,
     runs_top,
-    ALL_KINDS, ANSWER_FIELDS, answered_decisions, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
+    ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
-    factory_home, file_digest, find_story, findings_path, findings_rows, GateError, git, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
+    factory_home, file_digest, find_story, findings_cells, findings_path, findings_rows, GateError, git, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
     INSTRUCTION_FILES, is_delivered, JOURNEY_ORDER, order_for, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, needs_human_ids,
-    NOTHING, place, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
+    NOTHING, place, PLAIN_COLUMN, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
     record_path, records_of, resolve_profile, resume_stage, section_of, SELECTOR, set_places, SHARED_WINDOWS, shown,
     STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, stamp_applied, story_digest, story_files, story_folder,
     story_id_of, story_kind, TECH_HEADINGS, TESTED_KINDS, unknown_profile_keys, VERSION)
@@ -326,9 +326,9 @@ def close_findings(result, front):
             continue
         lines = read_text(path).splitlines()
         for index, line in enumerate(lines):
-            cells = [c.strip() for c in line.strip().strip("|").split("|")] if line.startswith("|") else []
-            if len(cells) == 7 and cells[0] == row[0]:
-                cells[6] = "done"
+            cells = findings_cells(line)
+            if cells and cells[0] == row[0]:
+                cells[-1] = "done"
                 lines[index] = "| " + " | ".join(cells) + " |"
         with open(path, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines) + "\n")
@@ -4518,6 +4518,12 @@ def deliver(result, story_path, story_id, front, runs):
     if added or open_now:
         result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
                               f"{open_now} open there")
+    judge = os.path.join(runs, story_id, "judge.md")
+    unworded = [r[1] for r in confirmed_defects(read_text(judge)) if not r[5]] if os.path.isfile(judge) else []
+    if unworded:
+        result.note("findings", f"{len(unworded)} confirmed defect(s) in judge.md without `{PLAIN_COLUMN}` "
+                                f"({', '.join(unworded[:3])}{' …' if len(unworded) > 3 else ''}) — the one sentence a "
+                                f"person reads first; Decide shows the reviewer's `Defect` in its place")
 
 
 def journal_gate(result, args, story_id, story_path, code):

@@ -10,8 +10,8 @@ under `<story>/decisions/` in each story's folder, the backlog under `product/ep
 start nothing and answer nothing on anyone's behalf.
 
 The brief also counts the judge's **open findings** — confirmed minors the pipeline kept in `<story>/findings.md`
-beside each delivered story; `python3 .agents/factory/factory-cli.py --findings` lists them with story, severity and
-place. They block nothing; a person closes a row (`done`, `wont-fix`) or a later story takes them as its brief.
+beside each delivered story; `python3 .agents/factory/factory-cli.py --findings` lists them with story, severity,
+place and the finding in plain words first. They block nothing; a person closes a row (`done`, `wont-fix`) or a later story takes them as its brief.
 
 ## Do
 

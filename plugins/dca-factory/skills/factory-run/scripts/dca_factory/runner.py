@@ -939,8 +939,10 @@ judge — {folder}/judge.md (the runner reads the verdict; the document gate rea
 - `back: test` under the verdict when a confirmed defect is in a test (it asserts less than its criterion): the round
   goes to the test stage, then build; without it the round goes to build, which may not change a test
 - `## Perspectives covered`: `- <perspective>: reviews/<perspective>.md (<carrier>) | in-session — <why no file> | not covered — <why>`
-- `## Confirmed defects`: `| Perspective | File:line | Severity | Defect | Fix |` — file as a path from the project root
-  with its line; severity blocker | major | minor; only blocker and major prevent `pass`
+- `## Confirmed defects`: `| Perspective | File:line | Severity | In plain words | Defect | Fix |` — file as a path from
+  the project root with its line; severity blocker | major | minor; only blocker and major prevent `pass`; `In plain
+  words` is one short sentence a person understands at once, no code name or line ("the checkout controller checks
+  the step twice"), `Defect` the reviewer's precise account
 - `## Considered and dropped`, `## Criteria re-checked`: `- <key>: met | met only nominally — <what the test does not assert>`
 - `## Previous round` in a repeat round: every defect the previous verdict confirmed — fixed (file:line) | withdrawn (why) | still open
 - a `story-conflict` names a decision record: `## needs-human` with `decision: <story>-<nn>`, the record's `stage:` is the one

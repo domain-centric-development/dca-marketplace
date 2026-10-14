@@ -2724,9 +2724,14 @@ exit 0
         # WP-104: the cockpit reads the same from the status JSON — the claims with their kind and action, and the
         # judge's open minors
         write_file(root, "product/epics/sample/STORY-1/findings.md",
+                   "| # | Perspective | File:line | Severity | In plain words | Defect | Fix | Status |\n|---|---|---|---|---|---|---|---|\n"
+                   "| 1 | ddd | src/main/Thing.java:3 | minor | the step is checked where nobody looks | a guard the plan did not name | name it | open |\n"
+                   "| 2 | ddd | src/main/Thing.java:9 | minor | done | closed already | — | done |\n")
+        write_file(root, "product/epics/sample/STORY-0/story.md",
+                   "---\nid: STORY-0\nepic: sample\nstatus: delivered\ncontext: Widgets\ntitle: The first one\n---\n\n# The first one\n")
+        write_file(root, "product/epics/sample/STORY-0/findings.md",
                    "| # | Perspective | File:line | Severity | Defect | Fix | Status |\n|---|---|---|---|---|---|---|\n"
-                   "| 1 | ddd | src/main/Thing.java:3 | minor | a guard the plan did not name | name it | open |\n"
-                   "| 2 | ddd | src/main/Thing.java:9 | minor | closed already | — | done |\n")
+                   "| 1 | clean-code | src/main/Old.java:1 | minor | an old row | old fix | open |\n")
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--format",
                                   "json")
         try:
@@ -2735,14 +2740,22 @@ exit 0
             view = {}
         kinds = {c.get("story"): c.get("kind") for c in view.get("claims", [])}
         found = view.get("findings", [])
+        new = next((f for f in found if f.get("story") == "STORY-1"), {"action": {"skill": ""}, "defect": "", "severity": "", "file": ""})
+        old = next((f for f in found if f.get("story") == "STORY-0"), {"action": {"skill": ""}, "defect": ""})
         check("status json: the claims of other factories by kind with an action, and the open findings with their file, "
-              "perspective and fix",
+              "perspective, fix and the plain-words sentence first (empty for a row from before contract 23)",
               kinds == {"STORY-1": "held", "STORY-9": "orphan"}
               and next(c for c in view["claims"] if c["story"] == "STORY-9")["action"]["shell"].endswith(
                   "release STORY-9 --force")
-              and len(found) == 1 and found[0]["story"] == "STORY-1" and found[0]["severity"] == "minor"
-              and found[0].get("perspective") == "ddd" and found[0].get("fix") == "name it"
-              and found[0]["file"].endswith("STORY-1/findings.md"),
+              and len(found) == 2 and new["severity"] == "minor"
+              and new.get("perspective") == "ddd" and new.get("fix") == "name it"
+              and new.get("plain") == "the step is checked where nobody looks"
+              and new["defect"] == "a guard the plan did not name"
+              and new["action"]["skill"].endswith("STORY-1: the step is checked where nobody looks")
+              and new["file"].endswith("STORY-1/findings.md")
+              # a row from before contract 23 reads with the sentence empty, its defect in its place
+              and old.get("plain") == "" and old["defect"] == "an old row"
+              and old["action"]["skill"].endswith("STORY-0: an old row"),
               [view.get("claims"), view.get("findings")])
         write_file(root, ".dca-factory/claims.tsv",
                    "STORY-1\tanna@example.org\tlaptop-a\t2026-01-02T03:04:05Z\t0\tother-epic\tSort the list\n")
@@ -5318,7 +5331,7 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 22\nrequried: compile\n" + PROFILE)),
+         dict(profile="contract: 23\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
@@ -5747,6 +5760,45 @@ def run_groups(args):
               after=lambda root: [] if os.path.isfile(os.path.join(root, "product/epics/sample/STORY-1/findings.md"))
               and open(os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read().count("| open |") == 2
               else ["no STORY-1/findings.md with two open rows in the story's folder"])),
+        # 0.84.0 (contract 23): the finding in plain words — its own column in judge.md, kept in findings.md.
+        (Case("document: the judge's plain-words sentence lands in findings.md in its own column after Severity",
+              "document", 0, must_pass=("delivered", "findings"), text=("1 confirmed finding(s) kept in",),
+              absent=("without `In plain words`",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=((".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
+                              "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
+                              "| clean-code | src/main/Thing.java:3 | minor | the page checks the step twice | repeats `Page`'s guard (`:3`–`:9`) | call the guard once |\n"),),
+              after=lambda root: [] if "| 1 | clean-code | src/main/Thing.java:3 | minor | the page checks the step twice | "
+              "repeats `Page`'s guard (`:3`–`:9`) | call the guard once | open |" in open(
+                  os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
+              and "| # | Perspective | File:line | Severity | In plain words | Defect | Fix | Status |" in open(
+                  os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
+              else ["findings.md has no eight-column row with the plain sentence after Severity"])),
+        (Case("document: a judge table from before contract 23 is still kept, its rows noted for the missing sentence",
+              "document", 0, must_pass=("delivered", "findings"),
+              text=("2 confirmed finding(s) kept in", "gate:note findings — 2 confirmed defect(s) in judge.md without `In plain words`")),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=((".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | Defect | Fix |\n|---|---|---|---|---|\n| clean-code | src/main/Thing.java:3 | minor | a name that says nothing | rename it |\n| ddd | src/main/Thing.java:9 | minor | an event in the present tense | past tense |\n"),),
+              after=lambda root: [] if "| 2 | ddd | src/main/Thing.java:9 | minor |  | an event in the present tense | past tense | open |"
+              in open(os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
+              else ["an old judge row is not kept with an empty plain-words cell"])),
+        (Case("document: a findings.md from before contract 23 is widened when a row is added — its rows kept, one table",
+              "document", 0, must_pass=("findings",), text=("1 confirmed finding(s) kept in", "2 open there")),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=(("product/epics/sample/STORY-1/findings.md",
+                              "---\nstory: STORY-1\n---\n\n# Findings — STORY-1\n\n"
+                              "| # | Perspective | File:line | Severity | Defect | Fix | Status |\n|---|---|---|---|---|---|---|\n"
+                              "| 1 | ddd | src/main/Old.java:1 | minor | an old defect | old fix | open |\n"),
+                             (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
+                              "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
+                              "| hexagonal | src/main/Thing.java:5 | minor | the shop asks the database from the page | adapter call in the controller | go through the port |\n")),
+              after=lambda root: (lambda text: [] if
+                                  "| # | Perspective | File:line | Severity | In plain words | Defect | Fix | Status |\n|---|---|---|---|---|---|---|---|\n"
+                                  "| 1 | ddd | src/main/Old.java:1 | minor |  | an old defect | old fix | open |\n"
+                                  "| 2 | hexagonal | src/main/Thing.java:5 | minor | the shop asks the database from the page | "
+                                  "adapter call in the controller | go through the port | open |" in text
+                                  else [text[-500:]])(open(os.path.join(root, "product/epics/sample/STORY-1/findings.md"),
+                                                           encoding="utf-8").read()))),
         # WP-81: one review file per perspective; a missing one is a note, a malformed one is refused.
         (Case("document: three review files in the skills' format pass the reviews check", "document", 0,
               must_pass=("reviews",)),

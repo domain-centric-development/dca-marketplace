@@ -39,8 +39,9 @@ export type FactoryStatus = {
   rows: Row[]
   next: { text: string; action: Action }
   journeys: { epic: string; text: string; action: Action }[]
-  // the judge's open minors and other factories' claims (dca-factory 0.79.3; absent from an older pipeline)
-  findings?: { story: string; where: string; severity: string; defect: string; perspective?: string; fix?: string; file: string; action: Action }[]
+  // the judge's open minors and other factories' claims (dca-factory 0.79.3; absent from an older pipeline); `plain`, the
+  // finding in one sentence a person understands at once, since 0.84.0 — '' for a row the judge wrote before it
+  findings?: { story: string; plain?: string; where: string; severity: string; defect: string; perspective?: string; fix?: string; file: string; action: Action }[]
   claims?: {
     story: string
     kind: 'held' | 'orphan' | 'collision'

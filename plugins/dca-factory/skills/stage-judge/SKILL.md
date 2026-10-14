@@ -176,7 +176,7 @@ back: test                        (only when a confirmed defect is in a test —
 - <perspective>: reviews/<perspective>.md (<carrier>) | in-session — <why there was no file> | not covered — <why>
 
 ## Confirmed defects
-| Perspective | File:line | Severity | Defect | Fix |
+| Perspective | File:line | Severity | In plain words | Defect | Fix |
 
 ## Considered and dropped
 - <finding>: <why it is not a defect>
@@ -205,10 +205,17 @@ anew. A defect does not disappear because this round's reading missed it: it is 
 line that shows it, or withdrawn, with the reason — and a withdrawal that contradicts the source
 the previous round cited (a glossary line, a criterion) is a `story-conflict`, not a `pass`.
 
+**In plain words.** Every confirmed defect carries one short sentence a person understands at once, without
+opening the file: what is wrong, in the words of the product or the code's purpose — "the checkout controller
+checks the step twice", not "repeats `Page`'s guard check (`:133`–`:143`)". No code name, no line, no reviewer
+term; the precise account stays in `Defect`, the remedy in `Fix`. A person deciding in the inbox reads this
+sentence first and opens the rest only when it matters.
+
 A `minor` you confirm is not lost with the run folder: when the story is delivered, the pipeline copies every
 row of `## Confirmed defects` into `<story>/findings.md` in the story's folder (`| # | Perspective | File:line |
-Severity | Defect | Fix | Status |`, `open` until a person or a later story closes it). So a row you write
-here is a row somebody will read later — file and line exact, the fix one sentence.
+Severity | In plain words | Defect | Fix | Status |`, `open` until a person or a later story closes it). So a row
+you write here is a row somebody will read later — file and line exact, the plain sentence and the fix one
+sentence each.
 
 `verdict: pass` means the change is deliverable. Say it plainly when it is true; inventing a
 finding to look thorough costs a build round and teaches the pipeline nothing. Every finding

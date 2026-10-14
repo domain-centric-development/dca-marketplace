@@ -231,10 +231,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 22
+CONTRACT = 23
 
 
-VERSION = "0.83.3"
+VERSION = "0.84.0"
 
 
 def split_front(text):
@@ -435,7 +435,15 @@ def flat_stories(epics):
     return found
 
 
-FINDINGS_HEADER = "| # | Perspective | File:line | Severity | Defect | Fix | Status |"
+#: The finding as a person reads it first: one short sentence anyone understands at once ("the checkout controller
+#: checks the step twice"), beside the reviewer's `Defect` and the `Fix` (contract 23). A judge.md or a findings.md
+#: from before it carries no such column and reads with the sentence empty.
+PLAIN_COLUMN = "In plain words"
+FINDINGS_HEADER = f"| # | Perspective | File:line | Severity | {PLAIN_COLUMN} | Defect | Fix | Status |"
+OLD_FINDINGS_HEADER = "| # | Perspective | File:line | Severity | Defect | Fix | Status |"
+#: judge.md's `## Confirmed defects` columns as the judge writes them; an older table lacks `In plain words`.
+JUDGE_COLUMNS = ("Perspective", "File:line", "Severity", PLAIN_COLUMN, "Defect", "Fix")
+JUDGE_HEADER = "| " + " | ".join(JUDGE_COLUMNS) + " |"
 
 
 def findings_path(story_path):
@@ -444,8 +452,11 @@ def findings_path(story_path):
 
 
 def confirmed_defects(judge_text):
-    """The rows of judge.md's `## Confirmed defects` table: (perspective, file:line, severity, defect, fix)."""
+    """The rows of judge.md's `## Confirmed defects` table: (perspective, file:line, severity, defect, fix, plain).
+    The cells are read by the header's names, so a table from before contract 23 — no `In plain words` — reads with
+    `plain` empty; a table without a header is read in the old order."""
     rows, inside = [], False
+    names = [c.lower() for c in JUDGE_COLUMNS if c != PLAIN_COLUMN]
     for line in judge_text.splitlines():
         if line.startswith("## "):
             inside = line[3:].strip().lower() == "confirmed defects"
@@ -453,31 +464,66 @@ def confirmed_defects(judge_text):
         if not inside or not line.lstrip().startswith("|"):
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 5 or cells[0].lower() == "perspective" or set(cells[0]) <= set("-: "):
+        if cells[0].lower() == "perspective":
+            names = [c.lower() for c in cells]
             continue
-        rows.append(tuple(cells[:5]))
+        if len(cells) < 5 or set(cells[0]) <= set("-: "):
+            continue
+        cell = dict(zip(names, cells))
+        rows.append((cell.get("perspective", ""), cell.get("file:line", ""), cell.get("severity", ""),
+                     cell.get("defect", ""), cell.get("fix", ""), cell.get(PLAIN_COLUMN.lower(), "")))
     return rows
 
 
+def findings_cells(line):
+    """A findings row's cells as written, or None for a line that is no row: seven cells before contract 23, eight
+    with `In plain words` after `Severity`."""
+    if not line.startswith("|"):
+        return None
+    cells = [c.strip() for c in line.strip().strip("|").split("|")]
+    return cells if len(cells) in (7, 8) and cells[0].isdigit() else None
+
+
 def findings_rows(path):
-    """The rows of a findings file: (n, perspective, file:line, severity, defect, fix, status)."""
+    """The rows of a findings file: (n, perspective, file:line, severity, defect, fix, status, plain) — `plain`
+    empty in a file from before contract 23."""
     rows = []
     if not os.path.isfile(path):
         return rows
     for line in read_text(path).splitlines():
-        if not line.startswith("|"):
+        cells = findings_cells(line)
+        if cells is None:
             continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) == 7 and cells[0].isdigit():
-            rows.append(tuple(cells))
+        if len(cells) == 7:
+            rows.append(tuple(cells) + ("",))
+        else:
+            n, perspective, where, severity, plain, defect, fix, status = cells
+            rows.append((n, perspective, where, severity, defect, fix, status, plain))
     return rows
+
+
+def widen_findings(text):
+    """A findings file from before contract 23 in today's shape: the header, its rule and every row gain the empty
+    `In plain words` cell after `Severity`, so the rows appended after them stand in one table."""
+    lines = text.split("\n")
+    for index, line in enumerate(lines):
+        if line.strip() == OLD_FINDINGS_HEADER:
+            lines[index] = FINDINGS_HEADER
+            if index + 1 < len(lines) and set(lines[index + 1].strip()) <= set("|-: ") and lines[index + 1].strip():
+                lines[index + 1] = "|---|---|---|---|---|---|---|---|"
+            continue
+        cells = findings_cells(line)
+        if cells is not None and len(cells) == 7:
+            lines[index] = "| " + " | ".join(cells[:4] + [""] + cells[4:]) + " |"
+    return "\n".join(lines)
 
 
 def record_findings(story_path, story_id, front, runs):
     """Keep the judge's confirmed defects in the story's folder, as `<story>/findings.md`, when the story is delivered:
     a finding that did not block (a minor) would otherwise live in the run folder alone, which is protocol and
     disposable. One row per finding, `open` until a person or a later story closes it; a row already there
-    (same file:line and defect) is not written twice. Returns (added, open)."""
+    (same file:line and defect) is not written twice. A file from before contract 23 is widened by the plain-words
+    column when a row is added to it. Returns (added, open)."""
     judge = os.path.join(runs, story_id, "judge.md")
     if not os.path.isfile(judge):
         return 0, 0
@@ -492,13 +538,13 @@ def record_findings(story_path, story_id, front, runs):
         text = (f"---\nstory: {story_id}\nepic: {front.get('epic', '')}\n---\n\n# Findings — {story_id}\n\n"
                 "The judge's confirmed defects that did not block the story, kept for a later story or a person's look. "
                 "The pipeline appends; a person sets `Status` to `done` or `wont-fix`.\n\n"
-                f"{FINDINGS_HEADER}\n|---|---|---|---|---|---|---|\n")
+                f"{FINDINGS_HEADER}\n|---|---|---|---|---|---|---|---|\n")
     else:
-        text = read_text(path).rstrip("\n") + "\n"
+        text = widen_findings(read_text(path).rstrip("\n")) + "\n"
     n = len(have)
-    for perspective, where, severity, defect, fix in added:
+    for perspective, where, severity, defect, fix, plain in added:
         n += 1
-        text += f"| {n} | {perspective} | {where} | {severity} | {defect} | {fix} | open |\n"
+        text += f"| {n} | {perspective} | {where} | {severity} | {plain} | {defect} | {fix} | open |\n"
     if added:
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(text)
@@ -506,12 +552,12 @@ def record_findings(story_path, story_id, front, runs):
 
 
 def open_findings(epics):
-    """Every open finding under the epics: (story id, file:line, severity, defect, perspective, fix), read from the
-    findings files."""
+    """Every open finding under the epics: (story id, file:line, severity, defect, perspective, fix, plain), read from
+    the findings files — `plain` empty for a row from before contract 23."""
     out = []
     for story_path in story_files(epics):
         story = story_id_of(story_path)
-        out += [(story, r[2], r[3], r[4], r[1], r[5]) for r in findings_rows(findings_path(story_path)) if r[6] == "open"]
+        out += [(story, r[2], r[3], r[4], r[1], r[5], r[7]) for r in findings_rows(findings_path(story_path)) if r[6] == "open"]
     return out
 
 

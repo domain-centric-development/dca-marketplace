@@ -12,7 +12,7 @@ const STATUS = {
     { mark: 'look', story: 'sort-books', what: 'published — waits for its merge', action: { text: 'open the merge request from its branch', skill: '', shell: '' } },
   ],
   findings: [
-    { story: 'add-book', where: 'src/Book.java:12', severity: 'minor', defect: 'a guard the plan did not name', perspective: 'ddd', fix: 'name the guard in the plan', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a guard the plan did not name', shell: '' } },
+    { story: 'add-book', plain: 'the book is checked where nobody looks', where: 'src/Book.java:12', severity: 'minor', defect: 'a guard the plan did not name', perspective: 'ddd', fix: 'name the guard in the plan', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: the book is checked where nobody looks', shell: '' } },
     { story: 'add-book', where: 'src/Book.java:30', severity: 'minor', defect: 'a comment names the old term', file: 'product/epics/books/add-book/findings.md', action: { text: '', skill: '/factory-backlog add-book: a comment names the old term', shell: '' } },
   ],
   claims: [
@@ -203,9 +203,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await expect(pane.press({ key: 'finding-file-1' })).rejects.toThrow()
     // the finding stands in front with what to do beside it, the file only by its name
     expect(await pane.find({ text: /→ name the/ })).toBeDefined()
+    // the finding in plain words leads, the reviewer's defect beside it; a row without the sentence shows its defect
+    expect(await pane.find({ text: /the book is/ })).toBeDefined()
+    expect(await pane.find({ text: /guard/ })).toBeDefined()
+    expect(await pane.find({ text: /a comment/ })).toBeDefined()
     expect(await pane.find({ text: 'Book.java:12' })).toBeDefined()
     await pane.press({ key: 'finding-story-0' })
-    expect(sent.at(-1)).toBe('/dca-factory:factory-backlog add-book: a guard the plan did not name')
+    expect(sent.at(-1)).toBe('/dca-factory:factory-backlog add-book: the book is checked where nobody looks')
     // the open record offers its options as choices; a press hands the answer to the decisions skill
     await pane.press({ key: 'record-add-book-01' })
     expect(await pane.find({ text: /the stage recommends b/ })).toBeDefined()
