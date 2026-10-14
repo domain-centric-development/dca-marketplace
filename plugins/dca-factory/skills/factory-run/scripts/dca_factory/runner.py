@@ -872,7 +872,8 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
   The test gate reads `level: browser-only` here (`levels`); a key is `[a-z0-9][a-z0-9-]*`
 - `## Invariants`: one line per aggregate, entity, value object or domain service `## Changes` names —
   `- <Element>: <rule>; <rule>` with its guards (required, trimmed, in range), or `- <Element>: none — <why>`.
-  The test gate reads it (`invariants`): each named rule needs a unit test in tests.md's `## Notes`
+  The test gate reads it (`invariants`): each named rule needs a unit test in tests.md's `## Notes`.
+  An adopted story names the domain types its scenarios exercise instead, or `- none — <why>`: the line is required
 - `## Spec delta`: the story against its context's spec (`product/spec/<context>/scenarios.md`) — the skeleton writes
   `- adds <key>` / `- holds <key>` / `- changes <key>` as the comparison says; add `- removes <key>: <why>` for a
   criterion the story takes away and `- rule "<old>" → "<new>"` for a renamed rule (every criterion under it named or

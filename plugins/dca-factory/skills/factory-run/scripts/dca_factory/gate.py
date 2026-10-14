@@ -564,15 +564,32 @@ def check_invariants(result, profile, cwd, runs, story_id, front, mapping):
     """Contract 13: every domain type the plan changes names its invariants — its rules, the guards included, one
     per `;` — and every rule has its own unit test in tests.md's `gate:invariants` table: a selector that exists as
     class and method, and that is no criterion's test. A guard nobody named is code no test asked for; a rule whose
-    only test is a criterion's is a rule nobody tested on its own."""
-    if story_kind(front) != "story" or contract_of(profile) < 13:
+    only test is a criterion's is a rule nobody tested on its own.
+
+    Contract 24 (#134): an adoption changes no domain type, so its plan names the ones its scenarios exercise — each
+    with its rules, or `- none — <why>` where they exercise none — and every rule is held the same way: an existing
+    unit test mapped, or a characterization test the adoption wrote, with its break."""
+    kind = story_kind(front)
+    if kind not in ("story", "adopt") or contract_of(profile) < (13 if kind == "story" else 24):
         return
     plan_path, tests_path = os.path.join(runs, story_id, "plan.md"), os.path.join(runs, story_id, "tests.md")
     if not os.path.isfile(plan_path):
         return
     plan = read_text(plan_path)
-    elements, named = plan_domain_elements(plan), plan_invariants(plan) or {}
+    if kind == "adopt":
+        if not any(line.strip().startswith("-") for line in section_of(plan, "invariants") or []):
+            result.fail("invariants", "plan.md: an adoption names the invariants of the domain types its scenarios "
+                                      "exercise under `## Invariants` — `- <Element>: <rule>; <rule>` per type, its "
+                                      "guards included, or `- none — <why>` where the scenarios exercise none")
+            return
+        elements = list(plan_invariants(plan) or {})
+    else:
+        elements = plan_domain_elements(plan)
+    named = plan_invariants(plan) or {}
     if not elements and not any(named.values()):
+        if kind == "adopt":
+            result.ok("invariants", "the adoption's scenarios exercise no domain type with a rule of its own — "
+                                    "the plan says why")
         return
     missing = [e for e in elements if e not in named]
     if missing:
@@ -913,6 +930,15 @@ def check_adopt(result, profile, cwd, runs, story_id, front, criteria):
     mapping = check_mapping(result, runs, story_id, criteria)
     located = check_exists(result, cwd, mapping)
     check_compiles(result, profile, cwd)
+    check_invariants(result, profile, cwd, runs, story_id, front, mapping)
+    # every rule's unit test is green beside the scenarios' tests: an adoption proves what holds, the rules included
+    tests_path = os.path.join(runs, story_id, "tests.md")
+    rows = read_invariant_rows(read_text(tests_path)) if os.path.isfile(tests_path) else None
+    rules = {f"{element} rule {', '.join(map(str, numbers))}": [selector] for element, numbers, selector in rows or []
+             if selector and SELECTOR.match(selector) and selector not in {s for sels in mapping.values() for s in sels}}
+    if rules and contract_of(profile) >= 24:
+        located = dict(located or {}, **(check_exists(Result(), cwd, rules) or {}))
+        mapping = dict(mapping, **rules)
     check_test_state(result, profile, cwd, mapping, "green", located, runs, story_id, guard=True)
     judge = read_text(os.path.join(runs, story_id, "judge.md")) if os.path.isfile(os.path.join(runs, story_id, "judge.md")) else ""
     if verdict_in(judge) != "pass":

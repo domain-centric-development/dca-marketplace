@@ -384,6 +384,19 @@ INVARIANT_TABLE = """
 | Widget | 3 | 1 to 40 characters | com.example.WidgetNameTest#refusesLong |
 """
 
+#: An adoption's plan (#134): its scenarios restated, where each lives, and `## Invariants` for the domain types they
+#: exercise — the line follows; the unit tests of the invariant fixture.
+ADOPT_PLAN = """# Plan — STORY-1
+
+## Acceptance criteria
+- shows-the-thing — src/main/java/com/example/Widget.java:1, com.example.WidgetPageTest#showsTheThing
+- shows-nothing-when-empty — src/main/java/com/example/Widget.java:1, com.example.WidgetUnitTest#showsNothingWhenEmpty
+
+## Invariants
+"""
+INVARIANT_TESTS = ["com.example.WidgetNameTest#refusesMissing", "com.example.WidgetNameTest#refusesUntrimmed",
+                   "com.example.WidgetNameTest#refusesLong"]
+
 # The fixture's runner: exit 1 while the marker for that test is absent, 0 once it is there. It
 # also refuses a selector it cannot see, so "a run that matched nothing" is reproducible too.
 #: A runner invoked the way a build tool is — `gradlew <task>`, no path anywhere in the command.
@@ -1461,7 +1474,7 @@ def verify_runner(runner, verbose=False):
         'test) f=tests.md ;; *) f="$FACTORY_STAGE.md" ;; esac; '
         'mkdir -p .dca-factory/runs/STORY-1; '
         'case "$FACTORY_STAGE" in '
-        '  plan) printf "## Context\\n## Changes\\n## Acceptance criteria\\n" ;; '
+        '  plan) printf "## Context\\n## Changes\\n## Acceptance criteria\\n## Invariants\\n- none — the stand-in exercises no domain type\\n" ;; '
         '  test) cat "$FIXTURE_TESTS" ;; '
         '  build) printf "## Changed\\n## Deviations from the plan\\n## Files\\n"; '
         '    for s in $(cat "$FIXTURE_GREEN" 2>/dev/null); do printf -- "- green/%s\\n" "$s"; done ;; '
@@ -5041,6 +5054,44 @@ def run_groups(args):
         (Case("adopt: a break that changes nothing is refused where the code sits in a package named `tasks`",
               "adopt", 1, must_fail=("break-proof",), text=("stays green under its break",)),
          dict(story=ADOPTED, profile=PACKAGED_PROFILE, tests=TESTS + CHARACTERIZED, extra_sources=PACKAGED_SOURCES)),
+        # #134, contract 24: an adoption names the invariants of the domain types its scenarios exercise, and every rule
+        # has a unit test of its own — an existing one mapped, or a characterization test with its break.
+        (Case("test: an adoption whose plan names no invariant line is refused", "test", 1,
+              must_fail=("invariants",), text=("an adoption names the invariants",)),
+         dict(story=ADOPTED, green=both_green, extra_sources=((".dca-factory/runs/STORY-1/plan.md", ADOPT_PLAN),))),
+        (Case("test: an adoption whose scenarios exercise no domain type says `none — <why>` and passes", "test", 0,
+              must_pass=("invariants", "tests-green")),
+         dict(story=ADOPTED, green=both_green, extra_sources=((".dca-factory/runs/STORY-1/plan.md", ADOPT_PLAN
+                                                               + "- none — the scenarios read a list, no rule of its own\n"),))),
+        (Case("test: an adoption maps every rule of a domain type it exercises to a unit test of its own", "test", 0,
+              must_pass=("invariants", "tests-green"), text=("3 rules, 3 rows",)),
+         dict(story=ADOPTED, green=both_green + INVARIANT_TESTS, tests=TESTS + INVARIANT_TABLE,
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", ADOPT_PLAN + INVARIANT_LINE + "\n"), INVARIANT_TEST_FILE))),
+        (Case("test: an adoption's rule without a unit test is refused, naming the rule", "test", 1,
+              must_fail=("invariants",), text=("without a unit test of their own: Widget 2",)),
+         dict(story=ADOPTED, green=both_green + INVARIANT_TESTS,
+              tests=TESTS + INVARIANT_TABLE.replace("com.example.WidgetNameTest#refusesUntrimmed", ""),
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", ADOPT_PLAN + INVARIANT_LINE + "\n"), INVARIANT_TEST_FILE))),
+        (Case("test: an adoption on a profile of contract 23 is not asked for invariants", "test", 0,
+              must_pass=("tests-green",), absent=("gate:fail invariants",)),
+         dict(story=ADOPTED, green=both_green, profile=PROFILE + "contract: 23\n",
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", ADOPT_PLAN),))),
+        (Case("adopt: an invariant's unit test that is red is not adopted", "adopt", 1, must_fail=("tests-green",),
+              text=("WidgetNameTest",)),
+         dict(story=ADOPTED, green=both_green, tests=TESTS + INVARIANT_TABLE,
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", ADOPT_PLAN + INVARIANT_LINE + "\n"), INVARIANT_TEST_FILE,
+                             (".dca-factory/runs/STORY-1/judge.md", "verdict: pass\n")))),
+        (Case("adopt: every rule on a green unit test of its own adopts the story", "adopt", 0,
+              must_pass=("invariants", "tests-green", "delivered")),
+         dict(story=ADOPTED, green=both_green + INVARIANT_TESTS, tests=TESTS + INVARIANT_TABLE,
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", ADOPT_PLAN + INVARIANT_LINE + "\n"), INVARIANT_TEST_FILE,
+                             (".dca-factory/runs/STORY-1/judge.md", "verdict: pass\n")))),
+        (Case("adopt: a characterization test written for an invariant needs its break", "adopt", 1,
+              must_fail=("break-proof",), text=("WidgetNameTest#refusesLong", "no break at")),
+         dict(story=ADOPTED, green=both_green + INVARIANT_TESTS,
+              tests=TESTS + INVARIANT_TABLE + "\n## Characterization\n- com.example.WidgetNameTest#refusesLong\n",
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", ADOPT_PLAN + INVARIANT_LINE + "\n"), INVARIANT_TEST_FILE,
+                             (".dca-factory/runs/STORY-1/judge.md", "verdict: pass\n")))),
         (Case("test: a journey's test is green at its gate, the inverse of a story", "test", 0,
               must_pass=("tests-green",)),
          dict(story=STORY.replace("status: approved\n", "status: approved\nkind: journey\n")
@@ -5335,7 +5386,7 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 23\nrequried: compile\n" + PROFILE)),
+         dict(profile="contract: 24\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
