@@ -38,8 +38,8 @@
       "source_sha256": "6258069e8861333f91630072cd1419384faa24f10029513535426c9eadf17890"
     },
     "dca-java": {
-      "revision": "8c5985749128ac5af98c144f87429829ed7dfb5c",
-      "source_sha256": "a8616bcac1f542002343e0852ef3ab16cebf49bc54f5db870962b2aa28ac503b"
+      "revision": "4381900519a77cfa76f721a349ae71e0c10682db",
+      "source_sha256": "aaec50a54606cd019f3c360797df6a74601464aae74b148fc8ee68643fe3eca4"
     },
     "dca-knowledge-catalog": {
       "note": "own repository: the carrying commit is the revision; content digest only",
