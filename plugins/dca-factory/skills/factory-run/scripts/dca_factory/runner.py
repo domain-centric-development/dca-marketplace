@@ -1358,6 +1358,8 @@ class Run:
         self.shared_builder = options.builder == "shared"
         self.shared_verifier = options.verifier == "shared"
         self.parallel = options.parallel
+        self.keep_going = getattr(options, "keep_going", False)
+        self.skipped = {}                     # --keep-going: story → the exit it stopped with
         self.options = options
         self.add_dirs, self.read_dirs = [], []
         self.tool_in_flight = ""
@@ -2774,6 +2776,29 @@ class Run:
             return None
         return int(given)
 
+    def skip(self, story, code):
+        """--keep-going: a story that stopped is set aside for the rest of this run — the schedule skips it and what
+        depends on it — unless the stop concerns the whole run: the checkout taken over (5), the run's --max-stages
+        (4 with the cap reached), a configuration nothing could run with (2). True when the run goes on."""
+        if not self.keep_going or code in (2, 5) or (code == 4 and self.max_stages and self.invocations >= self.max_stages):
+            return False
+        self.skipped[story] = code
+        err(f"factory: story {story} stopped (exit {code}) — --keep-going skips it and what depends on it; the "
+            f"backlog run goes on.")
+        return True
+
+    def skip_args(self):
+        return ("--skip", ",".join(self.skipped)) if self.skipped else ()
+
+    def skipped_summary(self):
+        """The run's exit once nothing more can start: 0, or the first stop's code where --keep-going skipped one."""
+        if not self.skipped:
+            return 0
+        err("factory: stopped in this run and skipped: "
+            + ", ".join(f"{story} (exit {code})" for story, code in self.skipped.items())
+            + " — `factory.sh status` says why.")
+        return next(iter(self.skipped.values()))
+
     def nothing_more(self, out, watch):
         print(out)
         print("factory: nothing more can run" + (", and nothing waits on an answer that would change that" if watch else "")
@@ -2818,7 +2843,7 @@ class Run:
                 if claimed and claimed != getattr(self, "last_claims", ""):
                     print(claimed)
                 self.last_claims = claimed
-            code, out = self.cli("--schedule", "--slots", "1", merge=True)
+            code, out = self.cli("--schedule", "--slots", "1", *self.skip_args(), merge=True)
             if code != 0:
                 err(out)
                 err("factory: the schedule could not be read.")
@@ -2829,6 +2854,9 @@ class Run:
                 if following == last:
                     print(out)
                     err(f"factory: {story} ran from {start} and the schedule names it there again — no progress, stopping.")
+                    if self.skip(story, 1):
+                        last = ""
+                        continue
                     return 1
                 print(f"══ story {story} from {start}")
                 if dry:
@@ -2842,11 +2870,14 @@ class Run:
                 if code == 3:                       # waits for a decision; the schedule skips it now
                     last = ""
                     continue
+                if self.skip(story, code):
+                    last = ""
+                    continue
                 err(f"factory: story {story} stopped (exit {code}) — the backlog run ends here.")
                 return code
             if not watch or not any(line == "wait: yes" or line.startswith("wait: yes") for line in out.split("\n")):
                 self.nothing_more(out, watch)
-                return 0
+                return self.skipped_summary()
             previous = self.waiting_note(out, previous, interval)
             last = ""
             self.sleep(interval)
@@ -2874,13 +2905,16 @@ class Run:
                 code = process.returncode
                 if code == 0:
                     seen.add(f"{story}@{start}")
+                elif code != 3 and self.skip(story, code):
+                    pass
                 elif code != 3:
                     err(f"factory: story {story} stopped (exit {code}) — no further story starts; the running ones finish.")
                     stopping = stopping if stopping is not None else code
                     failed = failed or code
             launched = False
             if stopping is None:
-                code, out = self.cli("--schedule", "--slots", str(slots), "--busy", ",".join(children), merge=True)
+                code, out = self.cli("--schedule", "--slots", str(slots), "--busy", ",".join(children),
+                                     *self.skip_args(), merge=True)
                 if code != 0:
                     err(out)
                     err("factory: the schedule could not be read.")
@@ -2893,6 +2927,8 @@ class Run:
                         if f"{story}@{start}" in seen:
                             err(f"factory: {story} ran from {start} and the schedule names it there again — no "
                                 "progress, not started again.")
+                            if self.skip(story, 1):
+                                continue
                             failed = failed or 1
                             stopping = stopping if stopping is not None else 1
                             continue
@@ -2905,7 +2941,7 @@ class Run:
                     return failed if isinstance(stopping, int) or failed else 0
                 if not watch or not any(line.startswith("wait: yes") for line in out.split("\n")):
                     self.nothing_more(out, watch)
-                    return failed
+                    return failed or self.skipped_summary()
                 previous = self.waiting_note(out, previous, interval)
                 time.sleep(interval)
                 continue
@@ -3080,6 +3116,8 @@ def run_options(argv):
     parser.add_argument("--verifier", choices=("shared", "separate"), default="shared")
     parser.add_argument("--parallel", default="")
     parser.add_argument("--child", action="store_true", help="one story of a parallel run, under its parent's claim")
+    parser.add_argument("--keep-going", action="store_true",
+                        help="a stopped story is skipped with what depends on it; the backlog run ends when nothing can start")
     return parser.parse_args(argv)
 
 

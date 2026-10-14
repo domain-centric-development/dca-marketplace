@@ -391,7 +391,7 @@ One story per run; several stories are a loop over it, never two builders workin
 code base. What comes next is read off the files (`python3 .agents/factory/factory-cli.py --schedule`).
 Read `reference/several-stories.md` before working more than one story or explaining how the runner
 works the backlog: the schedule's states and order, one story with unfinished code per checkout, the
-runner's worktrees, `--parallel`, `--watch` and `--max-stages`, where `run --story` starts, what a
+runner's worktrees, `--parallel`, `--watch`, `--keep-going` and `--max-stages`, where `run --story` starts, what a
 running stage does (`factory.sh follow`), a shared process's stages, and what a story cost (`--usage`,
 `--story-budget`). In-session, do the same loop yourself — ask the schedule, run the story it names,
 ask again — and stop instead of waiting.

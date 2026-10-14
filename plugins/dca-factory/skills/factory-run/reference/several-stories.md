@@ -39,7 +39,11 @@ stories at once. A story the runner started in its worktree is not taken up in a
 The runner — the person's, in a shell — does the same loop: `factory.sh run [--tool <t>]` without `--story` runs the next story from the stage the
 schedule names, asks again, and ends when nothing can run. A story that stops for a decision does
 not end it (`run` exits 3 there); any other stop does, because retrying a failure spends a run on
-the same refusal. `--watch` keeps it waiting while a story waits on a human: it re-reads the
+the same refusal — unless `--keep-going` is given: then the stopped story is set aside for the rest of the
+run (the schedule reads it as `stopped`, so what depends on it is `blocked`), the run goes on with what can
+start, and it ends when nothing more can, with the first stop's exit code and the skipped stories named. A
+stop that concerns the whole run still ends it — the checkout taken over, `--max-stages` reached, the stop
+file. `--watch` keeps it waiting while a story waits on a human: it re-reads the
 schedule every `--interval` seconds (default 60, 1–3600), invokes no agent while nothing changed,
 and resumes the answered story at the stage that applies the answer. `--max-stages <n>` caps the agent
 invocations of the run (exit 4, the work so far stays); `.dca-factory/stop` ends it before the

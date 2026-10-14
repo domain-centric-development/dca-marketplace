@@ -8735,6 +8735,48 @@ def verify_worktrees(runner, verbose=False):
               f"exit {code}; {[l.split()[0:2] + l.split()[3:] for l in ran][-12:]}; shared {shared!r}; "
               f"{output.strip().splitlines()[-8:]}")
 
+    # #138: `run --keep-going` — a story that stops is skipped with what depends on it, the run goes on with what can
+    # start and ends when nothing more can; without the flag the stop ends the run; a stop file still ends it (WP-111)
+    for mode in ("plain", "keep-going", "parallel", "stop-file"):
+        for root in throwaway():
+            log, env = fixture(root, [("STORY-2", ["STORY-1"]), ("STORY-3", [])])
+            script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+                'case "$FACTORY_STAGE" in\n',
+                'if [ "$FACTORY_STORY" = STORY-1 ] && [ "$FACTORY_STAGE" = plan ]; then\n'
+                '  [ -n "${FIXTURE_STOP:-}" ] && : > "$FACTORY_HOME/.dca-factory/stop"; exit 1\nfi\n'
+                'case "$FACTORY_STAGE" in\n', 1)
+            with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(script)
+            subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                           capture_output=True)
+            if mode == "stop-file":
+                env["FIXTURE_STOP"] = "1"
+            code, output = run_runner(runner, root, "run", *(["--keep-going"] if mode != "plain" else []),
+                                      *(["--parallel", "2"] if mode == "parallel" else []), env=env)
+            delivered = [s for s in ("STORY-1", "STORY-2", "STORY-3") if story_delivered(root, s)]
+            if mode == "plain":
+                ok = code == 1 and delivered == [] and "the backlog run ends here" in output
+                name = "keep going: without --keep-going a stopped story ends the backlog run"
+            elif mode in ("keep-going", "parallel"):
+                ok = code == 1 and delivered == ["STORY-3"] and "--keep-going skips it" in output \
+                    and "skipped: STORY-1 (exit 1)" in output and not any(l.startswith("STORY-2 ") for l in lines(log))
+                name = ("keep going: with --keep-going" + (" --parallel 2" if mode == "parallel" else "")
+                        + " a stopped story is skipped with what depends on it, the run delivers what can start and "
+                        "ends when nothing more can, with the stop's exit")
+            else:
+                ok = delivered == [] and "exists — the backlog run stops here" in output
+                name = "keep going: a stop file from the guard still ends a --keep-going run"
+            check(name, ok, f"exit {code}; delivered {delivered}; {output.strip().splitlines()[-6:]}")
+    # the schedule's side: a story named under --skip reads as stopped, and what depends on it is blocked
+    for root in throwaway():
+        backlog_project(root, ("STORY-2", ["STORY-1"]), ("STORY-3", []))
+        cli = cli_of(os.path.join(os.path.dirname(runner), "story-gate.py"))
+        listing = subprocess.run([sys.executable, cli, "--schedule", "--slots", "1", "--skip", "STORY-1"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8").stdout
+        check("schedule: `--skip` reads a story that stopped in this run as stopped, blocks what depends on it, and "
+              "names the next story that can start",
+              "STORY-1  stopped" in listing and "STORY-2  blocked" in listing and "next: STORY-3 plan" in listing, listing)
+
     # a waiting story the person sets superseded: the next run removes its worktree and branch, nothing of it on main
     for root in throwaway():
         log, env = fixture(root, [], asks="STORY-1")

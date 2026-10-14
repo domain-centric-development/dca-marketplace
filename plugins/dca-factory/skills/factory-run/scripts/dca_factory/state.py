@@ -1637,7 +1637,7 @@ def running_stages(runs):
     return found
 
 
-def schedule_data(cwd, epics, runs, slots=None, busy=()):
+def schedule_data(cwd, epics, runs, slots=None, busy=(), skip=()):
     """Every story's state, the order and the next one to run — read off the files, printed by
     `schedule` for the runner and by `status` for a person.
 
@@ -1649,7 +1649,8 @@ def schedule_data(cwd, epics, runs, slots=None, busy=()):
     With `slots` — the runner, which gives every story a worktree of its own — a story's code is in its
     worktree, so a story that waits holds nothing: up to `slots` stories run at once, `busy` names the ones
     this runner runs already. A story with a worktree goes first (it has code), then the order; between stories
-    of one epic the one whose context no running story changes."""
+    of one epic the one whose context no running story changes. `skip` names the stories that stopped in this
+    run (`run --keep-going`): they read as stopped, so what depends on them is blocked."""
     stories, order = {}, []
     hint = layout_hint(cwd, read_profile(resolve_profile(None, cwd)))
     twice = duplicate_ids(epics)
@@ -1679,6 +1680,11 @@ def schedule_data(cwd, epics, runs, slots=None, busy=()):
                                  and not has_worktree(story_id, factory_home() or cwd),
                                  path=path, epic=str(front.get("epic") or epic).strip(), front=front,
                                  body=story_body, title=story_title(front, story_body))
+
+    for story_id in skip:
+        if story_id in stories and stories[story_id]["state"] not in ("delivered", "superseded"):
+            stories[story_id].update(state="stopped", start=None,
+                                     detail="stopped in this run — skipped (--keep-going)")
 
     # dependency order, ties by the epic's place (an epic's `depends_on:` first, then its id) and then the
     # story's id; whatever is left after that sits on a cycle
@@ -1845,11 +1851,11 @@ def unclaimed_changes(cwd, runs, stories):
                   and path not in fixed)
 
 
-def schedule(cwd, epics, runs, slots=None, busy=()):
+def schedule(cwd, epics, runs, slots=None, busy=(), skip=()):
     """Print every story's state and the next one to run; return 0. The runner and the tests read
     these lines (`schedule:`, `wait:`, `next:`): they are a contract, not the person's view. With `slots`,
     one `next:` line per story that may start now."""
-    data = schedule_data(cwd, epics, runs, slots, busy)
+    data = schedule_data(cwd, epics, runs, slots, busy, skip)
     stories, order, nxt, reason, wait = data["stories"], data["order"], data["next"], data["reason"], data["wait"]
     if data["hint"]:
         print(f"layout: {data['hint']}")

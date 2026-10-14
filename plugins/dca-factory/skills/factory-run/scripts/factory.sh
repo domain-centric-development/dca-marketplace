@@ -11,12 +11,14 @@
 #   factory.sh backlog [--check]             every story's state and the next one; --check the backlog
 #   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch] [--interval <s>]
 #                  [--max-stages <n>] [--story-budget <tokens>] [--separate-stages] [--parallel <n>] [--dry-run]
-#                  [--shared-builder] [--shared-verifier]
+#                  [--shared-builder] [--shared-verifier] [--keep-going]
 #                    one story from where its files say (--from names the stage and starts a new
 #                    count of rounds), or without --story the whole backlog in the schedule's order;
 #                    every story in a worktree of its own, integrated into the checkout's branch when
 #                    every gate passed; --parallel runs up to <n> stories at once; shared stages are the
-#                    default, --shared-builder/--shared-verifier share one half over `stages: separate`
+#                    default, --shared-builder/--shared-verifier share one half over `stages: separate`;
+#                    --keep-going: a stopped story does not end the backlog run — it and what depends on it
+#                    are skipped, and the run ends when nothing more can start (a stop file still ends it)
 #   factory.sh status [--story <id>] [--usage] [--refusals] [--brief]   what runs, what waits, every story, the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh spec-delta <story> [--format json]  what holds before and after the story
@@ -72,6 +74,7 @@ RUNS=""                                      # the run folder — resolved below
 STOP_FILE=""                                 # <run folder's parent>/stop: exists → a backlog run stops before its next story
 MAX_STAGES=""                                # --max-stages: the cap on them, empty for none
 STORY_BUDGET=""                              # --story-budget: tokens one story may use in total
+KEEP_GOING=""                                # --keep-going: a stopped story is skipped, the backlog run goes on
 # Shared stages are the default: plan to tidy in one builder process, judge and document in one verifier
 # process (never the builder's). The profile's `stages: separate` starts one process per stage instead;
 # for one run, --separate-stages does the same, and FACTORY_SHARED_BUILDER / FACTORY_SHARED_VERIFIER set
@@ -1697,7 +1700,7 @@ resolve_stages() {
 # the pipeline's hash, runs the story or the backlog and gives the claim and the lock back however it ends.
 run_python() {                              # run_python <runner flags…>
   exec env FACTORY_RUNNER_PYTHON="$PY" "$PY" "$CLI" --run "$@" ${dry:+--dry-run} \
-    ${MAX_STAGES:+--max-stages "$MAX_STAGES"} ${STORY_BUDGET:+--story-budget "$STORY_BUDGET"} \
+    ${MAX_STAGES:+--max-stages "$MAX_STAGES"} ${STORY_BUDGET:+--story-budget "$STORY_BUDGET"} ${KEEP_GOING:+--keep-going} \
     --builder "$([ -n "$SHARED_BUILDER" ] && echo shared || echo separate)" \
     --verifier "$([ -n "$SHARED_VERIFIER" ] && echo shared || echo separate)" ${PARALLEL:+--parallel "$PARALLEL"}
 }
@@ -1810,6 +1813,7 @@ while [ $# -gt 0 ]; do
     --shared-verifier) SHARED_VERIFIER=1; SHARED_VERIFIER_SET=set; shift ;;
     --separate-stages) SEPARATE_STAGES=1; shift ;;
     --parallel) [ $# -ge 2 ] || usage; PARALLEL=$2; shift 2 ;;
+    --keep-going) KEEP_GOING=1; shift ;;
     *) usage ;;
   esac
 done
@@ -1854,6 +1858,7 @@ case "$command" in
     resolve_stages || exit 2
     if [ -n "$story" ]; then
       [ -z "$watch" ] || { echo "factory: --watch works the backlog off — it takes no --story" >&2; exit 2; }
+      [ -z "$KEEP_GOING" ] || { echo "factory: --keep-going works the backlog off — it takes no --story" >&2; exit 2; }
       tool=${tool:-stand-in}
       check_gate_freshness                  # once per invocation; run_story recurses on a verdict
       [ -n "$dry" ] || refuse_nested || exit $?

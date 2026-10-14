@@ -197,7 +197,9 @@ table in the product description (`s`, `m`, `l`, `xl`), never in pixels.
 Several stories are one command. It runs them in dependency order — and an epic's `depends_on:` before
 its stories — runs past a story that waits for a decision or an acceptance, and with `--watch` picks that
 story up again at the stage that asked, once the answer is written (`--max-stages` caps the agent
-invocations, `.dca-factory/stop` ends it). `--parallel <n>` (or `parallel: <n>` in the profile,
+invocations, `.dca-factory/stop` ends it). Any other stop ends the run, unless `--keep-going` is given: then the
+stopped story and what depends on it are skipped, the run goes on with what can start and ends when nothing more
+can — unattended, nothing needs to start it again. `--parallel <n>` (or `parallel: <n>` in the profile,
 `FACTORY_PARALLEL`) runs up to `<n>` stories at once, each in its worktree, every line of the run named by
 its story; a slot counts a story with a running stage, so one that waits holds none. Among the stories
 that may start, one with a worktree goes first, then the order, and between stories of one epic the one
@@ -207,6 +209,7 @@ story process:
 ```
 bash .agents/factory/factory.sh run --tool claude --watch
 bash .agents/factory/factory.sh run --tool claude --parallel 2
+bash .agents/factory/factory.sh run --tool claude --keep-going
 ```
 
 What each story and stage cost — tokens per invocation from the tool's own report, summed across
@@ -239,7 +242,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh setup [--tool <t>] [--copy\|--link]` | `factory-setup` | installs the pipeline where it is not — copies from a plugin cache, links from a checkout, unless named; on an installed project it only reports |
 | `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
 | `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
-| `factory.sh run [--story <id> [--from <stage>]] [--watch] [--parallel <n>]` | `factory-run` | one story through the six stages in its worktree, from where its files say, then integrated · `--from` names the stage (or `integrate`) and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch`, up to `<n>` at once with `--parallel` |
+| `factory.sh run [--story <id> [--from <stage>]] [--watch] [--keep-going] [--parallel <n>]` | `factory-run` | one story through the six stages in its worktree, from where its files say, then integrated · `--from` names the stage (or `integrate`) and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch`, past a stopped story with `--keep-going`, up to `<n>` at once with `--parallel` |
 | `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--refusals] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage · the gate refusals, form against substance |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |

@@ -2477,6 +2477,9 @@ def main(argv):
                              "one `next:` line per story that may start now")
     parser.add_argument("--busy", default="", metavar="IDS",
                         help="with --schedule --slots: the stories this runner runs already, comma-separated")
+    parser.add_argument("--skip", default="", metavar="IDS",
+                        help="with --schedule: the stories that stopped in this run (`run --keep-going`), "
+                             "comma-separated — stopped, and what depends on them blocked")
     parser.add_argument("--worktree-prepare", metavar="STORY",
                         help="make, update and link the story's worktree; print its path (or `none — <why>`)")
     parser.add_argument("--worktree-remove", metavar="STORY", help="remove the story's worktree and its branch")
@@ -2619,7 +2622,8 @@ def main(argv):
         return resolve(args.epics, args.resolve)
     if args.schedule:
         return schedule(cwd, args.epics, args.runs, args.slots,
-                        tuple(s.strip() for s in args.busy.split(",") if s.strip()))
+                        tuple(s.strip() for s in args.busy.split(",") if s.strip()),
+                        tuple(s.strip() for s in args.skip.split(",") if s.strip()))
     if args.worktree_prepare:
         return worktree_prepare(cwd, args.runs, args.worktree_prepare)
     if args.worktree_remove:
