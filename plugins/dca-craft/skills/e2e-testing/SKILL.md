@@ -225,8 +225,9 @@ Two causes look like flakiness and are neither a race in the page nor a regressi
   application's production timeout. The application under test takes a generous timeout for its stubbed partners
   from the suite's configuration; its own default stays.
 - **A missed load event.** After a form's redirect the runner's URL wait can miss the page's load event and time
-  out on a page that is fully there. Wait for the URL, then for the document's own ready state, in one helper every
-  Page Object uses.
+  out on a page that is fully there — even when the URL already matches, the runner's URL wait still waits for a
+  load state. Read the page's URL yourself until it matches, then wait for the document's own ready state, in one
+  helper every Page Object uses.
 
 ## Refuse
 
