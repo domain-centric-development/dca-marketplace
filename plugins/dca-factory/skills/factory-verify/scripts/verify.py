@@ -1757,6 +1757,68 @@ def verify_runner(runner, verbose=False):
                   and starts == ["builder", "verifier", "builder", "verifier"] and "gate 'document' refused" not in output,
                   f"exit {code}; starts {starts}; stray {stray}; {output.strip().splitlines()[-4:]}")
 
+    # #143: a run stopped by a signal closes its stage window, so a person may change the story before the next run —
+    # TERM to the runner alone (the stage ends, nothing more starts) and INT to the whole group (Ctrl-C) (WP-111)
+    signalled = ('if [ ! -f stopped-once ]; then : > stopped-once; : > started; sleep 3; exit 0; fi; ' + verifier_cmd)
+    for how in (("SIGTERM", False, ""), ("SIGTERM", False, "--shared-builder"), ("SIGINT", True, "")) \
+            if os.name != "nt" else ():
+        for root in throwaway():
+            build_project(root)
+            copy_scripts(runner, root)
+            tests_path = os.path.join(root, "fixture-tests.md")
+            with open(tests_path, "w", encoding="utf-8") as handle:
+                handle.write(TESTS)
+            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+            env = {"FACTORY_TOOL_CMD": signalled, "FIXTURE_STAND_IN": stand_in, "FIXTURE_TESTS": shell_path(tests_path),
+                   "FIXTURE_PY": shell_path(sys.executable), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+            process = subprocess.Popen([BASH, runner, "run", "--story", "STORY-1", "--from", "plan", "--tool",
+                                        "stand-in", *([how[2]] if how[2] else [])], cwd=root, env=dict(os.environ, **env), stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, start_new_session=True)
+            deadline = time.time() + 30
+            while not os.path.isfile(os.path.join(root, "started")) and time.time() < deadline:
+                time.sleep(0.1)
+            sig, group = getattr(signal, how[0]), how[1]
+            if group:
+                os.killpg(process.pid, sig)
+            else:
+                process.send_signal(sig)
+            first, _ = process.communicate(timeout=60)
+            first = first.decode("utf-8", errors="replace")
+            left = os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".owned-digest"))
+            story_path = os.path.join(root, "product", "epics", "sample", "STORY-1", "story.md")
+            with open(story_path, "a", encoding="utf-8") as handle:
+                handle.write("\nA sentence the person added between the two runs.\n")
+            code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
+                                      env=env)
+            check(f"signal: a run stopped by {how[0]}" + (" to its group" if group else " to the runner")
+                  + (" in a shared builder" if how[2] else "")
+                  + " closes its stage window"
+                  + " — the story changed before `--from plan` runs, and the plan gate passes",
+                  process.returncode in (130, 143) and not left and code == 0 and story_delivered(root)
+                  and "changed while this stage runs" not in output,
+                  f"first exit {process.returncode}, digest left {left}; {first.strip().splitlines()[-2:]}; "
+                  f"exit {code}; {output.strip().splitlines()[-3:]}")
+    # a window a killed run left open (no handler ran): `--from` names where the story starts and closes it
+    for root in throwaway():
+        build_project(root)
+        copy_scripts(runner, root)
+        tests_path = os.path.join(root, "fixture-tests.md")
+        with open(tests_path, "w", encoding="utf-8") as handle:
+            handle.write(TESTS)
+        os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+        with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+            handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+        write_file(root, ".dca-factory/evidence/STORY-1/.owned-digest", "0" * 64 + "  story.md\n")
+        env = {"FACTORY_TOOL_CMD": verifier_cmd, "FIXTURE_STAND_IN": stand_in, "FIXTURE_TESTS": shell_path(tests_path),
+               "FIXTURE_PY": shell_path(sys.executable), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
+                                  env=env)
+        check("signal: a window a killed run left open is closed by `--from` — the plan gate passes, the story is delivered",
+              code == 0 and story_delivered(root) and "closes the stage window an earlier run" in output
+              and "changed while this stage runs" not in output, f"exit {code}; {output.strip().splitlines()[-3:]}")
+
     # 1b-recheck. the runner's re-check of a shared builder refuses: a round with the gate's report, not a stop
     recheck_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
                    'printf "%s\\n" "$FACTORY_PROMPT" >> \"$FIXTURE_HOME/builder-prompts.txt\"; '

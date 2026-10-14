@@ -25,7 +25,7 @@ from .contract import (
     delivered_by, delivered_on, GateError, git, is_delivered, legacy_story_digest, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, resolve_profile, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_FILES, STAGE_ORDER, STAGES,
     STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of, story_kind, worktree_places, decisions_store,
-    needs_human_ids)
+    needs_human_ids, OWNED_DIGEST, WINDOW_DIGEST)
 from .reports import (
     tokens_of, usage_lines)
 from .state import (
@@ -1954,6 +1954,31 @@ class Run:
         return self.run([sys.executable, self.gate_path, "--owned", edge, window,
                          *([str(code)] if code is not None else []), "--story", story])[0]
 
+    def owned_invoke(self, story, window, call):
+        """The tool of an owned window. Stopped inside it — an interrupt, a signal that ends the tool — the window is
+        closed before the run ends: its end journaled, the person's parts compared and the digest gone, so a person
+        may change the story before the next run."""
+        try:
+            return call()
+        except (Stopped, KeyboardInterrupt):
+            self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit=stopped")
+            self.owned("end", window, story, 1)
+            raise
+
+    def fresh_window(self, story):
+        """`--from <stage>`: a person names where the story starts, so a window a killed run left open is closed —
+        its digest of the story is gone, and a story the person changed since reads as changed after its plan,
+        never as changed under a stage."""
+        self.profile()
+        folder = evidence_dir(place("runs"), story)
+        left = [name for name in (OWNED_DIGEST, WINDOW_DIGEST) if os.path.isfile(os.path.join(folder, name))]
+        for name in left:
+            with contextlib.suppress(OSError):
+                os.remove(os.path.join(folder, name))
+        if OWNED_DIGEST in left:
+            self.journal_line(story, f"{utc()}\twindow-closed\t-\tby=--from")
+            print(f"factory: --from closes the stage window an earlier run of {story} left open.")
+
     def record(self, flag, story, *more):
         """`--record-base` / `--record-changes <stage>`: what the story's diff is taken against, and what it changed."""
         if self.gate_installed():
@@ -2078,12 +2103,13 @@ class Run:
         self.journal_line(story, f"{utc()}\tstage-start\t{window}\ttool={tool}{self.effort_field(tool, window)}"
                                  f"\tstages={','.join(stages)}")
         began = time.time()
-        invoked = self.invoke(tool, prompt, raw, window, story)
+        invoked = self.owned_invoke(story, window, lambda: self.invoke(tool, prompt, raw, window, story))
         self.record_usage(story, window, tool, raw, int(time.time() - began))
         self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit={self.exit_field(invoked)}")
-        self.checkpoint()
+        # The window closes before a signal that arrived ends the run: the person may change the story before the next.
         if self.owned("end", window, story, invoked) != 0:
             return 7
+        self.checkpoint()
         if invoked != 0:
             err("factory: the tool exited non-zero during the shared stages.")
             return 1
@@ -2516,7 +2542,7 @@ class Run:
                                  f"{self.effort_field(tool, stage)}")
         raw = f"{evidence}/{stage}.{utc('%H%M%S')}.out"
         began = time.time()
-        invoked = self.invoke(tool, self.prompt_for(stage, story), raw, stage, story)
+        invoked = self.owned_invoke(story, stage, lambda: self.invoke(tool, self.prompt_for(stage, story), raw, stage, story))
         self.record_usage(story, stage, tool, raw, int(time.time() - began))
         if self.owned("end", stage, story, invoked) != 0:
             self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit=owned")
@@ -2588,12 +2614,13 @@ class Run:
                     self.owned("start", "integrate", story)
                     tool = self.tool_for("integrate", tool)
                     self.journal_line(story, f"{utc()}\tstage-start\tintegrate\ttool={tool}")
-                    code = self.invoke(tool, self.integrate_prompt(story, conflicts), raw, "integrate", story)
+                    code = self.owned_invoke(story, "integrate", lambda: self.invoke(
+                        tool, self.integrate_prompt(story, conflicts), raw, "integrate", story))
                     self.record_usage(story, "integrate", tool, raw, int(time.time() - began))
                     self.journal_line(story, f"{utc()}\tstage-end\tintegrate\texit={self.exit_field(code)}")
-                    self.checkpoint()
                     if self.owned("end", "integrate", story, code) != 0:
                         return 7
+                    self.checkpoint()
                     record = f"{self.runs}/{story}/integrate.md"
                     if os.path.isfile(record) and self.asks_human(record):
                         self.drop_lock()
@@ -3122,6 +3149,8 @@ def run_start(run, options):
             code = run.take_checkout() or run.guard_pipeline_start()
             if code:
                 return code
+            if options.start:
+                run.fresh_window(story)
         return run.run_story(story, tool or "stand-in", start, options.dry_run)
     if not options.dry_run:
         code = run.take_checkout() or run.guard_pipeline_start()
