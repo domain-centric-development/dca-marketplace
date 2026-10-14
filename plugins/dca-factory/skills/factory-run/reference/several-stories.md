@@ -58,6 +58,17 @@ and is delivered without a stage invocation. Resumed at a gated stage whose file
 lets the gate decide first on today's tree: a file that holds costs no invocation, and a stage that
 does run reads a report of now.
 
+**Stopping and starting again.** A run stopped by a signal — TERM to the runner, Ctrl-C — closes the stage
+window it is in before it ends: its end is journaled, the story and the answers are compared once more, and
+`.owned-digest` goes, so the person may change the story before the next run (the plan gate then reads it as
+changed after its plan, and the story runs again from plan). `--from <stage>` closes a window a killed run
+left open the same way. A story the runner resumes in its worktree — after an answer, after a restart — is
+moved onto the main line as it is now before its next stage: fast-forwarded where nothing of its own is in
+the way, else merged the way the integrate step merges (one commit on top of the main line), with the
+`stage-integrate` agent where git stops on a conflict. A story that gained a `depends_on` while it waited
+is `blocked` until that dependency is delivered. A stage file a shared process left as it was still holds
+for this pass when that stage ran in the process; one the process did not run is never marked after it.
+
 **What a running stage does.** The runner keeps each stage's tool output as the tool writes it, one event
 per line, in `.dca-factory/evidence/<story>/<stage>.<time>.out`. When the person asks what a stage is
 doing, run `bash .agents/factory/factory.sh follow --once` (or `--story <id>`) and show its lines — what
