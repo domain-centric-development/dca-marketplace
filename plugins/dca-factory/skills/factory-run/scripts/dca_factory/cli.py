@@ -55,10 +55,10 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, decision_files, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
+    ALL_KINDS, CONTRACT, decision_files, decision_options, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
     EPIC_FILE, epic_folder, evidence_dir, factory_home, find_story, findings_path, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
     location, needs_human_ids, open_findings, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
-    record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
+    recommended_option, record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
     story_id_of, story_kind, TECH_HEADINGS, VERSION)
 from .reports import (
     FOLLOW_ARGS, READERS, reader_of, session_reader, parse_time, part_of_call, session_usage_allowed, _short,
@@ -163,12 +163,13 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     for name, front, body, state, error, path in decision_files(cwd):
         if error:
             records.append(dict(rank=-1, id=name, state="unreadable", kind="question", story="?", stage="?",
-                                asked=None, text=str(error), path=shown(path)))
+                                asked=None, text=str(error), options=[], recommended=None, path=shown(path)))
             continue
         story = str(front.get("story", "")).strip()
         if story_id and story != story_id:
             continue
         answer = decision_state(body)[1]
+        options = [] if is_acceptance(front) else decision_options(body)
         question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
         given = f" → {answer.get('answer')} ({answer.get('by')})" if state in ("answered", "applied") else ""
         records.append(dict(rank={"open": 0, "draft": 1, "answered": 2, "applied": 3}[state],
@@ -176,7 +177,8 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
                             kind="acceptance" if is_acceptance(front) else "question", story=story,
                             stage=str(front.get("stage", "?")).strip(),
                             asked=parse_time(str(front.get("asked", ""))), text=question + given,
-                            path=shown(path)))
+                            options=[dict(key=o["key"], text=o["text"]) for o in options],
+                            recommended=recommended_option(body, options), path=shown(path)))
     records.sort(key=lambda r: (r["rank"], r["id"]))
     waiting = [r for r in records if r["state"] in ("open", "draft", "unreadable")]
     model = dict(project=os.path.basename(os.path.abspath(cwd)), story=story_id, records=records,

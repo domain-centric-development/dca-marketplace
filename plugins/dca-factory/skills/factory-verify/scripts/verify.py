@@ -5878,7 +5878,11 @@ def run_groups(args):
             ("STORY-1-03", DECISION.replace("STORY-1-01", "STORY-1-03") + ANSWER),
             ("STORY-1-04", DECISION.replace("STORY-1-01", "STORY-1-04") + ANSWER
              + "\n## Applied\nat: 2026-09-22T21:30:00Z\nstage: plan\n"),
-            ("STORY-9-01", DECISION.replace("STORY-1", "STORY-9")),
+            ("STORY-9-01", DECISION.replace("STORY-1", "STORY-9").replace(
+                "- a: archived things are shown, marked\n- b: archived things are hidden\n",
+                "- **a — the check also knows the stories in flight.** It also accepts\n  titles not delivered yet.\n"
+                "- **b — this story writes its scenarios.** Nothing else changes.\n"
+                "- **c - neither.** Keep it as it is.\n")),
             extra_sources=(("product/epics/sample/STORY-9/story.md", story("STORY-9")),)))
         listing = subprocess.run([sys.executable, args.cli, "--list-decisions"], cwd=root,
                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -5894,6 +5898,15 @@ def run_groups(args):
              "5 records · 3 wait for you" in listing.stdout and "/factory-decisions" in listing.stdout
              and "under `## Answer`" in listing.stdout, listing.stdout[-600:]),
         ]
+        bold = next((r for r in inbox.get("records", []) if r["id"] == "STORY-9-01"), {})
+        expectations.append(("inbox: options written bold with a dash after the label read as options a, b, c, "
+                             "the recommendation as the key it names",
+                             [o["key"] for o in bold.get("options", [])] == ["a", "b", "c"]
+                             and bold["options"][0]["text"] == "the check also knows the stories in flight. "
+                                                               "It also accepts titles not delivered yet."
+                             and bold.get("recommended") == "b"
+                             and [o["key"] for o in next(r for r in inbox["records"] if r["id"] == "STORY-1-01")
+                                  ["options"]] == ["a", "b"], bold))
         one_story = subprocess.run([sys.executable, args.cli, "--list-decisions", "--story", "STORY-9"],
                                    cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
         expectations.append(("inbox: --story narrows the listing to one story",

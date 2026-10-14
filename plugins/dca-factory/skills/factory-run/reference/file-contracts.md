@@ -297,7 +297,7 @@ asked: 2026-09-22T20:40:00Z
 - b: <another>
 
 ## Recommendation
-<the stage's view — never an answer>
+<the stage's view, opening with the label it recommends — never an answer>
 
 ## Answer
 answer: b
@@ -306,6 +306,11 @@ at: 2026-09-22T21:00:00Z
 rationale: <optional>
 ```
 
+- `## Options` holds one list item per option in the one canonical form `- a: <text>` — a lowercase
+  letter, a colon, plain text, continuation lines indented. The reader (`decision_options` in the package) also
+  takes the forms older records carry (`a.`, `a)`, `**a — …**`), and it is the only one: the inbox's JSON lists
+  each record's `options` and `recommended` from it, and an answer naming a label becomes that option's first
+  line in the story's `answered:` line.
 - `id` is `<story>-<nn>`, `nn` the next two-digit number among the story's records, and it is
   the file name — the gate finds a record by its name and refuses one whose `id:` disagrees.
 - `stage` is the stage that re-runs once the answer is there and applies it — the stage that asked,

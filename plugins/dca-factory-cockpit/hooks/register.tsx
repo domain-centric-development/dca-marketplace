@@ -3,7 +3,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
-import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, keepRefresh, moment, parseJournal, recommendedOption, recordOptions, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
+import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -503,9 +503,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   const guardCell = (hint: FactoryStatus['journeys'][number]): Cell =>
     ui.press(`guard-${hint.epic}`, 'add guard', () => send($, hint.action.skill || `/factory-backlog journey ${hint.epic}`), { byClaude: true })
   // An open record's answers as choices: one button per option, the recommended one first in weight, and a field for
-  // the person's own words; an acceptance is accepted or corrected. Each press hands the answer to /factory-decisions,
-  // which writes it into the record — the view writes nothing.
-  const choices = (record: DecisionRecord, text: string): RenderElement[] => {
+  // the person's own words; an acceptance is accepted or corrected. The options are the factory's reading of the
+  // record, never the view's own. Each press hands the answer to /factory-decisions, which writes it into the
+  // record — the view writes nothing.
+  const choices = (record: DecisionRecord): RenderElement[] => {
     const answer = (words: string) => send($, `/factory-decisions ${record.story} ${record.id}: answer ${words}`)
     if (record.kind === 'acceptance') {
       return [
@@ -514,8 +515,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ask(`correct-${record.id}`, 'correction', 'what should be different', `/factory-decisions ${record.story} ${record.id}: answer correction:`),
       ]
     }
-    const options = recordOptions(text)
-    const recommended = recommendedOption(text, options)
+    const options = record.options ?? []
+    const recommended = record.recommended ?? null
     return [
       ui.section('Your answer', recommended ? `the stage recommends ${recommended}` : 'choose an option or answer in your words'),
       ...(options.length > 0
@@ -694,7 +695,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ui.button('edit', '✎ edit', () => void editFile($, open.path), { hotkey: 'e' }),
         ]),
         ...(record?.kind === 'acceptance' ? await specRows(record) : []),
-        ...(record ? choices(record, text) : []),
+        ...(record ? choices(record) : []),
         ui.framed(ui.file(text, open.path) ?? ui.doc(text)),
       ],
       record ? 'b back · e edit in your editor · an answer goes to /factory-decisions' : 'b back · e edit in your editor',

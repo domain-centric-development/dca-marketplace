@@ -50,7 +50,8 @@ const DISCOVERY = {
 }
 const DECISIONS = {
   records: [
-    { id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'product/epics/books/add-book/decisions/01.md' },
+    { id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'product/epics/books/add-book/decisions/01.md',
+      options: [{ key: 'a', text: 'the reading list' }, { key: 'b', text: 'the shelf, read or not' }], recommended: 'b' },
     { id: 'add-book-accept-1', state: 'open', kind: 'acceptance', story: 'add-book', stage: 'document', asked: '2026-09-23T18:00:00Z', text: 'Accept add-book?', path: 'product/epics/books/add-book/decisions/accept-1.md' },
   ],
 }

@@ -68,6 +68,10 @@ export type DecisionRecord = {
   asked: string
   text: string
   path: string
+  // the record's `## Options` and the key its `## Recommendation` names, read by the factory's one option reader
+  // (`decisions --format json`, dca-factory 0.82.1); absent from an older pipeline, which then offers no choices
+  options?: { key: string; text: string }[]
+  recommended?: string | null
 }
 
 // One part of the project description as `status` reports it.
