@@ -26,6 +26,21 @@ test('reads the stages, rounds, gates and the open stage from a journal', () => 
   expect(build?.runningSince).toBe('2026-09-23T17:29:32Z')
 })
 
+test('the runner\'s own step runs as a chip of its own, a stage inside it keeps one clock', () => {
+  const journal = [
+    '2026-10-14T08:00:00Z\tstage-start\tdocument\ttool=claude',
+    '2026-10-14T08:01:00Z\tstage-end\tdocument\texit=0',
+    '2026-10-14T08:02:00Z\tstep-start\tintegrate\tby=runner',
+    '2026-10-14T08:03:00Z\tstage-start\tintegrate\ttool=claude',
+    '2026-10-14T08:04:00Z\tstage-end\tintegrate\texit=0',
+  ].join('\n')
+  const [, integrate] = stagesOf(parseJournal(journal))
+
+  expect(integrate).toEqual({ stage: 'integrate', rounds: 1, gates: [], seconds: 120, cost: 0, tokens: 0, runningSince: '2026-10-14T08:04:00Z' })
+  const [, ended] = stagesOf(parseJournal(`${journal}\n2026-10-14T08:05:00Z\tstep-end\tintegrate\texit=0`))
+  expect(ended).toEqual({ stage: 'integrate', rounds: 1, gates: [], seconds: 180, cost: 0, tokens: 0, runningSince: null })
+})
+
 test('a journal with seq, wrote and outdated lines: only stages and verdict gates count', () => {
   const journal = [
     '2026-10-10T08:00:00Z\tstage-start\tbuilder\ttool=claude\tseq=1',

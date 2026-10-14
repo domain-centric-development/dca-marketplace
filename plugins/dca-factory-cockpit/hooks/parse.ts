@@ -52,17 +52,31 @@ export function stagesOf(events: JournalEvent[]): StageRun[] {
     return made
   }
 
+  // The runner's own steps (integrate, merge, format) run as chips too; a stage inside a step of its name
+  // keeps one clock — the step's resumes when the stage ends.
+  const steps = new Set<string>()
+  const stop = (stage: StageRun, at: string) => {
+    if (stage.runningSince) stage.seconds += Math.max(0, (Date.parse(at) - Date.parse(stage.runningSince)) / 1000)
+    stage.runningSince = null
+  }
+
   for (const event of events) {
     if (event.kind === 'stage-start') {
       const stage = run(event.stage)
+      if (steps.has(event.stage)) stop(stage, event.at)
       stage.rounds += 1
       stage.runningSince = event.at
     } else if (event.kind === 'stage-end') {
       const stage = run(event.stage)
-      if (stage.runningSince) {
-        stage.seconds += Math.max(0, (Date.parse(event.at) - Date.parse(stage.runningSince)) / 1000)
-      }
-      stage.runningSince = null
+      stop(stage, event.at)
+      if (steps.has(event.stage)) stage.runningSince = event.at
+    } else if (event.kind === 'step-start') {
+      const stage = run(event.stage)
+      steps.add(event.stage)
+      if (!stage.runningSince) stage.runningSince = event.at
+    } else if (event.kind === 'step-end') {
+      steps.delete(event.stage)
+      stop(run(event.stage), event.at)
     } else if (event.kind === 'gate' && !isSelfCheck(event)) {
       run(event.stage).gates.push(event.fields.exit === '0')
     } else if (event.kind === 'usage') {

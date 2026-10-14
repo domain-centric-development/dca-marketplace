@@ -1,6 +1,7 @@
 """The schedule: every story's state, the order and the next one to run, over a few synthetic stories."""
 
 import unittest
+from datetime import datetime, timedelta, timezone
 
 from support import project, state
 
@@ -122,6 +123,35 @@ class Checkout(unittest.TestCase):
             data = schedule(p, slots=2, busy=("A-1",))
             self.assertEqual((data["next"], data["also"]), ("A-2", []))
             self.assertEqual(data["stories"]["A-1"]["state"], "running")
+
+
+class RunnerSteps(unittest.TestCase):
+    """WP-112: the runner's own steps — integrate, merge, format — are journaled as running, apart from the stages."""
+
+    def journal(self, p, story_id, *events):
+        now = datetime.now(timezone.utc)
+        lines = [f"{(now - timedelta(seconds=60 - n)).strftime('%Y-%m-%dT%H:%M:%SZ')}\t{kind}\t{name}\tby=runner"
+                 for n, (kind, name) in enumerate(events)]
+        p.evidence(story_id, "journal.tsv", "\n".join(lines) + "\n")
+
+    def test_an_open_step_runs_and_a_stage_inside_it_runs_in_its_place(self):
+        with project() as p:
+            p.story("A-1")
+            self.journal(p, "A-1", ("stage-start", "document"), ("stage-end", "document"), ("step-start", "integrate"))
+            self.assertEqual([(s, st) for s, st, _t in state.running_stages(p.runs)], [("A-1", "integrate")])
+            self.assertEqual(schedule(p)["stories"]["A-1"]["state"], "running")
+            self.journal(p, "A-1", ("step-start", "integrate"), ("stage-start", "integrate"))
+            self.assertEqual([st for _s, st, _t in state.running_stages(p.runs)], ["integrate"])
+            self.journal(p, "A-1", ("step-start", "integrate"), ("step-start", "format"), ("step-end", "format"))
+            self.assertEqual([st for _s, st, _t in state.running_stages(p.runs)], ["integrate"])
+
+    def test_an_ended_step_runs_no_more_and_counts_as_no_stage_run(self):
+        with project() as p:
+            p.story("A-1")
+            self.journal(p, "A-1", ("stage-start", "plan"), ("stage-end", "plan"), ("step-start", "integrate"),
+                         ("step-end", "integrate"))
+            self.assertEqual(state.running_stages(p.runs), [])
+            self.assertEqual(sorted(state.journal_usage(p.runs, "A-1")), ["plan"])
 
 
 if __name__ == "__main__":

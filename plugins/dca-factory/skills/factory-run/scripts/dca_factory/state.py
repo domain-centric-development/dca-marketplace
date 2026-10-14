@@ -1605,7 +1605,8 @@ def free_id(cwd, epics, config, target, prefix):
 
 
 def running_stages(runs):
-    """[(story, stage, started)] for every stage whose journal shows a start and no end yet.
+    """[(story, stage, started)] for every stage whose journal shows a start and no end yet — or, where no stage
+    runs, the runner's own step (`step-start`/`step-end`: integrate, merge, format), which no stage's reader counts.
 
     The journal knows that a stage began, not whether its process is still alive: a stage whose
     runner was killed reads the same, which is why the start time is shown with it."""
@@ -1614,7 +1615,7 @@ def running_stages(runs):
         journal = os.path.join(evidence_dir(runs, story), "journal.tsv")
         if not os.path.isfile(journal):
             continue
-        open_stage = None
+        open_stage, steps = None, []
         # By time, not by position: a union merge interleaves two branches' lines.
         for line in sorted(read_text(journal).splitlines(), key=lambda l: parse_time(l.split("\t")[0])
                            or datetime.min.replace(tzinfo=timezone.utc)):
@@ -1625,8 +1626,13 @@ def running_stages(runs):
                 open_stage = (parts[2], parts[0])
             elif parts[1] == "stage-end" and open_stage and parts[2] == open_stage[0]:
                 open_stage = None
-        if open_stage:
-            found.append((story, open_stage[0], open_stage[1]))
+            elif parts[1] == "step-start":
+                steps.append((parts[2], parts[0]))
+            elif parts[1] == "step-end":
+                steps = [step for step in steps if step[0] != parts[2]]
+        running = open_stage or (steps[-1] if steps else None)
+        if running:
+            found.append((story, running[0], running[1]))
     return found
 
 

@@ -8690,6 +8690,32 @@ def verify_worktrees(runner, verbose=False):
               and not os.path.isfile(os.path.join(root, ".dca-factory/evidence/STORY-1/.rounds")),
               f"exit {code}; {subjects!r}; {[l for l in output.splitlines() if 'fail' in l or 'moved' in l]}")
 
+    # #149: while the runner itself works — the integrate gate with the suite — the journal holds its step as running:
+    # the status (text and JSON) shows "integrate" with its clock, and nothing advises taking the story up (WP-112)
+    for root in throwaway():
+        peek = ('git log -1 --format=%s | grep -q "^feat(" && [ -n "${FACTORY_HOME:-}" ] '
+                '&& [ ! -f "$FACTORY_HOME/.git/peeked" ] && { : > "$FACTORY_HOME/.git/peeked"; h="$FACTORY_HOME"; '
+                f'( cd "$h" && unset FACTORY_HOME && "{shell_path(sys.executable)}" .agents/factory/factory-cli.py '
+                '--status --format json > .git/status.json; '
+                f'"{shell_path(sys.executable)}" .agents/factory/factory-cli.py --status > .git/status.txt; '
+                f'"{shell_path(sys.executable)}" .agents/factory/factory-cli.py --schedule > .git/schedule.txt ); }}\n'
+                'exit 0\n')
+        log, env = fixture(root, [], profile="compile: sh peek.sh\n", extra=(("peek.sh", peek),))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        try:
+            status = json.loads(read(root, ".git/status.json") or "{}")
+        except ValueError:
+            status = {}
+        running = [r for r in status.get("running", []) if r.get("story") == "STORY-1"]
+        text, listing = read(root, ".git/status.txt"), read(root, ".git/schedule.txt")
+        check("status: while the runner runs its integrate step, `status --format json` names it running with its "
+              "clock, the text status shows it, and neither the schedule nor the status advises taking the story up",
+              code == 0 and story_delivered(root, "STORY-1") and len(running) == 1
+              and running[0].get("stage") == "integrate" and running[0].get("since") and not running[0].get("interrupted")
+              and re.search(r"STORY-1\s+integrate", text) is not None
+              and "STORY-1  running" in listing and "takes it up" not in listing + text,
+              f"exit {code}; running {status.get('running')}; {text[-400:]!r}; {listing[-300:]!r}")
+
     # one slot: a story that waits with code in its worktree does not stop the next; answered, it resumes there,
     # meets the other story's change in a file both touched, and the integrate step makes both hold
     for root in throwaway():

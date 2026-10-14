@@ -1414,6 +1414,18 @@ class Run:
         with contextlib.suppress(OSError, GateError, ValueError):   # an unwritable journal costs the line, not the run
             journal_writer(place("runs"), story).write(line + "\n")
 
+    @contextlib.contextmanager
+    def step(self, story, name):
+        """A step the runner works itself — integrate, merge, format — journaled as running (`step-start`/
+        `step-end`), so the status shows it with its clock; no stage's reader counts it as a stage run."""
+        self.journal_line(story, f"{utc()}\tstep-start\t{name}\tby=runner")
+        code = None
+        try:
+            yield
+            code = 0
+        finally:
+            self.journal_line(story, f"{utc()}\tstep-end\t{name}\texit={'0' if code == 0 else 'stopped'}")
+
     def gate_installed(self):
         return os.path.isfile(self.gate_path)
 
@@ -2633,7 +2645,8 @@ class Run:
         fix = self.profile().get("formatFix", "").strip()
         if fix:
             print(f"── formatFix  (the profile's, over what the integrate stage resolved: {fix})")
-            fixed, said = run_command(fix, self.pwd)
+            with self.step(story, "format"):
+                fixed, said = run_command(fix, self.pwd)
             if fixed != 0:
                 err(f"factory: the profile's formatFix exited {fixed} — the gate's format check decides: "
                     f"{said.strip()[-300:]}")
@@ -2647,11 +2660,29 @@ class Run:
 
     def integrate_story(self, story, tool, dry):
         """Delivered is the integration: the main line merged into the story (a stage-integrate agent where git stops
-        on a conflict), squashed, the gate once more on that tree, the main checkout fast-forwarded — under the lock."""
+        on a conflict), squashed, the gate once more on that tree, the main checkout fast-forwarded — under the lock,
+        journaled as the runner's own step. A refusal on the main line runs the build stage again, after the step."""
         print("── integrate")
         if dry:
             print(f"   would merge {story}'s branch with the main line and fast-forward the main checkout")
             return 0
+        with self.step(story, "integrate"):
+            code = self.integrate_attempts(story, tool)
+        if code != "round":
+            return code
+        # the integration took the links down; the build stage works with them again — and document.md is an
+        # earlier pass's: the document stage writes it for the story as it now is, or its gate passes it as it is
+        self.take_lock()
+        try:
+            self.link_worktree(story)
+        finally:
+            self.drop_lock()
+        self.journal_line(story, f"{utc()}\toutdated\tdocument.md\tby=integrate")
+        return self.run_stages(story, tool, "build", dry)
+
+    def integrate_attempts(self, story, tool):
+        """The integration, again where the main line moved meanwhile: an exit code, or "round" where the gate
+        refused the story on the main line and the build stage runs again."""
         home = os.environ.get("FACTORY_HOME") or self.home
         for attempt in (1, 2, 3):
             self.take_lock()
@@ -2694,15 +2725,7 @@ class Run:
                 return 1
             err(f"factory: gate 'integrate' refused the story on the main line — round {rounds} runs the build stage "
                 "again with the gate's report.")
-            # the integration took the links down; the build stage works with them again — and document.md is an
-            # earlier pass's: the document stage writes it for the story as it now is, or its gate passes it as it is
-            self.take_lock()
-            try:
-                self.link_worktree(story)
-            finally:
-                self.drop_lock()
-            self.journal_line(story, f"{utc()}\toutdated\tdocument.md\tby=integrate")
-            return self.run_stages(story, tool, "build", dry)
+            return "round"
         err(f"factory: the main line moved on three times while {story} was integrated — run it again.")
         return 1
 
@@ -2722,11 +2745,14 @@ class Run:
             if code != 0:
                 err(f"factory: {story} could not be claimed — needs-human (see above).")
                 return 1
-        self.take_lock()
-        try:
-            _, out = self.cli("--worktree-prepare", story, quiet=False)
-        finally:
-            self.drop_lock()
+        # A story resumed in its worktree is merged with the main line here: the runner's own step, shown running.
+        resumed = has_worktree(story, self.home)
+        with self.step(story, "merge") if resumed else contextlib.nullcontext():
+            self.take_lock()
+            try:
+                _, out = self.cli("--worktree-prepare", story, quiet=False)
+            finally:
+                self.drop_lock()
         wt = out.split("\n")[-1] if out else ""
         if wt.startswith("none"):
             print(f"factory: {story} runs in the checkout — {wt[len('none — '):] if wt.startswith('none — ') else wt}")
