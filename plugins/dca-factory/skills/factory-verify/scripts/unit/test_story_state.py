@@ -131,6 +131,29 @@ class PassOrder(unittest.TestCase):
             same = [e["name"] for e in state.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
             self.assertEqual(same, ["plan.md", "tests.md", "build.md", "tidy.md"])
 
+    def test_a_shared_window_marks_only_the_stages_it_carried_and_not_one_a_later_stage_built_on(self):
+        with project() as p:
+            path = p.story("S-1")
+            full_pass(p, "S-1", upto="tidy")
+            state.journal_append(p.runs, "S-1", "stage-start", "builder", "stages=test,build,tidy", at=SECOND)
+            state.record_owned(p.runs, "S-1", path)
+            p.handover("S-1", "build", "# build, again\n")
+            state.owned_end(p.runs, "S-1", "builder", ran="0")
+            same = [e["name"] for e in state.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
+            self.assertEqual(same, ["tidy.md"])
+
+    def test_a_shared_window_marks_a_file_left_as_it_was_that_an_earlier_stage_outdated(self):
+        with project() as p:
+            path = p.story("S-1")
+            full_pass(p, "S-1", upto="tidy")
+            p.write_and_journal("S-1", "plan", "# plan, again\n", at=SECOND)
+            state.journal_append(p.runs, "S-1", "stage-start", "builder", "stages=test,build,tidy", at=SECOND)
+            state.record_owned(p.runs, "S-1", path)
+            p.handover("S-1", "build", "# build, again\n")
+            state.owned_end(p.runs, "S-1", "builder", ran="0")
+            same = [e["name"] for e in state.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
+            self.assertEqual(same, ["tests.md", "tidy.md"])
+
     def test_a_later_pass_of_a_post_gated_stage_holds_its_file(self):
         with project() as p:
             p.story("S-1")

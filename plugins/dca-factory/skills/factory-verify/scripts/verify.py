@@ -1712,6 +1712,51 @@ def verify_runner(runner, verbose=False):
               code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "verifier", "test", "build", "tidy", "verifier"],
               f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
 
+    # #139: a stage sent back that changes nothing still holds for this pass — the shared builder's window marks a file
+    # it left as it was only for the stages it carried, and only where an earlier stage's file is newer; a plan the
+    # window did not run is no `same` write after the tests (WP-111)
+    back_shared = ('if [ "$FACTORY_STAGE" = verifier ]; then '
+                   'if [ ! -f judged-once ]; then : > judged-once; '
+                   'printf "## Verdict\\nverdict: changes-requested\\nback: test\\n" > .dca-factory/runs/STORY-1/judge.md; '
+                   'else FACTORY_STAGE=judge sh -c "$FIXTURE_STAND_IN"; '
+                   '"$FIXTURE_PY" .agents/factory/factory-cli.py --document-skeleton STORY-1 >/dev/null; '
+                   'FACTORY_STAGE=document sh -c "$FIXTURE_STAND_IN"; fi; '
+                   'elif [ "$FACTORY_STAGE" = builder ]; then '
+                   'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                   'if [ "$s" = test ] && [ -f judged-once ]; then '
+                   '  if [ -n "${FIXTURE_REWRITE:-}" ]; then printf "\\n" >> .dca-factory/runs/STORY-1/tests.md; '
+                   '  "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; '
+                   'else FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
+                   '  if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; fi; '
+                   'if [ "$s" = build ] && [ -f judged-once ]; then printf "\\nround 2\\n" >> .dca-factory/runs/STORY-1/build.md; fi ;; '
+                   'esac; done; '
+                   'else sh -c "$FIXTURE_STAND_IN"; fi')
+    for rewrite in ("", "1"):
+        for root in throwaway():
+            build_project(root)
+            copy_scripts(runner, root)
+            tests_path = os.path.join(root, "fixture-tests.md")
+            with open(tests_path, "w", encoding="utf-8") as handle:
+                handle.write(TESTS)
+            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", "tests.md"))
+            with open(os.path.join(root, "greens.txt"), "w", encoding="utf-8") as handle:
+                handle.write(" ".join(re.sub(r"[./#]", "", s) for s in both_green) + "\n")
+            env = {"FACTORY_TOOL_CMD": back_shared, "FIXTURE_STAND_IN": stand_in, "FIXTURE_PY": shell_path(sys.executable),
+                   "FIXTURE_TESTS": shell_path(tests_path), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt")),
+                   "FIXTURE_REWRITE": rewrite}
+            code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
+                                      "--shared-builder", "--shared-verifier", env=env)
+            journal = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
+            lines = open(journal, encoding="utf-8").read().splitlines() if os.path.isfile(journal) else []
+            starts = [l.split("\t")[2] for l in lines if "\tstage-start\t" in l and "\tstage-start\treview:" not in l]
+            stray = [l for l in lines if "\twrote\tplan.md\t" in l and "same=1" in l]
+            check("story-pass: a test stage sent back by the judge that "
+                  + ("rewrites its file" if rewrite else "changes nothing")
+                  + " holds for this pass — no `same` mark for a plan the window did not run, delivered",
+                  code == 0 and story_delivered(root) and not stray
+                  and starts == ["builder", "verifier", "builder", "verifier"] and "gate 'document' refused" not in output,
+                  f"exit {code}; starts {starts}; stray {stray}; {output.strip().splitlines()[-4:]}")
+
     # 1b-recheck. the runner's re-check of a shared builder refuses: a round with the gate's report, not a stop
     recheck_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
                    'printf "%s\\n" "$FACTORY_PROMPT" >> \"$FIXTURE_HOME/builder-prompts.txt\"; '

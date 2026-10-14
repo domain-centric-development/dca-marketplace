@@ -298,7 +298,10 @@ def rebaseline_owned(story_path):
 
 def mark_window_files(runs, story_id, window):
     """A window that ran its stages to the end wrote their files — also one it wrote again as it was: the journal
-    then says so (`wrote <file> same=1`), after what the window wrote anew, in the stages' order."""
+    then says so (`wrote <file> same=1`). Only for the stages the window carried (its `stage-start` names them), and
+    not for one a later stage of the window built on by writing anew — unless the file would otherwise read as an
+    earlier pass's (an earlier stage's file is newer). A file a stage left as it was then holds for this pass; a
+    stage the window did not run is never written after the ones it did."""
     folder, run_folder = evidence_dir(runs, story_id), os.path.join(runs, story_id)
     path = os.path.join(folder, WINDOW_DIGEST)
     at_start = {}
@@ -307,11 +310,25 @@ def mark_window_files(runs, story_id, window):
             digest, _, name = line.partition("  ")
             at_start[name] = digest
         os.remove(path)
-    for stage in SHARED_WINDOWS.get(window, (window,)):
-        name = STAGE_FILES.get(stage)
-        full = os.path.join(run_folder, name) if name else None
-        if full and os.path.isfile(full) and at_start.get(name) == file_digest(full):
+    carried = SHARED_WINDOWS.get(window, (window,))
+    for event in journal_events(runs, story_id):
+        if event["kind"] == "stage-start" and event["name"] == window:
+            carried = tuple(event["fields"].get("stages", "").split(",")) if event["fields"].get("stages") else carried
+    marks = pass_marks(runs, story_id)
+    present = [s for s in STAGE_ORDER if STAGE_FILES.get(s) and os.path.isfile(os.path.join(run_folder, STAGE_FILES[s]))]
+    same = {s for s in present if s in carried
+            and at_start.get(STAGE_FILES[s]) == file_digest(os.path.join(run_folder, STAGE_FILES[s]))}
+    anew = [s for s in present if s in carried and s not in same]
+    newest, marked = 0, False
+    for stage in present:
+        name = STAGE_FILES[stage]
+        at = written_at(marks, stage)
+        later_anew = any(STAGE_ORDER.index(s) > STAGE_ORDER.index(stage) for s in anew)
+        if stage in same and (marked or at is None or at < newest or not later_anew):
             journal_append(runs, story_id, "wrote", name, f"sha={at_start[name]}", "same=1")
+            marked = True
+            continue
+        newest = max(newest, at or 0)
 
 
 def owned_end(runs, story_id, window, ran="0"):
