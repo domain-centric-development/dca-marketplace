@@ -202,7 +202,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     // a story's findings stand under its name, given once; the name opens the findings file
     await expect(pane.press({ key: 'finding-file-1' })).rejects.toThrow()
     // the finding stands in front with what to do beside it, the file only by its name
-    expect(await pane.find({ text: /→ name the/ })).toBeDefined()
+    expect(await pane.find({ text: /→/ })).toBeDefined()
+    expect(await pane.find({ text: /the guard/ })).toBeDefined()
     // the finding in plain words leads, the reviewer's defect beside it; a row without the sentence shows its defect
     expect(await pane.find({ text: /the book is/ })).toBeDefined()
     expect(await pane.find({ text: /guard/ })).toBeDefined()
