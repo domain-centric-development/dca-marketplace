@@ -83,7 +83,7 @@ from .contract import (
     runs_top,
     ALL_KINDS, ANSWER_FIELDS, answered_decisions, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
-    factory_home, file_digest, find_story, findings_path, findings_rows, GateError, git, HAPPY_MARK, HOME_VARIABLE, in_worktree,
+    factory_home, file_digest, find_story, findings_path, findings_rows, GateError, git, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
     INSTRUCTION_FILES, is_delivered, JOURNEY_ORDER, order_for, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, needs_human_ids,
     NOTHING, place, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
     record_path, records_of, resolve_profile, resume_stage, section_of, SELECTOR, set_places, SHARED_WINDOWS, shown,
@@ -332,6 +332,7 @@ def close_findings(result, front):
                 lines[index] = "| " + " | ".join(cells) + " |"
         with open(path, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines) + "\n")
+        result.written.append(path)
         closed.append(row_id)
     if closed:
         result.ok("findings", f"closed {', '.join(closed)} — set to done in their findings.md")
@@ -3509,6 +3510,7 @@ def ask_acceptance(cwd, runs, story_id, story_path, profile, criteria):
 class Result:
     def __init__(self):
         self.entries = []
+        self.written = []          # the files a delivery wrote into the project — what integrate commits on main
 
     def ok(self, check, message):
         self.entries.append(("pass", check, message))
@@ -4160,6 +4162,32 @@ def integrate_into_home(result, cwd, story_path, story_id, front, runs):
         return
     result.ok("integrated", f"{target} took the story's commit {head[:12]}")
     deliver(result, story_path, story_id, front, runs)
+    if not result.failed:
+        commit_delivery(result, home, story_id, front)
+
+
+def commit_delivery(result, home, story_id, front):
+    """What the delivery wrote on the main line — the story's folder (its state, decisions, findings) and the spec
+    it merged — committed there beside the story's commit, so the next story's worktree starts from it. Only those
+    paths: what else the main checkout holds, staged or not, stays as it is."""
+    paths = []
+    for path in dict.fromkeys(result.written):
+        rel = os.path.relpath(os.path.abspath(path), home).replace("\\", "/")
+        if not rel.startswith("../") and (os.path.exists(os.path.join(home, rel)) or git(home, "ls-files", "--", rel)[1]):
+            paths.append(rel)
+    if not paths:
+        return
+    git(home, "add", "-A", "--", *paths)
+    if git(home, "diff", "--cached", "--quiet", "HEAD", "--", *paths)[0] == 0:
+        return
+    scope = re.sub(r"[^a-z0-9]+", "-", str(front.get("context", "")).lower()).strip("-") or "story"
+    done = git(home, *git_identity(home), "commit", "--no-verify", "--quiet", "-m",
+               f"chore({scope}): deliver {story_id}\n\nStory: {story_id}\n", "--", *paths)
+    if done[0] != 0:
+        result.fail("committed", f"the delivery's files could not be committed on the main line: {done[1][:300]} — "
+                                 f"commit {', '.join(paths)} by hand")
+        return
+    result.ok("committed", f"the delivery's files committed on the main line: {', '.join(paths)}")
 
 
 def spec_target(front):
@@ -4318,6 +4346,7 @@ def merge_spec(result, story_path, story_id, front, runs):
                 with contextlib.suppress(OSError):
                     os.rmdir(os.path.dirname(path))
                 written.append(f"{shown(path)} (gone — no criterion left)")
+                result.written.append(path)
             continue
         if not entries and not os.path.isfile(path):
             continue
@@ -4329,6 +4358,7 @@ def merge_spec(result, story_path, story_id, front, runs):
             with open(path, "w", encoding="utf-8") as handle:
                 handle.write(text)
             written.append(shown(path))
+            result.written.append(path)
     found = derived(story, spec)
     result.ok("spec", f"{', '.join(written) or shown(target)}: {sum(v == 'adds' for v in found.values())} added, "
                       f"{sum(v == 'changes' for v in found.values())} changed, {len(delta['removes'])} removed"
@@ -4400,6 +4430,7 @@ def deliver(result, story_path, story_id, front, runs):
         return
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by="gate")
+    result.written.append(story_folder(story_path))
     result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
                            f"`delivered_by: gate`")
     added, open_now = record_findings(story_path, story_id, front, runs)

@@ -22,7 +22,7 @@ import threading
 import time
 from .contract import (
     ALL_KINDS, CONTRACT, DECISIONS_DIR, DEFAULTS, METHOD_PROFILE, METHOD_ROOT, read_flat, evidence_dir, evidence_rel, find_story, FINDINGS_FILE, flat_stories,
-    delivered_by, delivered_on, GateError, git, is_delivered, legacy_story_digest, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
+    delivered_by, delivered_on, GateError, git, git_identity, is_delivered, legacy_story_digest, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, resolve_profile, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_FILES, STAGE_ORDER, STAGES,
     STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of, story_kind, worktree_places, decisions_store,
     needs_human_ids, OWNED_DIGEST, WINDOW_DIGEST)
@@ -121,14 +121,6 @@ def unlink_folder(path):
         os.unlink(path)
     elif is_linked(path):
         os.rmdir(path)                           # a junction goes, its target stays
-
-
-def git_identity(cwd):
-    """`-c user.name=… -c user.email=…` where the repository names no committer — a factory commit must not
-    fail on a machine that never committed."""
-    if git(cwd, "config", "user.email")[1].strip():
-        return []
-    return ["-c", "user.name=dca-factory", "-c", "user.email=dca-factory@localhost"]
 
 
 def exclude_worktrees(cwd):

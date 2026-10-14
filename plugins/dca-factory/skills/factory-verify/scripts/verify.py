@@ -8638,12 +8638,38 @@ def verify_worktrees(runner, verbose=False):
     for root in throwaway():
         log, env = fixture(root, [], profile="compile: touch gate-output.junk\n")
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
-        committed = git_out(root, "show", "--name-only", "--format=", "main").split()
+        committed = git_out(root, "show", "--name-only", "--format=", "main~1").split()   # main: the delivery's own commit
         check("integrate: the story's commit takes the files its stages listed, not an untracked file a gate's "
               "command left, and names what it left out",
               code == 0 and "src/main/STORY-1.txt" in committed and "gate-output.junk" not in committed
               and "left out of STORY-1's commit" in output and "gate-output.junk" in output,
               f"exit {code}; {committed}; {output.strip()[-300:]}")
+
+    # #149: integrate commits what the delivery wrote on main — the story's folder and the spec it merged — beside the
+    # story's commit, and nothing else of the main checkout; the next story's worktree starts with that spec (WP-112)
+    for root in throwaway():
+        log, env = fixture(root, [("STORY-2", ["STORY-1"])])
+        script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            'case "$FACTORY_STAGE" in\n',
+            '[ "$FACTORY_STAGE" = plan ] && grep -qs shows-the-thing product/spec/widgets/scenarios.md '
+            '&& echo "$FACTORY_STORY plan sees the spec" >> "$FIXTURE_LOG"\n'
+            'case "$FACTORY_STAGE" in\n', 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                       capture_output=True)
+        write_file(root, "notes.txt", "a person's own change\n")
+        code, output = run_runner(runner, root, "run", env=env)
+        status = git_out(root, "status", "--porcelain")
+        subjects = git_out(root, "log", "--format=%s", "main")
+        check("integrate: the delivery's own files — the story's folder and the spec it merged — are committed on main "
+              "with the story; nothing else of the main checkout is, and the next story's worktree has the spec",
+              code == 0 and story_delivered(root, "STORY-1") and story_delivered(root, "STORY-2")
+              and "product/" not in status and "notes.txt" in status
+              and "shows-the-thing" in git_out(root, "show", "main:product/spec/widgets/scenarios.md")
+              and "status: delivered" in git_out(root, "show", "main:product/epics/sample/STORY-1/story.md")
+              and "STORY-2 plan sees the spec" in lines(log),
+              f"exit {code}; status {status!r}; {subjects!r}; {lines(log)[-3:]}; {output.strip().splitlines()[-6:]}")
 
     # one slot: a story that waits with code in its worktree does not stop the next; answered, it resumes there,
     # meets the other story's change in a file both touched, and the integrate step makes both hold
