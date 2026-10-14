@@ -4154,6 +4154,12 @@ def integrate_into_home(result, cwd, story_path, story_id, front, runs):
     head = git(cwd, "rev-parse", "HEAD")[1].strip()
     done = subprocess.run(["git", "merge", "--ff-only", "--quiet", head], cwd=home, capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
+    if done.returncode != 0 and git(home, "merge-base", "--is-ancestor", "HEAD", head)[0] != 0:
+        # The main line moved between the merge and here — a person's commit, another story integrated: the
+        # integrate step merges it again and holds the story to the gate once more, as for a target moved earlier.
+        result.fail("moved", f"{target} moved on while the story was held to the gate — the integrate step merges "
+                             f"again")
+        return
     if done.returncode != 0:
         result.fail("checkout", f"the main checkout could not take the story's commit: "
                                 f"{(done.stderr or done.stdout).strip().splitlines()[0] if (done.stderr or done.stdout).strip() else 'git refused'}"

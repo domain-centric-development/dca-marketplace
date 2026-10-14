@@ -8671,6 +8671,25 @@ def verify_worktrees(runner, verbose=False):
               and "STORY-2 plan sees the spec" in lines(log),
               f"exit {code}; status {status!r}; {subjects!r}; {lines(log)[-3:]}; {output.strip().splitlines()[-6:]}")
 
+    # #149: the main line moves while the integrate gate runs the suite (a person's commit): the fast-forward fails,
+    # the integrate step merges the main line again, holds it to the gate once more and delivers — no round spent
+    # (WP-112)
+    for root in throwaway():
+        moves = ('git log -1 --format=%s | grep -q "^feat(" && [ -n "${FACTORY_HOME:-}" ] '
+                 '&& [ ! -f "$FACTORY_HOME/.git/moved" ] && { : > "$FACTORY_HOME/.git/moved"; '
+                 'echo by-hand > "$FACTORY_HOME/by-hand.txt"; git -C "$FACTORY_HOME" add by-hand.txt; '
+                 'git -C "$FACTORY_HOME" commit -qm "a commit by hand" -- by-hand.txt; }\nexit 0\n')
+        log, env = fixture(root, [], profile="compile: sh moves.sh\n", extra=(("moves.sh", moves),))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        subjects = git_out(root, "log", "--format=%s", "main")
+        check("integrate: the main line moves between the integrate gate and the fast-forward — the runner merges it "
+              "again, the gate holds the story once more, and the story is delivered without a round",
+              code == 0 and story_delivered(root, "STORY-1") and "a commit by hand" in subjects
+              and "feat(widgets): A sample story" in subjects and read(root, "src/main/STORY-1.txt") == "STORY-1\n"
+              and "merged again" in output
+              and not os.path.isfile(os.path.join(root, ".dca-factory/evidence/STORY-1/.rounds")),
+              f"exit {code}; {subjects!r}; {[l for l in output.splitlines() if 'fail' in l or 'moved' in l]}")
+
     # one slot: a story that waits with code in its worktree does not stop the next; answered, it resumes there,
     # meets the other story's change in a file both touched, and the integrate step makes both hold
     for root in throwaway():

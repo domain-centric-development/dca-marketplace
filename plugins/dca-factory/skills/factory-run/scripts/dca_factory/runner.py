@@ -2676,8 +2676,9 @@ class Run:
                     print(f"factory: story {story} is integrated and delivered.")
                 return 0
             report = f"{self.runs}/{story}/.gate-integrate.txt"
+            # the checks that failed — not the report's closing `gate:fail story <id> stage <stage>` line
             fails = [line for line in (read_text(report).splitlines() if os.path.isfile(report) else [])
-                     if line.startswith("gate:fail ")]
+                     if line.startswith("gate:fail ") and not line.startswith("gate:fail story ")]
             if fails and all(line.startswith("gate:fail moved") for line in fails):
                 print(f"factory: the main line moved on while {story} was merged — merged again (attempt {attempt + 1}).")
                 continue
