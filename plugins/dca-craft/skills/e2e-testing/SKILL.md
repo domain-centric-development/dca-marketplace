@@ -112,7 +112,7 @@ true whenever anything else is.
 a state it sets up itself — an empty store through the application's own reset, or data unique to
 the test (its own titles, its own user) and assertions only about that data — never from what an
 earlier test left behind. A suite that shares one running application and one store across tests
-is where this breaks: "expected 2 rows, got 4" after another test ran first. Seeded data is shared too: a test that changes a seeded record (lowers a count, uses up a stock) or needs one of its values to be exact creates its own record through the application instead and reads only that one. Before handing over,
+is where this breaks: "expected 2 rows, got 4" after another test ran first. Seeded data is shared too: a test that changes a seeded record (lowers a count, uses up a stock) or needs one of its values to be exact creates its own record through the application instead and reads only that one. Where the scenario itself names the seeded record and its exact value, the test runs on an application of its own started from the seed, so the scenario stays literally true. A flow that only reads seeded data and needs no exact value stays on the shared application, so the suite can still drive any implementation of it. Before handing over,
 run the **whole** suite once, not only the tests you wrote; a test that passes alone and fails in the
 suite is not done.
 
