@@ -68,8 +68,9 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    placement, ordering): a detail that is not a criterion is a detail no test will cover and no
    stage will build. A clause about a state that did not come about — not saved, not sent, unchanged —
    says how a person sees it (the list as it was, the old value still on the page, no new entry): write
-   it after the criterion's level where the story leaves it implicit, and ask (`## needs-human`) where
-   neither the story nor the product description says it. An example of a rule sits where the rule
+   it after the criterion's level where the story leaves it implicit, and where neither the story nor
+   the product description says it, choose the plainest sign and record it under `## Open assumptions`
+   — the run goes on and the judge sees the assumption. An example of a rule sits where the rule
    differs from the obvious neighbour — a rounding exactly on the half cent, where rounding half up and
    half to even part; a limit on both sides of it. Where the story's example is one both rules answer
    alike, the rule's line under `## Invariants` names the value that tells them apart, so its unit test
