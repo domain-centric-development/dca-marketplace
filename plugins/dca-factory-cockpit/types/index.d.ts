@@ -42,6 +42,9 @@ export type FactoryStatus = {
   // the judge's open minors and other factories' claims (dca-factory 0.79.3; absent from an older pipeline); `plain`, the
   // finding in one sentence a person understands at once, since 0.84.0 — '' for a row the judge wrote before it
   findings?: { story: string; plain?: string; where: string; severity: string; defect: string; perspective?: string; fix?: string; file: string; action: Action }[]
+  // the review perspectives the profile asks for now, the built-ins first (dca-factory 0.84.2; absent from an older
+  // pipeline, which then shows every reviewer a story ran)
+  perspectives?: { name: string; carrier: string }[]
   claims?: {
     story: string
     kind: 'held' | 'orphan' | 'collision'

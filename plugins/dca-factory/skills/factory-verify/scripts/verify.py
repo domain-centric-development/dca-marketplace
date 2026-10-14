@@ -2743,7 +2743,8 @@ exit 0
         new = next((f for f in found if f.get("story") == "STORY-1"), {"action": {"skill": ""}, "defect": "", "severity": "", "file": ""})
         old = next((f for f in found if f.get("story") == "STORY-0"), {"action": {"skill": ""}, "defect": ""})
         check("status json: the claims of other factories by kind with an action, and the open findings with their file, "
-              "perspective, fix and the plain-words sentence first (empty for a row from before contract 23)",
+              "perspective, fix and the plain-words sentence first (empty for a row from before contract 23); the review "
+              "perspectives the profile asks for",
               kinds == {"STORY-1": "held", "STORY-9": "orphan"}
               and next(c for c in view["claims"] if c["story"] == "STORY-9")["action"]["shell"].endswith(
                   "release STORY-9 --force")
@@ -2755,7 +2756,10 @@ exit 0
               and new["file"].endswith("STORY-1/findings.md")
               # a row from before contract 23 reads with the sentence empty, its defect in its place
               and old.get("plain") == "" and old["defect"] == "an old row"
-              and old["action"]["skill"].endswith("STORY-0: an old row"),
+              and old["action"]["skill"].endswith("STORY-0: an old row")
+              # the perspectives the profile asks for now, the built-ins first — a view shows those reviewers alone
+              and [p.get("name") for p in view.get("perspectives", [])] == ["ddd", "hexagonal", "clean-code"]
+              and view["perspectives"][0].get("carrier") == "review-ddd",
               [view.get("claims"), view.get("findings")])
         write_file(root, ".dca-factory/claims.tsv",
                    "STORY-1\tanna@example.org\tlaptop-a\t2026-01-02T03:04:05Z\t0\tother-epic\tSort the list\n")

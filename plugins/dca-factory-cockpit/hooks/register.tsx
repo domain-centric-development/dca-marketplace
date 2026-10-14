@@ -3,7 +3,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 
 import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
-import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
+import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -708,7 +708,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const events = now.journals[open.id] ?? []
     const stored = await read($, storyView)
     const view = stored?.story === open.id ? stored : null
-    const perStage = view ? Object.entries(view.stages) : []
+    // a reviewer only for a perspective the profile asks for now — never one an earlier profile named
+    const shownProcess = (name: string) => isShownProcess(name, status.perspectives)
+    const perStage = view ? Object.entries(view.stages).filter(([name]) => shownProcess(name)) : []
     const longest = Math.max(1, ...perStage.map(([, one]) => one.seconds))
     const denials = perStage.flatMap(([name, one]) =>
       (one.denials ?? []).map(d => ({ where: d.stage && d.stage !== name ? `${name} · ${d.stage}` : name, tool: d.tool, command: d.command })),
@@ -717,7 +719,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const waitAt = status.waiting.find(wait => wait.story === open.id)
     const press = waitAt ? waitPress(waitAt.story, waitAt.action) : null
     const waits = press !== null
-    const shown = events.filter(isHistory).slice(-Math.max(4, rows - 34))
+    const shown = events.filter(event => isHistory(event) && shownProcess(event.stage)).slice(-Math.max(4, rows - 34))
     const mark = row?.mark ?? 'none'
     return page(
       [
@@ -752,7 +754,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           row?.done && ui.button('verify', 'verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v', byClaude: true }),
         ]),
         ui.section('Pipeline'),
-        ui.chips(stagesOf(events), at),
+        ui.chips(stagesOf(events).filter(run => shownProcess(run.stage)), at),
         ui.section('Time per stage', "the factory's own numbers"),
         ui.table(
           [COL.stage, { name: 'share', width: 20, isElastic: true }, COL.time, COL.runs, COL.tokens, COL.cost, { name: 'denied', width: 6, isNumber: true }, { name: 'model', width: 18 }],
@@ -858,7 +860,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.section('Output', 'what each process read, edited and ran'),
         ui.table(
           [{ name: 'process', width: 20 }],
-          (now.outputs[open.id] ?? []).map(process => [
+          (now.outputs[open.id] ?? []).filter(shownProcess).map(process => [
             ui.open(`output-${process}`, process, () => void openOutput($, now.root, open.id, process, open)),
           ]),
           'No stage has run yet.',

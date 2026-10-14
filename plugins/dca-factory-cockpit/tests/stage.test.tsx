@@ -19,6 +19,7 @@ const STATUS = {
   total: 1,
   tokens: 0,
   seconds: 60,
+  perspectives: [{ name: 'ddd', carrier: 'review-ddd' }, { name: 'hexagonal', carrier: 'review-hexagonal' }, { name: 'clean-code', carrier: 'review-clean-code' }],
 }
 // what `factory.sh follow --once --format json` prints for a stage a shell or a bench started
 const STORY = {
@@ -28,7 +29,9 @@ const STORY = {
     { stage: 'plan', runs: 1, seconds: 72, tokens: 668_330, cost: 0.67 },
     { stage: 'test', runs: 1, seconds: 238, tokens: 2_302_460, cost: 1.41, denied: 1 },
   ], denied: 1, denials: [{ stage: 'test', tool: 'Bash', command: 'for f in src/*.java; do cat $f; done' }] },
-    'review:hexagonal': { runs: 1, seconds: 70, tokens: 250_000, cost: 0.58, models: ['some-model'], input: 12, output: 5_400, cache_write: 54_000, cache_read: 190_500 } },
+    'review:hexagonal': { runs: 1, seconds: 70, tokens: 250_000, cost: 0.58, models: ['some-model'], input: 12, output: 5_400, cache_write: 54_000, cache_read: 190_500 },
+    // a reviewer an earlier profile named: the profile asks for it no more
+    'review:dca': { runs: 1, seconds: 60, tokens: 200_000, cost: 0.4, models: ['some-model'] } },
 }
 const FOLLOW = { story: 'add-book', stage: 'builder', running: true, lines: ['· session started — some-model', '▸ Read plan.md', '  writing the first test'] }
 
@@ -39,7 +42,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     on('fs.exists', async () => ({ value: true }))
     on('fs.list', async (_: unknown, e: { path: string }) => ({
       value: e.path.endsWith('/evidence/add-book')
-        ? [{ name: 'verifier.090000.out', kind: 'file', size: 0, mtimeMs: 2, isLink: false }, { name: 'builder.085007.out', kind: 'file', size: 0, mtimeMs: 1, isLink: false }]
+        ? [{ name: 'verifier.090000.out', kind: 'file', size: 0, mtimeMs: 2, isLink: false }, { name: 'builder.085007.out', kind: 'file', size: 0, mtimeMs: 1, isLink: false },
+           { name: 'review-dca.085900.out', kind: 'file', size: 0, mtimeMs: 1.5, isLink: false }, { name: 'review-ddd.085900.out', kind: 'file', size: 0, mtimeMs: 1.6, isLink: false }]
         : [],
     }) as never)
     on('fs.read', async (_: unknown, e: { path: string }) =>
@@ -74,6 +78,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: 'TOKENS PER STAGE' })).toBeDefined()
     // a column of text is as wide as its longest entry: a reviewer's stage name is not cut
     expect(await pane.find({ type: 'Text', text: 'review:hexagonal' })).toBeDefined()
+    // only the perspectives the profile asks for now: a reviewer an earlier profile named is in no table and no output
+    expect(await pane.find({ text: /review:dca/ })).toBeUndefined()
+    expect(await pane.find({ text: /review-dca/ })).toBeUndefined()
+    expect(await pane.find({ text: 'review-ddd' })).toBeDefined()
     expect(await pane.find({ text: 'cache read' })).toBeDefined()
     // a table's rules sit in boxes of their own: no text runs a rule across columns or pads a bar with spaces,
     // which a proportional font (Desktop) would shift off its column

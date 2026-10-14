@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filledCells, duration, gateBy, isHistory, isRefusal, isSelfCheck, moment, parseJournal, rounds, stagesOf, touchesFactory, waitingCount, waitPress, wrapWords } from '../hooks/parse'
+import { filledCells, duration, gateBy, isHistory, isRefusal, isSelfCheck, isShownProcess, moment, parseJournal, rounds, stagesOf, touchesFactory, waitingCount, waitPress, wrapWords } from '../hooks/parse'
 
 test('a factory command or skill refreshes the view, other calls do not', () => {
   expect(touchesFactory({ tool: 'Bash', command: 'bash .agents/factory/factory.sh run' } as { tool: string })).toBe(true)
@@ -112,4 +112,14 @@ test('Decide counts what waits and the claims a person must act on — a fresh f
   const claims = [{ kind: 'held', stale: false }, { kind: 'held', stale: true }, { kind: 'orphan', stale: false }, { kind: 'collision', stale: false }]
   expect(waitingCount({ waiting: [1, 2], claims })).toBe(5)
   expect(waitingCount({ waiting: [] })).toBe(0)
+})
+
+test('a reviewer shows only for a perspective the profile asks for now; every other process, and every reviewer on an older pipeline, shows', () => {
+  const asked = [{ name: 'ddd' }, { name: 'hexagonal' }, { name: 'clean-code' }]
+  expect(isShownProcess('review:ddd', asked)).toBe(true)
+  expect(isShownProcess('review-clean-code', asked)).toBe(true)
+  expect(isShownProcess('review:dca', asked)).toBe(false)
+  expect(isShownProcess('review-dca', asked)).toBe(false)
+  expect(isShownProcess('builder', asked)).toBe(true)
+  expect(isShownProcess('review:dca', undefined)).toBe(true)
 })

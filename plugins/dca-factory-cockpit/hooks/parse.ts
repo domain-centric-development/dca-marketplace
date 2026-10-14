@@ -40,6 +40,15 @@ export function isHistory(event: JournalEvent): boolean {
   return event.kind === 'stage-start' || event.kind === 'stage-end' || event.kind === 'gate'
 }
 
+// A story's process or stage as a view shows it: a reviewer — `review:<name>` in the journal and the figures,
+// `review-<name>` as its output — only for a perspective the profile asks for now (`perspectives` in the status, dca-factory
+// 0.84.2); a reviewer an earlier profile named stays out. Everything else, and every reviewer on an older pipeline, shows.
+export function isShownProcess(name: string, perspectives?: { name: string }[]): boolean {
+  if (!perspectives) return true
+  const reviewer = /^review[:-](.+)$/.exec(name)?.[1]
+  return reviewer === undefined || perspectives.some(perspective => perspective.name === reviewer)
+}
+
 // The stages in the order the journal first names them: plan…document, or builder/judge/document
 // when the project runs a shared builder — whatever the runner wrote, nothing assumed.
 export function stagesOf(events: JournalEvent[]): StageRun[] {

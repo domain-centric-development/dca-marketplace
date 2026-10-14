@@ -1122,8 +1122,11 @@ def status_model(cwd, epics, runs, live=False):
                              fix=fix, file=kept,
                              action=make_action(text=f"fix it in a story, or set its Status to done or wont-fix in {kept}",
                                                 skill=f"/factory-backlog {story}: {plain or defect}")))
+    # the review perspectives the profile asks for now — a view shows a story's `review:<name>` processes for these
+    # alone, never a reviewer a profile named before (an old `reviews/dca.md`, a `review:dca` in the journal)
+    perspectives = [dict(name=name, carrier=carrier) for name, carrier in perspectives_of(profile)]
     return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
-                findings=findings, claims=foreign_claims(epics_dir, runs),
+                findings=findings, claims=foreign_claims(epics_dir, runs), perspectives=perspectives,
                 description=description,
                 rows=rows, next=next_line, journeys=journeys,
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
