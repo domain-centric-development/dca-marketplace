@@ -94,6 +94,29 @@ class Delta(unittest.TestCase):
         self.assertEqual([(e["key"], e["rule"], e["tests"]) for e in merged],
                          [("a", "R2", ["x.T#a"]), ("c", None, ["x.T#c"])])
 
+    def test_a_rules_criteria_follow_the_order_the_delivering_story_lists_them_held_keys_included(self):
+        # #136: one criterion delivered first, the rest by a later story — the spec holds the later story's order,
+        # the same as where all came at once
+        first = spec.merge([], [spec.entry("b", "R", "line", ["- b: two"])], spec.read_delta(""), {})
+        story = [spec.entry("a", "R", "line", ["- a: one"]), spec.entry("b", "R", "line", ["- b: two"]),
+                 spec.entry("c", "R", "line", ["- c: three"])]
+        later = spec.merge(first, story, spec.read_delta(""), {})
+        at_once = spec.merge([], story, spec.read_delta(""), {})
+        self.assertEqual([e["key"] for e in later], ["a", "b", "c"])
+        self.assertEqual(spec.render_spec([], later, "C"), spec.render_spec([], at_once, "C"))
+
+    def test_the_storys_criteria_stand_together_where_the_first_of_them_stood(self):
+        held = [spec.entry(k, "R", "line", [f"- {k}: {k}"]) for k in ("x", "b", "y")] \
+            + [spec.entry("s", "S", "line", ["- s: s"])]
+        story = [spec.entry("a", "R", "line", ["- a: a"]), spec.entry("b", "R", "line", ["- b: b"])]
+        self.assertEqual([e["key"] for e in spec.merge(held, story, spec.read_delta(""), {})],
+                         ["x", "a", "b", "y", "s"])
+        alone = [spec.entry("y", "R", "line", ["- y: Y"])]          # one changed criterion keeps its place
+        self.assertEqual([e["key"] for e in spec.merge(held, alone, spec.read_delta(""), {})], ["x", "b", "y", "s"])
+        fresh = [spec.entry("n", "R", "line", ["- n: n"])]           # a new one goes to its rule's end
+        self.assertEqual([e["key"] for e in spec.merge(held, fresh, spec.read_delta(""), {})],
+                         ["x", "b", "y", "n", "s"])
+
     def test_a_context_names_its_folder(self):
         self.assertEqual(spec.context_folder("Product Catalog"), "product-catalog")
 

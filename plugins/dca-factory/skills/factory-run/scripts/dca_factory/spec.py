@@ -334,10 +334,13 @@ def touches(story, spec, delta):
 
 
 def merge(spec, story, delta, tests):
-    """The spec after the story: a changed criterion replaced where it stood (or moved to its new rule), a new one
-    appended under its rule (a new rule appended), a removed one gone, a renamed rule renamed; a rule left empty goes
-    with it. `tests` is {key: [selector]} — the story's mapping; a criterion that holds keeps its test line unless
-    the mapping names one."""
+    """The spec after the story: a removed criterion gone, a renamed rule renamed, and the story's criteria of each
+    rule standing together in the order the story lists them, held ones included (#136) — where the first of them
+    stood under that rule, or at the rule's end when none stood there (a new rule appended). So a rule's order
+    follows the story that delivered it last, not the order its criteria happened to arrive in; a criterion the story
+    does not list keeps its place, and a criterion that moves to another rule leaves its old one. `tests` is
+    {key: [selector]} — the story's mapping; a criterion that holds keeps its test line unless the mapping names
+    one."""
     renamed = dict(delta["renames"])
     merged = []
     for item in spec:
@@ -347,24 +350,34 @@ def merge(spec, story, delta, tests):
         if copy["rule"] in renamed:
             copy["rule"] = renamed[copy["rule"]]
         merged.append(copy)
-    index = {item["key"]: position for position, item in enumerate(merged)}
+    held = {item["key"]: item for item in merged}
+    rules = []
     for item in story:
-        new = dict(item, lines=list(item["lines"]), tests=list(tests.get(item["key"]) or []))
-        if item["key"] in index:
-            old = merged[index[item["key"]]]
-            new["tests"] = new["tests"] or old["tests"]
-            if old["rule"] == new["rule"]:
-                merged[index[item["key"]]] = new
-                continue
-            merged[index[item["key"]]] = None
-        last = max((position for position, other in enumerate(merged)
-                    if other is not None and other["rule"] == new["rule"]), default=None)
+        if item["rule"] not in rules:
+            rules.append(item["rule"])
+    for rule in rules:
+        block = []
+        for item in story:
+            if item["rule"] == rule:
+                new = dict(item, lines=list(item["lines"]), tests=list(tests.get(item["key"]) or []))
+                new["tests"] = new["tests"] or (held[item["key"]]["tests"] if item["key"] in held else [])
+                block.append(new)
+        keys = {item["key"] for item in block}
+        anchor = next((position for position, other in enumerate(merged)
+                       if other["key"] in keys and other["rule"] == rule), None)
+        if anchor is not None:
+            merged[anchor] = None
+        merged = [other for other in merged if other is None or other["key"] not in keys]
+        if anchor is not None:
+            anchor = merged.index(None)
+            merged[anchor:anchor + 1] = block
+            continue
+        last = max((position for position, other in enumerate(merged) if other["rule"] == rule), default=None)
         if last is None:
-            merged.append(new)
+            merged.extend(block)
         else:
-            merged.insert(last + 1, new)
-        index = {other["key"]: position for position, other in enumerate(merged) if other is not None}
-    return [item for item in merged if item is not None]
+            merged[last + 1:last + 1] = block
+    return merged
 
 
 def selectors_of(entries):

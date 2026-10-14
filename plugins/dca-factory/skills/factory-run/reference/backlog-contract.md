@@ -262,7 +262,9 @@ context's scenarios is its language, kept by the glossary skill and the document
 - **The merge**, when the story is delivered — after its acceptance where the profile asks for one: the
   document gate, the adopt gate, or in a story's worktree the integrate gate, which checks the delta again
   against the main line as it stands (a criterion another story changed meanwhile is a refusal). Added,
-  replaced, removed, renamed by key; a rule left without a criterion goes. A test of the spec this story
+  replaced, removed, renamed by key; a rule left without a criterion goes. A rule's criteria the story lists stand
+  together in the story's order, held ones included — where the first of them stood under that rule, else at the
+  rule's end — so the order follows the story that delivered them last, not the order they arrived in. A test of the spec this story
   renamed or moved goes under `tests.md`'s `## Moved tests` (`| <key> | <Class>#<method> |`); the delivering
   gate refuses a spec test line that names a test no longer there (`spec-tests`).
 - **By hand.** `--deliver-by-hand` merges a story's new criteria without test lines; a story that changes
