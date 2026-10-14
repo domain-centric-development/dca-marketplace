@@ -1,0 +1,85 @@
+"""#151: a merge's resolution keeps the main line's side of every test it met — what the main line added to a test
+while the story ran is held, the lines it kept from the base stay the story's to change."""
+
+import os
+import subprocess
+import tempfile
+import unittest
+
+from support import state, write
+from dca_factory import gate
+
+
+def git(cwd, *args, check=True):
+    done = subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args], cwd=cwd, capture_output=True,
+                          text=True, check=check)
+    return done.stdout.strip()
+
+
+TEST = "src/test/java/com/example/ShopTest.java"
+BASE = "class ShopTest {\n  @Test void opens() { assertTrue(shop.open()); }\n}\n"
+MAIN = "class ShopTest {\n  @Test void opens() { assertTrue(shop.open()); }\n  @Test void sideShop() { assertTrue(side.open()); }\n}\n"
+STORY = "class ShopTest {\n  @Test void opens() { assertTrue(shop.open()); }\n  @Test void closes() { assertFalse(shop.open()); }\n}\n"
+
+
+class MainTests(unittest.TestCase):
+
+    def setUp(self):
+        self.scratch = tempfile.TemporaryDirectory()
+        self.root = self.scratch.name
+        self.runs = os.path.join(self.root, ".dca-factory", "runs")
+        git(self.root, "init", "-q", "-b", "main")
+        write(os.path.join(self.root, ".gitignore"), ".dca-factory/\n")
+        write(os.path.join(self.root, TEST), BASE)
+        write(os.path.join(self.root, "src/main/Other.java"), "class Other {}\n")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-qm", "base")
+        git(self.root, "checkout", "-q", "-b", "story/STORY-1")
+        write(os.path.join(self.root, TEST), STORY)
+        git(self.root, "commit", "-qam", "the story's case")
+        git(self.root, "checkout", "-q", "main")
+        write(os.path.join(self.root, TEST), MAIN)
+        write(os.path.join(self.root, "src/main/Other.java"), "class Other { int a; }\n")
+        git(self.root, "commit", "-qam", "another story's case")
+        git(self.root, "checkout", "-q", "story/STORY-1")
+        git(self.root, "merge", "--no-edit", "-q", "main", check=False)      # stops on the test both changed
+        gate.record_main_tests(self.root, self.runs, "STORY-1", "main")
+
+    def tearDown(self):
+        self.scratch.cleanup()
+
+    def resolve(self, text):
+        write(os.path.join(self.root, TEST), text)
+
+    def test_the_record_holds_the_tests_the_main_line_changed_with_both_versions(self):
+        with open(os.path.join(state.evidence_dir(self.runs, "STORY-1"), gate.MAIN_TESTS), encoding="utf-8") as handle:
+            rows = [line.split("\t") for line in handle.read().splitlines()]
+        self.assertEqual([row[2] for row in rows], [TEST])          # a production file the main line changed is no test
+        self.assertNotEqual(rows[0][0], rows[0][1])
+
+    def test_a_resolution_that_takes_the_storys_side_whole_loses_the_main_lines_case(self):
+        self.resolve(STORY)
+        lost = gate.main_tests_lost(self.root, self.runs, "STORY-1")
+        self.assertEqual([rel for rel, _ in lost], [TEST])
+        self.assertTrue(any("sideShop" in line for line in lost[0][1]))
+        result = gate.Result()
+        gate.check_main_tests(result, self.root, self.runs, "STORY-1")
+        self.assertIn("main-tests", {check for kind, check, _ in result.entries if kind == "fail"})
+
+    def test_both_cases_kept_hold_and_the_story_may_still_change_what_the_base_had(self):
+        self.resolve(STORY.replace("\n}\n", "\n  @Test void sideShop() { assertTrue(side.open()); }\n}\n"))
+        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        # a line the main line kept from the base is the story's to change — tests-kept judges that, not this check
+        self.resolve(MAIN.replace("assertTrue(shop.open())", "assertTrue(shop.isOpen())"))
+        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        result = gate.Result()
+        gate.check_main_tests(result, self.root, self.runs, "STORY-1")
+        self.assertIn("main-tests", {check for kind, check, _ in result.entries if kind == "pass"})
+
+    def test_a_test_file_the_resolution_removed_is_lost_whole(self):
+        os.remove(os.path.join(self.root, TEST))
+        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [(TEST, ["(the file is gone)"])])
+
+
+if __name__ == "__main__":
+    unittest.main()

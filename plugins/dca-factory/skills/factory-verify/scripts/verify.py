@@ -9106,6 +9106,45 @@ def verify_worktrees(runner, verbose=False):
               and "formatFix" in output and not os.path.isfile(os.path.join(root, ".dca-factory/evidence/STORY-1/.rounds")),
               f"exit {code}; shared {shared!r}; {output.strip().splitlines()[-8:]}")
 
+    # #151: the integrate stage's resolution takes the story's side of a test both stories added a case to, dropping
+    # the main line's case: the runner names the lost line and starts the integrate stage again — no round, no person,
+    # and no stage gate after it calls the dropped case the story's
+    for root in throwaway():
+        log, env = fixture(root, [("STORY-2", [])], asks="STORY-1")
+        shared_test = "src/test/java/com/example/SharedTest.java"
+        script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            '  test) cat "$FIXTURE_DIR/tests.md" > "$d/tests.md" ;;',
+            '  test) cat "$FIXTURE_DIR/tests.md" > "$d/tests.md"; mkdir -p src/test/java/com/example; '
+            f'[ -f {shared_test} ] || echo "class SharedTest {{" > {shared_test}; '
+            f'printf \'  @Test void caseFrom%s() {{}}\\n\' "$FACTORY_STORY" >> {shared_test}; '
+            f'printf -- \'- {shared_test}\\n\' >> "$d/tests.md" ;;', 1).replace(
+            '    for f in $(cat "$e/conflicts"); do\n',
+            '    case "$FACTORY_PROMPT" in *"main line\'s side back"*)\n'
+            f'      git show main:{shared_test} | while IFS= read -r l; do grep -qxF "$l" {shared_test} || '
+            f'printf \'%s\\n\' "$l" >> {shared_test}; done; echo "$FACTORY_STORY integrate repaired" >> "$FIXTURE_LOG" ;;\n'
+            '    esac\n'
+            '    for f in $(cat "$e/conflicts" 2>/dev/null); do\n'
+            f'      [ "$f" = {shared_test} ] && {{ awk \'/^<<<<<<< /{{s=0;next}} /^=======$/{{s=1;next}} /^>>>>>>> /{{s=0;next}} !s\' '
+            '"$f" > "$f.resolved"; mv "$f.resolved" "$f"; continue; }\n', 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                       capture_output=True)
+        run_runner(runner, root, "run", env=env)
+        with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+            handle.write(ANSWER)
+        code, output = run_runner(runner, root, "run", env=env)
+        kept = read(root, shared_test)
+        check("integrate: a resolution that drops the main line's case from a test both stories changed goes back to the "
+              "integrate stage with the lost line named — both cases land, no round is spent, no stage gate refuses",
+              "awk" in script and code == 0 and story_delivered(root, "STORY-1")
+              and "caseFromSTORY-1" in kept and "caseFromSTORY-2" in kept and "<<<<<<<" not in kept
+              and "STORY-1 integrate repaired" in lines(log)
+              and "changed a test the main line holds" in output and "caseFromSTORY-2" in output
+              and "tests-kept" not in " ".join(l for l in output.splitlines() if "fail" in l)
+              and not os.path.isfile(os.path.join(root, ".dca-factory/evidence/STORY-1/.rounds")),
+              f"exit {code}; kept {kept!r}; {lines(log)[-4:]}; {output.strip().splitlines()[-10:]}")
+
     # a waiting story the person sets superseded: the next run removes its worktree and branch, nothing of it on main
     for root in throwaway():
         log, env = fixture(root, [], asks="STORY-1")

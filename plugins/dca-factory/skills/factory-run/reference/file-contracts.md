@@ -234,9 +234,15 @@ the whole to one commit, `feat(<context>): <title>` (`test(…)` for an adoption
 <id>` in its body; factory commits carry `--no-verify`, because the integrate gate holds the tree to more than
 the hook does. Where the merge stops, the conflicted files are listed in `.dca-factory/evidence/<story>/conflicts` and the
 `stage-integrate` agent resolves them in the worktree, writing `.dca-factory/runs/<story>/integrate.md` (`| File |
-The story changed | The main line changed | How both hold |`); the runner commits the resolution. The
+The story changed | The main line changed | How both hold |`); the runner commits the resolution. With the
+conflicts the runner records the main line's side of the tests in `.dca-factory/evidence/<story>/main-tests`
+(`<base blob | ->\t<main blob>\t<file>` for every test file the main line changed since the story began); a
+resolution that leaves out a line the main line added to one of them — a case another story wrote — goes back to
+the integrate stage with the file and the lines named, at most twice, before any other stage runs: it is the
+resolution's change, never the story's, so neither `tests-kept` nor a person sees it. The
 integrate gate (`--stage integrate`) then checks the tree as it now is — no unmerged path, no conflict marker
-in a file the story's commit changes, the commit on the target's tip (`moved` otherwise, and the step merges
+in a file the story's commit changes, the main line's side of every test the merge met (`main-tests`, refused by
+name and sent back to the integrate stage the same way, no round counted), the commit on the target's tip (`moved` otherwise, and the step merges
 again), the story's tests green, the required suites, `architecture` and `format` — and fast-forwards the main
 checkout's branch to the commit; where the main line gained a commit while the gate ran, that too is `moved`, and
 the step merges again, at most three times. Only then does it write `status: delivered`, and the files that delivery

@@ -26,13 +26,19 @@ stops and names the files. This step makes both changes true; it is not a choice
 2. Keep both. The main line carries what another story delivered and a person accepted: its behaviour stays.
    The story's change goes on top of it, in the shape the main line has now — a renamed method is called by
    its new name, a glossary entry the other story added stays beside this story's.
-3. Remove every conflict marker. A file with one left is refused, and the integrate gate searches every file
+3. A test the main line changed keeps the main line's side whole. Every case, assertion and helper line another
+   story added to a test file stays as the main line has it — `git show <target>:<file>` shows it — and this story's
+   own cases go beside them. A test case the story did not write is never yours to drop, merge away or rewrite,
+   even where the two sides look alike. The runner holds the resolution to it (`main-tests`: every line the main
+   line added to a test since the story began is still there) and, where one is missing, starts this step again
+   with the file and the lines named: put them back, edit nothing else, and add the file's row to `integrate.md`.
+4. Remove every conflict marker. A file with one left is refused, and the integrate gate searches every file
    the story's commit changes.
-4. Edit nothing outside the conflicted files. A test that the merged code would now fail is the integrate
+5. Edit nothing outside the conflicted files — or, sent back for a test, outside the files named. A test that the merged code would now fail is the integrate
    gate's finding and goes back to the build stage; this step does not chase it.
-5. Run no `git add`, `git commit`, `git merge`, `git rebase` or `git checkout`: the runner commits the
+6. Run no `git add`, `git commit`, `git merge`, `git rebase` or `git checkout`: the runner commits the
    resolution, squashes the story and holds it to the gate once more.
-6. Where both sides cannot hold — the main line removed what the story builds on, two rules contradict —
+7. Where both sides cannot hold — the main line removed what the story builds on, two rules contradict —
    stop with a `## needs-human` section and a decision record (`factory-run/reference/stage-common.md`).
 
 ## The integrate file
@@ -48,7 +54,8 @@ One row per conflicted file. The gate's outcome is not recorded here: its report
 
 ## Do not
 
-- Do not take one side whole to make a conflict go away.
+- Do not take one side whole to make a conflict go away — least of all the story's side of a test file, which
+  drops the main line's cases.
 - Do not reformat, rename or tidy anything a conflict does not need. Where the stack profile declares
   `formatFix:`, the runner runs it after you, before the merge is committed and gated — the formatting of a
   resolution is not yours to get right by hand.

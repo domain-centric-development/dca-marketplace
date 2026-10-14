@@ -64,7 +64,9 @@ A command the profile does not declare is skipped and named, never failed.
 
 import argparse
 import calendar
+import collections
 import contextlib
+import difflib
 import glob
 import hashlib
 import hmac
@@ -2985,6 +2987,88 @@ def rebase_tests_baseline(cwd, runs, story_id, new, old=None):
         write_mark(runs, story_id, TESTS_BASELINE, "\n".join(f"{blob}  {rel}" for rel, blob in sorted(rebased.items())))
 
 
+#: The main line's side of the tests a merge met (#151): written when merging the main line into a story stops on a
+#: conflict — every test file the main line changed since the story's base, as `<base blob | ->\t<main blob>\t<file>`
+#: — so the integrate gate tells a resolution that dropped what the main line added to a test from the story's own
+#: change, and the runner sends it back to the integrate stage.
+MAIN_TESTS = "main-tests"
+
+
+def record_main_tests(cwd, runs, story_id, target):
+    """During a merge that stopped on conflicts in the story's worktree (`HEAD` the story, `target` the main line):
+    the test files the main line changed since the two parted, with both versions. Nothing to hold, no record."""
+    base = git(cwd, "merge-base", "HEAD", target)[1].strip()
+    before, main = tree_tests(cwd, base) or {}, tree_tests(cwd, target) or {}
+    rows = [f"{before.get(rel, '-')}\t{blob}\t{rel}" for rel, blob in sorted(main.items()) if before.get(rel) != blob]
+    path = os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)
+    if rows:
+        write_mark(runs, story_id, MAIN_TESTS, "\n".join(rows))
+    elif os.path.isfile(path):
+        os.remove(path)
+
+
+def main_tests_lost(cwd, runs, story_id):
+    """[(test file, [line, …])]: what the main line added to a test while the story ran that the story's tree no
+    longer holds — a case another story added, an assertion it changed. Lines the main line kept from the base are
+    the story's to change (and `tests-kept` holds the story to them); the main line's own lines are not."""
+    path = os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)
+    if not os.path.isfile(path):
+        return []
+    lost = []
+    for line in read_text(path).splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        before_blob, main_blob, rel = parts
+        code, main_text = git(cwd, "cat-file", "blob", main_blob)
+        if code:
+            continue
+        base_text = "" if before_blob == "-" else git(cwd, "cat-file", "blob", before_blob)[1]
+        # compared without their indentation: git's answer comes stripped, and a resolution may indent a case anew
+        was = [l.strip() for l in meaningful_lines(base_text, rel)]
+        main = [l.strip() for l in meaningful_lines(main_text, rel)]
+        added = [main[j] for tag, _i1, _i2, j1, j2 in
+                 difflib.SequenceMatcher(None, was, main, autojunk=False).get_opcodes()
+                 if tag in ("insert", "replace") for j in range(j1, j2)]
+        full = os.path.join(cwd, rel)
+        if not os.path.isfile(full):
+            lost.append((rel, ["(the file is gone)"]))
+            continue
+        with open(full, encoding="utf-8", errors="replace") as handle:
+            left = collections.Counter(l.strip() for l in meaningful_lines(handle.read(), rel))
+        missing = []
+        for wanted in added:
+            if left[wanted] > 0:
+                left[wanted] -= 1
+            else:
+                missing.append(wanted)
+        if missing:
+            lost.append((rel, missing))
+    return lost
+
+
+def lost_text(lost):
+    """The lost lines as a reader takes them in: each file with its first lines."""
+    return "; ".join(f"{rel} lost {', '.join(repr(l) for l in lines[:2])}"
+                     + (f" and {len(lines) - 2} more line(s)" if len(lines) > 2 else "") for rel, lines in lost)
+
+
+def check_main_tests(result, cwd, runs, story_id):
+    """#151: the merge's resolution keeps the main line's side of every test it met. A line the main line added to a
+    test while the story ran — another story's case — that the story's tree lacks is the resolution's change, never
+    the story's: refused here by name, and the runner sends it back to the integrate stage."""
+    if not os.path.isfile(os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)):
+        return
+    lost = main_tests_lost(cwd, runs, story_id)
+    target = integration_target(runs, story_id) or "the main line"
+    if lost:
+        result.fail("main-tests", f"the merge's resolution changed a test the main line holds: {lost_text(lost)} — the "
+                                  f"integrate stage puts the main line's side back (`git show {target}:<file>`) beside "
+                                  f"the story's")
+    else:
+        result.ok("main-tests", "every test the main line changed while the story ran keeps the main line's side")
+
+
 def human_line(text):
     """A line a person wrote: not empty, not "none", not a template placeholder or an HTML comment."""
     text = re.sub(r"<!--.*?-->", "", text).strip()
@@ -3828,6 +3912,7 @@ def _adopt(run):
 @check("integrate", stages=("integrate",))
 def _integrated(run):
     check_integrated(run.result, run.cwd, run.runs, run.story_id)
+    check_main_tests(run.result, run.cwd, run.runs, run.story_id)
     # The spec as the main line holds it now: a key another story added meanwhile, or a criterion it changed, is a
     # question to a person — never a silent last-writer-wins (WP-98 R3). With claims on a remote the main line is the
     # remote's, merged into this worktree (WP-93 D).
