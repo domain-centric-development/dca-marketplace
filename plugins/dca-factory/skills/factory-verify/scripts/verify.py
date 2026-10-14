@@ -8844,6 +8844,75 @@ def verify_worktrees(runner, verbose=False):
               f"exit {code}; {[l.split()[0:2] + l.split()[3:] for l in ran][-12:]}; shared {shared!r}; "
               f"{output.strip().splitlines()[-8:]}")
 
+    # while a story waits, the main line changes a test that existed before the story and a file git tracks
+    # although .gitignore names it; resumed, the story takes the main line in (fast-forward; merged where its own
+    # change is in the way; through the integrate stage where both changed the same lines) and what the main line
+    # brought counts as base — its build gate passes tests-kept and
+    # files-listed. A story that weakens an existing test itself, before the merge (committed by the runner's merge)
+    # or after it, is still refused.
+    kept = ("class KeptTest {\n  void one() {\n    assertEquals(1, one());\n  }\n"
+            "  void two() {\n    assertEquals(2, two());\n  }\n}\n")
+    kept_rel = "src/test/java/com/example/KeptTest.java"
+    shared = "top\none\ntwo\nthree\n"
+    for way, weaken in (("fast-forward", ""), ("merge", ""), ("conflict", ""), ("merge", "before"), ("merge", "after")):
+        for root in throwaway():
+            log, env = fixture(root, [], asks="STORY-1", extra=((kept_rel, kept),)
+                               + ((("src/main/shared.txt", shared),) if way == "merge" else ()))
+            script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+                'case "$FACTORY_STAGE" in\n',
+                'if [ "$FACTORY_STAGE" = build ] && [ -n "${FIXTURE_WEAKEN:-}" ]; then\n'
+                '  if { [ "$FIXTURE_WEAKEN" = before ] && [ ! -f "$rec" ]; } || '
+                '{ [ "$FIXTURE_WEAKEN" = after ] && [ -f "$rec" ]; }; then\n'
+                f'    grep -v "assertEquals(1, one());" {kept_rel} > kept.tmp && mv kept.tmp {kept_rel}\n'
+                '  fi\nfi\n'
+                'case "$FACTORY_STAGE" in\n', 1).replace(
+                'esac\nexit 0\n',
+                'esac\n[ "$FACTORY_STAGE" = build ] && [ -n "${FIXTURE_WEAKEN:-}" ] && '
+                f'printf -- \'- `{kept_rel}` — changes\\n\' >> "$d/build.md"\nexit 0\n', 1)
+            with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(script)
+            with open(os.path.join(root, ".gitignore"), "a", encoding="utf-8", newline="\n") as handle:
+                handle.write(".vscode/\n")
+            write_file(root, ".vscode/settings.json", "{}\n")
+            subprocess.run(["git", "add", "-f", ".vscode/settings.json"], cwd=root, capture_output=True)
+            subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                           capture_output=True)
+            env = dict(env, FIXTURE_WEAKEN=weaken)
+            run_runner(runner, root, "run", env=env)
+            waited = "STORY-1" in git_out(root, "worktree", "list") and not story_delivered(root, "STORY-1")
+            write_file(root, kept_rel, kept.replace("assertEquals(2, two());", "assertEquals(3, two());"))
+            write_file(root, ".vscode/settings.json", '{ "editor.tabSize": 2 }\n')
+            if way != "fast-forward":
+                write_file(root, "src/main/shared.txt", shared.replace("top", "top from main") if way == "merge"
+                           else "line from main\n")
+            subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+            subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "main moves on"],
+                           cwd=root, capture_output=True)
+            with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+                handle.write(ANSWER)
+            code, output = run_runner(runner, root, "run", env=env)
+            evidence = os.path.join(root, ".dca-factory/evidence/STORY-1")
+            gates = "".join(read(root, os.path.join(".dca-factory/evidence/STORY-1", name))
+                            for name in sorted(os.listdir(evidence)) if name.startswith("gate-build"))
+            moved = {"fast-forward": "STORY-1 moved onto main as it is now", "merge": "STORY-1 merged with main as it is now",
+                     "conflict": "STORY-1 meets main in src/main/shared.txt"}[way] in output
+            if not weaken:
+                check(f"worktree: a resumed story takes in ({way}) a main line that changed an existing test and a "
+                      f"tracked file .gitignore names — its build gate counts neither as the story's, it is delivered",
+                      waited and moved and code == 0 and story_delivered(root, "STORY-1")
+                      and "assertEquals(3, two());" in read(root, kept_rel)
+                      and "fail files-listed" not in gates and "fail tests-kept" not in gates,
+                      f"waited {waited}; moved {moved}; exit {code}; "
+                      f"{[l for l in gates.splitlines() if 'fail' in l][:4]}; {output.strip().splitlines()[-6:]}")
+            else:
+                check(f"worktree: a resumed story that weakens an existing test itself, {weaken} the merge with the main "
+                      f"line, is still refused by tests-kept",
+                      waited and moved and not story_delivered(root, "STORY-1")
+                      and f"fail tests-kept — {kept_rel} existed before this story" in gates
+                      and "fail files-listed" not in gates,
+                      f"waited {waited}; moved {moved}; exit {code}; "
+                      f"{[l for l in gates.splitlines() if 'fail' in l][:4]}; {output.strip().splitlines()[-6:]}")
+
     # #138: `run --keep-going` — a story that stops is skipped with what depends on it, the run goes on with what can
     # start and ends when nothing more can; without the flag the stop ends the run; a stop file still ends it (WP-111)
     for mode in ("plain", "keep-going", "parallel", "stop-file"):

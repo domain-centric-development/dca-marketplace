@@ -2912,6 +2912,48 @@ def record_tests_baseline(cwd, runs, story_id):
     write_mark(runs, story_id, TESTS_BASELINE, "\n".join(blobs))
 
 
+def tree_tests(cwd, tree):
+    """{test file: blob} of a tree object, relative to the project as `test_files` finds them; None without one."""
+    if not tree or tree == "none":
+        return None
+    code, out = git(cwd, "ls-tree", "-r", "-z", tree)
+    if code:
+        return None
+    skipped = SKIP_DIRS | {runs_top()}
+    found = {}
+    for entry in out.split("\0"):
+        meta, _, rel = entry.partition("\t")
+        parts = meta.split()
+        if len(parts) != 3 or parts[1] != "blob" or not TEST_FILE.search(os.path.basename(rel)):
+            continue
+        if any(d in skipped or d.startswith(".") for d in rel.split("/")[:-1]):
+            continue
+        found[rel] = parts[2]
+    return found
+
+
+def rebase_tests_baseline(cwd, runs, story_id, new, old=None):
+    """After the runner brought the main line into a story's branch: "existed before this story" is the main line
+    as it was merged. Every test in the main line's tree `new` is held to the main line's version, so a test the
+    main line changed while the story waited is not the story's change; one the main line removed leaves the
+    baseline (where `old`, the base before, says it was tracked). `new` is the main line's tree, never the story's
+    branch — nothing the story changed, committed by the runner before the merge or not, gets into the baseline."""
+    path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
+    main = tree_tests(cwd, new)
+    if not os.path.isfile(path) or main is None:
+        return
+    before = tree_tests(cwd, old) or {}
+    entries = {}
+    for line in read_text(path).splitlines():
+        if "  " in line:
+            blob, rel = line.split("  ", 1)
+            entries[rel] = blob
+    rebased = {rel: blob for rel, blob in entries.items() if rel in main or rel not in before}
+    rebased.update(main)
+    if rebased != entries:
+        write_mark(runs, story_id, TESTS_BASELINE, "\n".join(f"{blob}  {rel}" for rel, blob in sorted(rebased.items())))
+
+
 def human_line(text):
     """A line a person wrote: not empty, not "none", not a template placeholder or an HTML comment."""
     text = re.sub(r"<!--.*?-->", "", text).strip()
@@ -3105,8 +3147,10 @@ def check_existing_tests(result, cwd, runs, story_id, story_body=""):
             continue
         # A run commits nothing while a story is open: a test committed since the baseline changed outside
         # this story. The story is held to its own changes — against what is committed now.
+        # Not in a story's worktree: every commit on its branch is the runner's, holding the story's own change,
+        # and what the main line brought in is in the baseline already (`rebase_tests_baseline`).
         head_code, head_blob = git(cwd, "rev-parse", f"HEAD:{rel}")
-        if not head_code and head_blob.strip() and head_blob.strip() != blob \
+        if not head_code and not in_worktree(cwd) and head_blob.strip() and head_blob.strip() != blob \
                 and not git(cwd, "cat-file", "-e", blob)[0] and not committed_by_a_stage(cwd, runs, story_id, rel):
             blob = head_blob.strip()
         code, before = git(cwd, "cat-file", "blob", blob)

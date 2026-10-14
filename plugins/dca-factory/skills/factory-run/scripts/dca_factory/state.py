@@ -456,10 +456,15 @@ def changes_between(before, after, runs, tracked=frozenset()):
 
 
 def git_tree(cwd):
-    """A tree object of the project as it is — `git add -A` into a throwaway index, never a commit."""
+    """A tree object of the project as it is — `git add -A` into a throwaway index, never a commit. The index starts
+    as HEAD's, so a file git tracks although the ignore rules name it (an editor's settings committed on purpose)
+    stays in the tree as it is in a commit's: the base a worktree takes from the main line is a commit's tree, and an
+    empty index would drop the file and count it removed by the story."""
     import tempfile
     with tempfile.TemporaryDirectory() as scratch:
         env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
+        if subprocess.run(["git", "rev-parse", "--verify", "--quiet", "HEAD"], cwd=cwd, capture_output=True).returncode == 0:
+            subprocess.run(["git", "read-tree", "HEAD"], cwd=cwd, env=env, capture_output=True)
         if subprocess.run(["git", "add", "-A", "--", "."], cwd=cwd, env=env, capture_output=True).returncode != 0:
             return None
         tree = subprocess.run(["git", "write-tree"], cwd=cwd, env=env, capture_output=True, text=True)

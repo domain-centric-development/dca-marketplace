@@ -40,7 +40,7 @@ from .gate import (
     read_mapping, spec_target, story_spec,
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
     integration_target, INVARIANTS_MARKER, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
-    read_invariant_rows, scenario_clauses, TESTS_BASELINE)
+    read_invariant_rows, rebase_tests_baseline, scenario_clauses, TESTS_BASELINE)
 from .tools import (
     isolation_args, TOOL, tool_command, TOOLS, tools_shell)
 
@@ -187,12 +187,17 @@ def link_places(path, home, runs):
               f"writes there is not seen by the main checkout", file=sys.stderr)
 
 
-def write_base(runs, story_id, tree):
-    """The tree the story's diff is taken against, once the worktree moved onto another base."""
+def write_base(path, runs, story_id, tree):
+    """The tree the story's diff is taken against, once the worktree moved onto another base — the main line's tree,
+    so what the main line brought in counts as base and only the story's own diff as its change. The tests baseline
+    moves with it: a test the main line changed existed before this story as the main line has it."""
     folder = evidence_dir(runs, story_id)
     if os.path.isdir(folder) and tree:
-        with open(os.path.join(folder, "base-tree"), "w", encoding="utf-8") as handle:
+        base_file = os.path.join(folder, "base-tree")
+        old = read_text(base_file).strip() if os.path.isfile(base_file) else None
+        with open(base_file, "w", encoding="utf-8") as handle:
             handle.write(tree + "\n")
+        rebase_tests_baseline(path, runs, story_id, tree, old)
 
 
 def worktree_prepare(cwd, runs, story_id):
@@ -236,7 +241,7 @@ def worktree_prepare(cwd, runs, story_id):
     if git(path, "merge-base", "--is-ancestor", target, "HEAD")[0] != 0:
         own = git(path, "rev-list", "--count", f"{target}..HEAD")[1].strip()
         if own == "0" and git(path, "merge", "--ff-only", "--quiet", target)[0] == 0:
-            write_base(runs, story_id, git(path, "rev-parse", "HEAD^{tree}")[1].strip())
+            write_base(path, runs, story_id, git(path, "rev-parse", "HEAD^{tree}")[1].strip())
             print(f"worktree: {story_id} moved onto {target} as it is now", file=sys.stderr)
         else:
             stage_story(path, runs, story_id)
@@ -260,6 +265,13 @@ def worktree_prepare(cwd, runs, story_id):
                 git(path, "merge", "--abort")
                 print(f"worktree: {story_id} keeps its base — merging {target} failed ({done[1].strip()[:200]}); the "
                       f"integrate step merges", file=sys.stderr)
+    else:
+        # Already on the main line — merged by a pipeline before the tests baseline moved with the base: held to the
+        # main line's tests now, where the base is the main line's tree.
+        base_file = os.path.join(evidence_dir(runs, story_id), "base-tree")
+        base = read_text(base_file).strip() if os.path.isfile(base_file) else ""
+        if base and base == git(path, "rev-parse", f"{target}^{{tree}}")[1].strip():
+            rebase_tests_baseline(path, runs, story_id, base)
     link_places(path, cwd, runs)
     print(os.path.abspath(path).replace("\\", "/"))
     return 0
@@ -317,7 +329,7 @@ def squash_story(path, runs, story_id, target, front, body):
         if done[0] != 0:
             print(f"factory: the story's commit could not be made — {done[1]}", file=sys.stderr)
             return 1
-    write_base(runs, story_id, git(path, "rev-parse", f"{target}^{{tree}}")[1].strip())
+    write_base(path, runs, story_id, git(path, "rev-parse", f"{target}^{{tree}}")[1].strip())
     head = git(path, "rev-parse", "--short", "HEAD")[1].strip()
     print(f"integrate: {story_id} is {'one commit, ' + head + ',' if head != git(path, 'rev-parse', '--short', target)[1].strip() else 'no commit'} on top of {target}")
     return 0

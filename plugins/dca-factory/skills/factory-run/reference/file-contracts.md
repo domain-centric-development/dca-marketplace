@@ -379,6 +379,12 @@ unless it is **authorised**:
   contradicting tests the story did not mention and asked once, with the list (B); or
 - the story has an answered decision of stage `test` — a judge's conflict landed there.
 
+When the runner brings the main line into a story's worktree (a resumed story, the integrate step), "existed
+before this story" moves with the base tree: every test in the main line's tree is recorded as the main line has it,
+and one the main line removed leaves the baseline. The main line's tree never holds the story's change, so a test
+the story changed before the merge — committed by the runner's merge or not — is still compared against what it
+was; in a worktree the gate never takes a test's version from `HEAD`, whose commits are the story's.
+
 A listed file without either backing fails, and so does a changed file the plan does not list. Outside git the check is skipped and named, and so is a file whose recorded blob `git gc` has pruned. What it does not see: a test this story itself
 wrote and later rewrote, and a test file named against the conventions.
 
