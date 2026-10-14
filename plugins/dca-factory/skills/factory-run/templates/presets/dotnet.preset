@@ -1,5 +1,6 @@
 # `--logger trx`: the gate reads what ran from the report, and the .NET platform writes one only when
-# asked. Without a project argument `dotnet test` runs every test project, hence `covers.test: **`.
+# asked. Without a project argument `dotnet test` runs every test project, hence `covers.test: **` — where
+# a unit or architecture project exists, `unit-dotnet` and `architecture-dotnet` name it instead.
 kind: stack
 order: 30
 detect.exists: *.sln *.slnx *.csproj

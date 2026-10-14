@@ -1,0 +1,9 @@
+# A test project whose name ends in `.UnitTests`: `test:` runs that project, not the whole solution. The
+# other levels have entries of their own (`test.integration:`, `e2eTest:`, `architecture:`), and a
+# whole-solution `test:` would run their suites a second time at every gate, all projects side by side.
+# `covers.test:` is taken back: the project path says what the command runs.
+kind: unit
+order: 30
+detect.exists: **/*.UnitTests.csproj
+test: dotnet test {match_dir} --logger trx
+covers.test:

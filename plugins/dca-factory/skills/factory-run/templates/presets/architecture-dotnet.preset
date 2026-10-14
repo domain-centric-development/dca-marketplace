@@ -1,0 +1,6 @@
+# A test project whose name ends in `.ArchitectureTests`: `architecture:` runs that project, so the gate
+# neither builds nor discovers every other test project to filter for one.
+kind: governance
+order: 40
+detect.exists: **/*.ArchitectureTests.csproj
+architecture: dotnet test {match_dir}

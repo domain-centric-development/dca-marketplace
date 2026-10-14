@@ -3281,6 +3281,13 @@ PRESET_FIXTURES = {
     "dotnet-integration": {"App.sln": "\n", "tests/App.IntegrationTests/App.IntegrationTests.csproj": "<Project/>\n"},
     "maven-playwright": {"pom.xml": "<project><dependency>com.microsoft.playwright</dependency></project>\n"},
     "dotnet": {"App.sln": "\n"},
+    # a unit project of its own: `test:` runs it, not the whole solution
+    "dotnet-unit": {"App.sln": "\n", "tests/App.UnitTests/App.UnitTests.csproj": "<Project/>\n"},
+    # every level a project of its own: no command runs another level's tests a second time
+    "dotnet-levels": {"App.sln": "\n", "tests/App.UnitTests/App.UnitTests.csproj": "<Project/>\n",
+                      "tests/App.IntegrationTests/App.IntegrationTests.csproj": "<Project/>\n",
+                      "tests/App.ArchitectureTests/App.ArchitectureTests.csproj": "<Project/>\n",
+                      "tests/App.E2E/App.E2E.csproj": '<Project><PackageReference Include="Microsoft.Playwright" /></Project>\n'},
     "dotnet-playwright": {"App.sln": "\n", "tests/App.E2E/App.E2E.csproj":
                           '<Project><PackageReference Include="Microsoft.Playwright" /></Project>\n'},
     "pytest-ini": {"pytest.ini": "[pytest]\n"},
@@ -3312,6 +3319,11 @@ PRESET_GOLDEN = {
     "dotnet-integration": _DOTNET + ["test.integration: dotnet test tests/App.IntegrationTests --logger trx"],
     "maven-playwright": _MAVEN + ["browser: playwright"],
     "dotnet": _DOTNET,
+    "dotnet-unit": _DOTNET[:1] + ["test: dotnet test tests/App.UnitTests --logger trx"] + _DOTNET[2:-1],
+    "dotnet-levels": _DOTNET[:1] + ["test: dotnet test tests/App.UnitTests --logger trx",
+                                    "e2eTest: dotnet test tests/App.E2E/App.E2E.csproj --logger trx"] + _DOTNET[3:5]
+                     + ["architecture: dotnet test tests/App.ArchitectureTests", _DOTNET[6], "browser: playwright",
+                        "test.integration: dotnet test tests/App.IntegrationTests --logger trx"],
     "dotnet-playwright": _DOTNET[:2] + ["e2eTest: dotnet test tests/App.E2E/App.E2E.csproj --logger trx"]
                          + _DOTNET[3:] + ["browser: playwright"],
     "pytest-ini": _PYTEST, "pytest-pyproject": _PYTEST, "pytest-setupcfg": _PYTEST,
@@ -3522,6 +3534,19 @@ def verify_setup(runner, verbose=False):
         code, output = run_runner(runner, root, "setup", "--check")
         check("setup --check: `covers.test` is not proposed to a `test:` the person narrowed",
               code == 0 and "covers.test" not in output and "· test   differs" in output, output.strip().splitlines())
+    # a solution with a project per level: a profile that runs each level once is what detection proposes
+    for root in throwaway():
+        fixture(root, PRESET_FIXTURES["dotnet-levels"])
+        run_setup(runner, root, "--tool", "none", "--from", source)
+        text = open(profile_of(root), encoding="utf-8").read()
+        with open(profile_of(root), "w", encoding="utf-8") as handle:
+            handle.write(re.sub(r"(?m)^(test|architecture|covers\.test):.*\n", "", text)
+                         + "test: dotnet test tests/App.UnitTests --logger trx\n"
+                         + "architecture: dotnet test tests/App.ArchitectureTests\n")
+        code, output = run_runner(runner, root, "setup", "--check")
+        check("setup --check: a unit project and an architecture project are not proposed as the whole solution",
+              code == 0 and "detected" in output and "differs" not in output and "covers.test" not in output,
+              output.strip().splitlines())
     for root in throwaway():
         write_file(root, ".editorconfig", "root = true\n")
         write_file(root, "build.gradle", "plugins { id 'java' }\n")

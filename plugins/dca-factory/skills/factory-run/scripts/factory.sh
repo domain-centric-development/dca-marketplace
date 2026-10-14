@@ -1157,7 +1157,8 @@ presets() {                                 # presets <dir> <mode> [args…]
 import os, re, sys
 
 directory, python, conventions, mode, rest = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
-KINDS = ("stack", "browser", "format", "governance", "stub", "integration")
+#: The order presets apply in; a later kind's value replaces an earlier one's, an empty value takes it back.
+KINDS = ("stack", "browser", "format", "governance", "stub", "integration", "unit")
 #: Folders no detection looks into: build output, dependencies, tool state. Bounded in depth as well,
 #: so a detection never walks a whole disk from a mistaken directory.
 PRUNED = {".git", ".gradle", ".idea", ".vs", "build", "bin", "obj", "target", "dist", "out",
@@ -1271,6 +1272,7 @@ def detect():
                     continue
                 values[key] = value.replace("{match_dir}", os.path.dirname(match or "") or ".") \
                     .replace("{match}", match or "").replace("{python}", python)
+    values = {key: value for key, value in values.items() if value}
     # A command the method's configuration states wins over the preset's, so the profile is not a second
     # truth: the first value there (or backticked command, in an older conventions file) the preset's pattern matches.
     if conventions and os.path.isfile(conventions) and derived:
