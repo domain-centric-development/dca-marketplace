@@ -218,6 +218,16 @@ A red end-user test means one of four things, and each has exactly one right rep
 
 A test "fixed" three times in a month with no production change is hiding something.
 
+Two causes look like flakiness and are neither a race in the page nor a regression:
+
+- **A stub slower than the timeout.** A stub that runs in the test process (an HTTP mock of a payment or mail
+  provider) shares the machine with every browser and shop of a parallel suite and can answer later than the
+  application's production timeout. The application under test takes a generous timeout for its stubbed partners
+  from the suite's configuration; its own default stays.
+- **A missed load event.** After a form's redirect the runner's URL wait can miss the page's load event and time
+  out on a page that is fully there. Wait for the URL, then for the document's own ready state, in one helper every
+  Page Object uses.
+
 ## Refuse
 
 - Selectors by CSS class, XPath or text.
