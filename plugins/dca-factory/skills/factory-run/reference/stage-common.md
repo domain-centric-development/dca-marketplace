@@ -74,6 +74,9 @@ The prompt names what an earlier round left; each is an input of this one.
 - *The build stage sent the story back*: `build.md` names a defect in a test's own code — the test
   stage repairs exactly that, without changing what the test asserts, and writes the test's break
   (see the contract).
+- *The story's tests changed after the test stage saw them fail* (the main line was merged into the story's
+  branch): the test stage records each named test as it now is — red where the code before the story fails it,
+  else its break (see the contract) — and changes nothing it asserts. A stale red proof is never a question.
 - *The judge asked for changes*: each stage fixes exactly the confirmed defects in `judge.md` that are
   its own — a test that asserts too little is the test stage's, with its break (see the contract); the
   code is the build's — nothing else.

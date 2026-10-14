@@ -210,7 +210,9 @@ file's shape.
 pass because of its own code (a helper, a locator) while what it asserts stays the same. The build may
 change no test, so without this way back it would have to ask a human about a repair that changes no
 expectation. The repaired test is green — the code already meets it — so the test gate asks for its
-break instead of a red run. A change to what a test asserts stays a human's question.
+break instead of a red run. A change to what a test asserts stays a human's question. A merge of the main line
+that changed one of the story's tests after it was seen failing sends the story to the test stage the same way,
+by the runner's own step: build and tidy never start on a stale red proof.
 
 **What a stage is told, so it searches for nothing.** Every stage prompt names the skill, the story and
 where things are: the stack profile, the story's run folder and evidence folder, the knowledge skill's

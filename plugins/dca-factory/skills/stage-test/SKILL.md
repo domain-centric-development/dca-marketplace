@@ -212,6 +212,11 @@ from the template, the link from the page). The gate applies it on a scratch cop
 it red, and records the test's new version; the tree stays as it is. A test you did not change needs no
 break. List the changed tests and their breaks under `## Files`.
 
+When the prompt says the story's tests changed after this stage saw them fail — the main line was merged into
+the story's branch — record each test it names as it now is: what it asserts stays the story's, so change
+nothing in it. Where the code already meets it, it is green and gets its break the same way; where it is still
+red, the gate records the red run. Ask nobody about it.
+
 ## Adopt mode
 
 For a story with `status: adopted`: map every scenario in the `gate:tests` table to the existing test the

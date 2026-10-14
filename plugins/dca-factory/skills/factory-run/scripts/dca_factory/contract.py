@@ -234,7 +234,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 22
 
 
-VERSION = "0.83.2"
+VERSION = "0.83.3"
 
 
 def split_front(text):

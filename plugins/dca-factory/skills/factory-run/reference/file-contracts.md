@@ -68,6 +68,16 @@ instead: `.dca-factory/runs/<story>/breaks/<Class>--<method>.patch`, applied to 
 project, must turn it red (`break-proof`, the same proof an adoption gives for a test it wrote); the red
 record then holds the test's new version, so the build gate's `red-proof` accepts it.
 
+A merge of the main line into the story's branch can change a test this way too — the resumed story's merge,
+the integrate stage's resolution of a test both sides changed, the round after an integrate gate refused. The
+runner does not hand such a story to build or tidy, whose gates would refuse `red-proof`: before a run starts at
+either, it compares the record's digests with the mapped test files, and where one moved (and no answered decision
+of stage `test` covers it) the story starts at its test stage instead — a `red-stale` line in the journal, no
+round counted. The test stage records each named test as it now is, red where the code before the story fails
+it, else with its break, and changes nothing it asserts; build and tidy then run on that record. An answered
+decision of a later stage waits for that stage: the test gate notes it, the later gate checks it was applied.
+No stage asks about a stale red proof.
+
 `.dca-factory/evidence/<story>/.rounds` counts the build/judge repeat rounds. It is a file rather than something
 the orchestrator remembers, because an in-session run has no other honest way to count and a
 resumed run must see the same number. At three the run stops. A refusal on `gate:fail environment` (a

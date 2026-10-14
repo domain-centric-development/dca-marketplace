@@ -37,7 +37,7 @@ from .spec import (
     context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
     merge_target, run as run_command,
-    read_mapping, spec_target, story_spec,
+    read_mapping, spec_target, stale_red_proof, story_spec,
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
     integration_target, INVARIANTS_MARKER, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
     read_invariant_rows, rebase_tests_baseline, scenario_clauses, TESTS_BASELINE)
@@ -1364,6 +1364,7 @@ class Run:
         self.parallel = options.parallel
         self.keep_going = getattr(options, "keep_going", False)
         self.skipped = {}                     # --keep-going: story → the exit it stopped with
+        self.red_stale = {}                   # story → its tests whose red proof a merge left stale
         self.options = options
         self.add_dirs, self.read_dirs = [], []
         self.tool_in_flight = ""
@@ -1974,6 +1975,8 @@ class Run:
             repeat += later
         if stage == "test" and self.back_to(story, "build") == "test":
             repeat += f" The build stage sent the story back: {self.runs}/{story}/build.md."
+        if stage == "test":
+            repeat += self.red_stale_sentence(story)
         if stage == "judge" and os.path.isfile(f"{self.runs}/{story}/.judge-previous.md"):
             repeat = f" This is a repeat round; the previous verdict: {self.runs}/{story}/.judge-previous.md."
         guard = self.guard_sentence() if stage in STAGE and STAGE[stage].guarded else ""
@@ -2181,6 +2184,8 @@ class Run:
         prompt += self.guard_sentence()
         if self.back_to(story, "build") == "test":
             prompt += f" The build stage sent the story back: {self.runs}/{story}/build.md."
+        if "test" in stages:
+            prompt += self.red_stale_sentence(story)
         for refused in stages:
             if os.path.isfile(f"{self.runs}/{story}/.gate-{refused}.txt"):
                 prompt += f" The gate refused stage {refused} before: {self.runs}/{story}/.gate-{refused}.txt."
@@ -2429,6 +2434,7 @@ class Run:
             return self.integrate_story(story, tool, dry)
         if start == "adopt":
             return self.adopt_gate(story, tool, dry)
+        start = self.red_proof_start(story, kind, start, dry)
         started, ran, built = False, [], False
         for stage in STAGE_ORDER:
             started = started or stage == start
@@ -2525,6 +2531,36 @@ class Run:
         if os.environ.get("FACTORY_HOME") and not dry and self.start_stage(story) == "integrate":
             return self.integrate_story(story, tool, dry)
         return 0
+
+    def red_proof_start(self, story, kind, start, dry):
+        """Where a story whose red proof went stale starts: a gate that holds the red proof (build, tidy) refuses a
+        test changed after it was seen failing, and only the test stage can record it again — so the story goes to
+        its test stage, as a step of the runner, never as a stage's question and never as a round. A merge of the
+        main line into the story's branch is what changes a test that way (the resumed story's merge, the integrate
+        stage's resolution, the integration a gate refused afterwards); the test stage records the tests as they now
+        are, a break where the code already meets them."""
+        if dry or start not in STAGE or not STAGE[start].lists or STAGE[start].red or not self.kind_runs(kind, "test"):
+            return start
+        self.profile()
+        moved = stale_red_proof(os.getcwd(), place("runs"), story)
+        if not moved:
+            self.red_stale.pop(story, None)
+            return start
+        self.red_stale[story] = moved
+        self.journal_line(story, f"{utc()}\tred-stale\ttest\tfrom={start}\ttests={len(moved)}")
+        print(f"factory: {', '.join(moved)} changed after the test stage saw it fail — the red proof is about the "
+              f"earlier version, so the story goes to its test stage to record it on the files as they are, then "
+              f"'{start}' runs again.")
+        return "test"
+
+    def red_stale_sentence(self, story):
+        moved = self.red_stale.get(story)
+        if not moved:
+            return ""
+        return (f" The story's tests changed after the test stage saw them fail — the main line was merged into the "
+                f"story's branch: {', '.join(moved)}. Record each as it now is and change nothing it asserts: red "
+                f"where the code before this story fails it, else its break under {self.runs}/{story}/breaks/ "
+                f"(`<Class>--<method>.patch`, the smallest change to the production code that turns it red).")
 
     def quiet_gate(self, stage, story):
         """A gate whose lines nobody reads — the runner asks it only whether a file already holds."""

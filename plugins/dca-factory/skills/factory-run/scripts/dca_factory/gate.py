@@ -2613,13 +2613,7 @@ def check_red_proof(result, cwd, located, digests, story):
         result.skip("red-proof", "the red record names no test-file digests (written by an older gate) — "
                                  "whether a test changed since it was seen failing is not checked")
         return
-    moved = []
-    for selector, digest in sorted(digests.items()):
-        test_file = located.get(selector)
-        if not digest or not test_file or not os.path.isfile(os.path.join(cwd, test_file)):
-            continue
-        if file_digest(os.path.join(cwd, test_file)) != digest:
-            moved.append(f"{selector} ({test_file})")
+    moved = unproven_tests(cwd, located, digests)
     if not moved:
         result.ok("red-proof", f"{len(digests) - len(unbound)} test(s) are the version that was seen failing")
     elif answered_decisions(cwd, story, "test"):
@@ -2632,6 +2626,33 @@ def check_red_proof(result, cwd, located, digests, story):
             f"earlier version, so its green now proves nothing. The test stage runs again and records "
             f"it red as it is; a change of what it expects is a human's decision.",
         )
+
+
+def unproven_tests(cwd, located, digests):
+    """`<selector> (<file>)` for each test whose file is no longer the version its red proof was taken against."""
+    moved = []
+    for selector, digest in sorted(digests.items()):
+        test_file = located.get(selector)
+        if not digest or not test_file or not os.path.isfile(os.path.join(cwd, test_file)):
+            continue
+        if file_digest(os.path.join(cwd, test_file)) != digest:
+            moved.append(f"{selector} ({test_file})")
+    return moved
+
+
+def stale_red_proof(cwd, runs, story):
+    """The tests whose red proof the build and tidy gates would refuse (`red-proof`), read without running anything:
+    each mapped test whose file changed after the test stage saw it fail — by a merge of the main line into the story,
+    most often — and no answered decision of stage `test` changed what it expects. Empty without a red record."""
+    digests = read_red_digests(runs, story)
+    if not digests or all(d is None for d in digests.values()):
+        return []
+    try:
+        _path, mapping = read_mapping(runs, story)
+    except GateError:
+        return []
+    moved = unproven_tests(cwd, check_exists(Result(), cwd, mapping) or {}, digests)
+    return [] if not moved or answered_decisions(cwd, story, "test") else moved
 
 
 #: Which selectors the test stage saw fail. Kept as a file next to the round counter for the same
@@ -2762,6 +2783,16 @@ def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None):
                     "decisions",
                     f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}) — the plan "
                     f"stage runs next and applies it; the gate after it checks that it did.",
+                )
+            # A stage before the one that applies the answer ran first — the test stage recording a red proof a
+            # merge left stale: the answer waits for its own stage, whose gate checks that it was applied.
+            elif gating in STAGE_ORDER and stage in STAGE_ORDER \
+                    and STAGE_ORDER.index(gating) < STAGE_ORDER.index(stage) and (text is None or still_asking
+                                                                                   or rid not in text):
+                result.note(
+                    "decisions",
+                    f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}) — stage {stage} comes "
+                    f"after {gating} and applies it; its gate checks that it did.",
                 )
             elif text is None or still_asking:
                 result.fail(

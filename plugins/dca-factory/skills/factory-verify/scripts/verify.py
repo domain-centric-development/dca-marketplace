@@ -8913,6 +8913,77 @@ def verify_worktrees(runner, verbose=False):
                       f"waited {waited}; moved {moved}; exit {code}; "
                       f"{[l for l in gates.splitlines() if 'fail' in l][:4]}; {output.strip().splitlines()[-6:]}")
 
+    # #150: while a story waits, the main line changes one of the story's own mapped test files; resumed, the merge
+    # leaves the red proof about the earlier version — the runner sends the story to its test stage, which records
+    # the test as it now is, before the stage that asked runs again: no question, no round. A main line that changed
+    # another file leaves the red proof as it was, and the story resumes where it asked.
+    ledger_py = ("import hashlib\nfor s, p in ((\"com.example.WidgetPageTest#showsTheThing\", "
+                 "\"src/test-pages/java/com/example/WidgetPageTest.java\"), (\"com.example.WidgetUnitTest#"
+                 "showsNothingWhenEmpty\", \"src/test/java/com/example/WidgetUnitTest.java\")):\n"
+                 "    print(s + \"\\t\" + hashlib.sha256(open(p, \"rb\").read()).hexdigest())\n")
+    for changed, shared_builder in (("src/test-pages/java/com/example/WidgetPageTest.java", "0"), ("README.md", "0"),
+                                    ("src/test-pages/java/com/example/WidgetPageTest.java", "1")):
+        for root in throwaway():
+            log, env = fixture(root, [], asks="STORY-1", extra=(("fixture/ledger.py", ledger_py),))
+            script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+                '  test) cat "$FIXTURE_DIR/tests.md" > "$d/tests.md" ;;',
+                '  test) cat "$FIXTURE_DIR/tests.md" > "$d/tests.md"; mkdir -p "$e"\n'
+                '    "$FIXTURE_PY" "$FIXTURE_DIR/ledger.py" > "$e/.tests-red"\n'
+                '    printf \'%s\' "$FACTORY_PROMPT" > "$FIXTURE_LOG.test-prompt" ;;\n'
+                '  builder) printf \'%s\' "$FACTORY_PROMPT" > "$FIXTURE_LOG.builder-prompt" ;;', 1)
+            with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(script)
+            subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                           capture_output=True)
+            env = dict(env, FIXTURE_PY=shell_path(sys.executable))
+            run_runner(runner, root, "run", env=env)
+            evidence = os.path.join(root, ".dca-factory/evidence/STORY-1")
+            recorded = read(root, ".dca-factory/evidence/STORY-1/.tests-red")
+            waited = "STORY-1" in git_out(root, "worktree", "list") and not story_delivered(root, "STORY-1") \
+                and recorded.count("\n") == 2
+            write_file(root, changed, read(root, changed) + "// main's line\n")
+            subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "main moves on"],
+                           cwd=root, capture_output=True)
+            with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+                handle.write(ANSWER)
+            before = len(lines(log))
+            code, output = run_runner(runner, root, "run", *(["--story", "STORY-1", "--max-stages", "1"]
+                                                             if shared_builder == "1" else []),
+                                      env=dict(env, FACTORY_SHARED_BUILDER=shared_builder))
+            resumed = [l.split()[1] for l in lines(log)[before:]]
+            if shared_builder == "1":
+                # the stand-in carries no shared session: what counts is what the runner hands the builder
+                prompt = read(root, ".git/stand-in.log.builder-prompt")
+                check("worktree: shared, the builder of a resumed story whose own mapped test the main line changed "
+                      "starts at the test stage and is told which tests to record on the merged files",
+                      waited and resumed[:1] == ["builder"]
+                      and "stage-test, stage-build, stage-tidy" in prompt
+                      and "the main line was merged into the story's branch" in prompt and "WidgetPageTest.java" in prompt,
+                      f"waited {waited}; resumed {resumed}; prompt {prompt[:300]!r}")
+                continue
+            prompt = read(root, ".git/stand-in.log.test-prompt")
+            journal = read(root, ".dca-factory/evidence/STORY-1/journal.tsv")
+            records = os.listdir(os.path.join(root, "product/epics/sample/STORY-1/decisions"))
+            if changed.endswith(".java"):
+                check("worktree: a resumed story whose own mapped test the main line changed goes to its test stage "
+                      "first — the red proof is recorded on the merged file, then build runs again; no question, no "
+                      "round, and the story is delivered",
+                      waited and code == 0 and story_delivered(root, "STORY-1") and resumed[:2] == ["test", "build"]
+                      and "changed after the test stage saw it fail" in output and "WidgetPageTest.java" in output
+                      and "the main line was merged into the story's branch" in prompt
+                      and "\tred-stale\ttest\tfrom=build" in journal and records == ["01.md"]
+                      and not os.path.isfile(os.path.join(evidence, ".rounds"))
+                      and read(root, ".dca-factory/evidence/STORY-1/.tests-red") != recorded,
+                      f"waited {waited}; exit {code}; resumed {resumed}; records {records}; "
+                      f"{output.strip().splitlines()[-8:]}")
+            else:
+                check("worktree: a resumed story whose tests the main line left alone keeps its red proof and resumes "
+                      "at the stage that asked",
+                      waited and code == 0 and story_delivered(root, "STORY-1") and resumed[:1] == ["build"]
+                      and "test" not in resumed and "red-stale" not in journal
+                      and read(root, ".dca-factory/evidence/STORY-1/.tests-red") == recorded,
+                      f"waited {waited}; exit {code}; resumed {resumed}; {output.strip().splitlines()[-8:]}")
+
     # #138: `run --keep-going` — a story that stops is skipped with what depends on it, the run goes on with what can
     # start and ends when nothing more can; without the flag the stop ends the run; a stop file still ends it (WP-111)
     for mode in ("plain", "keep-going", "parallel", "stop-file"):
