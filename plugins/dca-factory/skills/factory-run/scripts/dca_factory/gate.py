@@ -85,7 +85,7 @@ from .contract import (
     runs_top,
     ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
-    factory_home, file_digest, find_story, findings_cells, findings_path, findings_rows, GateError, git, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
+    factory_home, file_digest, find_story, findings_cells, findings_path, findings_rows, GateError, git, git_blob, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
     INSTRUCTION_FILES, is_delivered, JOURNEY_ORDER, order_for, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, needs_human_ids,
     NOTHING, place, PLAIN_COLUMN, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
     record_path, records_of, resolve_profile, resume_stage, section_of, SELECTOR, set_places, SHARED_WINDOWS, shown,
@@ -3020,11 +3020,11 @@ def main_tests_lost(cwd, runs, story_id):
         if len(parts) != 3:
             continue
         before_blob, main_blob, rel = parts
-        code, main_text = git(cwd, "cat-file", "blob", main_blob)
+        code, main_text = git_blob(cwd, main_blob)
         if code:
             continue
-        base_text = "" if before_blob == "-" else git(cwd, "cat-file", "blob", before_blob)[1]
-        # compared without their indentation: git's answer comes stripped, and a resolution may indent a case anew
+        base_text = "" if before_blob == "-" else git_blob(cwd, before_blob)[1]
+        # compared without their indentation: a resolution may indent a case anew
         was = [l.strip() for l in meaningful_lines(base_text, rel)]
         main = [l.strip() for l in meaningful_lines(main_text, rel)]
         added = [main[j] for tag, _i1, _i2, j1, j2 in
@@ -3268,7 +3268,7 @@ def check_existing_tests(result, cwd, runs, story_id, story_body=""):
         if not head_code and not in_worktree(cwd) and head_blob.strip() and head_blob.strip() != blob \
                 and not git(cwd, "cat-file", "-e", blob)[0] and not committed_by_a_stage(cwd, runs, story_id, rel):
             blob = head_blob.strip()
-        code, before = git(cwd, "cat-file", "blob", blob)
+        code, before = git_blob(cwd, blob)
         if code:
             lost.append(rel)
             continue

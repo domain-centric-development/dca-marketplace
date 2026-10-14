@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from .contract import (
     ADOPT_ORDER, CRITERION, decision_options, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
     EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest, find_story,
-    GateError, git, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, order_for, layout_hint, plain, MAX_ROUNDS, needs_human_ids,
+    GateError, git, git_blob, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, order_for, layout_hint, plain, MAX_ROUNDS, needs_human_ids,
     OWNED_DIGEST, place, PLACES_REL, POST_GATED, PROFILE_FILE, read_front_matter, read_profile, read_text, records_of,
     resolve_profile, resume_stage, section_of, SHARED_WINDOWS, shown, split_front, STAGE_FILES, STAGE_ORDER, STATE_KEYS, story_digest,
     STORY_BRANCH, STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
@@ -1451,7 +1451,7 @@ def story_on_ref(cwd, ref, epics_rel, story_id):
     _c, names = git(cwd, "ls-tree", "-r", "--name-only", ref, "--", epics_rel.rstrip("/") + "/")
     for name in names.splitlines():
         if name.endswith(f"/{story_id}/{STORY_FILE}"):
-            code, text = git(cwd, "show", f"{ref}:{name}")
+            code, text = git_blob(cwd, f"{ref}:{name}")
             if code == 0:
                 split = split_front(text + "\n")
                 if split:
