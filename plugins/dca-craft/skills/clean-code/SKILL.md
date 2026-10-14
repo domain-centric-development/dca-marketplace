@@ -98,6 +98,10 @@ When a comment **is** warranted:
 - Journal comments: `// 2024-03-15: bug fix`.
 - Commented-out code: delete it. Git remembers.
 - TODOs with no owner or date that are >6 months old.
+- A comment the change made wrong or too narrow: it names one case where there
+  are two now, or a mechanism the code no longer uses. Rewrite it in the same
+  change — or delete it where the code now says it. A comment says what holds
+  in this file, not what a source the reader cannot see says.
 
 ## DRY with judgment
 

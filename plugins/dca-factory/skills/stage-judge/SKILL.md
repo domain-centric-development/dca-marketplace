@@ -113,6 +113,9 @@ Then converge:
    binds nothing: it is never a finding's ground nor its fix. Mention it in the summary as information at most.
 5. Discard style preferences, speculative concerns and anything you cannot point at in the code.
    Every remaining finding names a file, a line and the fix.
+5c. A state the plan names under `## Open assumptions` as one the project had before this story — a gap the
+   story rests on and does not close — is no finding of this story. Mention it in the summary at most. What the
+   story's own change brings stays a finding, whatever the plan says about it.
 5a. An **unplanned invariant** the build file names — a guard it found necessary and left out, since the plan
    did not name it — is a confirmed `minor` against the plan (`plan` perspective), with the rule as its fix; a
    guard in a changed domain type that the plan's `## Invariants` does not name and no unit test covers is

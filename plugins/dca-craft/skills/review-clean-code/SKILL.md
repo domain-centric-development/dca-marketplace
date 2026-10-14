@@ -74,7 +74,9 @@ Cite Bob Martin's chapter on Meaningful Names.
   - Journal comments (`// 2024-03-15 - fix bug`)
   - Commented-out code → delete (git remembers)
   - Closing-brace comments (`} // end if`)
-  - Misleading or stale comments — worse than no comment
+  - Misleading or stale comments — worse than no comment; one the change made wrong or too narrow is
+    the change's finding, and so is one that cites a source the reader cannot see instead of saying
+    what holds in the file
 
 ### 5. Code smells (Fowler's *Refactoring* catalog)
 

@@ -328,10 +328,12 @@ for server faults. Name the types the call can produce. `DCA-ERR-006` lists the 
 cannot decide this.
 
 ### Failure translated in more than one place
-Symptoms: a `try`/`catch` in a resource for a failure the context's exception handler already maps, or a
-handler in global infrastructure naming one context's failure.
+Symptoms: a `try`/`catch` in a resource for a failure the context's exception handler already maps, a
+handler in global infrastructure naming one context's failure, or the same `catch` of a refusal in every
+handler of a page adapter, each building its own redirect with a notice.
 Why: two sites decide the same answer and drift apart. One translation site per context, and infrastructure
-keeps only the last-resort handler for an exception nobody named.
+keeps only the last-resort handler for an exception nobody named. A page adapter has one method that turns
+the refusal and its notice into the redirect, and every handler calls it.
 
 ### Status derived from the base type
 Symptoms: every `DomainException` mapped to one status, every `UseCaseException` to another.

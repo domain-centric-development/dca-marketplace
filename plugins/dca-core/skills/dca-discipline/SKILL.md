@@ -213,6 +213,9 @@ When writing or editing code that refuses:
   `IExceptionHandler` scoped to its routes, producing a problem document
   (`ProblemDetail` / `ProblemDetails`). The status follows the failure, not the
   base type — a missing position is a rule of the model and still answers 404.
+  A page adapter translates a refusal in one place too: one method turns the
+  refusal and its notice into the redirect, and every handler calls it — never
+  the same `catch` in each handler.
 - **Never catch `Exception` or `RuntimeException` around a use-case call.** Name
   the types the call can produce. The same holds inside a use case that converts
   a rule into a result variant: catch the rule's own type, not a generic one.

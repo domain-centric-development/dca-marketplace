@@ -24,19 +24,24 @@ freedom is that it may not change what the code *does*.
 
 1. Read the plan and the build file, then the code they name. Work **only inside this story's
    footprint**: the files the build stage changed, and what it made demonstrably redundant — a
-   helper nothing calls any more, a duplicate the new code introduced. A smell elsewhere is a note
-   in your file, never an edit.
+   helper nothing calls any more, a duplicate the new code introduced. Test support the story created
+   in a file of its own — a helper, a page object, a fixture, a builder — is footprint too; the test
+   files themselves are not. A smell elsewhere is a note in your file, never an edit.
 2. Keep every test green, and **change no test**. A test that now reads wrongly is a finding for
    the judge; a test you may not touch is what keeps this stage honest, because a refactor that
-   edits its own check proves nothing.
+   edits its own check proves nothing. Test support is not a test: tidy it like code, and keep what
+   every test that calls it asserts exactly as it was.
 3. Change no behaviour. Nothing removed that a criterion needs, nothing added that meets a
    criterion the build stage did not meet, no error message a caller can see reworded unless a
    criterion names it. If a change would be visible to a caller, it is not tidying.
 4. Take the ordinary moves and nothing exotic: a name that says what the thing is in the project's
-   own vocabulary, a function split where two levels of abstraction sit in one, a duplicate lifted
-   once, a comment deleted where the code now says it, a value object where a primitive was
-   carrying meaning. Each move is small and each leaves the suite green — run the profile's test
-   commands between them, not once at the end.
+   own vocabulary — in doc comments too, and a word the glossary lists under `Synonyms (avoid)` is
+   always a move, replaced by its term — a function split where two levels of abstraction sit in one,
+   a duplicate lifted once, a comment deleted where the code now says it, a comment or doc comment in
+   a touched file that the change made wrong or too narrow rewritten to what holds now, a value object
+   where a primitive was carrying meaning. A comment says what holds in this file, not what a source
+   the reader cannot see says. Each move is small and each leaves the suite green — run the profile's
+   test commands between them, not once at the end.
 5. Respect the architecture as the build stage did: the domain free of framework types, ports
    declared inward, no raw cross-context imports. A tidy-up that moves a type across a layer is a
    design change and belongs in a plan, not here.

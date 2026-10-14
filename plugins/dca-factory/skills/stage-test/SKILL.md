@@ -22,7 +22,9 @@ files written. You write **no** production behaviour.
    the others, `browser-only (<why>)` where only a browser observes the `Then`.
 2. Write **one test per criterion, at the level the plan gave it** — for a scenario, the test follows its steps: `Given`
    is the arrangement, `When` the one action, `Then` and each `And` after it an assertion, with the
-   scenario's own values — in the shape the plan named, using the test
+   scenario's own values — the `Given` arranged with them even where the outcome seems not to depend on
+   it (a refusal that answers alike for an empty and a full state still starts from the state the
+   scenario names) — in the shape the plan named, using the test
    frameworks the project already has. It asserts the behaviour a user or a caller can observe,
    not the internals. **Change no build file**: adding a dependency, a plugin, a source set or a
    runner is a stack decision, not part of a story. If the planned shape is impossible with what
@@ -53,6 +55,11 @@ files written. You write **no** production behaviour.
    plan lists as changed is passed by at least one mapped integration test; a case the adapter
    handles that no scenario names (a malformed body, a status the story does not mention) gets an
    integration test outside the table, named under `## Notes`, like the unit tests of step 3.
+   **Every branch the story adds in an adapter has a test** — the success, each refusal, each fallback
+   (input that does not parse, so the port is never called): one test per branch, not one per adapter.
+   An outgoing adapter that keeps state of its own beside what it stores — an index, a lookup by a second
+   key — gets an adapter test that saves, changes and saves again, and asserts the lookup after the
+   second save.
 2b. **A journey item** (`kind: journey`) is a guard over delivered stories: one test that walks the
    epic's `## Journey` to its outcome event, in the source set `test.journey:` declares. It is
    **green** when you finish — every step exists already — and it asserts the outcome event, not
@@ -70,8 +77,17 @@ files written. You write **no** production behaviour.
 2e. **Every assertion could fail.** Ask of each one: with the behaviour absent, would it turn red? An assertion on
    a mechanism the code does not use (a flash attribute count where the page renders its message from the
    model), a count of something nothing writes, an absence that holds before the feature exists — each is green
-   whatever the code does. Assert the element the criterion names, in the state it names: "no message" is the
-   message's element absent from the page the user sees, not an empty map beside it.
+   whatever the code does. So is an assertion inside an `if` (or a loop over a filtered list): when nothing
+   meets the condition it asserts nothing. So is an absence checked right after the action without waiting:
+   it holds before the page has reacted — wait for the state the action leads to first, then assert what is
+   absent (the end-user craft: waits are explicit). Assert the element the criterion names, in the state it
+   names: "no message" is the message's element absent from the page the user sees, not an empty map beside it.
+   **One break probe per clause.** For each row of `## Clauses`, name the smallest change to the production
+   code that violates that clause and leaves the others standing — the message not shown, the value not
+   stored, the order reversed — and check that the assertion on that clause's line turns red under it. A
+   test stops at its first failing assertion, so its red run proves the first clause only; for new
+   behaviour the probe is the red phase taken clause by clause, not test by test. A clause no probe can
+   turn red is asserted too weakly: sharpen the assertion before the gate.
 3. **A unit test for every invariant the plan's `## Invariants` names** — each rule, the guards
    included: a required value refused when absent, a trimmed one refused untrimmed, a range at both
    bounds. The test drives the domain type alone, no framework, and is its own — never a criterion's
@@ -84,7 +100,11 @@ files written. You write **no** production behaviour.
    the doubles.
 4. Place tests where this project places tests. Look at the existing layout and follow it —
    source set, folder, naming, base classes, test data builders. Do not introduce a second
-   convention next to the project's own.
+   convention next to the project's own. **Before you write a helper, a page-object call or a
+   context setup, find the existing one** — in the base classes, the page objects, the other tests of
+   the same level — and call it. Where the same code stands in two places already, the third use
+   extracts it into the shared test support (a base class, a builder, a page object) and calls it from
+   there; the test support is yours to change, the tests that existed before keep what they assert.
 5. Name the test after the behaviour: `showsEmptyStateWhenNothingIsRecorded`. **Never** write a
    criterion key or number into a test name, display name, comment or documentation. The link
    between criterion and test lives in the table below and nowhere else — one place the gate reads,

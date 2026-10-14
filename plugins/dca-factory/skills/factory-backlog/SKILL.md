@@ -129,6 +129,9 @@ that smuggles the decision in.
      characters" is four (200 accepted, 201 refused, 1 accepted, an empty value refused), "at most 5" is two
      (5 accepted, 6 refused). A limit with only its refusal written leaves its acceptance untested, and the
      gate can only hold the tests to the scenarios there are;
+   - **examples:** the values of a rule's scenario sit where the rule differs from the obvious neighbour —
+     a rounding exactly on the half cent, where rounding half up and half to even part; a limit on both
+     sides of it. An example both rules answer alike proves neither;
    - **malformed address:** an address that carries an id (`/tasks/{id}/…`) gets a scenario for an id that is
      not even well-formed, answered as the product answers an unknown one — not by the framework's default
      error;

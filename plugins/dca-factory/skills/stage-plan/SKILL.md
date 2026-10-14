@@ -66,7 +66,14 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    scenarios keeps its rules and each scenario's steps;
    plan within `## Out of scope` — what it lists is not planned, however close it lies. Add a criterion for every concrete detail the story specifies (wording,
    placement, ordering): a detail that is not a criterion is a detail no test will cover and no
-   stage will build.
+   stage will build. A clause about a state that did not come about — not saved, not sent, unchanged —
+   says how a person sees it (the list as it was, the old value still on the page, no new entry): write
+   it after the criterion's level where the story leaves it implicit, and ask (`## needs-human`) where
+   neither the story nor the product description says it. An example of a rule sits where the rule
+   differs from the obvious neighbour — a rounding exactly on the half cent, where rounding half up and
+   half to even part; a limit on both sides of it. Where the story's example is one both rules answer
+   alike, the rule's line under `## Invariants` names the value that tells them apart, so its unit test
+   uses it.
 8. **Give every scenario its level, the lowest that observes its `Then` from outside.** Choose from
    what the project **already has**: read the stack profile and look at the existing tests.
    - **The happy path** — the one scenario the story marks `(happy path)` — gets `e2e`: a browser

@@ -54,7 +54,8 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    the package or namespace layout when it changed, a described flow that now works differently, a
    list of contexts or capabilities that is now incomplete. Where the project declares its
    documentation targets (in the stack profile or its own instructions), follow that declaration
-   instead of guessing which file matters.
+   instead of guessing which file matters. An addition to an architecture decision record names the
+   mechanism that holds today — not one a later record replaced; check the code, not the older record.
 4. **Write only what you can verify.** Every path, file, class, method and command you put in a
    document must exist — check it, do not remember it. A documented path that does not resolve is
    worse than no documentation: it survives, gets cited, and sends the next reader nowhere.

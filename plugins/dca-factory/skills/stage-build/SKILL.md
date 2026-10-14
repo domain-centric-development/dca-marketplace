@@ -41,6 +41,10 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
 4. Use the project's own building blocks and conventions: its markers, its base types, its
    package layout, its error handling. Where the project ships an architecture rule suite, run it
    and take it as binding.
+4a. **A comment the change made wrong is rewritten in this story.** A comment or doc comment in a file
+   you touch that your change made wrong or too narrow — it names the one case where there are two now,
+   a mechanism the code no longer uses — says what holds after the change. A comment says what holds
+   in this file, not what a source the reader cannot see says (the plan, the story, another document).
 5. The gate is your test run (`factory-run/reference/stage-common.md`): the single test you are
    making green as often as you like, then the build gate, never the whole suite before it. Do not
    finish while the gate names something red — and write nothing about the gate into your file: its
