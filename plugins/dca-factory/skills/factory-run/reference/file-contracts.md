@@ -93,6 +93,7 @@ nothing rewrites it. A line without `seq=` takes its position in the file.
 |---|---|---|---|
 | `stage-start` | the stage, `builder`, `verifier`, `review:<perspective>` or `integrate` | `tool=`; `model_requested=` and `model_applied=no (<why>)` where the profile names a model; `stages=` for a shared window | the runner, `--stage-start` |
 | `stage-end` | as at its start | `exit=0`, `nonzero` or `owned` | the runner, `--stage-end` |
+| `step-start` · `step-end` | the runner's own step: `integrate` (merge, gate, fast-forward), `merge` (a resumed story brought onto the main line), `format` (`formatFix:` over a resolution) | `by=runner` at the start, `exit=0` or `stopped` at the end | the runner — read as running where no stage runs; no stage's figures count it |
 | `window-start` · `window-end` | the work outside a stage (`backlog`, `decisions`) | `tool=` at the start | `--window-start`, `--window-end` |
 | `usage` | the stage or the window | `tool=`, then `model=`, `input=`, `cache_read=`, `cache_write=`, `output=`, `cost=` where the tool reports a price and `seconds=` for a runner invocation — or `unknown`; in a session `window=<start>/<end>` with `session=<tool>:<id>` until the log is read, then a second line with the numbers and the same `window=` | the runner, the stage and window marks |
 | `gate` | the stage the gate ran for | `exit=<n>`; `fail=<check>,…` on a refusal; `by=runner`, `by=<stage>` (a stage's own run under the runner) or `by=session`; the plan gate's refusal adds `backlog=<digest>` of the story and its epic | the gate, on every run over a story |
@@ -227,9 +228,14 @@ The story changed | The main line changed | How both hold |`); the runner commit
 integrate gate (`--stage integrate`) then checks the tree as it now is — no unmerged path, no conflict marker
 in a file the story's commit changes, the commit on the target's tip (`moved` otherwise, and the step merges
 again), the story's tests green, the required suites, `architecture` and `format` — and fast-forwards the main
-checkout's branch to the commit. Only then does it write `status: delivered`; a main checkout on another branch,
+checkout's branch to the commit; where the main line gained a commit while the gate ran, that too is `moved`, and
+the step merges again, at most three times. Only then does it write `status: delivered`, and the files that delivery
+wrote — the story's folder (state, decisions, findings) and the spec it merged — are committed on the main line by
+path, `chore(<context>): deliver <id>`, nothing else of the main checkout with them, so the next story's worktree
+starts from them. A main checkout on another branch,
 or with a change of its own in a file the commit touches, is refused (`checkout`) and the story stops until
-`factory.sh run --story <id> --from integrate`. A refusal of the checks goes back to the build stage as a round, and
+`factory.sh run --story <id> --from integrate`. The whole step is journaled as the runner's own
+(`step-start integrate` … `step-end integrate`), so the status shows it running with its clock. A refusal of the checks goes back to the build stage as a round, and
 the journal marks `document.md` an earlier pass's (`outdated document.md by=integrate`): the document stage writes it
 for the story as it now is, or its gate passes it as it stands.
 Delivered, the worktree and the branch go. A story set `superseded` with a worktree, or a worktree whose id no story

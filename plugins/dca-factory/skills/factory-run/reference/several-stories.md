@@ -32,7 +32,9 @@ run folder, the pipeline, the skills — and `FACTORY_HOME` names this checkout 
 both read every place from here. A story is delivered when it is integrated: the integrate step merges the
 main line into its branch (the `stage-integrate` agent where git stops on a conflict, the profile's
 `formatFix:` over its resolution), squashes it to one commit, runs the integrate gate on that tree — the tidy gate's checks once more, no conflict marker left —
-and fast-forwards this checkout's branch; then its worktree and branch go. `--parallel <n>` runs up to `<n>`
+and fast-forwards this checkout's branch — merging again where the main line moved meanwhile — and commits what
+the delivery wrote (the story's folder, the merged spec) on it; then its worktree and branch go. While the runner
+works such a step itself it journals it (`step-start`), so the status shows the story running, not waiting for one. `--parallel <n>` runs up to `<n>`
 stories at once. A story the runner started in its worktree is not taken up in a session: run it with
 `factory.sh run --story <id>`.
 

@@ -173,8 +173,10 @@ through links — the stories with their decisions, the run folder, the pipeline
 question a stage writes, an answer you give and the status all read one place. When every gate passed
 (and a person accepted the story, where one is asked), the **integrate step** merges the main line into
 the story's branch, squashes the story to one commit (`feat(<context>): <title>`, the story's id in the
-body), runs the gate once more on that tree, and fast-forwards the checkout's branch to it; only then is
-the story delivered, and its worktree and branch go. Where git stops on a conflict — two stories changed
+body), runs the gate once more on that tree, and fast-forwards the checkout's branch to it — where the main line
+moved meanwhile (your commit, another story), it merges again; only then is the story delivered, what the delivery
+wrote (the story's folder, the merged spec) is committed beside it, and its worktree and branch go. While the
+runner integrates, `factory.sh status` shows the story running at `integrate` with its clock. Where git stops on a conflict — two stories changed
 the same lines — the `stage-integrate` agent makes both changes hold, and the runner commits. Where the
 checkout cannot take the commit (you changed the same file there, or switched branches), the story stops
 and says so; `factory.sh run --story <id> --from integrate` takes it up again. A repository without a
