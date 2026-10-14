@@ -40,9 +40,8 @@ the same code, that is a finding to report, not a drift to reconcile.
 **Where it runs, and where not.** A person runs it: on a brownfield project, on a context, on a branch.
 A delivery pipeline's judge runs the three general perspectives and the project's rule suite on every
 story; this audit is not one of its defaults — the rules it would confirm already run as ArchUnit in
-every gate, and its anti-patterns that neither the suite nor the general reviews catch are few. A
-project adopting the method through the pipeline (adoption stories) opts in with a profile line
-(`reviews: dca` and `review.dca: dca-audit`): there, the layer classification below is the question.
+every gate, and its anti-patterns that neither the suite nor the general reviews catch are few. It is
+not a judge perspective at all: a person runs it to examine a project by hand.
 
 ## Where ArchUnit ends and dca-audit begins
 
