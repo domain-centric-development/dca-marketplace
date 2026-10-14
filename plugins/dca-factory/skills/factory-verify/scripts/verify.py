@@ -8688,6 +8688,53 @@ def verify_worktrees(runner, verbose=False):
               f"exit {code}; shared {shared!r}; {git_out(root, 'log', '--oneline', 'main')}; "
               f"{output.strip().splitlines()[-8:]}")
 
+    # #135: a story that waits gains a dependency; answered, the schedule holds it until the dependency is delivered,
+    # and it resumes on the main line as it is then — merged, where its own change is in the way, with the integrate
+    # stage resolving the file both touched — so its next stage sees the dependency's code (WP-111)
+    for root in throwaway():
+        log, env = fixture(root, [("STORY-2", [])], asks="STORY-1")
+        script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            'case "$FACTORY_STAGE" in\n',
+            '[ -f src/main/STORY-2.txt ] && echo "$FACTORY_STORY $FACTORY_STAGE sees STORY-2" >> "$FIXTURE_LOG"\n'
+            'case "$FACTORY_STAGE" in\n', 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                       capture_output=True)
+        second = os.path.join(root, "product/epics/sample/STORY-2/story.md")
+        first = os.path.join(root, "product/epics/sample/STORY-1/story.md")
+        def set_field(path, old, new):
+            text = open(path, encoding="utf-8").read()
+            with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(text.replace(old, new, 1))
+        set_field(second, "status: approved", "status: draft")
+        run_runner(runner, root, "run", env=env)
+        waited = "STORY-1" in git_out(root, "worktree", "list") and not story_delivered(root, "STORY-2")
+        set_field(first, "depends_on: []", "depends_on: [STORY-2]")
+        set_field(second, "status: draft", "status: approved")
+        with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
+            handle.write(ANSWER)
+        rows, nxt, _w, listing = schedule_of(os.path.join(root, ".agents", "factory", "story-gate.py"), root)
+        named = subprocess.run([sys.executable, cli_of(os.path.join(root, ".agents", "factory", "story-gate.py")),
+                                "--story", "STORY-1", "--start", "--slots", "1"], cwd=root, capture_output=True,
+                               text=True, encoding="utf-8").stdout
+        check("schedule: an answered story that gained a dependency while it waited is held until the dependency is "
+              "delivered — the dependency is next",
+              waited and rows.get("STORY-1", ("",))[0] == "blocked" and nxt.startswith("STORY-2")
+              and "start: none" in named, f"{rows} {nxt!r} | {named.strip()}")
+        code, output = run_runner(runner, root, "run", env=env)
+        ran = lines(log)
+        shared = read(root, "src/main/shared.txt")
+        check("worktree: a resumed story whose own change is in the way is merged with the main line before its next "
+              "stage — the integrate stage resolves the file both touched, the stage sees the dependency's code",
+              code == 0 and story_delivered(root, "STORY-1") and story_delivered(root, "STORY-2")
+              and "STORY-1 build sees STORY-2" in ran
+              and min(i for i, l in enumerate(ran) if l.startswith("STORY-1 integrate ")) < ran.index("STORY-1 build sees STORY-2")
+              and "line from STORY-1" in shared and "line from STORY-2" in shared and "<<<<<<<" not in shared
+              and git_out(root, "log", "--format=%s", "main").count("feat(widgets)") == 2,
+              f"exit {code}; {[l.split()[0:2] + l.split()[3:] for l in ran][-12:]}; shared {shared!r}; "
+              f"{output.strip().splitlines()[-8:]}")
+
     # a waiting story the person sets superseded: the next run removes its worktree and branch, nothing of it on main
     for root in throwaway():
         log, env = fixture(root, [], asks="STORY-1")
@@ -8747,17 +8794,23 @@ def verify_worktrees(runner, verbose=False):
     for root in throwaway():
         check_sh = ("#!/bin/sh\n[ -f src/main/STORY-1.txt ] && grep -qx STORY-2 src/main/STORY-2.txt 2>/dev/null "
                     "&& [ ! -f src/main/adapted ] && { echo 'STORY-1 does not fit STORY-2 yet'; exit 1; }\nexit 0\n")
-        log, env = fixture(root, [("STORY-2", [])], asks="STORY-1", profile="compile: sh check.sh\n",
+        log, env = fixture(root, [], asks="STORY-1", profile="compile: sh check.sh\n",
                            extra=(("check.sh", check_sh),))
         env["FIXTURE_SHARED"] = "0"
         run_runner(runner, root, "run", env=env)
         with open(os.path.join(root, "product/epics/sample/STORY-1/decisions/01.md"), "a", encoding="utf-8") as handle:
             handle.write(ANSWER)
-        # the main line moved while STORY-1 waited, and the story keeps its base: a file of its own is in the way
-        with open(os.path.join(root, ".dca-factory/worktrees/STORY-1/src/main/STORY-2.txt"), "w", encoding="utf-8") as h:
-            h.write("in the way\n")
-        with open(os.path.join(root, ".dca-factory/evidence/STORY-1/stages-made.txt"), "a", encoding="utf-8") as h:
-            h.write("src/main/STORY-2.txt\n")       # made by the story's stage, as far as the record goes
+        # the main line moves after STORY-1 resumed, while its build runs: only the integration meets it
+        script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            '    elif [ -f "$rec" ]; then\n',
+            '    elif [ -f "$rec" ]; then\n'
+            '      if [ ! -f "$FACTORY_HOME/.git/moved" ]; then : > "$FACTORY_HOME/.git/moved"; '
+            'mkdir -p "$FACTORY_HOME/src/main"; printf "STORY-2\\n" > "$FACTORY_HOME/src/main/STORY-2.txt"; '
+            'git -C "$FACTORY_HOME" add src/main/STORY-2.txt; git -C "$FACTORY_HOME" commit -qm "the main line moves"; fi\n', 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                       capture_output=True)
         code, output = run_runner(runner, root, "run", env=env)
         ran = lines(log)
         builds = [l for l in ran if l.startswith("STORY-1 build")]

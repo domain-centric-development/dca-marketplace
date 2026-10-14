@@ -236,17 +236,38 @@ def worktree_prepare(cwd, runs, story_id):
             handle.write((on or git(path, "rev-parse", "HEAD")[1].strip()) + "\n")
     target = integration_target(runs, story_id)
     restore_places(path)
-    # Resumed after waiting: a branch with no commit of its own moves onto the main line as it is now — what the
-    # other stories delivered is there for its next stage. Git refuses where the story's changes are in the way;
-    # then it keeps its base, and the integrate step merges.
-    own = git(path, "rev-list", "--count", f"{target}..HEAD")[1].strip()
-    if own == "0" and git(path, "rev-parse", "HEAD")[1].strip() != git(path, "rev-parse", target)[1].strip():
-        if git(path, "merge", "--ff-only", "--quiet", target)[0] == 0:
+    # Resumed — after an answer, a restart: the story moves onto the main line as it is now, so what the other
+    # stories delivered (a dependency added while it waited among them) is there for its next stage. A branch with no
+    # commit of its own fast-forwards; where the story's own change is in the way, or it has a commit, it is merged
+    # the way the integrate step merges — one commit on top of the main line. A conflict is named (`conflict:` lines,
+    # the list in the evidence folder) and left to the integrate stage, which the runner starts before the stage.
+    if git(path, "merge-base", "--is-ancestor", target, "HEAD")[0] != 0:
+        own = git(path, "rev-list", "--count", f"{target}..HEAD")[1].strip()
+        if own == "0" and git(path, "merge", "--ff-only", "--quiet", target)[0] == 0:
             write_base(runs, story_id, git(path, "rev-parse", "HEAD^{tree}")[1].strip())
             print(f"worktree: {story_id} moved onto {target} as it is now", file=sys.stderr)
         else:
-            print(f"worktree: {story_id} keeps its base — {target} changed what the story changes; the integrate "
-                  f"step merges", file=sys.stderr)
+            stage_story(path, runs, story_id)
+            if git(path, "diff", "--cached", "--quiet")[0] != 0:
+                git(path, *git_identity(path), "commit", "--no-verify", "--quiet", "-m", f"wip({story_id}): before resuming")
+            done = git(path, *git_identity(path), "merge", "--no-ff", "--no-edit", "--no-verify", "--quiet", target)
+            conflicted = [p for p in git(path, "diff", "--name-only", "--diff-filter=U")[1].split("\n") if p.strip()]
+            if done[0] == 0:
+                front, body = read_front_matter(find_story(place("epics"), story_id))
+                if squash_story(path, runs, story_id, target, front, body) != 0:
+                    return 1
+                print(f"worktree: {story_id} merged with {target} as it is now", file=sys.stderr)
+            elif conflicted:
+                with open(os.path.join(evidence_dir(runs, story_id), CONFLICTS_FILE), "w", encoding="utf-8") as handle:
+                    handle.write("\n".join(conflicted) + "\n")
+                for conflict in conflicted:
+                    print(f"conflict: {conflict}")
+                print(f"worktree: {story_id} meets {target} in {', '.join(conflicted)} — the integrate stage resolves "
+                      f"it before the next stage", file=sys.stderr)
+            else:
+                git(path, "merge", "--abort")
+                print(f"worktree: {story_id} keeps its base — merging {target} failed ({done[1].strip()[:200]}); the "
+                      f"integrate step merges", file=sys.stderr)
     link_places(path, cwd, runs)
     print(os.path.abspath(path).replace("\\", "/"))
     return 0
@@ -2590,6 +2611,38 @@ class Run:
         self.run([sys.executable, self.cli_path, "--worktree-link", story], cwd=os.environ.get("FACTORY_HOME") or self.home,
                  env=self.home_env())
 
+    def resolve_merge(self, story, tool, out):
+        """A merge of the main line into the story that stopped on conflicts (`conflict: <path>` lines in <out>): the
+        stage-integrate agent resolves them in the worktree, then the merge is committed and squashed. None when it
+        is, else the run's exit code."""
+        conflicts = "".join(line[len("conflict: "):] + " " for line in out.split("\n") if line.startswith("conflict: "))
+        print(f"── stage integrate  (tool: {tool}, fresh context — the merge stopped on: {conflicts})")
+        self.link_worktree(story)
+        self.tool_in_flight = tool
+        raw = f"{self.evidence(story)}/integrate.{utc('%H%M%S')}.out"
+        began = time.time()
+        self.owned("start", "integrate", story)
+        tool = self.tool_for("integrate", tool)
+        self.journal_line(story, f"{utc()}\tstage-start\tintegrate\ttool={tool}")
+        code = self.owned_invoke(story, "integrate", lambda: self.invoke(
+            tool, self.integrate_prompt(story, conflicts), raw, "integrate", story))
+        self.record_usage(story, "integrate", tool, raw, int(time.time() - began))
+        self.journal_line(story, f"{utc()}\tstage-end\tintegrate\texit={self.exit_field(code)}")
+        if self.owned("end", "integrate", story, code) != 0:
+            return 7
+        self.checkpoint()
+        record = f"{self.runs}/{story}/integrate.md"
+        if os.path.isfile(record) and self.asks_human(record):
+            self.drop_lock()
+            return self.stopped_for_human(record, "integrate", story)
+        code, out = self.in_home("--integrate-finish", story)
+        print(out)
+        if code != 0:
+            err(f"factory: the conflicts of {story} are not resolved — needs-human: the worktree {self.pwd} holds the "
+                "merge.")
+            return 1
+        return None
+
     def integrate_story(self, story, tool, dry):
         """Delivered is the integration: the main line merged into the story (a stage-integrate agent where git stops
         on a conflict), squashed, the gate once more on that tree, the main checkout fast-forwarded — under the lock."""
@@ -2604,33 +2657,9 @@ class Run:
                 code, out = self.in_home("--integrate-prepare", story)
                 print(out)
                 if code == 3:
-                    conflicts = "".join(line[len("conflict: "):] + " " for line in out.split("\n")
-                                        if line.startswith("conflict: "))
-                    print(f"── stage integrate  (tool: {tool}, fresh context — the merge stopped on: {conflicts})")
-                    self.link_worktree(story)
-                    self.tool_in_flight = tool
-                    raw = f"{self.evidence(story)}/integrate.{utc('%H%M%S')}.out"
-                    began = time.time()
-                    self.owned("start", "integrate", story)
-                    tool = self.tool_for("integrate", tool)
-                    self.journal_line(story, f"{utc()}\tstage-start\tintegrate\ttool={tool}")
-                    code = self.owned_invoke(story, "integrate", lambda: self.invoke(
-                        tool, self.integrate_prompt(story, conflicts), raw, "integrate", story))
-                    self.record_usage(story, "integrate", tool, raw, int(time.time() - began))
-                    self.journal_line(story, f"{utc()}\tstage-end\tintegrate\texit={self.exit_field(code)}")
-                    if self.owned("end", "integrate", story, code) != 0:
-                        return 7
-                    self.checkpoint()
-                    record = f"{self.runs}/{story}/integrate.md"
-                    if os.path.isfile(record) and self.asks_human(record):
-                        self.drop_lock()
-                        return self.stopped_for_human(record, "integrate", story)
-                    code, out = self.in_home("--integrate-finish", story)
-                    print(out)
-                    if code != 0:
-                        err(f"factory: the conflicts of {story} are not resolved — needs-human: the worktree {self.pwd} "
-                            "holds the merge.")
-                        return 1
+                    stopped = self.resolve_merge(story, tool, out)
+                    if stopped is not None:
+                        return stopped
                 elif code != 0:
                     err(f"factory: {story} could not be merged with the main line — the worktree {self.pwd} keeps it as it was.")
                     return 1
@@ -2714,7 +2743,13 @@ class Run:
         os.environ["FACTORY_HOME"] = self.home
         self.runs = f"{self.home}/{self.runs_rel}"
         try:
-            code = self.run_stages(story, tool, start, dry)
+            # Resumed onto a main line that changed what the story changes: the conflicts are resolved first, so the
+            # next stage works on the main line as it is.
+            code = self.resolve_merge(story, tool, out) if "\nconflict: " in "\n" + out else None
+            if code is None:
+                if "\nconflict: " in "\n" + out:
+                    self.link_worktree(story)
+                code = self.run_stages(story, tool, start, dry)
         finally:
             os.chdir(self.home)
             self.pwd = self.home
