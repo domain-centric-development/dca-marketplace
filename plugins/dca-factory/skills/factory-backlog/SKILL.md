@@ -141,7 +141,11 @@ that smuggles the decision in.
    - **failure of a dependency:** the behaviour, and after how long a slow answer counts as a failure;
    - **state and lifecycle:** every transition a rule names, including the conflict case where two
      sources of the same value meet;
-   - **changed behaviour:** what looks different afterwards → `## Changed expectations`;
+   - **changed behaviour:** what looks different afterwards → `## Changed expectations`. Where the change alters
+     a scenario the spec already holds (`product/spec/<context>/…/scenarios.md`) — its outcome, or only its
+     example — the story also carries that scenario as a criterion: its `#### <key>` from the spec, with the
+     new text. The spec takes a story's criteria by key; a change said only in prose leaves the old text
+     standing, and the spec then contradicts the test that proves it;
    - **already a story's:** compare every scenario with the scenarios of the delivered and adopted stories
      under the epics, and with the tests that assert them. A scenario another story already carries is
      not written again: name that story and leave it out. A whole story that is covered so is not

@@ -177,7 +177,9 @@ Body sections:
 - `## Changed expectations` — optional: when the story changes behaviour the system already has,
   one line per expectation that no longer holds, in the project's language (what is seen now, what
   is seen after). No story ids, no file names, no keys — nobody has to know which story or which hand
-  wrote a test or a criterion: the plan finds which criteria of the spec the story changes or removes.
+  wrote a test or a criterion. A line that alters a criterion the spec holds comes with that criterion
+  among the story's own, under its key with the new text: the spec takes a story's criteria by key, and a
+  change said only here leaves the old text standing. The plan finds the criteria the story removes.
   Released with the story, it is the human's authority for the plan to change what holds and the tests
   that follow from it; without it, a plan that finds such a change asks. A human's correction at
   acceptance lands here too, in the same story, when it takes back something the story delivered.

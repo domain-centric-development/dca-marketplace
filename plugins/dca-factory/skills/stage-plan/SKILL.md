@@ -155,7 +155,10 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    of the spec the story takes away, and `- rule "<old>" → "<new>"` where the story rewords a rule — then every
    criterion under the old rule is either one of the story's or removed. A change or removal must follow from
    the story's `## Changed expectations`; where it does not, it is a change of agreed behaviour nobody said —
-   one decision record naming the keys, as in step 9, and stop.
+   one decision record naming the keys, as in step 9, and stop. The other way round as well: a line of
+   `## Changed expectations` that alters a criterion the spec holds, while the story does not carry that key
+   with its new text, would leave the spec's old text standing — one decision record naming the keys and
+   the text each would need, and stop.
 10. Name business terms **and operations** in the criteria that are not in the glossary yet, as
    proposals with a one-line definition — an operation as `<domain word> (<code word>): <what it does
    to which term>`. Name use cases, commands and events from the operation's code word. The code word
