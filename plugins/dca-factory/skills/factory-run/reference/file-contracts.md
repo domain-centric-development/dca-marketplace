@@ -138,7 +138,8 @@ stage window is open, the digest of what is the person's — the story file and 
 window's end compares, and a change leaves `.owned-changed`: the story is stopped and the gate refuses (`owned`)
 until `factory-cli.py --owned-confirm <story>`. The gate's own writes (delivered, reopened, `## Applied`) are
 not a change. Nothing the factory needs
-*after* a run lives in either. Whether a story is delivered stands
+*after* a run lives in either: the install keeps `.dca-factory/` out of git (`/.dca-factory` in `.gitignore`,
+unless a line there names it already), and the commit hook's snapshot leaves both folders out. Whether a story is delivered stands
 in the story itself: the gate that delivers — the document gate, the adopt gate, or in a story's worktree the
 integrate gate, all through one function — writes `status: delivered`, `delivered: <UTC time>` and
 `delivered_by: gate` into its front matter when it passes; built or adopted, the three lines are the same (one

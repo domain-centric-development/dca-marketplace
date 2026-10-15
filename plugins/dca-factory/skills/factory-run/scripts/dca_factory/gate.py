@@ -81,7 +81,7 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    DEFAULTS, METHOD_PROFILE, PLACES, read_flat,
+    DEFAULTS, evidence_rel, METHOD_PROFILE, PLACES, PLACES_REL, read_flat,
     runs_top,
     ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
@@ -2880,9 +2880,13 @@ def staged_snapshot(result, cwd, env):
     _, untracked = git(cwd, "ls-files", "--others", "--exclude-standard", env=env)
     # The agent tools' own folders — skill links, a settings file the install wrote — are no input to
     # any check here, and refusing every commit over them would stop the first commit after an install.
+    # Nor is what the pipeline writes itself while a runner works — `.dca-factory/`, the run folder and
+    # the evidence beside it: a person's commit is not refused by a running factory's protocol.
     tooling = lambda p: any(folder in "/" + p for folder in TOOL_FOLDERS)
-    drift = [f"modified, not staged: {p}" for p in unstaged.splitlines() if p and not tooling(p)] \
-        + [f"untracked: {p}" for p in untracked.splitlines() if p and not tooling(p)]
+    owned = pipeline_owned()
+    left = [p for p in unstaged.splitlines() + untracked.splitlines() if p and owned(p)]
+    drift = [f"modified, not staged: {p}" for p in unstaged.splitlines() if p and not tooling(p) and not owned(p)] \
+        + [f"untracked: {p}" for p in untracked.splitlines() if p and not tooling(p) and not owned(p)]
     if drift:
         shown = "\n".join("  " + line for line in drift[:10])
         more = f"\n  … and {len(drift) - 10} more" if len(drift) > 10 else ""
@@ -2893,8 +2897,17 @@ def staged_snapshot(result, cwd, env):
             f"(`git stash push --keep-index --include-untracked`), then commit again.",
         )
         return None
-    result.ok("snapshot", f"index tree {tree[:12]} — the working tree matches it")
+    result.ok("snapshot", f"index tree {tree[:12]} — the working tree matches it"
+                          + (f" ({len(left)} file(s) the pipeline writes itself left out)" if left else ""))
     return tree
+
+
+def pipeline_owned():
+    """Whether a path is one the pipeline writes itself, outside any story's commit: under `.dca-factory/`, the
+    run folder or the evidence beside it, as the profile places them."""
+    runs = (PLACES_REL.get("runs") or DEFAULTS["runs"]).strip("/")
+    prefixes = tuple(dict.fromkeys(folder + "/" for folder in (".dca-factory", runs, evidence_rel()) if folder))
+    return lambda path: path.replace("\\", "/").startswith(prefixes)
 
 
 def red(result, check, message, must, strict):

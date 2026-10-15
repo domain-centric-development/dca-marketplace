@@ -1055,6 +1055,21 @@ install_project() {                         # install_project <tool> <skill fold
     os_added="$os_added $os_file"
   done
   [ -n "$os_added" ] && echo "factory: .gitignore keeps the files a file manager drops out of git:$os_added"
+  # What the pipeline writes itself — the run folder, the evidence beside it, the worktrees — is protocol:
+  # nothing reads it from git, `.dca-factory/` can be deleted at any time, and untracked it would leave every
+  # commit beside a run. One line per folder, unless the project's .gitignore already names it: a project
+  # that commits its history writes its own lines, and the install leaves them as they are.
+  local own own_added=""
+  for own in .dca-factory "$RUNS_REL" "$(evidence_rel)"; do
+    own=${own%/}
+    case "$own/" in .dca-factory/?*) continue ;; esac       # inside the folder the first line already ignores
+    [ -f .gitignore ] && awk -v own="$own" '{ sub(/\r$/, ""); sub(/^!/, ""); sub(/^\//, "") }
+      $0 == own || index($0, own "/") == 1 { found = 1 } END { exit !found }' .gitignore && continue
+    [ -s .gitignore ] && [ -n "$(tail -c 1 .gitignore)" ] && printf '\n' >> .gitignore
+    printf '/%s\n' "$own" >> .gitignore
+    own_added="$own_added /$own"
+  done
+  [ -n "$own_added" ] && echo "factory: .gitignore keeps the pipeline's own protocol out of git:$own_added"
   write_agents_block
   if [ -n "$copy_mode" ]; then
     echo "factory: the skills are copies — commit .claude/.codex/.opencode skills with the project, and"

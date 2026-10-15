@@ -3136,6 +3136,21 @@ exit 0
         check("install: `.gitignore` keeps the files a file manager drops out of git — once, the last line whole",
               ignores[:1] == ["build/"] and ignores.count(".DS_Store") == 1 and ignores.count("Thumbs.db") == 1
               and ignored and "file manager" not in output, f"{ignores} | src/.DS_Store ignored: {ignored}")
+        write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv", "event\n")
+        protocol = subprocess.run(["git", "check-ignore", "-q", ".dca-factory/evidence/STORY-1/journal.tsv"],
+                                  cwd=root).returncode == 0
+        check("install: `.gitignore` keeps the pipeline's own protocol (`.dca-factory/`) out of git — once",
+              ignores.count("/.dca-factory") == 1 and protocol and "own protocol" not in output,
+              f"{ignores} | evidence ignored: {protocol}")
+    for root in throwaway():
+        build_project(root)
+        in_git(root)
+        write_file(root, ".gitignore", "build/\n/.dca-factory/runs/\n")      # the project commits its evidence
+        run_setup(runner, root, "--tool", "none")
+        ignores = open(os.path.join(root, ".gitignore"), encoding="utf-8").read().splitlines()
+        check("install: a `.gitignore` that names `.dca-factory` itself is the project's choice — left as it is",
+              "/.dca-factory/runs/" in ignores and not any(line.rstrip("/") == "/.dca-factory" for line in ignores),
+              ignores)
     for root in throwaway():
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
@@ -6134,6 +6149,16 @@ def run_groups(args):
         state_before = open(os.path.join(root, "src", "state"), encoding="utf-8").read()
         expectations.append(("change: checking leaves the user's files as they were",
                              state_before == "broken\n", state_before))
+        # a running factory writes its protocol beside a person's commit: no drift of the commit's
+        write_file(root, "src/state", "fixed\n")
+        subprocess.run(["git", "add", "src/state"], cwd=root, capture_output=True)
+        write_file(root, ".dca-factory/evidence/STORY-9/journal.tsv", "2026-10-15T08:00:00Z\tstage\tbuild\tseq=1\n")
+        write_file(root, ".dca-factory/runs/STORY-9/build.md", "# Build\n")
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: what the pipeline writes itself (`.dca-factory/`) is no drift — a running "
+                             "factory refuses no person's commit",
+                             code == 0 and "untracked: .dca-factory" not in output
+                             and "the pipeline writes itself left out" in output, output.strip().splitlines()[-4:]))
     for root in throwaway():
         # the hook is the same command; `git commit -a` hands it a temporary index
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", repository=True)

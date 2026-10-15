@@ -487,10 +487,12 @@ starts fresh and reads the skill, the story and its predecessor's file again.
   (`~/.claude/projects/<project>/<session>.jsonl`, `~/.codex/sessions/<date>/rollout-*.jsonl`).
 
 **History.** Every number lives in the project: `.dca-factory/evidence/<story>/journal.tsv`, next to the gate
-reports and each invocation's raw output (`*.out`). Whether `.dca-factory/runs/` is committed is the
-project's choice: committed, the history travels with the repository — `factory.sh status --usage`
-without `--story` shows every story ever run, `status --story` its passes and costs; left out, a clone
-still knows what is delivered (the story says so) and what was decided (the records beside it). The journal is append-only, so
+reports and each invocation's raw output (`*.out`). The install keeps `.dca-factory/` out of git
+(`/.dca-factory` in `.gitignore`): nothing reads it from there, and a clone still knows what is delivered
+(the story says so) and what was decided (the records beside it). Committing it is the project's choice: a
+`.gitignore` that names `.dca-factory` itself — `/.dca-factory/runs/` to keep the evidence, say — is left as
+it is, and the history travels with the repository — `factory.sh status --usage` without `--story` shows
+every story ever run, `status --story` its passes and costs. The journal is append-only, so
 the install marks it `merge=union` in `.gitattributes`: two branches that ran the same story merge
 without a conflict, a window read on one side and pending on the other counts once, and "running" is
 judged by time, not by line order. An in-session stage first
@@ -608,7 +610,9 @@ tests passing against an unstaged fix say nothing about the commit.
 `templates/githooks/pre-commit` is exactly that command (`git config core.hooksPath .githooks`; where
 another hook manager already set `core.hooksPath`, the install leaves it and says to call
 `.githooks/pre-commit` from there). The agent tools' own folders (`.claude/`, `.codex/`, `.opencode/`)
-are no input to the check, so skill links and settings the install left untracked do not refuse a commit.
+are no input to the check, so skill links and settings the install left untracked do not refuse a commit;
+nor is what the pipeline writes itself — `.dca-factory/`, the run folder and the evidence, tracked or not — so a
+running factory's files never refuse a person's commit beside it.
 `FACTORY_PRECOMMIT_CHECKS="compile architecture"` narrows the hook on a slow stack, and a required check
 left out is reported as not run here, never as passed. That is the enforcement boundary — a tool's
 own hooks are a fast feedback loop, but only git is common to every tool, and a hook can be skipped
