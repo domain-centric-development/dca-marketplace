@@ -341,12 +341,14 @@ CONFLICTS_FILE = "conflicts"
 
 def stage_story(path, runs, story_id):
     """Into the index of the story's worktree: every tracked file the story changed or removed, and the untracked
-    ones a stage window of the story made (`stages-made.txt`) — the files the gates held to the hand-overs. An
-    untracked file no stage made (a gate command's report nobody ignored, a file manager's) stays out of the
-    story's commit and is named."""
+    ones a stage window of the story made (`stages-made.txt`) or a hand-over lists (tests.md's, build.md's, tidy.md's
+    files) — the files the gates held to the hand-overs. An untracked file neither names (a gate command's report
+    nobody ignored, a file manager's) stays out of the story's commit and is named."""
     git(path, "add", "-u", "--", ".")
     made = os.path.join(evidence_dir(runs, story_id), STAGES_MADE)
     named = {line.strip() for line in read_text(made).splitlines() if line.strip()} if os.path.isfile(made) else set()
+    for stage in (s for s in STAGES if s.lists):
+        named |= listed_files(os.path.join(runs, story_id, stage.file)) or set()
     untracked = [p for p in git(path, "ls-files", "--others", "--exclude-standard", "-z")[1].split("\0") if p]
     taken = [p for p in untracked if p in named]
     left = [p for p in untracked if p not in named and not run_owned(p, runs)]
@@ -2160,6 +2162,10 @@ class Run:
         invoked = self.owned_invoke(story, window, lambda: self.invoke(tool, prompt, raw, window, story))
         self.record_usage(story, window, tool, raw, int(time.time() - began))
         self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit={self.exit_field(invoked)}")
+        # What the window changed is recorded however it ended: a file a stage made before the tool failed or a signal
+        # stopped it is the story's all the same, and only `stages-made.txt` takes an untracked file into its commit.
+        self.snapshot(story, f"after-{window}")
+        self.record("--record-changes", story, window)
         # The window closes before a signal that arrived ends the run: the person may change the story before the next.
         if self.owned("end", window, story, invoked) != 0:
             return 7
@@ -2167,8 +2173,6 @@ class Run:
         if invoked != 0:
             err("factory: the tool exited non-zero during the shared stages.")
             return 1
-        self.snapshot(story, f"after-{window}")
-        self.record("--record-changes", story, window)
         return 0
 
     # --- the shared processes ----------------------------------------------------------------------------------
@@ -2631,6 +2635,9 @@ class Run:
         began = time.time()
         invoked = self.owned_invoke(story, stage, lambda: self.invoke(tool, self.prompt_for(stage, story), raw, stage, story))
         self.record_usage(story, stage, tool, raw, int(time.time() - began))
+        # recorded however the stage ended, as a shared window's: the files it made reach the story's commit
+        self.snapshot(story, f"after-{stage}")
+        self.record("--record-changes", story, stage)
         if self.owned("end", stage, story, invoked) != 0:
             self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit=owned")
             return 7
@@ -2641,8 +2648,6 @@ class Run:
             return 1
         self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit=0")
         self.checkpoint()
-        self.snapshot(story, f"after-{stage}")
-        self.record("--record-changes", story, stage)
         if not os.path.isfile(artefact):
             err(f"factory: stage '{stage}' produced no {artefact} — a stage is finished when its file exists.")
             return 1

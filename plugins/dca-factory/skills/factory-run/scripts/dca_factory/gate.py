@@ -3996,6 +3996,11 @@ def _spec_tests(run):
     check_spec_tests(run.result, run.cwd, run.runs, run.story_id, run.front, run.mapping)
 
 
+@check("tests-committed", stages=("integrate",), kinds=TESTED_KINDS)
+def _tests_committed(run):
+    check_tests_committed(run.result, run.cwd, run.front, run.mapping)
+
+
 @check("tests-real", stages=("test", "adopt"))
 def _tests_real(run):
     if contract_of(run.profile) >= 21:
@@ -4505,6 +4510,47 @@ def check_spec_tests(result, cwd, runs, story_id, front, mapping):
                                   f"renamed or moved goes under tests.md's `## Moved tests` (| <key> | <Class>#<method> |)")
     else:
         result.ok("spec-tests", f"every test line of {shown(target)} names a test that is there")
+
+
+def check_tests_committed(result, cwd, front, mapping):
+    """What the main line takes is the story's commit, not its worktree: every test the story maps, and every one a
+    `Test:` line of its spec names, sits in a file that commit holds as the worktree has it. A file the story made and
+    no record took in (untracked, ignored, changed after the squash) would pass every check here and be gone with
+    the worktree — the spec then names a test the main line lacks."""
+    target, spec, _features, _feature = story_spec(front)
+    wanted = {key: list(selectors) for key, selectors in (mapping or {}).items()}
+    for item in spec if target else []:
+        if item["tests"]:
+            wanted.setdefault(item["key"], [])
+            wanted[item["key"]] += [t for t in item["tests"] if t not in wanted[item["key"]]]
+    if not wanted:
+        return
+    probe = Result()
+    located = check_exists(probe, cwd, wanted) or {}
+    files = sorted(set(located.values()))
+    if not files:
+        return
+    held = set(git(cwd, "ls-tree", "-r", "--name-only", "HEAD", "--", *files)[1].split("\n"))
+    prefix = git(cwd, "rev-parse", "--show-prefix")[1].strip()
+    # `git` strips its answer, so the first line's leading status column may be gone: the path is what follows the code
+    dirty = {line.split(None, 1)[1].split(" -> ")[-1] for line in
+             git(cwd, "status", "--porcelain", "--ignored", "--", *files)[1].split("\n") if len(line.split(None, 1)) == 2}
+    head = git(cwd, "rev-parse", "--short", "HEAD")[1].strip()
+    missing = []
+    for rel in files:
+        if rel not in held:
+            selectors = sorted(s for s, path in located.items() if path == rel)
+            missing.append(f"{rel} ({', '.join(selectors)}) is not in it")
+        elif prefix + rel in dirty or rel in dirty:
+            missing.append(f"{rel} differs from it")
+    if missing:
+        result.fail("tests-committed", f"the story's commit {head} lacks what its tests need: {'; '.join(missing)} — the "
+                                       f"worktree has the file, the main line would not: a file the stages made goes into "
+                                       f"the commit when a hand-over lists it (tests.md's `## Files`); an ignored one is "
+                                       f"the person's to add (`git add -f`) or to un-ignore")
+    else:
+        result.ok("tests-committed", f"the story's commit {head} holds every test file its mapping and its spec name "
+                                     f"({len(files)})")
 
 
 def merge_spec(result, story_path, story_id, front, runs):

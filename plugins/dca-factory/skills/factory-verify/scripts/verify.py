@@ -8802,6 +8802,58 @@ def verify_worktrees(runner, verbose=False):
               and "left out of STORY-1's commit" in output and "gate-output.junk" in output,
               f"exit {code}; {committed}; {output.strip()[-300:]}")
 
+    # 0.85.2: a test file the test stage made reaches the main line's commit — though the tool that wrote it exited
+    # non-zero (the window's changes are recorded however it ends) — and the spec's Test line names a test main holds
+    flow_test = "src/test/java/com/example/WidgetFlowTest.java"
+    new_test_stage = (
+        '  test) mkdir -p src/test/java/com/example\n'
+        f'    printf \'class WidgetFlowTest {{ void showsTheThing() {{}} }}\\n\' > {flow_test}\n'
+        '    sed "s/com.example.WidgetPageTest#showsTheThing/com.example.WidgetFlowTest#showsTheThing/; '
+        's#src/test-pages/java/com/example/WidgetPageTest.java#' + flow_test + '#" "$FIXTURE_DIR/tests.md" > "$d/tests.md"\n'
+        '    if [ ! -f "$FIXTURE_DIR/../.git/failed-once" ]; then : > "$FIXTURE_DIR/../.git/failed-once"; exit 1; fi ;;\n')
+
+    def new_test_fixture(root, ignore=False):
+        log, env = fixture(root, [], extra=((".gitignore", "build/\n" + (flow_test + "\n" if ignore else "")),))
+        script = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            '  test) cat "$FIXTURE_DIR/tests.md" > "$d/tests.md" ;;\n', new_test_stage, 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "stand-in"], cwd=root,
+                       capture_output=True)
+        return log, env
+
+    for root in throwaway():
+        log, env = new_test_fixture(root)
+        first, out1 = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        made = read(root, ".dca-factory/evidence/STORY-1/stages-made.txt")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        committed = git_out(root, "show", "--name-only", "--format=", "main~1").split()
+        check("integrate: a new test file the test stage made is in the story's commit on main, though the tool that "
+              "made it exited non-zero — its window's changes are recorded however it ends",
+              first != 0 and flow_test in made and code == 0 and story_delivered(root, "STORY-1")
+              and flow_test in committed and "WidgetFlowTest#showsTheThing" in git_out(
+                  root, "show", "main:product/spec/widgets/scenarios.md")
+              and "tests-committed" in read(root, ".dca-factory/evidence/STORY-1/" + next(
+                  (n for n in sorted(os.listdir(os.path.join(root, ".dca-factory/evidence/STORY-1")))
+                   if n.startswith("gate-integrate.")), "none")),
+              f"first exit {first}; made {made!r}; exit {code}; {committed}; {output.strip()[-400:]}")
+
+    # ... and the delivery refuses a commit that lacks a file a test the story maps sits in (here: ignored), rather than
+    # delivering a spec whose Test line names a class the main line does not have
+    for root in throwaway():
+        log, env = new_test_fixture(root, ignore=True)
+        run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        reports = os.path.join(root, ".dca-factory/evidence/STORY-1")
+        refused = "".join(read(root, ".dca-factory/evidence/STORY-1/" + n) for n in sorted(os.listdir(reports))
+                          if n.startswith("gate-integrate.")) if os.path.isdir(reports) else ""
+        check("integrate: a story's commit without the file its mapped test sits in is refused (`tests-committed`), "
+              "the story is not delivered and the main line has neither its commit nor its spec lines",
+              code != 0 and "gate:fail tests-committed" in refused and flow_test in refused
+              and not story_delivered(root, "STORY-1")
+              and "WidgetFlowTest" not in git_out(root, "show", "main:product/spec/widgets/scenarios.md"),
+              f"exit {code}; {refused.strip()[-500:]}; {output.strip()[-400:]}")
+
     # #149: integrate commits what the delivery wrote on main — the story's folder and the spec it merged — beside the
     # story's commit, and nothing else of the main checkout; the next story's worktree starts with that spec (WP-112)
     for root in throwaway():

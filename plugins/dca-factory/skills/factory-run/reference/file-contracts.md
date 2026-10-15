@@ -228,8 +228,10 @@ changes. `.dca-factory/worktrees/` is kept out of the main checkout's status in 
 **The integrate step.** When every gate passed — the document gate, or the adopt gate — the story is not
 delivered yet: the gate says `integrate` and the runner integrates it, one story at a time under
 `.dca-factory/integrate.lock`. It commits the story's code on its branch — every tracked file it changed and the
-untracked ones a stage window made (`.dca-factory/evidence/<story>/stages-made.txt`, kept across rounds); an
-untracked file no stage made, such as a gate command's report nobody ignored, stays out and is named — merges the
+untracked ones a stage window made (`.dca-factory/evidence/<story>/stages-made.txt`, kept across rounds, recorded
+however the window ended — a tool that exits non-zero after writing a file has still made it) or a hand-over lists
+(`tests.md`'s, `build.md`'s, `tidy.md`'s files); an untracked file neither names, such as a gate command's report
+nobody ignored, stays out and is named — merges the
 target in and squashes
 the whole to one commit, `feat(<context>): <title>` (`test(…)` for an adoption or a journey) with `Story:
 <id>` in its body; factory commits carry `--no-verify`, because the integrate gate holds the tree to more than
@@ -242,7 +244,9 @@ resolution that leaves out a line the main line added to one of them — a case 
 the integrate stage with the file and the lines named, at most twice, before any other stage runs: it is the
 resolution's change, never the story's, so neither `tests-kept` nor a person sees it. The
 integrate gate (`--stage integrate`) then checks the tree as it now is — no unmerged path, no conflict marker
-in a file the story's commit changes, the main line's side of every test the merge met (`main-tests`, refused by
+in a file the story's commit changes, every test the story maps and every one a `Test:` line of its spec names
+in a file the story's commit holds as the worktree has it (`tests-committed` — an untracked, ignored or changed
+file would pass in the worktree and be gone with it), the main line's side of every test the merge met (`main-tests`, refused by
 name and sent back to the integrate stage the same way, no round counted), the commit on the target's tip (`moved` otherwise, and the step merges
 again), the story's tests green, the required suites, `architecture` and `format` — and fast-forwards the main
 checkout's branch to the commit; where the main line gained a commit while the gate ran, that too is `moved`, and
