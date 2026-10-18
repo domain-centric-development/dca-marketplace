@@ -7262,6 +7262,14 @@ def run_groups(args):
              and [r["story"] for r in epic_json.get("rows", [])] == ["LATER-1"]
              and "Journey" in epic_json.get("description", "") and "Intent" in epic_text and "LATER-1" in epic_text,
              {k: epic_json.get(k) for k in ("intent", "path", "created", "description")}),
+            ("status --story/--epic --format json: every section in the file's order, the criteria's and the stories' "
+             "place kept, one line of what is up and the view the detail opens with",
+             [x["heading"] for x in story_view.get("sections", [])] == ["Story", "Assumptions"] and story_view.get("criteria_at") == 1
+             and story_view.get("superseded") is False and story_view.get("view") in ("story", "pipeline")
+             and story_view.get("situation", "").startswith("ready")
+             and "Journey" in [x["heading"] for x in epic_json.get("sections", [])]
+             and epic_json.get("situation", "").startswith("0 of 1 delivered") and epic_json.get("view") == "epic",
+             {k: story_view.get(k) for k in ("sections", "criteria_at", "situation", "view")}),
             ("status --epic: an epic there is not is refused with the ones there are",
              unknown.returncode == 1 and "later, sample" in unknown.stdout, unknown.stdout),
         ]

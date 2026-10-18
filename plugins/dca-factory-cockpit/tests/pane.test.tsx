@@ -333,9 +333,12 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'epic-books' })
     expect(await pane.find({ text: 'readers lose track of their books' })).toBeDefined()
     expect(await pane.find({ text: 'the librarian' })).toBeDefined()
-    expect(await pane.find({ text: /a reader adds a book and finds it again/ })).toBeDefined()
     expect(await pane.find({ text: 'newest first' })).toBeDefined()
     expect(await pane.find({ key: 'story-add-book' })).toBeDefined()
+    // an older pipeline names no view: the stories open, its own text one press away
+    await pane.press({ key: 'view-epic' })
+    expect(await pane.find({ text: /a reader adds a book and finds it again/ })).toBeDefined()
+    await pane.press({ key: 'view-stories' })
     await pane.press({ key: 'open-epic-books' })
     expect(await pane.find({ text: 'books / epic.md' })).toBeDefined()
     await pane.press({ key: 'back' })
@@ -349,7 +352,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: 'Given' })).toBeDefined()
     expect(await pane.find({ text: 'the reader adds "Dune"' })).toBeDefined()
     expect(await pane.find({ text: 'Adding "Dune" again keeps one.' })).toBeDefined()
+    expect(await pane.find({ text: /first delivery/ })).toBeUndefined()
+    await pane.press({ key: 'view-pipeline' })
     expect(await pane.find({ text: /first delivery/ })).toBeDefined()
+    await pane.press({ key: 'view-story' })
     await pane.press({ key: 'open-story' })
     expect(await pane.find({ text: 'add-book / story.md' })).toBeDefined()
     await pane.press({ key: 'back' })
@@ -360,5 +366,76 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'tab-delivered' })
     const shown = (await pane.findAll({ type: 'Button' })).map(one => one.key).filter(key => key === 'story-lend-book' || key === 'story-shelve-book')
     expect(shown).toEqual(['story-lend-book', 'story-shelve-book'])
+  })
+}
+
+// The story detail stays short: a head with the factory's one line of what is up, then two views — the story's own
+// sections in the factory's order (why it is not built framed first, the criteria where they stand) and the
+// pipeline. The factory names the view to open with; a press switches. An epic the same way.
+const SECTIONS_STORY = {
+  ...STORY_VIEW,
+  superseded: true,
+  situation: 'superseded — nobody shelves books any more',
+  view: 'story',
+  criteria_at: 2,
+  sections: [
+    { heading: 'Superseded', text: '- Not built: nobody shelves books any more; the\n  librarian decided so.', kind: 'superseded' },
+    { heading: 'Story', text: 'As a reader I want to add a book, so that it stands on my shelf.', kind: '' },
+    { heading: 'Notes', text: '- From the reading group.', kind: '' },
+  ],
+}
+const SECTIONS_EPIC = {
+  ...EPIC_VIEW,
+  situation: '0 of 1 delivered · 1 superseded',
+  view: 'epic',
+  stories_at: 1,
+  sections: [
+    { heading: 'Intent', text: 'Readers lose track of the books they lent.', kind: '' },
+    { heading: 'Journey', text: '- open: a reader adds a book and finds it again', kind: '' },
+  ],
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`a detail opens with what is up and the view the factory names; sections in its order (${surface})`, async ($, on) => {
+    on('session.root', async () => ({ value: ROOT }))
+    on('fs.exists', async () => ({ value: true }))
+    on('fs.list', async () => ({ value: [] }))
+    on('fs.read', async (_, e) => (FILES[e.path] === undefined ? { deny: 'missing' } : { value: FILES[e.path] as string }))
+    on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
+      const out = e.argv.includes('--epic') ? SECTIONS_EPIC : e.argv.includes('--story') ? SECTIONS_STORY : e.argv.includes('decisions') ? { records: [] } : e.argv.includes('--list') ? { topics: [] } : DETAIL_STATUS
+      return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    })
+    on('clock.now', async () => ({ value: Date.parse('2026-09-23T17:30:00Z') }))
+    on('clock.every', async () => ({ value: { cancel: () => {} } }) as never)
+    on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+    on('ui.status', async () => ({ value: undefined }) as never)
+    on('command.list', async () => ({ value: [] }) as never)
+
+    await $.command.run({ command: 'factory-cockpit', args: '' } as never)
+    const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface, component: 'Pane', requestId: 'factory-cockpit', props: { title: 'Factory', isFocused: true } as never })
+
+    // the epic: its line, its sections in the factory's order — the view it names first, the stories one press away
+    await pane.press({ key: 'epic-books' })
+    expect(await pane.find({ text: '0 of 1 delivered · 1 superseded' })).toBeDefined()
+    expect(await pane.find({ text: /Readers lose track of the books they lent/ })).toBeDefined()
+    expect(await pane.find({ text: 'JOURNEY' })).toBeDefined()
+    expect(await pane.find({ key: 'story-add-book' })).toBeUndefined()
+    await pane.press({ key: 'view-stories' })
+    expect(await pane.find({ key: 'story-add-book' })).toBeDefined()
+    expect(await pane.find({ text: /Readers lose track/ })).toBeUndefined()
+
+    // the story: what is up in one line, the reason it is not built framed first, a wrapped line kept, the
+    // criteria where they stand, the notes after them; the pipeline one press away
+    await pane.press({ key: 'story-add-book' })
+    expect(await pane.find({ text: 'superseded — nobody shelves books any more' })).toBeDefined()
+    expect(await pane.find({ text: 'SUPERSEDED' })).toBeDefined()
+    expect(await pane.find({ text: /librarian decided so/ })).toBeDefined()
+    expect(await pane.find({ text: 'A new book stands on the shelf' })).toBeDefined()
+    expect(await pane.find({ text: /From the reading group/ })).toBeDefined()
+    expect(await pane.find({ text: /first delivery/ })).toBeUndefined()
+    await pane.press({ key: 'view-pipeline' })
+    expect(await pane.find({ text: /first delivery/ })).toBeDefined()
+    expect(await pane.find({ text: 'SUPERSEDED' })).toBeUndefined()
+    expect(await pane.find({ text: 'superseded — nobody shelves books any more' })).toBeDefined()
   })
 }

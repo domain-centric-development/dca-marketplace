@@ -1915,6 +1915,8 @@ def story_model(cwd, epics, runs, story_id, live=False):
                 path=shown(data["path"]) if data.get("path") else "", kind=story_kind(front),
                 created=created_of(front), intent=front_text(front.get("intent")),
                 description=story_description(body), scenarios=scenarios_of(body),
+                superseded=data.get("state") == "superseded", **story_sections(body),
+                **story_situation(row, data, overview, body),
                 context=str(front.get("context", "")).strip(), criteria=criteria, accepted_by=accepted_by,
                 passes=passes, stages=facts["stages"], decisions=decisions, models=models, not_applied=not_applied,
                 priced=facts["priced"] > 0, waiting=[w for w in overview["waiting"] if w["story"] == story_id],
@@ -1934,6 +1936,108 @@ def story_description(body):
                 lines.append(line)
     text = re.sub(r"<!--.*?-->", "", "\n".join(lines), flags=re.S)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+#: The sections a detail shows in a block of its own instead of as text: a story's criteria (as scenarios), an
+#: epic's stories (with their state). Their place among the sections is kept as an index.
+STORY_OWN_BLOCK, EPIC_OWN_BLOCK = "acceptance criteria", "stories"
+
+#: A section a detail puts first, whatever its place in the file: why a story is not built.
+FIRST_SECTIONS = ("superseded",)
+
+
+def sections_of(body, own_block):
+    """Every `## ` section of a story's or an epic's file in the file's order, as {heading, text, kind} — the text
+    as Markdown, a wrapped line kept as written, comments left out, an empty section left out. Prose between the
+    title and the first section is a section without a heading. The section the detail draws as a block of its own
+    (`own_block`) is not among them; `at` says where it stood (the number of sections before it, or None). A section
+    of FIRST_SECTIONS moves to the front and says so in `kind` — the view draws the sections as given."""
+    parts, heading, lines = [], "", []
+    for line in body.splitlines() + ["## "]:
+        if line.startswith("## "):
+            parts.append((heading, lines))
+            heading, lines = line[3:].strip(), []
+        elif not line.startswith("# "):
+            lines.append(line)
+    sections, at = [], None
+    for name, lines in parts:
+        key = name.split("(")[0].strip().lower()
+        if name and key == own_block:
+            at = len(sections)
+            continue
+        text = re.sub(r"\n{3,}", "\n\n", re.sub(r"<!--.*?-->", "", "\n".join(lines), flags=re.S)).strip("\n")
+        if text.strip():
+            sections.append(dict(heading=name, text=textwrap.dedent(text).strip(),
+                                 kind=key if name and key in FIRST_SECTIONS else ""))
+    first = [s for s in sections if s["kind"]]
+    if first and at is not None:
+        at += sum(1 for s in sections[at:] if s["kind"])
+    return [*first, *(s for s in sections if not s["kind"])], at
+
+
+#: The longest a situation line quotes a reason before it cuts it.
+SITUATION_REASON = 90
+
+
+def first_sentence(text, limit=SITUATION_REASON):
+    """The first sentence of a section's text, list marks and line breaks out, cut at `limit` with an ellipsis."""
+    words = " ".join(line.strip().lstrip("-*").strip() for line in text.splitlines() if line.strip())
+    sentence = re.split(r"(?<=[.!?;])\s", words, maxsplit=1)[0].rstrip(".;")
+    return sentence if len(sentence) <= limit else sentence[:limit - 1].rstrip(" ,;—") + "…"
+
+
+def story_situation(row, story, overview, body):
+    """What is up with a story, in one line the factory decides — and which of its two views a detail opens with:
+    `pipeline` while it runs or waits for a person, `story` before it starts and once it is done or set aside."""
+    state = story.get("state", "")
+    moving = next((m for m in overview["running"] if m["story"] == row["story"] and not m["interrupted"]), None)
+    if moving:
+        line = f"running {moving['stage']}" + (f" · {moving['part']}" if moving.get("part") else "")
+        line += f" · round {moving['round']}" if (moving.get("round") or 1) > 1 else ""
+        if moving.get("since"):
+            line += " · " + took_text((datetime.now(timezone.utc) - moving["since"]).total_seconds())
+        return dict(situation=line, view="pipeline")
+    if state == "superseded":
+        reason = next((s["text"] for s in sections_of(body, STORY_OWN_BLOCK)[0] if s["kind"] == "superseded"), "")
+        return dict(situation="superseded" + (f" — {first_sentence(reason)}" if reason else ""), view="story")
+    if row["done"]:
+        return dict(situation=f"delivered {stamp_text(row['delivered'])[:10]}" if row["delivered"] else "delivered",
+                    view="story")
+    detail = str(story.get("detail", "")).strip()
+    if state == "blocked":
+        return dict(situation="blocked" + (f" — {first_sentence(detail)}" if detail else ""), view="story")
+    if row["mark"] in ("look", "question", "stopped"):
+        line = row["state"] + (f" — {first_sentence(detail)}" if row["mark"] == "stopped" and detail else "")
+        return dict(situation=line, view="story" if state == "unreleased" else "pipeline")
+    started = row["passes"] > 0 or state in ("in-progress", "resumable")
+    line = row["state"] + ("" if started else " — not started")
+    queue = overview.get("queue", {}).get("ready", [])
+    if row["story"] in queue:
+        place = queue.index(row["story"])
+        line += " · next in line" if place == 0 else f" · {place + 1}. in line"
+    return dict(situation=line, view="pipeline" if started else "story")
+
+
+def epic_situation(epic, overview):
+    """What is up with an epic, in one line: how much is delivered, what runs, what waits for a person — and the
+    view its detail opens with: `stories` once one of them started, `epic` before."""
+    ids = {r["story"] for r in epic["rows"]}
+    parts = [f"{epic['delivered']} of {epic['total']} delivered" if epic["total"] else "no story yet"]
+    set_aside = sum(1 for r in epic["rows"] if r["state"] == "superseded")
+    parts += [f"{set_aside} superseded"] if set_aside else []
+    parts += [f"{m['story']} running {m['stage']}" for m in overview["running"] if m["story"] in ids and not m["interrupted"]]
+    waits = sum(1 for w in overview["waiting"] if w["story"] in ids and not w.get("draft"))
+    drafts = sum(1 for w in overview["waiting"] if w["story"] in ids and w.get("draft"))
+    parts += [f"{waits} wait{'s' if waits == 1 else ''} for you"] if waits else []
+    parts += [f"{drafts} draft{'' if drafts == 1 else 's'}"] if drafts else []
+    started = any(r["passes"] or r["done"] for r in epic["rows"])
+    return dict(situation=" · ".join(parts), view="stories" if started else "epic")
+
+
+def story_sections(body):
+    """A story's sections for its detail, its criteria's place among them, and why it is not built where it says."""
+    sections, at = sections_of(body, STORY_OWN_BLOCK)
+    return dict(sections=sections, criteria_at=at)
 
 
 def epic_description(body, front):
@@ -1974,16 +2078,51 @@ def epic_model(cwd, epics, runs, epic_id, live=False):
                 intent=epic.get("intent", ""), goal=epic.get("goal", ""), metric=epic.get("metric", ""),
                 domain_contact=epic.get("domain_contact", ""), discovery=epic.get("discovery", ""),
                 description=epic_description(body, front), mark=epic_mark(epic), rows=epic["rows"],
+                **dict(zip(("sections", "stories_at"), sections_of(body, EPIC_OWN_BLOCK))),
+                **epic_situation(epic, overview),
                 delivered=epic["delivered"], total=epic["total"], tokens=epic["tokens"], measured=epic["measured"],
                 seconds=epic["seconds"], journey=journey, next=overview["next"])
 
 
+def sections_text(sections, at, block, colour):
+    """A story's or an epic's sections as the terminal shows them, in the order given — the block of its own (the
+    criteria, the stories) where its section stood, else after them; why a story is not built painted as a wait."""
+    out = []
+    for index, one in enumerate(sections + [None]):
+        if index == (len(sections) if at is None else at):
+            out += block
+        if one is None:
+            break
+        heading = one["heading"] or "Text"
+        out += (section(paint(heading, "look", colour) if one["kind"] else heading, colour)
+                + paragraph_lines(one["text"], "    "))
+    return out
+
+
+def sections_md(sections, at, block):
+    """The same for a session: each section under its heading in bold, its Markdown as written."""
+    out = []
+    for index, one in enumerate(sections + [None]):
+        if index == (len(sections) if at is None else at):
+            out += block
+        if one is None:
+            break
+        heading = f"**{one['heading'] or 'Text'}**"
+        out += ["", f"⚠ {heading}" if one["kind"] else heading, "", one["text"]]
+    return out
+
+
 def paragraph_lines(text, indent):
     """Prose wrapped to the view's width, its paragraphs kept apart; a heading, a list item or a table row stands on
-    its own line as written."""
+    its own line as written, a line wrapped under a list item joined to it."""
     out = []
     for paragraph in text.split("\n\n"):
-        lines = paragraph.splitlines()
+        lines = []
+        for line in paragraph.splitlines():
+            if lines and line[:1].isspace() and line.strip() and not line.lstrip().startswith(("-", "*", "|", ">", "#")):
+                lines[-1] += " " + line.strip()
+            else:
+                lines.append(line)
         if any(l.lstrip().startswith(("#", "-", "*", "|", ">")) for l in lines):
             wrapped = [w for l in lines for w in (textwrap.wrap(l.strip(), view_width(), initial_indent=indent,
                                                                 subsequent_indent=indent + "  ") or [""])]
@@ -2024,15 +2163,15 @@ def render_epic_text(model, colour=False):
         ("Stories", epic_summary(model) if model["rows"] else "no story yet"), ("File", model["path"])) if value]
     width = max(len(label) for label, _v in facts)
     out = [""] + heading(title, colour, "═") + [""]
+    out += [f"  {model['situation']}", ""] if model.get("situation") else []
     out += [f"  {bold(label.ljust(width), colour)}   {value}" for label, value in facts]
-    if model["description"]:
-        out += [""] + paragraph_lines(model["description"], "  ")
     if model["rows"]:
-        out += section("Stories — newest first", colour)
-        out += table_text(["story", "state", "delivered (UTC)", "title"], epic_story_cells(model, MARKS_TEXT),
-                          indent="    ", marks=[r["mark"] for r in model["rows"]], colour=colour)
+        stories = section("Stories — newest first", colour) + table_text(
+            ["story", "state", "delivered (UTC)", "title"], epic_story_cells(model, MARKS_TEXT),
+            indent="    ", marks=[r["mark"] for r in model["rows"]], colour=colour)
     else:
-        out += ["", f"  no story yet — {commands('/factory-backlog stories ' + model['epic'], colour)}"]
+        stories = ["", f"  no story yet — {commands('/factory-backlog stories ' + model['epic'], colour)}"]
+    out += sections_text(model["sections"], model["stories_at"], stories, colour)
     if model["journey"]:
         out += ["", f"  {dim('journey', colour)}   {model['journey']['text']} — "
                     f"{commands(model['journey']['action']['skill'], colour)}"]
@@ -2041,19 +2180,18 @@ def render_epic_text(model, colour=False):
 
 def render_epic_md(model):
     title = f"{model['epic']} — {model['title']}" if model["title"] else model["epic"]
-    out = [f"**{title}**", ""]
+    out = [f"**{title}**", ""] + ([f"*{model['situation']}*", ""] if model.get("situation") else [])
     out += [f"- **{label}:** {value}" for label, value in (
         ("Intent", model["intent"]), ("Goal", model["goal"]), ("Outcome", f"`{model['metric']}`" if model["metric"] else ""),
         ("Domain contact", model["domain_contact"]), ("Discovery", model["discovery"]), ("Created", model["created"]),
         ("Stories", epic_summary(model) if model["rows"] else "no story yet"), ("File", f"`{model['path']}`" if model["path"] else ""))
         if value]
-    if model["description"]:
-        out += ["", model["description"]]
     if model["rows"]:
-        out += ["", "**Stories** — newest first", ""]
-        out += table_md(["story", "state", "delivered (UTC)", "title"], epic_story_cells(model, MARKS_MD))
+        stories = ["", "**Stories** — newest first", ""] + table_md(["story", "state", "delivered (UTC)", "title"],
+                                                                     epic_story_cells(model, MARKS_MD))
     else:
-        out += ["", f"No story yet — `/factory-backlog stories {model['epic']}`."]
+        stories = ["", f"No story yet — `/factory-backlog stories {model['epic']}`."]
+    out += sections_md(model["sections"], model["stories_at"], stories)
     if model["journey"]:
         out += ["", f"*journey* — {model['journey']['text']} → `{model['journey']['action']['skill']}`"]
     return "\n".join(out + ["", next_md(model)])
@@ -2170,6 +2308,8 @@ def render_story_text(model, colour=False):
     title, facts = story_header(model)
     width = max(len(label) for label, _v in facts)
     out = [""] + heading(title, colour, "═") + [""]
+    if model.get("situation"):
+        out += [f"  {paint(model['situation'], row['mark'], colour)}", ""]
     for label, value in facts:
         if label == "State":
             value = paint(f"{MARKS_TEXT[row['mark']]} {value}", row["mark"], colour)
@@ -2177,10 +2317,13 @@ def render_story_text(model, colour=False):
     for w in model["waiting"]:
         out += ["", "  " + paint(f"{MARKS_TEXT[w['mark']]} {w['what']}", w["mark"], colour)]
         out += how_lines(w["action"], colour, "      ")
-    if model.get("description"):
-        out += section("Story", colour) + paragraph_lines(model["description"], "    ")
-    if model.get("scenarios"):
-        out += section("Criteria", colour) + scenario_lines(model)[1 if model["scenarios"][0]["rule"] else 0:]
+    criteria = (section("Criteria", colour) + scenario_lines(model)[1 if model["scenarios"][0]["rule"] else 0:]
+                if model.get("scenarios") else [])
+    if "sections" in model:
+        out += sections_text(model["sections"], model["criteria_at"], criteria, colour)
+    else:
+        out += (section("Story", colour) + paragraph_lines(model["description"], "    ")
+                if model.get("description") else []) + criteria
     if model["passes"]:
         out += section("Passes", colour)
         out += table_text(["pass", "started (UTC)", "ended (UTC)", "worked", "waited before", "tokens"],
@@ -2212,24 +2355,24 @@ def denial_rows(model):
 
 def render_story_md(model):
     title, facts = story_header(model)
-    out = [f"**{title}**", ""]
+    out = [f"**{title}**", ""] + ([f"*{model['situation']}*", ""] if model.get("situation") else [])
     out += [f"- **{label}:** " + (f"{MARKS_MD[model['row']['mark']]} " if label == "State" else "") + value
             for label, value in facts]
     for w in model["waiting"]:
         out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {how_md(w['action'])}"]
-    if model.get("description"):
-        out += ["", "**Story**", "", model["description"]]
+    criteria = []
     if model.get("scenarios"):
-        out += ["", "**Criteria**"]
+        criteria += ["", "**Criteria**"]
         rule = None
         for scenario in model["scenarios"]:
             if scenario["rule"] and scenario["rule"] != rule:
-                out += ["", f"*Rule: {scenario['rule']}*"]
+                criteria += ["", f"*Rule: {scenario['rule']}*"]
             rule = scenario["rule"]
-            out += ["", f"- **{scenario['title']}**" + (" (happy path)" if scenario["happy"] else "") + f" `{scenario['key']}`"]
-            out += [f"  - {step['word']} {step['text']}" for step in scenario["steps"]]
+            criteria += ["", f"- **{scenario['title']}**" + (" (happy path)" if scenario["happy"] else "") + f" `{scenario['key']}`"]
+            criteria += [f"  - {step['word']} {step['text']}" for step in scenario["steps"]]
             if scenario["text"]:
-                out.append(f"  - {scenario['text']}")
+                criteria.append(f"  - {scenario['text']}")
+    out += sections_md(model["sections"], model["criteria_at"], criteria)
     if model["passes"]:
         out += ["", "**Passes**", ""]
         out += table_md(["pass", "started (UTC)", "ended (UTC)", "worked", "waited before", "tokens"],

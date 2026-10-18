@@ -131,6 +131,13 @@ export type StoryView = {
   path?: string
   description?: string
   scenarios?: Scenario[]
+  // dca-factory 0.87.2: every section in the factory's order, where the criteria stand among them, one line of what
+  // is up, and the view the detail opens with
+  sections?: Section[]
+  criteria_at?: number | null
+  superseded?: boolean
+  situation?: string
+  view?: 'story' | 'pipeline'
   context: string
   criteria: number
   accepted_by: string
@@ -156,6 +163,10 @@ export type Cockpit = {
 }
 
 // One criterion as a person reads it: its title, the rule it serves, its steps — or the line form's text.
+// One `## ` section of a story's or an epic's file as the factory gives it (dca-factory 0.87.2): its heading (empty
+// for the prose before the first), its Markdown, and a kind where the factory puts it first (`superseded`).
+export type Section = { heading: string; text: string; kind: string }
+
 export type Scenario = { key: string; title: string; rule: string; happy: boolean; steps: { word: string; text: string }[]; text: string }
 
 // What `factory.sh status --epic <id> --format json` prints (dca-factory 0.87.0): one epic with its fields, its own
@@ -171,6 +182,11 @@ export type EpicView = {
   domain_contact: string
   discovery: string
   description: string
+  // dca-factory 0.87.2: the sections, where the stories stand among them, what is up, the view to open with
+  sections?: Section[]
+  stories_at?: number | null
+  situation?: string
+  view?: 'epic' | 'stories'
   rows: Row[]
   delivered: number
   total: number
@@ -192,8 +208,8 @@ export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'deli
 
 // `back`: where the view returns to — a topic that opened an epic, a story that opened a hand-over.
 export type Detail =
-  | { kind: 'story'; id: string }
-  | { kind: 'epic'; epic: string; back?: Detail | null }
+  | { kind: 'story'; id: string; pane?: 'story' | 'pipeline' }
+  | { kind: 'epic'; epic: string; back?: Detail | null; pane?: 'epic' | 'stories' }
   | { kind: 'topic'; topic: string; back?: Detail | null }
   | { kind: 'file'; path: string; title: string; back: Detail | null }
   | { kind: 'output'; story: string; process: string; back: Detail | null }

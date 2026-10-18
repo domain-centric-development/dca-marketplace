@@ -373,9 +373,9 @@ async function showTab($: EngineInterface, id: Tab): Promise<void> {
   await update($, tab, () => id)
 }
 
-async function openStory($: EngineInterface, id: string): Promise<void> {
+async function openStory($: EngineInterface, id: string, pane?: 'story' | 'pipeline'): Promise<void> {
   await update($, storyView, () => null)
-  await update($, detail, () => ({ kind: 'story', id }) as Detail)
+  await update($, detail, () => ({ kind: 'story', id, ...(pane ? { pane } : {}) }) as Detail)
   const now = await read($, cockpit)
   if (now) {
     const view = await loadStory($, now.root, id).catch(() => null)
@@ -689,7 +689,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           </Text>
         </Box>,
         ui.actions([
-          ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back)), { hotkey: 'b' }),
+          ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id, open.back.pane) : update($, detail, () => open.back)), { hotkey: 'b' }),
         ]),
         ui.framed(ui.log(lines.slice(-Math.max(10, rows - 12)), 'This process wrote nothing.')),
       ],
@@ -709,7 +709,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           </Text>
         </Box>,
         ui.actions([
-          ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id) : update($, detail, () => open.back)), { hotkey: 'b' }),
+          ui.button('back', '← back', () => void (open.back?.kind === 'story' ? openStory($, open.back.id, open.back.pane) : update($, detail, () => open.back)), { hotkey: 'b' }),
           ui.button('edit', '✎ edit', () => void editFile($, open.path), { hotkey: 'e' }),
         ]),
         ...(record?.kind === 'acceptance' ? await specRows(record) : []),
@@ -739,21 +739,41 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const waits = press !== null
     const shown = events.filter(event => isHistory(event) && shownProcess(event.stage)).slice(-Math.max(4, rows - 34))
     const mark = row?.mark ?? 'none'
-    return page(
-      [
-        <Box gap={1}>
-          <Text bold color={MARK_COLOR[mark]}>
-            {MARK_GLYPH[mark]}
-          </Text>
-          <Text bold color={C.bright}>
-            {open.id} — {row?.title ?? ''}
-          </Text>
-        </Box>,
+    // which view opens: the person's press, else the factory's choice, else — an older pipeline — the pipeline while
+    // it runs or waits for the person
+    const pane = open.pane ?? view?.view ?? (mark === 'running' || waits ? 'pipeline' : 'story')
+    const showPane = (next: 'story' | 'pipeline') => void update($, detail, () => ({ kind: 'story', id: open.id, pane: next }) as Detail)
+    const criteria = view?.scenarios
+      ? [ui.section('Criteria', `${view.scenarios.length} scenario${view.scenarios.length === 1 ? '' : 's'}`), ui.scenarios(view.scenarios)]
+      : []
+    // what the story is and what it must do, in its own words — the factory's sections in its order, the criteria
+    // where they stand; a pipeline older than the sections gives its words and criteria alone
+    const storyPart = view?.sections
+      ? ui.sections(view.sections, view.criteria_at, criteria)
+      : [...(view?.description ? [ui.section('Story'), ui.prose(view.description)] : []), ...criteria]
+    const storyHead = [
+      <Box gap={1}>
+        <Text bold color={MARK_COLOR[mark]}>
+          {MARK_GLYPH[mark]}
+        </Text>
+        <Text bold color={C.bright}>
+          {open.id} — {row?.title ?? ''}
+        </Text>
+      </Box>,
+      ...(view?.situation ? [ui.situation(view.situation, MARK_COLOR[mark])] : []),
+      ui.fields(
+        [
+          { label: 'state', text: row?.state ?? '', color: MARK_COLOR[mark], bold: true },
+          { label: 'epic', text: row?.epic ?? '' },
+          view?.context && { label: 'context', text: view.context },
+        ],
+        2,
+      ),
+    ]
+    // how the pipeline took it: the factory's numbers, passes, history, hand-overs, outputs and decisions
+    const pipelinePart = () => [
         ui.fields(
           [
-            { label: 'state', text: row?.state ?? '', color: MARK_COLOR[mark], bold: true },
-            { label: 'epic', text: row?.epic ?? '' },
-            view?.context && { label: 'context', text: view.context },
             view && view.criteria > 0 && !view.scenarios && { label: 'criteria', text: `${view.criteria} acceptance criteria` },
             row?.started && { label: 'started', text: moment(row.started) },
             row?.delivered && { label: 'delivered', text: moment(row.delivered), color: C.done },
@@ -765,19 +785,6 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ],
           2,
         ),
-        ui.actions([
-          ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' }),
-          row && !row.done && !isRunning() && ui.button('run', '▶ Run (worker)', () => void runWorker($, `run ${open.id}`, ['run', '--story', open.id]), { hotkey: 'r', isPrimary: true }),
-          row && !row.done && ui.button('session', 'run in this session', () => send($, `/factory-run ${open.id}`), { hotkey: 'e', byClaude: true }),
-          press && ui.button('answer', press.label, () => send($, press.command), { hotkey: 'a', isPrimary: true, byClaude: true }),
-          row?.done && ui.button('verify', 'verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v', byClaude: true }),
-          view?.path ? ui.button('open-story', 'open story.md', () => void openFile($, `${now.root}/${view.path}`, `${open.id} / story.md`, open), { hotkey: 'o' }) : null,
-        ]),
-        // what the story is and what it must do, in its own words — before how the pipeline took it
-        ...(view?.description ? [ui.section('Story'), ui.prose(view.description)] : []),
-        ...(view?.scenarios
-          ? [ui.section('Criteria', `${view.scenarios.length} scenario${view.scenarios.length === 1 ? '' : 's'}`), ui.scenarios(view.scenarios)]
-          : []),
         ui.section('Pipeline'),
         ui.chips(stagesOf(events).filter(run => shownProcess(run.stage)), at),
         ui.section('Time per stage', "the factory's own numbers"),
@@ -891,9 +898,26 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           'No stage has run yet.',
         ),
         ui.section('Decisions'),
-        recordTable(records, open),
+        recordTable(records, { ...open, pane }),
+      ]
+    return page(
+      [
+        ...storyHead,
+        ui.actions([
+          ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' }),
+          row && !row.done && !isRunning() && ui.button('run', '▶ Run (worker)', () => void runWorker($, `run ${open.id}`, ['run', '--story', open.id]), { hotkey: 'r', isPrimary: true }),
+          row && !row.done && ui.button('session', 'run in this session', () => send($, `/factory-run ${open.id}`), { hotkey: 'e', byClaude: true }),
+          press && ui.button('answer', press.label, () => send($, press.command), { hotkey: 'a', isPrimary: true, byClaude: true }),
+          row?.done && ui.button('verify', 'verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v', byClaude: true }),
+          view?.path ? ui.button('open-story', 'open story.md', () => void openFile($, `${now.root}/${view.path}`, `${open.id} / story.md`, { ...open, pane }), { hotkey: 'o' }) : null,
+        ]),
+        ui.views([
+          { key: 'view-story', label: 'Story', hotkey: 's', isOpen: pane === 'story', onPress: () => showPane('story') },
+          { key: 'view-pipeline', label: 'Pipeline', hotkey: 'p', isOpen: pane === 'pipeline', onPress: () => showPane('pipeline') },
+        ]),
+        ...(pane === 'story' ? storyPart : pipelinePart()),
       ],
-      `b back${row && !row.done ? ' · r run · e in session' : ''}${waits ? ' · a answer' : ''}${view?.path ? ' · o open story.md' : ''}`,
+      `b back · s story · p pipeline${row && !row.done ? ' · r run · e in session' : ''}${waits ? ' · a answer' : ''}${view?.path ? ' · o open story.md' : ''}`,
     )
   }
 
@@ -979,10 +1003,17 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   )
   // One epic: what it is for — intent, goal, outcome, domain contact — its own text, its stories newest first as the
   // factory orders them, and its file. The factory's epic view where the pipeline has one; the status's fields else.
-  const epicBody = (epic: Epic, view: EpicView | null) => {
+  const epicBody = (epic: Epic, view: EpicView | null, at: Extract<Detail, { kind: 'epic' }>) => {
     const cells = epicCells(epic)
     const drafts = cells.draftRows
     const path = view?.path || epic.path
+    // which view opens: the person's press, else the factory's choice, else — an older pipeline — the stories
+    const pane = at.pane ?? view?.view ?? 'stories'
+    const showPane = (next: 'epic' | 'stories') => void update($, detail, () => ({ ...at, pane: next }) as Detail)
+    const stories = [
+      ui.section('Stories', 'newest first'),
+      ui.table(storyColumns, epic.rows.map(story), 'no stories yet — ✦ suggest stories: Claude drafts the first, you release them'),
+    ]
     return (
       <Box flexDirection="column">
         {ui.card(
@@ -1011,9 +1042,18 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
           ],
         )}
-        {view?.description ? ui.prose(view.description) : null}
-        {ui.section('Stories', 'newest first')}
-        {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — ✦ suggest stories: Claude drafts the first, you release them')}
+        {view?.situation ? ui.situation(view.situation, cells.isDone ? C.done : C.text) : null}
+        {ui.views([
+          { key: 'view-epic', label: 'Epic', hotkey: 'i', isOpen: pane === 'epic', onPress: () => showPane('epic') },
+          { key: 'view-stories', label: 'Stories', hotkey: 's', isOpen: pane === 'stories', onPress: () => showPane('stories') },
+        ])}
+        {pane === 'stories'
+          ? stories
+          : view?.sections
+            ? ui.sections(view.sections, view.stories_at, [])
+            : view?.description
+              ? ui.prose(view.description)
+              : null}
       </Box>
     )
   }
@@ -1040,8 +1080,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const stored = await read($, epicView)
     const view = stored?.epic === open.epic ? stored : null
     return page(
-      [back(open.back), epic ? epicBody(epic, view) : <Text color={C.muted}>No such epic.</Text>],
-      'b back · o open epic.md · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it',
+      [back(open.back), epic ? epicBody(epic, view, open) : <Text color={C.muted}>No such epic.</Text>],
+      'b back · i epic · s stories · o open epic.md · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it',
     )
   }
 

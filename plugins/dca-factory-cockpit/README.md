@@ -17,8 +17,13 @@ factory works the same without it, in Claude Code, Codex or OpenCode.
 | 4 Decide | open questions and acceptances, answered records as Markdown; an open record with its options as choices; a story waiting for its merge, with what to do; other factories' claims — who, how long, a stale or orphaned one or an id collision with its release command; the judge's open findings, each in plain words first, then who saw it, the reviewer's defect and the fix | `/factory-decisions <story>`, `/factory-decisions <story> <record>: answer <option \| your words>` (✦ one button per option, the recommended one marked; accept or correct an acceptance); a finding opens its `findings.md` or goes to `/factory-backlog` (✦ to backlog — the skill decides what it becomes). Taking a claim away stays a command for a terminal — no button |
 | 5 Delivered | delivered stories, the newest delivery first, epics with their outcome events, unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
 
-A story opens with what it is: its own words (`## Story`) and its criteria as readable scenarios — the rule each
-serves, its title, its Given / When / Then — and a button that opens its `story.md`; then its pipeline, the factory's numbers per stage — a shared builder's and verifier's stages beneath
+A story opens with a short head — its title, its state and the one line the factory says about it (`situation`:
+what runs, what waits, why it is superseded, when it was delivered) — and two views beside each other, `s` Story and
+`p` Pipeline; the factory names the one to open with (`view`: the pipeline while the story runs or waits for the
+person, the story before it starts and once it is done or set aside), a press switches. Story is every section of
+its `story.md` in the factory's order — why it is not built framed first, then its own words, its criteria as
+compact scenarios (the rule each serves, its title, its Given / When / Then) where they stand, its changed
+expectations, assumptions and notes — and a button that opens its `story.md`. Pipeline is the factory's numbers per stage — a shared builder's and verifier's stages beneath
 them, with their share of the cost, their tokens by class (input, output, cache write, cache read), and the calls each was denied (a headless stage has nobody to grant one) — its passes, its history by day, its hand-overs, the output of every process it ran
 (what each read, edited and ran, through `factory.sh follow --process`) and its decision records. A reviewer
 appears there only for a perspective the profile asks for now — the status names them (`perspectives`); one an
@@ -33,8 +38,10 @@ project whose pipeline is older than these views gets a line saying so and a but
 
 Every order and every selection it shows is the factory's: the epics and an epic's stories newest first, the
 delivered stories newest delivery first (`delivered_order`), what waits and what comes next — the cockpit draws them
-as given. A story's and an epic's details are drawn from the same blocks (labelled fields, the item's own text,
-its criteria or its stories, the button that opens its file), the same in every tab that opens one.
+as given. A story's and an epic's details are drawn from the same blocks (the line of what is up, labelled fields, the view
+switch, the item's sections, its criteria or its stories, the button that opens its file), the same in every tab
+that opens one. An epic opens the same way: its line, then `i` Epic (every section of its `epic.md`) beside `s`
+Stories (newest first), the view the factory names first.
 
 ## How it acts
 

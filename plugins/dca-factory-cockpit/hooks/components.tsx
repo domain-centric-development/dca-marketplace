@@ -1,6 +1,6 @@
 import type { BoxProps, ButtonProps, CodeProps, ElementConstructor, InputProps, MarkdownProps, RenderElement, SvgProps, TextProps } from 'claude-code'
 
-import type { Scenario, StageRun } from '../types'
+import type { Scenario, Section, StageRun } from '../types'
 import { displayWidth, duration, filledCells, fit, rounds, short, tokens, wrapWords } from './parse'
 
 // The cockpit's building blocks. Every view is drawn from these, so a change to a table, a link, a chip or the
@@ -384,7 +384,16 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
   // text colour, which the painted background would swallow.
   const doc = (text: string) => {
     let isCode = false
-    return text.split('\n').map(raw => {
+    // a line wrapped under a list item belongs to it: the surface wraps the joined line to the pane's width
+    let isFenced = false
+    const lines = text.split('\n').reduce<string[]>((kept, raw) => {
+      const last = kept.length - 1
+      if (raw.startsWith('```')) isFenced = !isFenced
+      if (!isFenced && last >= 0 && /^\s*[-*]\s/.test(kept[last] ?? '') && /^\s+\S/.test(raw) && !/^\s*([-*|>#]|```)/.test(raw)) kept[last] = `${kept[last]} ${raw.trim()}`
+      else kept.push(raw)
+      return kept
+    }, [])
+    return lines.map(raw => {
       if (raw.startsWith('```')) {
         isCode = !isCode
         return <Text color={C.line}>{raw}</Text>
@@ -406,6 +415,18 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       return <Text color={C.text}>{raw.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1') || ' '}</Text>
     })
   }
+
+  // One framed switch: a phase of the cycle, a view of a detail — the open one in teal, a mark beside it.
+  const step = (phase: Phase) => (
+    <Box borderStyle="round" borderColor={phase.isOpen ? C.accent : C.line} paddingX={1} gap={1}>
+      <Button key={phase.key} label={phase.label} hotkey={phase.hotkey} plain variant={phase.isOpen ? 'primary' : 'secondary'} onPress={phase.onPress} />
+      {phase.mark && (
+        <Text bold color={phase.mark.color}>
+          {phase.mark.text}
+        </Text>
+      )}
+    </Box>
+  )
 
   return {
     progress,
@@ -538,8 +559,8 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       </Box>
     ),
 
-    // Criteria as a person reads them: the rule they serve as a kicker where it changes, each scenario's title with
-    // its key beside it, its steps below — the step word in the accent. The line form shows its text.
+    // Criteria as a person reads them, compact: the rule they serve as a kicker where it changes, each scenario's
+    // title, its steps below — the step word in the accent. The line form shows its text; the keys stay in the file.
     scenarios: (list: Scenario[], empty = 'No criterion.') => {
       if (list.length === 0)
         return (
@@ -561,7 +582,6 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
                   {scenario.title}
                 </Text>
                 {scenario.happy && <Text color={C.done}>happy path</Text>}
-                <Text color={C.muted}>{scenario.key}</Text>
               </Box>
               {scenario.steps.map(step => (
                 <Box gap={1} paddingLeft={2}>
@@ -650,16 +670,6 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       foundation: Phase[],
       cycle: Phase[],
     ) => {
-      const step = (phase: Phase) => (
-        <Box borderStyle="round" borderColor={phase.isOpen ? C.accent : C.line} paddingX={1} gap={1}>
-          <Button key={phase.key} label={phase.label} hotkey={phase.hotkey} plain variant={phase.isOpen ? 'primary' : 'secondary'} onPress={phase.onPress} />
-          {phase.mark && (
-            <Text bold color={phase.mark.color}>
-              {phase.mark.text}
-            </Text>
-          )}
-        </Box>
-      )
       return (
         <Box flexWrap="wrap" alignItems="center" columnGap={1} rowGap={1}>
           <Text color={C.accent}>ONCE</Text>
@@ -669,6 +679,54 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
           {cycle.flatMap((phase, index) => [...(index > 0 ? [<Text color={C.line}>›</Text>] : []), step(phase)])}
         </Box>
       )
+    },
+
+    // A detail's views — the item's own words beside what the factory did with it — as framed switches, the open one
+    // in teal, the same frame as a phase. Which one opens first is the factory's (`view`); a press is the person's.
+    views: (options: Phase[]) => (
+      <Box flexWrap="wrap" alignItems="center" columnGap={1} rowGap={1} marginTop={1}>
+        <Text color={C.accent}>VIEW</Text>
+        {options.map(step)}
+      </Box>
+    ),
+
+    // What is up with a story or an epic, in the one line the factory decided — under the title, always visible.
+    situation: (text: string, color: string | undefined) => (
+      <Box marginTop={1}>
+        <Text bold color={color ?? C.text}>
+          {text}
+        </Text>
+      </Box>
+    ),
+
+    // A story's or an epic's sections in the factory's order, each under its heading as prose; a section the
+    // factory puts first with a kind (why a story is not built) framed in the wait colour; the block of its own —
+    // the criteria, the stories — where its section stood, else after them.
+    sections: (list: Section[], at: number | null | undefined, block: RenderElement[]) => {
+      const place = at ?? list.length
+      const one = (section: Section) =>
+        section.kind ? (
+          <Box borderStyle="round" borderColor={C.wait} paddingX={1} flexDirection="column" marginTop={1}>
+            <Text bold color={C.wait}>
+              {(section.heading || section.kind).toUpperCase()}
+            </Text>
+            {Markdown && !isGrid ? <Markdown text={section.text} /> : doc(section.text)}
+          </Box>
+        ) : (
+          <Box flexDirection="column">
+            {section.heading ? (
+              <Box marginTop={1}>
+                <Text bold color={C.accent}>
+                  {section.heading.toUpperCase()}
+                </Text>
+              </Box>
+            ) : null}
+            <Box flexDirection="column" marginTop={1}>
+              {Markdown && !isGrid ? <Markdown text={section.text} /> : doc(section.text)}
+            </Box>
+          </Box>
+        )
+      return [...list.slice(0, place).map(one), ...block, ...list.slice(place).map(one)]
     },
 
     // The keys that work now, at the foot of every view.

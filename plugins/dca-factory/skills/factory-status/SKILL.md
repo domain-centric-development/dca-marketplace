@@ -31,11 +31,13 @@ place and the finding in plain words first. They block nothing; a person closes 
    newer pipeline on this machine. Asked for more, add one option:
    - `--all` — every story by epic (the newest epic first, its newest story first) with its state,
      stage, passes and times, and the tokens per story and epic;
-   - `--story <story>` — one story: its own words and its criteria as scenarios, its passes (a
+   - `--story <story>` — one story: one line of what is up, every section of its file in the file's
+     order (why it is not built first, for a superseded story) with its criteria as scenarios where
+     they stand, its passes (a
      correction after acceptance is a pass of its own), its stages with the time they worked and their
      tokens, its decisions;
-   - `--epic <epic>` — one epic: intent, goal, outcome event, domain contact, its own text, its
-     stories with their state, newest first.
+   - `--epic <epic>` — one epic: one line of what is up, intent, goal, outcome event, domain contact,
+     every section of its file, its stories with their state, newest first.
 
    Name these options under the view when the person may want more; run one only when asked. An
    argument names it: `/factory-status all` is `--all`; `/factory-status <id>` is `--epic <id>` where
