@@ -380,7 +380,8 @@ What `/factory-run <argument>` means is the gate's to say, not yours: run
 **One worker per checkout.** `--stage-start` takes the checkout for this session and exits 3 when
 another worker holds it — a second session, or a runner. Then stop, say who holds it (the gate prints
 it; `/factory-status` too), and end the turn; never work around it. A holder that shows no sign of
-life for two hours (`FACTORY_STALE_AFTER`) is taken as stopped, and the next worker takes over.
+life for two hours (`FACTORY_STALE_AFTER`) is taken as stopped, and the next worker takes over — a
+runner's claim (`runner:<host>:<pid>`) at once when that process no longer runs on this host.
 
 **Listening on the backlog.** A session that should pick up new stories and answered decisions
 by itself in its own context runs this under a scheduler: in Claude Code `/loop /factory-run` (it

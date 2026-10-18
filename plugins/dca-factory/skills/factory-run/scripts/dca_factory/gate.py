@@ -85,9 +85,9 @@ from .contract import (
     runs_top,
     ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
-    factory_home, file_digest, find_story, findings_cells, findings_path, findings_rows, GateError, git, git_blob, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
+    append_findings, factory_home, file_digest, find_story, findings_cells, findings_path, findings_rows, GateError, git, git_blob, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
     INSTRUCTION_FILES, is_delivered, JOURNEY_ORDER, order_for, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, needs_human_ids,
-    NOTHING, place, PLAIN_COLUMN, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
+    NOTHING, open_findings, place, PLAIN_COLUMN, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
     record_path, records_of, resolve_profile, resume_stage, section_of, SELECTOR, set_places, SHARED_WINDOWS, shown,
     STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, stamp_applied, story_digest, story_files, story_folder,
     story_id_of, story_kind, TECH_HEADINGS, TESTED_KINDS, unknown_profile_keys, VERSION)
@@ -101,7 +101,7 @@ from .spec import (
 from .state import (
     claim_config_here, PUBLISHED, remote_main,
     ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, backlog_digest,
-    current_stage_files, git_tree, is_acceptance, journal_append, last_ended, listed_files, MODEL_PROCESSES,
+    current_stage_files, flaky_tests, git_tree, is_acceptance, journal_append, last_ended, listed_files, MODEL_PROCESSES,
     NOT_OBSERVED, observe_writes, OWNED_CHANGED, owned_changes, owned_end, PRODUCT_HEADINGS, record_base,
     record_changes, record_owned, run_owned, snapshot_reason, stage_open, STORY_DIGEST, tree_changes, verdict_in,
     answer_sentence, window_open, write_answered, write_mark, write_story_fields)
@@ -301,7 +301,7 @@ def check_task(result, story_path, front, body):
                           + (f"; closes {', '.join(closes)}" if closes else ""))
 
 
-def check_task_suites(result, profile, cwd):
+def check_task_suites(result, profile, cwd, owner=None):
     """At a task's build and tidy gates: every test command the profile declares, run whole — nothing a test was
     written for, so everything the stories before delivered has to hold."""
     keys = [key for key in test_command_keys(profile) if profile.get(key)]
@@ -315,8 +315,9 @@ def check_task_suites(result, profile, cwd):
             continue
         seen.add(profile[key])
         before = len(result.entries)
-        run_test_command(result, cwd, profile, key, profile[key], True, True)
-        result.entries[before:] = [(state, "suite", message) for state, _check, message in result.entries[before:]]
+        run_test_command(result, cwd, profile, key, profile[key], True, True, owner=owner)
+        result.entries[before:] = [(state, "suite" if check != "flaky" else check, message)
+                                   for state, check, message in result.entries[before:]]
 
 
 def close_findings(result, front):
@@ -2919,9 +2920,11 @@ def red(result, check, message, must, strict):
         result.fail(check, message)
 
 
-def run_test_command(result, cwd, profile, key, command, required, strict=False):
-    """A test command passes only when its reports show it executed tests and none failed."""
+def run_test_command(result, cwd, profile, key, command, required, strict=False, owner=None):
+    """A test command passes only when its reports show it executed tests and none failed. With `owner` (a story's
+    whole suite) a red test outside the story runs again alone once (`retry_outside`)."""
     code, output, ran, reused = recorded_run(command, cwd, profile, with_reports=True)
+    code, ran = retry_outside(result, cwd, profile, command, code, output, ran, owner)
     judge_test_run(result, profile, key, command, code, output, ran, required, strict, reused=reused)
 
 
@@ -2942,6 +2945,118 @@ def judge_test_run(result, profile, key, command, code, output, ran, required, s
         message = (f"`{command}` ({key}) exited 0, but no report written by this run shows an "
                    f"executed test — a runner that matched nothing exits 0 too")
         (result.fail if required else result.note if strict else result.skip)("test", message)
+
+
+#: WP-113: a whole suite red in a test the story did not write, change or name is run again for that test alone, once.
+#: Green alone, the red was the suite's load or order, not this story: the gate passes with `flaky <test>` noted. More
+#: red tests than this outside the story is a broken suite, not a flake — nothing is run again.
+FLAKY_LIMIT = 3
+
+
+class SuiteOwner(typing.NamedTuple):
+    """Whose change a whole suite run judges: the story's run folder, id and criterion-to-test table."""
+    runs: str
+    story_id: str
+    mapping: dict
+
+
+def story_test_files(cwd, owner):
+    """The test files the story wrote or changed — not in its baseline, or another blob than there — or None without a
+    baseline: then which tests are the story's cannot be told, and none is run again."""
+    path = os.path.join(evidence_dir(owner.runs, owner.story_id), TESTS_BASELINE)
+    if not os.path.isfile(path):
+        return None
+    before = {}
+    for line in read_text(path).splitlines():
+        if "  " in line:
+            blob, rel = line.split("  ", 1)
+            before[rel] = blob
+    files = test_files(cwd)
+    if not files:
+        return []
+    try:
+        completed = subprocess.run(["git", "hash-object", "--stdin-paths"], cwd=cwd, input="\n".join(files) + "\n",
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    blobs = completed.stdout.split()
+    if completed.returncode or len(blobs) != len(files):
+        return None
+    return [rel for rel, blob in zip(files, blobs) if before.get(rel) != blob]
+
+
+def story_owns(cwd, owner, own_files, cls, method):
+    """Whether a reported test is the story's: named in its table, or a class of a test file it wrote or changed —
+    by the file's name or by a declaration in it. When in doubt it is the story's: its red proof must stay exact."""
+    for selectors in (owner.mapping or {}).values():
+        for selector in selectors:
+            match = SELECTOR.match(selector)
+            if match and match.group(2) == method and (
+                    match.group(1) == cls or cls.endswith("." + match.group(1)) or match.group(1).endswith("." + cls)):
+                return True
+    names = [n for n in re.split(r"[.$+/:]", cls) if n][-2:]
+    for rel in own_files:
+        stem = os.path.splitext(os.path.basename(rel))[0]
+        if stem in names:
+            return True
+        text = read_text(os.path.join(cwd, rel)) if os.path.isfile(os.path.join(cwd, rel)) else ""
+        if names and re.search(rf"\b{re.escape(names[-1])}\b", text):
+            return True
+    return False
+
+
+def alone_invocation(cwd, profile, command, cls, method):
+    """The profile's way to run one test of `command` — `<command> <filterFlag> "<filterFormat>"` — or None where the
+    profile names none (no filter, or the exit code as the only evidence): then nothing is run again."""
+    if str(profile.get("testEvidence", "")).strip() == "exit-code":
+        return None
+    flag, fmt = profile.get("filterFlag", ""), profile.get("filterFormat", "")
+    if not flag and not fmt:
+        return None
+    fmt = fmt or "{class}.{method}"
+    test_path = None
+    if "{file}" in fmt:
+        located = locate_selector(cwd, f"{cls}#{method}") if SELECTOR.match(f"{cls}#{method}") else None
+        if not located:
+            return None
+        test_path = os.path.relpath(located, cwd).replace(os.sep, "/")
+    return f'{command} {flag} "{fill(fmt, cls, method, test_path)}"'.strip()
+
+
+def retry_outside(result, cwd, profile, command, code, output, ran, owner):
+    """(code, ran) after the red tests outside the story ran again, each alone and once (WP-113).
+
+    Only when every red test is outside the story and the profile can select one: a red test of the story's own stands
+    as it is. Green alone, the test is noted `flaky` — the report, the journal (`flaky=`) and the status carry it — and
+    the run counts as green; red again, the run stays red and the report names the test as outside the story."""
+    if owner is None:
+        return code, ran
+    failed = sorted(key for key, outcome in ran.items() if outcome == "failed")
+    if not failed or len(failed) > FLAKY_LIMIT:
+        return code, ran
+    own_files = story_test_files(cwd, owner)
+    if own_files is None or any(story_owns(cwd, owner, own_files, cls, method) for cls, method in failed):
+        return code, ran
+    flaky, still = [], []
+    for cls, method in failed:
+        alone = alone_invocation(cwd, profile, command, cls, method)
+        if not alone:
+            return code, ran
+        _code, _output, ran_alone, _reused = recorded_run(alone, cwd, profile, with_reports=True)
+        outcome, _how = outcome_for(ran_alone, cls, method)
+        (flaky if outcome == "passed" else still).append((cls, method, alone))
+    if still:
+        result.note("suite", f"{', '.join(f'{c}#{m}' for c, m, _a in still)} — outside this story's change (not "
+                             f"written, changed or named in its table), red again on its own run "
+                             f"(`{still[0][2]}`): the suite is red, not this story's code alone")
+        return code, ran
+    ran = dict(ran)
+    for cls, method, alone in flaky:
+        ran[(cls, method)] = "passed"
+        result.flaky.append(f"{cls}#{method}")
+        result.note("flaky", f"flaky {cls}#{method} — red in `{command}`, green on its own run (`{alone}`); a test "
+                             f"this story did not write, change or name, so no round is counted")
+    return 0, ran
 
 
 # A story may add tests and add cases to a test file; it may not change what a test that existed
@@ -3384,7 +3499,7 @@ def check_existing_tests(result, cwd, runs, story_id, story_body=""):
         )
 
 
-def check_required_suites(result, profile, cwd, already=None):
+def check_required_suites(result, profile, cwd, already=None, owner=None):
     """At build and tidy: the test commands the policy requires, run whole.
 
     The mapped tests say this story's behaviour holds; they say nothing about the behaviour the
@@ -3412,11 +3527,13 @@ def check_required_suites(result, profile, cwd, already=None):
         before = len(result.entries)
         if profile[key] in already:
             _key, code, output, ran = already[profile[key]]
+            code, ran = retry_outside(result, cwd, profile, profile[key], code, output, ran, owner)
             judge_test_run(result, profile, key, profile[key], code, output, ran, True, True,
                            reused=" (the run the mapped tests were read from)")
         else:
-            run_test_command(result, cwd, profile, key, profile[key], True, True)
-        result.entries[before:] = [(state, "suite", message) for state, _check, message in result.entries[before:]]
+            run_test_command(result, cwd, profile, key, profile[key], True, True, owner=owner)
+        result.entries[before:] = [(state, "suite" if check != "flaky" else check, message)
+                                   for state, check, message in result.entries[before:]]
 
 
 def change_check(result, cwd, profile, staged, only):
@@ -3709,6 +3826,7 @@ class Result:
     def __init__(self):
         self.entries = []
         self.written = []          # the files a delivery wrote into the project — what integrate commits on main
+        self.flaky = []            # the tests outside the story red in a whole run and green alone (WP-113)
 
     def ok(self, check, message):
         self.entries.append(("pass", check, message))
@@ -4039,14 +4157,15 @@ def whole_suites(run):
        unrun=lambda run: ["compiles", f"tests-{run.expected}"] + (["suite"] if run.stage.suite else []))
 def _tests(run):
     check_compiles(run.result, run.profile, run.cwd)
+    owner = SuiteOwner(run.runs, run.story_id, run.mapping or {})
     if run.kind == "task":
-        check_task_suites(run.result, run.profile, run.cwd)
+        check_task_suites(run.result, run.profile, run.cwd, owner)
         return
     run.whole_runs = check_test_state(run.result, run.profile, run.cwd, run.mapping, run.expected, run.located,
                                       run.runs, run.story_id, guard=run.kind in ("journey", "adopt"),
                                       whole_for=whole_suites(run), red_proof=False)
     if run.stage.suite:
-        check_required_suites(run.result, run.profile, run.cwd, run.whole_runs)
+        check_required_suites(run.result, run.profile, run.cwd, run.whole_runs, owner)
 
 
 @check("commands", stages=lambda s: s.commands, needs_process=True,
@@ -4078,6 +4197,37 @@ def _plan_passed(run):
     else:
         write_mark(run.runs, run.story_id, STORY_DIGEST, story_digest(run.story_path))
         record_tests_baseline(run.cwd, run.runs, run.story_id)
+
+
+def record_flaky_findings(result, story_path, story_id, front, runs):
+    """WP-113: a test noted flaky in this story and in another one is a finding — a row in this story's findings.md,
+    open, for a task (`kind: task`, `closes: <story>#<n>`) that fixes the flake instead of running it again for ever.
+    One open row per test across the backlog."""
+    mine = set(flaky_tests(runs, story_id)) | set(result.flaky)
+    root = evidence_dir(runs)
+    if not mine or not os.path.isdir(root):
+        return
+    others = {}
+    for other in sorted(os.listdir(root)):
+        if other != story_id and os.path.isdir(os.path.join(root, other)):
+            for test in flaky_tests(runs, other):
+                others.setdefault(test, []).append(other)
+    open_rows = set()
+    with contextlib.suppress(GateError, OSError):
+        open_rows = {(where, perspective) for _s, where, _sev, _d, perspective, _f, _p in open_findings(place("epics"))}
+    added = []
+    for test in sorted(mine):
+        if test not in others or (test, "flaky") in open_rows:
+            continue
+        seen = ", ".join([story_id] + others[test])
+        added.append(("flaky", test, "minor", f"red in a whole suite run and green on its own run, in {seen}",
+                      "find what it depends on — load, order, a timeout, shared state — and fix the test or the "
+                      "code, as a task", f"The test {test} fails now and then in the whole suite, in more than one "
+                                         f"story — it is fixed, not run again"))
+    if added:
+        append_findings(story_path, story_id, front, added)
+        result.ok("findings", f"{len(added)} flaky test(s) noted in two stories kept as a finding in "
+                              f"{shown(findings_path(story_path))}: {', '.join(r[1] for r in added)}")
 
 
 @on_pass("document")
@@ -4688,6 +4838,7 @@ def deliver(result, story_path, story_id, front, runs):
     if added or open_now:
         result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
                               f"{open_now} open there")
+    record_flaky_findings(result, story_path, story_id, front, runs)
     judge = os.path.join(runs, story_id, "judge.md")
     unworded = [r[1] for r in confirmed_defects(read_text(judge)) if not r[5]] if os.path.isfile(judge) else []
     if unworded:
@@ -4706,6 +4857,8 @@ def journal_gate(result, args, story_id, story_path, code):
     by = "runner" if args.record_suites else (os.environ.get("FACTORY_STAGE") or "stage") \
         if os.environ.get("FACTORY_WORKER") else "session"
     fields = [f"exit={code}"] + ([f"fail={','.join(failed)}"] if failed else []) + [f"by={by}"]
+    if result.flaky:
+        fields.append(f"flaky={','.join(dict.fromkeys(result.flaky))}")
     if args.stage == "plan" and code == 1 and story_path:
         fields.append(f"backlog={backlog_digest(story_path)}")
     with contextlib.suppress(OSError):

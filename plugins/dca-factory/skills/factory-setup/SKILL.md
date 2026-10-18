@@ -53,7 +53,8 @@ docs/                      what exists and why — written after the code, some 
    detection. Show its output as it is — each key as a block with the profile's value, the detected one
    and the command that takes it; do not retell it. On the person's confirmation run `setup --write`; it adds the missing keys
    and never overwrites a value a person wrote. A differing value is theirs to keep or to replace
-   (`setup --write --replace <key>`, on their word).
+   (`setup --write --replace <key>`, on their word). It refuses a pipeline older than the installed one as its
+   source (a plugin-cache entry left from before) and names `FACTORY_PLUGIN_DIR` for the one the project came from.
 4a. **The end-user suite brings its application.** Where the profile has an `e2eTest:` command, run
    it once with nothing started beforehand. Green, and it ran tests (not zero, not all skipped) → the
    gate can trust it. Red because nothing answered, or skipped for a missing base URL → the suite

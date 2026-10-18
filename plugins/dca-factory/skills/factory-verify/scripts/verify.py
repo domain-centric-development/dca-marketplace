@@ -21,6 +21,7 @@ import os
 import re
 import shlex
 import signal
+import socket
 import shutil
 import subprocess
 import sys
@@ -833,6 +834,68 @@ DOCUMENT = """# Document — STORY-1
 |---|---|---|
 | `README.md` | one sentence about the thing | read `README.md:1` |
 """
+
+
+#: WP-113: a test outside the story that the whole suite runs red (a flake under load) and a run of its own green — or,
+#: with `always-red` in the project, red alone too. `required: test` runs the set whole at the build gate.
+FLAKY_RUNNER = ("flaky.sh",
+                '#!/bin/sh\n# whole, OtherTest is red; alone it is green, unless always-red says otherwise\n'
+                'set=$1; shift\nmkdir -p green\n'
+                'if [ $# -eq 0 ]; then rm -f green/comexampleOtherTestholds; exec sh whole-runner.sh "$set"; fi\n'
+                '[ -f always-red ] || touch green/comexampleOtherTestholds\n'
+                'exec sh runner.sh "$set" "$@"\n')
+FLAKY_PROFILE = PROFILE.replace("test: sh runner.sh src/test/java", "test: sh flaky.sh src/test/java") + "required: test\n"
+OTHER_TEST = ("src/test/java/com/example/OtherTest.java", "class OtherTest { void holds() {} }\n")
+
+
+def git_blob_of(text):
+    """The blob id `git hash-object` gives a file of this text."""
+    data = text.encode("utf-8")
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def flaky_sources(own=False):
+    """The flaky runner, the whole runner, OtherTest and the plan gate's baseline of the tests before the story:
+    OtherTest is in it — not the story's — unless `own` (then the story wrote it)."""
+    before = [("src/test/java/com/example/WidgetUnitTest.java", "class WidgetUnitTest { void showsNothingWhenEmpty() {} }\n"),
+              ("src/test-pages/java/com/example/WidgetPageTest.java",
+               "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n")]
+    if not own:
+        before.append(OTHER_TEST)
+    baseline = "".join(f"{git_blob_of(text)}  {path}\n" for path, text in before)
+    return (FLAKY_RUNNER, WHOLE_RUNNER, OTHER_TEST, (".dca-factory/evidence/STORY-1/.tests-baseline", baseline))
+
+
+def flaky_journal(story):
+    """A story's journal with one build gate that noted com.example.OtherTest#holds flaky."""
+    return (f".dca-factory/evidence/{story}/journal.tsv",
+            "2026-10-17T10:00:00Z\tgate\tbuild\texit=0\tby=runner\tflaky=com.example.OtherTest#holds\tseq=1\n")
+
+
+def read_or_empty(path):
+    return open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
+
+
+def flaky_status(args, root):
+    """The status shows a story's flaky notes: in its row (JSON, the cockpit's source) and in the text view."""
+    shown = subprocess.run([sys.executable, args.cli, "--status", "--format", "json"], cwd=root, capture_output=True,
+                           text=True, encoding="utf-8").stdout
+    text = subprocess.run([sys.executable, args.cli, "--status"], cwd=root, capture_output=True, text=True,
+                          encoding="utf-8").stdout
+    story = subprocess.run([sys.executable, args.cli, "--status", "--story", "STORY-1"], cwd=root, capture_output=True,
+                           text=True, encoding="utf-8").stdout
+    try:
+        rows = {r["story"]: r for r in json.loads(shown)["rows"]}
+    except (ValueError, KeyError):
+        return [f"no status JSON: {shown[-300:]}"]
+    problems = []
+    if rows.get("STORY-1", {}).get("flaky") != ["com.example.OtherTest#holds"]:
+        problems.append(f"the row carries no flaky note: {rows.get('STORY-1')}")
+    if "flaky" not in text or "com.example.OtherTest#holds" not in text:
+        problems.append(f"the status text names no flaky test: {text[-300:]}")
+    if "Flaky" not in story:
+        problems.append(f"the story view names no flaky test: {story[-300:]}")
+    return problems
 
 
 class Case:
@@ -3559,6 +3622,31 @@ def verify_setup(runner, verbose=False):
         code, output = run_runner(runner, root, "setup", "--check")
         check("setup --check: the conflict resolved, exit 0", code == 0, output.strip().splitlines()[-1:])
 
+    # TODO #127: `setup --write` without FACTORY_PLUGIN_DIR takes nothing from a plugin-cache entry older than the
+    # pipeline the project runs — its carriers would replace the project's newer copies
+    for root, home in throwaway(2):
+        fixture(root, PRESET_FIXTURES["gradle-playwright-e2e"])
+        in_git(root)
+        run_setup(runner, root, "--tool", "none", "--from", source)
+        old = os.path.join(home, ".claude", "plugins", "cache", "m", "dca-factory", "0.0.1")
+        write_file(old, ".claude-plugin/plugin.json", json.dumps({"name": "dca-factory", "version": "0.0.1"}))
+        shutil.copytree(source, os.path.join(old, "skills"), symlinks=True)
+        contract = os.path.join(old, "skills", "factory-run", "scripts", PACKAGE, "contract.py")
+        text = open(contract, encoding="utf-8").read()
+        with open(contract, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(re.sub(r'(?m)^VERSION = .*$', 'VERSION = "0.0.1"', text))
+        profile = profile_of(root)
+        with open(profile, encoding="utf-8") as handle:
+            text = handle.read()
+        with open(profile, "w", encoding="utf-8") as handle:
+            handle.write(text.replace("browser: playwright\n", ""))
+        before = tree_digest(root)
+        code, output = run_runner(project_runner(root), root, "setup", "--write",
+                                  env={"HOME": home, "FACTORY_PLUGIN_DIR": "", "FACTORY_STACKS_DIR": ""})
+        check("setup --write: an older pipeline in the plugin cache is no source — refused, named, nothing changed",
+              code == 2 and "0.0.1" in output and "older than the" in output and tree_digest(root) == before,
+              f"exit {code}; {output.strip()[-300:]}")
+
     # formatFix beside every detected format; covers.* only while its command is the detected one
     for root in throwaway():
         fixture(root, {"build.gradle": "plugins { id 'com.diffplug.spotless' version '8.2.1' }\n"})
@@ -4058,6 +4146,18 @@ def verify_setup(runner, verbose=False):
                   ".claude/skills/stage-plan" in ignore_lines(root) and ".claude/skills/factory-run" not in ignore_lines(root)
                   and ".claude/skills" not in ignore_lines(root) and ".claude/skills/" not in ignore_lines(root),
                   ignore_lines(root)[:5])
+        # TODO #154: an update writes the protocol's own line only where it is missing — the skill lines stay where they
+        # stand, so the `/.dca-factory` line written after them does not move among them on every update
+        for root in throwaway():
+            build_project(root)
+            run_setup(runner, root, "--tool", "claude", "--from", source)
+            before = ignore_lines(root)
+            code, output = run_runner(project_runner(root), root, "update", "--from", source)
+            code2, output2 = run_runner(project_runner(root), root, "update", "--from", source)
+            check("update: .gitignore is left as it stands — no line removed and appended again, `/.dca-factory` once",
+                  code == 0 and code2 == 0 and ignore_lines(root) == before and before.count("/.dca-factory") == 1
+                  and ".gitignore keeps the skill links" not in output + output2,
+                  f"exit {code}/{code2}; moved: {[l for a, l in zip(before, ignore_lines(root)) if a != l][:4]}")
         for root, home in throwaway(2):
             cache = os.path.join(home, ".claude", "plugins", "cache", "m")
             write_file(os.path.join(cache, "dca-factory", "9.0.0"), ".claude-plugin/plugin.json", "{}")
@@ -5523,6 +5623,39 @@ def run_groups(args):
                               'fi\n'
                               'exec sh runner.sh "$set" "$@"\n'),),
               after=lambda root: expect_calls(root, {"src/test/java": 1, "src/test-pages/java": 1}))),
+        # WP-113: a red test the story did not write, change or name runs again alone, once — green, the gate passes
+        # with `flaky <test>` in the report and the journal and no round; red again, as before; the story's own never
+        (Case("build: a test outside the story, red in the whole suite and green on its own run, is flaky — the gate "
+              "passes, no round", "build", 0, must_pass=("tests-green", "suite"),
+              text=("flaky com.example.OtherTest#holds",)),
+         dict(green=both_green, ledger=both_green, profile=FLAKY_PROFILE, extra_sources=flaky_sources(),
+              after=lambda root: [] if "flaky=com.example.OtherTest#holds" in read_or_empty(
+                  os.path.join(root, ".dca-factory/evidence/STORY-1/journal.tsv")) else
+              [f"the journal has no flaky= line: {read_or_empty(os.path.join(root, '.dca-factory/evidence/STORY-1/journal.tsv'))[-300:]}"])),
+        (Case("build: a test outside the story red again on its own run keeps the suite red, named as outside the story",
+              "build", 1, must_fail=("suite",), text=("outside this story's change",), absent=("flaky com.",)),
+         dict(green=both_green, ledger=both_green, profile=FLAKY_PROFILE,
+              extra_sources=flaky_sources() + (("always-red", ""),))),
+        (Case("build: the story's own test red in the whole suite is never run again — the red proof stays exact",
+              "build", 1, must_fail=("suite",), absent=("flaky com.", "outside this story's change")),
+         dict(green=both_green, ledger=both_green, profile=FLAKY_PROFILE, extra_sources=flaky_sources(own=True),
+              after=lambda root: [c for c in read_or_empty(os.path.join(root, "build/runner-calls.log")).splitlines()
+                                  if c.endswith("--select com.example.OtherTest#holds")])),
+        (Case("build: without a filter in the profile nothing is run again — the whole run decides, as before", "build", 1,
+              must_fail=("suite",), absent=("flaky com.",)),
+         dict(green=both_green, ledger=both_green,
+              profile=FLAKY_PROFILE.replace("filterFlag: --select\n", "").replace('filterFormat: "{class}#{method}"\n', ""),
+              extra_sources=flaky_sources())),
+        (Case("document: a test noted flaky in this story and in another becomes an open finding for a task", "document", 0,
+              must_pass=("documented", "findings"), text=("flaky test(s) noted in two stories",)),
+         dict(document=DOCUMENT, extra_sources=(flaky_journal("STORY-1"), flaky_journal("STORY-0")),
+              after=lambda root: [] if "| flaky | com.example.OtherTest#holds | minor |" in read_or_empty(
+                  os.path.join(root, "product/epics/sample/STORY-1/findings.md")) else
+              [f"no flaky row in findings.md: {read_or_empty(os.path.join(root, 'product/epics/sample/STORY-1/findings.md'))[-300:]}"])),
+        (Case("document: a test noted flaky in one story alone is a note, not a finding", "document", 0,
+              must_pass=("documented",), absent=("flaky test(s) noted in two stories",)),
+         dict(document=DOCUMENT, extra_sources=(flaky_journal("STORY-1"),),
+              after=lambda root: flaky_status(args, root))),
         (Case("build: a required suite that ran nothing fails the build gate, though the story's tests are green",
               "build", 1, must_fail=("suite",), text=("no report written by this run shows an executed test",)),
          dict(green=both_green, ledger=both_green, profile=PROFILE + "required: test\n")),
@@ -7218,6 +7351,40 @@ def run_groups(args):
              lock_in_git, os.listdir(os.path.join(root, ".git"))[:6]),
             ("claim: the holder gives it back", not os.path.exists(os.path.join(root, ".git", "dca-factory-worker.lock")), ""),
         ]
+    # TODO #156: a runner's claim on this host whose process is gone is taken over at once, and that is said; one whose
+    # process lives, or one of another host, still holds the checkout
+    if os.name != "nt":
+        for root in throwaway():
+            build_project(root)
+            subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+            claim = lambda owner: subprocess.run([sys.executable, args.cli, "--claim", owner], cwd=root,
+                                                 capture_output=True, text=True, encoding="utf-8")
+            ended = subprocess.Popen([sys.executable, "-c", "pass"])
+            ended.wait()
+            host = socket.gethostname() or "host"
+            claim(f"runner:{host}:{ended.pid}")
+            taken = claim("worker-new")
+            alive = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+            try:
+                subprocess.run([sys.executable, args.cli, "--release", "worker-new"], cwd=root, capture_output=True)
+                claim(f"runner:{host}:{alive.pid}")
+                living = claim("worker-other")
+            finally:
+                alive.kill()
+                alive.wait()
+            subprocess.run([sys.executable, args.cli, "--release", f"runner:{host}:{alive.pid}"], cwd=root,
+                           capture_output=True)
+            claim(f"runner:elsewhere-{host}:{ended.pid}")
+            foreign = claim("worker-third")
+            expectations += [
+                ("claim: a runner's claim whose process no longer runs on this host is taken over at once, and said",
+                 taken.returncode == 0 and f"took over from runner:{host}:{ended.pid}" in taken.stdout
+                 and "no longer runs" in taken.stdout, taken.stdout),
+                ("claim: a runner whose process still runs keeps the checkout",
+                 living.returncode == 3 and "held by runner:" in living.stdout, living.stdout),
+                ("claim: a runner's claim from another host is not judged by a pid here",
+                 foreign.returncode == 3 and "held by runner:elsewhere-" in foreign.stdout, foreign.stdout),
+            ]
     for root in throwaway():
         build_project(root)
         subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)

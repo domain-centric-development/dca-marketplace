@@ -54,7 +54,8 @@ a report of what changed. You commit nothing; the human reviews and commits.
    project keeps copies — and after a migration the moved files: the profile at the root, `product/epics/`
    with the records beside the stories. `.dca-factory/` stays out of git — the install writes `/.dca-factory`
    into `.gitignore` unless a line there names it already, which is how a project that commits its history
-   keeps its own lines.
+   keeps its own lines. A line that is there stays where it stands, so an update leaves `.gitignore`
+   unchanged when nothing is missing.
 6. **Name what was renamed.** The method plugins renamed skills (`review-domain` → `review-ddd`,
    `review-boundaries` → `review-hexagonal`, `review-craft` → `review-clean-code`, `ddd-modelling` →
    `dca-modelling`, `dca-bootstrap` → `dca-init`, `dca-scaffold` → `dca-new`). The update removes a

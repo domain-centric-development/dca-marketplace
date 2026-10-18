@@ -17,6 +17,9 @@ export type Row = {
   cost: number
   priced: number
   done: boolean
+  // the tests a gate of this story ran again alone and saw green — red in a whole suite, outside the story's change
+  // (dca-factory 0.86.0; absent from an older pipeline)
+  flaky?: string[]
 }
 
 export type FactoryStatus = {

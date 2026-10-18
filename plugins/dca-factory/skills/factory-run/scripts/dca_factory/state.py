@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -52,6 +53,18 @@ def read_events(path):
     # A union merge of two branches that ran the same story can repeat a number: the time decides between them.
     events.sort(key=lambda e: (e["seq"], e["at"]))
     return events
+
+
+def flaky_tests(runs, story_id):
+    """{test: [stage, …]} — the tests a gate over this story noted flaky (WP-113: red in a whole suite run, outside the
+    story's change, green on its own run), from the journal's `gate` events and their `flaky=` field."""
+    found = {}
+    for event in journal_events(runs, story_id):
+        if event["kind"] == "gate" and event["fields"].get("flaky"):
+            for test in event["fields"]["flaky"].split(","):
+                if test and event["name"] not in found.setdefault(test, []):
+                    found[test].append(event["name"])
+    return found
 
 
 @contextlib.contextmanager
@@ -1250,6 +1263,28 @@ def write_claim(path, owner, since):
     os.replace(temporary, path)
 
 
+def dead_runner(owner):
+    """The pid of a runner's claim (`runner:<host>:<pid>`) on this host whose process no longer runs — the claim is
+    then stale whatever its beat says: a killed runner leaves its claim, and nothing would free it for two hours. None
+    for another host, another kind of owner, or a process that still runs (or cannot be asked: Windows, where a
+    signal 0 would end the process, is never asked)."""
+    parts = str(owner or "").split(":")
+    if len(parts) != 3 or parts[0] != "runner" or not parts[2].isdigit() or os.name == "nt":
+        return None
+    if parts[1] != (socket.gethostname() or "host"):
+        return None
+    pid = int(parts[2])
+    if pid <= 0 or pid == os.getpid():
+        return None
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return pid
+    except (PermissionError, OSError):
+        return None
+    return None
+
+
 def claim(cwd, owner, say=print):
     """0 when `owner` holds the checkout now (claimed, renewed or taken over), 3 when another does; `say` gets
     the line that tells which."""
@@ -1288,6 +1323,12 @@ def claim(cwd, owner, say=print):
         with contextlib.suppress(OSError):
             beat = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc)
     age = (datetime.now(timezone.utc) - beat).total_seconds() if beat else None
+    gone = dead_runner(held.get("owner"))
+    if gone:
+        write_claim(path, owner, None)
+        say(f"claim: took over from {held.get('owner')} — its process {gone} no longer runs on this host, so it was "
+            f"stopped or crashed")
+        return 0
     if age is None or age > stale_after():
         write_claim(path, owner, None)
         say(f"claim: took over from {held.get('owner', 'an unreadable claim')} — no sign of life for "

@@ -68,7 +68,7 @@ from .state import (
     remote_main,
     acceptance_records, accepted, accepted_criteria, back_in, claim, claim_path, freeze_all, gate_passed_on_record,
     has_worktree,
-    is_acceptance, journal_append, journal_events, journal_usage, journal_writer, listener_line, mark_listening,
+    flaky_tests, is_acceptance, journal_append, journal_events, journal_usage, journal_writer, listener_line, mark_listening,
     mark_stage, mark_window, OWNED_CHANGED, owned_end, PRODUCT_HEADINGS, read_claim, record_owned, release,
     resolve_window, run_stories, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
     verdict_in, worktree_of, write_story_fields)
@@ -1013,7 +1013,9 @@ def status_model(cwd, epics, runs, live=False):
         stage = "" if done else next((st for sid, st, _t in running_stages(runs) if sid == story_id),
                                      story.get("start") or "")
         journal = os.path.isfile(os.path.join(evidence_dir(runs, story_id), "journal.tsv"))
-        rows.append(dict(journal=journal, done=done, epic=story.get("epic", ""), story=story_id,
+        # the tests a gate of this story ran again alone and saw green: red in the whole suite, not the story's (WP-113)
+        flaky = sorted(flaky_tests(runs, story_id))
+        rows.append(dict(journal=journal, done=done, epic=story.get("epic", ""), story=story_id, flaky=flaky,
                          title=story.get("title", ""), mark=mark,
                          state=words, stage=stage or "—", passes=len(facts["passes"]) or 0,
                          started=facts["started"], delivered=facts["delivered"], seconds=facts["seconds"],
@@ -1439,6 +1441,10 @@ def backlog_text(model, colour, heading_line=True):
                           colour=colour, widths=widths)
     for hint in model.get("journeys", []):
         out += ["", f"    {dim('journey', colour)}   {hint['epic']}: {hint['text']} — {commands(hint['action']['skill'], colour)}"]
+    for row in model["rows"]:
+        if row.get("flaky"):
+            out += ["", f"    {dim('flaky', colour)}   {row['story']}: {', '.join(row['flaky'])} — red in a whole suite, "
+                        f"green on its own run; no round counted"]
     if model["rows"]:
         headers, rows, kinds, right = token_rows(model)
         caption = "Tokens" + ("" if model["priced"] or not model["measured"] else " — no price in a session log")
@@ -1497,6 +1503,10 @@ def backlog_md_lines(model):
         out += table_md(headers, [backlog_cells(r, model, MARKS_MD) for r in epic["rows"]], right)
     for hint in model.get("journeys", []):
         out += ["", f"*journey* — {hint['epic']}: {hint['text']} → `{hint['action']['skill']}`"]
+    for row in model["rows"]:
+        if row.get("flaky"):
+            out += ["", f"*flaky* — {row['story']}: {', '.join(f'`{t}`' for t in row['flaky'])} — red in a whole suite, "
+                        f"green on its own run; no round counted"]
     if model["rows"]:
         headers, rows, kinds, right = token_rows(model)
         rows = [[f"**{c}**" if kind in ("epic", "total") and str(c) else c for c in row] if kind != "story"
@@ -1744,6 +1754,8 @@ def story_header(model):
     if model["context"]:
         facts.append(("Context", model["context"]))
     facts += [("Criteria", str(model["criteria"])), ("State", state), ("History", pass_text)]
+    if row.get("flaky"):
+        facts.append(("Flaky", ", ".join(row["flaky"]) + " — red in a whole suite, green on its own run; no round"))
     return title, facts
 
 

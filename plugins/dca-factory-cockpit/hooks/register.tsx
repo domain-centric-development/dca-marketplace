@@ -743,6 +743,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             row && row.seconds > 0 && { label: 'worked', text: fmt.time(row.seconds) },
             row && row.tokens > 0 && { label: 'tokens', text: fmt.tokens(row.tokens) },
             row && row.cost > 0 && { label: 'cost', text: fmt.cost(row.cost) },
+            row?.flaky && row.flaky.length > 0 && { label: 'flaky', text: `${row.flaky.join(' · ')} — red in a whole suite, green alone; no round`, color: C.wait },
           ],
           2,
         ),

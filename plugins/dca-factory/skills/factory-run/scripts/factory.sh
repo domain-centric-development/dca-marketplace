@@ -656,7 +656,12 @@ write_skill_ignores() {                     # write_skill_ignores <target> <mode
           # a folder-wide line hides the list too; it is replaced by one line per link, and named
           [ -L "$target" ] && [ "$mode" = link ] || { folder_line=1; changed=1; continue; } ;;
         "$target"/*)
-          { [ -L "$target" ] || printf '%s\n' $names | grep -qx "${line#"$target"/}"; } && { changed=1; continue; } ;;
+          # a line still wanted stays where it stands — rewritten at the end, it would move the lines around
+          # it (the protocol's own line among them) and leave a diff on every update
+          printf '%s\n' $want | grep -qxF "$line" && printf '%s' "$out" | grep -qxF "$line" && { changed=1; continue; }
+          printf '%s\n' $want | grep -qxF "$line" || {
+            { [ -L "$target" ] || printf '%s\n' $names | grep -qx "${line#"$target"/}"; } && { changed=1; continue; }
+          } ;;
       esac
       out="$out$line
 "
@@ -1670,6 +1675,19 @@ setup_write() {                             # setup_write [<key>]
   [ -f "$PROFILE" ] || { echo "factory: no stack profile at $PROFILE — 'factory.sh update' writes one"; return 1; }
   dir=$(presets_dir) || dir=""
   [ -n "$dir" ] || { echo "factory: no presets found — nothing to write from (FACTORY_PLUGIN_DIR names a pipeline)" >&2; return 2; }
+  # The presets and the carriers come from the pipeline found beside the project — the newest one, which can be an
+  # older plugin-cache entry than the copy this project runs: its carriers would replace the project's newer ones.
+  # An older source is refused; the one the installed copy came from is named with FACTORY_PLUGIN_DIR.
+  local have source_version
+  have=$(gate_field "$GATE" VERSION) source_version=""
+  [ -f "$dir/../../scripts/story-gate.py" ] && source_version=$(gate_field "$dir/../../scripts/story-gate.py" VERSION)
+  if [ -n "$have" ] && [ -n "$source_version" ] && [ "$have" != "$source_version" ] \
+     && [ "$(printf '%s\n%s\n' "$have" "$source_version" | sort -V | tail -1)" = "$have" ]; then
+    echo "factory: the pipeline found to write from is $source_version ($(cd "$dir/../../.." && pwd)), older than the" >&2
+    echo "factory:   installed $have — its presets and carriers would replace newer ones. Name the source the project" >&2
+    echo "factory:   was installed from: FACTORY_PLUGIN_DIR=<the dca-factory $have>/skills; nothing was changed" >&2
+    return 2
+  fi
   presets "$dir" write "$PROFILE" ${1:+"$1"} || return $?
   # A carrier line just written names a skill the stage processes must find in the project: put it there the
   # way `update` does — a profile that names a carrier the project does not hold stops the next run.

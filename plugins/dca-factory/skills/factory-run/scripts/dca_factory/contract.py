@@ -234,7 +234,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 24
 
 
-VERSION = "0.85.3"
+VERSION = "0.86.0"
 
 
 def split_front(text):
@@ -534,6 +534,17 @@ def record_findings(story_path, story_id, front, runs):
     added = [r for r in new if (r[1], r[3]) not in known]
     if not have and not added:
         return 0, 0
+    append_findings(story_path, story_id, front, added)
+    return len(added), sum(1 for r in findings_rows(path) if r[6] == "open")
+
+
+def append_findings(story_path, story_id, front, added):
+    """Append rows — (perspective, file:line, severity, defect, fix, plain) — to the story's findings.md, `open`,
+    numbered after the rows there; the file is made with its header when it is not there yet."""
+    if not added:
+        return
+    path = findings_path(story_path)
+    have = findings_rows(path)
     if not os.path.isfile(path):
         text = (f"---\nstory: {story_id}\nepic: {front.get('epic', '')}\n---\n\n# Findings — {story_id}\n\n"
                 "The judge's confirmed defects that did not block the story, kept for a later story or a person's look. "
@@ -545,10 +556,8 @@ def record_findings(story_path, story_id, front, runs):
     for perspective, where, severity, defect, fix, plain in added:
         n += 1
         text += f"| {n} | {perspective} | {where} | {severity} | {plain} | {defect} | {fix} | open |\n"
-    if added:
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(text)
-    return len(added), sum(1 for r in findings_rows(path) if r[6] == "open")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
 
 
 def open_findings(epics):
