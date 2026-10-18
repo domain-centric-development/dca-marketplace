@@ -37,6 +37,21 @@ class ScenarioForm(unittest.TestCase):
                                   "- Given a thing\n- When I look\n- Then it shows\n- And it is bright\n"),
                          [("shows-the-thing", "Given a thing; When I look; Then it shows; And it is bright")])
 
+    def test_a_step_wrapped_onto_an_indented_line_keeps_its_continuation(self):
+        self.assertEqual(criteria("#### sends-it\n- Given a form\n- When it is sent with Street \"Main 1\", Country\n"
+                                  "  \"Germany\" and the method \"teleport\"\n- Then it is refused\n"),
+                         [("sends-it", 'Given a form; When it is sent with Street "Main 1", Country "Germany" and the '
+                                       'method "teleport"; Then it is refused')])
+
+    def test_the_view_of_a_scenario_keeps_a_wrapped_step_whole(self):
+        body = ("# Story\n\n## Acceptance criteria\n#### sends-it\n- Given a form\n- When it is sent with Country\n"
+                "  \"Germany\"\n- Then it is refused\n")
+        self.assertEqual(gate.scenarios_of(body)[0]["steps"][1]["text"], 'it is sent with Country "Germany"')
+
+    def test_a_line_criterion_wrapped_onto_an_indented_line_keeps_its_continuation(self):
+        self.assertEqual(criteria("- shows-it: the thing shows\n  in bright colours\n"),
+                         [("shows-it", "the thing shows in bright colours")])
+
     def test_an_and_after_when_is_a_second_trigger(self):
         with self.assertRaisesRegex(contract.GateError, "has 2 triggers"):
             criteria("#### shows-it\n- Given a thing\n- When I look\n- And I blink\n- Then it shows\n")

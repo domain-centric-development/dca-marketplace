@@ -210,6 +210,16 @@ def criteria_of(story_path, body, front=None):
             if rule is not None:
                 rule_scenarios += 1
             continue
+        if line[:1].isspace() and not stripped.startswith(("-", "#")):
+            # a Markdown continuation line: the step or line criterion above it goes on
+            if scenario is not None and scenario[1]:
+                word, text = scenario[1][-1]
+                scenario[1][-1] = (word, f"{text} {stripped}")
+                continue
+            if scenario is None and found:
+                key, text = found[-1]
+                found[-1] = (key, f"{text} {stripped}")
+                continue
         step = STEP.match(stripped)
         if step:
             if scenario is None:
@@ -418,6 +428,10 @@ def scenarios_of(body):
             found.append(current)
         elif step and current is not None:
             current["steps"].append(dict(word=step.group(1), text=step.group(2).strip()))
+        elif stripped and line[:1].isspace() and found and (found[-1]["steps"] or found[-1]["text"]):
+            # a Markdown continuation line: the step or line criterion above it goes on
+            last = found[-1]["steps"][-1] if found[-1]["steps"] else found[-1]
+            last["text"] = f"{last['text']} {stripped}"
         elif criterion:
             key = criterion.group(1)
             found.append(dict(key=key, title=titles.get(key, key), rule=rule, happy=key in happy, steps=[],
