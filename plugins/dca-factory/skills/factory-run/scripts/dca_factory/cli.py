@@ -1975,6 +1975,37 @@ def sections_of(body, own_block):
     return [*first, *(s for s in sections if not s["kind"])], at
 
 
+#: The front-matter fields an epic's head shows, by the heading of the section that may say the same: a section under
+#: one of these headings whose text says nothing beyond its field is left out of the detail.
+HEAD_FIELDS = {"intent": "intent", "goal": "goal", "outcome": "metric", "metric": "metric",
+               "domain contact": "domain_contact", "domain": "domain_contact"}
+
+#: The sentence the epic template writes under `## Outcome` — it says nothing beyond the outcome event the head shows.
+OUTCOME_BOILERPLATE = ("The epic is measured by the outcome event `{metric}`: as long as it is not published in "
+                       "production, the epic has not delivered, however much code exists.")
+
+
+def said_alike(text):
+    """A text as compared with a field: whitespace collapsed, a trailing period off."""
+    return " ".join(text.split()).rstrip(".").strip()
+
+
+def without_head(sections, front):
+    """The sections the head does not already show: one whose heading names a field of HEAD_FIELDS and whose text is
+    that field's value (or, for the outcome, the template's sentence about it) — compared after `said_alike` — is
+    left out; a section with more to say stays. Returns the sections kept and how many were left out before `at`."""
+    kept, gone = [], []
+    for index, one in enumerate(sections):
+        key = HEAD_FIELDS.get(one["heading"].split("(")[0].strip().lower())
+        value = front_text(front.get(key)).strip() if key else ""
+        same = {said_alike(value)} | ({said_alike(OUTCOME_BOILERPLATE.format(metric=value))} if key == "metric" else set())
+        if value and said_alike(one["text"]) in same:
+            gone.append(index)
+        else:
+            kept.append(one)
+    return kept, gone
+
+
 #: The longest a situation line quotes a reason before it cuts it.
 SITUATION_REASON = 90
 
@@ -1988,7 +2019,15 @@ def first_sentence(text, limit=SITUATION_REASON):
 
 def story_situation(row, story, overview, body):
     """What is up with a story, in one line the factory decides — and which of its two views a detail opens with:
-    `pipeline` while it runs or waits for a person, `story` before it starts and once it is done or set aside."""
+    `pipeline` while it runs or waits for a person, `story` before it starts and once it is done or set aside. A line
+    that would only repeat the state the head shows is empty."""
+    found = situation_of_story(row, story, overview, body)
+    if said_alike(found["situation"]) == said_alike(str(row.get("state", ""))):
+        found["situation"] = ""
+    return found
+
+
+def situation_of_story(row, story, overview, body):
     state = story.get("state", "")
     moving = next((m for m in overview["running"] if m["story"] == row["story"] and not m["interrupted"]), None)
     if moving:
@@ -2019,10 +2058,11 @@ def story_situation(row, story, overview, body):
 
 
 def epic_situation(epic, overview):
-    """What is up with an epic, in one line: how much is delivered, what runs, what waits for a person — and the
-    view its detail opens with: `stories` once one of them started, `epic` before."""
+    """What is up with an epic beyond the progress its head shows, in one line: what is set aside, what runs, what
+    waits for a person — empty when nothing does — and the view its detail opens with: `stories` once one of them
+    started, `epic` before."""
     ids = {r["story"] for r in epic["rows"]}
-    parts = [f"{epic['delivered']} of {epic['total']} delivered" if epic["total"] else "no story yet"]
+    parts = []  # how much is delivered stands in the head (its progress) — the line says only what comes beside it
     set_aside = sum(1 for r in epic["rows"] if r["state"] == "superseded")
     parts += [f"{set_aside} superseded"] if set_aside else []
     parts += [f"{m['story']} running {m['stage']}" for m in overview["running"] if m["story"] in ids and not m["interrupted"]]
@@ -2038,6 +2078,14 @@ def story_sections(body):
     """A story's sections for its detail, its criteria's place among them, and why it is not built where it says."""
     sections, at = sections_of(body, STORY_OWN_BLOCK)
     return dict(sections=sections, criteria_at=at)
+
+
+def epic_sections(body, front):
+    """An epic's sections for its detail without those its head already says (`without_head`), and its stories'
+    place among the ones kept."""
+    sections, at = sections_of(body, EPIC_OWN_BLOCK)
+    kept, gone = without_head(sections, front)
+    return dict(sections=kept, stories_at=None if at is None else at - sum(1 for i in gone if i < at))
 
 
 def epic_description(body, front):
@@ -2078,7 +2126,7 @@ def epic_model(cwd, epics, runs, epic_id, live=False):
                 intent=epic.get("intent", ""), goal=epic.get("goal", ""), metric=epic.get("metric", ""),
                 domain_contact=epic.get("domain_contact", ""), discovery=epic.get("discovery", ""),
                 description=epic_description(body, front), mark=epic_mark(epic), rows=epic["rows"],
-                **dict(zip(("sections", "stories_at"), sections_of(body, EPIC_OWN_BLOCK))),
+                **epic_sections(body, front),
                 **epic_situation(epic, overview),
                 delivered=epic["delivered"], total=epic["total"], tokens=epic["tokens"], measured=epic["measured"],
                 seconds=epic["seconds"], journey=journey, next=overview["next"])

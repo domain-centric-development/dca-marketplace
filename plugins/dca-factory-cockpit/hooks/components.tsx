@@ -102,6 +102,10 @@ export function mark(kind: string): Cell {
   return { text: MARK_GLYPH[kind] ?? '·', color: MARK_COLOR[kind] ?? C.muted, bold: true }
 }
 
+// An epic's outcome — the event that measures it — in its one look, wherever an epic or a proposal names it: a table
+// cell, a card's field.
+export const outcomeCell = (metric?: string): { text: string; color: string } => ({ text: metric || '—', color: C.info })
+
 // An epic as its tables show it — the same cells in the backlog, in the delivered view and in its own card.
 export type EpicLike = { epic: string; title?: string; metric?: string; delivered: number; total: number; tokens: number; rows: { story: string; state: string }[] }
 export type JourneyHint = { epic: string; text: string }
@@ -117,7 +121,7 @@ export function epicCells(epic: EpicLike, journey?: JourneyHint) {
     title: { text: epic.title || epic.epic, bold: true } as Cell,
     count: { text: `${epic.delivered} of ${epic.total}`, color: C.muted } as Cell,
     drafts: { text: draftRows.length > 0 ? String(draftRows.length) : '—', color: draftRows.length > 0 ? C.wait : C.muted } as Cell,
-    outcome: { text: epic.metric || '—', color: C.info } as Cell,
+    outcome: outcomeCell(epic.metric),
     journey: journey ? ({ text: `${MARK_GLYPH.journey} ${journey.text}`, color: MARK_COLOR.journey } as Cell) : ({ text: '—', color: C.muted } as Cell),
     meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${tokens(epic.tokens)} tokens` : ''}`,
   }

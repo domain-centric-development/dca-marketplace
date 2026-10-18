@@ -7268,7 +7268,7 @@ def run_groups(args):
              and story_view.get("superseded") is False and story_view.get("view") in ("story", "pipeline")
              and story_view.get("situation", "").startswith("ready")
              and "Journey" in [x["heading"] for x in epic_json.get("sections", [])]
-             and epic_json.get("situation", "").startswith("0 of 1 delivered") and epic_json.get("view") == "epic",
+             and "0 of 1 delivered" not in epic_json.get("situation", "") and epic_json.get("view") == "epic",
              {k: story_view.get(k) for k in ("sections", "criteria_at", "situation", "view")}),
             ("status --epic: an epic there is not is refused with the ones there are",
              unknown.returncode == 1 and "later, sample" in unknown.stdout, unknown.stdout),

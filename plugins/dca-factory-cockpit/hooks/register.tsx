@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
 import type { Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
-import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
+import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, outcomeCell, type Cell } from './components'
 import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
@@ -982,7 +982,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         topic.proposals.map(proposal => [
           ui.mark(proposal.epic ? 'done' : 'proposed'),
           { text: proposal.id, bold: true },
-          { text: proposal.metric, color: C.info },
+          outcomeCell(proposal.metric),
           { text: proposal.goal, color: C.muted },
           proposal.epic
             ? ui.open(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic, back: open }))
@@ -1037,7 +1037,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           [
             (view?.intent || epic.intent) && { label: 'intent', text: view?.intent || epic.intent || '' },
             epic.goal && { label: 'goal', text: epic.goal },
-            epic.metric && { label: 'outcome', text: epic.metric, color: C.info },
+            epic.metric && { label: 'outcome', ...outcomeCell(epic.metric) },
             (view?.domain_contact || epic.domain_contact) && { label: 'domain', text: view?.domain_contact || epic.domain_contact || '' },
             epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
           ],

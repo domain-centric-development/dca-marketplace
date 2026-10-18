@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { components, epicCells, pairsPerRow, sizeColumns } from '../hooks/components'
+import { components, epicCells, outcomeCell, pairsPerRow, sizeColumns } from '../hooks/components'
 import { LINE_CAP, appendLines, createLatch, displayWidth, exitWord, fit, keepRefresh, rowSignature, wrapWords } from '../hooks/parse'
 
 test('the latch is taken once: a second press while the first starts gets nothing', () => {
@@ -36,6 +36,8 @@ test('an epic draws the same cells in every table: mark, count, drafts, outcome,
   expect(open.drafts.text).toBe('1')
   expect(open.draftRows.map(row => row.story)).toEqual(['a'])
   expect(open.outcome.text).toBe('BookAdded')
+  // one look for an outcome wherever it shows: a table cell, a card's field, a proposal
+  expect(open.outcome).toEqual(outcomeCell('BookAdded'))
   expect(open.journey.text).toBe('—')
   expect(open.meta).toBe('1 of 3 delivered · 2.5 k tokens')
 

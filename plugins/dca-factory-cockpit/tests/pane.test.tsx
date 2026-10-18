@@ -386,7 +386,7 @@ const SECTIONS_STORY = {
 }
 const SECTIONS_EPIC = {
   ...EPIC_VIEW,
-  situation: '0 of 1 delivered · 1 superseded',
+  situation: '1 superseded',
   view: 'epic',
   stories_at: 1,
   sections: [
@@ -416,7 +416,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     // the epic: its line, its sections in the factory's order — the view it names first, the stories one press away
     await pane.press({ key: 'epic-books' })
-    expect(await pane.find({ text: '0 of 1 delivered · 1 superseded' })).toBeDefined()
+    expect(await pane.find({ text: '1 superseded' })).toBeDefined()
     expect(await pane.find({ text: /Readers lose track of the books they lent/ })).toBeDefined()
     expect(await pane.find({ text: 'JOURNEY' })).toBeDefined()
     expect(await pane.find({ key: 'story-add-book' })).toBeUndefined()

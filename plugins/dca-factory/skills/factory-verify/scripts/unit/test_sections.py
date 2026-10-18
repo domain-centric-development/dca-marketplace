@@ -66,6 +66,69 @@ class Sections(unittest.TestCase):
         self.assertIsNone(cli.story_sections("# T\n\n## Story\n\ntext\n")["criteria_at"])
 
 
+EPIC = """# Availability before adding
+
+## Intent
+
+Customers order products
+that are no longer in stock.
+
+## Goal
+
+A customer sees whether a product is available. More: and why it matters.
+
+## Outcome
+
+The epic is measured by the outcome event `StockChanged`: as long as it is not published in production, the epic
+has not delivered, however much code exists.
+
+## Stories
+
+- S-1 — one
+
+## Journey
+
+- open: the flow
+"""
+
+EPIC_FRONT = dict(intent="Customers order products that are no longer in stock", metric="StockChanged",
+                  goal="A customer sees whether a product is available")
+
+
+class HeadSaysIt(unittest.TestCase):
+
+    def test_a_section_that_only_repeats_a_head_field_is_left_out_and_the_stories_place_follows(self):
+        got = cli.epic_sections(EPIC, EPIC_FRONT)
+        self.assertEqual([s["heading"] for s in got["sections"]], ["Goal", "Journey"])
+        self.assertEqual(got["stories_at"], 1)
+
+    def test_a_section_with_more_to_say_stays(self):
+        self.assertIn("Goal", [s["heading"] for s in cli.epic_sections(EPIC, EPIC_FRONT)["sections"]])
+
+    def test_the_outcome_section_stays_beside_another_event(self):
+        got = cli.epic_sections(EPIC, dict(EPIC_FRONT, metric="StockReserved"))
+        self.assertIn("Outcome", [s["heading"] for s in got["sections"]])
+
+    def test_without_the_field_the_section_stays(self):
+        got = cli.epic_sections(EPIC, {})
+        self.assertEqual([s["heading"] for s in got["sections"]], ["Intent", "Goal", "Outcome", "Journey"])
+
+    def test_the_template_says_the_outcome_sentence_the_factory_leaves_out(self):
+        import os
+        template = os.path.join(os.path.dirname(cli.__file__), "..", "..", "templates", "backlog", "epic.md.tmpl")
+        with open(template, encoding="utf-8") as handle:
+            text = handle.read()
+        sentence = cli.OUTCOME_BOILERPLATE.format(metric="{{OUTCOME_EVENT_THAT_MEASURES_IT}}")
+        self.assertIn(cli.said_alike(sentence), cli.said_alike(text))
+
+    def test_the_epic_line_leaves_the_progress_to_the_head(self):
+        epic = dict(rows=[dict(story="S-1", state="delivered", passes=1, done=True)], delivered=1, total=1)
+        overview = dict(running=[], waiting=[])
+        self.assertEqual(cli.epic_situation(epic, overview), dict(situation="", view="stories"))
+        overview = dict(running=[dict(story="S-1", stage="build", interrupted=False)], waiting=[])
+        self.assertEqual(cli.epic_situation(epic, overview)["situation"], "S-1 running build")
+
+
 class Situation(unittest.TestCase):
 
     OVERVIEW = dict(running=[], waiting=[], queue=dict(ready=["S-2", "S-1"]))
@@ -86,10 +149,15 @@ class Situation(unittest.TestCase):
         self.assertEqual(cli.story_situation(self.row(), dict(state="running"), overview, ""),
                          dict(situation="running build · round 2", view="pipeline"))
 
-    def test_a_waiting_story_opens_the_pipeline(self):
+    def test_a_waiting_story_opens_the_pipeline_without_repeating_its_state(self):
         got = cli.story_situation(self.row(mark="look", state="waiting for your acceptance"), dict(state="waiting"),
                                   self.OVERVIEW, "")
-        self.assertEqual(got, dict(situation="waiting for your acceptance", view="pipeline"))
+        self.assertEqual(got, dict(situation="", view="pipeline"))  # the head shows that state already
+
+    def test_a_line_that_says_more_than_the_state_stays(self):
+        got = cli.story_situation(self.row(mark="stopped", state="stopped"), dict(state="stopped", detail="gate red."),
+                                  self.OVERVIEW, "")
+        self.assertEqual(got["situation"], "stopped — gate red")
 
     def test_a_blocked_story_says_on_what(self):
         got = cli.story_situation(self.row(state="blocked"), dict(state="blocked", detail="depends on S-0"),
