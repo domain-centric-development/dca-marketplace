@@ -1,6 +1,6 @@
 ---
 name: factory-status
-description: Shows where the delivery pipeline stands in this project — which stage is running, which decisions wait for a human, every story's state and what comes next, and what the stories cost in tokens — read from the project's files alone. Use when someone asks how a run is going, what the factory is doing, what is waiting, how far the backlog is, what a story cost, or on "/factory-status". Works from any session in the project, beside a running pipeline; it changes nothing and starts nothing.
+description: Shows where the delivery pipeline stands in this project — which stage is running, which decisions wait for a human, what comes next and the totals, short; every story's state and what the stories cost in tokens, one story or one epic on request — read from the project's files alone. Use when someone asks how a run is going, what the factory is doing, what is waiting, how far the backlog is, what a story cost, or on "/factory-status". Works from any session in the project, beside a running pipeline; it changes nothing and starts nothing.
 ---
 
 # Show where the pipeline stands
@@ -9,8 +9,9 @@ Input: the project's files — the story journals under `.dca-factory/evidence/<
 under `<story>/decisions/` in each story's folder, the backlog under `product/epics/`. Output: an answer in the session. You write nothing,
 start nothing and answer nothing on anyone's behalf.
 
-The brief also counts the judge's **open findings** — confirmed minors the pipeline kept in `<story>/findings.md`
-beside each delivered story; `python3 .agents/factory/factory-cli.py --findings` lists them with story, severity,
+The brief also counts the **open findings** — confirmed minors the pipeline kept in `<story>/findings.md`
+beside each delivered story, and the project's own under `product/findings/` (a test flaky in more than one story,
+`flaky.md`); `python3 .agents/factory/factory-cli.py --findings` lists them with story or file, severity,
 place and the finding in plain words first. They block nothing; a person closes a row (`done`, `wont-fix`) or a later story takes them as its brief.
 
 ## Do
@@ -22,15 +23,26 @@ place and the finding in plain words first. They block nothing; a person closes 
    ```
 
    (`python3 .agents/factory/factory-cli.py --status --format md --live` where the project has no runner
-   copy.) `--format md` gives Markdown tables, which a session shows as tables; the terminal form
-   (without it) is for a person at a shell. `--live` adds what the clock says: how long ago a stage
-   started, its last activity, the worker, whether a session listens, a newer pipeline on this machine.
-   Asked about one story, add `--story <story>`: its criteria, its passes (a correction after
-   acceptance is a pass of its own), its stages with the time they worked and their tokens, its
-   decisions.
-2. **Show it as it is, and nothing after it.** The view is written to be read without you: what waits
-   for a person first, then what runs, then the backlog by epic, and it ends with **Next** — the one
-   thing to do now, with its skill. Do not retell the tables in sentences, do not reformat them, do
+   copy.) The view is short: what runs (story, stage, round, since when), what waits for a person (with
+   the record), the next stories in the schedule's order — the first five, then `… n more ready · m
+   blocked` — and one line of totals. `--format md` gives Markdown tables, which a session shows as
+   tables; the terminal form (without it) is for a person at a shell. `--live` adds what the clock
+   says: how long ago a stage started, its last activity, the worker, whether a session listens, a
+   newer pipeline on this machine. Asked for more, add one option:
+   - `--all` — every story by epic (the newest epic first, its newest story first) with its state,
+     stage, passes and times, and the tokens per story and epic;
+   - `--story <story>` — one story: its own words and its criteria as scenarios, its passes (a
+     correction after acceptance is a pass of its own), its stages with the time they worked and their
+     tokens, its decisions;
+   - `--epic <epic>` — one epic: intent, goal, outcome event, domain contact, its own text, its
+     stories with their state, newest first.
+
+   Name these options under the view when the person may want more; run one only when asked. An
+   argument names it: `/factory-status all` is `--all`; `/factory-status <id>` is `--epic <id>` where
+   the id names an epic's folder (it holds an `epic.md`), else `--story <id>`.
+2. **Show it as it is, and nothing after it.** The view is written to be read without you: what runs,
+   what waits for a person, what comes next and the totals, and it ends with **Next** — the one thing
+   to do now, with its skill — and the options for more. Do not retell the tables in sentences, do not reformat them, do
    not add an interpretation of the numbers, and do not repeat *Next* in your own words. Say more
    only when asked — the reason behind a state, read from the file it comes from ("why is STORY-3
    blocked?" — the dependency its story names; "why did test run three times?" — the journal and the

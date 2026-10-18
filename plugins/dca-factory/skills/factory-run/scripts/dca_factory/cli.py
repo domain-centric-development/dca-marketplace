@@ -55,10 +55,10 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, decision_files, decision_options, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
-    EPIC_FILE, epic_folder, evidence_dir, factory_home, find_story, findings_path, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
-    location, needs_human_ids, open_findings, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
-    recommended_option, record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
+    ALL_KINDS, CONTRACT, CREATED_KEY, created_of, decision_files, decision_options, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
+    EPIC_FILE, epic_folder, evidence_dir, factory_home, find_story, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
+    finding_records, location, needs_human_ids, open_findings, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
+    recommended_option, record_path, records_of, resolve_profile, section_of, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
     story_id_of, story_kind, TECH_HEADINGS, VERSION)
 from .reports import (
     FOLLOW_ARGS, READERS, reader_of, session_reader, parse_time, part_of_call, session_usage_allowed, _short,
@@ -70,13 +70,13 @@ from .state import (
     has_worktree,
     flaky_tests, is_acceptance, journal_append, journal_events, journal_usage, journal_writer, listener_line, mark_listening,
     mark_stage, mark_window, OWNED_CHANGED, owned_end, PRODUCT_HEADINGS, read_claim, record_owned, release,
-    resolve_window, run_stories, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
+    resolve_window, run_stories, RUNNABLE, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
     verdict_in, worktree_of, write_story_fields)
 from .spec import (
     lint_context,
     derived, merge, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
-    criteria_of, DESCRIPTION_CHANGES, spec_target, story_spec, description_part, discovery_items, perspectives_of, story_ids)
+    criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_spec, description_part, discovery_items, perspectives_of, story_ids)
 from .tools import (
     isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
 from .runner import (
@@ -455,8 +455,9 @@ def status_brief(cwd, epics, runs, session_start=False):
     findings = open_findings(epics)
     if findings:
         stories = sorted({f[0] for f in findings})
-        print(f"factory: {len(findings)} open finding(s) from the judge in {len(stories)} story file(s) "
-              f"(<story>/{FINDINGS_FILE} in the story's folder) — `factory-cli.py --findings` lists them")
+        print(f"factory: {len(findings)} open finding(s) in {len(stories)} file(s) "
+              f"(<story>/{FINDINGS_FILE} in the story's folder, product/findings/ for the project's own) — "
+              f"`factory-cli.py --findings` lists them")
     # A skill link that points nowhere — its plugin version pruned from the cache, a checkout moved: the
     # skills are then missing for a session and a runner stage alike, and only the update relinks them.
     dangling = dangling_skill_links(cwd)
@@ -574,17 +575,26 @@ def activity_line(cwd, owner, started, now):
     return f"activity: {ago}" + (f" — last tool call {call}" if call else "")
 
 
-def status(cwd, epics, runs, story_filter=None, fmt="text", colour="auto", live=False, part="all"):
-    """The person's view: what waits for them, what runs, the backlog by epic with times and tokens —
-    or one story's details. The same files give the same text; `--live` adds what the clock says."""
+def status(cwd, epics, runs, story_filter=None, fmt="text", colour="auto", live=False, part="all", every=False,
+           epic_filter=None):
+    """The person's view. Short by default (WP-146): what runs, what waits for them, the next stories in the schedule's
+    order and one line of totals; `every` (`--all`) the whole table — every story by epic with times and tokens — and
+    `--part backlog` the backlog alone; one story's or one epic's details. The JSON is the whole model whatever the
+    form. The same files give the same text; `--live` adds what the clock says."""
     try:
         if story_filter:
             model = story_model(cwd, epics, runs, story_filter, live)
             text = render_story_md(model) if fmt == "md" else render_story_text(model, use_colour(colour))
+        elif epic_filter:
+            model = epic_model(cwd, epics, runs, epic_filter, live)
+            text = render_epic_md(model) if fmt == "md" else render_epic_text(model, use_colour(colour))
         else:
             model = status_model(cwd, epics, runs, live)
             model["part"] = part
-            text = render_status_md(model) if fmt == "md" else render_status_text(model, use_colour(colour))
+            if every or part == "backlog":
+                text = render_status_md(model) if fmt == "md" else render_status_text(model, use_colour(colour))
+            else:
+                text = render_short_md(model) if fmt == "md" else render_short_text(model, use_colour(colour))
     except GateError as error:
         print(f"status: {error}")
         return 1
@@ -620,9 +630,12 @@ SHELL_NAME = "factory.sh"          # the help's tables name the runner short; th
 HELP_COMMANDS = (
     ("deliver a wish", "your words become a backlog story — which epic, the criteria — and it runs at once",
      "/factory-run <your words>", ""),
-    ("where it stands", "what runs, what waits for you, every story with its times and tokens",
+    ("where it stands", "what runs, what waits for you, what comes next, the totals — short",
      "/factory-status", "status"),
-    ("one story", "its stages, passes and tokens", "/factory-status <story>", "status --story <story>"),
+    ("every story", "the backlog by epic, newest first, with times and tokens", "/factory-status all", "status --all"),
+    ("one story", "its words, criteria, stages, passes and tokens", "/factory-status <story>", "status --story <story>"),
+    ("one epic", "what it is for, its text, its stories with their state", "/factory-status <epic>",
+     "status --epic <epic>"),
     ("follow a stage", "what the running stage reads, edits and runs, as it happens — whoever started it", "",
      "follow"),
     ("find the problem", "a problem or a wished deliverable → a report with sources and proposed epics, each with "
@@ -1016,20 +1029,21 @@ def status_model(cwd, epics, runs, live=False):
         # the tests a gate of this story ran again alone and saw green: red in the whole suite, not the story's (WP-113)
         flaky = sorted(flaky_tests(runs, story_id))
         rows.append(dict(journal=journal, done=done, epic=story.get("epic", ""), story=story_id, flaky=flaky,
-                         title=story.get("title", ""), mark=mark,
+                         title=story.get("title", ""), mark=mark, created=created_of(story.get("front") or {}),
                          state=words, stage=stage or "—", passes=len(facts["passes"]) or 0,
                          started=facts["started"], delivered=facts["delivered"], seconds=facts["seconds"],
                          tokens=facts["tokens"], measured=facts["measured"], runs=facts["runs"],
                          **{k: sum(e.get(k, 0) for e in facts["stages"].values()) for k in USAGE_FIELDS},
                          cost=facts["cost"], priced=facts["priced"]))
         if mark in ("look", "question", "stopped"):
-            waiting.append(dict(mark=mark, story=story_id, what=words, action=action))
+            waiting.append(dict(mark=mark, story=story_id, what=words, action=action, draft=story["state"] == "unreleased",
+                                record=open_record(cwd, story_id, story) if mark != "stopped" else ""))
     for name, front, body, state, error, path in decision_files(cwd):
         story_id = str(front.get("story", "")).strip() if not error else ""
         if story_id in stories:
             continue                                  # its story's row already says so
         if error or state in ("open", "draft"):
-            waiting.append(dict(mark="question", story=story_id or name, what="an open question",
+            waiting.append(dict(mark="question", story=story_id or name, what="an open question", record=shown(path), draft=False,
                                 action=make_action(skill="/factory-decisions",
                                               shell=f"write the answer into {shown(path)} under `## Answer`")))
     running = []
@@ -1038,7 +1052,8 @@ def status_model(cwd, epics, runs, live=False):
         if story_id in stories and stories[story_id]["state"] in ("delivered", "superseded"):
             continue
         interrupted = story_id in stories and stories[story_id]["state"] != "running"
-        entry = dict(story=story_id, stage=stage, since=parse_time(started), interrupted=interrupted)
+        entry = dict(story=story_id, stage=stage, since=parse_time(started), interrupted=interrupted,
+                     round=story_round(runs, story_id))
         if stage in SHARED_WINDOWS and not interrupted:
             entry["part"] = window_part_now(runs, story_id, stage)
         if live:
@@ -1062,7 +1077,7 @@ def status_model(cwd, epics, runs, live=False):
                     seconds=sum(r["seconds"] for r in epic["rows"]))
     epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
     journeys = journey_hints(stories, epics)
-    blank = dict(title="", goal="", metric="", discovery="")
+    blank = dict(title="", goal="", metric="", discovery="", intent="", domain_contact="", created="", path="")
     files = epic_files(epics_dir)
     for epic in epics:
         own = next((f for f in files if epic["epic"] in (f["epic"], f["folder"])), None)
@@ -1074,6 +1089,19 @@ def status_model(cwd, epics, runs, live=False):
             epics.append(dict(epic=own["epic"], rows=[], delivered=0, total=0, tokens=0, measured=0, seconds=0,
                               **{k: own[k] for k in blank}))
     empty = [e["epic"] for e in epics if not e["rows"]]
+    # The backlog newest first (WP-146): the epics by `created:`, the stories within an epic by theirs — the factory
+    # orders, every view shows the order as given. An item without the field comes after the dated ones, in the
+    # schedule's order, as does every tie.
+    for epic in epics:
+        epic["rows"] = newest_first(epic["rows"])
+    epics[:] = newest_first(epics)
+    # what comes next, in the schedule's order: the stories that can run, and how many cannot yet
+    queue = dict(ready=[r["story"] for r in rows if stories[r["story"]]["state"] in RUNNABLE
+                        and r["story"] not in {x["story"] for x in running}],
+                 blocked=sum(1 for r in rows if stories[r["story"]]["state"] == "blocked"),
+                 drafts=sum(1 for r in rows if stories[r["story"]]["state"] == "unreleased"))
+    # the delivered stories, the newest delivery first; one without a time (delivered before the field) last
+    delivered_order = [r["story"] for r in newest_first([r for r in rows if r["done"]], key="delivered")]
     nxt = data["next"]
     if nxt:
         next_line = dict(text=f"{nxt} can start from {stories[nxt]['start'] or 'plan'} — run it.",
@@ -1113,23 +1141,23 @@ def status_model(cwd, epics, runs, live=False):
                    description_part(cwd, profile, "domain", ())]
     # what else waits for a person: the judge's open minors, other factories' claims (WP-104)
     findings = []
-    for story, where, severity, defect, perspective, fix, plain in open_findings(epics_dir):
-        try:
-            path = find_story(epics_dir, story)
-        except GateError:
-            path = None
-        kept = shown(findings_path(path)) if path else FINDINGS_FILE
-        # `plain` leads: the finding in one sentence a person understands at once (contract 23; '' in an older row)
-        findings.append(dict(story=story, plain=plain, where=where, severity=severity, defect=defect, perspective=perspective,
-                             fix=fix, file=kept,
+    for found in finding_records(epics_dir):
+        story, plain, defect, kept = found["owner"], found["plain"], found["defect"], shown(found["path"])
+        # `plain` leads: the finding in one sentence a person understands at once (contract 23; '' in an older row).
+        # A project finding (`<product>/findings/<name>.md`, WP-146) belongs to no story: the backlog skill is handed
+        # its row, which a task's `closes:` names.
+        findings.append(dict(story=story, row=found["row"], project=found["project"], plain=plain, where=found["where"],
+                             severity=found["severity"], defect=defect, perspective=found["perspective"],
+                             fix=found["fix"], file=kept,
                              action=make_action(text=f"fix it in a story, or set its Status to done or wont-fix in {kept}",
-                                                skill=f"/factory-backlog {story}: {plain or defect}")))
+                                                skill=f"/factory-backlog {found['row'] if found['project'] else story}: "
+                                                      f"{plain or defect}")))
     # the review perspectives the profile asks for now — a view shows a story's `review:<name>` processes for these
     # alone, never a reviewer a profile named before (an old `reviews/dca.md`, a `review:dca` in the journal)
     perspectives = [dict(name=name, carrier=carrier) for name, carrier in perspectives_of(profile)]
     return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
                 findings=findings, claims=foreign_claims(epics_dir, runs), perspectives=perspectives,
-                description=description,
+                description=description, queue=queue, delivered_order=delivered_order,
                 rows=rows, next=next_line, journeys=journeys,
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
                 delivered=sum(r["done"] for r in rows), total=len(rows),
@@ -1158,9 +1186,101 @@ def epic_files(epics):
             front = read_front_matter(path)[0]
         except GateError:
             front = {}
-        found.append(dict(epic=str(front.get("id") or name), folder=name,
-                          **{k: front_text(front.get(k)) for k in ("title", "goal", "metric", "discovery")}))
+        found.append(dict(epic=str(front.get("id") or name), folder=name, created=created_of(front), path=shown(path),
+                          **{k: front_text(front.get(k))
+                             for k in ("title", "goal", "metric", "discovery", "intent", "domain_contact")}))
     return found
+
+
+def utc_text(moment):
+    """A time as the backlog writes it: UTC, to the second, `Z`."""
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def backfill_created(cwd, epics):
+    """WP-146: `created:` into every story and every epic that has none — once, idempotent, never over a value there
+    (a line `created:` of any content is the person's). The time is the commit that added the file: one pass over the
+    log for the files added where they lie; a file a move brought there followed through its renames; a file git does
+    not hold yet takes its own modification time. Prints what it wrote."""
+    files = story_files(epics) + [os.path.join(epics, e["folder"], EPIC_FILE) for e in epic_files(epics)]
+    missing = []
+    for path in files:
+        try:
+            front = read_front_matter(path)[0]
+        except GateError:
+            continue                              # a file the gate cannot read is named by the gate, not filled here
+        if CREATED_KEY not in front:
+            missing.append(path)
+    if not missing:
+        print("backfill: every story and epic has its created: — nothing written")
+        return 0
+    added = {}
+    if git(cwd, "rev-parse", "--is-inside-work-tree")[0] == 0:
+        code, out = git(cwd, "-c", "core.quotePath=false", "log", "--relative", "--diff-filter=A", "--no-renames",
+                        "--format=%x01%aI", "--name-only", "--", os.path.relpath(epics, cwd))
+        stamp = None
+        for line in out.splitlines() if code == 0 else []:
+            if line.startswith("\x01"):
+                stamp = line[1:].strip()
+            elif line.strip() and stamp:
+                added.setdefault(os.path.normpath(line.strip()), stamp)   # the log is newest first: the latest add
+    written, from_file = {"story": 0, "epic": 0}, 0
+    for path in missing:
+        rel = os.path.normpath(os.path.relpath(path, cwd))
+        stamp = added.get(rel)
+        if not stamp and git(cwd, "ls-files", "--error-unmatch", "--", rel)[0] == 0:
+            code, out = git(cwd, "log", "--diff-filter=A", "--follow", "--format=%aI", "-1", "--", rel)
+            stamp = out.strip().splitlines()[0] if code == 0 and out.strip() else None
+        moment = None
+        if stamp:
+            with contextlib.suppress(ValueError):
+                moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if moment is None:
+            moment, from_file = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc), from_file + 1
+        write_story_fields(path, **{CREATED_KEY: utc_text(moment)})
+        written["epic" if os.path.basename(path) == EPIC_FILE else "story"] += 1
+    print(f"backfill: created: written into {written['story']} stor{'y' if written['story'] == 1 else 'ies'} and "
+          f"{written['epic']} epic{'' if written['epic'] == 1 else 's'}, from the commit that added each"
+          + (f" — {from_file} not in git yet, from the file's own time" if from_file else ""))
+    return 0
+
+
+def created_moment(value):
+    """A `created:` (or `delivered:`) value as a UTC time to order by — a date alone at its midnight; None for none."""
+    value = str(value or "").strip()
+    if not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00") if "T" in value else value + "T00:00:00+00:00")
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def newest_first(items, key="created"):
+    """The items newest first by their `key` (a `created:` or a delivery time); the undated after them. Stable: the
+    order the items come in decides a tie and among the undated."""
+    def moment(item):
+        value = item.get(key)
+        return value if isinstance(value, datetime) else created_moment(value)
+    dated = sorted((i for i in items if moment(i)), key=lambda i: moment(i).astimezone(timezone.utc), reverse=True)
+    # sorted(reverse=True) keeps equal items in their order, so a tie stays in the schedule's
+    return dated + [i for i in items if not moment(i)]
+
+
+def story_round(runs, story_id):
+    """The round a story is in: 1, then one more for every gate refusal the runner counted (`.rounds`)."""
+    path = os.path.join(evidence_dir(runs, story_id), ".rounds")
+    text = read_text(path).strip() if os.path.isfile(path) else ""
+    return (int(text) if text.isdigit() else 0) + 1
+
+
+def open_record(cwd, story_id, story):
+    """The open record a waiting story waits on, as a path a person reads — '' where none is open."""
+    records = story_records(cwd, story_id, story.get("path"))
+    opened = [(path, front) for path, front, _b, st, _a in records if st in ("open", "draft")]
+    chosen = next((p for p, f in opened if is_acceptance(f)), opened[0][0] if opened else "")
+    return shown(chosen) if chosen else ""
 
 
 def journey_hints(stories, epics):
@@ -1381,6 +1501,138 @@ def heading(text, colour, underline="─"):
 
 def section(text, colour):
     return ["", "  " + bold(text, colour), ""]
+
+
+#: How many of the stories that can run the short view names; the rest it counts.
+QUEUE_SHOWN = 5
+
+
+#: Where the short view points for more — the same words in the terminal and in a session.
+MORE_FORMS = (("every story", "status --all"), ("one story", "status --story <id>"), ("one epic", "status --epic <id>"))
+
+
+def short_model(model):
+    """What the short view shows, decided once for the terminal and the session: the running stages with their round,
+    what waits for a person (the drafts in one line), the next stories in the schedule's order — the first few, the
+    rest counted — and the totals."""
+    queue = model.get("queue") or dict(ready=[], blocked=0, drafts=0)
+    by_id = {r["story"]: r for r in model["rows"]}
+    shown_ids = queue["ready"][:QUEUE_SHOWN]
+    rest = []
+    if len(queue["ready"]) > len(shown_ids):
+        rest.append(f"{len(queue['ready']) - len(shown_ids)} more ready")
+    if queue["blocked"]:
+        rest.append(f"{queue['blocked']} blocked")
+    totals = [f"{model['delivered']} of {model['total']} delivered", f"{len(queue['ready'])} ready"] if model["total"] \
+        else ["no story yet"]
+    totals += [f"{queue['blocked']} blocked"] if queue["blocked"] else []
+    totals += [f"{queue['drafts']} draft" + ("s" if queue["drafts"] != 1 else "")] if queue["drafts"] else []
+    if model["measured"]:
+        totals.append(f"{tokens_short(model['tokens'])} tokens")
+    if model["seconds"]:
+        totals.append(f"{took_text(model['seconds'])} worked")
+    if model.get("findings"):
+        totals.append(f"{len(model['findings'])} open finding" + ("s" if len(model["findings"]) != 1 else ""))
+    return dict(running=model["running"], waiting=[w for w in model["waiting"] if not w.get("draft")],
+                drafts=[w["story"] for w in model["waiting"] if w.get("draft")],
+                queue=[by_id[i] for i in shown_ids if i in by_id], rest=" · ".join(rest), totals=" · ".join(totals))
+
+
+def running_words(entry):
+    """A running stage as the short view says it: the stage (and the part of a shared one), its round after the
+    first, since when."""
+    stage = f"{entry['stage']} · {entry['part']}" if entry.get("part") else entry["stage"]
+    if entry.get("round", 1) > 1:
+        stage += f" · round {entry['round']}"
+    line = f"{stage}   since {stamp_text(entry['since'])} UTC"
+    if entry.get("interrupted"):
+        line += " · never ended — possibly interrupted"
+    if entry.get("ago"):
+        line += f" · {entry['ago']}"
+    return line
+
+
+def tokens_short(count):
+    """A token count at a glance: `481.7 M`, `12.3 k`."""
+    return f"{count / 1e6:.1f} M" if count >= 1e6 else f"{count / 1e3:.1f} k" if count >= 1e3 else str(count)
+
+
+def render_short_text(model, colour=False):
+    short = short_model(model)
+    section = lambda title, colour: ["", "  " + bold(title, colour)]   # the short view: no blank line under a heading
+    out = [""] + heading(f"Factory — {model['project']}", colour, "═")
+    out += section("Running", colour)
+    for r in short["running"]:
+        mark = "stopped" if r.get("interrupted") else "running"
+        out.append("    " + paint(f"{MARKS_TEXT[mark]} {r['story']}   {running_words(r)}", mark, colour))
+        if r.get("activity"):
+            out.append(f"        activity: {r['activity']}")
+    if not short["running"]:
+        out.append("    Nothing is running.")
+    out += section("Waiting for you", colour)
+    for n, w in enumerate(short["waiting"]):
+        head = f"{MARKS_TEXT[w['mark']]} {w['story']}   {w['what']}" + (f"   {w['record']}" if w.get("record") else "")
+        out += ([""] if n else []) + ["    " + paint(head, w["mark"], colour)]
+        out += how_lines(w["action"], colour, "        ")
+    if short["drafts"]:
+        ids = " ".join(short["drafts"])
+        out += ([""] if short["waiting"] else []) + [
+            "    " + paint(f"{MARKS_TEXT['question']} {len(short['drafts'])} draft(s) wait for your release: {ids}",
+                           "question", colour),
+            f"        {dim('agent'.ljust(10), colour)}   {commands('/factory-backlog release ' + ids, colour)}"]
+    if not short["waiting"] and not short["drafts"]:
+        out.append("    Nothing waits for you.")
+    out += section("Next in line", colour)
+    if short["queue"]:
+        cells = [[f"{MARKS_TEXT[r['mark']]} {r['story']}", r["state"], r["title"]] for r in short["queue"]]
+        out += table_text(["story", "state", "title"], cells, indent="    ",
+                          marks=[r["mark"] for r in short["queue"]], colour=colour)
+    else:
+        out.append("    Nothing is ready to run.")
+    if short["rest"]:
+        out.append(f"    … {short['rest']}")
+    out += ["", "  " + short["totals"]]
+    out += ["", "─" * 72] + next_text(model, colour)
+    out.append(f"  {bold('More', colour)}   " + " · ".join(f"{what}: {form}" for what, form in MORE_FORMS))
+    if model["extra"]:
+        out += [""] + ["  " + line for line in model["extra"]]
+    if model["hint"]:
+        out += ["", f"  layout: {model['hint']}"]
+    return "\n".join(out + [""])
+
+
+def render_short_md(model):
+    short = short_model(model)
+    out = [f"### Factory — {model['project']}", "", "**Running**", ""]
+    if short["running"]:
+        out += [f"- {MARKS_MD['stopped' if r.get('interrupted') else 'running']} **{r['story']}** {running_words(r)}"
+                + (f" — {r['activity']}" if r.get("activity") else "") for r in short["running"]]
+    else:
+        out.append("Nothing is running.")
+    out += ["", "**Waiting for you**", ""]
+    if short["waiting"]:
+        out += table_md(["", "story", "what", "how"],
+                        [[MARKS_MD[w["mark"]], w["story"], w["what"] + (f" — `{w['record']}`" if w.get("record") else ""),
+                          how_md(w["action"])] for w in short["waiting"]])
+    if short["drafts"]:
+        ids = " ".join(short["drafts"])
+        out += ([""] if short["waiting"] else []) + [
+            f"{MARKS_MD['question']} {len(short['drafts'])} draft(s) wait for your release: {ids} → `/factory-backlog release {ids}`"]
+    if not short["waiting"] and not short["drafts"]:
+        out.append("Nothing waits for you.")
+    out += ["", "**Next in line**", ""]
+    if short["queue"]:
+        out += table_md(["", "story", "state", "title"],
+                        [[MARKS_MD[r["mark"]], r["story"], r["state"], r["title"]] for r in short["queue"]])
+    else:
+        out.append("Nothing is ready to run.")
+    if short["rest"]:
+        out += ["", f"… {short['rest']}"]
+    out += ["", short["totals"], "", next_md(model), "",
+            "More — " + " · ".join(f"{what}: `{form}`" for what, form in MORE_FORMS)]
+    if model["extra"]:
+        out += [""] + [f"- {line}" for line in model["extra"]]
+    return "\n".join(out)
 
 
 def render_status_text(model, colour=False):
@@ -1658,11 +1910,153 @@ def story_model(cwd, epics, runs, story_id, live=False):
             entry["why"] = " · ".join(w for w in (entry.get("why", ""), f"{entry['denied']} denied") if w)
     models = sorted({m for e in facts["stages"].values() for m in e["models"]})
     not_applied = sorted({r for e in facts["stages"].values() if e["not_applied"] for r in e["requested"]})
+    front, body = data.get("front") or {}, data.get("body") or ""
     return dict(row=row, story=story_id, title=data.get("title", ""), epic=data.get("epic", ""),
-                context=str(data["front"].get("context", "")).strip(), criteria=criteria, accepted_by=accepted_by,
+                path=shown(data["path"]) if data.get("path") else "", kind=story_kind(front),
+                created=created_of(front), intent=front_text(front.get("intent")),
+                description=story_description(body), scenarios=scenarios_of(body),
+                context=str(front.get("context", "")).strip(), criteria=criteria, accepted_by=accepted_by,
                 passes=passes, stages=facts["stages"], decisions=decisions, models=models, not_applied=not_applied,
                 priced=facts["priced"] > 0, waiting=[w for w in overview["waiting"] if w["story"] == story_id],
                 next=overview["next"])
+
+
+def story_description(body):
+    """What a story is about, in its own words: its `## Story` section — or, for a task, which has none, the prose
+    between its title and its first section. Comments left out."""
+    lines = section_of(body, "story")
+    if lines is None:
+        lines = []
+        for line in body.splitlines():
+            if line.startswith("## "):
+                break
+            if not line.startswith("# "):
+                lines.append(line)
+    text = re.sub(r"<!--.*?-->", "", "\n".join(lines), flags=re.S)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def epic_description(body, front):
+    """An epic's own text beside its fields: its body without the title, without `## Stories` (the stories come with
+    their state) and without a section the front matter already says — `## Intent`, `## Goal`, `## Outcome` (its
+    `metric:`). Comments left out."""
+    said = {"stories"} | {name for name, key in (("intent", "intent"), ("goal", "goal"), ("outcome", "metric"))
+                          if front_text(front.get(key))}
+    kept, skip = [], False
+    for line in body.splitlines():
+        if line.startswith("# "):
+            continue
+        if line.startswith("## "):
+            skip = line[3:].strip().lower() in said
+        if not skip:
+            kept.append(line)
+    text = re.sub(r"<!--.*?-->", "", "\n".join(kept), flags=re.S)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def epic_model(cwd, epics, runs, epic_id, live=False):
+    """One epic as a person reads it (WP-146): its fields, its own text, its stories with their state — newest
+    first, as the backlog shows them — and what comes next."""
+    overview = status_model(cwd, epics, runs, live)
+    wanted = epic_id.lower()
+    folders = {f["folder"].lower(): f["epic"] for f in epic_files(epics)}
+    epic = next((e for e in overview["epics"] if e["epic"].lower() in (wanted, folders.get(wanted, "").lower())), None)
+    if epic is None:
+        known = ", ".join(e["epic"] for e in overview["epics"] if e["epic"]) or "none"
+        raise GateError(f"no epic {epic_id} under {epics}/ — the epics: {known}")
+    front, body = {}, ""
+    own = next((f for f in epic_files(epics) if epic["epic"] in (f["epic"], f["folder"])), None)
+    if own:
+        with contextlib.suppress(GateError, OSError):
+            front, body = read_front_matter(os.path.join(epics, own["folder"], EPIC_FILE))
+    journey = next((j for j in overview["journeys"] if j["epic"] == epic["epic"]), None)
+    return dict(epic=epic["epic"], title=epic.get("title", ""), path=epic.get("path", ""), created=epic.get("created", ""),
+                intent=epic.get("intent", ""), goal=epic.get("goal", ""), metric=epic.get("metric", ""),
+                domain_contact=epic.get("domain_contact", ""), discovery=epic.get("discovery", ""),
+                description=epic_description(body, front), mark=epic_mark(epic), rows=epic["rows"],
+                delivered=epic["delivered"], total=epic["total"], tokens=epic["tokens"], measured=epic["measured"],
+                seconds=epic["seconds"], journey=journey, next=overview["next"])
+
+
+def paragraph_lines(text, indent):
+    """Prose wrapped to the view's width, its paragraphs kept apart; a heading, a list item or a table row stands on
+    its own line as written."""
+    out = []
+    for paragraph in text.split("\n\n"):
+        lines = paragraph.splitlines()
+        if any(l.lstrip().startswith(("#", "-", "*", "|", ">")) for l in lines):
+            wrapped = [w for l in lines for w in (textwrap.wrap(l.strip(), view_width(), initial_indent=indent,
+                                                                subsequent_indent=indent + "  ") or [""])]
+        else:
+            wrapped = textwrap.wrap(" ".join(paragraph.split()), view_width(), initial_indent=indent,
+                                    subsequent_indent=indent)
+        out += ([""] if out else []) + wrapped
+    return out
+
+
+def epic_story_cells(model, marks):
+    """An epic's stories as its view lists them: the story with its mark, its state, when it was delivered, its title."""
+    return [[f"{marks[r['mark']]} {r['story']}", r["state"], stamp_text(r["delivered"]), r["title"]] for r in model["rows"]]
+
+
+def scenario_lines(model, indent="    "):
+    """A story's criteria as a person reads them: the title, then the steps, the rule they serve above them."""
+    out, rule, width = [], None, view_width()
+    wrap = lambda text, first, rest: textwrap.wrap(text, width, initial_indent=first, subsequent_indent=rest) or [first]
+    for scenario in model["scenarios"]:
+        if scenario["rule"] and scenario["rule"] != rule:
+            out += [""] + wrap(f"Rule: {scenario['rule']}", indent, indent + "      ")
+        rule = scenario["rule"]
+        out += wrap(scenario["title"] + (" (happy path)" if scenario["happy"] else "") + f"  [{scenario['key']}]",
+                    indent + "  ", indent + "    ")
+        for step in scenario["steps"]:
+            out += wrap(f"{step['word']} {step['text']}", indent + "    ", indent + "      ")
+        if scenario["text"]:
+            out += wrap(scenario["text"], indent + "    ", indent + "      ")
+    return out
+
+
+def render_epic_text(model, colour=False):
+    title = f"{model['epic']} — {model['title']}" if model["title"] else model["epic"]
+    facts = [(label, value) for label, value in (
+        ("Intent", model["intent"]), ("Goal", model["goal"]), ("Outcome", model["metric"]),
+        ("Domain", model["domain_contact"]), ("Discovery", model["discovery"]), ("Created", model["created"]),
+        ("Stories", epic_summary(model) if model["rows"] else "no story yet"), ("File", model["path"])) if value]
+    width = max(len(label) for label, _v in facts)
+    out = [""] + heading(title, colour, "═") + [""]
+    out += [f"  {bold(label.ljust(width), colour)}   {value}" for label, value in facts]
+    if model["description"]:
+        out += [""] + paragraph_lines(model["description"], "  ")
+    if model["rows"]:
+        out += section("Stories — newest first", colour)
+        out += table_text(["story", "state", "delivered (UTC)", "title"], epic_story_cells(model, MARKS_TEXT),
+                          indent="    ", marks=[r["mark"] for r in model["rows"]], colour=colour)
+    else:
+        out += ["", f"  no story yet — {commands('/factory-backlog stories ' + model['epic'], colour)}"]
+    if model["journey"]:
+        out += ["", f"  {dim('journey', colour)}   {model['journey']['text']} — "
+                    f"{commands(model['journey']['action']['skill'], colour)}"]
+    return "\n".join(out + ["", "─" * 72] + next_text(model, colour) + [""])
+
+
+def render_epic_md(model):
+    title = f"{model['epic']} — {model['title']}" if model["title"] else model["epic"]
+    out = [f"**{title}**", ""]
+    out += [f"- **{label}:** {value}" for label, value in (
+        ("Intent", model["intent"]), ("Goal", model["goal"]), ("Outcome", f"`{model['metric']}`" if model["metric"] else ""),
+        ("Domain contact", model["domain_contact"]), ("Discovery", model["discovery"]), ("Created", model["created"]),
+        ("Stories", epic_summary(model) if model["rows"] else "no story yet"), ("File", f"`{model['path']}`" if model["path"] else ""))
+        if value]
+    if model["description"]:
+        out += ["", model["description"]]
+    if model["rows"]:
+        out += ["", "**Stories** — newest first", ""]
+        out += table_md(["story", "state", "delivered (UTC)", "title"], epic_story_cells(model, MARKS_MD))
+    else:
+        out += ["", f"No story yet — `/factory-backlog stories {model['epic']}`."]
+    if model["journey"]:
+        out += ["", f"*journey* — {model['journey']['text']} → `{model['journey']['action']['skill']}`"]
+    return "\n".join(out + ["", next_md(model)])
 
 
 def token_cells(entry, measured):
@@ -1783,6 +2177,10 @@ def render_story_text(model, colour=False):
     for w in model["waiting"]:
         out += ["", "  " + paint(f"{MARKS_TEXT[w['mark']]} {w['what']}", w["mark"], colour)]
         out += how_lines(w["action"], colour, "      ")
+    if model.get("description"):
+        out += section("Story", colour) + paragraph_lines(model["description"], "    ")
+    if model.get("scenarios"):
+        out += section("Criteria", colour) + scenario_lines(model)[1 if model["scenarios"][0]["rule"] else 0:]
     if model["passes"]:
         out += section("Passes", colour)
         out += table_text(["pass", "started (UTC)", "ended (UTC)", "worked", "waited before", "tokens"],
@@ -1819,6 +2217,19 @@ def render_story_md(model):
             for label, value in facts]
     for w in model["waiting"]:
         out += ["", f"{MARKS_MD[w['mark']]} **{w['what']}** — {how_md(w['action'])}"]
+    if model.get("description"):
+        out += ["", "**Story**", "", model["description"]]
+    if model.get("scenarios"):
+        out += ["", "**Criteria**"]
+        rule = None
+        for scenario in model["scenarios"]:
+            if scenario["rule"] and scenario["rule"] != rule:
+                out += ["", f"*Rule: {scenario['rule']}*"]
+            rule = scenario["rule"]
+            out += ["", f"- **{scenario['title']}**" + (" (happy path)" if scenario["happy"] else "") + f" `{scenario['key']}`"]
+            out += [f"  - {step['word']} {step['text']}" for step in scenario["steps"]]
+            if scenario["text"]:
+                out.append(f"  - {scenario['text']}")
     if model["passes"]:
         out += ["", "**Passes**", ""]
         out += table_md(["pass", "started (UTC)", "ended (UTC)", "worked", "waited before", "tokens"],
@@ -2355,7 +2766,12 @@ def main(argv):
     parser.add_argument("--process", help="with --follow: only that process's output — builder, verifier, review-ddd, plan, …")
     parser.add_argument("--all", dest="every", action="store_true",
                         help="with --follow --story: every process of the story, in the order they began, and exit; "
-                             "with --stages: every row of the table, the steps after the run order too")
+                             "with --stages: every row of the table, the steps after the run order too; "
+                             "with --status: every story by epic, with times and tokens, instead of the short view")
+    parser.add_argument("--epic", help="with --status: one epic — its fields, its text, its stories with their state")
+    parser.add_argument("--backfill-created", action="store_true",
+                        help="write `created:` into every story and epic without one, from the commit that added the "
+                             "file — once, never over a value there (`factory.sh update` runs it)")
     parser.add_argument("--lines", type=int, default=30, help="with --follow --once: how many lines (0: all)")
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
@@ -2365,7 +2781,7 @@ def main(argv):
     parser.add_argument("--listening", action="store_true",
                         help="record that this session looked at the backlog (a listening loop's sign of life)")
     parser.add_argument("--status", action="store_true",
-                        help="print what runs, what waits for a human, every story's state and the cost")
+                        help="print what runs, what waits for a human and what comes next (--all: every story's state and the cost)")
     parser.add_argument("--brief", action="store_true", help="with --status: two lines, for a session's start")
     parser.add_argument("--format", choices=("text", "md", "json"), default="text",
                         help="with --status: aligned text for a terminal, Markdown for a session, JSON for tools")
@@ -2590,7 +3006,8 @@ def main(argv):
             return 0
         for story, where, severity, defect, _perspective, _fix, plain in rows:
             print(f"{story}\t{severity}\t{where}\t" + (f"{plain} — {defect}" if plain else defect))
-        print(f"factory: {len(rows)} open finding(s); set Status to done or wont-fix in the story's {FINDINGS_FILE}")
+        print(f"factory: {len(rows)} open finding(s); set Status to done or wont-fix in the story's {FINDINGS_FILE} "
+              f"or the project's file under product/findings/")
         return 0
     if args.perspectives:
         for name, carrier in perspectives_of(read_profile(resolve_profile(None, cwd))):
@@ -2697,6 +3114,8 @@ def main(argv):
         return claim(cwd, args.claim)
     if args.release is not None:
         return release(cwd, args.release or session_owner())
+    if args.backfill_created:
+        return backfill_created(cwd, args.epics)
     if args.status and args.brief:
         try:
             return status_brief(cwd, args.epics, args.runs, args.session_start)
@@ -2706,7 +3125,8 @@ def main(argv):
     if args.help_view:
         return factory_help(cwd, args.epics, args.runs, args.format, args.color)
     if args.status:
-        return status(cwd, args.epics, args.runs, args.story, args.format, args.color, args.live, args.part)
+        return status(cwd, args.epics, args.runs, args.story, args.format, args.color, args.live, args.part,
+                      every=args.every, epic_filter=args.epic)
     if args.window_start or args.window_end:
         if not args.story:
             parser.error("--window-start/--window-end need --story")

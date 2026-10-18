@@ -270,6 +270,12 @@ TASK_SOURCES = (
      "| 2 | ddd | src/main/Page.java:30 | minor | already handled | — | done |\n"),
 )
 
+#: A project finding (WP-146): a flaky test's row in product/findings/flaky.md, which a task closes as `flaky#1`.
+FLAKY_FINDING = ("product/findings/flaky.md",
+                 "---\nfindings: flaky\n---\n\n# Findings — flaky\n\n"
+                 "| # | Perspective | File:line | Severity | In plain words | Defect | Fix | Status |\n|---|---|---|---|---|---|---|---|\n"
+                 "| 1 | flaky | com.example.OtherTest#holds | minor |  | flaky | fix it | open |\n")
+
 #: Every test command run whole, as a build tool runs an unfiltered suite: each test the set has, by its marker.
 WHOLE_RUNNER = ("whole-runner.sh",
                 '#!/bin/sh\n# unfiltered, it runs every test it finds in the set, as a build tool does\n'
@@ -880,7 +886,7 @@ def flaky_status(args, root):
     """The status shows a story's flaky notes: in its row (JSON, the cockpit's source) and in the text view."""
     shown = subprocess.run([sys.executable, args.cli, "--status", "--format", "json"], cwd=root, capture_output=True,
                            text=True, encoding="utf-8").stdout
-    text = subprocess.run([sys.executable, args.cli, "--status"], cwd=root, capture_output=True, text=True,
+    text = subprocess.run([sys.executable, args.cli, "--status", "--all"], cwd=root, capture_output=True, text=True,
                           encoding="utf-8").stdout
     story = subprocess.run([sys.executable, args.cli, "--status", "--story", "STORY-1"], cwd=root, capture_output=True,
                            text=True, encoding="utf-8").stdout
@@ -2612,6 +2618,11 @@ exit 0
               "raise it to 'contract:" in output
               and "contract: 1" in open(os.path.join(root, "dca-factory.profile.yaml"), encoding="utf-8").read(),
               [l for l in output.splitlines() if "contract" in l][:2])
+        check("update: every story and epic without `created:` gets one, and the update says so (WP-146)",
+              "created: written into 1 story and 1 epic" in output
+              and re.search(r"^created: \d{4}-", open(os.path.join(root, "product/epics/sample/STORY-1/story.md"),
+                                                       encoding="utf-8").read(), re.M) is not None,
+              [l for l in output.splitlines() if "created" in l][:2])
     for root in throwaway():
         build_project(root)
         run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
@@ -3336,9 +3347,16 @@ exit 0
         project_runner = os.path.join(root, ".agents", "factory", "factory.sh")
         status_code, status_out = run_runner(project_runner, root, "status") if os.path.isfile(project_runner) \
             else (None, "")
-        check("install: the runner is copied beside the gate, and `factory.sh status` works from there",
-              status_code == 0 and "Waiting for you" in status_out and "Backlog" in status_out,
-              f"exit {status_code}; {status_out[:120]}")
+        all_code, all_out = run_runner(project_runner, root, "status", "--all") if os.path.isfile(project_runner) \
+            else (None, "")
+        epic_code, epic_out = run_runner(project_runner, root, "status", "--epic", "sample") \
+            if os.path.isfile(project_runner) else (None, "")
+        check("install: the runner is copied beside the gate, and `factory.sh status` works from there — short, "
+              "`--all` the whole table, `--epic` one epic",
+              status_code == 0 and "Waiting for you" in status_out and "Next in line" in status_out
+              and "Backlog" not in status_out and all_code == 0 and "Backlog" in all_out
+              and epic_code == 0 and "A sample epic" in epic_out,
+              f"exit {status_code}/{all_code}/{epic_code}; {status_out[:120]}")
         usage_code, usage_out = run_runner(project_runner, root, "status", "--usage") if os.path.isfile(project_runner) \
             else (None, "")
         check("install: `factory.sh status --usage` passes on to the gate", usage_code == 0 and "Tokens" in usage_out,
@@ -5646,12 +5664,15 @@ def run_groups(args):
          dict(green=both_green, ledger=both_green,
               profile=FLAKY_PROFILE.replace("filterFlag: --select\n", "").replace('filterFormat: "{class}#{method}"\n', ""),
               extra_sources=flaky_sources())),
-        (Case("document: a test noted flaky in this story and in another becomes an open finding for a task", "document", 0,
-              must_pass=("documented", "findings"), text=("flaky test(s) noted in two stories",)),
+        (Case("document: a test noted flaky in this story and in another becomes an open finding of the project's, not of "
+              "the story", "document", 0, must_pass=("documented", "findings"),
+              text=("flaky test(s) noted in two stories", "product/findings/flaky.md")),
          dict(document=DOCUMENT, extra_sources=(flaky_journal("STORY-1"), flaky_journal("STORY-0")),
-              after=lambda root: [] if "| flaky | com.example.OtherTest#holds | minor |" in read_or_empty(
-                  os.path.join(root, "product/epics/sample/STORY-1/findings.md")) else
-              [f"no flaky row in findings.md: {read_or_empty(os.path.join(root, 'product/epics/sample/STORY-1/findings.md'))[-300:]}"])),
+              after=lambda root: [] if "| 1 | flaky | com.example.OtherTest#holds | minor |" in read_or_empty(
+                  os.path.join(root, "product/findings/flaky.md"))
+              and "flaky" not in read_or_empty(os.path.join(root, "product/epics/sample/STORY-1/findings.md")) else
+              [f"no flaky row in product/findings/flaky.md, or one in the story's: "
+               f"{read_or_empty(os.path.join(root, 'product/findings/flaky.md'))[-300:]}"])),
         (Case("document: a test noted flaky in one story alone is a note, not a finding", "document", 0,
               must_pass=("documented",), absent=("flaky test(s) noted in two stories",)),
          dict(document=DOCUMENT, extra_sources=(flaky_journal("STORY-1"),),
@@ -5796,6 +5817,13 @@ def run_groups(args):
         (Case("task: a task without a criterion that closes an open finding row passes the plan gate", "plan", 0,
               must_pass=("task",), absent=("happy-path",), text=("closes STORY-0#1",)),
          dict(story=TASK, tests=None, extra_sources=TASK_SOURCES)),
+        (Case("task: a task closes a row of the project's findings — `flaky#1` of product/findings/flaky.md — at delivery",
+              "document", 0, must_pass=("delivered", "findings"), text=("closed flaky#1",)),
+         dict(story=TASK.replace("closes: [STORY-0#1]", "closes: [flaky#1]"), tests=None,
+              document="# Document\n\n## Glossary\n(none)\n", extra_sources=TASK_SOURCES + (FLAKY_FINDING,),
+              after=lambda root: [] if "| 1 | flaky | com.example.OtherTest#holds | minor |  | flaky | fix it | done |"
+              in read_or_empty(os.path.join(root, "product/findings/flaky.md")) else
+              [f"the row is not done: {read_or_empty(os.path.join(root, 'product/findings/flaky.md'))[-300:]}"])),
         (Case("task: a task with an acceptance criterion is refused — a criterion is behaviour, a story's", "plan", 1,
               must_fail=("task",), text=("shows-the-thing",)),
          dict(story=STORY.replace("status: approved", "kind: task\nstatus: approved"), tests=None)),
@@ -7144,9 +7172,9 @@ def run_groups(args):
              and "0 of 0 delivered" not in shown_status("--part", "backlog")
              and "0 of 0 delivered" not in shown_status(), shown_status("--part", "backlog")[-400:]),
             ("status: the terminal and the session view say the empty epic has no story yet",
-             "no story yet — /factory-backlog stories reminders" in shown_status()
-             and "No story yet — `/factory-backlog stories reminders`." in shown_status("--format", "md"),
-             shown_status()[-400:]),
+             "no story yet — /factory-backlog stories reminders" in shown_status("--all")
+             and "No story yet — `/factory-backlog stories reminders`." in shown_status("--format", "md", "--all"),
+             shown_status("--all")[-400:]),
         ]
         write_file(root, "product/overview.md", "# Product\n\n## What and for whom\n\nA list.\n\n## Surfaces\n\n"
                                                "<!-- the pages -->\n\n## Qualities\n\nFast.\n")
@@ -7156,6 +7184,126 @@ def run_groups(args):
                              product.get("present") and "Surfaces" in product.get("empty", [])
                              and "How it works" in product.get("missing", [])
                              and product.get("sections") == ["What and for whom", "Surfaces", "Qualities"], product))
+    for name, ok, detail in drain(expectations):
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
+        if not ok:
+            print(f"          {detail}")
+            failures.append((name, [], ""))
+
+    # --- status for the person (WP-146): short by default, the backlog newest first, a story's and an epic's details --
+    for root in throwaway():
+        dated = lambda text, created: text.replace("\ntitle:", f"\ncreated: {created}\ntitle:", 1)
+        scenario_story = dated(story("STORY-3"), "2026-10-03T08:00:00Z").replace(
+            "## Acceptance criteria\n\n- shows-the-thing: The reader sees the thing.\n"
+            "- shows-nothing-when-empty (happy path): With nothing recorded, the reader sees an empty list, not an error.\n",
+            "## Story\n\nAs a reader I want to see the thing, so that I know it is there.\n\n## Acceptance criteria\n\n"
+            "### Rule: The thing shows\n\n#### shows-the-thing (happy path)\nTitle: The reader sees the thing\n"
+            "- Given one thing recorded\n- When the reader opens the list\n- Then the thing is listed\n"
+            "- And nothing else is\n")
+        backlog_project(root, ("STORY-2", []), ("STORY-4", []), ("STORY-5", []), ("STORY-6", []), ("STORY-7", []),
+                        ("STORY-8", ["STORY-1"]), extra_sources=(
+            ("product/epics/sample/STORY-2/story.md", dated(story("STORY-2"), "2026-10-02T08:00:00Z")),
+            ("product/epics/sample/STORY-3/story.md", scenario_story),
+            ("product/epics/sample/STORY-0/story.md", delivered_story(story("STORY-0"), "2026-10-01T10:00:00Z")),
+            ("product/epics/sample/STORY-9/story.md", delivered_story(story("STORY-9"), "2026-10-05T10:00:00Z")),
+            ("product/epics/later/epic.md", dated(EPIC.replace("id: sample", "id: later"), "2026-10-10T00:00:00Z")
+             + "\n## Journey\n\n- open: the reader sees it\n"),
+            ("product/epics/later/LATER-1/story.md", story("LATER-1").replace("epic: sample", "epic: later"))))
+        cli_run = lambda *more: subprocess.run([sys.executable, args.cli, "--status", *more], cwd=root,
+                                               capture_output=True, text=True, encoding="utf-8")
+        short, whole, md = cli_run().stdout, cli_run("--all").stdout, cli_run("--format", "md").stdout
+        model = json.loads(cli_run("--format", "json").stdout or "{}")
+        listed = [l.split()[1] for l in short.split("Next in line", 1)[-1].split("\n\n", 1)[0].splitlines()
+                  if re.match(r"^\s+· ", l)]
+        epic_order = [e["epic"] for e in model.get("epics", [])]
+        sample = next((e for e in model.get("epics", []) if e["epic"] == "sample"), {"rows": []})
+        story_view = json.loads(cli_run("--story", "STORY-3", "--format", "json").stdout or "{}")
+        epic_json = json.loads(cli_run("--epic", "later", "--format", "json").stdout or "{}")
+        epic_text, unknown = cli_run("--epic", "later").stdout, cli_run("--epic", "nowhere")
+        expectations = [
+            ("status (short): what runs, what waits, the next stories in the schedule's order — the first five, the rest "
+             "counted — and one line of totals; no table of every story, no tokens table",
+             all(h in short for h in ("Running", "Waiting for you", "Next in line"))
+             and listed == model.get("queue", {}).get("ready", [])[:5] and len(listed) == 5
+             and "… 3 more ready · 1 blocked" in short and "2 of 11 delivered · 8 ready · 1 blocked" in short
+             and "Tokens" not in short and "STORY-8" not in short.split("Next in line", 1)[-1].split("──", 1)[0]
+             and "status --all" in short and "status --epic <id>" in short, short[-1500:]),
+            ("status --all: the whole table — every story by epic, the tokens",
+             "Tokens" in whole and "STORY-8" in whole and "LATER-1" in whole, whole[-600:]),
+            ("status --format md (short): the same parts for a session, the rest counted",
+             "**Next in line**" in md and "… 3 more ready · 1 blocked" in md and "**Tokens**" not in md, md[-900:]),
+            ("status --format json: the whole model whatever the form, with the queue in the schedule's order",
+             len(model.get("rows", [])) == 11 and model.get("queue", {}).get("blocked") == 1
+             and model.get("queue", {}).get("ready") == ["LATER-1"] + [f"STORY-{n}" for n in range(1, 8)],
+             model.get("queue")),
+            ("status: the epics newest first by `created:`, an epic without it after them",
+             epic_order.index("later") < epic_order.index("sample"), epic_order),
+            ("status: the stories within an epic newest first by `created:`, the undated after them in the schedule's "
+             "order",
+             [r["story"] for r in sample["rows"]][:3] == ["STORY-3", "STORY-2", "STORY-0"]
+             and [r.get("created") for r in sample["rows"]][:2] == ["2026-10-03T08:00:00Z", "2026-10-02T08:00:00Z"],
+             [r["story"] for r in sample["rows"]]),
+            ("status: the delivered stories newest delivery first, as the factory orders them",
+             model.get("delivered_order") == ["STORY-9", "STORY-0"], model.get("delivered_order")),
+            ("status --story --format json: the story's own words and its criteria as scenarios — title, rule, steps",
+             story_view.get("description") == "As a reader I want to see the thing, so that I know it is there."
+             and story_view.get("path") == "product/epics/sample/STORY-3/story.md"
+             and [(c["key"], c["title"], c["rule"], c["happy"], [st["word"] for st in c["steps"]])
+                  for c in story_view.get("scenarios", [])]
+             == [("shows-the-thing", "The reader sees the thing", "The thing shows", True, ["Given", "When", "Then", "And"])],
+             story_view.get("scenarios")),
+            ("status --story: the line form reads as a criterion with its text",
+             [(c["key"], c["text"]) for c in json.loads(cli_run("--story", "STORY-2", "--format", "json").stdout
+                                                         or "{}").get("scenarios", [])][:1]
+             == [("shows-the-thing", "The reader sees the thing.")], ""),
+            ("status --epic: one epic — its fields, its own text, its stories with their state, the file to open",
+             all(epic_json.get(k) for k in ("intent", "goal", "metric", "domain_contact", "path", "created"))
+             and [r["story"] for r in epic_json.get("rows", [])] == ["LATER-1"]
+             and "Journey" in epic_json.get("description", "") and "Intent" in epic_text and "LATER-1" in epic_text,
+             {k: epic_json.get(k) for k in ("intent", "path", "created", "description")}),
+            ("status --epic: an epic there is not is refused with the ones there are",
+             unknown.returncode == 1 and "later, sample" in unknown.stdout, unknown.stdout),
+        ]
+    for name, ok, detail in drain(expectations):
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
+        if not ok:
+            print(f"          {detail}")
+            failures.append((name, [], ""))
+
+    # --- created: filled once from git, never over a value there, the story as planned unchanged (WP-146) ---------
+    for root in throwaway():
+        backlog_project(root, ("STORY-2", []))
+        write_file(root, "product/epics/sample/STORY-2/story.md",
+                   story("STORY-2").replace("\ntitle:", "\ncreated: 2026-01-02T03:04:05Z\ntitle:", 1))
+        in_git(root)
+        dated_env = dict(os.environ, GIT_AUTHOR_DATE="2026-10-11T12:13:14+02:00", GIT_COMMITTER_DATE="2026-10-11T12:13:14+02:00")
+        for command in (["git", "add", "-A"], ["git", "-c", "user.name=t", "-c", "user.email=t@x", "commit", "-qm", "backlog"]):
+            subprocess.run(command, cwd=root, capture_output=True, env=dated_env)
+        write_file(root, "product/epics/sample/STORY-3/story.md", story("STORY-3"))       # not in git yet
+        digest_of = lambda path: subprocess.run(
+            [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); from dca_factory.contract import "
+             "story_digest; print(story_digest(sys.argv[2]))", os.path.dirname(os.path.abspath(args.cli)), path],
+            capture_output=True, text=True).stdout.strip()
+        story1 = os.path.join(root, "product/epics/sample/STORY-1/story.md")
+        planned = digest_of(story1)
+        first = subprocess.run([sys.executable, args.cli, "--backfill-created"], cwd=root, capture_output=True, text=True)
+        again = subprocess.run([sys.executable, args.cli, "--backfill-created"], cwd=root, capture_output=True, text=True)
+        front_of = lambda rel: read_or_empty(os.path.join(root, rel)).split("\n---", 1)[0]
+        expectations = [
+            ("backfill: a story and an epic without `created:` get the time of the commit that added them, in UTC",
+             "created: 2026-10-11T10:13:14Z" in front_of("product/epics/sample/STORY-1/story.md")
+             and "created: 2026-10-11T10:13:14Z" in front_of("product/epics/sample/epic.md"), first.stdout),
+            ("backfill: a `created:` there is never overwritten; a file git does not hold yet takes its own time",
+             "created: 2026-01-02T03:04:05Z" in front_of("product/epics/sample/STORY-2/story.md")
+             and front_of("product/epics/sample/STORY-2/story.md").count("created:") == 1
+             and re.search(r"^created: \d{4}-\d\d-\d\dT", front_of("product/epics/sample/STORY-3/story.md"), re.M)
+             and "1 not in git yet" in first.stdout, first.stdout),
+            ("backfill: run again, it writes nothing", "nothing written" in again.stdout, again.stdout),
+            ("backfill: `created:` is not part of the story as planned — its digest stays",
+             planned and digest_of(story1) == planned, (planned, digest_of(story1))),
+        ]
     for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)
@@ -7174,7 +7322,7 @@ def run_groups(args):
              "2026-09-23T10:02:00Z\tstage-start\ttest\ttool=x\n")))
         run = lambda *more: subprocess.run([sys.executable, args.cli, "--status", *more], cwd=root,
                                            capture_output=True, text=True, encoding="utf-8").stdout
-        out = run()
+        out = run("--all")
         part = lambda text, name, until: text.split(name, 1)[1].split(until, 1)[0] if name in text else ""
         story2 = next((l for l in part(out, "Backlog", "Tokens").splitlines() if "STORY-2" in l), "")
         expectations = [
@@ -7195,11 +7343,11 @@ def run_groups(args):
              and re.search(r"^\s+total\s+2\s+10\s+90\s+0\s+0\s+100\s+0\.01$", part(out, "Tokens", "\n" + "─" * 72), re.M),
              part(out, "Tokens", "\n" + "─" * 72)),
             ("status: the same files give the same text — no clock in the view without --live",
-             out == run(), ""),
+             out == run("--all") and run() == run(), ""),
             ("status: no colour when the output is not a terminal, colour when asked for",
              "\x1b[" not in out and "\x1b[" in run("--color", "always"), ""),
         ]
-        md = run("--format", "md")
+        md = run("--format", "md", "--all")
         cells = lambda text: sorted(c.strip() for l in text.splitlines() if l.startswith("|") and "---" not in l
                                     for c in l.strip("|").split("|")[1:])
         text_rows = [l for l in part(out, "Backlog", "Tokens").splitlines() if re.match(r"^\s+[?!✗▶✓·] STORY", l)]
@@ -7963,7 +8111,7 @@ def run_groups(args):
             (".dca-factory/runs/STORY-1/document.md", DOCUMENT),
             ("product/epics/sample/STORY-1/decisions/01.md", DECISION.replace(
                 "# Does an archived thing count?", "# " + long_question) + ANSWER)))
-        overview = subprocess.run([sys.executable, args.cli, "--status"], cwd=root, capture_output=True,
+        overview = subprocess.run([sys.executable, args.cli, "--status", "--all"], cwd=root, capture_output=True,
                                   text=True, encoding="utf-8").stdout
         detail = subprocess.run([sys.executable, args.cli, "--status", "--story", "STORY-1"], cwd=root,
                                 capture_output=True, text=True, encoding="utf-8").stdout

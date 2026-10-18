@@ -1,6 +1,6 @@
 import type { BoxProps, ButtonProps, CodeProps, ElementConstructor, InputProps, MarkdownProps, RenderElement, SvgProps, TextProps } from 'claude-code'
 
-import type { StageRun } from '../types'
+import type { Scenario, StageRun } from '../types'
 import { displayWidth, duration, filledCells, fit, rounds, short, tokens, wrapWords } from './parse'
 
 // The cockpit's building blocks. Every view is drawn from these, so a change to a table, a link, a chip or the
@@ -380,6 +380,33 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
     )
   }
 
+  // A Markdown text drawn line by line in the palette's colours — the surface's own Markdown takes the terminal's
+  // text colour, which the painted background would swallow.
+  const doc = (text: string) => {
+    let isCode = false
+    return text.split('\n').map(raw => {
+      if (raw.startsWith('```')) {
+        isCode = !isCode
+        return <Text color={C.line}>{raw}</Text>
+      }
+      if (isCode) return <Text color={C.muted}>{raw || ' '}</Text>
+      const heading = /^(#{1,6})\s+(.*)$/.exec(raw)
+      if (heading) {
+        return (
+          <Box marginTop={heading[1] && heading[1].length <= 2 ? 1 : 0}>
+            <Text bold color={C.accent}>
+              {heading[1] && heading[1].length <= 2 ? (heading[2] ?? '').toUpperCase() : heading[2]}
+            </Text>
+          </Box>
+        )
+      }
+      if (/^\s*\|/.test(raw)) return <Text color={C.muted}>{raw}</Text>
+      if (/^\s*[-*]\s/.test(raw)) return <Text color={C.text}>{raw.replace(/^(\s*)[-*]\s/, '$1• ')}</Text>
+      if (/^---\s*$/.test(raw)) return <Text color={C.line}>{'─'.repeat(40)}</Text>
+      return <Text color={C.text}>{raw.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1') || ' '}</Text>
+    })
+  }
+
   return {
     progress,
 
@@ -490,8 +517,6 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       </Box>
     ),
 
-    // A Markdown file drawn line by line in the palette's colours — the surface's own Markdown takes the terminal's
-    // text colour, which the painted background would swallow.
     // A file as the surface draws it best: a diff in the highlighter's diff view everywhere; Markdown in the
     // surface's own renderer where it draws in its own font and colours (off the terminal's painted grid); any other
     // file as code. On the terminal a Markdown file is drawn line by line in the palette's colours.
@@ -502,29 +527,61 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       return null
     },
 
-    doc: (text: string) => {
-      let isCode = false
-      return text.split('\n').map(raw => {
-        if (raw.startsWith('```')) {
-          isCode = !isCode
-          return <Text color={C.line}>{raw}</Text>
-        }
-        if (isCode) return <Text color={C.muted}>{raw || ' '}</Text>
-        const heading = /^(#{1,6})\s+(.*)$/.exec(raw)
-        if (heading) {
-          return (
-            <Box marginTop={heading[1] && heading[1].length <= 2 ? 1 : 0}>
-              <Text bold color={C.accent}>
-                {heading[1] && heading[1].length <= 2 ? (heading[2] ?? '').toUpperCase() : heading[2]}
-              </Text>
+    // A Markdown file drawn line by line in the palette's colours, where the surface's own renderer would not do.
+    doc,
+
+    // What a story or an epic says in its own words: the surface's Markdown where it draws its own font and colours,
+    // else line by line in the palette's — the same block in every detail.
+    prose: (text: string) => (
+      <Box flexDirection="column" marginTop={text.trim() ? 1 : 0}>
+        {text.trim() ? (Markdown && !isGrid ? <Markdown text={text} /> : doc(text)) : null}
+      </Box>
+    ),
+
+    // Criteria as a person reads them: the rule they serve as a kicker where it changes, each scenario's title with
+    // its key beside it, its steps below — the step word in the accent. The line form shows its text.
+    scenarios: (list: Scenario[], empty = 'No criterion.') => {
+      if (list.length === 0)
+        return (
+          <Box marginTop={1}>
+            <Text color={C.muted}>{empty}</Text>
+          </Box>
+        )
+      return (
+        <Box flexDirection="column">
+          {list.map((scenario, index) => (
+            <Box flexDirection="column" marginTop={1}>
+              {scenario.rule && scenario.rule !== list[index - 1]?.rule && (
+                <Text bold color={C.info}>
+                  {`Rule: ${scenario.rule}`}
+                </Text>
+              )}
+              <Box gap={2}>
+                <Text bold color={C.bright}>
+                  {scenario.title}
+                </Text>
+                {scenario.happy && <Text color={C.done}>happy path</Text>}
+                <Text color={C.muted}>{scenario.key}</Text>
+              </Box>
+              {scenario.steps.map(step => (
+                <Box gap={1} paddingLeft={2}>
+                  <Box width={5} flexShrink={0}>
+                    <Text bold color={C.accent}>
+                      {step.word}
+                    </Text>
+                  </Box>
+                  <Text color={C.text}>{step.text}</Text>
+                </Box>
+              ))}
+              {scenario.text && (
+                <Box paddingLeft={2}>
+                  <Text color={C.text}>{scenario.text}</Text>
+                </Box>
+              )}
             </Box>
-          )
-        }
-        if (/^\s*\|/.test(raw)) return <Text color={C.muted}>{raw}</Text>
-        if (/^\s*[-*]\s/.test(raw)) return <Text color={C.text}>{raw.replace(/^(\s*)[-*]\s/, '$1• ')}</Text>
-        if (/^---\s*$/.test(raw)) return <Text color={C.line}>{'─'.repeat(40)}</Text>
-        return <Text color={C.text}>{raw.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1') || ' '}</Text>
-      })
+          ))}
+        </Box>
+      )
     },
 
     // A banner in one colour, for what waits and what is behind.

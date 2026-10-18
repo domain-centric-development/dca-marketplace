@@ -156,11 +156,11 @@ def in_worktree(cwd=None):
 
 
 def worktree_places():
-    """(folders, files) a worktree takes from the main checkout, relative: the epics, the run folder and the
-    discovery reports as links with the pipeline and the skill folders; the description and the profile as
+    """(folders, files) a worktree takes from the main checkout, relative: the epics, the run folder, the
+    discovery reports and the project's findings as links with the pipeline and the skill folders; the description and the profile as
     copies, read alone."""
     rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).rstrip("/")
-    folders = [rel("epics"), rel("runs"), evidence_rel(), rel("discovery")] + list(WORKTREE_LINKED)
+    folders = [rel("epics"), rel("runs"), evidence_rel(), rel("discovery"), findings_rel()] + list(WORKTREE_LINKED)
     files = [rel("product"), rel("tech"), rel("domain"), PROFILE_FILE]
     return folders, files
 
@@ -234,7 +234,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 24
 
 
-VERSION = "0.86.0"
+VERSION = "0.87.0"
 
 
 def split_front(text):
@@ -541,15 +541,22 @@ def record_findings(story_path, story_id, front, runs):
 def append_findings(story_path, story_id, front, added):
     """Append rows — (perspective, file:line, severity, defect, fix, plain) — to the story's findings.md, `open`,
     numbered after the rows there; the file is made with its header when it is not there yet."""
+    head = (f"---\nstory: {story_id}\nepic: {front.get('epic', '')}\n---\n\n# Findings — {story_id}\n\n"
+            "The judge's confirmed defects that did not block the story, kept for a later story or a person's look. "
+            "The pipeline appends; a person sets `Status` to `done` or `wont-fix`.\n\n")
+    append_finding_rows(findings_path(story_path), head, added)
+
+
+def append_finding_rows(path, head, added):
+    """Append rows — (perspective, file:line, severity, defect, fix, plain) — to a findings file, `open`, numbered
+    after the rows there; the file is made with `head` (its front matter, title and sentence) and the table's header
+    when it is not there yet."""
     if not added:
         return
-    path = findings_path(story_path)
     have = findings_rows(path)
     if not os.path.isfile(path):
-        text = (f"---\nstory: {story_id}\nepic: {front.get('epic', '')}\n---\n\n# Findings — {story_id}\n\n"
-                "The judge's confirmed defects that did not block the story, kept for a later story or a person's look. "
-                "The pipeline appends; a person sets `Status` to `done` or `wont-fix`.\n\n"
-                f"{FINDINGS_HEADER}\n|---|---|---|---|---|---|---|---|\n")
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        text = head + f"{FINDINGS_HEADER}\n|---|---|---|---|---|---|---|---|\n"
     else:
         text = widen_findings(read_text(path).rstrip("\n")) + "\n"
     n = len(have)
@@ -560,14 +567,65 @@ def append_findings(story_path, story_id, front, added):
         handle.write(text)
 
 
-def open_findings(epics):
-    """Every open finding under the epics: (story id, file:line, severity, defect, perspective, fix, plain), read from
-    the findings files — `plain` empty for a row from before contract 23."""
-    out = []
+#: The project's own findings — one that belongs to no story, such as a test that turns out flaky in more than one
+#: story (WP-146) — beside the epics: `<product>/findings/<name>.md`, the same table as a story's findings.md, a row
+#: named `<name>#<n>` where a task `closes:` it.
+PROJECT_FINDINGS = "findings"
+
+
+#: The file a flaky test's finding goes to: `<product>/findings/flaky.md`.
+FLAKY_FINDINGS = "flaky"
+
+
+def findings_dir():
+    """The project's findings folder beside the epics: `product/findings` for `product/epics`."""
+    epics = place("epics").rstrip("/")
+    return os.path.join(os.path.dirname(epics) or ".", PROJECT_FINDINGS)
+
+
+def findings_rel():
+    """The project's findings folder relative to the project, as the profile places the epics."""
+    epics = (PLACES_REL.get("epics") or DEFAULTS["epics"]).rstrip("/")
+    return os.path.join(os.path.dirname(epics) or ".", PROJECT_FINDINGS).replace("\\", "/")
+
+
+def project_findings_path(name):
+    """`<product>/findings/<name>.md` — a project finding file by its name."""
+    return os.path.join(findings_dir(), f"{name}.md")
+
+
+def project_findings_head(name):
+    """The front matter, title and sentence a project finding file is made with."""
+    return (f"---\nfindings: {name}\n---\n\n# Findings — {name}\n\n"
+            "Findings that belong to no one story, kept for a task or a person's look. The pipeline appends; a person "
+            f"sets `Status` to `done` or `wont-fix`, a task closes a row with `closes: {name}#<n>`.\n\n")
+
+
+def finding_records(epics):
+    """Every open finding: a dict with `owner` (the story's id, or a project finding file's name), `row` (`<owner>#<n>`,
+    what a task's `closes:` names), `path` (its file), `project` (a project finding, under `<product>/findings/`),
+    `where`, `severity`, `defect`, `perspective`, `fix`, `plain` — the stories' first, then the project's."""
+    found = []
+    def add(owner, path, project):
+        for n, perspective, where, severity, defect, fix, status, plain in findings_rows(path):
+            if status == "open":
+                found.append(dict(owner=owner, row=f"{owner}#{n}", path=path, project=project, where=where,
+                                  severity=severity, defect=defect, perspective=perspective, fix=fix, plain=plain))
     for story_path in story_files(epics):
-        story = story_id_of(story_path)
-        out += [(story, r[2], r[3], r[4], r[1], r[5], r[7]) for r in findings_rows(findings_path(story_path)) if r[6] == "open"]
-    return out
+        add(story_id_of(story_path), findings_path(story_path), False)
+    folder = os.path.join(os.path.dirname(epics.rstrip("/")) or ".", PROJECT_FINDINGS)
+    if os.path.isdir(folder):
+        for name in sorted(os.listdir(folder)):
+            if name.endswith(".md"):
+                add(name[:-3], os.path.join(folder, name), True)
+    return found
+
+
+def open_findings(epics):
+    """Every open finding under the epics and in the project's findings: (owner, file:line, severity, defect,
+    perspective, fix, plain) — `plain` empty for a row from before contract 23."""
+    return [(r["owner"], r["where"], r["severity"], r["defect"], r["perspective"], r["fix"], r["plain"])
+            for r in finding_records(epics)]
 
 
 def story_id_of(path, front=None):
@@ -645,15 +703,32 @@ def delivered_by(front):
 STATE_KEYS = ("status", "delivered", "delivered_by")
 
 
+#: When a story or an epic was written: `created:` in its front matter, a UTC time (`2026-10-18T09:12:00Z`; a date
+#: alone reads as well). The backlog skill writes it with the item, `update` fills it once from git for an item
+#: without it (the commit that added the file). The views order the backlog by it, newest first; an item without it
+#: comes last. It says nothing about what the story asks for, so the story's digest leaves it out too.
+CREATED_KEY = "created"
+
+
+#: The front-matter lines a story's digest leaves out: its state and when it was written.
+DIGEST_LEFT_OUT = STATE_KEYS + (CREATED_KEY,)
+
+
+def created_of(front):
+    """An item's `created:` as written, '' where it has none or where it is no ISO date or UTC time."""
+    value = str(front.get(CREATED_KEY) or "").strip().strip("'\"")
+    return value if re.match(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$", value) else ""
+
+
 def story_digest(path):
-    """The story as planned: SHA-256 over the file with LF line endings and the state lines (`STATE_KEYS`) of its
-    front matter left out — the front matter read by lines (`split_front`), an indented line never a key."""
+    """The story as planned: SHA-256 over the file with LF line endings and the state lines (`STATE_KEYS`) and its
+    `created:` line left out — the front matter read by lines (`split_front`), an indented line never a key."""
     text = read_text(path).replace("\r\n", "\n")
     split = split_front(text)
     if split is not None:
         front_lines, body = split
         kept = [line for line in front_lines
-                if line.startswith((" ", "\t", "-")) or line.split(":", 1)[0].strip().lower() not in STATE_KEYS]
+                if line.startswith((" ", "\t", "-")) or line.split(":", 1)[0].strip().lower() not in DIGEST_LEFT_OUT]
         text = "---\n" + "".join(line + "\n" for line in kept) + "---" + body
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 

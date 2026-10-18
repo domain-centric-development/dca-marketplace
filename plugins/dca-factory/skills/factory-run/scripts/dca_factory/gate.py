@@ -85,9 +85,9 @@ from .contract import (
     runs_top,
     ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
-    append_findings, factory_home, file_digest, find_story, findings_cells, findings_path, findings_rows, GateError, git, git_blob, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
+    append_finding_rows, factory_home, FLAKY_FINDINGS, file_digest, find_story, findings_cells, findings_path, findings_rows, GateError, git, git_blob, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
     INSTRUCTION_FILES, is_delivered, JOURNEY_ORDER, order_for, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, needs_human_ids,
-    NOTHING, open_findings, place, PLAIN_COLUMN, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
+    NOTHING, open_findings, place, PLAIN_COLUMN, project_findings_head, project_findings_path, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
     record_path, records_of, resolve_profile, resume_stage, section_of, SELECTOR, set_places, SHARED_WINDOWS, shown,
     STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, stamp_applied, story_digest, story_files, story_folder,
     story_id_of, story_kind, TECH_HEADINGS, TESTED_KINDS, unknown_profile_keys, VERSION)
@@ -262,17 +262,15 @@ def closes_of(front):
 
 
 def closed_rows(row_id):
-    """(findings file, row) for `<story>#<n>` — the file None where the story or the row is not there."""
+    """(findings file, row) for `<story>#<n>`, or `<name>#<n>` of a project finding file (`<product>/findings/<name>.md`,
+    where no story has that id) — the file None where neither or the row is not there."""
     match = CLOSES_ROW.match(row_id)
     if not match:
         return None, None
     try:
-        story_path = find_story(place("epics"), match.group(1))
+        path = findings_path(find_story(place("epics"), match.group(1)))
     except GateError:
-        return None, None
-    if not story_path:
-        return None, None
-    path = findings_path(story_path)
+        path = project_findings_path(match.group(1))
     row = next((r for r in findings_rows(path) if r[0] == match.group(2)), None)
     return (path if row else None), row
 
@@ -294,7 +292,7 @@ def check_task(result, story_path, front, body):
             wrong.append(f"{row_id} ({row[6]} already)")
     if wrong:
         result.fail("task", f"`closes:` names rows a task cannot close: {'; '.join(wrong)} — `<story>#<n>`, an open row "
-                            f"of that story's findings.md")
+                            f"of that story's findings.md, or `<name>#<n>` of a project finding file")
     else:
         closes = closes_of(front)
         result.ok("task", "a task: no criterion, the existing suite is its evidence"
@@ -395,6 +393,37 @@ def scenario_titles(body):
         elif current and TITLE_LINE.match(stripped) and "{{" not in stripped:   # a template placeholder names nothing
             titles[current] = TITLE_LINE.match(stripped).group(1)
     return titles
+
+
+def scenarios_of(body):
+    """The criteria as a person reads them (WP-146), in the story's order: [{key, title, rule, happy, steps, text}] —
+    `steps` the scenario's `[{word, text}]` (Given / When / Then / And / But), `text` the line form's criterion, `rule`
+    the `### Rule:` it stands under, `happy` its happy-path mark. A reader for the views: it refuses nothing —
+    `criteria_of` is the check."""
+    section = body.split("## Acceptance criteria", 1)[-1].split("\n## ", 1)[0] if "## Acceptance criteria" in body else ""
+    titles, happy = scenario_titles(body), set(happy_paths(body))
+    found, rule, current = [], "", None
+    for line in section.splitlines():
+        stripped = line.strip()
+        if line.startswith("### "):
+            heading = line[4:].strip()
+            rule, current = (heading[5:].strip() if heading.lower().startswith("rule:") else heading), None
+            continue
+        heading = re.match(r"^####\s+([a-z0-9][a-z0-9-]*)", stripped)
+        criterion = CRITERION.match(stripped)
+        step = STEP.match(stripped)
+        if heading:
+            key = heading.group(1)
+            current = dict(key=key, title=titles.get(key, key), rule=rule, happy=key in happy, steps=[], text="")
+            found.append(current)
+        elif step and current is not None:
+            current["steps"].append(dict(word=step.group(1), text=step.group(2).strip()))
+        elif criterion:
+            key = criterion.group(1)
+            found.append(dict(key=key, title=titles.get(key, key), rule=rule, happy=key in happy, steps=[],
+                              text=criterion.group(2).strip()))
+            current = None
+    return found
 
 
 def carries_title(path, method, title):
@@ -4200,9 +4229,10 @@ def _plan_passed(run):
 
 
 def record_flaky_findings(result, story_path, story_id, front, runs):
-    """WP-113: a test noted flaky in this story and in another one is a finding — a row in this story's findings.md,
-    open, for a task (`kind: task`, `closes: <story>#<n>`) that fixes the flake instead of running it again for ever.
-    One open row per test across the backlog."""
+    """WP-113: a test noted flaky in this story and in another one is a finding — a row of the project's own findings
+    (`<product>/findings/flaky.md`, WP-146: the flake belongs to no one story), open, for a task (`kind: task`,
+    `closes: flaky#<n>`) that fixes the flake instead of running it again for ever. One open row per test across the
+    backlog."""
     mine = set(flaky_tests(runs, story_id)) | set(result.flaky)
     root = evidence_dir(runs)
     if not mine or not os.path.isdir(root):
@@ -4225,9 +4255,11 @@ def record_flaky_findings(result, story_path, story_id, front, runs):
                       "code, as a task", f"The test {test} fails now and then in the whole suite, in more than one "
                                          f"story — it is fixed, not run again"))
     if added:
-        append_findings(story_path, story_id, front, added)
+        path = project_findings_path(FLAKY_FINDINGS)
+        append_finding_rows(path, project_findings_head(FLAKY_FINDINGS), added)
+        result.written.append(path)
         result.ok("findings", f"{len(added)} flaky test(s) noted in two stories kept as a finding in "
-                              f"{shown(findings_path(story_path))}: {', '.join(r[1] for r in added)}")
+                              f"{shown(path)}: {', '.join(r[1] for r in added)}")
 
 
 @on_pass("document")

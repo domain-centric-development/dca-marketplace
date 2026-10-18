@@ -245,7 +245,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh setup --check` · `--write [--replace <key>]` | `factory-setup` | what detection finds against the profile · add the keys it lacks, never overwriting a value a person wrote |
 | `factory.sh backlog [--check]` | `factory-backlog` | every story's state and the next one · the plan gate's backlog checks over every story; it never works the backlog off |
 | `factory.sh run [--story <id> [--from <stage>]] [--watch] [--keep-going] [--parallel <n>]` | `factory-run` | one story through the six stages in its worktree, from where its files say, then integrated · `--from` names the stage (or `integrate`) and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch`, past a stopped story with `--keep-going`, up to `<n>` at once with `--parallel` |
-| `factory.sh status [--story <id>] [--live] [--format md\|json] [--usage] [--refusals] [--brief]` | `factory-status` | what waits for you, what runs, the backlog by epic with times and tokens · one story's passes, stages and decisions · every token class per stage · the gate refusals, form against substance |
+| `factory.sh status [--all] [--story <id>] [--epic <id>] [--live] [--format md\|json] [--usage] [--refusals] [--brief]` | `factory-status` | what runs, what waits for you, what comes next and the totals · `--all` the backlog by epic with times and tokens · one story's words, criteria, passes, stages and decisions · one epic with its stories · every token class per stage · the gate refusals, form against substance |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |
 | `factory.sh update [--from <dir>] [--copy\|--link] [--adopt <skill>,…\|all]` | `factory-update` | the newest pipeline found, same tools; the mode the project has, or the one named; `--adopt` takes over a method skill's copy the install did not make, which every later update then refreshes |
@@ -271,8 +271,9 @@ bash .agents/factory/factory.sh update [--from <plugin>/skills]     # the same, 
 It finds the newest pipeline on the machine (`--from`, `FACTORY_PLUGIN_DIR`, the project's skill links,
 Claude Code's plugin cache), hands over to *that* pipeline's runner — so a release that adds a file
 the project needs puts it there — for the tools the project already uses, and reports the versions
-and whether the profile's `contract:` line has to be raised. It commits nothing and leaves the
-profile; at its end it names `factory.sh setup --check`, which lists what the project gained since
+and whether the profile's `contract:` line has to be raised. A story or an epic without `created:` gets one,
+once, from the commit that added its file (`factory-cli.py --backfill-created`; never over a value there), so the
+backlog reads newest first. It commits nothing and leaves the profile; at its end it names `factory.sh setup --check`, which lists what the project gained since
 (a browser runner, a formatter) as profile lines to confirm.
 
 Skills are held one of two ways. The install picks by the source, the update keeps what the project
@@ -324,20 +325,26 @@ From any session in the project — beside a running `run --watch` too, since it
 bash .agents/factory/factory.sh status          # the same, without a skill
 ```
 
-First what waits for you — a story to accept, a question to answer, a draft to release, a story that
-stopped — each with what to do; then what runs; then the backlog grouped by epic, one row per story
-with its state, stage, passes, when it started and was delivered, how long its stages worked and its
-tokens; then what comes next. The same files give the same text: times are UTC stamps and durations
-from the journal. `--live` adds what the clock says (how long ago, the running stage's last activity,
-the worker, a listening session, a newer pipeline on this machine). `--story <id>` shows one story:
-its passes — a correction after acceptance is a pass of its own — its stages and its decisions.
+Short: what runs — story, stage, round, since when; what waits for you — a story to accept, a question to
+answer (with its record), the drafts to release in one line, a story that stopped — each with what to do; the
+next stories in the schedule's order, the first five, then `… n more ready · m blocked`; one line of totals; then
+what comes next and the options for more. `--all` shows the whole backlog grouped by epic — the newest epic first,
+its newest story first (`created:`), one row per story with its state, stage, passes, when it started and was
+delivered, how long its stages worked and its tokens. The same files give the same text: times are UTC stamps and
+durations from the journal. `--live` adds what the clock says (how long ago, the running stage's last activity,
+the worker, a listening session, a newer pipeline on this machine). `--story <id>` shows one story: its own words
+and its criteria as scenarios, its passes — a correction after acceptance is a pass of its own — its stages and
+its decisions. `--epic <id>` shows one epic: intent, goal, outcome event, domain contact, its own text and its
+stories with their state, newest first.
 
 In a terminal the marks are `!` look at it · `?` answer · `✗` stopped · `▶` running · `✓` delivered ·
 `·` nothing to do, in colour where the output is a terminal (`--color always|never`, `NO_COLOR`).
 `--format md` renders the same rows as Markdown tables with 👀 ❓ ⛔ ⏳ ✅ ➖ — what a session shows —
 and `--format json` for tools. Every epic with an `epic.md` is listed, also before its first story (its next
 step is `/factory-backlog stories <epic>`), with its title, goal, outcome event and discovery link; the JSON also
-carries the project description as it stands — each part present or missing, its missing and empty headings.
+carries the project description as it stands — each part present or missing, its missing and empty headings — and,
+whatever the text shows, the whole model: every row, the epics newest first, the queue in the schedule's order
+(`queue`), the delivered stories newest delivery first (`delivered_order`); the views show these orders as given.
 `factory.sh discover --list [--format json]` lists every discovery topic with its proposed epics, which of them
 are epics already, and its proposed description changes. In Claude Code, the optional `dca-factory-cockpit` plugin
 draws all of it as a cockpit; the files and these commands stay the source.
@@ -552,7 +559,7 @@ what must be true before the next one starts.
 | — `<story>/findings.md` | the judge's confirmed minors, kept in the story's folder when it is delivered (the run folder is disposable, these are not): one row per finding with file, line, the finding in plain words, the reviewer's defect, the fix and `Status`; `factory-cli.py --findings` lists the open ones, the status brief counts them |
 | — `decisions/` | the questions a run may not answer, one file each under `<story>/decisions/<nn>.md` in the story's folder, committed with the project: the stage that asks writes it, a human answers it under `## Answer`, the gate blocks the story while it is open and stamps it applied once the asking stage ran with the answer (`skills/factory-run/reference/file-contracts.md`) |
 | `factory-update` | brings the project's gate, runner, hook and skill copies up to the newest pipeline on the machine, for the tools it uses, links as links and copies as copies; migrates an older layout once (profile to the root, `product/backlog/` → `product/epics/`, each story into a folder of its own, records into their stories' folders, run artefacts out of `tasks/`, the delivery mark into the story) and prints every move. Reports the versions and the profile's contract line; commits nothing |
-| `factory-status` | one look at the pipeline from any session in the project: which stage runs (and since when), which decisions wait for a human, every story's state and what comes next, the tokens spent per story, and per stage for one (`factory.sh status [--story <id>]`). Reads files; changes and starts nothing |
+| `factory-status` | one look at the pipeline from any session in the project, short: which stage runs (and since when, in which round), which decisions wait for a human, what comes next and the totals; on request every story's state and the tokens per story (`--all`), one story (`--story <id>`) or one epic (`--epic <id>`). Reads files; changes and starts nothing |
 | `factory-decisions` | the inbox for those records: lists what waits on a human (`factory.sh decisions`), explains one from its files and the story it blocks, and writes the human's `## Answer` — exact wording, their name, the time — only on their explicit confirmation. Answers nothing itself; the stage that asked applies the answer. A structural answer — a new bounded context, a new relationship, a surface an actor lacks — also brings `product/domain.md` and the product description in line |
 | `factory-help` | the factory explained in one fixed view (`factory.sh help`): the flow from describing the project to accepting a story with this project's place in it, every command for agent and shell, the marks, the files, what to do next. Reads files; changes and starts nothing |
 | `factory-verify` | checks the pipeline itself: every gate check against throwaway fixtures, the runner's stage order, verdict handling and install shapes, and — when asked — one tiny story delivered end to end. Reports; it repairs nothing |
@@ -580,7 +587,7 @@ python3 .agents/factory/story-gate.py --story <id> --stage <plan|test|build|tidy
 | `test` | every criterion mapped to a test; that test exists in the sources; test sources compile; every mapped test **red** |
 | `build` | every mapped test **green**, and the same version of it the test stage saw fail (`red-proof`); the required suites whole; the profile's `architecture:` and `format:` commands succeed |
 | `tidy` | the build gate's checks again — the tidy stage's whole claim is that it changed no behaviour |
-| build, tidy, integrate | a required suite red in a test the story did not write, change or name in its table runs that test again on its own, once, by the profile's `filterFlag:`/`filterFormat:` — green there, the gate passes with `flaky <test>` in the report and the journal (`flaky=`) and no round is counted; red again, the suite fails and the report names the test as outside the story. A story's own test is never run again, nor anything when more than three tests are red or the profile names no filter. `status` shows the notes per story; a test noted flaky in two stories becomes an open finding (`flaky`) in the delivering story's `findings.md`, for a task |
+| build, tidy, integrate | a required suite red in a test the story did not write, change or name in its table runs that test again on its own, once, by the profile's `filterFlag:`/`filterFormat:` — green there, the gate passes with `flaky <test>` in the report and the journal (`flaky=`) and no round is counted; red again, the suite fails and the report names the test as outside the story. A story's own test is never run again, nor anything when more than three tests are red or the profile names no filter. `status` shows the notes per story; a test noted flaky in two stories becomes an open finding of the project's own, a row of `product/findings/flaky.md` (`flaky#<n>`), for a task |
 | `document` | every file, path and identifier the document stage claims **exists**; every claim names how it was checked; every term the plan proposed has landed in a glossary or is named as open |
 | test, build, tidy | a test that existed before the story still expects what it did — added cases pass, and so does a change around its assertions that keeps every assertion with its words and literals in order (a type the test builds gained a field; a note); any other changed or removed line passes only when the plan lists it under `## Changed tests`, backed by the story's `## Changed expectations` or by an answered decision (`tests-kept`, from the plan gate's git baseline) |
 | every stage | the story's **decision records** (`<story>/decisions/` in each story's folder): a `## needs-human` names one; an open one blocks the story and says where to answer; an answered one is applied by the stage that asked and stamped `## Applied` |

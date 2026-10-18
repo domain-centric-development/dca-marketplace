@@ -12,12 +12,13 @@ factory works the same without it, in Claude Code, Codex or OpenCode.
 |---|---|---|
 | 0 Describe | the project description, each part present or missing, its missing and empty headings | `/dca-describe`, `/dca-describe <change>`, opens a file in the system's editor |
 | 1 Discover | every discovery topic, its proposed epics (which are epics already), its proposed description changes | `/factory-discover <topic>`, `/factory-backlog epic <id> --from <report>`, `/dca-describe <file> — <section>: <change>` |
-| 2 Backlog | every epic — also before its first story — with goal, outcome event, its stories with state, passes, time, tokens, cost | `/factory-backlog <words>`, `stories <epic>` (✦ suggest stories: Claude drafts them as `status: draft`), `release <story> …`, `/factory-run <wish>` |
+| 2 Backlog | every epic — also before its first story — newest first, with goal, outcome event; an epic opens with its intent, goal, outcome, domain contact, its own text and its stories with state, passes, time, tokens, cost, newest first (✎ open epic.md) | `/factory-backlog <words>`, `stories <epic>` (✦ suggest stories: Claude drafts them as `status: draft`), `release <story> …`, `/factory-run <wish>` |
 | 3 Run | the worker, the running stories with their stage, since when and the stage's last activity; a shared builder named with its stage (`builder · test`); the output of the worker started here, or else what the running stage reads, edits and runs (`factory.sh follow`) — whoever started it | starts `factory.sh run` / `run --watch` as a child of the session, stops it |
 | 4 Decide | open questions and acceptances, answered records as Markdown; an open record with its options as choices; a story waiting for its merge, with what to do; other factories' claims — who, how long, a stale or orphaned one or an id collision with its release command; the judge's open findings, each in plain words first, then who saw it, the reviewer's defect and the fix | `/factory-decisions <story>`, `/factory-decisions <story> <record>: answer <option \| your words>` (✦ one button per option, the recommended one marked; accept or correct an acceptance); a finding opens its `findings.md` or goes to `/factory-backlog` (✦ to backlog — the skill decides what it becomes). Taking a claim away stays a command for a terminal — no button |
-| 5 Delivered | delivered stories, epics with their outcome events, unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
+| 5 Delivered | delivered stories, the newest delivery first, epics with their outcome events, unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
 
-A story opens with its pipeline, the factory's numbers per stage — a shared builder's and verifier's stages beneath
+A story opens with what it is: its own words (`## Story`) and its criteria as readable scenarios — the rule each
+serves, its title, its Given / When / Then — and a button that opens its `story.md`; then its pipeline, the factory's numbers per stage — a shared builder's and verifier's stages beneath
 them, with their share of the cost, their tokens by class (input, output, cache write, cache read), and the calls each was denied (a headless stage has nobody to grant one) — its passes, its history by day, its hand-overs, the output of every process it ran
 (what each read, edited and ran, through `factory.sh follow --process`) and its decision records. A reviewer
 appears there only for a perspective the profile asks for now — the status names them (`perspectives`); one an
@@ -25,9 +26,15 @@ earlier profile named, such as an old `review:dca`, stays out.
 
 ## What it reads
 
-`factory.sh status --format json --live`, `status --story <id> --format json --live`, `decisions --format json`,
+`factory.sh status --format json --live`, `status --story <id> --format json --live`, `status --epic <id> --format json`,
+`decisions --format json`,
 `discover --list --format json`, `follow --once --format json` — and the append-only journals and hand-over files under `.dca-factory/runs/`. A
 project whose pipeline is older than these views gets a line saying so and a button for `/factory-update`.
+
+Every order and every selection it shows is the factory's: the epics and an epic's stories newest first, the
+delivered stories newest delivery first (`delivered_order`), what waits and what comes next — the cockpit draws them
+as given. A story's and an epic's details are drawn from the same blocks (labelled fields, the item's own text,
+its criteria or its stories, the button that opens its file), the same in every tab that opens one.
 
 ## How it acts
 

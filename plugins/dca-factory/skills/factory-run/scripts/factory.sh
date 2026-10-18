@@ -19,7 +19,7 @@
 #                    default, --shared-builder/--shared-verifier share one half over `stages: separate`;
 #                    --keep-going: a stopped story does not end the backlog run — it and what depends on it
 #                    are skipped, and the run ends when nothing more can start (a stop file still ends it)
-#   factory.sh status [--story <id>] [--usage] [--refusals] [--brief]   what runs, what waits, every story, the cost; --refusals: form against substance
+#   factory.sh status [--all] [--story <id>] [--epic <id>] [--usage] [--refusals] [--brief]   what runs, what waits, what comes next; --all: every story and the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh spec-delta <story> [--format json]  what holds before and after the story
 #   factory.sh release <story> [--force]     give up a story's claim on the remote (`claim_remote:`); --force: another's
@@ -366,6 +366,9 @@ update_project() {                          # update_project <explicit skill fol
   fi
   after=$(gate_field "$GATE" VERSION); after_contract=$(gate_field "$GATE" CONTRACT)
   echo "factory: updated ${before:-an unstamped install} → $after (file contract ${before_contract:-?} → $after_contract) from $src"
+  # When each story and epic was written orders the backlog, newest first: filled once from git where it is missing,
+  # never over a value there.
+  cli --backfill-created 2>&1 | sed 's/^backfill: /factory: /'
   declared=$(cli --get contract 2>/dev/null)
   if [ -n "$declared" ] && [ "$declared" != "$after_contract" ]; then
     echo "factory: the stack profile declares contract $declared — raise it to 'contract: $after_contract' once" >&2
@@ -1753,6 +1756,8 @@ case "$command" in
     while [ $# -gt 0 ]; do
       case "$1" in
         --story) [ $# -ge 2 ] || usage; story=$2; shift 2 ;;
+        --epic) [ $# -ge 2 ] || usage; view+=("--epic" "$2"); shift 2 ;;
+        --all) view+=("--all"); shift ;;
         --usage) want_usage=1; shift ;;
         --refusals) want_refusals=1; shift ;;
         --brief) want_brief=1; shift ;;

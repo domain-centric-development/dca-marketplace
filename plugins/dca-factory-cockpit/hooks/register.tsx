@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
-import type { Cockpit, DecisionRecord, Detail, FactoryStatus, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
+import type { Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, type Cell } from './components'
 import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
 
@@ -15,6 +15,7 @@ const LIVE_MS = 5_000
 
 const cockpit = atom({ plugin: 'dca-factory-cockpit', key: 'cockpit' } as const, null)
 const storyView = atom({ plugin: 'dca-factory-cockpit', key: 'story' } as const, null as StoryView | null)
+const epicView = atom({ plugin: 'dca-factory-cockpit', key: 'epicView' } as const, null as EpicView | null)
 const tab = atom({ plugin: 'dca-factory-cockpit', key: 'tab' } as const, 'backlog' as Tab)
 const detail = atom({ plugin: 'dca-factory-cockpit', key: 'detail' } as const, null as Detail | null)
 const fileText = atom({ plugin: 'dca-factory-cockpit', key: 'fileText' } as const, '')
@@ -164,6 +165,13 @@ async function loadStory($: EngineInterface, root: string, id: string): Promise<
   return view && view.story === id && typeof view.stages === 'object' && Array.isArray(view.passes) ? view : null
 }
 
+// One epic as the factory reads it: its fields, its own text, its stories newest first (dca-factory 0.87.0); null on
+// an older pipeline, whose epic view keeps to what the status says.
+async function loadEpic($: EngineInterface, root: string, id: string): Promise<EpicView | null> {
+  const view = await factoryJson<EpicView>($, root, ['status', '--epic', id, '--format', 'json'])
+  return view && view.epic === id && Array.isArray(view.rows) ? view : null
+}
+
 // ---------------------------------------------------------------- the worker
 
 // The worker is factory.sh run, started by the person's press and nothing else. It runs as a child of
@@ -272,6 +280,10 @@ async function load($: EngineInterface, isQuiet: boolean, isLive: boolean): Prom
     const view = await loadStory($, now.root, open.id).catch(() => null)
     await update($, storyView, () => view)
   }
+  if (now && open?.kind === 'epic') {
+    const view = await loadEpic($, now.root, open.epic).catch(() => null)
+    await update($, epicView, () => view)
+  }
   if (open?.kind === 'file') await readFile($, open.path)
   if (now && open?.kind === 'output') await readOutput($, now.root, open.story, open.process)
   if (!now) {
@@ -347,7 +359,13 @@ async function editFile($: EngineInterface, path: string): Promise<void> {
 }
 
 async function showDetail($: EngineInterface, next: Detail): Promise<void> {
+  if (next.kind === 'epic') await update($, epicView, () => null)
   await update($, detail, () => next)
+  const now = await read($, cockpit)
+  if (now && next.kind === 'epic') {
+    const view = await loadEpic($, now.root, next.epic).catch(() => null)
+    await update($, epicView, () => view)
+  }
 }
 
 async function showTab($: EngineInterface, id: Tab): Promise<void> {
@@ -736,7 +754,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             { label: 'state', text: row?.state ?? '', color: MARK_COLOR[mark], bold: true },
             { label: 'epic', text: row?.epic ?? '' },
             view?.context && { label: 'context', text: view.context },
-            view && view.criteria > 0 && { label: 'criteria', text: `${view.criteria} acceptance criteria` },
+            view && view.criteria > 0 && !view.scenarios && { label: 'criteria', text: `${view.criteria} acceptance criteria` },
             row?.started && { label: 'started', text: moment(row.started) },
             row?.delivered && { label: 'delivered', text: moment(row.delivered), color: C.done },
             view?.accepted_by && { label: 'accepted', text: view.accepted_by, color: C.done },
@@ -753,7 +771,13 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           row && !row.done && ui.button('session', 'run in this session', () => send($, `/factory-run ${open.id}`), { hotkey: 'e', byClaude: true }),
           press && ui.button('answer', press.label, () => send($, press.command), { hotkey: 'a', isPrimary: true, byClaude: true }),
           row?.done && ui.button('verify', 'verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v', byClaude: true }),
+          view?.path ? ui.button('open-story', 'open story.md', () => void openFile($, `${now.root}/${view.path}`, `${open.id} / story.md`, open), { hotkey: 'o' }) : null,
         ]),
+        // what the story is and what it must do, in its own words — before how the pipeline took it
+        ...(view?.description ? [ui.section('Story'), ui.prose(view.description)] : []),
+        ...(view?.scenarios
+          ? [ui.section('Criteria', `${view.scenarios.length} scenario${view.scenarios.length === 1 ? '' : 's'}`), ui.scenarios(view.scenarios)]
+          : []),
         ui.section('Pipeline'),
         ui.chips(stagesOf(events).filter(run => shownProcess(run.stage)), at),
         ui.section('Time per stage', "the factory's own numbers"),
@@ -869,7 +893,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ui.section('Decisions'),
         recordTable(records, open),
       ],
-      `b back${row && !row.done ? ' · r run · e in session' : ''}${waits ? ' · a answer' : ''}`,
+      `b back${row && !row.done ? ' · r run · e in session' : ''}${waits ? ' · a answer' : ''}${view?.path ? ' · o open story.md' : ''}`,
     )
   }
 
@@ -953,9 +977,12 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         )}
     </Box>
   )
-  const epicBody = (epic: Epic) => {
+  // One epic: what it is for — intent, goal, outcome, domain contact — its own text, its stories newest first as the
+  // factory orders them, and its file. The factory's epic view where the pipeline has one; the status's fields else.
+  const epicBody = (epic: Epic, view: EpicView | null) => {
     const cells = epicCells(epic)
     const drafts = cells.draftRows
+    const path = view?.path || epic.path
     return (
       <Box flexDirection="column">
         {ui.card(
@@ -974,13 +1001,18 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                 () => send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
                 { byClaude: true },
               ),
+            Boolean(path) && ui.button(`open-epic-${epic.epic}`, 'open epic.md', () => void openFile($, `${now.root}/${path}`, `${epic.epic} / epic.md`, open), { hotkey: 'o' }),
           ],
           [
+            (view?.intent || epic.intent) && { label: 'intent', text: view?.intent || epic.intent || '' },
             epic.goal && { label: 'goal', text: epic.goal },
             epic.metric && { label: 'outcome', text: epic.metric, color: C.info },
+            (view?.domain_contact || epic.domain_contact) && { label: 'domain', text: view?.domain_contact || epic.domain_contact || '' },
             epic.discovery && { label: 'discovery', text: epic.discovery, color: C.muted },
           ],
         )}
+        {view?.description ? ui.prose(view.description) : null}
+        {ui.section('Stories', 'newest first')}
         {ui.table(storyColumns, epic.rows.map(story), 'no stories yet — ✦ suggest stories: Claude drafts the first, you release them')}
       </Box>
     )
@@ -1005,7 +1037,12 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   }
   if (open?.kind === 'epic') {
     const epic = status.epics.find(one => one.epic === open.epic)
-    return page([back(open.back), epic ? epicBody(epic) : <Text color={C.muted}>No such epic.</Text>], 'b back · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it')
+    const stored = await read($, epicView)
+    const view = stored?.epic === open.epic ? stored : null
+    return page(
+      [back(open.back), epic ? epicBody(epic, view) : <Text color={C.muted}>No such epic.</Text>],
+      'b back · o open epic.md · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it',
+    )
   }
 
   if (current === 'discover') {
@@ -1185,7 +1222,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     )
   }
 
-  const delivered = status.rows.filter(row => row.done)
+  // the factory's order — the newest delivery first; an older pipeline without it lists them as the status does
+  const delivered = status.delivered_order
+    ? status.delivered_order.map(id => status.rows.find(row => row.story === id)).filter((row): row is Row => Boolean(row))
+    : status.rows.filter(row => row.done)
   return page(
     [
       ui.section('Delivered', `${delivered.length} stories · ${fmt.time(delivered.reduce((sum, row) => sum + row.seconds, 0))} worked`),

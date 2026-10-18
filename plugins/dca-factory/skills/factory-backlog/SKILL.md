@@ -25,6 +25,7 @@ The same words from a person, a view that sends them, or another tool — one me
 | `/factory-backlog release <story> [<story> …]` | the person releases these drafts: run the question pass (step 6) for each, set `status: approved` where it leaves nothing open, and say which stay drafts and why |
 | `/factory-backlog release <epic>` | the person releases a whole epic: the same for every draft story of it — an id that names a folder under the epics with an `epic.md` is an epic, one that names a story's folder a story |
 | `/factory-backlog <story>: <finding>` | a judge's finding to settle (the cockpit sends it so): a story where it changes behaviour, a task where it does not (section *A task*) |
+| `/factory-backlog <name>#<n>: <finding>` | a finding of the project's own (`product/findings/<name>.md` — a test flaky in more than one story is `flaky#<n>`): the same, the task's `closes:` names that row |
 | `/factory-backlog <words>` | anything else: what the person wants, in their words — an epic, a story, a task or a correction |
 
 A form names the person's decision; it never skips a check. A release with open questions stays a draft until
@@ -192,6 +193,9 @@ that smuggles the decision in.
    backlog), take the id from `python3 .agents/factory/factory-cli.py --free-id <PREFIX>` — it fetches and skips
    every id the remote main line, its `Story:` history or a remote claim uses; otherwise the next number of the
    epic's prefix. Never reuse the id of a delivered story, also one whose folder is gone.
+8b. **Say when it was written.** Every new epic, story, task and journey item carries `created:` in its front
+   matter, the UTC time you write it (`date -u +%Y-%m-%dT%H:%M:%SZ`). The views show the backlog newest first by
+   it; never change it on an item that has one.
 9. **Leave `status: draft` unless the human releases it.** The gate refuses to plan a draft story,
    which is the one check no script can replace. Say plainly that the story is waiting for their
    release, and set `approved` only when they say so.
@@ -255,7 +259,8 @@ in the code, `closes:` the finding rows it settles. Where a person's words or a 
 question. A finding that makes a test assert more is neither: the test's expectation changes, which is a story's
 `## Changed expectations` or a decision of the test stage.
 
-A task lives in the epic of the code it touches — for a finding, the epic of the story the finding belongs to.
+A task lives in the epic of the code it touches — for a finding, the epic of the story the finding belongs to; for a
+project finding (`flaky#<n>`), the epic whose code the test covers.
 Several findings of one kind may go into one task; findings that touch unrelated code are separate tasks.
 
 ## Taking a feature away

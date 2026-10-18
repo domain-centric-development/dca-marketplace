@@ -271,3 +271,94 @@ test('a backlog with hundreds of open findings still draws the decide tab', asyn
   expect(await pane.find({ text: /300 from the judge · the first \d+ shown/ })).toBeDefined()
   expect(await pane.find({ text: /defect 299 / })).toBeUndefined()
 })
+
+// WP-146: a story opens with its own words and its criteria as scenarios, an epic with what it is for, its text and its
+// stories; the delivered tab shows the factory's order. Both details are drawn from the same blocks.
+const DETAIL_STATUS = {
+  ...STATUS,
+  waiting: [],
+  findings: [],
+  claims: [],
+  rows: [
+    { ...ROW, story: 'shelve-book', title: 'Shelve a book', mark: 'done', state: 'delivered', done: true, delivered: '2026-09-20T10:00:00Z' },
+    { ...ROW, story: 'lend-book', title: 'Lend a book', mark: 'done', state: 'delivered', done: true, delivered: '2026-09-22T10:00:00Z' },
+    ROW,
+  ],
+  // the factory's order: the newest delivery first — not the order of the rows
+  delivered_order: ['lend-book', 'shelve-book'],
+  delivered: 2,
+  total: 3,
+  epics: [{ ...STATUS.epics[0], intent: 'readers lose track of their books', domain_contact: 'the librarian', path: 'product/epics/books/epic.md', created: '2026-09-01T08:00:00Z' }],
+}
+const STORY_VIEW = {
+  ...STORY,
+  path: 'product/epics/books/add-book/story.md',
+  description: 'As a reader I want to add a book, so that it stands on my shelf.',
+  scenarios: [
+    { key: 'adds-a-book', title: 'A new book stands on the shelf', rule: 'A book is added once', happy: true, text: '',
+      steps: [{ word: 'Given', text: 'an empty shelf' }, { word: 'When', text: 'the reader adds "Dune"' }, { word: 'Then', text: 'the shelf shows "Dune"' }] },
+    { key: 'twice-is-once', title: 'Twice is once', rule: 'A book is added once', happy: false, text: 'Adding "Dune" again keeps one.', steps: [] },
+  ],
+}
+const EPIC_VIEW = {
+  epic: 'books', title: 'Keep track of books', path: 'product/epics/books/epic.md', created: '2026-09-01T08:00:00Z',
+  intent: 'readers lose track of their books', goal: 'one list', metric: 'BookAdded', domain_contact: 'the librarian', discovery: '',
+  description: '## Journey\n\n- open: a reader adds a book and finds it again', rows: [ROW], delivered: 0, total: 1, tokens: 0,
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`a story and an epic open with what they say; delivered shows the factory's order (${surface})`, async ($, on) => {
+    on('session.root', async () => ({ value: ROOT }))
+    on('fs.exists', async () => ({ value: true }))
+    on('fs.list', async () => ({ value: [] }))
+    const files: Record<string, string> = {
+      ...FILES,
+      [`${ROOT}/product/epics/books/add-book/story.md`]: '---\nid: add-book\n---\n\n# Add a book\n',
+    }
+    on('fs.read', async (_, e) => (files[e.path] === undefined ? { deny: 'missing' } : { value: files[e.path] as string }))
+    on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
+      const out = e.argv.includes('--epic') ? EPIC_VIEW : e.argv.includes('--story') ? STORY_VIEW : e.argv.includes('decisions') ? { records: [] } : e.argv.includes('--list') ? { topics: [] } : DETAIL_STATUS
+      return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    })
+    on('clock.now', async () => ({ value: Date.parse('2026-09-23T17:30:00Z') }))
+    on('clock.every', async () => ({ value: { cancel: () => {} } }) as never)
+    on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+    on('ui.status', async () => ({ value: undefined }) as never)
+    on('command.list', async () => ({ value: [] }) as never)
+
+    await $.command.run({ command: 'factory-cockpit', args: '' } as never)
+    const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface, component: 'Pane', requestId: 'factory-cockpit', props: { title: 'Factory', isFocused: true } as never })
+
+    // the epic: what it is for, its own text, its stories, its file
+    await pane.press({ key: 'epic-books' })
+    expect(await pane.find({ text: 'readers lose track of their books' })).toBeDefined()
+    expect(await pane.find({ text: 'the librarian' })).toBeDefined()
+    expect(await pane.find({ text: /a reader adds a book and finds it again/ })).toBeDefined()
+    expect(await pane.find({ text: 'newest first' })).toBeDefined()
+    expect(await pane.find({ key: 'story-add-book' })).toBeDefined()
+    await pane.press({ key: 'open-epic-books' })
+    expect(await pane.find({ text: 'books / epic.md' })).toBeDefined()
+    await pane.press({ key: 'back' })
+    expect(await pane.find({ text: 'the librarian' })).toBeDefined()
+
+    // the story: its own words, its criteria as scenarios — title, rule, steps — and its file; the pipeline below
+    await pane.press({ key: 'story-add-book' })
+    expect(await pane.find({ text: /As a reader I want to add a book/ })).toBeDefined()
+    expect(await pane.find({ text: 'A new book stands on the shelf' })).toBeDefined()
+    expect(await pane.find({ text: 'Rule: A book is added once' })).toBeDefined()
+    expect(await pane.find({ text: 'Given' })).toBeDefined()
+    expect(await pane.find({ text: 'the reader adds "Dune"' })).toBeDefined()
+    expect(await pane.find({ text: 'Adding "Dune" again keeps one.' })).toBeDefined()
+    expect(await pane.find({ text: /first delivery/ })).toBeDefined()
+    await pane.press({ key: 'open-story' })
+    expect(await pane.find({ text: 'add-book / story.md' })).toBeDefined()
+    await pane.press({ key: 'back' })
+    expect(await pane.find({ text: 'A new book stands on the shelf' })).toBeDefined()
+
+    // delivered: the newest delivery first, as the factory ordered them
+    await pane.press({ key: 'back' })
+    await pane.press({ key: 'tab-delivered' })
+    const shown = (await pane.findAll({ type: 'Button' })).map(one => one.key).filter(key => key === 'story-lend-book' || key === 'story-shelve-book')
+    expect(shown).toEqual(['story-lend-book', 'story-shelve-book'])
+  })
+}

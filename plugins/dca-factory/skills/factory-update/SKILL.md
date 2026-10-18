@@ -52,7 +52,8 @@ a report of what changed. You commit nothing; the human reviews and commits.
 5. **Name what to commit:** `.agents/factory/`, `.githooks/pre-commit`, `.gitattributes`, `.gitignore`, the
    `AGENTS.md` section, `.dca-factory-skills` in each skill folder, the skill copies where the
    project keeps copies — and after a migration the moved files: the profile at the root, `product/epics/`
-   with the records beside the stories. `.dca-factory/` stays out of git — the install writes `/.dca-factory`
+   with the records beside the stories — and the stories and epics the update gave `created:` (it says how many:
+   once, from the commit that added each file, never over a value there). `.dca-factory/` stays out of git — the install writes `/.dca-factory`
    into `.gitignore` unless a line there names it already, which is how a project that commits its history
    keeps its own lines. A line that is there stays where it stands, so an update leaves `.gitignore`
    unchanged when nothing is missing.

@@ -20,6 +20,8 @@ export type Row = {
   // the tests a gate of this story ran again alone and saw green — red in a whole suite, outside the story's change
   // (dca-factory 0.86.0; absent from an older pipeline)
   flaky?: string[]
+  // when the story was written, `created:` in its front matter (dca-factory 0.87.0; '' without one)
+  created?: string
 }
 
 export type FactoryStatus = {
@@ -37,14 +39,23 @@ export type FactoryStatus = {
     goal?: string
     metric?: string
     discovery?: string
+    // dca-factory 0.87.0: the epic's other fields, when it was written and its file — the epics come newest first
+    intent?: string
+    domain_contact?: string
+    created?: string
+    path?: string
   }[]
   description?: DescriptionPart[]
+  // what comes next in the schedule's order, and how many cannot yet (dca-factory 0.87.0)
+  queue?: { ready: string[]; blocked: number; drafts: number }
+  // the delivered stories, the newest delivery first — the factory's order (dca-factory 0.87.0)
+  delivered_order?: string[]
   rows: Row[]
   next: { text: string; action: Action }
   journeys: { epic: string; text: string; action: Action }[]
   // the judge's open minors and other factories' claims (dca-factory 0.79.3; absent from an older pipeline); `plain`, the
   // finding in one sentence a person understands at once, since 0.84.0 — '' for a row the judge wrote before it
-  findings?: { story: string; plain?: string; where: string; severity: string; defect: string; perspective?: string; fix?: string; file: string; action: Action }[]
+  findings?: { story: string; row?: string; project?: boolean; plain?: string; where: string; severity: string; defect: string; perspective?: string; fix?: string; file: string; action: Action }[]
   // the review perspectives the profile asks for now, the built-ins first (dca-factory 0.84.2; absent from an older
   // pipeline, which then shows every reviewer a story ran)
   perspectives?: { name: string; carrier: string }[]
@@ -116,6 +127,10 @@ export type StageRun = {
 // What `factory.sh status --story <id> --format json --live` prints — the factory's own numbers for one story.
 export type StoryView = {
   story: string
+  // dca-factory 0.87.0: the story's file, its own words and its criteria as scenarios
+  path?: string
+  description?: string
+  scenarios?: Scenario[]
   context: string
   criteria: number
   accepted_by: string
@@ -138,6 +153,28 @@ export type Cockpit = {
   // what the newest stage does, from `factory.sh follow --once` — whoever started it; null on an older pipeline
   stage: StageOutput | null
   updatedAt: number
+}
+
+// One criterion as a person reads it: its title, the rule it serves, its steps — or the line form's text.
+export type Scenario = { key: string; title: string; rule: string; happy: boolean; steps: { word: string; text: string }[]; text: string }
+
+// What `factory.sh status --epic <id> --format json` prints (dca-factory 0.87.0): one epic with its fields, its own
+// text and its stories, newest first.
+export type EpicView = {
+  epic: string
+  title: string
+  path: string
+  created: string
+  intent: string
+  goal: string
+  metric: string
+  domain_contact: string
+  discovery: string
+  description: string
+  rows: Row[]
+  delivered: number
+  total: number
+  tokens: number
 }
 
 // What `factory.sh spec-delta <story> --format json` prints: what holds before and after a story (dca-factory 0.81.0).
@@ -176,6 +213,7 @@ declare module 'claude-code' {
     'dca-factory-cockpit': {
       cockpit: Cockpit | null
       story: StoryView | null
+      epicView: EpicView | null
       tab: Tab
       detail: Detail | null
       fileText: string

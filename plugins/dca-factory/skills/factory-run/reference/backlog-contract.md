@@ -93,6 +93,11 @@ Front matter, every field non-empty; the gate refuses an epic without `intent`, 
 | `metric` | the **outcome event** that measures it: a domain or integration event whose publication in production is the evidence. Not a story count, not a burndown |
 | `domain_contact` | who answers domain questions for this epic |
 
+Optional: `created` — when the epic was written, a UTC time (`2026-10-18T09:12:00Z`; a date alone reads as well). The
+backlog skill writes it with the epic; `factory.sh update` fills it once from git for an epic without one (the commit
+that added the file), never over a value there. The views order the epics by it, newest first; an epic without it
+comes after the dated ones. The gate checks nothing about it.
+
 Optional: `discovery` — the report the epic came from (`product/discovery/<topic>/discovery.md`, written by
 `factory-discover`); the gate refuses a link to a report that is not there.
 
@@ -122,6 +127,7 @@ Front matter:
 | `title` | short name |
 | `status` | `draft` while it is still being written, `approved` once a human released it for building, `adopted` when it describes behaviour the project already has — adopted, never built (below) — `superseded` when another story replaced it, `delivered` once the document or the adopt gate passed it — and where the runner gave the story a worktree, once the integrate gate put it on the main line — or once a person delivered it by hand (`delivered_by: hand:<who>`, below). Built or adopted, a delivered story reads `status: delivered` (one end state). The person writes `draft → approved`; `→ delivered` is the gate's, or a person's who delivered by hand; a reopen or `--prove` takes it back. The gate refuses to plan a `draft` story: the most expensive mistake is well-built wrong code. A project that does not use the field is not blocked — the check is then reported as skipped |
 | `delivered` | the UTC time the story was delivered, written with `status: delivered`. The story's digest leaves it out |
+| `created` | optional: when the story was written, a UTC time (a date alone reads as well), written by the backlog skill; `factory.sh update` fills it once from git where it is missing (the commit that added the file), never over a value there. The views list an epic's stories by it, newest first, the undated after them in the schedule's order. The story's digest leaves it out; the gate checks nothing about it |
 | `delivered_by` | who claims the delivery (contract 18): `gate`, written by the gate that delivered it, or `hand:<who>`, written by a person who built it by hand (`factory-cli.py --deliver-by-hand <story> --by <who>` writes the three lines). A claim, not a proof: the files are the person's. `factory-cli.py --prove <story>` turns a hand's claim into a gate's delivery through the adopt path. The story's digest leaves it out |
 | `publishes` | optional (contract 14): the epic's outcome event, on the story after which it can happen — the step that completes the flow. Its name is a word of the epic's `metric:` (the plan gate's `outcome`); at the document gate the production code declares a type of that name and a file the story changed — the aggregate that raises it, or the use case that publishes it — refers to it (`outcome`). One event, or a list |
 | `depends_on` | story ids that must be delivered first; empty list when none. `[A, B]` and a `- A` list both read. The schedule runs stories in this order, ties by their epic's place (its `depends_on:`, then its id) and then by id; an unknown id or a cycle blocks the story and is named |
@@ -205,8 +211,8 @@ a step lists the journey test under `## Changed tests`, as any other.
 changes no behaviour, a dependency or build change, a unit test for an invariant that already holds. It has **no**
 acceptance criteria — a criterion is behaviour, and behaviour that changes is a story with a red test; the plan gate
 refuses a task with one. What it does stands in the body, in a sentence or two. `closes:` names the finding rows it
-settles, `<story>#<n>` (the row's number in that story's `findings.md`), each open; the delivering gate sets them to
-`done`. It runs plan, build, tidy, judge and document — no test stage —, and its evidence is the existing suite: the
+settles, `<story>#<n>` (the row's number in that story's `findings.md`) or `<name>#<n>` for a project finding
+(`product/findings/<name>.md`, such as `flaky#1`), each open; the delivering gate sets them to `done`. It runs plan, build, tidy, judge and document — no test stage —, and its evidence is the existing suite: the
 build and tidy gates run every test command the profile declares, whole, with the architecture and format checks; a
 test that existed before the task may not change (`tests-kept`), a new one may be added. No spec delta: what holds is
 what held. Taking a feature away is not a task — an actor sees it gone — but a story whose criterion is the absence.
