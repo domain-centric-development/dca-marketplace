@@ -1199,9 +1199,9 @@ def utc_text(moment):
 
 def backfill_created(cwd, epics):
     """WP-146: `created:` into every story and every epic that has none — once, idempotent, never over a value there
-    (a line `created:` of any content is the person's). The time is the commit that added the file: one pass over the
-    log for the files added where they lie; a file a move brought there followed through its renames; a file git does
-    not hold yet takes its own modification time. Prints what it wrote."""
+    (a line `created:` of any content is the person's). The time is the commit that first added the file, followed
+    through its renames — a file a layout change moved keeps its first day; a file git does not hold yet takes its own
+    modification time. Prints what it wrote."""
     files = story_files(epics) + [os.path.join(epics, e["folder"], EPIC_FILE) for e in epic_files(epics)]
     missing = []
     for path in files:
@@ -1214,23 +1214,16 @@ def backfill_created(cwd, epics):
     if not missing:
         print("backfill: every story and epic has its created: — nothing written")
         return 0
-    added = {}
-    if git(cwd, "rev-parse", "--is-inside-work-tree")[0] == 0:
-        code, out = git(cwd, "-c", "core.quotePath=false", "log", "--relative", "--diff-filter=A", "--no-renames",
-                        "--format=%x01%aI", "--name-only", "--", os.path.relpath(epics, cwd))
-        stamp = None
-        for line in out.splitlines() if code == 0 else []:
-            if line.startswith("\x01"):
-                stamp = line[1:].strip()
-            elif line.strip() and stamp:
-                added.setdefault(os.path.normpath(line.strip()), stamp)   # the log is newest first: the latest add
+    tracked = git(cwd, "rev-parse", "--is-inside-work-tree")[0] == 0
     written, from_file = {"story": 0, "epic": 0}, 0
     for path in missing:
         rel = os.path.normpath(os.path.relpath(path, cwd))
-        stamp = added.get(rel)
-        if not stamp and git(cwd, "ls-files", "--error-unmatch", "--", rel)[0] == 0:
-            code, out = git(cwd, "log", "--diff-filter=A", "--follow", "--format=%aI", "-1", "--", rel)
-            stamp = out.strip().splitlines()[0] if code == 0 and out.strip() else None
+        stamp = None
+        if tracked and git(cwd, "ls-files", "--error-unmatch", "--", rel)[0] == 0:
+            # through every rename: a file a layout change moved keeps the day it was first written, not the move's
+            code, out = git(cwd, "log", "--follow", "--diff-filter=A", "--format=%aI", "--", rel)
+            lines = out.strip().splitlines() if code == 0 else []
+            stamp = lines[-1].strip() if lines else None              # the log is newest first: the earliest add
         moment = None
         if stamp:
             with contextlib.suppress(ValueError):
@@ -2059,8 +2052,7 @@ def situation_of_story(row, story, overview, body):
 
 def epic_situation(epic, overview):
     """What is up with an epic beyond the progress its head shows, in one line: what is set aside, what runs, what
-    waits for a person — empty when nothing does — and the view its detail opens with: `stories` once one of them
-    started, `epic` before."""
+    waits for a person — empty when nothing does. The detail is one page: head, sections, stories."""
     ids = {r["story"] for r in epic["rows"]}
     parts = []  # how much is delivered stands in the head (its progress) — the line says only what comes beside it
     set_aside = sum(1 for r in epic["rows"] if r["state"] == "superseded")
@@ -2070,8 +2062,7 @@ def epic_situation(epic, overview):
     drafts = sum(1 for w in overview["waiting"] if w["story"] in ids and w.get("draft"))
     parts += [f"{waits} wait{'s' if waits == 1 else ''} for you"] if waits else []
     parts += [f"{drafts} draft{'' if drafts == 1 else 's'}"] if drafts else []
-    started = any(r["passes"] or r["done"] for r in epic["rows"])
-    return dict(situation=" · ".join(parts), view="stories" if started else "epic")
+    return dict(situation=" · ".join(parts))
 
 
 def story_sections(body):

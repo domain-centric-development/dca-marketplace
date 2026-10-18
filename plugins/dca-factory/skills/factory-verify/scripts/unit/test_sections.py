@@ -124,7 +124,7 @@ class HeadSaysIt(unittest.TestCase):
     def test_the_epic_line_leaves_the_progress_to_the_head(self):
         epic = dict(rows=[dict(story="S-1", state="delivered", passes=1, done=True)], delivered=1, total=1)
         overview = dict(running=[], waiting=[])
-        self.assertEqual(cli.epic_situation(epic, overview), dict(situation="", view="stories"))
+        self.assertEqual(cli.epic_situation(epic, overview), dict(situation=""))  # one page: no view to choose
         overview = dict(running=[dict(story="S-1", stage="build", interrupted=False)], waiting=[])
         self.assertEqual(cli.epic_situation(epic, overview)["situation"], "S-1 running build")
 

@@ -182,11 +182,10 @@ export type EpicView = {
   domain_contact: string
   discovery: string
   description: string
-  // dca-factory 0.87.2: the sections, where the stories stand among them, what is up, the view to open with
+  // dca-factory 0.87.2: the sections, where the stories stand among them, what is up
   sections?: Section[]
   stories_at?: number | null
   situation?: string
-  view?: 'epic' | 'stories'
   rows: Row[]
   delivered: number
   total: number
@@ -209,7 +208,7 @@ export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'deli
 // `back`: where the view returns to — a topic that opened an epic, a story that opened a hand-over.
 export type Detail =
   | { kind: 'story'; id: string; pane?: 'story' | 'pipeline' }
-  | { kind: 'epic'; epic: string; back?: Detail | null; pane?: 'epic' | 'stories' }
+  | { kind: 'epic'; epic: string; back?: Detail | null }
   | { kind: 'topic'; topic: string; back?: Detail | null }
   | { kind: 'file'; path: string; title: string; back: Detail | null }
   | { kind: 'output'; story: string; process: string; back: Detail | null }

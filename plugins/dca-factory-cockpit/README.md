@@ -40,8 +40,9 @@ Every order and every selection it shows is the factory's: the epics and an epic
 delivered stories newest delivery first (`delivered_order`), what waits and what comes next — the cockpit draws them
 as given. A story's and an epic's details are drawn from the same blocks (the line of what is up, labelled fields, the view
 switch, the item's sections, its criteria or its stories, the button that opens its file), the same in every tab
-that opens one. An epic opens the same way: its line, then `i` Epic (every section of its `epic.md`) beside `s`
-Stories (newest first), the view the factory names first.
+that opens one. An epic is one page without a switch: its head (title, progress, intent, goal, outcome, domain),
+its line, the sections of its `epic.md` the head does not already say, then its stories newest first — where the
+factory places them.
 
 ## How it acts
 

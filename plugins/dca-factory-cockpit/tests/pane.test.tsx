@@ -335,10 +335,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: 'the librarian' })).toBeDefined()
     expect(await pane.find({ text: 'newest first' })).toBeDefined()
     expect(await pane.find({ key: 'story-add-book' })).toBeDefined()
-    // an older pipeline names no view: the stories open, its own text one press away
-    await pane.press({ key: 'view-epic' })
+    // one page: its own text beside its stories, no switch
     expect(await pane.find({ text: /a reader adds a book and finds it again/ })).toBeDefined()
-    await pane.press({ key: 'view-stories' })
+    expect(await pane.find({ key: 'view-epic' })).toBeUndefined()
     await pane.press({ key: 'open-epic-books' })
     expect(await pane.find({ text: 'books / epic.md' })).toBeDefined()
     await pane.press({ key: 'back' })
@@ -387,7 +386,6 @@ const SECTIONS_STORY = {
 const SECTIONS_EPIC = {
   ...EPIC_VIEW,
   situation: '1 superseded',
-  view: 'epic',
   stories_at: 1,
   sections: [
     { heading: 'Intent', text: 'Readers lose track of the books they lent.', kind: '' },
@@ -414,15 +412,14 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.command.run({ command: 'factory-cockpit', args: '' } as never)
     const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface, component: 'Pane', requestId: 'factory-cockpit', props: { title: 'Factory', isFocused: true } as never })
 
-    // the epic: its line, its sections in the factory's order — the view it names first, the stories one press away
+    // the epic on one page: its line, its sections in the factory's order, its stories where the factory puts them
     await pane.press({ key: 'epic-books' })
     expect(await pane.find({ text: '1 superseded' })).toBeDefined()
     expect(await pane.find({ text: /Readers lose track of the books they lent/ })).toBeDefined()
     expect(await pane.find({ text: 'JOURNEY' })).toBeDefined()
-    expect(await pane.find({ key: 'story-add-book' })).toBeUndefined()
-    await pane.press({ key: 'view-stories' })
     expect(await pane.find({ key: 'story-add-book' })).toBeDefined()
-    expect(await pane.find({ text: /Readers lose track/ })).toBeUndefined()
+    expect(await pane.find({ key: 'view-epic' })).toBeUndefined()
+    expect(await pane.find({ key: 'view-stories' })).toBeUndefined()
 
     // the story: what is up in one line, the reason it is not built framed first, a wrapped line kept, the
     // criteria where they stand, the notes after them; the pipeline one press away

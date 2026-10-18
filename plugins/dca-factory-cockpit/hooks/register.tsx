@@ -1001,15 +1001,13 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         )}
     </Box>
   )
-  // One epic: what it is for — intent, goal, outcome, domain contact — its own text, its stories newest first as the
-  // factory orders them, and its file. The factory's epic view where the pipeline has one; the status's fields else.
-  const epicBody = (epic: Epic, view: EpicView | null, at: Extract<Detail, { kind: 'epic' }>) => {
+  // One epic on one page: what it is for — intent, goal, outcome, domain contact — then the sections of its file the
+  // head does not say, then its stories newest first, in the order and where the factory puts them. The factory's
+  // epic view where the pipeline has one; the status's fields else.
+  const epicBody = (epic: Epic, view: EpicView | null) => {
     const cells = epicCells(epic)
     const drafts = cells.draftRows
     const path = view?.path || epic.path
-    // which view opens: the person's press, else the factory's choice, else — an older pipeline — the stories
-    const pane = at.pane ?? view?.view ?? 'stories'
-    const showPane = (next: 'epic' | 'stories') => void update($, detail, () => ({ ...at, pane: next }) as Detail)
     const stories = [
       ui.section('Stories', 'newest first'),
       ui.table(storyColumns, epic.rows.map(story), 'no stories yet — ✦ suggest stories: Claude drafts the first, you release them'),
@@ -1043,17 +1041,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ],
         )}
         {view?.situation ? ui.situation(view.situation, cells.isDone ? C.done : C.text) : null}
-        {ui.views([
-          { key: 'view-epic', label: 'Epic', hotkey: 'i', isOpen: pane === 'epic', onPress: () => showPane('epic') },
-          { key: 'view-stories', label: 'Stories', hotkey: 's', isOpen: pane === 'stories', onPress: () => showPane('stories') },
-        ])}
-        {pane === 'stories'
-          ? stories
-          : view?.sections
-            ? ui.sections(view.sections, view.stories_at, [])
-            : view?.description
-              ? ui.prose(view.description)
-              : null}
+        {view?.sections
+          ? ui.sections(view.sections, view.stories_at, stories)
+          : [...(view?.description ? [ui.prose(view.description)] : []), ...stories]}
       </Box>
     )
   }
@@ -1080,8 +1070,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const stored = await read($, epicView)
     const view = stored?.epic === open.epic ? stored : null
     return page(
-      [back(open.back), epic ? epicBody(epic, view, open) : <Text color={C.muted}>No such epic.</Text>],
-      'b back · i epic · s stories · o open epic.md · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it',
+      [back(open.back), epic ? epicBody(epic, view) : <Text color={C.muted}>No such epic.</Text>],
+      'b back · o open epic.md · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it',
     )
   }
 

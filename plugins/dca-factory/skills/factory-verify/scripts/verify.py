@@ -7263,12 +7263,12 @@ def run_groups(args):
              and "Journey" in epic_json.get("description", "") and "Intent" in epic_text and "LATER-1" in epic_text,
              {k: epic_json.get(k) for k in ("intent", "path", "created", "description")}),
             ("status --story/--epic --format json: every section in the file's order, the criteria's and the stories' "
-             "place kept, one line of what is up and the view the detail opens with",
+             "place kept, one line of what is up, the story's view to open with — an epic is one page and names none",
              [x["heading"] for x in story_view.get("sections", [])] == ["Story", "Assumptions"] and story_view.get("criteria_at") == 1
              and story_view.get("superseded") is False and story_view.get("view") in ("story", "pipeline")
              and story_view.get("situation", "").startswith("ready")
              and "Journey" in [x["heading"] for x in epic_json.get("sections", [])]
-             and "0 of 1 delivered" not in epic_json.get("situation", "") and epic_json.get("view") == "epic",
+             and "0 of 1 delivered" not in epic_json.get("situation", "") and "view" not in epic_json,
              {k: story_view.get(k) for k in ("sections", "criteria_at", "situation", "view")}),
             ("status --epic: an epic there is not is refused with the ones there are",
              unknown.returncode == 1 and "later, sample" in unknown.stdout, unknown.stdout),
@@ -7285,10 +7285,15 @@ def run_groups(args):
         backlog_project(root, ("STORY-2", []))
         write_file(root, "product/epics/sample/STORY-2/story.md",
                    story("STORY-2").replace("\ntitle:", "\ncreated: 2026-01-02T03:04:05Z\ntitle:", 1))
+        write_file(root, "backlog/sample/STORY-4/story.md", story("STORY-4"))             # moved by a layout change
         in_git(root)
         dated_env = dict(os.environ, GIT_AUTHOR_DATE="2026-10-11T12:13:14+02:00", GIT_COMMITTER_DATE="2026-10-11T12:13:14+02:00")
         for command in (["git", "add", "-A"], ["git", "-c", "user.name=t", "-c", "user.email=t@x", "commit", "-qm", "backlog"]):
             subprocess.run(command, cwd=root, capture_output=True, env=dated_env)
+        moved_env = dict(os.environ, GIT_AUTHOR_DATE="2026-10-15T09:00:00+00:00", GIT_COMMITTER_DATE="2026-10-15T09:00:00+00:00")
+        for command in (["git", "mv", "backlog/sample/STORY-4", "product/epics/sample/STORY-4"],
+                        ["git", "-c", "user.name=t", "-c", "user.email=t@x", "commit", "-qm", "layout", "--no-verify"]):
+            subprocess.run(command, cwd=root, capture_output=True, env=moved_env)
         write_file(root, "product/epics/sample/STORY-3/story.md", story("STORY-3"))       # not in git yet
         digest_of = lambda path: subprocess.run(
             [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); from dca_factory.contract import "
@@ -7308,6 +7313,9 @@ def run_groups(args):
              and front_of("product/epics/sample/STORY-2/story.md").count("created:") == 1
              and re.search(r"^created: \d{4}-\d\d-\d\dT", front_of("product/epics/sample/STORY-3/story.md"), re.M)
              and "1 not in git yet" in first.stdout, first.stdout),
+            ("backfill: a file a layout change moved keeps the day it was first added, followed through the rename",
+             "created: 2026-10-11T10:13:14Z" in front_of("product/epics/sample/STORY-4/story.md"),
+             front_of("product/epics/sample/STORY-4/story.md")),
             ("backfill: run again, it writes nothing", "nothing written" in again.stdout, again.stdout),
             ("backfill: `created:` is not part of the story as planned — its digest stays",
              planned and digest_of(story1) == planned, (planned, digest_of(story1))),
