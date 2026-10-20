@@ -185,13 +185,14 @@ def display_name_of(test_path, method):
     lines = text.splitlines()
     for index, line in enumerate(lines):
         if re.search(rf"\b{re.escape(method)}\s*\(", line):
-            for candidate in reversed(lines[max(0, index - 6):index + 1]):
-                for pattern in DISPLAY_NAME:
-                    match = pattern.search(candidate)
-                    if match:
-                        return unescape_literal(match.group(1))
-                if candidate.strip().endswith("}") and candidate is not lines[index]:
-                    break                     # left this method's declaration
+            start = index
+            while start > max(0, index - 8) and not lines[start - 1].strip().endswith("}"):
+                start -= 1                    # stop where the declaration before this one ends
+            # One text, not one line at a time: a formatter wraps a long title onto the line after the annotation
+            block = "\n".join(lines[start:index + 1])
+            found = [m for pattern in DISPLAY_NAME for m in pattern.finditer(block)]
+            if found:
+                return unescape_literal(max(found, key=lambda m: m.start()).group(1))
     return None
 
 

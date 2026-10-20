@@ -112,6 +112,13 @@ class OutcomeFor(Reports):
         csharp = self.file("WidgetTests.cs", '[Fact(DisplayName = "Shows it")]\npublic void ShowsIt() {}\n')
         self.assertEqual(reports.display_name_of(csharp, "ShowsIt"), "Shows it")
 
+    def test_a_display_name_a_formatter_wrapped_is_read_across_the_line_break(self):
+        path = self.file("LongTest.java", 'class LongTest {\n  @Test\n  void before() {}\n\n  @Test\n'
+                                          '  @DisplayName(\n      "A title too long for one line")\n'
+                                          '  void wrapped() {}\n}\n')
+        self.assertEqual(reports.display_name_of(path, "wrapped"), "A title too long for one line")
+        self.assertIsNone(reports.display_name_of(path, "before"))
+
 
 class Usage(Reports):
 
