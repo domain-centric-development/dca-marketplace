@@ -89,6 +89,17 @@ class MainTests(unittest.TestCase):
               f"---\nid: STORY-1-01\nstory: STORY-1\nstage: {stage}\n---\n# Keep the merged helpers?\n\n"
               f"## Question\n`{TEST}` lost a line that no longer compiles.\n\n## Options\n- a: keep the merge\n{answer}")
 
+    def test_a_record_that_names_the_file_by_its_name_alone_waives_it_and_a_longer_name_does_not(self):
+        self.resolve(STORY)
+        self.answer("integrate")
+        record = os.path.join(self.root, "product", "epics", "sample", "STORY-1", "decisions", "01.md")
+        with open(record, encoding="utf-8") as handle:
+            text = handle.read()
+        write(record, text.replace(f"`{TEST}`", "`OtherShopTest.java`"))
+        self.assertEqual([rel for rel, _ in gate.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
+        write(record, text.replace(f"`{TEST}`", "`ShopTest.java`"))
+        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+
     def test_a_file_an_answered_integrate_decision_names_is_not_asked_back(self):
         self.resolve(STORY)
         self.answer("integrate", answered=False)

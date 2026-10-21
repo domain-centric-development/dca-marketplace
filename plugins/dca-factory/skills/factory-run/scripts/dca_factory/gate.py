@@ -3227,7 +3227,8 @@ def main_tests_lost(cwd, runs, story_id, waive=True):
 
 
 def main_tests_waiver(cwd, story_id, rel):
-    """The ids of the story's answered integrate decisions that name this test file — a person answered how its
+    """The ids of the story's answered integrate decisions that name this test file — by its path or its file name, as
+    a record names it — a person answered how its
     main-line lines are resolved, so the check holds the resolution to that answer, not to the lines (#163). Read in
     the main checkout, where the records are: the integrate step has taken the worktree's links down."""
     try:
@@ -3236,7 +3237,7 @@ def main_tests_waiver(cwd, story_id, rel):
         return []
     return [str(front.get("id", "")).strip() for _p, front, body, state, _a in records
             if state in ("answered", "applied") and str(front.get("stage", "")).strip() == "integrate"
-            and rel in body]
+            and (rel in body or re.search(rf"(?<![\w./-]){re.escape(os.path.basename(rel))}(?![\w.-])", body))]
 
 
 def _main_tests_lost(cwd, runs, story_id):
