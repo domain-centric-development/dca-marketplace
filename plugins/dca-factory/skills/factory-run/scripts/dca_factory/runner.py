@@ -525,8 +525,8 @@ def migrate_spec(cwd, epics, runs, say):
     """The living spec from what is delivered (WP-98): every delivered story merged into its context's spec — or a
     journey item into `journeys.md` — in the order of its `delivered:` time, its test lines from its `tests.md` where
     the run folder kept one; a story without a mapping is merged without test lines and named. Only a criterion the
-    spec lacks is merged: one the spec holds in other words was changed by a later story or a delivery since, and
-    taking it back would undo that. A story whose criteria the spec holds already is left alone, so a second run
+    spec lacks is merged — and not one a delivered story's plan removed at the same time or later: one the spec holds
+    in other words was changed since, one it lacks so was taken out, and taking either back would undo that. A story whose criteria the spec holds already is left alone, so a second run
     changes nothing."""
     delivered = []
     for story_path in story_files(epics):
@@ -536,14 +536,23 @@ def migrate_spec(cwd, epics, runs, say):
             continue
         if is_delivered(front) and spec_target(front):
             delivered.append((delivered_on(front), story_id_of(story_path), story_path, front, body))
-    for _when, story_id, story_path, front, body in sorted(delivered):
+    place_of = lambda front: ("journeys" if story_kind(front) == "journey"
+                              else str(front.get("context", "")).strip().lower())
+    removed = {}
+    for when, story_id, _path, front, _body in delivered:
+        plan = os.path.join(runs, story_id, "plan.md")
+        if os.path.isfile(plan):
+            for key in read_delta(read_text(plan))["removes"]:
+                removed.setdefault((place_of(front), key), []).append(when)
+    for when, story_id, story_path, front, body in sorted(delivered):
         target, held, _features, _feature = story_spec(front)
         preamble, spec = read_spec(target)
         story = story_entries(body)
         # held anywhere in the context — its own file or a feature's (WP-105): a criterion moved into a feature
         # folder is not merged back into the file the story names
         found = derived(story, held)
-        story = [item for item in story if found.get(item["key"]) == "adds"]
+        story = [item for item in story if found.get(item["key"]) == "adds"
+                 and not any(w >= when for w in removed.get((place_of(front), item["key"]), []))]
         if not story:
             continue
         try:

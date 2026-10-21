@@ -194,6 +194,22 @@ class HandAndMigration(unittest.TestCase):
             self.assertNotIn("shows-the-name", text)
             self.assertIn("in bold", read(feature))
 
+    def test_the_migration_leaves_out_a_criterion_a_later_story_removed(self):
+        with project() as p:
+            contract.set_places({})
+            p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
+            p.story("S-2", text=STORY.replace("S-1", "S-2").replace("status: approved",
+                                                                    "status: delivered\ndelivered: 2026-10-02T00:00:00Z"))
+            p.run_file("S-2", "plan.md", "# Plan\n\n## Spec delta\n- holds shows-the-name\n"
+                                         "- removes lists-in-order: no longer wanted\n")
+            root_file = os.path.join(p.root, "product", "spec", "widgets", "scenarios.md")
+            write(root_file, spec.render_spec([], [item for item in spec.story_entries(STORY.split("---", 2)[2])
+                                                   if item["key"] == "shows-the-name"], "widgets"))
+            said = []
+            runner.migrate_spec(p.root, p.epics, p.runs, said.append)
+            self.assertEqual(said, [])
+            self.assertNotIn("lists-in-order", read(root_file))
+
     def test_the_spec_check_names_a_delivered_criterion_the_spec_lacks(self):
         with project() as p:
             contract.set_places({})
