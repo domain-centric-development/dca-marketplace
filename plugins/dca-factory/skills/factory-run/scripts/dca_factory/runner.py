@@ -524,8 +524,10 @@ def migrate_delivery(cwd, epics, runs, say):
 def migrate_spec(cwd, epics, runs, say):
     """The living spec from what is delivered (WP-98): every delivered story merged into its context's spec — or a
     journey item into `journeys.md` — in the order of its `delivered:` time, its test lines from its `tests.md` where
-    the run folder kept one; a story without a mapping is merged without test lines and named. A story whose criteria
-    the spec holds already is left alone, so a second run changes nothing."""
+    the run folder kept one; a story without a mapping is merged without test lines and named. Only a criterion the
+    spec lacks is merged: one the spec holds in other words was changed by a later story or a delivery since, and
+    taking it back would undo that. A story whose criteria the spec holds already is left alone, so a second run
+    changes nothing."""
     delivered = []
     for story_path in story_files(epics):
         try:
@@ -541,14 +543,14 @@ def migrate_spec(cwd, epics, runs, say):
         # held anywhere in the context — its own file or a feature's (WP-105): a criterion moved into a feature
         # folder is not merged back into the file the story names
         found = derived(story, held)
-        if not story or all(verb == "holds" for verb in found.values()):
+        story = [item for item in story if found.get(item["key"]) == "adds"]
+        if not story:
             continue
         try:
             tests = read_mapping(runs, story_id)[1]
         except GateError:
             tests = {}
-        plan = os.path.join(runs, story_id, "plan.md")
-        delta = read_delta(read_text(plan)) if os.path.isfile(plan) else read_delta("")
+        delta = read_delta("")       # what the story's plan changed or removed holds already, or a later story undid it
         title = "Journeys" if story_kind(front) == "journey" else str(front.get("context", "")).strip()
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, "w", encoding="utf-8") as handle:

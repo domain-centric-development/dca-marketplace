@@ -175,6 +175,25 @@ class HandAndMigration(unittest.TestCase):
             self.assertEqual(said, [])
             self.assertFalse(os.path.isfile(root_file))
 
+    def test_the_migration_leaves_a_criterion_a_later_story_changed_and_adds_only_what_the_spec_lacks(self):
+        """A delivered story whose criterion the spec holds in other words — a later story changed it, in a feature
+        folder — is not merged back into its own file; a criterion of it the spec lacks is."""
+        with project() as p:
+            contract.set_places({})
+            p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
+            changed = STORY.replace('"Cog" is shown', '"Cog" is shown in bold')
+            later = spec.story_entries(changed.split("---", 2)[2])
+            feature = os.path.join(p.root, "product", "spec", "widgets", "naming", "scenarios.md")
+            write(feature, spec.render_spec([], [item for item in later if item["key"] == "shows-the-name"],
+                                            "widgets — naming"))
+            said = []
+            runner.migrate_spec(p.root, p.epics, p.runs, said.append)
+            root_file = os.path.join(p.root, "product", "spec", "widgets", "scenarios.md")
+            text = read(root_file)
+            self.assertIn("lists-in-order", text)
+            self.assertNotIn("shows-the-name", text)
+            self.assertIn("in bold", read(feature))
+
     def test_the_spec_check_names_a_delivered_criterion_the_spec_lacks(self):
         with project() as p:
             contract.set_places({})
