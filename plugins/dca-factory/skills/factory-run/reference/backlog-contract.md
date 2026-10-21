@@ -273,7 +273,8 @@ context's scenarios is its language, kept by the glossary skill and the document
   replaced, removed, renamed by key; a rule left without a criterion goes. A rule's criteria the story lists stand
   together in the story's order, held ones included — where the first of them stood under that rule, else at the
   rule's end — so the order follows the story that delivered them last, not the order they arrived in. A test of the spec this story
-  renamed or moved goes under `tests.md`'s `## Moved tests` (`| <key> | <Class>#<method> |`); the delivering
+  renamed or moved goes under `tests.md`'s `## Moved tests` (`| <key> | <Class>#<method> |`, the test as it is now — a
+  criterion the story carries keeps the test its mapping names); the delivering
   gate refuses a spec test line that names a test no longer there (`spec-tests`), and in a worktree one whose file
   the story's commit does not hold (`tests-committed`).
 - **By hand.** `--deliver-by-hand` merges a story's new criteria without test lines; a story that changes

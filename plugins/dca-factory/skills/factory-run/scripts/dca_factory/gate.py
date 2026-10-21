@@ -4687,7 +4687,17 @@ def check_spec_tests(result, cwd, runs, story_id, front, mapping):
     plan = os.path.join(runs, story_id, "plan.md")
     # a criterion the story takes away takes its test with it (WP-106 B): the delta's removals are not asked for
     removed = set(read_delta(read_text(plan))["removes"]) if os.path.isfile(plan) else set()
-    own = set(mapping or {}) | set(moved_tests(runs, story_id)) | removed
+    moved = moved_tests(runs, story_id)
+    if moved:
+        # a row names the test as it is now: the old one is gone, and the delivery writes the row into the spec
+        probe = Result()
+        check_exists(probe, cwd, moved)
+        absent = [message.split(" — ")[0] for state, _c, message in probe.entries if state == "fail"]
+        if absent:
+            result.fail("spec-tests", f"tests.md's `## Moved tests` names a test that is not there: {'; '.join(absent)}"
+                                      f" — a row names the test as it is now, not the one it replaced")
+            return
+    own = set(mapping or {}) | set(moved) | removed
     wanted = {item["key"]: item["tests"] for item in spec if item["tests"] and item["key"] not in own}
     if not wanted:
         return
@@ -4765,7 +4775,8 @@ def merge_spec(result, story_path, story_id, front, runs):
     except GateError:
         mapping = {}
     tests = dict(mapping)
-    tests.update(moved_tests(runs, story_id))
+    for key, selectors in moved_tests(runs, story_id).items():
+        tests.setdefault(key, selectors)        # a criterion of the story keeps the test its mapping names
     story = story_entries(body)
     context = str(front.get("context", "")).strip()
     journey = story_kind(front) == "journey"

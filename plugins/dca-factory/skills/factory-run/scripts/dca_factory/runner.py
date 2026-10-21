@@ -902,7 +902,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   plan gave `level: browser-only`; every other scenario's test lives in a `test.<name>:` source set
 - titles: an end-user test's display name is the scenario's `Title:` line verbatim, else its key in words
   (`shows-empty-state` → "Shows empty state"); never the key itself in a name, display name or comment
-- `## Moved tests` (a spec test this story renamed): `| <key> | <selector> |` (`spec-tests`)
+- `## Moved tests` (a spec test the story renamed, of a key it does not carry): `| <key> | <new selector> |` (`spec-tests`)
 - one process per test command; each selector is read from its report by name
 - red: every selector in the table fails before any production code — the gate writes `{evidence}/.tests-red`
   (`<selector>\t<sha256 of the test file>`); the build gate refuses a test changed after it was seen red (`red-proof`)
