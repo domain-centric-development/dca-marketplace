@@ -80,6 +80,29 @@ class MainTests(unittest.TestCase):
         os.remove(os.path.join(self.root, TEST))
         self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [(TEST, ["(the file is gone)"])])
 
+    def answer(self, stage, answered=True):
+        """A record of the story, asked at <stage>, that names the test file; answered by a person or still open."""
+        folder = os.path.join(self.root, "product", "epics", "sample", "STORY-1")
+        write(os.path.join(folder, "story.md"), "---\nid: STORY-1\nstatus: approved\n---\n# STORY-1\n")
+        answer = "\n## Answer\nanswer: a\nby: the-expert\nat: 2026-10-21T18:30:00Z\n" if answered else ""
+        write(os.path.join(folder, "decisions", "01.md"),
+              f"---\nid: STORY-1-01\nstory: STORY-1\nstage: {stage}\n---\n# Keep the merged helpers?\n\n"
+              f"## Question\n`{TEST}` lost a line that no longer compiles.\n\n## Options\n- a: keep the merge\n{answer}")
+
+    def test_a_file_an_answered_integrate_decision_names_is_not_asked_back(self):
+        self.resolve(STORY)
+        self.answer("integrate", answered=False)
+        self.assertEqual([rel for rel, _ in gate.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
+        self.answer("build")
+        self.assertEqual([rel for rel, _ in gate.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
+        self.answer("integrate")
+        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        result = gate.Result()
+        gate.check_main_tests(result, self.root, self.runs, "STORY-1")
+        kinds = {kind for kind, check, _ in result.entries if check == "main-tests"}
+        self.assertNotIn("fail", kinds)
+        self.assertTrue(any("STORY-1-01" in message for _k, check, message in result.entries if check == "main-tests"))
+
 
 if __name__ == "__main__":
     unittest.main()

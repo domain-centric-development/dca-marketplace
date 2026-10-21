@@ -3204,10 +3204,29 @@ def record_main_tests(cwd, runs, story_id, target):
         os.remove(path)
 
 
-def main_tests_lost(cwd, runs, story_id):
+def main_tests_lost(cwd, runs, story_id, waive=True):
     """[(test file, [line, …])]: what the main line added to a test while the story ran that the story's tree no
     longer holds — a case another story added, an assertion it changed. Lines the main line kept from the base are
-    the story's to change (and `tests-kept` holds the story to them); the main line's own lines are not."""
+    the story's to change (and `tests-kept` holds the story to them); the main line's own lines are not. A file an
+    answered integrate decision names is the person's to settle (`waive`, #163): it is left out."""
+    lost = _main_tests_lost(cwd, runs, story_id)
+    return [(rel, lines) for rel, lines in lost if not main_tests_waiver(cwd, story_id, rel)] if waive else lost
+
+
+def main_tests_waiver(cwd, story_id, rel):
+    """The ids of the story's answered integrate decisions that name this test file — a person answered how its
+    main-line lines are resolved, so the check holds the resolution to that answer, not to the lines (#163). Read in
+    the main checkout, where the records are: the integrate step has taken the worktree's links down."""
+    try:
+        records = records_of(story_id, cwd=factory_home() or cwd)
+    except (GateError, OSError):
+        return []
+    return [str(front.get("id", "")).strip() for _p, front, body, state, _a in records
+            if state in ("answered", "applied") and str(front.get("stage", "")).strip() == "integrate"
+            and rel in body]
+
+
+def _main_tests_lost(cwd, runs, story_id):
     path = os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)
     if not os.path.isfile(path):
         return []
@@ -3258,6 +3277,11 @@ def check_main_tests(result, cwd, runs, story_id):
         return
     lost = main_tests_lost(cwd, runs, story_id)
     target = integration_target(runs, story_id) or "the main line"
+    for rel, _lines in main_tests_lost(cwd, runs, story_id, waive=False):
+        ids = main_tests_waiver(cwd, story_id, rel)
+        if ids:
+            result.note("main-tests", f"{rel} keeps the resolution {', '.join(ids)} answered — the main line's lines "
+                                      f"there are not asked back")
     if lost:
         result.fail("main-tests", f"the merge's resolution changed a test the main line holds: {lost_text(lost)} — the "
                                   f"integrate stage puts the main line's side back (`git show {target}:<file>`) beside "
