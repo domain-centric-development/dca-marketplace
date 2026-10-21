@@ -2845,6 +2845,19 @@ def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None):
                 f"{rid} has an `## Answer` that is not confirmed — {missing} missing in {rel}. "
                 f"A draft unblocks nothing; the person deciding signs it with a name and a time.",
             )
+        elif state == "answered" and stage == "integrate":
+            # The integrate step has no stage file of its own to cite an answer in, and its agent runs only on a
+            # conflict: the step applies the answer when it runs — its gate stamps it; every gate before it waits.
+            if gating == "integrate":
+                stamp_applied(path, stage)
+                story = story_path or find_story(place("epics"), story_id)
+                written = write_answered(story, runs, rid, answer_sentence(body, answer))
+                result.ok("decisions", f"{rid} applied by the integrate step ({answer.get('answer')!r} by "
+                                       f"{answer.get('by')}) — stamped in {rel}"
+                                       + (f", the answer an `answered:` line in {shown(story)}" if written else ""))
+            else:
+                result.note("decisions", f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}) — the "
+                                         f"integrate step applies it; its gate stamps it.")
         elif state == "answered":
             text = stage_texts.get(stage)
             still_asking = text is not None and rid in (needs_human_ids(text) or [])
