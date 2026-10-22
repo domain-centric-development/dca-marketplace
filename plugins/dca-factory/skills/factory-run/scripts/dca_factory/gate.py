@@ -997,9 +997,11 @@ def check_adopt(result, profile, cwd, runs, story_id, front, criteria):
     extra = {sel for sel in wanted if sel not in located}
     if extra:
         located = dict(located, **check_exists(Result(), cwd, {"outside the table": sorted(extra)}))
-    for selector in wanted:
-        check_break(result, profile, cwd, runs, story_id, selector, by_selector.get(selector, "outside the table"),
-                    located)
+    if wanted:
+        with break_copy(cwd) as copied:
+            for selector in wanted:
+                check_break(result, profile, cwd, runs, story_id, selector,
+                            by_selector.get(selector, "outside the table"), located, copied)
     if not wanted:
         result.skip("break-proof", "the adoption wrote no test of its own — every scenario maps to an existing "
                                    "test, which the judge read")
@@ -1037,47 +1039,181 @@ def break_verdict(seen):
     return "unchecked", "; ".join(m for st, m in seen if st != "pass")[:300] or "no run of it was recorded"
 
 
-def check_break(result, profile, cwd, runs, story_id, selector, key, located):
+def break_patch(runs, story_id, selector):
+    """The break a selector has — under its full name or its simple class —, or None."""
     patch = break_path(runs, story_id, selector)
     if not os.path.isfile(patch):
         short = selector.split("#")[0].rsplit(".", 1)[-1] + "#" + selector.split("#", 1)[-1]
         patch = break_path(runs, story_id, short) if os.path.isfile(break_path(runs, story_id, short)) else patch
-    if not os.path.isfile(patch):
-        result.fail("break-proof", f"{selector} ({key}): no break at {os.path.relpath(patch, cwd)} — a test that is "
-                                   f"green without ever being seen red (one an adoption wrote, one strengthened after "
-                                   f"its build) is shown to work by one change to the code that turns it red")
-        return
+    return patch if os.path.isfile(patch) else None
+
+
+def apply_break(copy, scratch, patch, reverse=False):
+    """`git apply` of a break on the scratch copy (`-R` to take it back): (exit code, what git said). An editor on
+    Windows writes the patch with CRLF, which git reads as part of each line — retried with LF."""
+    args = ["git", "apply", "--whitespace=nowarn"] + (["-R"] if reverse else [])
+    applied = subprocess.run(args + [os.path.abspath(patch)], cwd=copy, capture_output=True, text=True)
+    with open(patch, "rb") as handle:
+        raw = handle.read()
+    if applied.returncode != 0 and b"\r\n" in raw:
+        unix = os.path.join(scratch, "break.patch")
+        with open(unix, "wb") as handle:
+            handle.write(re.sub(rb"\r+\n", b"\n", raw))
+        applied = subprocess.run(args + [unix], cwd=copy, capture_output=True, text=True)
+    return applied.returncode, (applied.stderr or applied.stdout).strip()
+
+
+def run_break(profile, copy, scratch, patch, selector, key, located):
+    """One break on a scratch copy the caller made: applied, the one test run, taken back — so the next break on the
+    same copy builds on what this one compiled. ('red' | 'green' | 'unchecked' | 'unapplied', what to add)."""
+    code, said = apply_break(copy, scratch, patch)
+    if code != 0:
+        return "unapplied", said[:200]
+    try:
+        probe = Result()
+        check_test_state(probe, profile, copy, {key: [selector]}, "red",
+                         {selector: located.get(selector)} if located.get(selector) else {})
+        return break_verdict([(st, m) for st, c, m in probe.entries if c == "tests-red"])
+    finally:
+        apply_break(copy, scratch, patch, reverse=True)
+
+
+@contextlib.contextmanager
+def break_copy(cwd):
+    """One scratch copy of the project for every break of a gate run (WP-148): the first break compiles it, the ones
+    after it build on that. Removed afterwards; the tree is never touched."""
     scratch = tempfile.mkdtemp(prefix="dca-break-")
     try:
         copy = os.path.join(scratch, "tree")
         copy_for_break(cwd, copy)
-        applied = subprocess.run(["git", "apply", "--whitespace=nowarn", os.path.abspath(patch)], cwd=copy,
-                                 capture_output=True, text=True)
-        with open(patch, "rb") as handle:
-            raw = handle.read()
-        if applied.returncode != 0 and b"\r\n" in raw:
-            # An editor on Windows writes the patch with CRLF, which git reads as part of each line.
-            unix = os.path.join(scratch, "break.patch")
-            with open(unix, "wb") as handle:
-                handle.write(re.sub(rb"\r+\n", b"\n", raw))
-            applied = subprocess.run(["git", "apply", "--whitespace=nowarn", unix], cwd=copy,
-                                     capture_output=True, text=True)
-        if applied.returncode != 0:
-            result.fail("break-proof", f"{selector} ({key}): its break does not apply — "
-                                       f"{(applied.stderr or applied.stdout).strip()[:200]}")
-            return
-        probe = Result()
-        check_test_state(probe, profile, copy, {key: [selector]}, "red", {selector: located.get(selector)} if located.get(selector) else {})
-        verdict, said = break_verdict([(st, m) for st, c, m in probe.entries if c == "tests-red"])
-        if verdict == "red":
-            result.ok("break-proof", f"{selector} ({key}): red under its break, on a scratch copy{said}")
-        elif verdict == "green":
-            result.fail("break-proof", f"{selector} ({key}): stays green under its break — the test does not "
-                                       f"notice the behaviour it claims to prove")
-        else:
-            result.fail("break-proof", f"{selector} ({key}): its break could not be checked — {said}")
+        yield copy, scratch
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def check_break(result, profile, cwd, runs, story_id, selector, key, located, copied=None):
+    patch = break_patch(runs, story_id, selector)
+    if not patch:
+        result.fail("break-proof", f"{selector} ({key}): no break at "
+                                   f"{os.path.relpath(break_path(runs, story_id, selector), cwd)} — a test that is "
+                                   f"green without ever being seen red (one an adoption wrote, one strengthened after "
+                                   f"its build) is shown to work by one change to the code that turns it red")
+        return
+    with (contextlib.nullcontext(copied) if copied else break_copy(cwd)) as (copy, scratch):
+        verdict, said = run_break(profile, copy, scratch, patch, selector, key, located)
+    if verdict == "red":
+        result.ok("break-proof", f"{selector} ({key}): red under its break, on a scratch copy{said}")
+    elif verdict == "green":
+        result.fail("break-proof", f"{selector} ({key}): stays green under its break — the test does not "
+                                   f"notice the behaviour it claims to prove")
+    elif verdict == "unapplied":
+        result.fail("break-proof", f"{selector} ({key}): its break does not apply — {said}")
+    else:
+        result.fail("break-proof", f"{selector} ({key}): its break could not be checked — {said}")
+
+
+#: Why a person corrected a story at its acceptance (WP-148 C): `correction: <code>: <their words>` — the skill
+#: proposes a code from the words, the person confirms it.
+REASON_CODES = ("structural", "behavioural", "domain-concept", "domain-boundary", "domain-invariant", "domain-term",
+                "assumption")
+CORRECTION_CODE = re.compile(r"^\s*correction:\s*([a-z-]+)\s*:", re.I)
+
+
+def correction_code(answer):
+    """The reason code of an acceptance correction's answer, `uncoded` for one that names none (or none known), None
+    for an answer that is no correction."""
+    text = str(answer or "").strip()
+    if not text.lower().startswith("correction:"):
+        return None
+    match = CORRECTION_CODE.match(text)
+    return match.group(1).lower() if match and match.group(1).lower() in REASON_CODES else "uncoded"
+
+
+def story_signals(runs, story_id, records, body):
+    """WP-148 B/C: the raw facts of one story the bench aggregates — questions the stages asked and how many a person
+    answered, the story's assumptions open and answered, what the plan left open, each named rule's verdict at the
+    test gate, the acceptance corrections by reason code. Counted, never rated."""
+    questions = [(front, state) for _p, front, _b, state, _a in records if not is_acceptance(front)]
+    lines = [l.strip()[1:].strip().lower() for l in section_of(body, "assumptions") or [] if l.strip().startswith(("-", "*"))]
+    plan_path = os.path.join(runs, story_id, "plan.md")
+    left = [l for l in (section_of(read_text(plan_path), "open assumptions") or []) if l.strip().startswith(("-", "*"))
+            and l.strip()[1:].strip().lower().rstrip(".") not in NOTHING] if os.path.isfile(plan_path) else []
+    rules = {}
+    tsv = os.path.join(evidence_dir(runs, story_id), INVARIANT_BREAKS)
+    for line in read_text(tsv).splitlines() if os.path.isfile(tsv) else []:
+        parts = line.split("\t")
+        if len(parts) == 4:
+            rules[parts[3]] = rules.get(parts[3], 0) + len([n for n in parts[1].split(",") if n])
+    corrections = {}
+    for _p, front, _b, state, answer in records:
+        code = correction_code(answer.get("answer")) if is_acceptance(front) and state in ("answered", "applied") else None
+        if code:
+            corrections[code] = corrections.get(code, 0) + 1
+    return dict(asked=len(questions), answered=sum(1 for _f, st in questions if st in ("answered", "applied")),
+                assumptions_open=sum(1 for l in lines if l.startswith("open:")),
+                assumptions_answered=sum(1 for l in lines if l.startswith("answered:")),
+                plan_open=len(left), rules=rules, corrections=corrections)
+
+
+#: Every named rule's unit test at the test gate (WP-148 A): `<element>\t<rules>\t<selector>\t<verdict>` — `red`
+#: seen red before the build (the rule is new), `killed` red under its break, `survived` green under it, `no-break`
+#: green with no break that applies, `unchecked` no run gave a verdict. The bench computes the rate; the gate keeps
+#: the facts.
+INVARIANT_BREAKS = "invariant-breaks.tsv"
+
+
+def check_invariant_breaks(result, profile, cwd, runs, story_id, mapping):
+    """WP-148 A: every rule the plan names is shown to be guarded by its unit test. Its test seen red before the
+    build proves it as a criterion's red run does; one green already — the rule exists — needs its break, one change
+    to the production code that turns it red. All breaks of the gate run on one scratch copy, each running its one
+    test, so the second compiles on the first. A survived or missing break is refused."""
+    tests_path = os.path.join(runs, story_id, "tests.md")
+    rows = read_invariant_rows(read_text(tests_path)) if os.path.isfile(tests_path) else None
+    criterion = {sel for sels in (mapping or {}).values() for sel in sels}
+    rules = {}
+    for element, numbers, selector in rows or []:
+        if selector and SELECTOR.match(selector) and selector not in criterion:
+            rules.setdefault(selector, []).append((element, numbers))
+    if not rules:
+        return
+    keys = {sel: "; ".join(f"{e} rule {', '.join(map(str, n))}" for e, n in owners) for sel, owners in rules.items()}
+    located = check_exists(Result(), cwd, {keys[sel]: [sel] for sel in rules}) or {}
+    probe = Result()
+    check_test_state(probe, profile, cwd, {keys[sel]: [sel] for sel in sorted(rules)}, "red", located)
+    seen = {sel: break_verdict([(st, m) for st, c, m in probe.entries if c == "tests-red"
+                                and (m.startswith(sel + " ") or m.startswith(sel + ":"))])[0] for sel in rules}
+    verdicts = {sel: "red" for sel, v in seen.items() if v == "red"}
+    green = [sel for sel, v in sorted(seen.items()) if v == "green"]
+    for sel in (s for s, v in seen.items() if v not in ("red", "green")):
+        verdicts[sel] = "unchecked"
+    if green:
+        with break_copy(cwd) as copied:
+            for sel in green:
+                patch = break_patch(runs, story_id, sel)
+                if not patch:
+                    verdicts[sel] = "no-break"
+                    continue
+                verdict, _said = run_break(profile, *copied, patch, sel, keys[sel], located)
+                verdicts[sel] = {"red": "killed", "green": "survived", "unapplied": "no-break"}.get(verdict, "unchecked")
+    write_mark(runs, story_id, INVARIANT_BREAKS, "\n".join(
+        f"{e}\t{','.join(map(str, n))}\t{sel}\t{verdicts[sel]}" for sel, owners in sorted(rules.items())
+        for e, n in owners))
+    for sel in sorted(rules):
+        verdict, key = verdicts[sel], keys[sel]
+        if verdict == "red":
+            result.ok("invariant-breaks", f"{sel} ({key}): red before the build — the rule is new, its test saw it missing")
+        elif verdict == "killed":
+            result.ok("invariant-breaks", f"{sel} ({key}): green already, red under its break on a scratch copy")
+        elif verdict == "survived":
+            result.fail("invariant-breaks", f"{sel} ({key}): stays green under its break — the test does not guard "
+                                            f"the rule it names")
+        elif verdict == "no-break":
+            result.fail("invariant-breaks", f"{sel} ({key}): green before the build, so the rule exists already, and "
+                                            f"no break applies at {os.path.relpath(break_path(runs, story_id, sel), cwd)}"
+                                            f" — one change to the production code that turns exactly this test red")
+        else:
+            result.fail("invariant-breaks", f"{sel} ({key}): no run gave it a verdict — "
+                                            + "; ".join(m for st, c, m in probe.entries if sel in m)[:300])
 
 
 def epic_of(story_path, front, epics):
@@ -4322,6 +4458,12 @@ def _tests(run):
                                       whole_for=whole_suites(run), red_proof=False)
     if run.stage.suite:
         check_required_suites(run.result, run.profile, run.cwd, run.whole_runs, owner)
+
+
+@check("invariant-breaks", stages=("test",), needs_process=True, kinds=("story",))
+def _invariant_breaks(run):
+    if contract_of(run.profile) >= 25:
+        check_invariant_breaks(run.result, run.profile, run.cwd, run.runs, run.story_id, run.mapping)
 
 
 @check("commands", stages=lambda s: s.commands, needs_process=True,

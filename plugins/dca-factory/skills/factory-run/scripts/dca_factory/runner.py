@@ -911,7 +911,7 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
     if stage == "test":
         return f"""{CONTRACT_HEAD}
 
-test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, compiles, tests-red, levels, test-titles, invariants, files-listed)
+test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, compiles, tests-red, levels, test-titles, invariants, invariant-breaks, files-listed)
 - the table, right after the marker `<!-- gate:tests -->`, one row per criterion (a criterion may have several rows):
   `| criterion | test |` then `| <key> | <selector> |`
   row pattern: {MAPPING_ROW.pattern!r}
@@ -932,7 +932,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
   `files-listed` compares it with the changed-files record; `factory-cli.py --files-skeleton <story> test`
   writes it from the tree, and the invariant rows below: run it, add the rest
 - `## Invariants`: `<!-- gate:invariants -->`, a row per plan rule `| <Element> | <n> | <rule> | <Class>#<method> |`:
-  each its own test, not a criterion's (`invariants`)
+  each its own test, not a criterion's (`invariants`), a green one its break (`invariant-breaks`)
 - `## Clauses` (contract 15): `<!-- gate:clauses -->`, per `Then`/`And` `| <key> | <n> | <clause> | <File>:<line> | <level> |`
   — the line asserting it, level `unit|port|adapter|e2e`; a stored-state clause never `adapter` (`clauses`)
 - `## Notes`: `- uncovered: <key> — <why>` only when unavoidable — not what a test fails on: the red run records it

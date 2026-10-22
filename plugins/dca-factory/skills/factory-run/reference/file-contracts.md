@@ -62,6 +62,14 @@ a test. The build and tidy gates compare the digest with the file as it is
 answered decision of stage `test` changed what it expects. A line without a digest proves the red run
 but not the version, so the comparison is skipped and named.
 
+Every rule the plan's `## Invariants` names is shown to be guarded by its unit test (contract 25,
+`invariant-breaks`): the test gate runs the `gate:invariants` table's tests once — a test red there proves its
+rule as a criterion's red run does; one green already, its rule existing, needs its break under
+`.dca-factory/runs/<story>/breaks/`, and every break runs on one scratch copy of the project, one test each, so the
+second compiles on the first. A test that stays green under its break, or a green one without a break that applies,
+is refused. The verdicts — `red`, `killed`, `survived`, `no-break`, `unchecked` per rule — are kept in
+`.dca-factory/evidence/<story>/invariant-breaks.tsv`; the factory computes no rate from them.
+
 A test changed after its build met it — a round the judge sent back with `back: test` because the
 test asserted too little — is green and cannot be seen red again. The test gate asks for its break
 instead: `.dca-factory/runs/<story>/breaks/<Class>--<method>.patch`, applied to a scratch copy of the

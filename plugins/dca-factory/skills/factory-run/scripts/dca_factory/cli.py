@@ -76,7 +76,7 @@ from .spec import (
     lint_context,
     derived, merge, read_delta, read_spec, render_spec, renamed_rules, story_entries)
 from .gate import (
-    criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_spec, description_part, discovery_items, perspectives_of, story_ids)
+    criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_signals, story_spec, description_part, discovery_items, perspectives_of, story_ids)
 from .tools import (
     isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
 from .runner import (
@@ -1912,6 +1912,7 @@ def story_model(cwd, epics, runs, story_id, live=False):
                 **story_situation(row, data, overview, body),
                 context=str(front.get("context", "")).strip(), criteria=criteria, accepted_by=accepted_by,
                 passes=passes, stages=facts["stages"], decisions=decisions, models=models, not_applied=not_applied,
+                signals=story_signals(runs, story_id, records, body),
                 priced=facts["priced"] > 0, waiting=[w for w in overview["waiting"] if w["story"] == story_id],
                 next=overview["next"])
 
@@ -2327,6 +2328,19 @@ def story_header(model):
     facts += [("Criteria", str(model["criteria"])), ("State", state), ("History", pass_text)]
     if row.get("flaky"):
         facts.append(("Flaky", ", ".join(row["flaky"]) + " — red in a whole suite, green on its own run; no round"))
+    signals = model.get("signals") or {}
+    if signals.get("asked") or signals.get("assumptions_open") or signals.get("assumptions_answered") \
+            or signals.get("plan_open"):
+        facts.append(("Questions", f"{signals['asked']} asked, {signals['answered']} answered · assumptions "
+                                   f"{signals['assumptions_open']} open, {signals['assumptions_answered']} answered"
+                                   + (f" · {signals['plan_open']} left open by the plan" if signals["plan_open"] else "")))
+    if signals.get("rules"):
+        order = ("red", "killed", "survived", "no-break", "unchecked")
+        said = {"red": "red before the build", "killed": "killed by a break"}
+        facts.append(("Rules", f"{sum(signals['rules'].values())} named — " + ", ".join(
+            f"{signals['rules'][v]} {said.get(v, v)}" for v in order if signals["rules"].get(v))))
+    if signals.get("corrections"):
+        facts.append(("Corrections", ", ".join(f"{n} {code}" for code, n in sorted(signals["corrections"].items()))))
     return title, facts
 
 

@@ -320,6 +320,12 @@ BREAK_THE_THING = """diff --git a/green/comexampleWidgetPageTestshowsTheThing b/
 deleted file mode 100644
 index e69de29..0000000
 """
+def invariant_break(selector):
+    """A break that turns exactly this fixture test red: it removes the test's green marker."""
+    marker = "green/" + re.sub(r"[^A-Za-z0-9]", "", selector)
+    return f"diff --git a/{marker} b/{marker}\ndeleted file mode 100644\nindex e69de29..0000000\n"
+
+
 #: A break that changes something no test reads.
 BREAK_NOTHING = """diff --git a/unrelated.txt b/unrelated.txt
 --- a/unrelated.txt
@@ -5285,6 +5291,37 @@ def run_groups(args):
                               "- shows-nothing-when-empty  →  level: \n"),))),
         # WP-82, 0.57.0: every domain type the plan changes names its invariants; every rule has its own unit test in
         # tests.md's `gate:invariants` table, a selector that exists as class and method and is no criterion's test.
+        # WP-148 A: every named rule's test is shown to guard it — red before the build, or red under its break
+        (Case("test: a rule whose test is red before the build is proven by that run — no break asked", "test", 0,
+              must_pass=("invariant-breaks",), text=("red before the build — the rule is new",)),
+         dict(tests=TESTS + INVARIANT_TABLE, extra_sources=PLAN_AND_TEST,
+              after=lambda root: [] if "\tred" in open(os.path.join(root, ".dca-factory/evidence/STORY-1/"
+                                                                       "invariant-breaks.tsv"), encoding="utf-8").read()
+              else ["invariant-breaks.tsv holds no `red` verdict"])),
+        (Case("test: a rule whose test is green already, with no break, is refused and names the break's place", "test", 1,
+              must_fail=("invariant-breaks",),
+              text=("WidgetNameTest#refusesMissing", "green before the build, so the rule exists already")),
+         dict(tests=TESTS + INVARIANT_TABLE, green=INVARIANT_TESTS, extra_sources=PLAN_AND_TEST)),
+        (Case("test: rules green already, each red under its break on one scratch copy, pass and are recorded killed",
+              "test", 0, must_pass=("invariant-breaks",), text=("green already, red under its break",)),
+         dict(tests=TESTS + INVARIANT_TABLE, green=INVARIANT_TESTS,
+              extra_sources=PLAN_AND_TEST + tuple(
+                  (f".dca-factory/runs/STORY-1/breaks/{sel.replace('#', '--')}.patch", invariant_break(sel))
+                  for sel in INVARIANT_TESTS),
+              after=lambda root: [] if open(os.path.join(root, ".dca-factory/evidence/STORY-1/invariant-breaks.tsv"),
+                                            encoding="utf-8").read().count("\tkilled") == 3
+              else ["invariant-breaks.tsv does not hold three `killed`"])),
+        (Case("test: a rule's test that stays green under its break is refused", "test", 1,
+              must_fail=("invariant-breaks",), text=("refusesLong", "stays green under its break")),
+         dict(tests=TESTS + INVARIANT_TABLE, green=INVARIANT_TESTS,
+              extra_sources=PLAN_AND_TEST + (("unrelated.txt", "a\n"),) + tuple(
+                  (f".dca-factory/runs/STORY-1/breaks/{sel.replace('#', '--')}.patch",
+                   BREAK_NOTHING if sel.endswith("refusesLong") else invariant_break(sel))
+                  for sel in INVARIANT_TESTS))),
+        (Case("test: a profile on contract 24 is not asked for a rule's break", "test", 0,
+              must_pass=("tests-red",), absent=("gate:fail invariant-breaks", "gate:pass invariant-breaks")),
+         dict(tests=TESTS + INVARIANT_TABLE, green=INVARIANT_TESTS, extra_sources=PLAN_AND_TEST,
+              profile=PROFILE + "contract: 24\n")),
         (Case("test: a plan that changes a value object without an invariants line is refused", "test", 1,
               must_fail=("invariants",), text=("without an `## Invariants` line: Widget",)),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0]),))),
@@ -5533,7 +5570,7 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 24\nrequried: compile\n" + PROFILE)),
+         dict(profile="contract: 25\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
@@ -6816,7 +6853,7 @@ def run_groups(args):
         expectations.append(("contract: --contract test prints the table marker, the selector pattern the gate matches and the "
                              "Files section", code_t == 0 and "<!-- gate:tests -->" in text_t
                              and repr(gate_names.SELECTOR.pattern) in text_t and repr(gate_names.MAPPING_ROW.pattern) in text_t
-                             and "## Files" in text_t and ".tests-red" in text_t and len(text_t) < 3400,   # contract 15's clauses row, contract 19's moved tests
+                             and "## Files" in text_t and ".tests-red" in text_t and len(text_t) < 3500,   # contract 15's clauses row, contract 19's moved tests, contract 25's breaks
                              text_t[:300]))
         expectations.append(("contract: plan, judge and document print their shapes; an unknown stage is refused",
                              code_p == 0 and "level: e2e | integration | browser-only" in text_p

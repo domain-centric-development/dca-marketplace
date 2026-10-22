@@ -231,10 +231,10 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 #: so a project can be governed by a release older than the pipeline it was installed from without
 #: anything being incompatible. That is an update to offer, never a reason to refuse, and only the
 #: installer can see it — it is the one place that holds both files.
-CONTRACT = 24
+CONTRACT = 25
 
 
-VERSION = "0.87.15"
+VERSION = "0.88.0"
 
 
 def split_front(text):

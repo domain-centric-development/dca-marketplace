@@ -121,8 +121,11 @@ and after, a new feature named. Show it as it prints; a person accepts what the 
   which starts there by itself — `/factory-run <story>` in a session, or the person's `factory.sh run
   --story <story>` in a shell; no stage runs again. Start neither from here: answering is not running
   the story (step 8). The story's commit follows — the code, the tests and `.dca-factory/runs/<story>/`.
-- **A correction** — what the human wants different, in their words: write `answer: correction:
-  <their words>`, then bring it into **the same story** through the backlog skill's rules: changed or
+- **A correction** — what the human wants different, in their words: write `answer: correction: <code>:
+  <their words>`. The code says why, one of `structural`, `behavioural`, `domain-concept`, `domain-boundary`,
+  `domain-invariant`, `domain-term`, `assumption` (a rule the code decided that neither the story nor an answer
+  settled); propose the one their words point to and write it once they confirm it — never choose it alone. The
+  status counts corrections by code; the bench reads them. Then bring it into **the same story** through the backlog skill's rules: changed or
   new criteria, one `- answered: <the human's words> (<record id>)` line under `## Assumptions` — the
   same line the gate writes for a decision's answer once it is applied — and under
   `## Changed expectations` what the story had delivered that no longer holds. The story then runs
