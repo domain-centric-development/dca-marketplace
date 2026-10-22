@@ -31,7 +31,7 @@ from .reports import (
 from .state import (
     CLAIM_TRAILERS, claim_config_here, fetch_remote,
     back_in, claim, freeze_all, gate_passed_on_record, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
-    STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, verdict_in, worktree_of, worktrees_dir,
+    STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, uncommitted_story, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
 from .spec import (
     context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
@@ -371,7 +371,15 @@ def integrate_prepare(cwd, runs, epics, story_id):
     if config:
         fetch_remote(cwd, config["remote"])
     target = merge_target(runs, story_id, cwd)
-    front, body = read_front_matter(find_story(epics, story_id))
+    story_path = find_story(epics, story_id)
+    missing = uncommitted_story(cwd, story_path, target, changed=False)
+    if missing:
+        # The integrated tree takes the backlog from the main line: without the story there, a test that reads the
+        # backlog fails on it, and no stage of the story can repair that (#162).
+        print(f"factory: {missing} on {target} — the integrated tree would not have it; commit the story on {target}, "
+              f"then `factory.sh run --story {story_id} --from integrate`", file=sys.stderr)
+        return 1
+    front, body = read_front_matter(story_path)
     restore_places(path)
     stage_story(path, runs, story_id)
     if git(path, "diff", "--cached", "--quiet")[0] != 0:

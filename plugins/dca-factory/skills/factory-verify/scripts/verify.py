@@ -7294,7 +7294,7 @@ def run_groups(args):
         for command in (["git", "mv", "backlog/sample/STORY-4", "product/epics/sample/STORY-4"],
                         ["git", "-c", "user.name=t", "-c", "user.email=t@x", "commit", "-qm", "layout", "--no-verify"]):
             subprocess.run(command, cwd=root, capture_output=True, env=moved_env)
-        write_file(root, "product/epics/sample/STORY-3/story.md", story("STORY-3"))       # not in git yet
+        write_file(root, "product/epics/sample/STORY-3/story.md", STORY.replace("STORY-1", "STORY-3"))       # not in git yet
         digest_of = lambda path: subprocess.run(
             [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); from dca_factory.contract import "
              "story_digest; print(story_digest(sys.argv[2]))", os.path.dirname(os.path.abspath(args.cli)), path],
@@ -9730,6 +9730,48 @@ def verify_worktrees(runner, verbose=False):
         nexts = [l[6:] for l in listing.splitlines() if l.startswith("next: ")]
         check("schedule: with three slots and three ready stories, one `next:` line for each",
               nexts == ["STORY-1 plan", "STORY-4 plan", "STORY-2 plan"], listing)
+
+    # #162: the runner starts a story from the main line's commit — a story the checkout holds uncommitted, or changed
+    # since its commit, is not taken; a session's schedule names it and lets it run in the checkout
+    for root in throwaway():
+        log, env = fixture(root, [("STORY-2", [])])
+        write_file(root, "product/epics/sample/STORY-3/story.md", STORY.replace("STORY-1", "STORY-3"))
+        with open(os.path.join(root, "product/epics/sample/STORY-2/story.md"), "a", encoding="utf-8") as handle:
+            handle.write("\nA line the person added.\n")
+        cli = cli_of(os.path.join(root, ".agents", "factory", "story-gate.py"))
+        slotted = subprocess.run([sys.executable, cli, "--schedule", "--slots", "3"], cwd=root,
+                                 capture_output=True, text=True, encoding="utf-8").stdout
+        plain = subprocess.run([sys.executable, cli, "--schedule"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8").stdout
+        row = lambda listing, sid: next((l for l in listing.splitlines() if l.startswith(sid + "  ")), "")
+        check("schedule: with slots, a story not committed and one changed since its commit are blocked and named; "
+              "the committed one is next",
+              [l[6:] for l in slotted.splitlines() if l.startswith("next: ")] == ["STORY-1 plan"]
+              and "blocked" in row(slotted, "STORY-3") and "STORY-3/story.md is not committed" in row(slotted, "STORY-3")
+              and "blocked" in row(slotted, "STORY-2") and "changed since its last commit" in row(slotted, "STORY-2"),
+              slotted)
+        check("schedule: without slots the same stories stay ready, with a note that the runner waits for the commit",
+              "ready" in row(plain, "STORY-3") and "the runner takes it once it is committed" in row(plain, "STORY-3"),
+              plain)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-3", env=env)
+        check("run --story: a story that is not committed starts nowhere and says why",
+              code == 1 and "is not committed" in output and not lines(log), f"exit {code}; {output.strip()[-300:]}")
+
+    # #162: a story that left the main line while its worktree ran is named at the integrate step, not tested there
+    for root in throwaway():
+        log, env = fixture(root, [])
+        cli = cli_of(os.path.join(root, ".agents", "factory", "story-gate.py"))
+        made = subprocess.run([sys.executable, cli, "--worktree-prepare", "STORY-1"], cwd=root, capture_output=True,
+                              text=True, encoding="utf-8")
+        subprocess.run(["git", "rm", "-q", "--cached", "product/epics/sample/STORY-1/story.md"], cwd=root,
+                       capture_output=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "drop"], cwd=root,
+                       capture_output=True)
+        done = subprocess.run([sys.executable, cli, "--integrate-prepare", "STORY-1"], cwd=root, capture_output=True,
+                              text=True, encoding="utf-8")
+        check("integrate: a story the main line does not hold stops the integrate step with the reason and the way on",
+              made.returncode == 0 and done.returncode == 1 and "STORY-1/story.md is not committed on main" in done.stderr
+              and "--from integrate" in done.stderr, f"{made.returncode}; exit {done.returncode}; {done.stderr[-300:]}")
 
     failures = [name for name, ok, _ in results if not ok]
     print(f"\nverify: {len(results) - len(failures)}/{len(results)} worktree cases behaved as specified")

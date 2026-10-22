@@ -144,6 +144,24 @@ def has_worktree(story_id, home=None):
     return os.path.isfile(os.path.join(worktree_of(story_id, home), ".git"))
 
 
+def uncommitted_story(home, path, ref="HEAD", changed=True):
+    """Why a story's file is not on the main line as the checkout has it — not in `ref`'s tree, or (with `changed`)
+    changed since —, or "". A story's worktree starts from the main line's commit and the integrate step tests that
+    tree: a story only the checkout holds is missing there, and the tests that read the backlog go red on the main
+    line (#162). Outside a repository, before its first commit, or for a file outside the checkout, nothing is
+    compared."""
+    if git(home, "rev-parse", "--verify", "--quiet", ref)[0] != 0:
+        return ""
+    rel = os.path.relpath(os.path.abspath(path), os.path.abspath(home)).replace(os.sep, "/")
+    if rel.startswith("../"):
+        return ""
+    if git(home, "cat-file", "-e", f"{ref}:{rel}")[0] != 0:
+        return f"{rel} is not committed"
+    if changed and git(home, "diff", "--quiet", ref, "--", rel)[0] != 0:
+        return f"{rel} changed since its last commit"
+    return ""
+
+
 #: The product description's headings — what is built, for whom, through which surfaces.
 PRODUCT_HEADINGS = (
     "What and for whom",
@@ -1766,6 +1784,22 @@ def schedule_data(cwd, epics, runs, slots=None, busy=(), skip=()):
                 if waits:
                     story.update(state="blocked", start=None, detail=waits)
 
+    # A story the runner would give a worktree is taken from the main line's commit: one the checkout holds
+    # uncommitted would be missing from — or older in — the tree the integrate step tests (#162). The runner
+    # leaves it; a session working in this checkout may take it as it is.
+    home = factory_home() or cwd
+    for story_id in order:
+        story = stories[story_id]
+        if story["state"] not in RUNNABLE or story.get("holds") or has_worktree(story_id, home):
+            continue
+        why = uncommitted_story(home, story["path"])
+        if why and slots:
+            story.update(state="blocked", start=None,
+                         detail=f"{why} — commit it: the runner starts a story from the main line's commit")
+        elif why:
+            story["detail"] = (story["detail"] + " · " if story["detail"] else "") \
+                + f"{why} — the runner takes it once it is committed"
+
     # A stage that started and has not ended is running — unless it has shown no sign of life for longer
     # than a stage may take, then it was interrupted and the story may be picked up again.
     now = datetime.now(timezone.utc)
@@ -1932,7 +1966,7 @@ def start_of(cwd, epics, runs, story_id, slots=None):
     (state, stage or None, detail); None for an unknown story. A story that is delivered, waits, is blocked or
     stopped starts nowhere; another story's unfinished code in the checkout blocks it the way it blocks the
     backlog run."""
-    data = schedule_data(cwd, epics, runs)
+    data = schedule_data(cwd, epics, runs, slots)
     story = data["stories"].get(story_id)
     if story is None:
         return None

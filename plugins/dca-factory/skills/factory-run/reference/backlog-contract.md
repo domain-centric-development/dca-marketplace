@@ -32,7 +32,9 @@ product/
 
 Stories stay with their epic for life; they never move between folders. *Backlog* is a view:
 `factory.sh backlog` lists every story with its state and the next one that can run — approved, not
-delivered, its dependencies met. The stack profile's `product:`, `tech:`, `domain:`, `epics:` and
+delivered, its dependencies met. The runner starts a story in a worktree made from the main line's commit, and
+its integrate step tests that tree: a story the checkout holds uncommitted, or changed since its commit, is
+`blocked` for the runner until it is committed (a session working in the checkout may take it as it is). The stack profile's `product:`, `tech:`, `domain:`, `epics:` and
 `runs:` name other places; without them these are the places. An older layout — `product/backlog/`,
 a profile under `.agents/factory/`, records under `.agents/factory/decisions/`, run artefacts under
 `tasks/` — is named by the gate and moved once by `factory.sh update`; nothing reads it as a fallback.

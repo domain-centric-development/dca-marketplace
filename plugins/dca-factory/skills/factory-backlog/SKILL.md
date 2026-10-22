@@ -198,7 +198,9 @@ that smuggles the decision in.
    it; never change it on an item that has one.
 9. **Leave `status: draft` unless the human releases it.** The gate refuses to plan a draft story,
    which is the one check no script can replace. Say plainly that the story is waiting for their
-   release, and set `approved` only when they say so.
+   release, and set `approved` only when they say so. Commit the story once it is released, the release
+   line included: the runner starts a story from the main line's commit and leaves one the checkout
+   holds uncommitted, or changed since its commit, `blocked`.
 10. **Check it with the gate, not with your own judgement:**
    `python3 .agents/factory/story-gate.py --check-backlog --story <id>` — the plan gate's checks on
    the story, writing nothing. Not `--stage plan`: that one records the story and the tests as the run
