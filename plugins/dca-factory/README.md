@@ -486,6 +486,12 @@ starts fresh and reads the skill, the story and its predecessor's file again.
   `exit=timeout`. Ctrl-C stops the running stage's tool too and gives the checkout back (exit 130); a TERM or a
   hang-up lets the running stage finish and starts nothing more (143, 129). The runner is `dca_factory/runner.py`;
   `factory.sh run` checks the tool, the carriers and the contract and then hands over to it.
+- A stage whose tool runs into its usage limit is not a failure: the runner keeps that process's output beside the
+  stage's (`<stage>.<time>-limit<n>.out`), journals `limit` with the time it waits until, and waits for the reset
+  the tool named plus a minute — `FACTORY_LIMIT_WAIT` (default `30m`) where it named none —, renewing its claim;
+  then the same stage runs again, told to go on from the files. No round is counted and no story set aside. The
+  stop file ends the wait. Read from Claude Code's output; Codex's and OpenCode's at the limit are not recorded yet,
+  so their limit still ends the stage as a failure.
 - In a session (`/factory-run` without the runner) the orchestrator marks each stage with
   `--stage-start`/`--stage-end`; the numbers come from the session's own log, without a price, so
   `cost` reads `—`.

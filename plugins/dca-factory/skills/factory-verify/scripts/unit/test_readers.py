@@ -90,6 +90,29 @@ class RecordedStreams(unittest.TestCase):
         self.assertTrue(all(d["stage"] == "plan" for d in denied))
 
 
+class UsageLimit(unittest.TestCase):
+    """#161: the tool's usage limit read from its own output — recorded from `claude -p` on 2026-10-13 in a shop's run;
+    no other tool's output at the limit is recorded yet, so their readers name none."""
+
+    def test_the_recorded_claude_stream_names_the_limit_and_its_reset(self):
+        limited = reports.stream_limit(stream("claude-limit-recorded.jsonl"))
+        self.assertEqual(limited["until"], 1791868200)
+        self.assertIn("session limit", limited["text"])
+
+    def test_a_claude_result_without_the_limit_names_none(self):
+        self.assertIsNone(reports.stream_limit(stream("claude-recorded.jsonl")))
+        self.assertIsNone(reports.stream_limit(stream("claude-stream.jsonl")))
+
+    def test_the_limit_without_a_rejected_event_has_no_reset(self):
+        text = "\n".join(line for line in raw("claude-limit-recorded.jsonl").splitlines() if "rejected" not in line)
+        limited = reports.READERS["claude-json"].limit(text)
+        self.assertIsNone(limited["until"])
+
+    def test_the_other_tools_name_no_limit(self):
+        for name in ("codex-recorded.jsonl", "opencode-recorded.jsonl"):
+            self.assertIsNone(reports.stream_limit(stream(name)), name)
+
+
 class NamesFromTheRecords(unittest.TestCase):
     """A list of the tools beside `TOOLS` drifts from it: each one is held to the records."""
 

@@ -154,5 +154,25 @@ class RunnerSteps(unittest.TestCase):
             self.assertEqual(sorted(state.journal_usage(p.runs, "A-1")), ["plan"])
 
 
+
+class WaitingForTheLimit(unittest.TestCase):
+    """#161: a stage that waits for the tool's usage limit to reset stays running until then, though it began long
+    before what a stage may take."""
+
+    def test_a_stage_waiting_for_its_reset_runs_and_one_past_it_is_interrupted(self):
+        with project() as p:
+            p.story("A-1")
+            now = datetime.now(timezone.utc)
+            at = lambda delta: (now + delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+            p.evidence("A-1", "journal.tsv", f"{at(timedelta(hours=-5))}\tstage-start\tbuilder\ttool=claude\n"
+                                             f"{at(timedelta(hours=-4))}\tlimit\tbuilder\ttool=claude\t"
+                                             f"until={at(timedelta(hours=1))}\n")
+            self.assertEqual(schedule(p)["stories"]["A-1"]["state"], "running")
+            p.evidence("A-1", "journal.tsv", f"{at(timedelta(hours=-9))}\tstage-start\tbuilder\ttool=claude\n"
+                                             f"{at(timedelta(hours=-8))}\tlimit\tbuilder\ttool=claude\t"
+                                             f"until={at(timedelta(hours=-7))}\n")
+            self.assertNotEqual(schedule(p)["stories"]["A-1"]["state"], "running")
+
+
 if __name__ == "__main__":
     unittest.main()

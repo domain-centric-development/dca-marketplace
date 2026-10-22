@@ -1,0 +1,4 @@
+{"type": "system", "subtype": "init", "model": "claude-opus-5-5", "session_id": "s-limit"}
+{"type": "rate_limit_event", "rate_limit_info": {"status": "allowed_warning", "resetsAt": 1791868200, "rateLimitType": "five_hour", "utilization": 0.99}, "session_id": "s-limit"}
+{"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "resetsAt": 1791868200, "rateLimitType": "five_hour"}, "session_id": "s-limit"}
+{"type": "result", "subtype": "success", "is_error": true, "num_turns": 18, "duration_ms": 47002, "api_error_status": 429, "api_error": "usage_limit_reached", "result": "You've hit your session limit · resets 7:10am (Europe/Berlin)", "total_cost_usd": 0.6026708, "usage": {"input_tokens": 18, "cache_creation_input_tokens": 55647, "cache_read_input_tokens": 341214, "output_tokens": 4459}, "session_id": "s-limit"}

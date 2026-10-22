@@ -9731,6 +9731,54 @@ def verify_worktrees(runner, verbose=False):
         check("schedule: with three slots and three ready stories, one `next:` line for each",
               nexts == ["STORY-1 plan", "STORY-4 plan", "STORY-2 plan"], listing)
 
+    # #161: a stage that runs into the tool's usage limit waits for the reset and runs again — no round, the story
+    # delivered; the limited process's output kept beside the stage's, its wait in the journal
+    for root in throwaway():
+        log, env = fixture(root, [])
+        script = read(root, "stand-in.sh").replace(
+            'mkdir -p "$d"\n',
+            'mkdir -p "$d"\n'
+            'if [ "$FACTORY_STAGE" = plan ] && [ ! -f "$FIXTURE_LOG.limited" ]; then\n'
+            '  : > "$FIXTURE_LOG.limited"\n'
+            "  printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"model\":\"m\",\"session_id\":\"s\"}' "
+            "'{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":429,"
+            "\"api_error\":\"usage_limit_reached\",\"result\":\"You have hit your session limit\",\"session_id\":\"s\"}'\n"
+            '  exit 1\n'
+            'fi\n', 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=dict(env, FACTORY_LIMIT_WAIT="1"))
+        journal = read(root, ".dca-factory/evidence/STORY-1/journal.tsv")
+        kept = glob.glob(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "plan.*-limit1.out"))
+        plans = [l for l in lines(log) if l.split()[1:2] == ["plan"]]
+        check("limit: a stage that hit the tool's usage limit waits, runs again with a note, and the story is "
+              "delivered without a round",
+              code == 0 and story_delivered(root) and len(plans) == 2 and "\tlimit\tplan\t" in journal
+              and len(kept) == 1 and "reached its usage limit during plan" in output
+              and "usage limit" in read(root, ".git/stand-in.log.prompt")
+              and not read(root, ".dca-factory/evidence/STORY-1/.rounds").strip(),
+              f"exit {code}; plans {len(plans)}; kept {kept}; {output.strip()[-400:]}")
+
+    # #161: the stop file ends the wait; the stage did not finish and the run says so
+    for root in throwaway():
+        log, env = fixture(root, [])
+        script = read(root, "stand-in.sh").replace(
+            'mkdir -p "$d"\n',
+            'mkdir -p "$d"\n'
+            'if [ "$FACTORY_STAGE" = plan ]; then\n'
+            '  : > "${FACTORY_HOME:-.}/.dca-factory/stop"\n'
+            "  printf '%s\\n' '{\"type\":\"result\",\"is_error\":true,\"api_error_status\":429,"
+            "\"api_error\":\"usage_limit_reached\",\"result\":\"limit\"}'\n"
+            '  exit 1\n'
+            'fi\n', 1)
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(script)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=dict(env, FACTORY_LIMIT_WAIT="1h"))
+        plans = [l for l in lines(log) if l.split()[1:2] == ["plan"]]
+        check("limit: the stop file ends the wait for the reset — the stage is not run again, the story not delivered",
+              code != 0 and len(plans) == 1 and not story_delivered(root) and "the wait for the usage limit ends" in output,
+              f"exit {code}; plans {len(plans)}; {output.strip()[-300:]}")
+
     # #162: the runner starts a story from the main line's commit — a story the checkout holds uncommitted, or changed
     # since its commit, is not taken; a session's schedule names it and lets it run in the checkout
     for root in throwaway():

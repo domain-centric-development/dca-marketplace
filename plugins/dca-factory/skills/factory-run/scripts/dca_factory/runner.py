@@ -27,7 +27,7 @@ from .contract import (
     STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of, story_kind, worktree_places, decisions_store,
     needs_human_ids, OWNED_DIGEST, WINDOW_DIGEST)
 from .reports import (
-    tokens_of, usage_lines)
+    stream_limit, tokens_of, usage_lines)
 from .state import (
     CLAIM_TRAILERS, claim_config_here, fetch_remote,
     back_in, claim, freeze_all, gate_passed_on_record, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
@@ -1328,6 +1328,9 @@ NO_HASHES = "# no-sha256-command: names only, no content hashes"
 #: `stageTimeout:`. A number with `s`, `m` or `h`; a bare number is seconds.
 TIMEOUT_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600}
 TIMED_OUT = 124
+#: The usage limit (#161): the wait where the tool names no reset, the margin past the one it names, how often the
+#: wait looks at the stop file and renews the claim — seconds.
+LIMIT_FALLBACK, LIMIT_MARGIN, LIMIT_POLL = 1800, 60, 60
 SIGNAL_EXITS = {"SIGTERM": 143, "SIGHUP": 129, "SIGINT": 130}
 
 
@@ -1764,7 +1767,54 @@ class Run:
         print(f"   model: {flags}{note}")
 
     def invoke(self, tool, prompt, raw, stage, story, count=True):
-        """One stage's tool process; its output kept in <raw>, where the tool also says what the stage cost."""
+        """One stage's tool process; its output kept in <raw>, where the tool also says what the stage cost. A process
+        that ran into the tool's usage limit is kept beside it (`<raw>` with `-limit<n>` before `.out`, its usage
+        journaled), the runner waits for the reset and the same stage runs again — no round counted, no story set
+        aside (#161)."""
+        attempt = 0
+        while True:
+            code = self.invoke_once(tool, prompt, raw, stage, story, count and attempt == 0)
+            fmt = self.usage_format(tool)
+            limited = stream_limit(raw, None if fmt == "none" else fmt) if raw != os.devnull else None
+            if not limited:
+                return code
+            attempt += 1
+            kept = f"{raw[:-len('.out')]}-limit{attempt}.out" if raw.endswith(".out") else f"{raw}.limit{attempt}"
+            with contextlib.suppress(OSError):
+                os.replace(raw, kept)
+            self.record_usage(story, stage, tool, kept)
+            if not self.wait_for_limit(story, stage, tool, limited):
+                return code if code != 0 else 1
+            if attempt == 1:
+                prompt += (" An earlier process of this stage stopped at the tool's usage limit before it finished: "
+                           "read the files as they are and go on from there.")
+
+    def wait_for_limit(self, story, stage, tool, limited):
+        """Until a minute past the reset the tool named — or FACTORY_LIMIT_WAIT (30m) where it named none, or one past.
+        The claim is renewed while it waits, and the journal says until when, so the schedule reads the stage as
+        running, not as interrupted. False where the stop file, another worker or a signal ends the wait."""
+        now = time.time()
+        fallback = seconds_of(os.environ.get("FACTORY_LIMIT_WAIT", "")) or LIMIT_FALLBACK
+        until = limited["until"] + LIMIT_MARGIN if limited.get("until") and limited["until"] > now else now + fallback
+        when = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(until))
+        self.journal_line(story, f"{utc()}\tlimit\t{stage}\ttool={tool}\tuntil={when}")
+        said = f" ({limited['text']})" if limited.get("text") else ""
+        print(f"factory: {tool} reached its usage limit during {stage}{said} — waiting until {when}, then {stage} runs "
+              f"again; {self.stop_file} ends the wait.")
+        main = threading.current_thread() is threading.main_thread()
+        while time.time() < until:
+            if os.path.isfile(self.stop_file):
+                err(f"factory: {self.stop_file} exists — the wait for the usage limit ends; {stage} did not finish.")
+                return False
+            if main and not self.renew():
+                err("factory: another worker took over this checkout while the run waited for the usage limit.")
+                return False
+            self.sleep(min(LIMIT_POLL, max(1, until - time.time())))
+        print(f"factory: the usage limit reset — {stage} runs again.")
+        return True
+
+    def invoke_once(self, tool, prompt, raw, stage, story, count=True):
+        """One tool process, as `invoke` starts it."""
         if count:
             self.invocations += 1
         flags, _note = self.model_choice(tool, stage)

@@ -774,6 +774,12 @@ class Reader:
         them per project folder; [] otherwise."""
         return []
 
+    def limit(self, raw):
+        """Where the process stopped at the tool's usage limit: {"until": the reset as epoch seconds, or None where the
+        output names none; "text": what the tool said} — else None. Only a tool whose output at the limit was recorded
+        is read; any other answers None, and the runner treats its exit as any other."""
+        return None
+
 
 class ClaudeReader(Reader):
     fmt, session_kind = "claude-json", "claude-session"
@@ -828,6 +834,23 @@ class ClaudeReader(Reader):
                             "duration_ms": event.get("duration_ms"), "output": output, "denied": denied,
                             "failed": str(event.get("subtype")) if event.get("is_error") else "", "at": at})
         return out
+
+    def limit(self, raw):
+        # Recorded 2026-10-13 (`claude -p --output-format stream-json`): the result carries `api_error:
+        # usage_limit_reached` (status 429) and "You've hit your session limit · resets 7:10am (Europe/Berlin)"; the
+        # `rate_limit_event` before it, `status: rejected`, names the reset as `resetsAt` in epoch seconds.
+        events = _json_lines(raw)
+        result = next((e for e in reversed(events) if e.get("type") == "result"), None)
+        if not result or not (result.get("api_error") == "usage_limit_reached"
+                              or result.get("is_error") and result.get("api_error_status") == 429):
+            return None
+        until = None
+        for event in events:
+            info = event.get("rate_limit_info") if event.get("type") == "rate_limit_event" else None
+            if isinstance(info, dict) and info.get("status") == "rejected" \
+                    and isinstance(info.get("resetsAt"), (int, float)):
+                until = int(info["resetsAt"])
+        return {"until": until, "text": str(result.get("result", "")).strip()}
 
     def session_logs(self, session_id=None):
         return claude_session_logs(session_id)
@@ -978,3 +1001,12 @@ def stream_events(path, fmt=None):
     except (OSError, GateError):
         return []
     return reader_of(raw, fmt).events(raw)
+
+
+def stream_limit(path, fmt=None):
+    """The tool's usage limit in one process's output, as `Reader.limit` reads it — None where it ran into none."""
+    try:
+        raw = read_text(path)
+    except (OSError, GateError):
+        return None
+    return reader_of(raw, fmt).limit(raw)

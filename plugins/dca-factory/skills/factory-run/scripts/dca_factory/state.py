@@ -1673,7 +1673,8 @@ def running_stages(runs):
     runs, the runner's own step (`step-start`/`step-end`: integrate, merge, format), which no stage's reader counts.
 
     The journal knows that a stage began, not whether its process is still alive: a stage whose
-    runner was killed reads the same, which is why the start time is shown with it."""
+    runner was killed reads the same, which is why the start time is shown with it. A stage that waits for the tool's
+    usage limit (`limit` line, #161) reads as started at the reset it waits for: alive until then."""
     found = []
     for story in run_stories(runs):
         journal = os.path.join(evidence_dir(runs, story), "journal.tsv")
@@ -1690,6 +1691,10 @@ def running_stages(runs):
                 open_stage = (parts[2], parts[0])
             elif parts[1] == "stage-end" and open_stage and parts[2] == open_stage[0]:
                 open_stage = None
+            elif parts[1] == "limit" and open_stage and parts[2] == open_stage[0]:
+                until = next((f[len("until="):] for f in parts[3:] if f.startswith("until=")), "")
+                if parse_time(until) and parse_time(until) > (parse_time(open_stage[1]) or parse_time(until)):
+                    open_stage = (open_stage[0], until)
             elif parts[1] == "step-start":
                 steps.append((parts[2], parts[0]))
             elif parts[1] == "step-end":
