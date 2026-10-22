@@ -4990,6 +4990,20 @@ def run_groups(args):
                                                    "old thing.\n\n## Assumptions"),
               extra_sources=(("product/spec/widgets/scenarios.md", "# Widgets\n\n- shows-the-thing: The reader sees the old thing.\nTest: com.example.WidgetPageTest#showsTheThing\n"),
                              (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- changes shows-the-thing\n")))),
+        # #164: a rule the story rewords takes what the spec holds under it along — and a rewording the story's own
+        # words name needs its line in the delta
+        (Case("spec: a rule `## Changed expectations` rewords, with no `rule` line in the delta, is refused", "test", 1,
+              must_fail=("spec-delta",), text=('names the rule "Old"', "kept-thing follow it")),
+         dict(story=STORY.replace("## Assumptions", "## Changed expectations\n\n- The rule \"Old\" reads \"New\".\n\n"
+                                                   "## Assumptions"),
+              extra_sources=(("product/spec/widgets/scenarios.md", "# Widgets\n\n### Rule: Old\n\n- kept-thing: It holds.\nTest: com.example.WidgetPageTest#keptThing\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n")))),
+        (Case("spec: the same rewording named as `rule \"Old\" → \"New\"` passes, the held criterion following it", "test", 0,
+              must_pass=("spec-delta",)),
+         dict(story=STORY.replace("## Assumptions", "## Changed expectations\n\n- The rule \"Old\" reads \"New\".\n\n"
+                                                   "## Assumptions"),
+              extra_sources=(("product/spec/widgets/scenarios.md", "# Widgets\n\n### Rule: Old\n\n- kept-thing: It holds.\nTest: com.example.WidgetPageTest#keptThing\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- rule \"Old\" → \"New\"\n- holds kept-thing\n")))),
         (Case("spec: a delta that removes a criterion the spec does not hold is refused", "test", 1,
               must_fail=("spec-delta",), text=("`removes gone` — the spec has no `gone`",)),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Spec delta\n- removes gone\n"),))),

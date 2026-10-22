@@ -74,7 +74,7 @@ from .state import (
     verdict_in, worktree_of, write_story_fields)
 from .spec import (
     lint_context,
-    derived, merge, read_delta, read_spec, render_spec, story_entries)
+    derived, merge, read_delta, read_spec, render_spec, renamed_rules, story_entries)
 from .gate import (
     criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_spec, description_part, discovery_items, perspectives_of, story_ids)
 from .tools import (
@@ -2644,7 +2644,7 @@ def spec_delta_view(runs, epics, story_id):
     front, body = read_front_matter(story_path)
     target, held, _features, feature = story_spec(front)
     if not target:
-        return dict(story=story_id, context="", feature="", features=[], rows=[])
+        return dict(story=story_id, context="", feature="", features=[], renames=[], rows=[])
     plan = os.path.join(runs, story_id, "plan.md")
     delta = read_delta(read_text(plan)) if os.path.isfile(plan) else read_delta("")
     story = story_entries(body)
@@ -2660,8 +2660,10 @@ def spec_delta_view(runs, epics, story_id):
         old = before.get(key)
         rows.append(dict(key=key, verb="removes", before_feature=old["feature"] if old else None, after_feature=None,
                          before=old["lines"] if old else [], after=[], reason=reason))
+    renames = [dict(old=old, new=new, follow=renamed_rules(story, held, delta).get(old, []))
+               for old, new in delta["renames"]]
     return dict(story=story_id, context=str(front.get("context", "")).strip(), feature=feature,
-                features=sorted(delta["features"]), rows=rows)
+                features=sorted(delta["features"]), renames=renames, rows=rows)
 
 
 def print_spec_delta(view, fmt):
@@ -2673,6 +2675,9 @@ def print_spec_delta(view, fmt):
           + (f", feature {view['feature']}" if view["feature"] else ""))
     for name in view["features"]:
         print(f"  new feature: {name}")
+    for rename in view.get("renames", []):
+        print(f'  rule "{rename["old"]}" → "{rename["new"]}"'
+              + (f" — {', '.join(rename['follow'])} follow it" if rename["follow"] else ""))
     for row in view["rows"]:
         if row["verb"] == "holds":
             continue

@@ -95,7 +95,7 @@ from .reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
 from .spec import (
-    context_files, delta_problems, derived, feature_name, journeys_path, merge, merge_context, placement_problems,
+    context_files, delta_problems, derived, feature_name, journeys_path, merge, merge_context, placement_problems, rule_problems,
     lint_context, read_context, read_delta, read_spec, render_spec, scenarios_path, story_entries,
     touches)
 from .state import (
@@ -4683,7 +4683,8 @@ def check_spec_delta(result, cwd, runs, story_id, story_path, front, body):
         return
     story = story_entries(body)
     delta = read_delta(read_text(plan_path))
-    problems = delta_problems(story, spec, delta)
+    problems = delta_problems(story, spec, delta) \
+        + rule_problems(section_of(body, "changed expectations") or [], story, spec, delta)
     if story_kind(front) != "journey":
         problems += placement_problems(story, spec, delta, feature, features)
     if problems:

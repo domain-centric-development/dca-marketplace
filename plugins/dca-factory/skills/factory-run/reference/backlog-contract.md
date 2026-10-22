@@ -263,7 +263,9 @@ context's scenarios is its language, kept by the glossary skill and the document
   `- rule "<old>" → "<new>"`, `- adds feature <name>` for a feature the context does not have yet, and
   `- moves <key>: <from> → <to>` for a criterion that stands under another feature (`context` for none). What
   follows from comparing story and spec — the moves and the new feature included — the skeleton writes; a
-  removal and a renamed rule only the plan can say. Keys are unique across the context's files, so a move keeps
+  removal and a renamed rule only the plan can say. A renamed rule takes the criteria the spec holds under it
+  along — they follow its new text without being the story's criteria; a rule `## Changed expectations` quotes
+  word for word that the story no longer writes needs that line. Keys are unique across the context's files, so a move keeps
   its key.
 - **The check** (test gate, `spec-delta`): every key named agrees with what the comparison says, a removed
   key stands in the spec, a renamed rule leaves no criterion under its old text, and every change or removal

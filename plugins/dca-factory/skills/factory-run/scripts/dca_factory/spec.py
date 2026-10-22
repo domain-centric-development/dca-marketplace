@@ -244,8 +244,11 @@ def delta_problems(story, spec, delta):
     problems = []
     held = {item["key"]: item for item in spec}
     found = derived(story, spec)
+    renamed = {old for old, _new in delta["renames"]}
     for verb in ("adds", "changes", "holds"):
         for key in sorted(delta[verb]):
+            if key not in found and verb == "holds" and key in held and held[key]["rule"] in renamed:
+                continue                     # it follows its rule's new text without being one of the story's (#164)
             if key not in found:
                 problems.append(f"`{verb} {key}` — the story has no criterion `{key}`")
             elif found[key] != verb and not (verb == "adds" and found[key] == "holds"):
@@ -259,16 +262,41 @@ def delta_problems(story, spec, delta):
         elif key in found:
             problems.append(f"`removes {key}` — the story still has `{key}` as a criterion")
     rules = {item["rule"] for item in spec}
-    for old, new in delta["renames"]:
+    for old, _new in delta["renames"]:
         if old not in rules:
             problems.append(f'rule "{old}" — the spec has no such rule')
-            continue
-        left = [item["key"] for item in spec if item["rule"] == old
-                and item["key"] not in found and item["key"] not in delta["removes"]]
-        if left:
-            problems.append(f'rule "{old}" → "{new}" leaves {", ".join(left)} under the old text — name each as a '
-                            f"criterion of the story under the new rule, or `removes` it")
     return problems
+
+
+#: A rule's text as a person quotes it: straight, typographic or German quotation marks.
+QUOTED = re.compile(r'"([^"]+)"|\u201c([^\u201d]+)\u201d|\u201e([^\u201c\u201d]+)[\u201c\u201d]')
+
+
+def renamed_rules(story, spec, delta):
+    """{old rule: [key]} — the criteria the spec holds under each rule the delta renames, which follow its new text."""
+    return {old: [item["key"] for item in spec if item["rule"] == old and item["key"] not in delta["removes"]]
+            for old, _new in delta["renames"]}
+
+
+def rule_problems(changed, story, spec, delta):
+    """A rule `## Changed expectations` quotes word for word, while the story no longer writes it and the delta neither
+    renames it nor takes all of it away — a rewording the spec would not see: the old rule would keep its criteria and
+    the story's new text would stand beside it as a second rule (#164). `changed` is the section's lines."""
+    rules = {item["rule"] for item in spec if item["rule"]}
+    kept = {item["rule"] for item in story}
+    renamed = {old for old, _new in delta["renames"]}
+    problems = []
+    for line in changed:
+        for match in QUOTED.finditer(line):
+            text = " ".join(next(g for g in match.groups() if g).split())
+            if text not in rules or text in kept or text in renamed:
+                continue
+            left = [item["key"] for item in spec if item["rule"] == text and item["key"] not in delta["removes"]]
+            if left:
+                problems.append(f'`## Changed expectations` names the rule "{text}", which the story no longer writes '
+                                f'— `rule "{text}" → "<its new text>"` where it is reworded ({", ".join(left)} follow '
+                                f"it), or `removes` what it takes away")
+    return list(dict.fromkeys(problems))
 
 
 def place_name(feature):

@@ -897,8 +897,8 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
   An adopted story names the domain types its scenarios exercise instead, or `- none — <why>`: the line is required
 - `## Spec delta`: the story against its context's spec (`product/spec/<context>/scenarios.md`) — the skeleton writes
   `- adds <key>` / `- holds <key>` / `- changes <key>` as the comparison says; add `- removes <key>: <why>` for a
-  criterion the story takes away and `- rule "<old>" → "<new>"` for a renamed rule (every criterion under it named or
-  removed). The test gate reads it (`spec-delta`): a change or removal of what holds needs the story's
+  criterion the story takes away and `- rule "<old>" → "<new>"` for a renamed rule (the criteria under it follow it;
+  a rule `## Changed expectations` quotes that the story no longer writes needs one). The test gate reads it (`spec-delta`): a change or removal of what holds needs the story's
   `## Changed expectations` or an answered decision — where neither says it, ask (`## needs-human`)
 - `## Changed tests` (only when the story contradicts an existing test): `| <path from the project root> | <backing line or decision id> |`
 - `## Files`: `- <path from the project root> — <changes|read>: <why>` (the path in backticks) — the next stages open these first

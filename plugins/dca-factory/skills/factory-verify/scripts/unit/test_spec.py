@@ -77,15 +77,44 @@ class Delta(unittest.TestCase):
         self.assertEqual(spec.derived(story, self.held), {"a": "holds", "b": "changes", "c": "adds"})
         self.assertEqual(spec.touches(story, self.held, spec.read_delta("")), ["b"])
 
-    def test_a_delta_that_disagrees_or_leaves_a_scenario_behind_is_named(self):
+    def test_a_delta_that_disagrees_is_named(self):
         story = [spec.entry("a", "S", "line", ["- a: one"])]
-        delta = spec.read_delta('## Spec delta\n- adds a\n- removes zzz\n- rule "R" → "S"\n')
+        delta = spec.read_delta('## Spec delta\n- adds a\n- removes zzz\n- rule "Q" → "S"\n')
         problems = spec.delta_problems(story, self.held, delta)
         self.assertTrue(any("`adds a`" in p for p in problems), problems)
         self.assertTrue(any("removes zzz" in p for p in problems), problems)
-        self.assertTrue(any("leaves b under the old text" in p for p in problems), problems)
+        self.assertTrue(any('rule "Q" — the spec has no such rule' in p for p in problems), problems)
         fine = spec.read_delta('## Spec delta\n- changes a\n- removes b: gone\n- rule "R" -> "S"\n')
         self.assertEqual(spec.delta_problems(story, self.held, fine), [])
+
+    def test_a_renamed_rule_takes_the_criteria_it_holds_along_without_the_story_carrying_them(self):
+        # #164: a story that rewords a rule and adds one criterion under it — the held ones follow the new text
+        story = [spec.entry("c", "S", "line", ["- c: three"])]
+        delta = spec.read_delta('## Spec delta\n- adds c\n- holds a\n- holds b\n- rule "R" → "S"\n')
+        self.assertEqual(spec.delta_problems(story, self.held, delta), [])
+        merged = spec.merge(self.held, story, delta, {"c": ["x.T#c"]})
+        self.assertEqual([(e["key"], e["rule"], e["tests"]) for e in merged],
+                         [("a", "S", ["x.T#a"]), ("b", "S", ["x.T#b"]), ("c", "S", ["x.T#c"])])
+        self.assertEqual(spec.renamed_rules(story, self.held, delta), {"R": ["a", "b"]})
+        without = spec.read_delta('## Spec delta\n- adds c\n- holds a\n')
+        self.assertTrue(any("`holds a` — the story has no criterion" in p
+                            for p in spec.delta_problems(story, self.held, without)))
+
+    def test_a_rule_the_changed_expectations_reword_needs_its_rename(self):
+        # #164: the .NET plan of the same story left the rename out; the story's own words said it
+        story = [spec.entry("c", "S", "line", ["- c: three"])]
+        changed = ['- The rule "R" reads \u201cS\u201d.']
+        bare = spec.read_delta('## Spec delta\n- adds c\n')
+        problems = spec.rule_problems(changed, story, self.held, bare)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn('names the rule "R"', problems[0])
+        self.assertIn("(a, b follow it)", problems[0])
+        renamed = spec.read_delta('## Spec delta\n- adds c\n- rule "R" → "S"\n')
+        self.assertEqual(spec.rule_problems(changed, story, self.held, renamed), [])
+        emptied = spec.read_delta('## Spec delta\n- adds c\n- removes a: x\n- removes b: y\n')
+        self.assertEqual(spec.rule_problems(changed, story, self.held, emptied), [])
+        still = [spec.entry("c", "R", "line", ["- c: three"])]
+        self.assertEqual(spec.rule_problems(changed, still, self.held, bare), [])
 
     def test_the_merge_replaces_moves_removes_and_renames_and_keeps_a_held_test(self):
         story = [spec.entry("a", "R2", "line", ["- a: one"]), spec.entry("c", None, "line", ["- c: new"])]
