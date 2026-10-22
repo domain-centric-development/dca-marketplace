@@ -3226,6 +3226,13 @@ def main_tests_lost(cwd, runs, story_id, waive=True):
     return [(rel, lines) for rel, lines in lost if not main_tests_waiver(cwd, story_id, rel)] if waive else lost
 
 
+def main_tests_adapted(cwd, runs, story_id):
+    """[(test file, [line, …])]: the main line's test lines the merge rewrote to a name the story re-signed (#163)."""
+    adapted = []
+    _main_tests_lost(cwd, runs, story_id, adapted)
+    return adapted
+
+
 def main_tests_waiver(cwd, story_id, rel):
     """The ids of the story's answered integrate decisions that name this test file — by its path or its file name, as
     a record names it — a person answered how its
@@ -3240,11 +3247,66 @@ def main_tests_waiver(cwd, story_id, rel):
             and (rel in body or re.search(rf"(?<![\w./-]){re.escape(os.path.basename(rel))}(?![\w.-])", body))]
 
 
-def _main_tests_lost(cwd, runs, story_id):
+#: A name called or declared on a line: `Name(`, `obj.Name(`, `new Name(` — the words before a parenthesis that are no
+#: statement of the language.
+CALLED = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^<>()]*>)?\s*\(")
+NOT_CALLS = {"if", "for", "foreach", "while", "switch", "catch", "return", "new", "typeof", "nameof", "sizeof", "lock",
+             "using", "fixed", "base", "this", "super", "await", "throw", "when", "assert", "synchronized", "with"}
+
+
+#: A name declared on a line: a word — a type, a modifier, `def`, `record` — then the name and its parameters
+#: (`public Money Total(`, `record Command(`, `def total(`); never `.Name(`, `= Name(`, `return Name(`, `new Name(`.
+DECLARED = re.compile(r"(?:^|\s)([A-Za-z_][\w.<>\[\],?]*[\w>\]?]|>)\s+([A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*\(")
+NOT_DECLARING = {"return", "new", "await", "throw", "yield", "else", "case", "in", "is", "as", "and", "or", "not",
+                 "await", "typeof", "nameof", "var", "val", "let"}
+
+
+def called_names(line):
+    return {name for name in CALLED.findall(line) if name not in NOT_CALLS}
+
+
+def declared_names(line):
+    return {name for before, name in DECLARED.findall(line)
+            if before.split(".")[-1] not in NOT_DECLARING and name not in NOT_CALLS}
+
+
+def rewritten(line, lines):
+    """Whether the file still has `line` in another form — a line alike to at least 60 % — so a missing line is not
+    a case that went whole."""
+    for other in lines:
+        matcher = difflib.SequenceMatcher(None, line, other, autojunk=False)
+        if matcher.real_quick_ratio() >= 0.6 and matcher.quick_ratio() >= 0.6 and matcher.ratio() >= 0.6:
+            return True
+    return False
+
+
+def resigned_names(cwd, target):
+    """The names the story's own change in production code re-signed or removed: every name declared on a line of a
+    non-test file the story's tree no longer has as `target` (the main line) has it. A main-line test line that calls
+    one of them was adapted to the story's new signature, or could not compile — not lost (#163)."""
+    code, diff = git(cwd, "diff", "--no-color", "--unified=0", target, "--")
+    if code:
+        return set()
+    names, test = set(), False
+    for line in diff.splitlines():
+        if line.startswith("+++ ") or line.startswith("--- "):
+            rel = line[4:].strip()
+            if rel != "/dev/null":
+                test = bool(TEST_FILE.search(os.path.basename(rel[2:] if rel[:2] in ("a/", "b/") else rel)))
+            continue
+        if line[:1] == "-" and not test:
+            names |= declared_names(line[1:])
+    return names
+
+
+def _main_tests_lost(cwd, runs, story_id, adapted=None):
+    """The main line's added test lines the story's tree lacks. A missing line that calls a name the story's own
+    production change re-signed or removed is the merge adapting another story's helper to it — collected in
+    `adapted`, not lost; a test case's own lines (its head, its attributes) name no such name and stay asked for."""
     path = os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)
     if not os.path.isfile(path):
         return []
-    lost = []
+    lost, resigned = [], None
     for line in read_text(path).splitlines():
         parts = line.split("\t")
         if len(parts) != 3:
@@ -3265,13 +3327,22 @@ def _main_tests_lost(cwd, runs, story_id):
             lost.append((rel, ["(the file is gone)"]))
             continue
         with open(full, encoding="utf-8", errors="replace") as handle:
-            left = collections.Counter(l.strip() for l in meaningful_lines(handle.read(), rel))
+            now = [l.strip() for l in meaningful_lines(handle.read(), rel)]
+        left = collections.Counter(now)
         missing = []
         for wanted in added:
             if left[wanted] > 0:
                 left[wanted] -= 1
             else:
                 missing.append(wanted)
+        if missing:
+            if resigned is None:
+                target = merge_target(runs, story_id, cwd)
+                resigned = resigned_names(cwd, target) if target else set()
+            kept = [line for line in missing if called_names(line) & resigned and rewritten(line, now)]
+            if kept and adapted is not None:
+                adapted.append((rel, kept))
+            missing = [line for line in missing if line not in kept]
         if missing:
             lost.append((rel, missing))
     return lost
@@ -3291,6 +3362,10 @@ def check_main_tests(result, cwd, runs, story_id):
         return
     lost = main_tests_lost(cwd, runs, story_id)
     target = integration_target(runs, story_id) or "the main line"
+    for rel, lines in main_tests_adapted(cwd, runs, story_id):
+        result.note("main-tests", f"{rel}: {len(lines)} line(s) of the main line call what the story re-signed — taken as "
+                                  f"adapted, not asked back: {', '.join(repr(l) for l in lines[:2])}"
+                                  + (" …" if len(lines) > 2 else ""))
     for rel, _lines in main_tests_lost(cwd, runs, story_id, waive=False):
         ids = main_tests_waiver(cwd, story_id, rel)
         if ids:

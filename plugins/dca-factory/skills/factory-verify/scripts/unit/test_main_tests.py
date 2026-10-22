@@ -115,5 +115,65 @@ class MainTests(unittest.TestCase):
         self.assertTrue(any("STORY-1-01" in message for _k, check, message in result.entries if check == "main-tests"))
 
 
+SHOP = "src/main/java/com/example/Shop.java"
+R_BASE = ("class ShopTest {\n  @Test void opens() {\n    assertTrue(shop.open());\n  }\n}\n")
+R_MAIN = ("class ShopTest {\n  @Test void opens() {\n    assertTrue(shop.open());\n  }\n"
+          "  @Test void sideShop() {\n    assertTrue(side.open());\n  }\n}\n")
+R_STORY = ("class ShopTest {\n  @Test void opens() {\n    assertTrue(shop.open(9));\n  }\n}\n")
+
+
+class ResignedHelpers(unittest.TestCase):
+    """#163: a main-line test line that calls what the story re-signed was adapted by the merge, not lost — while a
+    case that went whole is still asked back."""
+
+    def setUp(self):
+        self.scratch = tempfile.TemporaryDirectory()
+        self.root = self.scratch.name
+        self.runs = os.path.join(self.root, ".dca-factory", "runs")
+        git(self.root, "init", "-q", "-b", "main")
+        write(os.path.join(self.root, ".gitignore"), ".dca-factory/\n")
+        write(os.path.join(self.root, TEST), R_BASE)
+        write(os.path.join(self.root, SHOP), "class Shop {\n  public boolean open() { return true; }\n}\n")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-qm", "base")
+        git(self.root, "checkout", "-q", "-b", "story/STORY-1")
+        write(os.path.join(self.root, TEST), R_STORY)
+        write(os.path.join(self.root, SHOP), "class Shop {\n  public boolean open(int hour) { return hour > 8; }\n}\n")
+        git(self.root, "commit", "-qam", "the story re-signs open")
+        git(self.root, "checkout", "-q", "main")
+        write(os.path.join(self.root, TEST), R_MAIN)
+        git(self.root, "commit", "-qam", "another story's case")
+        git(self.root, "checkout", "-q", "story/STORY-1")
+        gate.record_main_tests(self.root, self.runs, "STORY-1", "main")    # as the merge would stop
+        git(self.root, "merge", "--no-edit", "-q", "main", check=False)
+        write(os.path.join(state.evidence_dir(self.runs, "STORY-1"), "target"), "main\n")
+
+    def tearDown(self):
+        self.scratch.cleanup()
+
+    def resolve(self, text):
+        write(os.path.join(self.root, TEST), text)
+
+    def test_a_case_adapted_to_the_new_signature_is_not_lost_and_is_named(self):
+        self.resolve(R_STORY.replace("\n}\n", "\n  @Test void sideShop() {\n    assertTrue(side.open(9));\n  }\n}\n"))
+        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        self.assertEqual(gate.main_tests_adapted(self.root, self.runs, "STORY-1"), [(TEST, ["assertTrue(side.open());"])])
+        result = gate.Result()
+        gate.check_main_tests(result, self.root, self.runs, "STORY-1")
+        self.assertIn("main-tests", {check for kind, check, _ in result.entries if kind == "pass"})
+
+    def test_a_case_that_went_whole_is_still_lost(self):
+        self.resolve(R_STORY)
+        lost = gate.main_tests_lost(self.root, self.runs, "STORY-1")
+        self.assertEqual([rel for rel, _ in lost], [TEST])
+        self.assertIn("@Test void sideShop() {", lost[0][1])
+
+    def test_a_line_calling_what_the_story_left_alone_is_lost(self):
+        write(os.path.join(self.root, SHOP), "class Shop {\n  public boolean open() { return true; }\n}\n")
+        self.resolve(R_STORY.replace("\n}\n", "\n  @Test void sideShop() {\n    assertTrue(side.open(9));\n  }\n}\n"))
+        lost = gate.main_tests_lost(self.root, self.runs, "STORY-1")
+        self.assertEqual(lost, [(TEST, ["assertTrue(side.open());"])])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -32,6 +32,9 @@ stops and names the files. This step makes both changes true; it is not a choice
    even where the two sides look alike. The runner holds the resolution to it (`main-tests`: every line the main
    line added to a test since the story began is still there) and, where one is missing, starts this step again
    with the file and the lines named: put them back, edit nothing else, and add the file's row to `integrate.md`.
+   One exception: a main-line line that calls what this story re-signed or removed in production code cannot
+   compile as it was — rewrite that call to the story's signature and keep the rest of its case; the check takes
+   such a line as adapted when the file still has it in a like form, and names it.
 4. Remove every conflict marker. A file with one left is refused, and the integrate gate searches every file
    the story's commit changes.
 5. Edit nothing outside the conflicted files — or, sent back for a test, outside the files named. A test that the merged code would now fail is the integrate

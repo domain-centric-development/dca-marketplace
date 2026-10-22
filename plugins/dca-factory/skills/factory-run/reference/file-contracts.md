@@ -242,7 +242,9 @@ conflicts the runner records the main line's side of the tests in `.dca-factory/
 (`<base blob | ->\t<main blob>\t<file>` for every test file the main line changed since the story began); a
 resolution that leaves out a line the main line added to one of them — a case another story wrote — goes back to
 the integrate stage with the file and the lines named, at most twice, before any other stage runs: it is the
-resolution's change, never the story's, so neither `tests-kept` nor a person sees it. The
+resolution's change, never the story's, so neither `tests-kept` nor a person sees it. A missing line that calls a
+name the story's production change no longer declares as the main line does — re-signed or removed — and that the
+file still holds in a like form (60 % alike) is taken as adapted and noted, not asked back. The
 integrate gate (`--stage integrate`) then checks the tree as it now is — no unmerged path, no conflict marker
 in a file the story's commit changes, every test the story maps and every one a `Test:` line of its spec names
 in a file the story's commit holds as the worktree has it (`tests-committed` — an untracked, ignored or changed
