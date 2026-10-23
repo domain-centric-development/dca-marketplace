@@ -189,6 +189,10 @@ back: test                        (only when a confirmed defect is in a test —
   was not a defect after all> | still open — listed above
 ```
 
+A defect the DDD perspective confirms about the domain model starts its Defect cell with what it gets wrong —
+`domain-concept:`, `domain-boundary:`, `domain-invariant:` or `domain-term:` — the same codes a person's
+correction carries, so a run's domain misses can be counted beside them.
+
 **Where the round goes.** A `changes-requested` goes to the build stage, which may not change a test —
 its red proof holds each test's version. When a confirmed defect is in a test itself (it asserts less
 than its criterion, it proves the scenario only nominally), write `back: test` under the verdict: the
