@@ -238,6 +238,19 @@ class Decisions(unittest.TestCase):
             p.write_and_journal("S-1", "plan", "# plan\napplies S-1-01\n")
             self.assertEqual(p.state_of("S-1")[:2], ("in-progress", "test"))
 
+    def test_a_story_edited_after_its_plan_runs_from_plan_though_an_answer_waits_at_a_later_stage(self):
+        with project() as p:
+            path = p.story("S-1")
+            store = contract.decisions_store(path)
+            write(os.path.join(store, "01.md"), self.RECORD.replace("stage: plan", "stage: test")
+                  + "\n## Answer\nanswer: the first\nby: a person\nat: now\n")
+            full_pass(p, "S-1", upto="build")
+            p.evidence("S-1", ".story-digest", contract.story_digest(path) + "\n")
+            self.assertEqual(p.state_of("S-1")[:2], ("resumable", "test"))
+            p.story("S-1", text=contract.read_text(path) + "- answered: another use case (S-2-02)\n")
+            self.assertEqual(p.state_of("S-1"),
+                             ("in-progress", "plan", "the story changed after it was planned — every stage runs again"))
+
     def test_the_story_changed_under_a_stage_stops_it(self):
         with project() as p:
             path = p.story("S-1")

@@ -8080,6 +8080,22 @@ def run_groups(args):
                              unchanged == ("in-progress", "test") and rows.get("STORY-1") == ("in-progress", "plan")
                              and "the story changed after it was planned" in output,
                              f"before the edit {unchanged}, after {rows.get('STORY-1')}"))
+    for root in throwaway():
+        # #158: an answer that resumes at a later stage does not outrank a story changed since its plan
+        backlog_project(root, extra_sources=((".dca-factory/runs/STORY-1/plan.md", PLAN_APPLIED),
+                                             ("product/epics/sample/STORY-1/decisions/01.md",
+                                              DECISION.replace("stage: plan", "stage: test") + ANSWER)))
+        subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        unchanged = rows.get("STORY-1")
+        with open(os.path.join(root, "product", "epics", "sample", "STORY-1", "story.md"), "a", encoding="utf-8") as handle:
+            handle.write("- answered: another use case takes the step (STORY-2-02).\n")
+        rows, nxt, wait, output = schedule_of(args.gate, root)
+        expectations.append(("schedule: a story edited after its plan runs from plan, not from an answer's later stage",
+                             unchanged == ("resumable", "test") and rows.get("STORY-1") == ("in-progress", "plan")
+                             and "the story changed after it was planned" in output,
+                             f"before the edit {unchanged}, after {rows.get('STORY-1')}"))
     for root, home in throwaway(2):
         # a story's last stages end its run, so no later stage of its own freezes their windows — the
         # next writing command does, for every story, once a window has settled

@@ -907,6 +907,12 @@ def story_state(cwd, runs, story_id, front, story_path=None):
         # story conflict the stage the answer lands in. Until that stage's file cites the id, it is next.
         if state == "answered" and (text is None or rid in (needs_human_ids(text) or []) or rid not in text):
             answered.setdefault(asked_by, rid)
+    # A story changed since its plan runs from plan, before any answer's stage: that stage would build on a plan
+    # of the story as it was (#158). The gate's own `answered:` line takes the planned digest anew, so it does not.
+    planned = os.path.join(evidence, STORY_DIGEST)
+    if story_path and texts and os.path.isfile(planned) and os.path.isfile(os.path.join(folder, "plan.md")) \
+            and read_text(planned).strip() != story_digest(story_path):
+        return "in-progress", "plan", "the story changed after it was planned — every stage runs again"
     if answered:
         stage = min(answered, key=lambda s: STAGE_ORDER.index(s) if s in STAGE_ORDER else 0)
         return "resumable", stage, f"decision {answered[stage]} answered — its stage applies it"
@@ -938,10 +944,6 @@ def story_state(cwd, runs, story_id, front, story_path=None):
             return "stopped", None, f"{STAGE_FILES[stage]} ends in `## needs-human` without an open record"
     if verdict_in(texts.get("judge", "")) == "story-conflict":
         return "stopped", None, "the judge found a story conflict"
-    planned = os.path.join(evidence, STORY_DIGEST)
-    if story_path and texts and os.path.isfile(planned) and os.path.isfile(os.path.join(folder, "plan.md")) \
-            and read_text(planned).strip() != story_digest(story_path):
-        return "in-progress", "plan", "the story changed after it was planned — every stage runs again"
     integrate_refusal = os.path.join(folder, ".gate-integrate.txt")
     if os.path.isfile(integrate_refusal) and not marks.get(f"wrote:{STAGE_FILES['build']}", 0) > marks.get("fail:integrate", 0):
         report = read_text(integrate_refusal)
