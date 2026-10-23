@@ -13,7 +13,7 @@ import re
 from datetime import datetime, timezone
 from xml.etree import ElementTree
 from .contract import (
-    GateError, read_profile, read_text, resolve_profile, SHARED_WINDOWS)
+    GateError, read_profile, read_text, resolve_profile, SHARED_WINDOWS, STAGE_ORDER)
 
 
 #: Where test runners leave a report of what they actually executed. These are file-format
@@ -613,9 +613,42 @@ def part_of_call(block):
     return found.group(1) if found else None
 
 
+#: A shared process that loads no stage's skill — a builder resumed after a question goes straight to the skeletons
+#: and the gates — still shows where a stage begins: its skeleton (`--plan-skeleton`, `--files-skeleton <story>
+#: <stage>`) and its gate (`story-gate.py … --stage <stage>`).
+PART_SKELETON = re.compile(r"factory-cli\.py\b.*?--(?:plan-skeleton\b|files-skeleton\s+\S+\s+(plan|test|build|tidy|judge|document)\b)")
+PART_GATE = re.compile(r"story-gate\.py\b.*?--stage\s+(plan|test|build|tidy|judge|document)\b")
+
+
+def part_marker(block):
+    """(stage, how) a tool call marks: `skill` — the stage's skill loaded —, `skeleton` or `gate`; (None, '')."""
+    stage = part_of_call(block)
+    if stage:
+        return stage, "skill"
+    if block.get("name") != "Bash":
+        return None, ""
+    command = str((block.get("input") or {}).get("command") or "")
+    found = PART_SKELETON.search(command)
+    if found:
+        return found.group(1) or "plan", "skeleton"
+    found = PART_GATE.search(command)
+    return (found.group(1), "gate") if found else (None, "")
+
+
+def next_part(current, block):
+    """The stage a call moves a shared process into, None where it stays. A gate call never moves it back: a later
+    stage that runs an earlier stage's gate again checks its ground, it does not return to that stage."""
+    stage, how = part_marker(block)
+    if not stage or stage == current:
+        return None
+    if how == "gate" and current in STAGE_ORDER and stage in STAGE_ORDER and STAGE_ORDER.index(stage) < STAGE_ORDER.index(current):
+        return None
+    return stage
+
+
 def stream_parts(path, fmt=None):
     """[{stage, start, end, input, cache_read, cache_write, output, weight}] of one shared process's stream,
-    in the order its stages began, and the process's reported cost (None when the stream has no result) — read from
+    in the order its stages began (`next_part`: a stage's skill, skeleton or gate), and the process's reported cost (None when the stream has no result) — read from
     the common events, so every tool's stream gives its parts.
 
     An answer's own usage carries its input and cache tokens, but its output only as counted when the answer
@@ -629,8 +662,8 @@ def stream_parts(path, fmt=None):
             output_total = event.get("output") if event.get("output") is not None else output_total
             continue
         if event["kind"] == "call":
-            stage = part_of_call(event)
-            if stage and (current is None or current["stage"] != stage):
+            stage = next_part(current["stage"] if current else None, event)
+            if stage:
                 if current is not None and moment:
                     current["end"] = moment              # a part lasts until the next one begins
                 current = dict(stage=stage, start=moment, end=moment)
@@ -679,8 +712,7 @@ def stream_denials(path, fmt=None):
     where, current, denied = {}, "", []
     for event in stream_events(path, fmt):
         if event["kind"] == "call":
-            stage = part_of_call(event)
-            current = stage or current
+            current = next_part(current or None, event) or current
             where[event.get("id")] = current
         elif event["kind"] == "result":
             for call_id, name, given in event.get("denied") or []:

@@ -1,6 +1,7 @@
 """The journal is the story's record (WP-150): what a stream, a gate or a hand-over says about a story is a journal
 line, written once, and the views read the journal alone — so the raw material can go."""
 
+import json
 import os
 import shutil
 import time
@@ -149,6 +150,61 @@ class Prune(unittest.TestCase):
         self.assertEqual(state.keep_days({}), 7)
         self.assertEqual(state.keep_days({"evidence.keepDays": "30"}), 30)
         self.assertEqual(state.keep_days({"evidence.keepDays": "soon"}), 7)
+
+
+def resumed_builder(*commands):
+    """A builder resumed after a question: it loads no stage's skill, only runs the skeletons and the gates."""
+    lines = []
+    for n, command in enumerate(commands):
+        lines.append({"type": "assistant", "timestamp": f"2026-10-10T10:{n:02d}:00Z", "message": {
+            "id": f"m{n}", "usage": {"input_tokens": 10, "output_tokens": 2},
+            "content": [{"type": "tool_use", "id": f"t{n}", "name": "Bash", "input": {"command": command}}]}})
+    lines.append({"type": "result", "total_cost_usd": 1.0})
+    return "\n".join(json.dumps(line) for line in lines) + "\n"
+
+
+RESUMED = ("cat .claude/skills/factory-run/reference/stage-common.md",
+           "python3 .agents/factory/factory-cli.py --plan-skeleton S-1",
+           "python3 .agents/factory/story-gate.py --story S-1 --stage plan --brief",
+           "python3 .agents/factory/factory-cli.py --files-skeleton S-1 test",
+           "python3 .agents/factory/story-gate.py --story S-1 --stage test --brief",
+           "python3 .agents/factory/factory-cli.py --files-skeleton S-1 build",
+           "python3 .agents/factory/story-gate.py --story S-1 --stage build --brief",
+           "python3 .agents/factory/story-gate.py --story S-1 --stage test --brief",
+           "python3 .agents/factory/story-gate.py --story S-1 --stage tidy --brief")
+
+
+class ResumedBuilder(unittest.TestCase):
+    """0.90.1: a part begins at a stage's skeleton or gate too — a resumed builder loads no stage's skill."""
+
+    def test_its_stages_are_read_from_the_skeletons_and_the_gates_and_an_earlier_gate_does_not_go_back(self):
+        with project() as p:
+            path = p.evidence("S-1", "builder.100000.out", resumed_builder(*RESUMED))
+            self.assertEqual([x["stage"] for x in reports.stream_parts(path)[0]], ["plan", "test", "build", "tidy"])
+
+    def test_a_stream_an_older_reading_froze_is_frozen_again_and_read_once(self):
+        with project() as p:
+            path = p.evidence("S-1", "builder.100000.out", resumed_builder(*RESUMED))
+            journal = state.journal_path(p.runs, "S-1")
+            state.journal_append(p.runs, "S-1", "usage", "builder", "tool=claude")
+            # what 0.90.0 wrote: one part, the stream line without a version
+            state.journal_append(p.runs, "S-1", "part", "plan", "process=builder", "stream=builder.100000.out", "seconds=9")
+            state.journal_append(p.runs, "S-1", "stream", "builder.100000.out", "process=builder", "parts=1", "denied=0")
+            self.assertTrue(state.parts_incomplete(state.journal_events(p.runs, "S-1"), "builder"))
+            state.freeze_streams(journal)
+            state.freeze_streams(journal)
+            events = state.journal_events(p.runs, "S-1")
+            self.assertEqual([r["stage"] for r in state.journal_parts(events, "builder")], ["plan", "test", "build", "tidy"])
+            self.assertEqual(sum(r["runs"] for r in state.journal_parts(events, "builder")), 4)
+            self.assertFalse(state.parts_incomplete(events, "builder"))
+
+    def test_parts_whose_stream_is_gone_stay_as_frozen_and_say_they_are_incomplete(self):
+        with project() as p:
+            state.journal_append(p.runs, "S-1", "part", "plan", "process=builder", "stream=builder.100000.out", "seconds=9")
+            state.journal_append(p.runs, "S-1", "stream", "builder.100000.out", "process=builder", "parts=1", "denied=0")
+            events = state.journal_events(p.runs, "S-1")
+            self.assertEqual([r["stage"] for r in state.journal_parts(events, "builder")], ["plan"])
+            self.assertTrue(state.parts_incomplete(events, "builder"))
 
 
 class OneWayToRead(unittest.TestCase):

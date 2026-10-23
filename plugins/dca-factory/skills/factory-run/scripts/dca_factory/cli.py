@@ -68,7 +68,7 @@ from .state import (
     remote_main,
     acceptance_records, accepted, accepted_criteria, back_in, claim, claim_path, freeze_all, gate_passed_on_record,
     has_worktree,
-    flaky_tests, ignore_journals_in, is_acceptance, journal_append, journal_denials, journal_events, journal_parts, journal_usage, journal_writer, listener_line, mark_listening,
+    flaky_tests, ignore_journals_in, is_acceptance, journal_append, parts_incomplete, journal_denials, journal_events, journal_parts, journal_usage, journal_writer, listener_line, mark_listening,
     mark_stage, mark_window, OWNED_CHANGED, owned_end, PRODUCT_HEADINGS, read_claim, record_owned, release,
     resolve_window, run_stories, RUNNABLE, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
     verdict_in, worktree_of, write_story_fields)
@@ -1843,6 +1843,10 @@ def decision_mark(decision):
     return "running"
 
 
+#: What a story view says beside a shared process whose parts an older reading froze and whose stream is gone (0.90.1).
+PARTS_INCOMPLETE = "parts incomplete — the stream was cleared before 0.90.1 could read it again"
+
+
 def window_parts(events, window):
     """The parts of every run of one shared window of a story, summed per stage, in the stages' order — from the
     journal's `part` lines (WP-150): [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or
@@ -1927,6 +1931,7 @@ def story_model(cwd, epics, runs, story_id, live=False):
     for window in SHARED_WINDOWS:
         if window in facts["stages"]:
             facts["stages"][window]["parts"] = window_parts(events, window)
+            facts["stages"][window]["parts_incomplete"] = parts_incomplete(events, window)
     for moving in overview["running"]:
         if moving["story"] == story_id and not moving["interrupted"]:
             window_running(facts["stages"].get(moving["stage"]), runs, story_id, moving, live)
@@ -2319,6 +2324,8 @@ def stage_cells(model):
             if any_why:
                 sub.append(f"{part['denied']} denied" if part.get("denied") else "")
             rows.append(sub)
+        if e.get("parts_incomplete"):
+            rows.append([f"  · {PARTS_INCOMPLETE}"] + [""] * (len(cells) - 1))
     total = {k: sum(e.get(k, 0) for e in model["stages"].values())
              for k in ("runs", "seconds", "tokens", "measured", "cost") + USAGE_FIELDS}
     streaming = any(e.get("running") for e in model["stages"].values())

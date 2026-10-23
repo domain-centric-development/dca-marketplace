@@ -1167,8 +1167,35 @@ def freeze_all(runs):
 # process has ended both are journal lines, so the views read the journal and the stream may be pruned:
 #   part <stage>     process=<window> stream=<file> seconds= input= cache_read= cache_write= output= [cost=]
 #   denied <stage>   process=<process> stream=<file> tool=<tool> call=<the call cut to a line>   (`-` outside a part)
-#   stream <file>    process=<process> parts=<n> denied=<n>       — the stream is frozen; never read for it again
+#   stream <file>    process=<process> parts=<n> denied=<n> version=<n>  — the stream is frozen
+# A stream is frozen again when the reading of it improved (`STREAM_VERSION`): the journal stays append-only, and a
+# reader takes for each stream the part and denied lines its last `stream` line closes. Version 2 (0.90.1): a part
+# also begins at a stage's skeleton or gate, not only where its skill is loaded — a builder resumed after a question
+# loads none, and before 0.90.1 its build and tidy were not seen.
 STREAM_FROZEN = "stream"
+STREAM_VERSION = 2
+
+
+def frozen_streams(events):
+    """{stream file: the version it was frozen with} — 1 for a `stream` line written before versions."""
+    versions = {}
+    for e in events:
+        if e["kind"] == STREAM_FROZEN:
+            version = int(e["fields"].get("version") or 1) if str(e["fields"].get("version") or "1").isdigit() else 1
+            versions[e["name"]] = max(versions.get(e["name"], 0), version)
+    return versions
+
+
+def stream_lines(events, kind):
+    """The `part` or `denied` lines the last freeze of each stream wrote — the lines between a stream's previous
+    `stream` line and its last one."""
+    pending, kept = {}, {}
+    for e in events:
+        if e["kind"] == kind:
+            pending.setdefault(e["fields"].get("stream", ""), []).append(e)
+        elif e["kind"] == STREAM_FROZEN:
+            kept[e["name"]] = pending.pop(e["name"], [])
+    return [e for lines in kept.values() for e in lines]
 
 
 def stream_process(name):
@@ -1181,7 +1208,7 @@ def freeze_stream(journal, path):
     `stream` line is there is left alone. The cost a part gets is the process's split by the parts' weight — an
     estimate, as the view shows it; a process whose stream reports no cost gives its parts none."""
     name = os.path.basename(path)
-    if any(e["kind"] == STREAM_FROZEN and e["name"] == name for e in read_events(journal)):
+    if frozen_streams(read_events(journal)).get(name, 0) >= STREAM_VERSION:
         return False
     process = stream_process(name)
     parts, cost = stream_parts(path)
@@ -1195,7 +1222,8 @@ def freeze_stream(journal, path):
     for denial in denials:
         append_event(journal, "denied", denial["stage"] or "-", f"process={process}", f"stream={name}",
                      f"tool={denial['tool']}", f"call={denial['command']}")
-    append_event(journal, STREAM_FROZEN, name, f"process={process}", f"parts={len(parts)}", f"denied={len(denials)}")
+    append_event(journal, STREAM_FROZEN, name, f"process={process}", f"parts={len(parts)}", f"denied={len(denials)}",
+                 f"version={STREAM_VERSION}")
     return True
 
 
@@ -1210,24 +1238,32 @@ def process_running(events, process):
 
 
 def freeze_streams(journal):
-    """`freeze_stream` for every stream beside the journal whose process is not running by the journal. The runner
-    freezes its stream right after the usage line; this catches one a stopped runner left behind, and every stream
-    of a story from before the record."""
+    """`freeze_stream` for every stream beside the journal whose process is not running by the journal and that is not
+    frozen with today's reading (`STREAM_VERSION`). The runner freezes its stream right after the usage line; this
+    catches one a stopped runner left behind, every stream of a story from before the record, and every stream an
+    older reading froze."""
     folder = os.path.dirname(journal)
     events = read_events(journal)
-    frozen = {e["name"] for e in events if e["kind"] == STREAM_FROZEN}
+    frozen = frozen_streams(events)
     for path in sorted(glob.glob(os.path.join(folder, "*.out"))):
         name = os.path.basename(path)
-        if name not in frozen and not process_running(events, stream_process(name)):
+        if frozen.get(name, 0) < STREAM_VERSION and not process_running(events, stream_process(name)):
             freeze_stream(journal, path)
+
+
+def parts_incomplete(events, process):
+    """Whether a process's parts were frozen with an older reading whose stream is gone — they cannot be read again,
+    and the view says so instead of showing them as whole."""
+    return any(e["kind"] == STREAM_FROZEN and e["fields"].get("process") == process
+               and frozen_streams(events).get(e["name"], 1) < STREAM_VERSION for e in events)
 
 
 def journal_parts(events, process):
     """The `part` lines of one shared process, summed per stage in the order the stages first ran:
     [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (None where a run had none), denied}]."""
     total = {}
-    for event in events:
-        if event["kind"] != "part" or event["fields"].get("process") != process:
+    for event in stream_lines(events, "part"):
+        if event["fields"].get("process") != process:
             continue
         f = event["fields"]
         entry = total.setdefault(event["name"], dict(stage=event["name"], runs=0, seconds=0.0, input=0, cache_read=0,
@@ -1240,8 +1276,8 @@ def journal_parts(events, process):
             entry["cost"] += float(f["cost"])
         else:
             entry["cost"] = None
-    for event in events:
-        if event["kind"] == "denied" and event["fields"].get("process") == process and event["name"] in total:
+    for event in stream_lines(events, "denied"):
+        if event["fields"].get("process") == process and event["name"] in total:
             total[event["name"]]["denied"] += 1
     for entry in total.values():
         entry["tokens"] = sum(entry[f] for f in USAGE_FIELDS)
@@ -1311,6 +1347,12 @@ INVARIANT_BREAKS = "invariant-breaks.tsv"
 RECORD_VERSION = "1"
 
 
+def streams_current(events, folder):
+    """Whether every stream beside the journal is frozen with today's reading — what must hold before one is deleted."""
+    frozen = frozen_streams(events)
+    return all(frozen.get(os.path.basename(p), 0) >= STREAM_VERSION for p in glob.glob(os.path.join(folder, "*.out")))
+
+
 def recorded(events):
     """The `record` line's fields, or None for a journal that is not the record yet."""
     return next((e["fields"] for e in events if e["kind"] == "record"), None)
@@ -1321,16 +1363,18 @@ def record_story(runs, story_id):
     hand-overs that are still there, then the `record` line. None while a stream's process still runs (the story
     is recorded on a later call), or when the journal is the record already; the `record` line's fields otherwise."""
     journal = journal_path(runs, story_id)
-    if not (os.path.isfile(journal) or os.path.isdir(os.path.join(runs, story_id))) \
-            or recorded(read_events(journal)) is not None:
+    if not (os.path.isfile(journal) or os.path.isdir(os.path.join(runs, story_id))):
+        return None
+    if recorded(read_events(journal)) is not None:
+        freeze_streams(journal)                 # an improved reading freezes the streams that are still here again
         return None
     os.makedirs(os.path.dirname(journal), exist_ok=True)        # hand-overs from before the journal: it begins here
     freeze_streams(journal)
     events = read_events(journal)
-    frozen = {e["name"] for e in events if e["kind"] == STREAM_FROZEN}
     folder = evidence_dir(runs, story_id)
-    if any(os.path.basename(p) not in frozen for p in glob.glob(os.path.join(folder, "*.out"))):
+    if not streams_current(events, folder):
         return None
+    frozen = frozen_streams(events)
     unknown = []
     if latest_signal(events, "plan") is None:
         plan = os.path.join(runs, story_id, "plan.md")
@@ -1406,8 +1450,9 @@ def prune_raw(runs, epics, days=None, now=None):
         if when is None or when.timestamp() > limit:
             continue
         record_story(runs, story_id)
-        if recorded(read_events(journal)) is None:
-            continue
+        events = read_events(journal)
+        if recorded(events) is None or not streams_current(events, folder):
+            continue                            # nothing is deleted that is not read with today's reading
         for name in raw:
             os.remove(name)
         append_event(journal, PRUNED, "-", f"files={len(raw)}", f"days={days}")
@@ -1453,7 +1498,7 @@ def journal_denials(events, process):
     """[{stage, tool, command}] — the calls the tool denied one process, from the `denied` lines in their order."""
     return [dict(stage="" if e["name"] == "-" else e["name"], tool=e["fields"].get("tool", ""),
                  command=e["fields"].get("call", ""))
-            for e in events if e["kind"] == "denied" and e["fields"].get("process") == process]
+            for e in stream_lines(events, "denied") if e["fields"].get("process") == process]
 
 
 def window_logs(fields):
