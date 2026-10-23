@@ -98,8 +98,9 @@ dca-marketplace/
   audit — a person runs it on a project, a context or a diff; the factory's judge does not load it by default.
   Knowledge lives in the skills; the agents are thin wrappers for an isolated context and a tool restriction.
 - **dca-factory-cockpit** — Claude Code only and optional: `/factory-cockpit` draws the factory's foundation and cycle
-  as a cockpit in a pane (function hooks, an early-access Claude Code surface). It reads `factory.sh` JSON views
-  and the journals, sends slash commands through `$.command.run` and may start `factory.sh run` as a child; it
+  as a cockpit in a pane, and what waits and runs in a band above the prompt (function hooks, an early-access Claude Code surface). It reads `factory.sh` JSON views
+  and the journals, sends slash commands through `$.command.run`, tells Claude the factory's state beside a prompt, offers a
+  read-only `factory_status` tool and may start `factory.sh run` as a child; it
   holds no logic the factory lacks and is never a dependency of `dca-factory`, which stays portable. A view the
   cockpit needs is added to `factory.sh` first (a JSON format every tool can read), then drawn here. Tests:
   `claude plugin test plugins/dca-factory-cockpit`.

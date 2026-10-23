@@ -517,6 +517,22 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       </Box>
     ),
 
+    // One item in a line: its mark, its words cut at the edge, the presses that act on it at the end — what waits or
+    // runs, in the band and in a printed status.
+    item: (key: string, glyph: string, color: string, text: string, acts: (RenderElement | false | null | undefined)[]) => (
+      <Box key={key} gap={1}>
+        <Text bold color={color}>
+          {glyph}
+        </Text>
+        <Box flexGrow={1} flexShrink={1}>
+          <Text color={C.text} wrap="truncate">
+            {text}
+          </Text>
+        </Box>
+        {acts.filter((act): act is RenderElement => Boolean(act))}
+      </Box>
+    ),
+
     // A row of buttons with room above it.
     actions: (buttons: (RenderElement | false | null | undefined)[]) => (
       <Box columnGap={1} rowGap={1} marginTop={1} flexWrap="wrap">
@@ -733,9 +749,12 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       return [...list.slice(0, place).map(one), ...block, ...list.slice(place).map(one)]
     },
 
-    // The keys that work now, at the foot of every view.
+    // The keys that work now, at the foot of every view under a rule — the pane's own footer, clipped to one row.
     keys: (isFocused: boolean, hint: string) => (
-      <Box marginTop={1}>
+      <Box marginTop={1} flexDirection="column">
+        <Box height={1} overflow="hidden">
+          <Text color={C.line}>{'─'.repeat(Math.max(0, width - 2))}</Text>
+        </Box>
         <Text color={C.muted}>{isFocused ? `${hint} · ${BY_CLAUDE} Claude does it in this session · ↑↓ Tab ⇧Tab move · Enter choose · b back · 0–5 tabs · q close · Esc prompt` : 'click here or ctrl+x tab (with an empty prompt) to steer the cockpit · ← is Claude Code’s, not the cockpit’s'}</Text>
       </Box>
     ),

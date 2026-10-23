@@ -223,6 +223,9 @@ export type Worker = {
   lines: string[]
 }
 
+// One status as `/factory-cockpit status` printed it: what the transcript's row draws, as it stood then.
+export type Glance = Pick<FactoryStatus, 'project' | 'running' | 'waiting' | 'next' | 'queue' | 'delivered' | 'total' | 'tokens'> & { at: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'dca-factory-cockpit': {
@@ -235,6 +238,10 @@ declare module 'claude-code' {
       outputLines: string[]
       specDelta: SpecDelta | null
       worker: Worker
+      // the note last attached to a prompt; the next is attached only when it differs
+      told: string
+      // the statuses `/factory-cockpit status` printed into the transcript, by the moment they were read
+      glances: Record<string, Glance>
     }
   }
 }

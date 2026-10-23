@@ -1,9 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
-import type { Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
+import type { Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, Glance, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, outcomeCell, type Cell } from './components'
-import { appendLines, clock, createLatch, day, exitWord, gateBy, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish } from './parse'
+import { appendLines, clock, createLatch, day, exitWord, factoryNote, gateBy, glanceId, glanceText, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, seenOf, sinceSeen, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish, type Seen } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -22,6 +22,8 @@ const fileText = atom({ plugin: 'dca-factory-cockpit', key: 'fileText' } as cons
 const outputLines = atom({ plugin: 'dca-factory-cockpit', key: 'outputLines' } as const, [] as string[])
 // what the spec will say once the open acceptance's story is delivered — read when the record opens
 const specDelta = atom({ plugin: 'dca-factory-cockpit', key: 'specDelta' } as const, null as SpecDelta | null)
+const told = atom({ plugin: 'dca-factory-cockpit', key: 'told' } as const, '')
+const glances = atom({ plugin: 'dca-factory-cockpit', key: 'glances' } as const, {} as Record<string, Glance>)
 
 // The recurring cycle; Describe sits beside it with set up and update — written once, changed when things move.
 const TABS: { id: Tab; label: string; key: string }[] = [
@@ -291,6 +293,7 @@ async function load($: EngineInterface, isQuiet: boolean, isLive: boolean): Prom
     return
   }
   if (!isQuiet && before) announce($, before, now)
+  await remember($, now)
   const running = now.status.running[0]
   const waiting = now.status.waiting[0]
   $.ui.status(
@@ -300,6 +303,20 @@ async function load($: EngineInterface, isQuiet: boolean, isLive: boolean): Prom
         ? `factory: ${running.story} · ${running.stage}${running.part ? ` · ${running.part}` : ''}`
         : `factory: ${now.status.next.text}`,
   )
+}
+
+// What moved since this project's last session, said once as the first reading lands; then what this one sees, kept
+// for the next. A reload says nothing again: what was kept is what it sees.
+let hasGreeted = false
+async function remember($: EngineInterface, now: Cockpit): Promise<void> {
+  const key = `seen:${now.root}`
+  if (!hasGreeted) {
+    hasGreeted = true
+    const seen = (await $.store.get(key).catch(() => undefined)) as Seen | undefined
+    const line = seen ? sinceSeen(seen, now.status) : null
+    if (line) $.ui.toast(line)
+  }
+  await $.store.set(key, seenOf(now.status, new Date(await $.clock.now()).toISOString())).catch(() => undefined)
 }
 
 // What changed since the last look: a stage started, a gate refused, a story delivered, a new question.
@@ -417,6 +434,14 @@ async function openRecord($: EngineInterface, root: string, record: DecisionReco
   }
 }
 
+// The pane opened on a view: the band's way in and the command's. With the pane closed only the status was read, so
+// the rest is read behind it.
+async function showPane($: EngineInterface, show: () => Promise<unknown>): Promise<void> {
+  await show()
+  void refresh($, true)
+  await $.ui.open({ id: PANE, title: 'Factory cockpit', focus: true })
+}
+
 async function runWorker($: EngineInterface, label: string, args: string[]): Promise<void> {
   await update($, tab, () => 'run' as Tab)
   await update($, detail, () => null)
@@ -433,7 +458,21 @@ async function runWorker($: EngineInterface, label: string, args: string[]): Pro
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'factory-cockpit', description: 'The product flow as a cockpit: describe beside the cycle discover, backlog, run, decide, delivered — `close` closes it' })
+    await $.command.register({ name: 'factory-cockpit', description: 'The product flow as a cockpit: describe beside the cycle discover, backlog, run, decide, delivered — `status` prints where it stands, `close` closes it' })
+    await $.tool.register({
+      name: TOOL,
+      description:
+        "The project's dca-factory as JSON, read by factory.sh — read-only, no shell. Without input: what runs, what waits for the person, what comes next, the queue, the epics and the totals; `full: true` adds every story, finding and claim. `story`: one story's detail (its sections, criteria, stages, passes); `epic`: one epic with its stories; `decisions: true`: the decision records. Use it instead of running factory.sh status through Bash.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          story: { type: 'string', description: 'a story id' },
+          epic: { type: 'string', description: 'an epic id' },
+          decisions: { type: 'boolean', description: 'the decision records instead of the status' },
+          full: { type: 'boolean', description: 'the whole status with every story, finding and claim' },
+        },
+      },
+    })
     // the timers first, the first reading in the background: the session's start waits for neither
     $.clock.every(STATUS_MS, () => void refresh($))
     $.clock.every(LIVE_MS, () => {
@@ -451,6 +490,19 @@ export const register: Register = on => {
       await $.ui.close({ id: PANE })
       return { text: 'Factory cockpit closed — /factory-cockpit opens it again.' }
     }
+    // where it stands, printed into the transcript: the text the model reads, the row drawn from what was read then —
+    // the cockpit's last reading (at most one poll old) at once, since a fresh `status --live` takes seconds; a fresh
+    // one follows behind for the pane and the band
+    if (e.args.trim() === 'status') {
+      if (await read($, cockpit)) void refresh($, true)
+      else await refresh($, true)
+      const now = await read($, cockpit)
+      if (!now) return { text: 'No factory in this project (.agents/factory/factory.sh is missing) — /factory-setup installs it.' }
+      const at = new Date(now.updatedAt).toISOString()
+      const { project, running, waiting, next, queue, delivered, total, tokens } = now.status
+      await update($, glances, all => ({ ...all, [at]: { at, project, running, waiting, next, queue, delivered, total, tokens } }))
+      return { text: glanceText(now.status, at) }
+    }
     // with a cockpit read before, the pane opens on it at once and a fresh reading follows; without one, the
     // first reading decides whether there is a factory at all
     if (await read($, cockpit)) void refresh($, true)
@@ -463,11 +515,24 @@ export const register: Register = on => {
     return { text: 'Factory cockpit opened.' }
   })
 
-  // The tool's result goes back at once; what the call wrote is read behind it.
+  // The tool's result goes back at once; what the call wrote is read behind it. The cockpit's own tool is answered here.
   on('tool.call', async ($, e, next) => {
+    // the generated tool list knows the tool only once it was registered: compared as a name
+    if ((e.tool as string) === TOOL_NAME) return answerTool($, e as unknown as ToolInput)
     const ran = await next(e)
     if (touchesFactory(e)) void refresh($)
     return ran
+  })
+
+  // The model reads where the factory stands beside a prompt — only when that changed since it was last told, so an
+  // unchanged factory costs nothing and the prompt cache holds. A slash command carries none.
+  on('prompt.submit', async ($, e, next) => {
+    const now = await read($, cockpit)
+    if (!now || e.command || e.isMeta) return next(e)
+    const note = factoryNote(now.status)
+    if (note === (await read($, told))) return next(e)
+    await update($, told, () => note)
+    return next({ ...e, context: [...(e.context ?? []), note] })
   })
 
   // A slash command the cockpit sent runs as a turn of its own; when any turn ends, what it wrote is read.
@@ -483,12 +548,70 @@ export const register: Register = on => {
     if (!now) return <Text color={C.muted}>No factory in this project.</Text>
     return draw($, e, now)
   })
+
+  // A survey holds the band before the cockpit; without a factory, or with nothing waiting or running, it stays empty.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const now = await read($, cockpit)
+    if (e.props.hasSurvey || !now || (now.status.waiting.length === 0 && now.status.running.length === 0 && !isRunning())) return next(e)
+    return band($, e, now)
+  })
+
+  // A status `/factory-cockpit status` printed is drawn from what was read then; any other row of the command, and a
+  // status this session did not read (a resumed one), keeps the engine's text.
+  on('ui.render', { component: 'CommandOutput' }, async ($, e, next) => {
+    const id = e.props.command.endsWith('factory-cockpit') ? glanceId(e.props.text) : null
+    const glance = id ? (await read($, glances))[id] : undefined
+    return glance ? glanceView($, e, glance) : next(e)
+  })
+}
+
+// ---------------------------------------------------------------- the cockpit's tool
+
+const TOOL = 'factory_status'
+const TOOL_NAME = `mcp__dca-factory-cockpit__${TOOL}`
+type ToolInput = { story?: unknown; epic?: unknown; decisions?: unknown; full?: unknown }
+
+// factory.sh's own JSON, the status cut to what a question about the factory needs unless the whole is asked for.
+async function answerTool($: EngineInterface, input: ToolInput) {
+  const root = await $.session.root()
+  if (!(await $.fs.exists(`${root}/${RUNNER}`))) return { deny: 'No factory in this project (.agents/factory/factory.sh is missing).' }
+  const args =
+    typeof input.story === 'string' && input.story
+      ? ['status', '--story', input.story, '--format', 'json', '--live']
+      : typeof input.epic === 'string' && input.epic
+        ? ['status', '--epic', input.epic, '--format', 'json']
+        : input.decisions === true
+          ? ['decisions', '--format', 'json']
+          : ['status', '--format', 'json', '--live']
+  const value = await factoryJson<FactoryStatus>($, root, args)
+  if (!value) return { deny: `factory.sh ${args.join(' ')} printed no JSON.` }
+  const isStatus = args.length === 4 && args[0] === 'status'
+  const shown =
+    isStatus && input.full !== true
+      ? {
+          project: value.project,
+          delivered: value.delivered,
+          total: value.total,
+          tokens: value.tokens,
+          running: value.running,
+          waiting: value.waiting,
+          next: value.next,
+          queue: value.queue,
+          epics: value.epics.map(epic => ({ epic: epic.epic, title: epic.title, delivered: epic.delivered, total: epic.total })),
+          journeys: value.journeys,
+          findings: value.findings?.length ?? 0,
+          claims: value.claims?.length ?? 0,
+        }
+      : value
+  return { result: JSON.stringify(shown, null, 1) }
 }
 
 // ---------------------------------------------------------------- drawing
 
 
-async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
+// The surface's elements and the cockpit's blocks over them, in the palette of Claude Code's theme — the pane and the
+// band and a printed status draw from the same.
+async function kit($: EngineInterface, e: RenderInput<'Pane'> | RenderInput<'AbovePrompt'> | RenderInput<'CommandOutput'>) {
   const { Box, Text, Button, ...rest } = $.ui.resolve(e)
   // the site's paper for a light theme, its deep plates for a dark one — before anything is drawn
   const theme = (await $.config.list().catch(() => [])).find(row => row.key === 'theme')
@@ -501,9 +624,125 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     Svg: 'Svg' in rest ? rest.Svg : null,
     Markdown: 'Markdown' in rest ? rest.Markdown : null,
     Code: 'Code' in rest ? rest.Code : null,
-    width: e.props.bodyColumns ?? e.viewport?.columns ?? 100,
+    // a pane and the band say the cells their body has; a transcript row takes the viewport's
+    width: ('bodyColumns' in e.props ? e.props.bodyColumns : undefined) ?? e.viewport?.columns ?? 100,
     isGrid: e.surface === 'terminal',
   })
+  return { Box, Text, ui }
+}
+
+// What waits for the person, with its answer and the way to its story, and what runs, with the way to its output — one
+// item each, in the factory's order. `isLive`: the worker started here can be stopped from it (the band, not a status
+// printed into the transcript).
+function factoryItems($: EngineInterface, ui: Awaited<ReturnType<typeof kit>>['ui'], prefix: string, status: Pick<FactoryStatus, 'waiting' | 'running'>, isLive: boolean): RenderElement[] {
+  return [
+    ...status.waiting.map((wait, index) => {
+      const press = waitPress(wait.story, wait.action)
+      return ui.item(`${prefix}-wait-${wait.story}`, MARK_GLYPH[wait.mark] ?? '?', MARK_COLOR[wait.mark] ?? C.wait, `${wait.story} — ${press ? wait.what : `${wait.what} — ${wait.action.text}`}`, [
+        press && ui.button(`${prefix}-answer-${wait.story}`, press.label, () => send($, press.command), { isPrimary: true, byClaude: true, hotkey: isLive && index === 0 ? 'a' : undefined }),
+        ui.link(`${prefix}-story-${wait.story}`, 'open', () => void showPane($, () => openStory($, wait.story))),
+      ])
+    }),
+    ...status.running.map((running, index) =>
+      ui.item(
+        `${prefix}-run-${running.story}`,
+        MARK_GLYPH.running ?? '▶',
+        running.interrupted ? C.fail : C.accent,
+        [`${running.story} · ${running.part ? `${running.stage} · ${running.part}` : running.stage}`, running.interrupted ? 'interrupted' : running.ago, running.activity].filter(Boolean).join(' — '),
+        [
+          ui.link(`${prefix}-output-${running.story}`, 'output', () => void showPane($, () => showTab($, 'run'))),
+          isLive && index === 0 && isRunning() && ui.button(`${prefix}-stop`, '■ stop', () => void stopWorker($), { hotkey: 'x' }),
+        ],
+      ),
+    ),
+  ]
+}
+
+// A status `/factory-cockpit status` printed into the transcript, drawn as it stood when it was read: the head with
+// what is delivered, what waits and what runs as items, what comes next and what is ready.
+async function glanceView($: EngineInterface, e: RenderInput<'CommandOutput'>, glance: Glance) {
+  const { Box, Text, ui } = await kit($, e)
+  const ready = glance.queue?.ready ?? []
+  const items = factoryItems($, ui, `glance-${glance.at}`, glance, false)
+  return (
+    // a border's glyphs take the colour of the box around it: the frame stands on the page's colour, not the terminal's
+    <Box backgroundColor={C.bg}>
+      <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={C.line} paddingX={1} backgroundColor={C.bg}>
+        <Box gap={1}>
+          {ui.brandMark()}
+          <Text bold color={C.accent}>
+            FACTORY
+          </Text>
+          <Text bold color={C.bright}>
+            {glance.project}
+          </Text>
+          <Box flexGrow={1} flexShrink={1}>
+            <Text color={C.muted} wrap="truncate">
+              {`${glance.delivered} of ${glance.total} delivered${glance.tokens > 0 ? ` · ${fmt.tokens(glance.tokens)} tokens` : ''} · read ${moment(glance.at)}`}
+            </Text>
+          </Box>
+          {ui.button(`glance-${glance.at}-cockpit`, 'cockpit', () => void showPane($, () => update($, detail, () => null)))}
+        </Box>
+        {items.length > 0 ? items : <Text color={C.done}>Nothing runs, nothing waits for you.</Text>}
+        <Box gap={1}>
+          <Text bold color={C.accent}>
+            Next ›
+          </Text>
+          <Text color={C.text}>{glance.next.text}</Text>
+        </Box>
+        {ready.length > 0 && <Text color={C.muted}>{`ready: ${ready.slice(0, 5).join(' · ')}${ready.length > 5 ? ` · ${ready.length - 5} more` : ''}`}</Text>}
+      </Box>
+    </Box>
+  )
+}
+
+// The band above the prompt: what waits for the person, with its answer, and what runs, with the way into the pane —
+// one row each, as many as the band holds. It is quiet while nothing waits or runs: what to show is the factory's
+// (`waiting`, `running`), never the band's own choice.
+async function band($: EngineInterface, e: RenderInput<'AbovePrompt'>, now: Cockpit) {
+  const { Box, Text, ui } = await kit($, e)
+  const status = now.status
+  const job = await read($, worker)
+  const isWorker = isRunning() && status.running.length === 0
+  const total = status.waiting.length + status.running.length + (isWorker ? 1 : 0)
+  // the frame and the head take three rows; the rest is the rows', one at least
+  const room = Math.max(1, (e.props.maxRows ?? 8) - 3)
+  const rows = [
+    ...factoryItems($, ui, 'band', status, true),
+    ...(isWorker
+      ? [ui.item('band-worker', MARK_GLYPH.running ?? '▶', C.accent, `worker · ${job.label}`, [ui.button('band-stop', '■ stop', () => void stopWorker($), { hotkey: 'x' })])]
+      : []),
+  ]
+  const shown = rows.slice(0, room)
+  const counts = [
+    status.waiting.length > 0 && `${status.waiting.length} wait${status.waiting.length === 1 ? 's' : ''} for you`,
+    status.running.length + (isWorker ? 1 : 0) > 0 && `${status.running.length + (isWorker ? 1 : 0)} running`,
+    shown.length < total && `${total - shown.length} more in the cockpit`,
+  ].filter(Boolean)
+  return (
+    // a border's glyphs take the colour of the box around it: the frame stands on the page's colour, not the terminal's
+    <Box backgroundColor={C.bg} width={e.props.bodyColumns}>
+      <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={status.waiting.length > 0 ? C.wait : C.accent} paddingX={1} backgroundColor={C.bg}>
+        <Box gap={1}>
+          {ui.brandMark()}
+          <Text bold color={C.accent}>
+            FACTORY
+          </Text>
+          <Box flexGrow={1} flexShrink={1}>
+            <Text color={C.muted} wrap="truncate">
+              {counts.join(' · ')}
+            </Text>
+          </Box>
+          {ui.button('band-cockpit', 'cockpit', () => void showPane($, () => update($, detail, () => null)), { hotkey: 'o' })}
+        </Box>
+        {shown}
+      </Box>
+    </Box>
+  )
+}
+
+async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
+  const { Box, Text, ui } = await kit($, e)
   const at = await $.clock.now()
   const current = await read($, tab)
   const open = await read($, detail)
@@ -671,7 +910,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     // the painted surface fills the pane: at least the rows the surface gave its body, the whole width
     <Box flexDirection="column" paddingX={1} paddingY={1} backgroundColor={C.bg} minHeight={e.props.scroll?.bodyRows ?? rows} width={e.props.bodyColumns ?? '100%'}>
       {head}
-      <Box flexDirection="column" marginTop={1}>
+      {/* the body takes what the page leaves, so the keys stand at the pane's foot */}
+      <Box flexDirection="column" marginTop={1} flexGrow={1}>
         {body}
       </Box>
       {ui.keys(isFocused, hint)}

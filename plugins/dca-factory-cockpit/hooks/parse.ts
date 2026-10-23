@@ -317,3 +317,64 @@ export function waitPress(story: string, action: { text: string; skill: string }
   const label = { '/factory-decisions': 'answer', '/factory-status': 'look', '/factory-run': 'run', '/factory-backlog': 'release' }[verb] ?? 'open'
   return { label, command }
 }
+
+// ---- what the session is told and shown beside the cockpit
+
+type Told = {
+  running: { story: string; stage: string; part?: string }[]
+  waiting: { story: string; what: string }[]
+  next: { text: string }
+}
+
+// What the model reads beside a prompt: what runs, what waits for the person, what comes next — the factory's own words.
+// The cockpit attaches it only when it differs from what it attached last, so an unchanged factory costs nothing.
+export function factoryNote(status: Told): string {
+  const running = status.running.map(run => `${run.story} · ${run.part ? `${run.stage} · ${run.part}` : run.stage}`)
+  const waiting = status.waiting.map(wait => `${wait.story} — ${wait.what}`)
+  return [
+    "The project's dca-factory now (from the cockpit; said again only when it changes):",
+    `- running: ${running.join('; ') || 'nothing'}`,
+    `- waits for the person: ${waiting.join('; ') || 'nothing'}`,
+    `- next: ${status.next.text}`,
+  ].join('\n')
+}
+
+// What a session saw of the factory when it last looked: kept across sessions, per project.
+export type Seen = { at: string; delivered: string[]; waiting: string[] }
+
+const waitKey = (wait: { story: string; what: string }) => `${wait.story} — ${wait.what}`
+
+export function seenOf(status: { rows: { story: string; done: boolean }[]; waiting: { story: string; what: string }[] }, at: string): Seen {
+  return { at, delivered: status.rows.filter(row => row.done).map(row => row.story), waiting: status.waiting.map(waitKey) }
+}
+
+// What moved since a session last looked, in one line — null when nothing did.
+export function sinceSeen(seen: Seen, status: { rows: { story: string; done: boolean }[]; waiting: { story: string; what: string }[] }): string | null {
+  const delivered = status.rows.filter(row => row.done && !seen.delivered.includes(row.story)).map(row => row.story)
+  const waiting = status.waiting.filter(wait => !seen.waiting.includes(waitKey(wait))).map(wait => wait.story)
+  const parts = [
+    delivered.length > 0 && `${delivered.length} delivered (${delivered.slice(0, 3).join(', ')}${delivered.length > 3 ? ', …' : ''})`,
+    waiting.length > 0 && `${waiting.length} new for you (${waiting.slice(0, 3).join(', ')}${waiting.length > 3 ? ', …' : ''})`,
+  ].filter(Boolean)
+  return parts.length > 0 ? `factory since ${moment(seen.at)}: ${parts.join(' · ')}` : null
+}
+
+// The first line of a status the cockpit printed into the transcript names the moment it was read: its drawing is
+// found by it.
+export const GLANCE_HEAD = 'Factory status at '
+export function glanceId(text: string): string | null {
+  return text.startsWith(GLANCE_HEAD) ? (text.slice(GLANCE_HEAD.length).split(/\s/)[0] ?? null) : null
+}
+
+// The status `/factory-cockpit status` prints: what the model reads, and the transcript shows where nothing draws it.
+export function glanceText(
+  status: Told & { project: string; delivered: number; total: number; tokens: number; queue?: { ready: string[] } },
+  at: string,
+): string {
+  const ready = status.queue?.ready ?? []
+  return [
+    `${GLANCE_HEAD}${at} — ${status.project}: ${status.delivered} of ${status.total} stories delivered${status.tokens > 0 ? ` · ${tokens(status.tokens)} tokens` : ''}`,
+    ...factoryNote(status).split('\n').slice(1),
+    ...(ready.length > 0 ? [`- ready: ${ready.slice(0, 5).join(', ')}${ready.length > 5 ? `, … ${ready.length - 5} more` : ''}`] : []),
+  ].join('\n')
+}

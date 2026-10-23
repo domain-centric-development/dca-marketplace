@@ -29,6 +29,45 @@ them, with their share of the cost, their tokens by class (input, output, cache 
 appears there only for a perspective the profile asks for now — the status names them (`perspectives`); one an
 earlier profile named, such as an old `review:dca`, stays out.
 
+## The band above the prompt
+
+While something waits for the person or runs, the cockpit draws a band directly above the prompt — whether the pane
+is open or not; the status line says the same in one line. One row per item, as many as the band holds, the rest
+counted (`n more in the cockpit`):
+
+```
+FACTORY  1 waits for you · 1 running                                  [ cockpit ]
+? add-book — plan asks a question                              [ ✦ answer ]  open ›
+▶ lend-book · builder · test — 3 min — Edit LendBook.java          output ›  [ ■ stop ]
+```
+
+| Row | Acts |
+|---|---|
+| what waits (`status.waiting`) | ✦ its own press, as in Decide (`/factory-decisions <story>` …) — `a` for the first; `open` opens the story in the pane. A row the factory says in words only (a story waiting for its merge) offers no press |
+| what runs (`status.running`), or the worker started here between stages | `output` opens the Run tab; `■ stop` (`x`) stops the worker started here |
+| the head | `cockpit` (`o`) opens the pane as it stood |
+
+The band takes the keys after a click into it or `ctrl+x tab`; `ctrl+x ctrl+a` or its `[-]` collapses it. It is
+quiet — the engine's own band shows — while nothing waits or runs, while a survey holds the band, and in a project
+without a factory. It draws in the pane's palette and wordmark, on the terminal and in the Desktop app (the two
+surfaces that have the band); like every press of the cockpit, an answer goes to `/factory-decisions`, which writes
+the record — the band writes nothing.
+
+## Beside the pane
+
+- **What Claude is told.** With a prompt the person sends, Claude reads where the factory stands — what runs, what
+  waits for the person, what comes next — as context beside the prompt, never in the system prompt (which would
+  break the prompt cache on every change). It is attached only when it changed since it was last attached; a slash
+  command carries none.
+- **A tool for Claude.** `factory_status` (`mcp__dca-factory-cockpit__factory_status`) answers with `factory.sh`'s own
+  JSON, read-only and without a shell: the status cut to what runs, waits and comes next, the queue, the epics and the
+  totals; `full: true` the whole status; `story` or `epic` one item's view; `decisions: true` the records.
+- **`/factory-cockpit status`** prints where the factory stands into the transcript — the text Claude reads, drawn
+  as a small framed panel in the cockpit's palette with the same items and presses as the band, as it stood when it
+  was read. A status from a resumed session keeps the plain text.
+- **Since the last session.** The cockpit keeps what a session saw per project (`$.store`); the next session's first
+  reading says in a toast what moved meanwhile: `factory since 22.10.2026 17:05 UTC: 3 delivered (…) · 1 new for you (…)`.
+
 ## What it reads
 
 `factory.sh status --format json --live`, `status --story <id> --format json --live`, `status --epic <id> --format json`,
@@ -68,7 +107,7 @@ hand-overs are read again only when its row changed or a stage of it runs.
 /factory-cockpit
 ```
 
-`0` opens Describe, `1`–`5` the cycle, ↑↓, Tab and Shift+Tab move, `b` goes back, `q` or `ctrl+x x` closes the pane (`/factory-cockpit close` from the prompt), `Esc` returns to the prompt. ← and → are Claude Code's own — a mod receives no left or right arrow. The pane has the keyboard after
+`0` opens Describe, `1`–`5` the cycle, ↑↓, Tab and Shift+Tab move, `b` goes back, `q` or `ctrl+x x` closes the pane (`/factory-cockpit close` from the prompt; `/factory-cockpit status` prints where it stands), `Esc` returns to the prompt. ← and → are Claude Code's own — a mod receives no left or right arrow. The pane has the keyboard after
 `/factory-cockpit`, a click into it, or `ctrl+x tab` — the last two only while the prompt is empty.
 
 ## Terminal and Desktop

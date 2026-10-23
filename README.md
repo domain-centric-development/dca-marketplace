@@ -45,7 +45,7 @@ Only for working *on* these plugins — a clone, so edits take effect without a 
 | start a DCA project from nothing, or add DCA to an existing one | `dca-core` (`/dca-new`, `/dca-init`) |
 | TDD, Clean Code, ADRs, end-user tests, a glossary, a context map and an outside review — with or without DCA | `dca-craft` |
 | deliver stories through plan → test → build → tidy → judge → document with a gate between | `dca-factory` (+ `dca-core` for the method) |
-| see and steer that cycle in a Claude Code pane — discover, backlog, run, decide, delivered | `dca-factory-cockpit` (optional, Claude Code only) |
+| see and steer that cycle in a Claude Code pane and a band above the prompt — discover, backlog, run, decide, delivered | `dca-factory-cockpit` (optional, Claude Code only) |
 
 `dca-core` and `dca-craft` are what a developer invokes directly. `dca-craft` knows no DCA
 artifact: it reads what any project has — code, glossary, context map, `AGENTS.md` — which makes its
