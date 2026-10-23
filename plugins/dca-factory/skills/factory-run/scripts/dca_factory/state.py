@@ -1199,21 +1199,26 @@ def freeze_stream(journal, path):
     return True
 
 
+def process_running(events, process):
+    """Whether the journal says a process runs now: its last `stage-start` has no `stage-end` or `usage` after it. A
+    reviewer's stream is `review-<name>`, its journal name `review:<name>`. File times are not read — a move or a copy
+    sets them anew."""
+    names = {process, process.replace("review-", "review:", 1)}
+    started = max((e["seq"] for e in events if e["kind"] == "stage-start" and e["name"] in names), default=None)
+    ended = max((e["seq"] for e in events if e["kind"] in ("stage-end", "usage") and e["name"] in names), default=None)
+    return started is not None and (ended is None or ended < started)
+
+
 def freeze_streams(journal):
-    """`freeze_stream` for every stream beside the journal whose process has ended — the journal holds a `usage` or
-    `stage-end` line for that process written after the stream's last write. The runner freezes its stream right
-    after the usage line; this catches one a stopped runner left behind."""
+    """`freeze_stream` for every stream beside the journal whose process is not running by the journal. The runner
+    freezes its stream right after the usage line; this catches one a stopped runner left behind, and every stream
+    of a story from before the record."""
     folder = os.path.dirname(journal)
     events = read_events(journal)
     frozen = {e["name"] for e in events if e["kind"] == STREAM_FROZEN}
     for path in sorted(glob.glob(os.path.join(folder, "*.out"))):
         name = os.path.basename(path)
-        if name in frozen:
-            continue
-        process, written = stream_process(name), os.path.getmtime(path)
-        ended = (e for e in events if e["kind"] in ("usage", "stage-end") and e["name"] == process)
-        if any((parse_time(e["at"]) or datetime.min.replace(tzinfo=timezone.utc)).timestamp() >= written - 2
-               for e in ended):
+        if name not in frozen and not process_running(events, stream_process(name)):
             freeze_stream(journal, path)
 
 
@@ -1316,8 +1321,10 @@ def record_story(runs, story_id):
     hand-overs that are still there, then the `record` line. None while a stream's process still runs (the story
     is recorded on a later call), or when the journal is the record already; the `record` line's fields otherwise."""
     journal = journal_path(runs, story_id)
-    if not os.path.isfile(journal) or recorded(read_events(journal)) is not None:
+    if not (os.path.isfile(journal) or os.path.isdir(os.path.join(runs, story_id))) \
+            or recorded(read_events(journal)) is not None:
         return None
+    os.makedirs(os.path.dirname(journal), exist_ok=True)        # hand-overs from before the journal: it begins here
     freeze_streams(journal)
     events = read_events(journal)
     frozen = {e["name"] for e in events if e["kind"] == STREAM_FROZEN}
@@ -1364,12 +1371,14 @@ def keep_days(profile):
 
 
 def raw_material(folder):
-    """A story's raw streams and tree snapshots — read only while it runs and right after."""
-    return sorted(glob.glob(os.path.join(folder, "*.out")) + glob.glob(os.path.join(folder, "tree-*.txt")))
+    """A story's raw streams, tree snapshots and the runner's suite record (`suites.tsv`, the signed runs a later gate
+    on the same tree reuses) — read only while it runs and right after."""
+    return sorted(glob.glob(os.path.join(folder, "*.out")) + glob.glob(os.path.join(folder, "tree-*.txt"))
+                  + glob.glob(os.path.join(folder, "suites.tsv")))
 
 
 def prune_raw(runs, epics, days=None, now=None):
-    """Delete the streams and snapshots of every story delivered more than `days` ago (the profile's
+    """Delete the streams, snapshots and suite record of every story delivered more than `days` ago (the profile's
     `evidence.keepDays`) once its journal is its record — `record_story` first, so nothing goes unread — and say
     so in a `pruned` line. The journal, the gate reports, story.diff and the hand-overs stay. A story that is not
     delivered — running, waiting, reopened — is never touched. [(story, files removed)]."""

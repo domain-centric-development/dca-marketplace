@@ -84,5 +84,25 @@ class Signals(unittest.TestCase):
         self.assertIsNone(gate.correction_code("accepted"))
 
 
+class Totals(unittest.TestCase):
+    """WP-150 E: the figures over many stories — the factory computes them, every view and the bench print them."""
+
+    def test_rates_from_the_measured_stories_and_a_story_before_the_rules_is_not_measured_not_zero(self):
+        from dca_factory import cli
+        rows = [dict(signals=dict(rules={"red": 3, "killed": 1}, asked=2, answered=1, domain={"domain-concept": 2},
+                                  corrections={"domain-term": 1}, findings={"ddd": 2})),
+                dict(signals=dict(rules={"survived": 1}, domain={"domain-term": 1})),
+                dict(signals=dict(rules=None, asked=1, answered=1))]
+        totals = cli.signal_totals(rows)
+        self.assertEqual((totals["measured"], totals["not_measured"], totals["named"]), (2, 1, 5))
+        self.assertEqual((totals["kill_rate"], totals["guarded_rate"]), (0.2, 0.8))
+        self.assertEqual((totals["asked"], totals["answered"], totals["domain"]), (3, 2, {"domain-concept": 2, "domain-term": 1}))
+        self.assertEqual(cli.signals_line(totals), "kill rate 0.20 · guarded 0.80 (5 rules named) · domain findings "
+                                                   "2 concept · 1 term · corrections 1 term")
+        nothing = cli.signal_totals([dict(signals=dict(rules=None))])
+        self.assertIsNone(nothing["kill_rate"])
+        self.assertEqual(cli.signals_line(nothing), "rules not measured")
+
+
 if __name__ == "__main__":
     unittest.main()

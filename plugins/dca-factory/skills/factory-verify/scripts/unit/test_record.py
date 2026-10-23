@@ -47,11 +47,11 @@ class FrozenStream(unittest.TestCase):
                 self.assertEqual(sum(r[field] for r in rows), sum(x[field] for x in parts), field)
             self.assertEqual(sum(r["denied"] for r in rows), len(reports.stream_denials(os.path.join(STREAMS, "claude-recorded.jsonl"))))
 
-    def test_a_stream_is_frozen_only_once_its_process_has_ended(self):
+    def test_a_stream_is_frozen_only_once_its_process_has_ended_by_the_journal_never_by_its_file_time(self):
         with project() as p:
             path = window(p)
             journal = state.journal_path(p.runs, "S-1")
-            os.utime(path, (time.time() - 60, time.time() - 60))
+            os.utime(path, (time.time() + 3600, time.time() + 3600))      # a move or a copy sets it anew
             state.journal_append(p.runs, "S-1", "stage-start", "builder", "tool=claude")
             state.freeze_streams(journal)
             self.assertFalse(any(e["kind"] == "part" for e in state.journal_events(p.runs, "S-1")))
@@ -78,7 +78,6 @@ def delivered_story(p, story_id, days_ago):
 def material(p):
     """A story run before the record: a stream its runner ended, its hand-overs, the test gate's tsv."""
     path = window(p)
-    os.utime(path, (time.time() - 60, time.time() - 60))
     state.journal_append(p.runs, "S-1", "usage", "builder", "tool=claude", "input=1", "seconds=40")
     p.handover("S-1", "plan", "# Plan\n\n## Open assumptions\n- the order\n")
     p.handover("S-1", "judge", JUDGE)
@@ -150,6 +149,21 @@ class Prune(unittest.TestCase):
         self.assertEqual(state.keep_days({}), 7)
         self.assertEqual(state.keep_days({"evidence.keepDays": "30"}), 30)
         self.assertEqual(state.keep_days({"evidence.keepDays": "soon"}), 7)
+
+
+class OneWayToRead(unittest.TestCase):
+    """WP-150 D: after the migration the readers know the journal alone — no stream or hand-over parser in them."""
+
+    def test_the_readers_hold_no_stream_or_hand_over_parser(self):
+        import inspect
+        from dca_factory import gate
+        for reader in (gate.story_signals, cli.window_parts):
+            text = inspect.getsource(reader)
+            for parser in ("stream_parts", "stream_denials", "plan.md", "judge.md", "INVARIANT_BREAKS", "read_text"):
+                self.assertNotIn(parser, text, f"{reader.__name__} reads {parser}")
+        model = inspect.getsource(cli.story_model)
+        self.assertNotIn("stream_denials", model)
+        self.assertNotIn(".out", model)
 
 
 if __name__ == "__main__":

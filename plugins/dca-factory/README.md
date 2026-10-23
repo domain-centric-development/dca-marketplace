@@ -506,7 +506,7 @@ judge's findings by domain code — is a line there, written once when it was de
 the rest of `.dca-factory/` stays out of git (`/.dca-factory/*` and the lines that let
 `.dca-factory/evidence/<story>/journal.tsv` in), and the delivery's commit carries them — so the history travels
 with the repository: `factory.sh status --usage` without `--story` shows every story ever run, `status --story` its
-passes and costs. A delivered story's raw output and tree snapshots go `evidence.keepDays` days after its delivery
+passes and costs. A delivered story's raw output, tree snapshots and suite record go `evidence.keepDays` days after its delivery
 (7 by default); `factory.sh update` reads a story from before once and writes its record first. A `.gitignore` that
 names the folder in a line of its own other than `/.dca-factory` is left as it is. The journal is append-only, so
 the install marks it `merge=union` in `.gitattributes`: two branches that ran the same story merge

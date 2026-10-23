@@ -535,8 +535,10 @@ def migrate_record(runs, say):
     journal that is the record is left alone, so a second update writes nothing; a story whose process still runs
     is recorded by a later command."""
     done, partial = 0, []
-    for journal in sorted(glob.glob(os.path.join(evidence_dir(runs, "*"), "journal.tsv"))):
-        story_id = os.path.basename(os.path.dirname(journal))
+    ids = {os.path.basename(os.path.dirname(j)) for j in glob.glob(os.path.join(evidence_dir(runs, "*"), "journal.tsv"))}
+    ids |= {name for name in (os.listdir(runs) if os.path.isdir(runs) else [])
+            if os.path.isdir(os.path.join(runs, name)) and not name.startswith(".")}
+    for story_id in sorted(ids):
         with contextlib.suppress(OSError, GateError, ValueError):
             written = record_story(runs, story_id)
             if written is not None:

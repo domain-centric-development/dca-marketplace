@@ -135,7 +135,7 @@ the plan left open, each named rule's verdict and the judge's confirmed findings
 group of a kind is its record; a later gate run writes a new group. A fact no gate recorded reads as "not recorded"
 (`None` in `status --story --format json`'s `signals`), never as 0. `factory.sh update` reads every story from before
 once with today's parsers and writes its `record` line; after that the readers know the journal alone. A delivered
-story's raw streams (`*.out`) and tree snapshots (`tree-*.txt`) are deleted `evidence.keepDays` days (default 7) after
+story's raw streams (`*.out`), tree snapshots (`tree-*.txt`) and the runner's suite record (`suites.tsv`) are deleted `evidence.keepDays` days (default 7) after
 its delivery, once its `record` line is there; the journal, the gate reports, `story.diff` and the hand-overs stay.
 The journals are committed: the install's `.gitignore` keeps the pipeline's folder out and lets
 `<evidence>/<story>/journal.tsv` in, `merge=union` merges them, and the delivery's commit on the main line carries

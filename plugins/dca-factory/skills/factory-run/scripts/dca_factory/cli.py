@@ -1028,7 +1028,9 @@ def status_model(cwd, epics, runs, live=False):
         journal = os.path.isfile(os.path.join(evidence_dir(runs, story_id), "journal.tsv"))
         # the tests a gate of this story ran again alone and saw green: red in the whole suite, not the story's (WP-113)
         flaky = sorted(flaky_tests(runs, story_id))
+        signals = story_signals(runs, story_id, story_records(cwd, story_id, story.get("path")), story.get("body") or "")
         rows.append(dict(journal=journal, done=done, epic=story.get("epic", ""), story=story_id, flaky=flaky,
+                         signals=signals,
                          title=story.get("title", ""), mark=mark, created=created_of(story.get("front") or {}),
                          state=words, stage=stage or "—", passes=len(facts["passes"]) or 0,
                          started=facts["started"], delivered=facts["delivered"], seconds=facts["seconds"],
@@ -1074,7 +1076,7 @@ def status_model(cwd, epics, runs, live=False):
         epic["rows"].sort(key=lambda r: order.index(r["story"]))
         epic.update(delivered=sum(r["done"] for r in epic["rows"]), total=len(epic["rows"]),
                     tokens=sum(r["tokens"] for r in epic["rows"]), measured=sum(r["measured"] for r in epic["rows"]),
-                    seconds=sum(r["seconds"] for r in epic["rows"]))
+                    seconds=sum(r["seconds"] for r in epic["rows"]), signals=signal_totals(epic["rows"]))
     epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
     journeys = journey_hints(stories, epics)
     blank = dict(title="", goal="", metric="", discovery="", intent="", domain_contact="", created="", path="")
@@ -1087,6 +1089,7 @@ def status_model(cwd, epics, runs, live=False):
     for own in files:
         if own["epic"] not in named and own["folder"] not in named:
             epics.append(dict(epic=own["epic"], rows=[], delivered=0, total=0, tokens=0, measured=0, seconds=0,
+                              signals=signal_totals([]),
                               **{k: own[k] for k in blank}))
     empty = [e["epic"] for e in epics if not e["rows"]]
     # The backlog newest first (WP-146): the epics by `created:`, the stories within an epic by theirs — the factory
@@ -1162,7 +1165,58 @@ def status_model(cwd, epics, runs, live=False):
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
                 delivered=sum(r["done"] for r in rows), total=len(rows),
                 tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
-                seconds=sum(r["seconds"] for r in rows))
+                seconds=sum(r["seconds"] for r in rows), signals=signal_totals(rows))
+
+
+RULE_VERDICTS = ("red", "killed", "survived", "no-break", "unchecked")
+
+
+def signal_totals(rows):
+    """The signals of several stories summed (WP-150 E) — the figures the bench rates: the rules named and each
+    verdict, the kill rate (killed / named) and the guarded rate ((red + killed) / named) — None where no rule was
+    named —, questions, assumptions, what plans left open, the judges' findings by perspective and domain code, the
+    corrections by code. A story whose gate recorded no rules (one built before 0.88.0) is counted as not measured,
+    never as zero."""
+    total = dict(stories=len(rows), measured=0, not_measured=0, named=0, **{v: 0 for v in RULE_VERDICTS},
+                 asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0,
+                 findings={}, domain={}, corrections={})
+    for row in rows:
+        signals = row.get("signals") or {}
+        if signals.get("rules") is None:
+            total["not_measured"] += 1
+        else:
+            total["measured"] += 1
+            for verdict, n in signals["rules"].items():
+                total[verdict] = total.get(verdict, 0) + n
+                total["named"] += n
+        for key in ("asked", "answered", "assumptions_open", "assumptions_answered", "plan_open"):
+            total[key] += signals.get(key) or 0
+        for key in ("findings", "domain", "corrections"):
+            for name, n in (signals.get(key) or {}).items():
+                total[key][name] = total[key].get(name, 0) + n
+    named = total["named"]
+    total["kill_rate"] = round(total["killed"] / named, 2) if named else None
+    total["guarded_rate"] = round((total["red"] + total["killed"]) / named, 2) if named else None
+    total["line"] = signals_line(total)
+    return total
+
+
+def signals_line(totals):
+    """The figures in one line — `kill rate 0.04 · guarded 1.00 · domain findings 2 concept · 1 term · corrections
+    1 term` —, '' where nothing was measured or found."""
+    parts = []
+    if totals.get("named"):
+        parts.append(f"kill rate {totals['kill_rate']:.2f} · guarded {totals['guarded_rate']:.2f} "
+                     f"({totals['named']} rules named)")
+    elif totals.get("measured") is not None and totals.get("stories") and not totals.get("measured"):
+        parts.append("rules not measured")
+    if totals.get("domain"):
+        parts.append("domain findings " + " · ".join(f"{n} {c.replace('domain-', '', 1)}"
+                                                     for c, n in sorted(totals["domain"].items())))
+    if totals.get("corrections"):
+        parts.append("corrections " + " · ".join(f"{n} {c.replace('domain-', '', 1)}"
+                                                 for c, n in sorted(totals["corrections"].items())))
+    return " · ".join(parts)
 
 
 def front_text(value):
@@ -1701,6 +1755,11 @@ def backlog_text(model, colour, heading_line=True):
             if kind == "epic" and colour:
                 lines[index] = bold(lines[index], True)
         out += lines
+    figures = [(e["epic"] or "(no epic)", signals_line(e.get("signals") or {})) for e in model["epics"] if e["rows"]]
+    if model["rows"] and signals_line(model.get("signals") or {}):
+        out += section("Signals — " + signals_line(model["signals"]), colour)
+        width = max(len(name) for name, _l in figures)
+        out += [f"    {name.ljust(width)}   {line}" for name, line in figures if line]
     out += ["", "─" * 72] + next_text(model, colour)
     if model["extra"]:
         out += [""] + ["  " + line for line in model["extra"]]
