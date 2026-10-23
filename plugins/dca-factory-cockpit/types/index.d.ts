@@ -1,6 +1,34 @@
 
 export type Action = { text: string; skill: string; shell: string }
 
+// One story's signals as its gates recorded them in the journal (dca-factory 0.89.0): a fact no gate recorded is null —
+// "not recorded", never 0; `rules` is null for a story built before the rule check (0.88.0) — "not measured".
+export type Signals = {
+  asked: number
+  answered: number
+  assumptions_open: number
+  assumptions_answered: number
+  plan_open: number | null
+  rules: Record<string, number> | null
+  findings: Record<string, number> | null
+  domain: Record<string, number> | null
+  corrections: Record<string, number>
+}
+
+// The signals of several stories summed by the factory (dca-factory 0.89.0) — `line` is the figures in one line, as
+// every view prints them; '' where nothing was measured or found.
+export type SignalTotals = {
+  stories: number
+  measured: number
+  not_measured: number
+  named: number
+  kill_rate: number | null
+  guarded_rate: number | null
+  domain: Record<string, number>
+  corrections: Record<string, number>
+  line: string
+}
+
 // What `factory.sh status --format json --live` prints — the fields the cockpit reads.
 export type Row = {
   story: string
@@ -22,6 +50,7 @@ export type Row = {
   flaky?: string[]
   // when the story was written, `created:` in its front matter (dca-factory 0.87.0; '' without one)
   created?: string
+  signals?: Signals
 }
 
 export type FactoryStatus = {
@@ -44,6 +73,7 @@ export type FactoryStatus = {
     domain_contact?: string
     created?: string
     path?: string
+    signals?: SignalTotals
   }[]
   description?: DescriptionPart[]
   // what comes next in the schedule's order, and how many cannot yet (dca-factory 0.87.0)
@@ -74,6 +104,8 @@ export type FactoryStatus = {
   total: number
   tokens: number
   seconds: number
+  // the project's figures — kill rate, guarded rate, domain findings and corrections by code (dca-factory 0.89.0)
+  signals?: SignalTotals
 }
 
 // What `factory.sh decisions --format json` prints.
@@ -141,6 +173,8 @@ export type StoryView = {
   context: string
   criteria: number
   accepted_by: string
+  // dca-factory 0.89.0: what the gates recorded about the story — questions, assumptions, rules, findings
+  signals?: Signals
   passes: { label: string; start: string; end: string; seconds: number; tokens: number; stages: string[]; waited: number }[]
   stages: Record<string, { runs: number; seconds: number; tokens: number; cost: number; models: string[]; parts?: StagePart[]; denied?: number; denials?: Denial[] } & TokenClasses>
 }
@@ -224,7 +258,7 @@ export type Worker = {
 }
 
 // One status as `/factory-cockpit status` printed it: what the transcript's row draws, as it stood then.
-export type Glance = Pick<FactoryStatus, 'project' | 'running' | 'waiting' | 'next' | 'queue' | 'delivered' | 'total' | 'tokens'> & { at: string }
+export type Glance = Pick<FactoryStatus, 'project' | 'running' | 'waiting' | 'next' | 'queue' | 'delivered' | 'total' | 'tokens' | 'signals'> & { at: string }
 
 declare module 'claude-code' {
   interface PluginState {

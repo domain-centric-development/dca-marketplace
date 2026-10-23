@@ -288,10 +288,16 @@ const DETAIL_STATUS = {
   delivered_order: ['lend-book', 'shelve-book'],
   delivered: 2,
   total: 3,
-  epics: [{ ...STATUS.epics[0], intent: 'readers lose track of their books', domain_contact: 'the librarian', path: 'product/epics/books/epic.md', created: '2026-09-01T08:00:00Z' }],
+  epics: [{ ...STATUS.epics[0], intent: 'readers lose track of their books', domain_contact: 'the librarian', path: 'product/epics/books/epic.md', created: '2026-09-01T08:00:00Z',
+            signals: { line: 'kill rate 0.50 · guarded 1.00 (2 rules named)' } }],
+  // the project's figures, the factory's line (dca-factory 0.89.0)
+  signals: { stories: 3, measured: 2, not_measured: 1, named: 4, kill_rate: 0.25, guarded_rate: 1, domain: { 'domain-term': 1 }, corrections: {},
+             line: 'kill rate 0.25 · guarded 1.00 (4 rules named) · domain findings 1 term' },
 }
 const STORY_VIEW = {
   ...STORY,
+  signals: { asked: 2, answered: 1, assumptions_open: 0, assumptions_answered: 1, plan_open: null, rules: { red: 1, killed: 1 },
+             findings: { ddd: 1 }, domain: { 'domain-term': 1 }, corrections: {} },
   path: 'product/epics/books/add-book/story.md',
   description: 'As a reader I want to add a book, so that it stands on my shelf.',
   scenarios: [
@@ -354,6 +360,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /first delivery/ })).toBeUndefined()
     await pane.press({ key: 'view-pipeline' })
     expect(await pane.find({ text: /first delivery/ })).toBeDefined()
+    // what the gates recorded: a fact no gate recorded says so, never 0
+    expect(await pane.find({ text: '2 named — 1 killed · 1 red' })).toBeDefined()
+    expect(await pane.find({ text: '1 ddd · domain 1 term' })).toBeDefined()
+    expect(await pane.find({ text: 'not recorded' })).toBeDefined()
     await pane.press({ key: 'view-story' })
     await pane.press({ key: 'open-story' })
     expect(await pane.find({ text: 'add-book / story.md' })).toBeDefined()
@@ -365,6 +375,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'tab-delivered' })
     const shown = (await pane.findAll({ type: 'Button' })).map(one => one.key).filter(key => key === 'story-lend-book' || key === 'story-shelve-book')
     expect(shown).toEqual(['story-lend-book', 'story-shelve-book'])
+    // the project's figures above the list, each epic's in its row — a wide column, so only where the pane is wide
+    expect(await pane.find({ text: /kill rate 0\.25 · guarded 1\.00/ })).toBeDefined()
+    if (surface === 'terminal') expect(await pane.find({ text: /kill rate 0\.50/ })).toBeDefined()
   })
 }
 

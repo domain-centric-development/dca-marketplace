@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filledCells, duration, gateBy, isHistory, isRefusal, isSelfCheck, isShownProcess, moment, parseJournal, rounds, stagesOf, touchesFactory, waitingCount, waitPress, wrapWords } from '../hooks/parse'
+import { glanceText, signalFields, filledCells, duration, gateBy, isHistory, isRefusal, isSelfCheck, isShownProcess, moment, parseJournal, rounds, stagesOf, touchesFactory, waitingCount, waitPress, wrapWords } from '../hooks/parse'
 
 test('a factory command or skill refreshes the view, other calls do not', () => {
   expect(touchesFactory({ tool: 'Bash', command: 'bash .agents/factory/factory.sh run' } as { tool: string })).toBe(true)
@@ -122,4 +122,18 @@ test('a reviewer shows only for a perspective the profile asks for now; every ot
   expect(isShownProcess('review-dca', asked)).toBe(false)
   expect(isShownProcess('builder', asked)).toBe(true)
   expect(isShownProcess('review:dca', undefined)).toBe(true)
+})
+
+test('a story\'s signals read as the gates recorded them: not recorded and not measured, never a zero', () => {
+  const none = signalFields({ asked: 0, answered: 0, assumptions_open: 0, assumptions_answered: 0, plan_open: null, rules: null, findings: null, domain: null, corrections: {} })
+  expect(none.map(field => field.text)).toEqual(['0 asked, 0 answered', '0 open, 0 answered', 'not recorded', 'not measured', 'not recorded', 'none'])
+  const some = signalFields({ asked: 1, answered: 1, assumptions_open: 1, assumptions_answered: 0, plan_open: 2, rules: { survived: 1, killed: 2 },
+    findings: { 'clean-code': 1, ddd: 1 }, domain: { 'domain-concept': 1 }, corrections: { 'domain-term': 1 } })
+  expect(some.map(field => field.text)).toEqual(['1 asked, 1 answered', '1 open, 0 answered', '2', '3 named — 2 killed · 1 survived', '1 clean-code · 1 ddd · domain 1 concept', '1 term'])
+})
+
+test('the printed status carries the project\'s figures when the factory gives them', () => {
+  const base = { project: 'shop', delivered: 1, total: 2, tokens: 0, waiting: [], running: [], next: { text: 'run it' } }
+  expect(glanceText({ ...base, signals: { line: 'kill rate 0.10 · guarded 0.90 (10 rules named)' } } as never, '2026-10-23T10:00:00Z')).toContain('- signals: kill rate 0.10')
+  expect(glanceText(base as never, '2026-10-23T10:00:00Z')).not.toContain('signals')
 })

@@ -3,7 +3,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 
 import type { Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, Glance, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, outcomeCell, type Cell } from './components'
-import { appendLines, clock, createLatch, day, exitWord, factoryNote, gateBy, glanceId, glanceText, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, seenOf, sinceSeen, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish, type Seen } from './parse'
+import { appendLines, clock, createLatch, day, exitWord, factoryNote, gateBy, glanceId, glanceText, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, seenOf, signalFields, sinceSeen, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish, type Seen } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
 // It shows what factory.sh and the project's files hold and decides nothing; a press either sends the
@@ -499,8 +499,8 @@ export const register: Register = on => {
       const now = await read($, cockpit)
       if (!now) return { text: 'No factory in this project (.agents/factory/factory.sh is missing) — /factory-setup installs it.' }
       const at = new Date(now.updatedAt).toISOString()
-      const { project, running, waiting, next, queue, delivered, total, tokens } = now.status
-      await update($, glances, all => ({ ...all, [at]: { at, project, running, waiting, next, queue, delivered, total, tokens } }))
+      const { project, running, waiting, next, queue, delivered, total, tokens, signals } = now.status
+      await update($, glances, all => ({ ...all, [at]: { at, project, running, waiting, next, queue, delivered, total, tokens, signals } }))
       return { text: glanceText(now.status, at) }
     }
     // with a cockpit read before, the pane opens on it at once and a fresh reading follows; without one, the
@@ -597,7 +597,8 @@ async function answerTool($: EngineInterface, input: ToolInput) {
           waiting: value.waiting,
           next: value.next,
           queue: value.queue,
-          epics: value.epics.map(epic => ({ epic: epic.epic, title: epic.title, delivered: epic.delivered, total: epic.total })),
+          epics: value.epics.map(epic => ({ epic: epic.epic, title: epic.title, delivered: epic.delivered, total: epic.total, signals: epic.signals?.line })),
+          signals: value.signals,
           journeys: value.journeys,
           findings: value.findings?.length ?? 0,
           claims: value.claims?.length ?? 0,
@@ -691,6 +692,7 @@ async function glanceView($: EngineInterface, e: RenderInput<'CommandOutput'>, g
           <Text color={C.text}>{glance.next.text}</Text>
         </Box>
         {ready.length > 0 && <Text color={C.muted}>{`ready: ${ready.slice(0, 5).join(' · ')}${ready.length > 5 ? ` · ${ready.length - 5} more` : ''}`}</Text>}
+        {glance.signals?.line ? <Text color={C.muted}>{`signals: ${glance.signals.line}`}</Text> : null}
       </Box>
     </Box>
   )
@@ -1025,6 +1027,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ],
           2,
         ),
+        // what the gates recorded about the story (dca-factory 0.89.0) — absent from an older pipeline
+        ...(view?.signals ? [ui.section('Signals', 'what the gates recorded'), ui.fields(signalFields(view.signals), 2)] : []),
         ui.section('Pipeline'),
         ui.chips(stagesOf(events).filter(run => shownProcess(run.stage)), at),
         ui.section('Time per stage', "the factory's own numbers"),
@@ -1135,7 +1139,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           (now.outputs[open.id] ?? []).filter(shownProcess).map(process => [
             ui.open(`output-${process}`, process, () => void openOutput($, now.root, open.id, process, open)),
           ]),
-          'No stage has run yet.',
+          // the raw streams go some days after the delivery (dca-factory 0.89.0); the journal keeps the record
+          ((pruned) => (pruned ? `Cleared ${pruned.fields.days ?? '?'} days after the delivery — the journal keeps the record.` : 'No stage has run yet.'))(
+            events.findLast(event => event.kind === 'pruned'),
+          ),
         ),
         ui.section('Decisions'),
         recordTable(records, { ...open, pane }),
@@ -1499,6 +1506,8 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   return page(
     [
       ui.section('Delivered', `${delivered.length} stories · ${fmt.time(delivered.reduce((sum, row) => sum + row.seconds, 0))} worked`),
+      // the project's figures, the factory's own line — kill rate, guarded rate, domain findings, corrections
+      ...(status.signals?.line ? [ui.fields([{ label: 'signals', text: status.signals.line }], 1)] : []),
       ui.table(
         [COL.story(idWidth), COL.delivered, COL.worked, COL.tokens, COL.cost, COL.epic],
         delivered.map(row => [
@@ -1513,11 +1522,11 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       ),
       ui.section('Epics'),
       ui.table(
-        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }, COL.act],
+        [COL.mark, { name: 'epic', width: 26 }, { name: 'delivered', width: 9, isNumber: true }, COL.outcome, { name: 'journey', width: 20, isWide: true }, { name: 'signals', width: 30, isWide: true }, COL.act],
         status.epics.map(epic => {
           const unguarded = status.journeys.find(hint => hint.epic === epic.epic)
           const cells = epicCells(epic, unguarded)
-          return [cells.mark, cells.title, cells.count, cells.outcome, cells.journey, unguarded ? guardCell(unguarded) : {}]
+          return [cells.mark, cells.title, cells.count, cells.outcome, cells.journey, { text: epic.signals?.line ?? '', color: C.muted }, unguarded ? guardCell(unguarded) : {}]
         }),
       ),
     ],

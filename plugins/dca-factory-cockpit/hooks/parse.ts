@@ -368,7 +368,7 @@ export function glanceId(text: string): string | null {
 
 // The status `/factory-cockpit status` prints: what the model reads, and the transcript shows where nothing draws it.
 export function glanceText(
-  status: Told & { project: string; delivered: number; total: number; tokens: number; queue?: { ready: string[] } },
+  status: Told & { project: string; delivered: number; total: number; tokens: number; queue?: { ready: string[] }; signals?: { line: string } },
   at: string,
 ): string {
   const ready = status.queue?.ready ?? []
@@ -376,5 +376,44 @@ export function glanceText(
     `${GLANCE_HEAD}${at} — ${status.project}: ${status.delivered} of ${status.total} stories delivered${status.tokens > 0 ? ` · ${tokens(status.tokens)} tokens` : ''}`,
     ...factoryNote(status).split('\n').slice(1),
     ...(ready.length > 0 ? [`- ready: ${ready.slice(0, 5).join(', ')}${ready.length > 5 ? `, … ${ready.length - 5} more` : ''}`] : []),
+    ...(status.signals?.line ? [`- signals: ${status.signals.line}`] : []),
   ].join('\n')
+}
+
+// One story's signals as the pane lists them — what the gates recorded; "not recorded" and "not measured" where a gate
+// recorded nothing, never a zero that was not counted.
+export function signalFields(signals: {
+  asked: number
+  answered: number
+  assumptions_open: number
+  assumptions_answered: number
+  plan_open: number | null
+  rules: Record<string, number> | null
+  findings: Record<string, number> | null
+  domain: Record<string, number> | null
+  corrections: Record<string, number>
+}): { label: string; text: string }[] {
+  const counted = (map: Record<string, number>, strip = '') =>
+    Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, n]) => `${n} ${name.replace(strip, '')}`)
+      .join(' · ')
+  const rules = signals.rules
+  const named = rules ? Object.values(rules).reduce((sum, n) => sum + n, 0) : 0
+  return [
+    { label: 'questions', text: `${signals.asked} asked, ${signals.answered} answered` },
+    { label: 'assumptions', text: `${signals.assumptions_open} open, ${signals.assumptions_answered} answered` },
+    { label: 'plan left open', text: signals.plan_open === null ? 'not recorded' : String(signals.plan_open) },
+    { label: 'rules', text: rules === null ? 'not measured' : named === 0 ? 'none named' : `${named} named — ${counted(rules)}` },
+    {
+      label: 'findings',
+      text:
+        signals.findings === null
+          ? 'not recorded'
+          : Object.keys(signals.findings).length === 0
+            ? 'none confirmed'
+            : counted(signals.findings) + (signals.domain && Object.keys(signals.domain).length > 0 ? ` · domain ${counted(signals.domain, 'domain-')}` : ''),
+    },
+    { label: 'corrections', text: Object.keys(signals.corrections).length === 0 ? 'none' : counted(signals.corrections, 'domain-') },
+  ]
 }

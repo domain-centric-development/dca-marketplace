@@ -15,7 +15,7 @@ factory works the same without it, in Claude Code, Codex or OpenCode.
 | 2 Backlog | every epic — also before its first story — newest first, with goal, outcome event; an epic opens with its intent, goal, outcome, domain contact, its own text and its stories with state, passes, time, tokens, cost, newest first (✎ open epic.md) | `/factory-backlog <words>`, `stories <epic>` (✦ suggest stories: Claude drafts them as `status: draft`), `release <story> …`, `/factory-run <wish>` |
 | 3 Run | the worker, the running stories with their stage, since when and the stage's last activity; a shared builder named with its stage (`builder · test`); the output of the worker started here, or else what the running stage reads, edits and runs (`factory.sh follow`) — whoever started it | starts `factory.sh run` / `run --watch` as a child of the session, stops it |
 | 4 Decide | open questions and acceptances, answered records as Markdown; an open record with its options as choices; a story waiting for its merge, with what to do; other factories' claims — who, how long, a stale or orphaned one or an id collision with its release command; the judge's open findings, each in plain words first, then who saw it, the reviewer's defect and the fix | `/factory-decisions <story>`, `/factory-decisions <story> <record>: answer <option \| your words>` (✦ one button per option, the recommended one marked; accept or correct an acceptance); a finding opens its `findings.md` or goes to `/factory-backlog` (✦ to backlog — the skill decides what it becomes). Taking a claim away stays a command for a terminal — no button |
-| 5 Delivered | delivered stories, the newest delivery first, epics with their outcome events, unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
+| 5 Delivered | the project's figures — kill rate, guarded rate, domain findings and corrections by code, the factory's own line —, delivered stories, the newest delivery first, epics with their outcome events, their figures and unguarded journeys | `/factory-verify <story>`, `/factory-backlog journey <epic>` (✦ add guard beside an unguarded epic, also under Journeys in 2 Backlog) |
 
 A story opens with a short head — its title, its state and the one line the factory says about it (`situation`:
 what runs, what waits, why it is superseded, when it was delivered) — and two views beside each other, `s` Story and
@@ -23,9 +23,12 @@ what runs, what waits, why it is superseded, when it was delivered) — and two 
 person, the story before it starts and once it is done or set aside), a press switches. Story is every section of
 its `story.md` in the factory's order — why it is not built framed first, then its own words, its criteria as
 compact scenarios (the rule each serves, its title, its Given / When / Then) where they stand, its changed
-expectations, assumptions and notes — and a button that opens its `story.md`. Pipeline is the factory's numbers per stage — a shared builder's and verifier's stages beneath
+expectations, assumptions and notes — and a button that opens its `story.md`. Pipeline opens with the story's signals —
+questions, assumptions, what the plan left open, its rules' verdicts, the judge's findings and corrections by code, as
+the gates recorded them in the journal ("not recorded" or "not measured" where none did, never 0) —, then the factory's numbers per stage — a shared builder's and verifier's stages beneath
 them, with their share of the cost, their tokens by class (input, output, cache write, cache read), and the calls each was denied (a headless stage has nobody to grant one) — its passes, its history by day, its hand-overs, the output of every process it ran
-(what each read, edited and ran, through `factory.sh follow --process`) and its decision records. A reviewer
+(what each read, edited and ran, through `factory.sh follow --process`; "cleared" once the factory removed the raw
+streams some days after the delivery — the journal keeps the record) and its decision records. A reviewer
 appears there only for a perspective the profile asks for now — the status names them (`perspectives`); one an
 earlier profile named, such as an old `review:dca`, stays out.
 
@@ -61,10 +64,10 @@ the record — the band writes nothing.
   command carries none.
 - **A tool for Claude.** `factory_status` (`mcp__dca-factory-cockpit__factory_status`) answers with `factory.sh`'s own
   JSON, read-only and without a shell: the status cut to what runs, waits and comes next, the queue, the epics and the
-  totals; `full: true` the whole status; `story` or `epic` one item's view; `decisions: true` the records.
+  totals and the project's figures (`signals`); `full: true` the whole status; `story` or `epic` one item's view; `decisions: true` the records.
 - **`/factory-cockpit status`** prints where the factory stands into the transcript — the text Claude reads, drawn
-  as a small framed panel in the cockpit's palette with the same items and presses as the band, as it stood when it
-  was read. A status from a resumed session keeps the plain text.
+  as a small framed panel in the cockpit's palette with the same items and presses as the band and the project's
+  figures, as it stood when it was read. A status from a resumed session keeps the plain text.
 - **Since the last session.** The cockpit keeps what a session saw per project (`$.store`); the next session's first
   reading says in a toast what moved meanwhile: `factory since 22.10.2026 17:05 UTC: 3 delivered (…) · 1 new for you (…)`.
 
