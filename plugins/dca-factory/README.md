@@ -500,12 +500,15 @@ starts fresh and reads the skill, the story and its predecessor's file again.
   (`~/.claude/projects/<project>/<session>.jsonl`, `~/.codex/sessions/<date>/rollout-*.jsonl`).
 
 **History.** Every number lives in the project: `.dca-factory/evidence/<story>/journal.tsv`, next to the gate
-reports and each invocation's raw output (`*.out`). The install keeps `.dca-factory/` out of git
-(`/.dca-factory` in `.gitignore`): nothing reads it from there, and a clone still knows what is delivered
-(the story says so) and what was decided (the records beside it). Committing it is the project's choice: a
-`.gitignore` that names `.dca-factory` itself — `/.dca-factory/runs/` to keep the evidence, say — is left as
-it is, and the history travels with the repository — `factory.sh status --usage` without `--story` shows
-every story ever run, `status --story` its passes and costs. The journal is append-only, so
+reports and each invocation's raw output (`*.out`). The journal is the story's record: every fact the views and
+the signals read — a shared window's parts, the denied calls, what the plan left open, each rule's verdict, the
+judge's findings by domain code — is a line there, written once when it was decided. The journals are committed;
+the rest of `.dca-factory/` stays out of git (`/.dca-factory/*` and the lines that let
+`.dca-factory/evidence/<story>/journal.tsv` in), and the delivery's commit carries them — so the history travels
+with the repository: `factory.sh status --usage` without `--story` shows every story ever run, `status --story` its
+passes and costs. A delivered story's raw output and tree snapshots go `evidence.keepDays` days after its delivery
+(7 by default); `factory.sh update` reads a story from before once and writes its record first. A `.gitignore` that
+names the folder in a line of its own other than `/.dca-factory` is left as it is. The journal is append-only, so
 the install marks it `merge=union` in `.gitattributes`: two branches that ran the same story merge
 without a conflict, a window read on one side and pending on the other counts once, and "running" is
 judged by time, not by line order. An in-session stage first

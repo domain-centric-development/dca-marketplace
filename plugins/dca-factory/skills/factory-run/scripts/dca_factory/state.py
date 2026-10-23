@@ -18,15 +18,15 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ADOPT_ORDER, CRITERION, decision_options, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
+    ADOPT_ORDER, confirmed_defects, CRITERION, decision_options, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
     EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest, find_story,
-    GateError, git, git_blob, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, order_for, layout_hint, plain, MAX_ROUNDS, needs_human_ids,
+    GateError, git, git_blob, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, order_for, layout_hint, plain, MAX_ROUNDS, needs_human_ids, NOTHING,
     OWNED_DIGEST, place, PLACES_REL, POST_GATED, PROFILE_FILE, read_front_matter, read_profile, read_text, records_of,
     resolve_profile, resume_stage, section_of, SHARED_WINDOWS, shown, split_front, STAGE_FILES, STAGE_ORDER, STATE_KEYS, story_digest,
     STORY_BRANCH, STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
 from .reports import (
     current_session, log_kind, parse_time, session_reader, PROCESS_RANKS, session_usage,
-    session_usage_allowed, tokens_of, USAGE_FIELDS, usage_fields, WINDOWS)
+    session_usage_allowed, stream_denials, stream_parts, tokens_of, USAGE_FIELDS, usage_fields, WINDOWS)
 
 
 def journal_path(runs, story_id):
@@ -409,10 +409,12 @@ def tree_snapshot(cwd):
     prefix = subprocess.run(["git", "rev-parse", "--show-prefix"], cwd=cwd, capture_output=True,
                             text=True).stdout.strip()
     local = lambda path: path[len(prefix):] if prefix and path.startswith(prefix) else path
+    # the story journals are committed (WP-150), and the pipeline appends to them all the time: no one's change
+    protocol = evidence_rel().rstrip("/") + "/"
     entries = iter(listing.stdout.decode("utf-8", "replace").split("\0"))
     for entry in entries:
         code, path = entry[:2], local(entry[3:])
-        if not path:
+        if not path or path.startswith(protocol):
             continue
         if code[0] in "RC":
             origin = local(next(entries, ""))       # -z writes a rename's source as the next entry
@@ -1153,6 +1155,296 @@ def freeze_all(runs):
     for journal in glob.glob(os.path.join(evidence_dir(runs, "*"), "journal.tsv")):
         with contextlib.suppress(OSError, GateError, ValueError):
             freeze_windows(journal)
+        with contextlib.suppress(OSError, GateError, ValueError):
+            freeze_streams(journal)
+    with contextlib.suppress(OSError, GateError, ValueError):
+        prune_raw(runs, place("epics"))
+
+
+# --- what a process's stream says, written once (WP-150 A) ----------------------------------------------------
+# A tool process's raw stream (`<process>.<HHMMSS>.out` beside the journal) holds two facts no other file has: the
+# parts of a shared window — each stage it carried, its time and tokens — and the calls the tool denied. Once the
+# process has ended both are journal lines, so the views read the journal and the stream may be pruned:
+#   part <stage>     process=<window> stream=<file> seconds= input= cache_read= cache_write= output= [cost=]
+#   denied <stage>   process=<process> stream=<file> tool=<tool> call=<the call cut to a line>   (`-` outside a part)
+#   stream <file>    process=<process> parts=<n> denied=<n>       — the stream is frozen; never read for it again
+STREAM_FROZEN = "stream"
+
+
+def stream_process(name):
+    """The process a stream belongs to: `builder.101500.out` and `builder.101500-limit1.out` are `builder`'s."""
+    return os.path.basename(name).split(".", 1)[0]
+
+
+def freeze_stream(journal, path):
+    """Append the parts and the denied calls of one ended process's stream to the journal, once: a stream whose
+    `stream` line is there is left alone. The cost a part gets is the process's split by the parts' weight — an
+    estimate, as the view shows it; a process whose stream reports no cost gives its parts none."""
+    name = os.path.basename(path)
+    if any(e["kind"] == STREAM_FROZEN and e["name"] == name for e in read_events(journal)):
+        return False
+    process = stream_process(name)
+    parts, cost = stream_parts(path)
+    weight = sum(p["weight"] for p in parts)
+    for part in parts:
+        seconds = max((part["end"] - part["start"]).total_seconds(), 0) if part["start"] and part["end"] else 0
+        share = [] if cost is None or not weight else [f"cost={cost * part['weight'] / weight:.6f}"]
+        append_event(journal, "part", part["stage"], f"process={process}", f"stream={name}", f"seconds={seconds:g}",
+                     *(f"{field}={part[field]}" for field in USAGE_FIELDS), *share)
+    denials = stream_denials(path)
+    for denial in denials:
+        append_event(journal, "denied", denial["stage"] or "-", f"process={process}", f"stream={name}",
+                     f"tool={denial['tool']}", f"call={denial['command']}")
+    append_event(journal, STREAM_FROZEN, name, f"process={process}", f"parts={len(parts)}", f"denied={len(denials)}")
+    return True
+
+
+def freeze_streams(journal):
+    """`freeze_stream` for every stream beside the journal whose process has ended — the journal holds a `usage` or
+    `stage-end` line for that process written after the stream's last write. The runner freezes its stream right
+    after the usage line; this catches one a stopped runner left behind."""
+    folder = os.path.dirname(journal)
+    events = read_events(journal)
+    frozen = {e["name"] for e in events if e["kind"] == STREAM_FROZEN}
+    for path in sorted(glob.glob(os.path.join(folder, "*.out"))):
+        name = os.path.basename(path)
+        if name in frozen:
+            continue
+        process, written = stream_process(name), os.path.getmtime(path)
+        ended = (e for e in events if e["kind"] in ("usage", "stage-end") and e["name"] == process)
+        if any((parse_time(e["at"]) or datetime.min.replace(tzinfo=timezone.utc)).timestamp() >= written - 2
+               for e in ended):
+            freeze_stream(journal, path)
+
+
+def journal_parts(events, process):
+    """The `part` lines of one shared process, summed per stage in the order the stages first ran:
+    [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (None where a run had none), denied}]."""
+    total = {}
+    for event in events:
+        if event["kind"] != "part" or event["fields"].get("process") != process:
+            continue
+        f = event["fields"]
+        entry = total.setdefault(event["name"], dict(stage=event["name"], runs=0, seconds=0.0, input=0, cache_read=0,
+                                                     cache_write=0, output=0, cost=0.0, denied=0))
+        entry["runs"] += 1
+        entry["seconds"] += float(f.get("seconds") or 0)
+        for field in USAGE_FIELDS:
+            entry[field] += int(f.get(field) or 0)
+        if entry["cost"] is not None and "cost" in f:
+            entry["cost"] += float(f["cost"])
+        else:
+            entry["cost"] = None
+    for event in events:
+        if event["kind"] == "denied" and event["fields"].get("process") == process and event["name"] in total:
+            total[event["name"]]["denied"] += 1
+    for entry in total.values():
+        entry["tokens"] = sum(entry[f] for f in USAGE_FIELDS)
+    return list(total.values())
+
+
+# --- what a gate decided, written once (WP-150 B) --------------------------------------------------------------
+# A gate that decides a signal writes it as a group: one `signal <what> run=<id> …` line, then one line per item
+# with the same `run=` — `rule <selector>` at the test gate, `finding <perspective>` at the judge gate. A later gate
+# run writes a new group; the last group is the record.
+def journal_signal(runs, story_id, what, items=(), **fields):
+    """One group: `signal <what>` with `fields`, then `(kind, name, {field: value})` per item, under one run id."""
+    run = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    journal_append(runs, story_id, "signal", what, f"run={run}", *(f"{k}={v}" for k, v in fields.items()))
+    for kind, name, values in items:
+        journal_append(runs, story_id, kind, name or "-", f"run={run}", *(f"{k}={v}" for k, v in values.items()))
+
+
+def latest_signal(events, what, kind=None):
+    """The last group of a signal: (its `signal` line's fields, [(name, fields)] of its `kind` lines), or None."""
+    head = next((e for e in reversed(events) if e["kind"] == "signal" and e["name"] == what), None)
+    if head is None:
+        return None
+    run = head["fields"].get("run")
+    items = [("" if e["name"] == "-" else e["name"], e["fields"]) for e in events
+             if kind and e["kind"] == kind and e["fields"].get("run") == run]
+    return head["fields"], items
+
+
+#: The code a judge's confirmed defect about the domain model starts its Defect cell with (WP-148 C).
+DOMAIN_CODE = re.compile(r"^\s*`?(domain-(?:concept|boundary|invariant|term))`?\s*:", re.I)
+
+
+def plan_left_open(plan_text):
+    """The lines a plan's `## Open assumptions` leaves open — a `none` line is none."""
+    return [l for l in (section_of(plan_text, "open assumptions") or []) if l.strip().startswith(("-", "*"))
+            and l.strip()[1:].strip().lower().rstrip(".") not in NOTHING]
+
+
+def record_judge_signal(runs, story_id, judge_text):
+    """The judge's confirmed defects as the journal's `signal judge` group (WP-150 B) — once per judge.md: a group
+    for the same text is not written again."""
+    sha = hashlib.sha256(judge_text.encode("utf-8")).hexdigest()[:16]
+    last = latest_signal(journal_events(runs, story_id), "judge")
+    if last and last[0].get("sha") == sha:
+        return
+    rows = confirmed_defects(judge_text)
+    items = []
+    for perspective, where, severity, defect, _fix, _plain in rows:
+        code = DOMAIN_CODE.match(defect or "")
+        items.append(("finding", perspective.lower(), dict(severity=severity.lower(), file=where,
+                                                             code=code.group(1).lower() if code else "")))
+    journal_signal(runs, story_id, "judge", items, sha=sha, findings=len(rows))
+
+
+#: Every named rule's unit test at the test gate (WP-148 A): `<element>\t<rules>\t<selector>\t<verdict>` — `red`
+#: seen red before the build (the rule is new), `killed` red under its break, `survived` green under it, `no-break`
+#: green with no break that applies, `unchecked` no run gave a verdict. The bench computes the rate; the gate keeps
+#: the facts.
+INVARIANT_BREAKS = "invariant-breaks.tsv"
+
+
+# --- the record complete (WP-150 D) -----------------------------------------------------------------------------
+#: The version of what a journal holds as the story's record: a `record <version>` line says the facts that stood
+#: in streams and hand-overs are journal lines now — written live from this version on, read once from the files for
+#: a story from before. `unknown=` names the facts whose material was gone; the views say "not recorded" for them.
+RECORD_VERSION = "1"
+
+
+def recorded(events):
+    """The `record` line's fields, or None for a journal that is not the record yet."""
+    return next((e["fields"] for e in events if e["kind"] == "record"), None)
+
+
+def record_story(runs, story_id):
+    """Make a story's journal its record, once: freeze every ended stream, write the signals no gate wrote from the
+    hand-overs that are still there, then the `record` line. None while a stream's process still runs (the story
+    is recorded on a later call), or when the journal is the record already; the `record` line's fields otherwise."""
+    journal = journal_path(runs, story_id)
+    if not os.path.isfile(journal) or recorded(read_events(journal)) is not None:
+        return None
+    freeze_streams(journal)
+    events = read_events(journal)
+    frozen = {e["name"] for e in events if e["kind"] == STREAM_FROZEN}
+    folder = evidence_dir(runs, story_id)
+    if any(os.path.basename(p) not in frozen for p in glob.glob(os.path.join(folder, "*.out"))):
+        return None
+    unknown = []
+    if latest_signal(events, "plan") is None:
+        plan = os.path.join(runs, story_id, "plan.md")
+        if os.path.isfile(plan):
+            journal_signal(runs, story_id, "plan", open=len(plan_left_open(read_text(plan))))
+        elif any(e["kind"] == "gate" and e["name"] == "plan" and e["fields"].get("exit") == "0" for e in events):
+            unknown.append("plan")
+    if latest_signal(events, "rules") is None:
+        tsv = os.path.join(folder, INVARIANT_BREAKS)
+        rows = [l.split("\t") for l in read_text(tsv).splitlines()] if os.path.isfile(tsv) else []
+        rows = [r for r in rows if len(r) == 4]
+        if rows:
+            journal_signal(runs, story_id, "rules", [("rule", r[2], dict(element=r[0], rules=r[1], verdict=r[3]))
+                                                     for r in rows],
+                           named=sum(len([n for n in r[1].split(",") if n]) for r in rows))
+    if latest_signal(events, "judge") is None:
+        judge = os.path.join(runs, story_id, "judge.md")
+        if os.path.isfile(judge) and verdict_in(read_text(judge)) == "pass":
+            record_judge_signal(runs, story_id, read_text(judge))
+        elif any(e["kind"] == "stage-start" and e["name"] in ("judge", "verifier") for e in events):
+            unknown.append("judge")
+    if not frozen and any(e["kind"] == "usage" and "seconds" in e["fields"] for e in events):
+        unknown.append("streams")             # the runner ran it, and no stream of it is left
+    fields = [f"unknown={','.join(unknown)}"] if unknown else []
+    append_event(journal, "record", RECORD_VERSION, *fields)
+    return dict(unknown=",".join(unknown)) if unknown else {}
+
+
+# --- what only a run needs goes (WP-150 C) -----------------------------------------------------------------------
+KEEP_DAYS = 7
+PRUNED = "pruned"
+
+
+def keep_days(profile):
+    """`evidence.keepDays` from the profile — a whole number of days, 7 where it is missing or no number."""
+    value = str(profile.get("evidence.keepDays") or "").strip()
+    return int(value) if value.isdigit() else KEEP_DAYS
+
+
+def raw_material(folder):
+    """A story's raw streams and tree snapshots — read only while it runs and right after."""
+    return sorted(glob.glob(os.path.join(folder, "*.out")) + glob.glob(os.path.join(folder, "tree-*.txt")))
+
+
+def prune_raw(runs, epics, days=None, now=None):
+    """Delete the streams and snapshots of every story delivered more than `days` ago (the profile's
+    `evidence.keepDays`) once its journal is its record — `record_story` first, so nothing goes unread — and say
+    so in a `pruned` line. The journal, the gate reports, story.diff and the hand-overs stay. A story that is not
+    delivered — running, waiting, reopened — is never touched. [(story, files removed)]."""
+    if days is None:
+        days = keep_days(read_profile(resolve_profile(None, os.getcwd())))
+    limit = (now or time.time()) - days * 86400
+    pruned = []
+    candidates = [j for j in sorted(glob.glob(os.path.join(evidence_dir(runs, "*"), JOURNAL)))
+                  if raw_material(os.path.dirname(j))]
+    if not candidates:
+        return pruned
+    stories = {}
+    for path in story_files(epics):
+        stories.setdefault(story_id_of(path), path)
+        stories.setdefault(os.path.basename(story_folder(path)), path)
+    for journal in candidates:
+        folder = os.path.dirname(journal)
+        raw = raw_material(folder)
+        story_id = os.path.basename(folder)
+        path = stories.get(story_id)
+        if not path:
+            continue
+        front, _body = read_front_matter(path)
+        when = parse_time(delivered_on(front)) if is_delivered(front) else None
+        if when is None or when.timestamp() > limit:
+            continue
+        record_story(runs, story_id)
+        if recorded(read_events(journal)) is None:
+            continue
+        for name in raw:
+            os.remove(name)
+        append_event(journal, PRUNED, "-", f"files={len(raw)}", f"days={days}")
+        pruned.append((story_id, len(raw)))
+    return pruned
+
+
+# --- the journal is committed (WP-150, the user's decision 2) ------------------------------------------------------
+def journal_ignore_lines(evidence):
+    """The .gitignore lines that keep the pipeline's protocol out of git and every story's journal in: git does not
+    look into a folder it ignores, so the folders on the way are let in and their contents ignored again."""
+    top = evidence.strip("/").split("/")[0]
+    lines, path = [f"/{top}/*"], top
+    for part in evidence.strip("/").split("/")[1:]:
+        path += "/" + part
+        lines += [f"!/{path}/", f"/{path}/*"]
+    return lines + [f"!/{path}/*/", f"/{path}/*/*", f"!/{path}/*/journal.tsv"]
+
+
+def ignore_journals_in(cwd, evidence):
+    """Rewrite the project's ignore of the pipeline's folder so the story journals are committed: the line that
+    ignores the whole folder becomes the lines of `journal_ignore_lines`. A .gitignore that holds them already, or
+    names the folder in no line of its own, is left as it is. True when the file changed."""
+    path = os.path.join(cwd, ".gitignore")
+    if not os.path.isfile(path):
+        return False
+    text = read_text(path)
+    lines = text.splitlines()
+    wanted = journal_ignore_lines(evidence)
+    if wanted[-1] in lines:
+        return False
+    top = evidence.strip("/").split("/")[0]
+    whole = [i for i, l in enumerate(lines) if l.strip().rstrip("/") in (f"/{top}", top)]
+    if not whole:
+        return False
+    lines[whole[0]:whole[0] + 1] = wanted
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        handle.write("\n".join(lines) + "\n")
+    return True
+
+
+def journal_denials(events, process):
+    """[{stage, tool, command}] — the calls the tool denied one process, from the `denied` lines in their order."""
+    return [dict(stage="" if e["name"] == "-" else e["name"], tool=e["fields"].get("tool", ""),
+                 command=e["fields"].get("call", ""))
+            for e in events if e["kind"] == "denied" and e["fields"].get("process") == process]
 
 
 def window_logs(fields):

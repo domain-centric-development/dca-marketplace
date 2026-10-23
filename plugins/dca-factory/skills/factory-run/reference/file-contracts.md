@@ -120,6 +120,26 @@ nothing rewrites it. A line without `seq=` takes its position in the file.
 | `rounds-reset` | `-` | `by=--from` | the runner, on `run --from` |
 | `pipeline-changed` | the stage before whose gate the installed pipeline differed | — | the runner |
 | `owned-confirmed` | the parts a person confirmed, comma-separated | — | `--owned-confirm` |
+| `part` | a stage a shared process carried | `process=<window>`, `stream=<file>`, `seconds=`, `input=`, `cache_read=`, `cache_write=`, `output=`; `cost=` — the process's cost split by the parts' weight, an estimate — where the stream reports one | the runner after the process's `usage` line; `freeze_all` for a stream a stopped runner left |
+| `denied` | the stage the call fell in, `-` outside one | `process=`, `stream=`, `tool=`, `call=` (the call cut to a line) | as `part` |
+| `stream` | the stream's file name | `process=`, `parts=<n>`, `denied=<n>` — the stream is frozen and never read for the record again | as `part` |
+| `signal` | `plan`, `rules` or `judge` | `run=<id>` shared with its items; `open=<n>` (what the plan's `## Open assumptions` leaves open) for `plan`; `named=<n>` for `rules`; `sha=` of judge.md and `findings=<n>` for `judge` | the plan gate's pass; the test gate's rule check; the document gate when it reads a judge's `pass` (once per judge.md) |
+| `rule` | the rule's test selector | `run=`, `element=`, `rules=<numbers>`, `verdict=red\|killed\|survived\|no-break\|unchecked` | the test gate, with its `signal rules` |
+| `finding` | the perspective of a confirmed defect | `run=`, `severity=`, `file=`, `code=domain-concept\|domain-boundary\|domain-invariant\|domain-term` or empty | the document gate, with its `signal judge` |
+| `record` | the record's version (`1`) | `unknown=plan,judge,streams` for the facts whose material was gone | `factory.sh update` once per story (`migrate_record`), the prune before it deletes |
+| `pruned` | `-` | `files=<n>`, `days=<n>` | the prune, on every writing command |
+
+**The journal is the story's record** (WP-150). Every fact the views and the signals read about a story is a line
+here, written once when it is decided: a shared window's parts and the denied calls from the process's stream, what
+the plan left open, each named rule's verdict and the judge's confirmed findings from their gates. The last `signal`
+group of a kind is its record; a later gate run writes a new group. A fact no gate recorded reads as "not recorded"
+(`None` in `status --story --format json`'s `signals`), never as 0. `factory.sh update` reads every story from before
+once with today's parsers and writes its `record` line; after that the readers know the journal alone. A delivered
+story's raw streams (`*.out`) and tree snapshots (`tree-*.txt`) are deleted `evidence.keepDays` days (default 7) after
+its delivery, once its `record` line is there; the journal, the gate reports, `story.diff` and the hand-overs stay.
+The journals are committed: the install's `.gitignore` keeps the pipeline's folder out and lets
+`<evidence>/<story>/journal.tsv` in, `merge=union` merges them, and the delivery's commit on the main line carries
+them.
 
 **The current pass.** A stage file counts from its last `wrote`, or from a later pass of its own gate (or its exit 3: every check passed, a person is asked) for
 `test`, `build`, `tidy` and `document` — those gates run after their file is written, so a pass vouches for the
@@ -146,8 +166,10 @@ stage window is open, the digest of what is the person's — the story file and 
 window's end compares, and a change leaves `.owned-changed`: the story is stopped and the gate refuses (`owned`)
 until `factory-cli.py --owned-confirm <story>`. The gate's own writes (delivered, reopened, `## Applied`) are
 not a change. Nothing the factory needs
-*after* a run lives in either: the install keeps `.dca-factory/` out of git (`/.dca-factory` in `.gitignore`,
-unless a line there names it already), and the commit hook's snapshot leaves both folders out. Whether a story is delivered stands
+*after* a run lives in either, but the journal: the install keeps `.dca-factory/` out of git but for
+`<evidence>/<story>/journal.tsv` (`/.dca-factory/*` and the lines that let the journals in; a project whose
+`.gitignore` names the folder in a line of its own other than `/.dca-factory` keeps its lines), and the commit
+hook's snapshot leaves both folders out. Whether a story is delivered stands
 in the story itself: the gate that delivers — the document gate, the adopt gate, or in a story's worktree the
 integrate gate, all through one function — writes `status: delivered`, `delivered: <UTC time>` and
 `delivered_by: gate` into its front matter when it passes; built or adopted, the three lines are the same (one

@@ -234,7 +234,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 25
 
 
-VERSION = "0.88.3"
+VERSION = "0.89.0"
 
 
 def split_front(text):
@@ -342,6 +342,8 @@ PROFILE_KEYS = frozenset((
     *DEFAULTS, "contextMap", "glossary", "backlog",
     # what the stages read and how the runner starts them
     "knowledge", "knowledge.read", "reviews", "stages", "parallel", "stageTimeout", "sessionUsage", "contract",
+    # how long a delivered story's raw streams and snapshots are kept (WP-150)
+    "evidence.keepDays",
     # `model` alone is refused by the model check, which names the right form
     "model",
 ))

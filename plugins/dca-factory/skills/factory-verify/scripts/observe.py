@@ -215,6 +215,14 @@ def observe(project, runs, epics, story_id):
     report = Report()
     run_dir = os.path.join(project, runs, story_id)
     journal_dir = _contract.evidence_dir(os.path.join(project, runs), story_id)
+    journal = os.path.join(journal_dir, _contract.JOURNAL)
+    pruned = [l.split("\t") for l in _contract.read_text(journal).splitlines()
+              if l.split("\t")[1:2] == ["pruned"]] if os.path.isfile(journal) else []
+    if pruned:
+        days = next((f[5:] for f in pruned[-1] if f.startswith("days=")), "?")
+        report.blind("raw", f"the story's streams and tree snapshots were cleared {days} days after its delivery "
+                            f"(`evidence.keepDays`) — the checks that compare them say what they could not see; "
+                            f"observe a run right after it")
 
     if not os.path.isdir(run_dir):
         report.finding("run", f"no run artefacts at {os.path.join(runs, story_id)} — nothing to observe")

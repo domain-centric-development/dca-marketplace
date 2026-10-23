@@ -81,7 +81,7 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    DEFAULTS, evidence_rel, METHOD_PROFILE, PLACES, PLACES_REL, read_flat,
+    DEFAULTS, evidence_rel, JOURNAL, METHOD_PROFILE, PLACES, PLACES_REL, read_flat,
     runs_top,
     ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
@@ -101,7 +101,8 @@ from .spec import (
 from .state import (
     claim_config_here, PUBLISHED, remote_main,
     ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, backlog_digest,
-    current_stage_files, flaky_tests, git_tree, is_acceptance, journal_append, last_ended, listed_files, MODEL_PROCESSES,
+    current_stage_files, flaky_tests, git_tree, is_acceptance, journal_append, journal_events, journal_signal,
+    INVARIANT_BREAKS, last_ended, latest_signal, plan_left_open, record_judge_signal, listed_files, MODEL_PROCESSES,
     NOT_OBSERVED, observe_writes, OWNED_CHANGED, owned_changes, owned_end, PRODUCT_HEADINGS, record_base,
     record_changes, record_owned, run_owned, snapshot_reason, stage_open, STORY_DIGEST, tree_changes, verdict_in,
     answer_sentence, window_open, write_answered, write_mark, write_story_fields)
@@ -1132,18 +1133,24 @@ def correction_code(answer):
 def story_signals(runs, story_id, records, body):
     """WP-148 B/C: the raw facts of one story the bench aggregates — questions the stages asked and how many a person
     answered, the story's assumptions open and answered, what the plan left open, each named rule's verdict at the
-    test gate, the acceptance corrections by reason code. Counted, never rated."""
+    test gate, the judge's confirmed findings by perspective and domain code, the acceptance corrections by reason
+    code. Counted, never rated. What a gate decided is read from the journal alone (WP-150): a fact no gate recorded
+    is None — "not recorded", never 0."""
     questions = [(front, state) for _p, front, _b, state, _a in records if not is_acceptance(front)]
     lines = [l.strip()[1:].strip().lower() for l in section_of(body, "assumptions") or [] if l.strip().startswith(("-", "*"))]
-    plan_path = os.path.join(runs, story_id, "plan.md")
-    left = [l for l in (section_of(read_text(plan_path), "open assumptions") or []) if l.strip().startswith(("-", "*"))
-            and l.strip()[1:].strip().lower().rstrip(".") not in NOTHING] if os.path.isfile(plan_path) else []
+    events = journal_events(runs, story_id)
+    plan = latest_signal(events, "plan")
+    rules_group = latest_signal(events, "rules", "rule")
     rules = {}
-    tsv = os.path.join(evidence_dir(runs, story_id), INVARIANT_BREAKS)
-    for line in read_text(tsv).splitlines() if os.path.isfile(tsv) else []:
-        parts = line.split("\t")
-        if len(parts) == 4:
-            rules[parts[3]] = rules.get(parts[3], 0) + len([n for n in parts[1].split(",") if n])
+    for _sel, fields in rules_group[1] if rules_group else []:
+        verdict = fields.get("verdict", "unchecked")
+        rules[verdict] = rules.get(verdict, 0) + len([n for n in fields.get("rules", "").split(",") if n])
+    judge = latest_signal(events, "judge", "finding")
+    findings, domain = {}, {}
+    for perspective, fields in judge[1] if judge else []:
+        findings[perspective] = findings.get(perspective, 0) + 1
+        if fields.get("code"):
+            domain[fields["code"]] = domain.get(fields["code"], 0) + 1
     corrections = {}
     for _p, front, _b, state, answer in records:
         code = correction_code(answer.get("answer")) if is_acceptance(front) and state in ("answered", "applied") else None
@@ -1152,14 +1159,12 @@ def story_signals(runs, story_id, records, body):
     return dict(asked=len(questions), answered=sum(1 for _f, st in questions if st in ("answered", "applied")),
                 assumptions_open=sum(1 for l in lines if l.startswith("open:")),
                 assumptions_answered=sum(1 for l in lines if l.startswith("answered:")),
-                plan_open=len(left), rules=rules, corrections=corrections)
+                plan_open=int(plan[0].get("open", 0)) if plan else None,
+                rules=rules if rules_group else None,
+                findings=findings if judge else None, domain=domain if judge else None,
+                corrections=corrections)
 
 
-#: Every named rule's unit test at the test gate (WP-148 A): `<element>\t<rules>\t<selector>\t<verdict>` — `red`
-#: seen red before the build (the rule is new), `killed` red under its break, `survived` green under it, `no-break`
-#: green with no break that applies, `unchecked` no run gave a verdict. The bench computes the rate; the gate keeps
-#: the facts.
-INVARIANT_BREAKS = "invariant-breaks.tsv"
 
 
 def check_invariant_breaks(result, profile, cwd, runs, story_id, mapping):
@@ -1198,6 +1203,10 @@ def check_invariant_breaks(result, profile, cwd, runs, story_id, mapping):
     write_mark(runs, story_id, INVARIANT_BREAKS, "\n".join(
         f"{e}\t{','.join(map(str, n))}\t{sel}\t{verdicts[sel]}" for sel, owners in sorted(rules.items())
         for e, n in owners))
+    journal_signal(runs, story_id, "rules", [("rule", sel, dict(element=e, rules=",".join(map(str, n)),
+                                                                verdict=verdicts[sel]))
+                                             for sel, owners in sorted(rules.items()) for e, n in owners],
+                   named=sum(len(n) for owners in rules.values() for _e, n in owners))
     for sel in sorted(rules):
         verdict, key = verdicts[sel], keys[sel]
         if verdict == "red":
@@ -2346,6 +2355,8 @@ def check_story_pass(result, runs, story_id, story_path, front):
                                   f"in order, in this pass; the story runs on from the first of them")
         return
     verdict = verdict_in(texts["judge"])
+    if verdict == "pass":
+        record_judge_signal(runs, story_id, texts["judge"])
     if verdict != "pass":
         result.fail("story-pass", f"{STAGE_FILES['judge']} says `verdict: {verdict or 'none'}` — only a judge's "
                                   f"`pass` lets a story be delivered")
@@ -4495,6 +4506,8 @@ def _plan_passed(run):
     else:
         write_mark(run.runs, run.story_id, STORY_DIGEST, story_digest(run.story_path))
         record_tests_baseline(run.cwd, run.runs, run.story_id)
+        plan = os.path.join(run.runs, run.story_id, "plan.md")
+        journal_signal(run.runs, run.story_id, "plan", open=len(plan_left_open(read_text(plan))) if os.path.isfile(plan) else 0)
 
 
 def record_flaky_findings(result, story_path, story_id, front, runs):
@@ -4835,6 +4848,11 @@ def commit_delivery(result, home, story_id, front):
     for path in dict.fromkeys(result.written):
         rel = os.path.relpath(os.path.abspath(path), home).replace("\\", "/")
         if not rel.startswith("../") and (os.path.exists(os.path.join(home, rel)) or git(home, "ls-files", "--", rel)[1]):
+            paths.append(rel)
+    # the story journals ride along — every one git does not ignore (WP-150: the journal is the record, committed)
+    for journal in sorted(glob.glob(os.path.join(home, evidence_rel(), "*", JOURNAL))):
+        rel = os.path.relpath(journal, home).replace("\\", "/")
+        if git(home, "check-ignore", "-q", "--", rel)[0] != 0:
             paths.append(rel)
     if not paths:
         return

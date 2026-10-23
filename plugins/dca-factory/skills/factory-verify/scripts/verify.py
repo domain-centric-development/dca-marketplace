@@ -3217,11 +3217,16 @@ exit 0
               ignores[:1] == ["build/"] and ignores.count(".DS_Store") == 1 and ignores.count("Thumbs.db") == 1
               and ignored and "file manager" not in output, f"{ignores} | src/.DS_Store ignored: {ignored}")
         write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv", "event\n")
-        protocol = subprocess.run(["git", "check-ignore", "-q", ".dca-factory/evidence/STORY-1/journal.tsv"],
-                                  cwd=root).returncode == 0
-        check("install: `.gitignore` keeps the pipeline's own protocol (`.dca-factory/`) out of git — once",
-              ignores.count("/.dca-factory") == 1 and protocol and "own protocol" not in output,
-              f"{ignores} | evidence ignored: {protocol}")
+        write_file(root, ".dca-factory/evidence/STORY-1/builder.101500.out", "{}\n")
+        write_file(root, ".dca-factory/runs/STORY-1/plan.md", "# Plan\n")
+        ignored_ = lambda rel: subprocess.run(["git", "check-ignore", "-q", rel], cwd=root).returncode == 0
+        protocol = ignored_(".dca-factory/evidence/STORY-1/builder.101500.out") and ignored_(".dca-factory/runs/STORY-1/plan.md")
+        journal = not ignored_(".dca-factory/evidence/STORY-1/journal.tsv")
+        check("install: `.gitignore` keeps the pipeline's own protocol (`.dca-factory/`) out of git and lets the story "
+              "journals in (WP-150) — once",
+              ignores.count("/.dca-factory/*") == 1 and "/.dca-factory" not in ignores and protocol and journal
+              and "own protocol" not in output and "journals" not in output,
+              f"{ignores} | protocol ignored: {protocol}, journal in git: {journal}")
     for root in throwaway():
         build_project(root)
         in_git(root)
@@ -4178,8 +4183,8 @@ def verify_setup(runner, verbose=False):
             before = ignore_lines(root)
             code, output = run_runner(project_runner(root), root, "update", "--from", source)
             code2, output2 = run_runner(project_runner(root), root, "update", "--from", source)
-            check("update: .gitignore is left as it stands — no line removed and appended again, `/.dca-factory` once",
-                  code == 0 and code2 == 0 and ignore_lines(root) == before and before.count("/.dca-factory") == 1
+            check("update: .gitignore is left as it stands — no line removed and appended again, `/.dca-factory/*` once",
+                  code == 0 and code2 == 0 and ignore_lines(root) == before and before.count("/.dca-factory/*") == 1
                   and ".gitignore keeps the skill links" not in output + output2,
                   f"exit {code}/{code2}; moved: {[l for a, l in zip(before, ignore_lines(root)) if a != l][:4]}")
         for root, home in throwaway(2):
@@ -4591,6 +4596,33 @@ def verify_places(args):
                              in open(os.path.join(root, ".gitattributes"), encoding="utf-8").read()
                              and "evidence →" not in second.stdout,
                              first.stdout + second.stdout))
+
+    # WP-150 D: a story from before the record is read once from its hand-overs, then its journal is the record
+    for root in throwaway():
+        backlog_project(root, extra_sources=(
+            (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Open assumptions\n- the order\n- none\n"),
+            (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
+                                                   "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n"
+                                                   "|---|---|---|---|---|---|\n"
+                                                   "| ddd | a.java:1 | minor | w | domain-term: says Item | rename |\n"),
+            (".dca-factory/evidence/STORY-1/journal.tsv", "2026-10-01T10:00:00Z\tgate\tplan\texit=0\tseq=1\n")))
+        first = cli(root, "--migrate-layout")
+        second = cli(root, "--migrate-layout")
+        for name in ("plan.md", "judge.md"):
+            os.remove(os.path.join(root, ".dca-factory", "runs", "STORY-1", name))
+        shown_ = cli(root, "--status", "--story", "STORY-1", "--format", "json")
+        journal = open(os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv"), encoding="utf-8").read()
+        try:
+            signals = json.loads(shown_.stdout)["signals"]
+        except (ValueError, KeyError):
+            signals = {}
+        expectations.append(("migrate: a story from before the record is read once from its hand-overs — the signals "
+                             "stay with the hand-overs gone, a second update writes nothing",
+                             first.returncode == 0 and "the journal is the record of 1 more story" in first.stdout
+                             and "the journal is the record" not in second.stdout
+                             and journal.count("\trecord\t") == 1 and signals.get("plan_open") == 1
+                             and signals.get("domain") == {"domain-term": 1},
+                             f"{first.stdout} | {second.stdout} | {signals} | {shown_.stderr[-300:]}"))
 
     # contract 16: a story is a folder — the flat layout of before is named, not read, and `update` moves each story
     # with its decisions and findings into a folder named after its id, through git where the files are tracked

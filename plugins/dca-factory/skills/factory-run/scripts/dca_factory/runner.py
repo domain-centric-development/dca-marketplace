@@ -30,7 +30,7 @@ from .reports import (
     stream_limit, tokens_of, usage_lines)
 from .state import (
     CLAIM_TRAILERS, claim_config_here, fetch_remote,
-    back_in, claim, freeze_all, gate_passed_on_record, git_tree, has_worktree, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
+    back_in, claim, freeze_all, freeze_stream, gate_passed_on_record, record_story, git_tree, has_worktree, journal_path, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, uncommitted_story, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
 from .spec import (
@@ -529,6 +529,25 @@ def migrate_delivery(cwd, epics, runs, say):
             say(f"{shown(planned)}: the planned digest taken anew with today's function")
 
 
+def migrate_record(runs, say):
+    """WP-150 D: every story's journal becomes its record — the parts and denied calls its streams hold, the signals
+    its hand-overs hold, read once with today's parsers and written as journal lines, then the `record` line. A
+    journal that is the record is left alone, so a second update writes nothing; a story whose process still runs
+    is recorded by a later command."""
+    done, partial = 0, []
+    for journal in sorted(glob.glob(os.path.join(evidence_dir(runs, "*"), "journal.tsv"))):
+        story_id = os.path.basename(os.path.dirname(journal))
+        with contextlib.suppress(OSError, GateError, ValueError):
+            written = record_story(runs, story_id)
+            if written is not None:
+                done += 1
+                if written.get("unknown"):
+                    partial.append(f"{story_id} ({written['unknown']})")
+    if done:
+        say(f"the journal is the record of {done} more stor{'y' if done == 1 else 'ies'} — read once from their streams "
+            f"and hand-overs" + (f"; not recorded, its material gone: {', '.join(partial)}" if partial else ""))
+
+
 def migrate_spec(cwd, epics, runs, say):
     """The living spec from what is delivered (WP-98): every delivered story merged into its context's spec — or a
     journey item into `journeys.md` — in the order of its `delivered:` time, its test lines from its `tests.md` where
@@ -839,6 +858,7 @@ def migrate_layout(cwd):
     migrate_configuration(cwd, say)
     migrate_glossaries(cwd, say)
     migrate_spec(cwd, epics, runs, say)
+    migrate_record(runs, say)
     attributes = ".gitattributes"
     if os.path.isfile(attributes):
         text = read_text(attributes)
@@ -1875,6 +1895,10 @@ class Run:
         if fmt != "none" and len(lines) > 1:
             print("\n".join(lines[1:]))
         self.journal_line(story, f"{utc()}\tusage\t{stage}\ttool={tool}\t{fields}")
+        # what only the stream says — a shared window's parts, the denied calls — goes into the journal now (WP-150)
+        if os.path.isfile(raw):
+            with contextlib.suppress(OSError, GateError, ValueError):
+                freeze_stream(journal_path(place("runs"), story), raw)
 
     # --- what the files say --------------------------------------------------------------------------------
     def verdict_of(self, story):

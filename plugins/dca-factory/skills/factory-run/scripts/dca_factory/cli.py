@@ -56,19 +56,19 @@ import time
 from datetime import datetime, timezone
 from .contract import (
     ALL_KINDS, CONTRACT, CREATED_KEY, created_of, decision_files, decision_options, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
-    EPIC_FILE, epic_folder, evidence_dir, factory_home, find_story, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
+    EPIC_FILE, epic_folder, evidence_dir, evidence_rel, factory_home, find_story, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
     finding_records, location, needs_human_ids, open_findings, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     recommended_option, record_path, records_of, resolve_profile, section_of, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
     story_id_of, story_kind, TECH_HEADINGS, VERSION)
 from .reports import (
     FOLLOW_ARGS, READERS, reader_of, session_reader, parse_time, part_of_call, session_usage_allowed, _short,
-    stream_denials, stream_parts, tokens_of, USAGE_FIELDS, usage_from, WINDOWS)
+    stream_parts, tokens_of, USAGE_FIELDS, usage_from, WINDOWS)
 from .state import (
     cached_claims, story_title, claim_config_here, claim_story, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
     remote_main,
     acceptance_records, accepted, accepted_criteria, back_in, claim, claim_path, freeze_all, gate_passed_on_record,
     has_worktree,
-    flaky_tests, is_acceptance, journal_append, journal_events, journal_usage, journal_writer, listener_line, mark_listening,
+    flaky_tests, ignore_journals_in, is_acceptance, journal_append, journal_denials, journal_events, journal_parts, journal_usage, journal_writer, listener_line, mark_listening,
     mark_stage, mark_window, OWNED_CHANGED, owned_end, PRODUCT_HEADINGS, read_claim, record_owned, release,
     resolve_window, run_stories, RUNNABLE, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
     verdict_in, worktree_of, write_story_fields)
@@ -1784,37 +1784,13 @@ def decision_mark(decision):
     return "running"
 
 
-def window_parts(runs, story_id, window):
-    """The parts of every run of one shared window of a story, summed per stage, in the stages' order:
-    [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or None), denied}]."""
+def window_parts(events, window):
+    """The parts of every run of one shared window of a story, summed per stage, in the stages' order — from the
+    journal's `part` lines (WP-150): [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or
+    None), denied}]."""
     order = SHARED_WINDOWS.get(window, ())
-    total = {}
-    for path in sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), f"{window}.*.out"))):
-        parts, cost = stream_parts(path)
-        weight = sum(p["weight"] for p in parts)
-        denied = [d["stage"] for d in stream_denials(path)]
-        for part in parts:
-            entry = total.setdefault(part["stage"], dict(stage=part["stage"], runs=0, seconds=0.0, input=0,
-                                                         cache_read=0, cache_write=0, output=0, cost=0.0,
-                                                         priced=True, denied=0))
-            entry["denied"] += denied.count(part["stage"])
-            entry["runs"] += 1
-            if part["start"] and part["end"]:
-                entry["seconds"] += max((part["end"] - part["start"]).total_seconds(), 0)
-            for field in USAGE_FIELDS:
-                entry[field] += part[field]
-            if cost is None or not weight:
-                entry["priced"] = False
-            else:
-                entry["cost"] += cost * part["weight"] / weight
-    rows = []
-    for stage in [s for s in order if s in total] + [s for s in total if s not in order]:
-        entry = total[stage]
-        entry["tokens"] = sum(entry[f] for f in USAGE_FIELDS)
-        if not entry.pop("priced"):
-            entry["cost"] = None
-        rows.append(entry)
-    return rows
+    rows = journal_parts(events, window)
+    return sorted(rows, key=lambda r: order.index(r["stage"]) if r["stage"] in order else len(order))
 
 
 def window_running(entry, runs, story_id, moving, live):
@@ -1888,16 +1864,16 @@ def story_model(cwd, epics, runs, story_id, live=False):
                 f"{given} — {question}" if given else f"open — {question}")
         decisions.append(dict(id=str(front["id"]).strip(), state=state,
                               kind="acceptance" if is_acceptance(front) else "question", text=text))
+    events = journal_events(runs, story_id)
     for window in SHARED_WINDOWS:
         if window in facts["stages"]:
-            facts["stages"][window]["parts"] = window_parts(runs, story_id, window)
+            facts["stages"][window]["parts"] = window_parts(events, window)
     for moving in overview["running"]:
         if moving["story"] == story_id and not moving["interrupted"]:
             window_running(facts["stages"].get(moving["stage"]), runs, story_id, moving, live)
     # the calls a stage was denied: each a turn spent on another way
     for stage, entry in facts["stages"].items():
-        entry["denials"] = [d for path in sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), f"{stage}.*.out")))
-                            for d in stream_denials(path)]
+        entry["denials"] = journal_denials(events, stage)
         entry["denied"] = len(entry["denials"])
         if entry["denied"]:
             entry["why"] = " · ".join(w for w in (entry.get("why", ""), f"{entry['denied']} denied") if w)
@@ -2339,6 +2315,10 @@ def story_header(model):
         said = {"red": "red before the build", "killed": "killed by a break"}
         facts.append(("Rules", f"{sum(signals['rules'].values())} named — " + ", ".join(
             f"{signals['rules'][v]} {said.get(v, v)}" for v in order if signals["rules"].get(v))))
+    if signals.get("findings"):
+        facts.append(("Findings", ", ".join(f"{n} {p}" for p, n in sorted(signals["findings"].items()))
+                      + (" · domain " + ", ".join(f"{n} {c[7:]}" for c, n in sorted(signals["domain"].items()))
+                         if signals.get("domain") else "")))
     if signals.get("corrections"):
         facts.append(("Corrections", ", ".join(f"{n} {code}" for code, n in sorted(signals["corrections"].items()))))
     return title, facts
@@ -2973,6 +2953,9 @@ def main(argv):
     parser.add_argument("--backfill-created", action="store_true",
                         help="write `created:` into every story and epic without one, from the commit that added the "
                              "file — once, never over a value there (`factory.sh update` runs it)")
+    parser.add_argument("--ignore-journals", action="store_true",
+                        help="let the story journals into git: the .gitignore line that ignores the pipeline's folder "
+                             "becomes lines that keep everything but the journals out (`factory.sh setup`/`update`)")
     parser.add_argument("--lines", type=int, default=30, help="with --follow --once: how many lines (0: all)")
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
@@ -3317,6 +3300,11 @@ def main(argv):
         return release(cwd, args.release or session_owner())
     if args.backfill_created:
         return backfill_created(cwd, args.epics)
+    if args.ignore_journals:
+        if ignore_journals_in(cwd, evidence_rel()):
+            print(f"journals: .gitignore lets the story journals ({evidence_rel()}/<story>/journal.tsv) into git — the "
+                  f"rest of the pipeline's folder stays out")
+        return 0
     if args.status and args.brief:
         try:
             return status_brief(cwd, args.epics, args.runs, args.session_start)

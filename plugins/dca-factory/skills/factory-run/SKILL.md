@@ -43,8 +43,8 @@ pipeline, say so and hand over to it. What it runs:
    what it printed. It starts no tool, and it stops with one line where the directory is not a git
    repository. It puts the gate, the runner and the observer under `.agents/factory/`, the commit
    hook under `.githooks/`, `.gitattributes`, the `.gitignore` lines for `.DS_Store` and `Thumbs.db`
-   (a file manager's drop would otherwise stop a run as an unclaimed change) and for `/.dca-factory`, the
-   pipeline's protocol (left out where the `.gitignore` already names it), the pipeline's section in `AGENTS.md` and, for Claude
+   (a file manager's drop would otherwise stop a run as an unclaimed change) and for `/.dca-factory/*`, the
+   pipeline's protocol, with the story journals let in (left out where the `.gitignore` already names it), the pipeline's section in `AGENTS.md` and, for Claude
    Code, the gate's permission and a SessionStart hook; it writes the stack profile first, from what
    it detects. The hook runs `factory.sh check --staged`: tool hooks and deny rules do not port
    between agent tools, but every tool commits through git, so that is where the guard belongs.

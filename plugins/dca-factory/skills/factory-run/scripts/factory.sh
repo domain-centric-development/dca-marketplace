@@ -1078,6 +1078,8 @@ install_project() {                         # install_project <tool> <skill fold
     own_added="$own_added /$own"
   done
   [ -n "$own_added" ] && echo "factory: .gitignore keeps the pipeline's own protocol out of git:$own_added"
+  # The story journals are the stories' record and are committed (WP-150): the folder's ignore lets them in.
+  cli --ignore-journals 2>&1 | sed 's/^journals: /factory: /'
   write_agents_block
   if [ -n "$copy_mode" ]; then
     echo "factory: the skills are copies — commit .claude/.codex/.opencode skills with the project, and"
