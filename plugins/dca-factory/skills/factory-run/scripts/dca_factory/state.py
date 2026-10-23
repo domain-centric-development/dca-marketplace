@@ -1252,10 +1252,13 @@ def freeze_streams(journal):
 
 
 def parts_incomplete(events, process):
-    """Whether a process's parts were frozen with an older reading whose stream is gone — they cannot be read again,
-    and the view says so instead of showing them as whole."""
-    return any(e["kind"] == STREAM_FROZEN and e["fields"].get("process") == process
-               and frozen_streams(events).get(e["name"], 1) < STREAM_VERSION for e in events)
+    """Whether a run of a process is missing from its parts for good: an older reading froze its stream with no part
+    at all — a builder resumed after a question, which loads no stage's skill — and the stream is gone, so it cannot
+    be read again. The view says so instead of showing the parts as whole. A run the older reading found parts in
+    loaded its stages' skills, which that reading saw."""
+    versions = frozen_streams(events)
+    return any(e["kind"] == STREAM_FROZEN and e["fields"].get("process") == process and e["fields"].get("parts") == "0"
+               and versions.get(e["name"], 1) < STREAM_VERSION for e in events)
 
 
 def journal_parts(events, process):

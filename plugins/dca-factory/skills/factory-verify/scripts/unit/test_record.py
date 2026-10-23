@@ -188,23 +188,25 @@ class ResumedBuilder(unittest.TestCase):
             journal = state.journal_path(p.runs, "S-1")
             state.journal_append(p.runs, "S-1", "usage", "builder", "tool=claude")
             # what 0.90.0 wrote: one part, the stream line without a version
-            state.journal_append(p.runs, "S-1", "part", "plan", "process=builder", "stream=builder.100000.out", "seconds=9")
-            state.journal_append(p.runs, "S-1", "stream", "builder.100000.out", "process=builder", "parts=1", "denied=0")
+            state.journal_append(p.runs, "S-1", "stream", "builder.100000.out", "process=builder", "parts=0", "denied=0")
             self.assertTrue(state.parts_incomplete(state.journal_events(p.runs, "S-1"), "builder"))
             state.freeze_streams(journal)
             state.freeze_streams(journal)
             events = state.journal_events(p.runs, "S-1")
             self.assertEqual([r["stage"] for r in state.journal_parts(events, "builder")], ["plan", "test", "build", "tidy"])
             self.assertEqual(sum(r["runs"] for r in state.journal_parts(events, "builder")), 4)
+            self.assertEqual(sum(1 for e in events if e["kind"] == "stream"), 2)
             self.assertFalse(state.parts_incomplete(events, "builder"))
 
-    def test_parts_whose_stream_is_gone_stay_as_frozen_and_say_they_are_incomplete(self):
+    def test_a_run_frozen_with_no_part_whose_stream_is_gone_says_the_parts_are_incomplete(self):
         with project() as p:
             state.journal_append(p.runs, "S-1", "part", "plan", "process=builder", "stream=builder.100000.out", "seconds=9")
             state.journal_append(p.runs, "S-1", "stream", "builder.100000.out", "process=builder", "parts=1", "denied=0")
             events = state.journal_events(p.runs, "S-1")
             self.assertEqual([r["stage"] for r in state.journal_parts(events, "builder")], ["plan"])
-            self.assertTrue(state.parts_incomplete(events, "builder"))
+            self.assertFalse(state.parts_incomplete(events, "builder"))      # its stages' skills were seen
+            state.journal_append(p.runs, "S-1", "stream", "builder.110000.out", "process=builder", "parts=0", "denied=0")
+            self.assertTrue(state.parts_incomplete(state.journal_events(p.runs, "S-1"), "builder"))
 
 
 class OneWayToRead(unittest.TestCase):
