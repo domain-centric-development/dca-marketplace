@@ -176,7 +176,7 @@ export type StoryView = {
   // dca-factory 0.89.0: what the gates recorded about the story — questions, assumptions, rules, findings
   signals?: Signals
   passes: { label: string; start: string; end: string; seconds: number; tokens: number; stages: string[]; waited: number }[]
-  stages: Record<string, { runs: number; seconds: number; tokens: number; cost: number; models: string[]; parts?: StagePart[]; denied?: number; denials?: Denial[] } & TokenClasses>
+  stages: Record<string, { runs: number; seconds: number; tokens: number; cost: number; models: string[]; parts?: StagePart[]; parts_incomplete?: boolean; denied?: number; denials?: Denial[] } & TokenClasses>
 }
 
 export type Cockpit = {

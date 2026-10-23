@@ -1056,6 +1056,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               { text: part.denied ? String(part.denied) : '', color: C.wait },
               { text: '' },
             ]),
+            // parts an older reading froze before their stream was cleared (dca-factory 0.90.1): said, not shown as whole
+            ...(one.parts_incomplete
+              ? [[{ text: '  · parts incomplete — stream cleared before 0.90.1', color: C.wait }, { text: '' }, { text: '' }, { text: '' }, { text: '' }, { text: '' }, { text: '' }, { text: '' }]]
+              : []),
           ]),
           'Not run yet.',
         ),
