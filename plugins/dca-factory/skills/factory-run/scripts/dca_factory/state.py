@@ -1112,7 +1112,12 @@ def freeze_windows(journal):
     The window points at a session log on this machine, which a clone does not have and the tool
     deletes after a while. Once read, the numbers are appended as a usage line of their own with the same window and
     no path — the line that pointed at the log stays, and the reader counts a window once, the read line first. The
-    journal is only ever appended to, so nothing another writer appends meanwhile is lost."""
+    journal is only ever appended to, so nothing another writer appends meanwhile is lost.
+
+    A settled window whose log is here but holds no model answer inside it — a decision written in a second, between
+    two answers — is frozen with zero tokens: it was read and nothing was spent. Left pending, every status would read
+    the whole log for it again, which for a long session's log costs seconds per window. Only a window whose log is not
+    on this machine stays pending, for a machine that has it."""
     if not os.path.isfile(journal):
         return
     settled = datetime.now(timezone.utc).timestamp() - FREEZE_AFTER
@@ -1130,7 +1135,9 @@ def freeze_windows(journal):
             continue                            # the log may still lag behind this window
         read = resolve_window(fields)
         if read is None:
-            continue
+            if not window_logs(fields):
+                continue                        # the log is not here: another machine may read it
+            read = {"model": "", **{k: 0 for k in USAGE_FIELDS}}
         append_event(journal, "usage", event["name"], f"tool={fields.get('tool', '')}", *usage_fields(read).split("\t"),
                      f"window={fields['window']}", at=event["at"])
         frozen.add((event["name"], fields["window"]))
@@ -1146,18 +1153,23 @@ def freeze_all(runs):
             freeze_windows(journal)
 
 
-def resolve_window(fields):
-    """A recorded session window, read now: {usage fields} or None."""
+def window_logs(fields):
+    """The session logs a recorded window points at that are on this machine — [] where session usage is switched off."""
     if not session_usage_allowed(os.getcwd()):
-        return None
-    kind = fields.get("tool", "")
-    start, _, end = fields.get("window", "").partition("/")
+        return []
     paths = [p for p in fields.get("log", "").split(",") if p]
     tool, _, session_id = fields.get("session", "").partition(":")
     reader = session_reader(f"{tool}-session") if session_id else None
     if reader:
         paths = reader.session_logs(session_id)
-    return session_usage(kind, paths, parse_time(start), parse_time(end)) if paths else None
+    return [p for p in paths if os.path.isfile(p)]
+
+
+def resolve_window(fields):
+    """A recorded session window, read now: {usage fields} or None."""
+    paths = window_logs(fields)
+    start, _, end = fields.get("window", "").partition("/")
+    return session_usage(fields.get("tool", ""), paths, parse_time(start), parse_time(end)) if paths else None
 
 
 def journal_usage(runs, story_id, resolve=True):

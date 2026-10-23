@@ -8091,7 +8091,13 @@ def run_groups(args):
                    f"{stamp(900)}\tusage\tdocument\ttool=claude-session\twindow={stamp(1200)}/{stamp(900)}"
                    f"\tsession=claude:{session}\n"
                    f"{stamp(60)}\tusage\tjudge\ttool=claude-session\twindow={stamp(120)}/{stamp(60)}"
-                   f"\tsession=claude:{session}\n")
+                   f"\tsession=claude:{session}\n"
+                   # settled, its log here, no answer inside: a decision written between two answers
+                   f"{stamp(650)}\tusage\tdecisions\ttool=claude-session\twindow={stamp(700)}/{stamp(650)}"
+                   f"\tsession=claude:{session}\n"
+                   # settled, its log on no machine here: another may read it
+                   f"{stamp(650)}\tusage\tbacklog\ttool=claude-session\twindow={stamp(700)}/{stamp(650)}"
+                   f"\tsession=claude:0e0e0e0e-aaaa-bbbb-cccc-000000000000\n")
         write_file(home, f"projects/-any-project/{session}.jsonl", "".join(json.dumps({
             "timestamp": stamp(ago), "message": {"id": f"m{ago}", "model": "model-x", "usage": {
                 "input_tokens": 7, "cache_read_input_tokens": 100, "cache_creation_input_tokens": 10,
@@ -8106,6 +8112,12 @@ def run_groups(args):
                              len(document_lines) == 2 and "session=" in document_lines[0]
                              and "input=7" in document_lines[1] and "session=" not in document_lines[1]
                              and len(judge_lines) == 1 and "input=" not in judge_lines[0], journal))
+        decision_lines = [l for l in journal.splitlines() if "\tdecisions\t" in l]
+        backlog_lines = [l for l in journal.splitlines() if "\tbacklog\t" in l]
+        expectations.append(("usage: a settled window whose log is here but holds no answer inside it is frozen with "
+                             "zero tokens, so no status reads the log for it again; one whose log is not here stays open",
+                             len(decision_lines) == 2 and "input=0\t" in decision_lines[1] and "output=0" in decision_lines[1]
+                             and "session=" not in decision_lines[1] and len(backlog_lines) == 1, journal))
     for root, home in throwaway(2):
         # inside a stage the journal is silent; the stage's session log is where its sign of life is
         backlog_project(root)
