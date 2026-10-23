@@ -465,7 +465,9 @@ while [ $# -gt 0 ]; do
   cls=$(echo "$selector" | sed 's/#.*//')
   mkdir -p build/test-results/run
   report="build/test-results/run/TEST-$simple.$simple_method.xml"
-  if [ -f "green/$(echo "$selector" | tr -d './#')" ]; then
+  # a test whose file says ASSERTS_NOTHING passes whatever the code does — an assertion that went
+  if [ -f "green/$(echo "$selector" | tr -d './#')" ] \\
+      || grep -q ASSERTS_NOTHING "$(find "$set" -name "$simple.java" | head -1)"; then
     printf '<testsuite name="%s"><testcase classname="%s" name="%s"/></testsuite>\\n' \\
       "$cls" "$cls" "$simple_method" > "$report"
     echo "1 test ran, 0 failed: $selector"
@@ -6548,6 +6550,80 @@ def run_groups(args):
         expectations.append(("red-proof: a red record without digests (an older gate) is skipped and named",
                              code == 0 and "red-proof" in checks_by_verdict(output)["skip"],
                              [l for l in output.splitlines() if "red-proof" in l]))
+    # WP-151 A: tidy may rework the story's tests; its gate runs each moved one on the tree the test stage left, with
+    # the working tree's tests laid over it, and the moved test carries the proof only where it is red there.
+    page_rel = "src/test-pages/java/com/example/WidgetPageTest.java"
+    compile_stub = ("if grep -rq renamedCall src/test-pages && ! grep -rq renamedCall src/main; then "
+                    "echo 'cannot find symbol: renamedCall'; exit 1; fi\n")
+
+    def tidy_fixture(root, red_tree=True, timeouts=()):
+        build_project(root, profile=PROFILE.replace("compile: true", "compile: sh compile.sh"), timeouts=timeouts)
+        write_file(root, "compile.sh", compile_stub)
+        if red_tree:
+            subprocess.run(["git", "init", "-q"], cwd=root, capture_output=True)
+        run_gate(args.gate, root, "test")
+        for selector in both_green:
+            write_file(root, "green/" + re.sub(r"[./#]", "", selector), "")
+        return os.path.join(root, ".dca-factory", "evidence", "STORY-1")
+
+    def page_test(root, body):
+        write_file(root, page_rel, "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() { "
+                                   + body + " } }\n")
+
+    for root in throwaway():
+        evidence = tidy_fixture(root)
+        expectations.append(("red-reproof: the test gate's pass records the tree it saw red",
+                             os.path.isfile(os.path.join(evidence, "red-tree")), sorted(os.listdir(evidence))))
+        ledger = open(os.path.join(evidence, ".tests-red"), encoding="utf-8").read()
+        page_test(root, "page.thing();")
+        write_file(root, "src/test-pages/java/com/example/support/WidgetPage.java", "class WidgetPage {}\n")
+        code, output = run_gate(args.gate, root, "tidy")
+        journal = open(os.path.join(evidence, "journal.tsv"), encoding="utf-8").read()
+        expectations.append(("red-reproof: a test tidy moved is red again on the red tree, its digest taken, the journal "
+                             "names it",
+                             code == 0 and "red-reproof" in checks_by_verdict(output)["pass"]
+                             and open(os.path.join(evidence, ".tests-red"), encoding="utf-8").read() != ledger
+                             and "red-reproved\tcom.example.WidgetPageTest#showsTheThing\tby=tidy" in journal,
+                             [l for l in output.splitlines() if "red-" in l]))
+        code, output = run_gate(args.gate, root, "tidy")
+        expectations.append(("red-reproof: the re-proved version is the one the red proof holds afterwards",
+                             code == 0 and "red-proof" in checks_by_verdict(output)["pass"]
+                             and "red-reproof" not in checks_by_verdict(output)["pass"],
+                             [l for l in output.splitlines() if "red-" in l]))
+    for root in throwaway():
+        tidy_fixture(root)
+        page_test(root, "/* ASSERTS_NOTHING */")
+        code, output = run_gate(args.gate, root, "tidy")
+        expectations.append(("red-reproof: a move that leaves the test green on the red tree is refused",
+                             code == 1 and "red-reproof" in checks_by_verdict(output)["fail"]
+                             and "green on the tree the test stage left" in output,
+                             [l for l in output.splitlines() if "red-" in l]))
+    for root in throwaway():
+        tidy_fixture(root)
+        page_test(root, "thing.renamedCall();")
+        write_file(root, "src/main/Thing.java", "class Thing { void renamedCall() {} }\n")
+        code, output = run_gate(args.gate, root, "tidy")
+        expectations.append(("red-reproof: a test that calls production code tidy renamed does not compile on the red "
+                             "tree and is refused",
+                             code == 1 and "red-reproof" in checks_by_verdict(output)["fail"]
+                             and "do not compile" in output and "renamedCall" in output,
+                             [l for l in output.splitlines() if "red-" in l or "renamedCall" in l]))
+    for root in throwaway():
+        tidy_fixture(root, timeouts=("com.example.WidgetPageTest#showsTheThing",))   # in the red tree as well
+        page_test(root, "page.thing();")
+        code, output = run_gate(args.gate, root, "tidy")
+        expectations.append(("red-reproof: red on the red tree only on a timeout is refused",
+                             code == 1 and "red-reproof" in checks_by_verdict(output)["fail"] and "timeout" in output,
+                             [l for l in output.splitlines() if "red-" in l]))
+    for root in throwaway():
+        tidy_fixture(root, red_tree=False)
+        page_test(root, "page.thing();")
+        code, output = run_gate(args.gate, root, "tidy")
+        expectations.append(("red-reproof: without a red tree (an older story, outside git) a moved test fails the red "
+                             "proof as before",
+                             code == 1 and "red-proof" in checks_by_verdict(output)["fail"]
+                             and "red-reproof" not in checks_by_verdict(output)["pass"],
+                             [l for l in output.splitlines() if "red-" in l]))
     # WP-79 C10: the plan's criteria lines come with the keys; the stage gives the levels.
     for root in throwaway():
         build_project(root)

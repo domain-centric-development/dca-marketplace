@@ -62,6 +62,17 @@ a test. The build and tidy gates compare the digest with the file as it is
 answered decision of stage `test` changed what it expects. A line without a digest proves the red run
 but not the version, so the comparison is skipped and named.
 
+Tidy may move the story's tests — a copy lifted into the shared support, a page object called instead of a raw
+locator — and keep what each asserts. At every pass of the test gate in which every mapped test was red, the gate
+records the tree as it is in `.dca-factory/evidence/<story>/red-tree` (a git tree id, like `base-tree`): the
+production code as the test stage left it and the tests seen red. Where a mapped test's digest moved at the tidy
+gate and no answered decision of stage `test` covers it, the gate builds a scratch copy of that tree, lays every test
+file and every file below a test folder of the working tree over it, compiles it and runs the moved tests there
+(`red-reproof`). Each must be red — an assertion's red, not a timeout —; the red record then takes its new digest and
+the journal a `red-reproved <selector> by=tidy` line. A test green there changed what it asserts, one that does not
+compile calls production code tidy renamed: both are refused, naming the test. Without a red tree — an older story,
+outside git — the tidy gate refuses `red-proof` as the build gate does.
+
 Every rule the plan's `## Invariants` names is shown to be guarded by its unit test (contract 25,
 `invariant-breaks`): the test gate runs the `gate:invariants` table's tests once — a test red there proves its
 rule as a criterion's red run does; one green already, its rule existing, needs its break under
@@ -79,7 +90,7 @@ record then holds the test's new version, so the build gate's `red-proof` accept
 A merge of the main line into the story's branch can change a test this way too — the resumed story's merge,
 the integrate stage's resolution of a test both sides changed, the round after an integrate gate refused. The
 runner does not hand such a story to build or tidy, whose gates would refuse `red-proof`: before a run starts at
-either, it compares the record's digests with the mapped test files, and where one moved (and no answered decision
+either — a tidy that runs again with a red tree aside, whose gate re-proves its own moves —, it compares the record's digests with the mapped test files, and where one moved (and no answered decision
 of stage `test` covers it) the story starts at its test stage instead — a `red-stale` line in the journal, no
 round counted. The test stage records each named test as it now is, red where the code before the story fails
 it, else with its break, and changes nothing it asserts; build and tidy then run on that record. An answered

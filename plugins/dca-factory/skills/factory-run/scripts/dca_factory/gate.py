@@ -2859,7 +2859,7 @@ def unproven_tests(cwd, located, digests):
     return moved
 
 
-def stale_red_proof(cwd, runs, story):
+def stale_red_proof(cwd, runs, story, start=None):
     """The tests whose red proof the build and tidy gates would refuse (`red-proof`), read without running anything:
     each mapped test whose file changed after the test stage saw it fail — by a merge of the main line into the story,
     most often — and no answered decision of stage `test` changed what it expects. Empty without a red record."""
@@ -2871,7 +2871,130 @@ def stale_red_proof(cwd, runs, story):
     except GateError:
         return []
     moved = unproven_tests(cwd, check_exists(Result(), cwd, mapping) or {}, digests)
-    return [] if not moved or answered_decisions(cwd, story, "test") else moved
+    if not moved or answered_decisions(cwd, story, "test"):
+        return []
+    if start == "tidy" and red_tree(runs, story) and last_ended(runs, story, tuple(s.name for s in STAGES if s.lists and not s.red)) == "tidy":
+        # A tidy that runs again moved the tests itself: its gate re-proves them on the red tree (WP-151 A).
+        return []
+    return moved
+
+
+#: The tree at the test gate's pass (WP-151 A): the production code as the test stage left it — stubs that refuse to
+#: answer — and the tests seen red. The tidy gate rebuilds it with tidy's tests laid over, to see them red again.
+RED_TREE = "red-tree"
+
+
+def red_tree(runs, story_id):
+    """The recorded red tree's id, or None (an older story, outside git)."""
+    path = os.path.join(evidence_dir(runs, story_id), RED_TREE) if runs and story_id else None
+    tree = read_text(path).strip() if path and os.path.isfile(path) else ""
+    return tree if tree and tree != "none" else None
+
+
+def record_red_tree(result, cwd, runs, story_id):
+    """At the test gate's pass: the tree as it is, when every mapped test was red in this run. A pass that let a test
+    through green — a back round after the build, a decision — has production code past the red state: the tree an
+    earlier pass recorded stays, since tidy's tests are laid over it anyway."""
+    if any(c == "tests-red" and st == "pass" and " is green now" in m for st, c, m in result.entries):
+        return
+    tree = git_tree(cwd)
+    if tree:
+        write_mark(runs, story_id, RED_TREE, tree)
+
+
+def is_test_path(path):
+    """A test file by its name, or any file below a test folder — the support a test uses beside the tests."""
+    parts = path.replace("\\", "/").split("/")
+    return bool(TEST_FILE.search(parts[-1])) or any(TEST_DIR.search(part) for part in parts[:-1])
+
+
+@contextlib.contextmanager
+def red_tree_copy(cwd, runs, tree):
+    """A scratch copy of the red tree with every test file and test-support file of the working tree laid over it —
+    a test path the tree has and the working tree lost is removed. Removed afterwards; the tree is never touched."""
+    scratch = tempfile.mkdtemp(prefix="dca-reproof-")
+    try:
+        copy = os.path.join(scratch, "tree")
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
+        for args in (["read-tree", tree], ["checkout-index", "-a", "-f", f"--prefix={copy}/"]):
+            done = subprocess.run(["git"] + args, cwd=cwd, env=env, capture_output=True, text=True)
+            if done.returncode != 0:
+                raise GateError(f"the red tree {tree[:12]} cannot be read back: {(done.stderr or '').strip()[:200]}")
+        listed = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", tree], cwd=cwd, capture_output=True)
+        now = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=cwd,
+                             capture_output=True)
+        names = {n for out in (listed.stdout, now.stdout) for n in out.decode("utf-8", "replace").split("\0") if n}
+        for name in sorted(n for n in names if is_test_path(n) and not run_owned(n, runs)):
+            source, target = os.path.join(cwd, name), os.path.join(copy, name)
+            if os.path.isfile(source):
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.copy2(source, target)
+            elif os.path.lexists(target) and not os.path.lexists(source):
+                os.remove(target)
+        yield copy
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def tidy_moves(cwd, runs, story_id, located):
+    """The mapped tests whose file changed since the test stage saw them fail, by selector."""
+    return [selector for selector, digest in sorted(read_red_digests(runs, story_id).items())
+            if digest and located.get(selector) and os.path.isfile(os.path.join(cwd, located[selector]))
+            and file_digest(os.path.join(cwd, located[selector])) != digest]
+
+
+def reprove_red(result, profile, cwd, runs, story_id, mapping, located):
+    """WP-151 A, at the tidy gate: a test tidy moved — a copy lifted into the support, a page object called instead of
+    a raw locator — is run on the red tree with the working tree's tests laid over it. Red there (an assertion's red,
+    not a timeout), its new version carries the proof: the ledger takes its digest and the journal a `red-reproved`
+    line. Green there, or not compiling (tidy renamed production code the test calls), it is refused."""
+    if answered_decisions(cwd, story_id, "test"):
+        return
+    moved = tidy_moves(cwd, runs, story_id, located)
+    tree = red_tree(runs, story_id)
+    if not moved or not tree:
+        return
+    keys = {selector: key for key, selectors in (mapping or {}).items() for selector in selectors}
+    table = {}
+    for selector in moved:
+        table.setdefault(keys.get(selector, "moved by tidy"), []).append(selector)
+    with red_tree_copy(cwd, runs, tree) as copy:
+        built = Result()
+        check_compiles(built, profile, copy)
+        if built.failed:
+            result.fail("red-reproof", f"{', '.join(moved)}: tidy changed the test(s), and they do not compile on the "
+                                       f"tree the test stage left — a test calls production code tidy renamed, which "
+                                       f"is a change of what it tests:\n"
+                                       + "\n".join(m for st, _c, m in built.entries if st == "fail")[-600:])
+            return
+        probe = Result()
+        check_test_state(probe, profile, copy, table, "red", {s: located[s] for s in moved})
+    proved = []
+    for selector in moved:
+        seen = [(st, m) for st, c, m in probe.entries if c == "tests-red" and selector in m]
+        verdict, _said = break_verdict(seen)
+        timed_out = any(st == "note" for st, _m in seen)
+        if verdict == "red" and not timed_out:
+            proved.append(selector)
+            result.ok("red-reproof", f"{selector}: changed by tidy, red again on the tree the test stage left")
+        elif verdict == "red":
+            result.fail("red-reproof", f"{selector}: changed by tidy, and red on the test stage's tree only on a "
+                                       f"timeout — an action waited, no assertion failed, so the moved test proves "
+                                       f"nothing yet")
+        elif verdict == "green":
+            result.fail("red-reproof", f"{selector}: changed by tidy, and green on the tree the test stage left — the "
+                                       f"move changed what it asserts; put it back, a change of what it expects is a "
+                                       f"human's decision")
+        else:
+            result.fail("red-reproof", f"{selector}: changed by tidy, and no run on the test stage's tree gave it a "
+                                       f"verdict — {_said}")
+    if proved:
+        digests = read_red_digests(runs, story_id)
+        write_red_ledger(runs, story_id, set(proved), located, cwd,
+                         kept={s: d for s, d in digests.items() if s not in proved})
+        for selector in proved:
+            with contextlib.suppress(OSError):
+                journal_append(runs, story_id, "red-reproved", selector, "by=tidy")
 
 
 #: Which selectors the test stage saw fail. Kept as a file next to the round counter for the same
@@ -4444,6 +4567,11 @@ def _red_proof(run):
     # the red proof compares digests, so it belongs here, before any process
     ledger = red_ledger_path(run.runs, run.story_id)
     if run.expected == "green" and ledger and os.path.isfile(ledger):
+        if run.stage.name == "tidy" and red_tree(run.runs, run.story_id) \
+                and tidy_moves(run.cwd, run.runs, run.story_id, run.located):
+            run.result.ok("red-proof", "tidy changed a test it may rework — `red-reproof` runs it on the tree the "
+                                       "test stage left")
+            return
         check_red_proof(run.result, run.cwd, run.located, read_red_digests(run.runs, run.story_id), run.story_id)
 
 
@@ -4475,6 +4603,11 @@ def _tests(run):
 def _invariant_breaks(run):
     if contract_of(run.profile) >= 25:
         check_invariant_breaks(run.result, run.profile, run.cwd, run.runs, run.story_id, run.mapping)
+
+
+@check("red-reproof", stages=("tidy",), needs_process=True, kinds=("story",))
+def _red_reproof(run):
+    reprove_red(run.result, run.profile, run.cwd, run.runs, run.story_id, run.mapping, run.located)
 
 
 @check("commands", stages=lambda s: s.commands, needs_process=True,
@@ -4542,6 +4675,12 @@ def record_flaky_findings(result, story_path, story_id, front, runs):
         result.written.append(path)
         result.ok("findings", f"{len(added)} flaky test(s) noted in two stories kept as a finding in "
                               f"{shown(path)}: {', '.join(r[1] for r in added)}")
+
+
+@on_pass("test")
+def _test_passed(run):
+    if run.kind == "story" and not is_delivered(run.front):
+        record_red_tree(run.result, run.cwd, run.runs, run.story_id)
 
 
 @on_pass("document")

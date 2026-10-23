@@ -442,8 +442,8 @@ def move_path(cwd, src, dst):
 
 
 #: What the gate and the runner keep in a story's evidence folder that a new pass starts without: the red ledger, the
-#: story's digest, the tests baseline, the round count and the base tree. The journal and the snapshots carry on.
-PASS_MARKS = (".tests-red", STORY_DIGEST, TESTS_BASELINE, ".rounds", "base-tree", STAGES_MADE, MAIN_TESTS)
+#: story's digest, the tests baseline, the round count, the base tree and the red tree. The journal and the snapshots carry on.
+PASS_MARKS = (".tests-red", STORY_DIGEST, TESTS_BASELINE, ".rounds", "base-tree", "red-tree", STAGES_MADE, MAIN_TESTS)
 
 
 def migrate_evidence(cwd, runs, say):
@@ -462,7 +462,7 @@ def migrate_evidence(cwd, runs, say):
         sources = [(os.path.join(verify, entry), os.path.join(evidence, entry))
                    for entry in (sorted(os.listdir(verify)) if os.path.isdir(verify) else [])]
         sources += [(os.path.join(folder, mark), os.path.join(evidence, mark)) for mark in PASS_MARKS
-                    if mark != "base-tree" and os.path.lexists(os.path.join(folder, mark))]
+                    if mark not in ("base-tree", "red-tree") and os.path.lexists(os.path.join(folder, mark))]
         if not sources:
             continue
         kept = []
@@ -964,7 +964,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
         table, name = ("## Changed", "build") if stage == "build" else ("## Moves", "tidy")
         return f"""{CONTRACT_HEAD}
 
-{name} — {folder}/{STAGE_FILES[stage]} (gate after the stage: tests-green, red-proof, files-listed, existing tests, architecture, format)
+{name} — {folder}/{STAGE_FILES[stage]} (gate after the stage: tests-green, red-proof{', red-reproof' if stage == 'tidy' else ''}, files-listed, existing tests, architecture, format)
 - `{table}`: `| File | Why |` — the first cell is a path from the project root, in backticks or bare; the other cells
   are prose. `files-listed` refuses a file the pipeline recorded as changed that no row names; a listed file that did
   not change is a note. A stage that changed no file needs no such section (tidy) — say so and why.
@@ -974,7 +974,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - tests: every selector of the `gate:tests` table green, and its file's digest as `.tests-red` holds it (`red-proof`)
 - {'`## Deviations from the plan`: `- <element>: <what differed and why>`, or nothing when the plan held. No `## Criteria` (the judge re-checks each one) and no `## Checks`: the gate\'s report is the evidence, and a stage edits no hand-over after the gate ran — the gate is the stage\'s test run' if stage == 'build' else '`## Left alone`: what you saw and did not change, and why. No `## Checks`: the gate\'s report is the evidence, and a stage edits no hand-over after the gate ran — the gate is the stage\'s test run'}
 - `## needs-human` only to stop, with `decision: <story>-<nn>` and the record beside the story (`stage: {name}`)
-- {'a test that cannot pass for a reason in its own code — a helper, a locator, a fixture — while what it asserts stays as it is: write `back: test` on a line of its own and say what is wrong; the round goes to the test stage, which repairs it and proves it with a break. A change to what a test asserts is still a question (`## needs-human`)' if stage == 'build' else 'no test change: a defect in a test goes back through the build stage'}
+- {'a test that cannot pass for a reason in its own code — a helper, a locator, a fixture — while what it asserts stays as it is: write `back: test` on a line of its own and say what is wrong; the round goes to the test stage, which repairs it and proves it with a break. A change to what a test asserts is still a question (`## needs-human`)' if stage == 'build' else 'the story\'s tests take moves that keep what each asserts — a copy lifted into the shared support, a page object instead of a raw locator, a name after its display name, a dead helper deleted —, each a row under `## Moves`; `red-reproof` runs every moved mapped test on the tree the test stage left and refuses one green there or not compiling. Never an assertion, an expected value, a selector or a scope: a defect in what a test asserts is a finding for the judge'}
 - no criterion key in code, a comment or a test name; no `TODO` for the criterion delivered"""
     if stage == "judge":
         return f"""{CONTRACT_HEAD}
@@ -2653,7 +2653,7 @@ class Run:
         if dry or start not in STAGE or not STAGE[start].lists or STAGE[start].red or not self.kind_runs(kind, "test"):
             return start
         self.profile()
-        moved = stale_red_proof(os.getcwd(), place("runs"), story)
+        moved = stale_red_proof(os.getcwd(), place("runs"), story, start)
         if not moved:
             self.red_stale.pop(story, None)
             return start

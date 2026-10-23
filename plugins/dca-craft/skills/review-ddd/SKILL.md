@@ -171,7 +171,15 @@ Before reviewing, gather context:
 
 - **must-fix**: violates a DDD invariant; the code is dishonest about what
   it represents (anemic aggregate with business rules outside; Repository
-  for a non-aggregate; cross-context import bypassing boundaries).
+  for a non-aggregate; cross-context import bypassing boundaries). Three of
+  them spelled out, always must-fix, whatever a plan says: a rule over an
+  aggregate's state decided outside the aggregate (in the use case, the
+  controller, a query); a precondition the command does not check again
+  after an earlier read (a choice shown on one request and acted on by the
+  next, a snapshot and its reload, a remote answer and the step that
+  confirms it); a result that encodes three or more outcomes as flags or
+  nullables a caller must decode, an impossible combination representable,
+  instead of naming them.
 - **should-fix**: a name, shape, or placement that will cause confusion —
   but the code works.
 - **nit**: stylistic or minor improvement; ignorable in a small PR.

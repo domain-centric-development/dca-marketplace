@@ -161,6 +161,14 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    `## Changed expectations` that alters a criterion the spec holds, while the story does not carry that key
    with its new text, would leave the spec's old text standing — one decision record naming the keys and
    the text each would need, and stop.
+9c. **Search what lies outside the story's own files**, and list each hit under `## Files` (`changes:` with what
+   follows), so the tidy stage's footprint covers it:
+   - a rule whose statement changes → its old wording in doc comments, messages and the other documents;
+   - a call the story removes → the target's remaining callers; where none is left, the target and the tests that
+     only keep it alive, `changes: removed`;
+   - a check, a literal or a mapping the story adds → the same one elsewhere: a second copy is named, a third is
+     lifted into one place.
+   Nothing found is no line. A search the plan skipped is a finding the judge ranks against the plan.
 10. Name business terms **and operations** in the criteria that are not in the glossary yet, as
    proposals with a one-line definition — an operation as `<domain word> (<code word>): <what it does
    to which term>`. Name use cases, commands and events from the operation's code word. The code word
@@ -249,7 +257,7 @@ your file. The rule in full: `factory-run/reference/stage-common.md`.
 - <term>: <definition>            (omit the section when there are none)
 
 ## Open assumptions
-- <assumption from the story that the plan rests on>
+- <assumption from the story that the plan rests on>   (a known gap it defers stays a gap: the judge keeps it as a finding)
 
 ## needs-human                    (only when the run must stop — otherwise leave the heading out)
 decision: <story>-<nn>

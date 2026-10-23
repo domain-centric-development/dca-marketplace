@@ -114,8 +114,10 @@ Then converge:
 5. Discard style preferences, speculative concerns and anything you cannot point at in the code.
    Every remaining finding names a file, a line and the fix.
 5c. A state the plan names under `## Open assumptions` as one the project had before this story — a gap the
-   story rests on and does not close — is no finding of this story. Mention it in the summary at most. What the
-   story's own change brings stays a finding, whatever the plan says about it.
+   story rests on and does not close — is no defect of this story and blocks nothing. Where you confirm it in the
+   code, keep it as a `minor` with its Defect cell starting `deferred by the plan:`, so it lands in the findings
+   and a clean-up story sees it; a deferral never lowers a rank. What the story's own change brings stays a
+   finding, whatever the plan says about it.
 5a. An **unplanned invariant** the build file names — a guard it found necessary and left out, since the plan
    did not name it — is a confirmed `minor` against the plan (`plan` perspective), with the rule as its fix; a
    guard in a changed domain type that the plan's `## Invariants` does not name and no unit test covers is
@@ -155,6 +157,12 @@ The perspectives rank in their own words — `must-fix`, `should-fix`, `nit` —
 what you confirmed in the code, never by copying: a `must-fix` is `major`, and `blocker` where it
 breaks a criterion, the architecture suite or the product description; a `should-fix` is `minor`,
 and `major` where you confirm it deviates from the plan; a `nit` is `minor`.
+**Three domain defects are `major` whatever the perspective called them**, and whatever the plan says — you rank
+what the code does: a rule over an aggregate's state decided outside the aggregate (`domain-invariant:`); a
+precondition the command does not check again after an earlier read — a choice shown on one request and acted on by
+the next, a snapshot and its reload, a remote answer and the step that confirms it (`domain-invariant:`); a result
+that encodes three or more outcomes as flags or nullables a caller must decode, an impossible combination
+representable (`domain-concept:`) — found-or-not as one nullable is two outcomes, not this.
 A `story-conflict` is a question to a human, so it is a **decision record** like any other (`factory-run/reference/stage-common.md`):
 `## needs-human` in the judge file naming it, and the record's `stage:` is the stage that will
 **apply** the answer, not yourself — `plan` when the story or the plan has to change, `test` when an

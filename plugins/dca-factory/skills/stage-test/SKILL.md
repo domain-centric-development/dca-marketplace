@@ -88,6 +88,9 @@ files written. You write **no** production behaviour.
    test stops at its first failing assertion, so its red run proves the first clause only; for new
    behaviour the probe is the red phase taken clause by clause, not test by test. A clause no probe can
    turn red is asserted too weakly: sharpen the assertion before the gate.
+   **Test data a swap would turn red.** Where a test passes several numbers or strings of the same type,
+   each differs from the others — two quantities, two prices, two names alike let the code mix them up and
+   stay green. Cases that can fail apart are tests of their own, not one test looping over them.
 3. **A unit test for every invariant the plan's `## Invariants` names** — each rule, the guards
    included: a required value refused when absent, a trimmed one refused untrimmed, a range at both
    bounds. The test drives the domain type alone, no framework, and is its own — never a criterion's

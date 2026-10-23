@@ -213,7 +213,10 @@ change no test, so without this way back it would have to ask a human about a re
 expectation. The repaired test is green — the code already meets it — so the test gate asks for its
 break instead of a red run. A change to what a test asserts stays a human's question. A merge of the main line
 that changed one of the story's tests after it was seen failing sends the story to the test stage the same way,
-by the runner's own step: build and tidy never start on a stale red proof.
+by the runner's own step: build and tidy never start on a stale red proof. Tidy's own moves in the story's tests —
+a copy lifted into the support, a page object instead of a raw locator, what each test asserts kept — are the one
+exception: its gate runs each moved test on the tree the test stage left (`red-tree`) and takes the new version
+where it is red there (`red-reproof`).
 
 **What a stage is told, so it searches for nothing.** Every stage prompt names the skill, the story and
 where things are: the stack profile, the story's run folder and evidence folder, the knowledge skill's

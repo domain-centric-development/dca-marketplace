@@ -24,13 +24,21 @@ freedom is that it may not change what the code *does*.
 
 1. Read the plan and the build file, then the code they name. Work **only inside this story's
    footprint**: the files the build stage changed, and what it made demonstrably redundant — a
-   helper nothing calls any more, a duplicate the new code introduced. Test support the story created
-   in a file of its own — a helper, a page object, a fixture, a builder — is footprint too; the test
-   files themselves are not. A smell elsewhere is a note in your file, never an edit.
-2. Keep every test green, and **change no test**. A test that now reads wrongly is a finding for
-   the judge; a test you may not touch is what keeps this stage honest, because a refactor that
-   edits its own check proves nothing. Test support is not a test: tidy it like code, and keep what
-   every test that calls it asserts exactly as it was.
+   helper nothing calls any more, a duplicate the new code introduced, and what the plan's `## Files`
+   lists beyond the story's own code — an old wording, a last caller's target, a twin check. The
+   story's test files and the test support they use are footprint too. A smell elsewhere is a note in
+   your file, never an edit.
+2. Keep every test green, and **change no test's claim**. The story's tests and the shared test support
+   take moves that keep what each test asserts: a copy lifted into the shared support — the earlier
+   copies too, at the third one —, a page object called instead of a raw locator, a test method named
+   after its display name, a stale comment or a dead helper of the story's tests deleted. Never an
+   assertion, an expected value, a selector of the `gate:tests` table or a test's scope — a test that
+   asserts too little is a finding for the judge, and a change of what it expects is a human's
+   decision. Each test file you change is a row under `## Moves`. The tidy gate runs every mapped
+   test you moved on the tree the test stage left, with your test files laid over it (`red-reproof`):
+   it must be red there as it was, so a move that renamed production code a test calls, or let a test
+   pass without the code, is refused. A test that existed before the story keeps what it expects, as
+   at every stage.
 3. Change no behaviour. Nothing removed that a criterion needs, nothing added that meets a
    criterion the build stage did not meet, no error message a caller can see reworded unless a
    criterion names it. If a change would be visible to a caller, it is not tidying.
@@ -84,7 +92,7 @@ to have made one.
 
 ## Do not
 
-- Do not change a test, delete a test, or weaken an assertion.
+- Do not change what a test asserts, delete a test, or weaken an assertion; move only how it says it.
 - Do not rename anything a criterion, a glossary entry or a document names — the story's words are
   the domain contact's. A better name for a domain term is a glossary question.
 - Do not reformat files the story never touched; a formatter run across the repository buries this
