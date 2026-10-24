@@ -435,6 +435,26 @@ What this does not do, on purpose: no leases, no revision numbers, no stale-answ
 the story changes underneath, no authorisation beyond `by:`. Files writable by the same user give
 process guarantees, not security ones.
 
+## Project decision records — `product/decisions/<name>.md`, beside the epics
+
+A question that belongs to no story yet — the description, a discovery, an epic not written — asked by a skill the
+factory runs for a request (`reference/requests.md`). The shape of a story's record without `story:`: `id:` is the
+file's name (`<stamp>-<topic>`), `stage: request`, and `request: <request id>` names the request that waits on it.
+The state is read off the file as for every record; the inbox (`--list-decisions`), the status's *waiting* and the
+page list it beside the stories' records, and an answer is written as for any other. Answered, the request runs
+again; when it has, the factory stamps `## Applied`. A record here that names a story is unreadable — a story's
+record lives in its story's folder. Committed with the backlog: a commit of these records alone runs no suite.
+
+A record beside a story may carry `request:` as well — a skill run for a request asked about that story; it blocks
+the story like any open record and is stamped applied by the request's next run.
+
+## Requests — `.dca-factory/requests/<stamp>-<kind>.md`
+
+What a person asks the factory to do from a page, a terminal or a view: front matter (`kind`, what it is about,
+`option`, `from`, `by`, `asked`, `state`) and the person's words as its body; protocol, deleted once done, with a
+journal (`journal.tsv`) and each process's output (`out/<id>.out`) beside it. The kinds, the states, when the
+factory works a request, what it commits and what a skill does when it runs headless: `reference/requests.md`.
+
 ## Tests that existed before the story — `.dca-factory/evidence/<story>/.tests-baseline`
 
 The plan gate runs before any stage of a story touches a test. In a git repository it records every

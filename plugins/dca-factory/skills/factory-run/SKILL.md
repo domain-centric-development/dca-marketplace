@@ -403,3 +403,9 @@ runner's worktrees, `--parallel`, `--watch`, `--keep-going` and `--max-stages`, 
 running stage does (`factory.sh follow`), a shared process's stages, and what a story cost (`--usage`,
 `--story-budget`). In-session, do the same loop yourself — ask the schedule, run the story it names,
 ask again — and stop instead of waiting.
+
+## The factory without a session
+
+`factory.sh up` runs the factory in the background until `down`; `serve` shows it in a browser, and every press
+there — or `factory.sh request <kind> …` — writes a request it works before the next story. A prompt that says
+*request `<id>` … you run headless* is such a request: read `reference/requests.md` first.

@@ -1379,12 +1379,18 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
 
   if (current === 'run') {
     const log = job.lines.slice(-Math.max(6, rows - 30))
+    // a factory another process holds — `factory.sh up`, a terminal — runs on its own: a second runner would only be
+    // refused the checkout, so the buttons give way to what it is (dca-factory 0.93.0)
+    const held = !isRunning() && status.worker?.alive ? status.worker : null
     return page(
       [
         ui.section('Worker', 'factory.sh run in the background — one stage per process, a gate between them'),
+        ...(held ? [<Text color={C.accent}>{held.how === 'up'
+          ? 'The factory is up (factory.sh up) — it works the backlog and the requests; factory.sh down ends it.'
+          : `${held.owner} holds the checkout — a runner started here would be refused.`}</Text>] : []),
         ui.actions([
-          !isRunning() && ui.button('run-all', '▶ Run the backlog', () => void runWorker($, 'run the backlog', ['run']), { hotkey: 'r', isPrimary: true }),
-          !isRunning() && ui.button('run-watch', '◉ Run & keep watching', () => void runWorker($, 'run and watch', ['run', '--watch']), { hotkey: 'w' }),
+          !isRunning() && !held && ui.button('run-all', '▶ Run the backlog', () => void runWorker($, 'run the backlog', ['run']), { hotkey: 'r', isPrimary: true }),
+          !isRunning() && !held && ui.button('run-watch', '◉ Run & keep watching', () => void runWorker($, 'run and watch', ['run', '--watch']), { hotkey: 'w' }),
           isRunning() && ui.button('stop', '■ Stop', () => void stopWorker($), { hotkey: 'x', isPrimary: true }),
         ]),
         ui.facts([

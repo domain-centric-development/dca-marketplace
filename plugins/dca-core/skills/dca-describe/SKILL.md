@@ -116,6 +116,16 @@ the description, not about the story. The answer changes the description first �
 skill, with the person — and the story follows it. No build stage edits these files: they record
 decisions people took, not facts a stage can check against code.
 
+## Without a person in the session
+
+A delivery pipeline may run this skill for a person's written request, with nobody reading the session — its
+prompt says so, names the person and names where a question goes. Then the request is the person's yes: a change
+in their words is written as they gave it, without showing it first. What the change leaves open is never guessed
+and never asked in the chat: write it as one decision record at the place the prompt names — a question, options
+`- a: …` with what each means for the description, a recommendation, the front matter the prompt asks for — and
+end, the description unchanged where the answer is missing. Run again with the answer, write what it settles.
+Nothing here starts a pipeline or commits.
+
 ## Do not
 
 - Do not write a story, an epic, a plan or code.

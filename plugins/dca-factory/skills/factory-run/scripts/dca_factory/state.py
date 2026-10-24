@@ -647,8 +647,9 @@ def stage_open(runs, story_id, stage):
     return last == "stage-start"
 
 
-#: Processes a model key may name beside the stages: the shared builder and verifier, and the reviewers.
-MODEL_PROCESSES = ("builder", "verifier", "review")
+#: Processes a model key may name beside the stages: the shared builder and verifier, the reviewers, and a person's
+#: request worked headless (WP-91).
+MODEL_PROCESSES = ("builder", "verifier", "review", "request")
 
 
 RUNNABLE = ("ready", "in-progress", "resumable")

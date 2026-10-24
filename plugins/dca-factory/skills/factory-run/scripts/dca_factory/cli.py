@@ -79,10 +79,14 @@ from .gate import (
     criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_signals, story_spec, description_part, discovery_items, perspectives_of, story_ids)
 from .tools import (
     isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
+from .requests import (
+    drop_request, Duplicate, KIND, KINDS, out_path, request_of, RequestError, retry_request, write_request)
+from .requests import counts as request_counts, view as requests_view
+from . import service
 from .runner import (
     contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
     command_heads, first_word, model_for, needs_human_lines, open_decision_files, PASS_MARKS, plan_skeleton, run_main,
-    stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove)
+    stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove, request_main)
 
 
 def resolve(epics, argument):
@@ -638,6 +642,13 @@ HELP_COMMANDS = (
      "status --epic <epic>"),
     ("follow a stage", "what the running stage reads, edits and runs, as it happens — whoever started it", "",
      "follow"),
+    ("start the factory", "a process of its own in the background: your requests and the backlog, until it is "
+                          "ended — --serve the page too", "", "up [--serve]"),
+    ("end the factory", "after its running stage; --now interrupts that stage too", "", "down"),
+    ("the page", "the factory in the browser, on this machine alone — every press a request", "", "serve"),
+    ("ask the factory", "one request it works before its next story: a wish, a release, an answer, an acceptance, …",
+     "", "request <kind> …"),
+    ("the requests", "what you asked and where each stands — retry or drop one", "", "requests"),
     ("find the problem", "a problem or a wished deliverable → a report with sources and proposed epics, each with "
                          "its outcome event", "/factory-discover <topic>", "discover --check <topic>"),
     ("the discoveries", "every topic, its proposed epics and which are epics already, its proposed description changes",
@@ -964,7 +975,11 @@ RUNNER = "bash .agents/factory/factory.sh"
 def make_action(text="", skill="", shell="", look=""):
     """What to do, both ways: `skill` in an agent session, `shell` in a terminal — empty where a
     terminal cannot do it (writing a story needs an agent)."""
-    return dict(text=text, skill=skill, shell=shell, look=look)
+    action = dict(text=text, skill=skill, shell=shell, look=look)
+    request = request_of(skill)                     # the same press from a page: the request it writes (WP-91)
+    if request:
+        action["request"] = request
+    return action
 
 
 def story_attention(cwd, story_id, story, profile):
@@ -1130,9 +1145,16 @@ def status_model(cwd, epics, runs, live=False):
             text = data["reason"] + "."
         next_line = dict(text=text, action=make_action())
     extra = []
+    requests = request_counts()                       # what a person asked the factory to do (WP-91)
+    if any(requests.values()):
+        extra.append("requests: " + ", ".join(f"{n} {state}" for state, n in requests.items() if n)
+                     + " — `factory.sh requests`")
+    worker = service.worker(cwd) if live else None
     if live:
         if held:
-            extra.append(f"worker: {held.get('owner')} since {stamp_text(held.get('since'))} UTC")
+            how = {"up": ", started by `factory.sh up`", "session": ", a session's run"}.get((worker or {}).get("how"), "")
+            extra.append(f"worker: {held.get('owner')} since {stamp_text(held.get('since'))} UTC{how}"
+                         + (" — stopping after its stage" if (worker or {}).get("stopping") else ""))
         listening = listener_line(cwd)
         extra.append(listening or "listening: no session has looked at the backlog")
         note = duplicate_pipeline_note(cwd)
@@ -1159,7 +1181,7 @@ def status_model(cwd, epics, runs, live=False):
     # alone, never a reviewer a profile named before (an old `reviews/dca.md`, a `review:dca` in the journal)
     perspectives = [dict(name=name, carrier=carrier) for name, carrier in perspectives_of(profile)]
     return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
-                findings=findings, claims=foreign_claims(epics_dir, runs), perspectives=perspectives,
+                worker=worker, requests=requests, findings=findings, claims=foreign_claims(epics_dir, runs), perspectives=perspectives,
                 description=description, queue=queue, delivered_order=delivered_order,
                 rows=rows, next=next_line, journeys=journeys,
                 priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
@@ -2934,7 +2956,13 @@ def follow_newest(runs, story=None, process=None):
             os.path.basename(path).split(".")[0], path)
 
 
-def follow(runs, story, once, fmt, width, process=None, every=False):
+def follow(runs, story, once, fmt, width, process=None, every=False, request=None):
+    if request:
+        # a request's process (WP-91): its one output beside the requests, read as a stage's
+        path = out_path(request)
+        newest = lambda: ("request", request, path) if os.path.isfile(path) else None
+    else:
+        newest = lambda: follow_newest(runs, story, process)
     if every:
         if not story:
             print("factory: follow --all names a story (--story <id>)", file=sys.stderr)
@@ -2954,7 +2982,7 @@ def follow(runs, story, once, fmt, width, process=None, every=False):
                     print(line)
                 print()
         return 0
-    found = follow_newest(runs, story, process)
+    found = newest()
     if once:
         if not found:
             if fmt == "json":
@@ -2976,7 +3004,7 @@ def follow(runs, story, once, fmt, width, process=None, every=False):
     current, offset, pending = None, 0, ""
     try:
         while True:
-            found = follow_newest(runs, story, process)
+            found = newest()
             if found and found[2] != current:
                 name, stage, current = found
                 offset, pending = 0, ""
@@ -2999,9 +3027,144 @@ def follow(runs, story, once, fmt, width, process=None, every=False):
         return 0
 
 
+# --- the factory as a process of its own, and what a person asks of it (WP-91) -----------------------------------------
+def placed(profile_arg=None):
+    """The places as the profile names them, for a command that reads no other option."""
+    set_places(read_profile(resolve_profile(profile_arg, os.getcwd())))
+
+
+def request_command(argv):
+    """`factory.sh request <kind> [<target>…] [<words>…] [--story|--epic|--record|--topic|--proposal <id>]
+    [--option <key>] [--from <stage>] [--by <who>]` — `-` as the words reads them from stdin."""
+    parser = argparse.ArgumentParser(prog="factory.sh request",
+                                     description="write one request the factory works before its next story")
+    parser.add_argument("kind", choices=[k.name for k in KINDS])
+    parser.add_argument("rest", nargs="*", help="the target the kind names, then the person's words")
+    parser.add_argument("--story")
+    parser.add_argument("--epic")
+    parser.add_argument("--record")
+    parser.add_argument("--topic")
+    parser.add_argument("--proposal")
+    parser.add_argument("--option", help="an answer's option key, a correction's reason code")
+    parser.add_argument("--from", dest="start", help="with run: the stage the story starts at")
+    parser.add_argument("--by", help="who asks (default: git user.name)")
+    parser.add_argument("--format", choices=("text", "json"), default="text")
+    args = parser.parse_args(argv)
+    placed()
+    kind, rest = KIND[args.kind], list(args.rest)
+    fields = {key: getattr(args, key) for key in ("story", "epic", "record", "topic", "proposal", "option")
+              if getattr(args, key)}
+    if args.start:
+        fields["from"] = args.start
+    for spec in kind.keys:
+        names = spec.split("|")
+        if any(name in fields for name in names) or not rest:
+            continue
+        if kind.name == "release":                  # every id given: the stories, or the one epic
+            fields[names[0]] = " ".join(rest)
+            rest = []
+        else:
+            fields[names[0]] = rest.pop(0)
+    words = " ".join(rest)
+    if words == "-":
+        words = sys.stdin.read()
+    try:
+        request_id, path = write_request(os.getcwd(), kind.name, fields, words, args.by or "")
+    except Duplicate as same:
+        print(f"factory: {same}")
+        return 0
+    except (RequestError, GateError) as error:
+        print(f"factory: request refused — {error}", file=sys.stderr)
+        return 2
+    if args.format == "json":
+        print(json.dumps(dict(id=request_id, path=shown(path))))
+    else:
+        print(f"factory: request {request_id} written ({shown(path)}) — the factory works it before its next story")
+    return 0
+
+
+def requests_command(argv):
+    parser = argparse.ArgumentParser(prog="factory.sh requests", description="the requests and their state")
+    parser.add_argument("--format", choices=("text", "json"), default="text")
+    parser.add_argument("--drop", metavar="ID", help="take a request back (not while it runs)")
+    parser.add_argument("--retry", metavar="ID", help="queue a failed request again")
+    args = parser.parse_args(argv)
+    placed()
+    try:
+        if args.drop:
+            drop_request(args.drop)
+            print(f"factory: request {args.drop} dropped")
+            return 0
+        if args.retry:
+            retry_request(args.retry)
+            print(f"factory: request {args.retry} queued again")
+            return 0
+    except (RequestError, OSError) as error:
+        print(f"factory: {error}", file=sys.stderr)
+        return 2
+    return requests_view(args.format)
+
+
+def up_command(argv):
+    parser = argparse.ArgumentParser(prog="factory.sh up", description="start the factory in the background")
+    parser.add_argument("--serve", action="store_true", help="the page too")
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--by")
+    args, run_args = parser.parse_known_args(argv)
+    allowed = {"--tool", "--parallel", "--interval", "--max-stages", "--story-budget", "--keep-going",
+               "--separate-stages", "--shared-builder", "--shared-verifier"}
+    stray = [a for a in run_args if a.startswith("-") and a not in allowed]
+    if stray:
+        print(f"factory: up takes no {' '.join(stray)} — the runner's flags it passes on: {' '.join(sorted(allowed))}",
+              file=sys.stderr)
+        return 2
+    placed()
+    return service.up(os.getcwd(), run_args, args.serve, args.port, args.by or "")
+
+
+def down_command(argv):
+    parser = argparse.ArgumentParser(prog="factory.sh down", description="end the factory after its running stage")
+    parser.add_argument("--now", action="store_true", help="interrupt the running stage too")
+    parser.add_argument("--no-wait", action="store_true", help="say stop and return at once")
+    parser.add_argument("--by")
+    args = parser.parse_args(argv)
+    placed()
+    return service.down(os.getcwd(), args.now, not args.no_wait, args.by or "")
+
+
+def serve_command(argv):
+    parser = argparse.ArgumentParser(prog="factory.sh serve", description="the factory's page, on this machine alone")
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--open", action="store_true", help="open it in the browser")
+    parser.add_argument("--background", action="store_true", help="start it detached and return")
+    parser.add_argument("--by-up", action="store_true", help=argparse.SUPPRESS)
+    args = parser.parse_args(argv)
+    placed()
+    if args.by_up:
+        return service.serve_here(os.getcwd(), args.port, by_up=True)
+    return service.serve(os.getcwd(), args.port, background=args.background, open_browser=args.open)
+
+
+def worker_command(argv):
+    parser = argparse.ArgumentParser(prog="factory-cli.py --worker")
+    parser.add_argument("--format", choices=("text", "json"), default="text")
+    args = parser.parse_args(argv)
+    placed()
+    info = service.worker(os.getcwd())
+    print(json.dumps(info) if args.format == "json" else service.worker_line(info))
+    return 0
+
+
+LIFECYCLE = {"--request": request_command, "--requests": requests_command, "--work-request": request_main,
+             "--up": up_command, "--down": down_command, "--serve": serve_command, "--worker": worker_command}
+
+
 def main(argv):
     if argv[:1] == ["--run"]:                    # `factory.sh run` once its checks passed: the runner itself
         return run_main(argv[1:])
+    lifecycle = LIFECYCLE.get(argv[0]) if argv else None
+    if lifecycle:                                # the factory as a process, its requests and its page (WP-91)
+        return lifecycle(argv[1:])
     parser = argparse.ArgumentParser(add_help=True, description="factory cli")
     parser.add_argument("--version", action="version", version=f"factory-cli {VERSION} (file contract {CONTRACT})")
     parser.add_argument("--story")
@@ -3011,6 +3174,7 @@ def main(argv):
                         help="print what the stage in flight does, one line per tool call, as it happens (--once: the last lines and exit)")
     parser.add_argument("--once", action="store_true", help="with --follow: print the newest output's last lines and exit")
     parser.add_argument("--process", help="with --follow: only that process's output — builder, verifier, review-ddd, plan, …")
+    parser.add_argument("--request", help="with --follow: the output of that request's process")
     parser.add_argument("--all", dest="every", action="store_true",
                         help="with --follow --story: every process of the story, in the order they began, and exit; "
                              "with --stages: every row of the table, the steps after the run order too; "
@@ -3294,7 +3458,8 @@ def main(argv):
         print("\n".join(open_decision_files(cwd, args.open_decisions)))
         return 0
     if args.follow:
-        return follow(args.runs, args.story, args.once, args.format, args.lines, args.process, args.every)
+        return follow(args.runs, args.story, args.once, args.format, args.lines, args.process, args.every,
+                      args.request)
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
     if args.discover_list:

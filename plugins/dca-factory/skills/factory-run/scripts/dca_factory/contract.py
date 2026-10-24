@@ -234,7 +234,7 @@ SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
 CONTRACT = 26
 
 
-VERSION = "0.92.0"
+VERSION = "0.93.0"
 
 
 def split_front(text):
@@ -579,10 +579,28 @@ PROJECT_FINDINGS = "findings"
 FLAKY_FINDINGS = "flaky"
 
 
+#: The project's own decision records — a question that belongs to no story yet: the description, a discovery, an
+#: epic not written (WP-91) — beside the epics: `<product>/decisions/<name>.md`, the shape of a story's record with
+#: `id: <name>` and no `story:`. A skill run for a request asks there when it may not decide alone.
+PROJECT_DECISIONS = "decisions"
+
+
 def findings_dir():
     """The project's findings folder beside the epics: `product/findings` for `product/epics`."""
     epics = place("epics").rstrip("/")
     return os.path.join(os.path.dirname(epics) or ".", PROJECT_FINDINGS)
+
+
+def project_decisions_dir():
+    """The project's decision records beside the epics: `product/decisions` for `product/epics`."""
+    epics = place("epics").rstrip("/")
+    return os.path.join(os.path.dirname(epics) or ".", PROJECT_DECISIONS)
+
+
+def project_decisions_rel():
+    """The project's decision records relative to the project, as the profile places the epics."""
+    epics = (PLACES_REL.get("epics") or DEFAULTS["epics"]).rstrip("/")
+    return os.path.join(os.path.dirname(epics) or ".", PROJECT_DECISIONS).replace("\\", "/")
 
 
 def findings_rel():
@@ -1141,6 +1159,32 @@ def decision_files(cwd):
                 yield f"{story_id}-{name[:-3]}", {}, "", "unreadable", error, path
                 continue
             yield f"{story_id}-{name[:-3]}", front, body, decision_state(body)[0], None, path
+    yield from project_decision_files(cwd)
+
+
+def project_decision_files(cwd):
+    """The same six fields for every record of the project's own (`<product>/decisions/<name>.md`): its id is its
+    file's name, and a record that names a story belongs beside that story instead — read as unreadable here."""
+    epics = place("epics")
+    store = os.path.join(os.path.dirname(os.path.join(cwd, epics).rstrip("/")) or ".", PROJECT_DECISIONS)
+    if not os.path.isdir(store):
+        return
+    for name in sorted(os.listdir(store)):
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(store, name)
+        try:
+            front, body = read_front_matter(path)
+            if str(front.get("story", "")).strip():
+                raise GateError(f"{shown(path)}: names story {front.get('story')!r} — a story's record lives in its "
+                                f"own `{DECISIONS_DIR}/` folder, a project record names no story")
+            if str(front.get("id", "")).strip() != name[:-3]:
+                raise GateError(f"{shown(path)}: `id:` is {front.get('id')!r}, the file is named {name[:-3]!r} — a "
+                                f"project record is found by its file name")
+        except GateError as error:
+            yield name[:-3], {}, "", "unreadable", error, path
+            continue
+        yield name[:-3], front, body, decision_state(body)[0], None, path
 
 
 def git(cwd, *args, env=None):

@@ -272,6 +272,31 @@ test('a backlog with hundreds of open findings still draws the decide tab', asyn
   expect(await pane.find({ text: /defect 299 / })).toBeUndefined()
 })
 
+// WP-91: a factory `factory.sh up` started holds the checkout — the run tab says so and offers no second runner
+test('a factory that is up elsewhere replaces the run buttons with what it is', async ($, on) => {
+  const up = { ...STATUS, worker: { owner: 'runner:host:42', since: '2026-09-23T17:00:00Z', beat: '2026-09-23T17:29:00Z', how: 'up', pid: 42, alive: true, log: '.dca-factory/factory.log', stopping: false }, requests: { queued: 2, running: 0, waiting: 0, failed: 0 }, extra: ['requests: 2 queued — `factory.sh requests`'] }
+  on('session.root', async () => ({ value: ROOT }))
+  on('fs.exists', async () => ({ value: true }))
+  on('fs.list', async () => ({ value: [] }))
+  on('fs.read', async () => ({ deny: 'missing' }))
+  on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
+    const out = e.argv.includes('decisions') ? DECISIONS : e.argv.includes('--list') ? { topics: [] } : up
+    return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('clock.now', async () => ({ value: Date.parse('2026-09-23T17:30:00Z') }))
+  on('clock.every', async () => ({ value: { cancel: () => {} } }) as never)
+  on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+  on('ui.status', async () => ({ value: undefined }) as never)
+  on('command.list', async () => ({ value: [] }) as never)
+
+  await $.command.run({ command: 'factory-cockpit', args: '' } as never)
+  const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface: 'terminal', component: 'Pane', requestId: 'factory-cockpit', props: { title: 'Factory', isFocused: true } as never })
+  await pane.press({ key: 'tab-run' })
+  expect(await pane.find({ text: /The factory is up \(factory.sh up\)/ })).toBeDefined()
+  expect(await pane.find({ text: /requests: 2 queued/ })).toBeDefined()
+  expect(await pane.find({ text: /Run the backlog/ })).toBeUndefined()
+})
+
 // WP-146: a story opens with its own words and its criteria as scenarios, an epic with what it is for, its text and its
 // stories; the delivered tab shows the factory's order. Both details are drawn from the same blocks.
 const DETAIL_STATUS = {

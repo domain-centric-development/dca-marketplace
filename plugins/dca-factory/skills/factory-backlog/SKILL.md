@@ -317,6 +317,17 @@ without a session. You may run `factory.sh` for everything that starts no tool �
 process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
 inside one anyway.
 
+## Run for a request
+
+When the factory runs you for a person's request — the prompt says *request `<id>` … you run headless* — follow
+`factory-run/reference/requests.md`, *Run headless*. The arguments are the forms above, word for word. A wish keeps
+what it writes `status: draft`: the person releases it. Every question this skill would ask — the project
+description missing, which epic, a criterion the words leave open, a decision the description does not carry — is
+answered from the files where they settle it, else asked as **one** decision record with `request: <id>`: beside the
+story it concerns (`stage: backlog`), or as the project's own record where no story exists yet; then end. A release
+is the person's decision: run the question pass, approve what it leaves open nowhere, and write each open question
+as a record beside its story, which stays a draft.
+
 ## Do not
 
 - Do not write a plan, a test shape, an implementation hint or a file path into a story. What

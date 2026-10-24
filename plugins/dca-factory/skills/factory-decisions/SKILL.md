@@ -150,6 +150,16 @@ without a session. You may run `factory.sh` for everything that starts no tool �
 process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
 inside one anyway.
 
+## Run for a request
+
+When the factory runs you for a person's request — the prompt says *request `<id>` … you run headless* — follow
+`factory-run/reference/requests.md`, *Run headless*. The request is the explicit confirmation of step 5: write the
+block it names without showing it first, `by:` the request's person, `at:` now, the request's words as `rationale:`
+where it gives an option and words. Answer only the record the request names — a record of the project's own
+(`product/decisions/`, no `story:`) like a story's. An acceptance correction without a reason code takes the one the
+words point to where exactly one fits; else ask the code as a record beside the story, the seven codes as its
+options. The structural follow-ups and the correction's way into the story are the same as on a person's say-so.
+
 ## Do not
 
 - Do not write `## Answer` from a recommendation, a timeout, a majority of options or your own

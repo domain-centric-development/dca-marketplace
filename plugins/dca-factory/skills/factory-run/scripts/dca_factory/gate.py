@@ -81,7 +81,7 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    DEFAULTS, evidence_rel, findings_rel, JOURNAL, METHOD_PROFILE, PLACES, PLACES_REL, read_flat,
+    DEFAULTS, evidence_rel, findings_rel, project_decisions_rel, JOURNAL, METHOD_PROFILE, PLACES, PLACES_REL, read_flat,
     runs_top,
     ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
@@ -3239,14 +3239,14 @@ def pipeline_owned():
 
 def backlog_paths(cwd, env):
     """The staged paths when every one of them is backlog or the pipeline's own protocol — the epics with their
-    stories, decisions and findings, the project's findings, `.dca-factory/` — else None. A commit that stages
+    stories, decisions and findings, the project's findings and decision records, `.dca-factory/` — else None. A commit that stages
     nothing is None: it is checked as any other."""
     code, names = git(cwd, "diff", "--cached", "--name-only", "--no-renames", env=env)
     paths = [p for p in names.splitlines() if p] if code == 0 else []
     if not paths:
         return None
     epics = (PLACES_REL.get("epics") or DEFAULTS["epics"]).strip("/")
-    prefixes = tuple(folder.strip("/") + "/" for folder in (epics, findings_rel()) if folder)
+    prefixes = tuple(folder.strip("/") + "/" for folder in (epics, findings_rel(), project_decisions_rel()) if folder)
     owned = pipeline_owned()
     backlog = lambda path: path.replace("\\", "/").startswith(prefixes) or owned(path)
     return paths if all(backlog(p) for p in paths) else None

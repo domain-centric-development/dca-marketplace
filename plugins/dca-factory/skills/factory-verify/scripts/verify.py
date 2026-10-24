@@ -154,7 +154,7 @@ def cli_in(root):
 
 
 PACKAGE = "dca_factory"
-MODULES = ("contract", "reports", "state", "spec", "gate", "tools", "runner", "cli")
+MODULES = ("contract", "reports", "state", "spec", "gate", "tools", "requests", "runner", "page", "service", "cli")
 GATE_SIDE = ("contract", "reports", "state", "spec", "gate")        # what decides; tools, runner and cli show and start
 
 
@@ -3496,6 +3496,7 @@ def tree_digest(root):
 DOC_COMMAND = re.compile(r"(factory\.sh|story-gate\.py|factory-cli\.py)\b([^`#]*)")
 # The runner's subcommands that hand their flags on — to the cli, the gate or the fixture suite — beside its own.
 PASSED_ON = {"backlog": "cli", "decisions": "cli", "follow": "cli", "help": "cli", "discover": "cli",
+             "up": "cli", "down": "cli", "serve": "cli", "request": "cli", "requests": "cli",
              "check": "gate", "verify": "verify"}
 
 
@@ -9226,7 +9227,8 @@ def run_groups(args):
     expectations.append(("vocabulary: no skill, reference or template names a sample's domain",
                          not hits, ", ".join(hits[:5])))
     # the skills call only the runner's verbs, which mirror them (WP-62 item 11)
-    verbs = {"setup", "backlog", "run", "status", "decisions", "discover", "follow", "help", "update", "verify", "check"}
+    verbs = {"setup", "backlog", "run", "status", "decisions", "discover", "follow", "help", "update", "verify", "check",
+             "up", "down", "serve", "request", "requests"}
     called = []
     for folder, _, names in os.walk(skills_root):
         for name in names:
@@ -10070,6 +10072,345 @@ def verify_worktrees(runner, verbose=False):
 UNIT_DIR = os.path.join(HERE, "unit")
 
 
+#: A request's process in the fixtures (WP-91): logged, asking once where FIXTURE_REQ_ASK says so, failing where
+#: FIXTURE_REQ_FAIL does — every other stage goes to the worktree stand-in. The plan stage of the story named in
+#: FIXTURE_REQ_DURING writes two requests while it runs: one about nothing, one about that story.
+STAND_IN_REQUESTS = """#!/bin/sh
+case "$FACTORY_STAGE" in
+  request:*)
+    echo "REQ $FACTORY_STAGE" >> "$FIXTURE_LOG"
+    printf '%s\\n' "$FACTORY_PROMPT" >> "$FIXTURE_LOG.request-prompts"
+    [ -n "${FIXTURE_REQ_FAIL:-}" ] && exit 3
+    # an answer the first run writes, as factory-decisions would, before its own question
+    if [ -n "${FIXTURE_REQ_ANSWERS:-}" ] && [ ! -f "$FIXTURE_REQ_ANSWERS.done" ]; then
+      printf '\n## Answer\nanswer: b\nby: Ann\nat: 2026-10-24T11:00:00Z\n' >> "$FIXTURE_REQ_ANSWERS"; : > "$FIXTURE_REQ_ANSWERS.done"
+    fi
+    rid=$(printf '%s' "$FACTORY_PROMPT" | sed -n 's/.*This is request \\([^ ]*\\) of the factory.*/\\1/p' | head -1)
+    if [ -n "${FIXTURE_REQ_ASK:-}" ] && ! printf '%s' "$FACTORY_PROMPT" | grep -q 'ran before and asked'; then
+      mkdir -p product/decisions
+      printf -- '---\\nid: %s-q\\nrequest: %s\\nstage: request\\nasked: 2026-10-24T10:00:00Z\\n---\\n\\n# Which epic?\\n\\n## Question\\nq\\n\\n## Options\\n- a: sample\\n- b: a new one\\n\\n## Recommendation\\na\\n' "$rid" "$rid" > "product/decisions/$rid-q.md"
+    else
+      printf '%s %s\\n' "$FACTORY_STAGE" "$rid" >> product/notes.md
+    fi
+    exit 0 ;;
+esac
+if [ "$FACTORY_STAGE" = plan ] && [ "$FACTORY_STORY" = "${FIXTURE_REQ_DURING:-}" ]; then
+  ( cd "$FACTORY_HOME" && "$FIXTURE_PY" "$FIXTURE_CLI" --request wish "written while $FACTORY_STORY runs" \\
+      && "$FIXTURE_PY" "$FIXTURE_CLI" --request release "$FACTORY_STORY" ) >/dev/null
+fi
+exec sh "$FIXTURE_STAND_IN"
+"""
+
+
+def verify_requests(runner, verbose=False):
+    """WP-91: the factory as a process of its own — a person's requests worked before the next story and between the
+    stages of a running one, a skill's question kept as a record, `up` and `down`, and the page that writes requests."""
+    results = []
+
+    def check(name, ok, detail=""):
+        results.append((name, ok, detail))
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
+        if not ok and detail:
+            print(f"          {detail}")
+
+    cli = os.path.join(os.path.dirname(runner), "factory-cli.py")
+
+    def fixture(root, stories=(), status="approved", **env):
+        backlog_project(root, *stories, extra_sources=(
+            ("fixture/tests.md", TESTS), ("fixture/decision.md", DECISION), (".gitignore", "build/\n.dca-factory/\n")))
+        if status != "approved":
+            write_file(root, "product/epics/sample/STORY-1/story.md", story("STORY-1", status=status))
+        for name, text in (("stand-in.sh", STAND_IN_WORKTREE), ("requests-stand-in.sh", STAND_IN_REQUESTS)):
+            with open(os.path.join(root, name), "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(text)
+        copy_scripts(runner, root)
+        for command in (["init", "-q", "-b", "main"], ["add", "-A"],
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+            subprocess.run(["git", *command], cwd=root, capture_output=True)
+        log = os.path.join(root, ".git", "stand-in.log")
+        base = {"FACTORY_TOOL_CMD": f"sh '{shell_path(os.path.join(root, 'requests-stand-in.sh'))}'",
+                "FIXTURE_STAND_IN": shell_path(os.path.join(root, "stand-in.sh")),
+                "FIXTURE_LOG": shell_path(log), "FIXTURE_DIR": shell_path(os.path.join(root, "fixture")),
+                "FIXTURE_PY": shell_path(sys.executable), "FIXTURE_CLI": shell_path(cli),
+                "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        base.update(env)
+        return log, base
+
+    def lines(path):
+        return open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else []
+
+    def requests_of(root):
+        folder = os.path.join(root, ".dca-factory", "requests")
+        return sorted(n for n in os.listdir(folder) if n.endswith(".md")) if os.path.isdir(folder) else []
+
+    def requests_json(root, env):
+        code, out = run_runner(runner, root, "requests", "--format", "json", env=env)
+        try:
+            return json.loads(out[out.index("{"):])
+        except ValueError:
+            return {"requests": [], "error": out}
+
+    def git_log(root):
+        return subprocess.run(["git", "log", "--format=%s"], cwd=root, capture_output=True, text=True).stdout
+
+    # a request is checked when it is written, and refused with its reason
+    for root in throwaway():
+        log, env = fixture(root)
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md", DECISION)
+        refused = [run_runner(runner, root, "request", *args, env=env) for args in (
+            ("release", "NOPE"), ("wish",), ("answer", "STORY-1-01", "c"), ("stories", "nope"),
+            ("accept", "STORY-1"), ("run", "STORY-1", "--from", "nowhere"))]
+        check("requests: a request naming no story, no words, no option of its record, no epic, nothing to accept or "
+              "no stage is refused with its reason, and nothing is written",
+              all(code == 2 and "request refused" in out for code, out in refused) and not requests_of(root),
+              [out.strip()[-120:] for code, out in refused if code != 2 or "refused" not in out])
+        first = run_runner(runner, root, "request", "answer", "STORY-1-01", "b", "--by", "Ann", env=env)
+        again = run_runner(runner, root, "request", "answer", "STORY-1-01", "b", env=env)
+        text = open(os.path.join(root, ".dca-factory", "requests", requests_of(root)[0]), encoding="utf-8").read() \
+            if requests_of(root) else ""
+        check("requests: an answer naming an option is written with the option and who asked; the same request "
+              "twice is one",
+              first[0] == 0 and again[0] == 0 and "queued already" in again[1] and len(requests_of(root)) == 1
+              and "option: b" in text and "by: Ann" in text and "state: queued" in text, f"{first} {again} {text}")
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md", DECISION + ANSWER)
+        code, out = run_runner(runner, root, "request", "answer", "STORY-1-01", "a", env=env)
+        check("requests: an answered record takes no second answer", code == 2 and "never overwritten" in out, out)
+
+    # worked before the next story, in a process of its own, its result committed alone
+    for root in throwaway():
+        log, env = fixture(root)
+        run_runner(runner, root, "request", "wish", "show the newest first", "--by", "Ann", env=env)
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        order = [l.split()[0] if l.startswith("REQ") else l.split()[1] for l in lines(log)]
+        journal = open(os.path.join(root, ".dca-factory", "requests", "journal.tsv"), encoding="utf-8").read() \
+            if os.path.isfile(os.path.join(root, ".dca-factory", "requests", "journal.tsv")) else ""
+        check("requests: a queued wish is worked before the next story, and gone once done",
+              order[:2] == ["REQ", "plan"] and not requests_of(root) and "state=done" in journal,
+              f"exit {code}; order {order[:4]}; {out.strip()[-300:]}")
+        check("requests: what a request wrote is committed on its own, named after the request",
+              "chore(backlog): wish show the newest first" in git_log(root), git_log(root))
+        prompts = open(log + ".request-prompts", encoding="utf-8").read() if os.path.isfile(log + ".request-prompts") else ""
+        check("requests: the request's prompt names the skill with the session's arguments, the person, the headless "
+              "rules and where a question goes",
+              "Apply the factory-backlog skill with the arguments: show the newest first" in prompts
+              and "written by Ann" in prompts and "factory-run/reference/requests.md" in prompts
+              and "request: " in prompts and "product/decisions/" in prompts, prompts[:400])
+
+    # written while a story runs: worked between its stages — one about that story only after it
+    for root in throwaway():
+        log, env = fixture(root, FIXTURE_REQ_DURING="STORY-1")
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        steps = [l.split()[1] if not l.startswith("REQ") else l for l in lines(log)]
+        wish = steps.index("REQ request:wish") if "REQ request:wish" in steps else -1
+        release = steps.index("REQ request:release") if "REQ request:release" in steps else -1
+        check("requests: one written while a story runs is worked before that story's next stage",
+              wish > 0 and steps[wish - 1] == "plan" and "test" in steps[wish + 1:], f"exit {code}; {steps}")
+        check("requests: one about the running story waits until the story's run ended",
+              release > wish and "document" in steps[:release], f"{steps}")
+
+    # a skill that has to ask: the request waits under its record, and runs again once it is answered
+    for root in throwaway():
+        log, env = fixture(root, status="draft", FIXTURE_REQ_ASK="1")
+        run_runner(runner, root, "request", "wish", "something unclear", env=env)
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        listed = requests_json(root, env)["requests"]
+        records = os.listdir(os.path.join(root, "product", "decisions")) if os.path.isdir(os.path.join(root, "product", "decisions")) else []
+        check("requests: a skill's question becomes a project record named by the request, which waits on it",
+              len(listed) == 1 and listed[0]["state"] == "waiting" and listed[0]["record"].startswith("product/decisions/")
+              and len(records) == 1, f"{listed} {records}")
+        code, out = run_runner(runner, root, "decisions", "--format", "json", env=env)
+        check("requests: the inbox lists the project's record beside the stories'",
+              records and f'"id": "{records[0][:-3]}"' in out and '"state": "open"' in out, out[:300])
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        check("requests: a waiting request is not run again while its record is open",
+              lines(log).count("REQ request:wish") == 1, lines(log))
+        if records:
+            with open(os.path.join(root, "product", "decisions", records[0]), "a", encoding="utf-8") as handle:
+                handle.write("\n## Answer\nanswer: a\nby: Ann\nat: 2026-10-24T11:00:00Z\n")
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        prompts = open(log + ".request-prompts", encoding="utf-8").read() if os.path.isfile(log + ".request-prompts") else ""
+        record_text = open(os.path.join(root, "product", "decisions", records[0]), encoding="utf-8").read() if records else ""
+        check("requests: answered, the request runs again with the answer named, and the record is stamped applied",
+              lines(log).count("REQ request:wish") == 2 and "ran before and asked" in prompts and not requests_of(root)
+              and "## Applied" in record_text, f"{lines(log)} {requests_of(root)}")
+
+    # an answer whose skill asks a follow-up: answered, it runs again although its own record is answered by now
+    for root in throwaway():
+        record = os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions", "01.md")
+        log, env = fixture(root, status="draft", FIXTURE_REQ_ASK="1", FIXTURE_REQ_ANSWERS=shell_path(record))
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md", DECISION)
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "record"], cwd=root,
+                       capture_output=True)
+        run_runner(runner, root, "request", "answer", "STORY-1-01", "b", env=env)
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        asked = sorted(os.listdir(os.path.join(root, "product", "decisions"))) \
+            if os.path.isdir(os.path.join(root, "product", "decisions")) else []
+        for name in asked:
+            with open(os.path.join(root, "product", "decisions", name), "a", encoding="utf-8") as handle:
+                handle.write("\n## Answer\nanswer: a\nby: Ann\nat: 2026-10-24T11:00:00Z\n")
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        check("requests: an answer that asked a follow-up runs again once that is answered — its own record, answered "
+              "by its first run, does not fail it",
+              len(asked) == 1 and lines(log).count("REQ request:answer") == 2 and not requests_of(root),
+              f"{asked} {lines(log)} {requests_json(root, env)['requests']}")
+
+    # a tool that fails: failed, not taken again; retry and drop
+    for root in throwaway():
+        log, env = fixture(root, status="draft", FIXTURE_REQ_FAIL="1")
+        run_runner(runner, root, "request", "wish", "this fails", env=env)
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        listed = requests_json(root, env)["requests"]
+        check("requests: a request whose tool fails stays failed with the reason, and is not taken again",
+              len(listed) == 1 and listed[0]["state"] == "failed" and "exit 3" in listed[0]["error"]
+              and lines(log).count("REQ request:wish") == 1, f"{listed} {lines(log)}")
+        rid = listed[0]["id"] if listed else "none"
+        retried = run_runner(runner, root, "requests", "--retry", rid, env=env)
+        state = (requests_json(root, env)["requests"] or [{}])[0].get("state")
+        dropped = run_runner(runner, root, "requests", "--drop", rid, env=env)
+        check("requests: a failed request is queued again on --retry, and gone on --drop",
+              retried[0] == 0 and state == "queued" and dropped[0] == 0 and not requests_of(root),
+              f"{retried} {state} {dropped}")
+
+    # the runner's own kinds: a story run now, the factory stopped
+    for root in throwaway():
+        log, env = fixture(root, stories=(("STORY-2", ()),))
+        run_runner(runner, root, "request", "run", "STORY-2", env=env)
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", "--max-stages", "1", env=env)
+        first = [l.split()[0] for l in lines(log) if not l.startswith("REQ")][:1]
+        check("requests: a run request starts its story before the schedule's next one",
+              first == ["STORY-2"] and not requests_of(root), f"{first} {out.strip()[-200:]}")
+    for root in throwaway():
+        log, env = fixture(root, status="draft")
+        run_runner(runner, root, "request", "stop", env=env)
+        started = time.time()
+        code, out = run_runner(runner, root, "run", "--watch", "--stay", "--interval", "30", "--tool", "stand-in", env=env)
+        check("requests: a stop request ends a watching factory at once, and is gone",
+              code == 0 and time.time() - started < 20 and "stops the factory" in out and not requests_of(root),
+              f"exit {code}; {out.strip()[-200:]}")
+
+    # several stories at once: a request takes a slot of its own, before any story
+    for root in throwaway():
+        log, env = fixture(root, stories=(("STORY-2", ()),))
+        run_runner(runner, root, "request", "wish", "beside the stories", env=env)
+        code, out = run_runner(runner, root, "run", "--parallel", "2", "--tool", "stand-in", env=env)
+        check("requests: in a parallel run a request takes a slot before any story, and the stories still run",
+              "REQ request:wish" in lines(log)[:1] and not requests_of(root)
+              and any(l.startswith("STORY-2 ") for l in lines(log)) and any(l.startswith("STORY-1 ") for l in lines(log)),
+              f"exit {code}; {lines(log)[:6]}")
+
+    # up and down: one factory, in the background, ended between stages
+    for root in throwaway():
+        log, env = fixture(root, status="draft")
+        code, out = run_runner(runner, root, "up", env=env)
+        claim = os.path.join(root, ".git", "dca-factory-worker.lock")
+        owner = (json.load(open(claim, encoding="utf-8")) if os.path.isfile(claim) else {}).get("owner", "")
+        started = (json.load(open(os.path.join(root, ".dca-factory", "factory.json"), encoding="utf-8"))
+                   if os.path.isfile(os.path.join(root, ".dca-factory", "factory.json")) else {})
+        check("lifecycle: `up` starts the factory in the background; it holds the checkout under its own pid",
+              code == 0 and owner.endswith(f":{started.get('pid')}") and "factory.sh down" in out, f"{code} {out} {owner}")
+        second = run_runner(runner, root, "up", env=env)
+        check("lifecycle: a second `up` names the factory that is up and starts nothing",
+              second[0] == 0 and "nothing started" in second[1] and owner in second[1], second[1])
+        code, out = run_runner(runner, root, "status", "--format", "json", "--live", env=env)
+        try:
+            model = json.loads(out[out.index("{"):])
+        except ValueError:
+            model = {}
+        check("lifecycle: the status names the worker — who, since when, and that `up` started it",
+              (model.get("worker") or {}).get("how") == "up" and (model.get("worker") or {}).get("owner") == owner
+              and "requests" in model, str(model.get("worker"))[:200])
+        code, out = run_runner(runner, root, "down", env=env)
+        check("lifecycle: `down` ends it, gives the checkout back and removes its stop file and pid file",
+              code == 0 and "down" in out and not os.path.isfile(claim)
+              and not os.path.isfile(os.path.join(root, ".dca-factory", "stop"))
+              and not os.path.isfile(os.path.join(root, ".dca-factory", "factory.json")), f"{code} {out}")
+        code, out = run_runner(runner, root, "down", env=env)
+        check("lifecycle: `down` with nothing up says so", code == 0 and "nobody holds the checkout" in out, out)
+
+    # the page: this machine alone, this start's token, writes from the page alone — and each checkout its own port
+    if os.name != "nt":
+        for first_root, second_root in throwaway(2):
+            _log, env = fixture(first_root)
+            fixture(second_root)
+            servers = []
+            try:
+                for root in (first_root, second_root):
+                    code, out = run_runner(runner, root, "serve", "--background", env=env)
+                    servers.append(json.load(open(os.path.join(root, ".dca-factory", "serve.json"), encoding="utf-8"))
+                                   if os.path.isfile(os.path.join(root, ".dca-factory", "serve.json")) else {})
+                served = servers[0]
+                port, token = served.get("port"), served.get("url", "").split("t=")[-1]
+                check("serve: two checkouts get two ports, each bound to 127.0.0.1 alone",
+                      len(servers) == 2 and servers[0].get("port") and servers[0].get("port") != servers[1].get("port")
+                      and served.get("url", "").startswith(f"http://127.0.0.1:{port}/?t="), str(servers))
+                import urllib.request
+                import urllib.error
+
+                def call(path, token=token, host=None, origin=None, body=None, kind="application/json"):
+                    headers = {"X-Factory-Token": token} if token else {}
+                    if host:
+                        headers["Host"] = host
+                    if origin:
+                        headers["Origin"] = origin
+                    data = None
+                    if body is not None:
+                        data = json.dumps(body).encode("utf-8")
+                        headers["Content-Type"] = kind
+                    request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=data, headers=headers)
+                    try:
+                        with urllib.request.urlopen(request, timeout=30) as response:
+                            return response.status, json.loads(response.read() or b"{}")
+                    except urllib.error.HTTPError as error:
+                        return error.code, json.loads(error.read() or b"{}")
+                own = f"http://127.0.0.1:{port}"
+                refusals = [call("/api/view/status", token=""), call("/api/view/status", token="x" * 32),
+                            call("/api/view/status", host=f"evil.example:{port}"),
+                            call("/api/request", body={"kind": "wish", "words": "x"}),
+                            call("/api/request", origin="http://evil.example", body={"kind": "wish", "words": "x"}),
+                            call("/api/request", origin=own, body={"kind": "wish", "words": "x"}, kind="text/plain"),
+                            call("/api/view/story?id=--help")]
+                check("serve: refuses a missing or wrong token, a foreign Host, a write without its Origin or from "
+                      "another, a write that is no JSON, and an id that is an option",
+                      [c for c, _ in refusals] == [403, 403, 403, 403, 403, 415, 400] and not requests_of(first_root),
+                      [c for c, _ in refusals])
+                code, view = call("/api/view/status")
+                check("serve: the page reads the factory's own status view", code == 200 and view.get("project") and
+                      "requests" in view, str(view)[:200])
+                code, made = call("/api/request", origin=own, body={"kind": "release", "story": "STORY-1", "by": "Ann"})
+                pressed = open(os.path.join(first_root, ".dca-factory", "requests", requests_of(first_root)[0]),
+                               encoding="utf-8").read() if requests_of(first_root) else ""
+                run_runner(runner, first_root, "requests", "--drop", made.get("id", "none"), env=env)
+                run_runner(runner, first_root, "request", "release", "STORY-1", "--by", "Ann", env=env)
+                typed = open(os.path.join(first_root, ".dca-factory", "requests", requests_of(first_root)[0]),
+                             encoding="utf-8").read() if requests_of(first_root) else ""
+                strip = lambda text: [l for l in text.splitlines() if not l.startswith("asked:")]
+                check("serve: a press writes exactly the request `factory.sh request` writes",
+                      code == 201 and pressed and strip(pressed) == strip(typed), f"{code} {made}\n{pressed}\n{typed}")
+                code, page = 0, ""
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/?t={token}", timeout=10) as response:
+                        code, page = response.status, response.read().decode("utf-8")
+                        policy = response.headers.get("Content-Security-Policy", "")
+                except urllib.error.HTTPError as error:
+                    code, policy = error.code, ""
+                check("serve: the page is one HTML file whose policy allows no script, style or connection from "
+                      "elsewhere", code == 200 and "<script>" in page and "<script src" not in page and "<link" not in page
+                      and "default-src 'none'" in policy and "connect-src 'self'" in policy, f"{code} {policy}")
+            finally:
+                for served in servers:
+                    if served.get("pid"):
+                        try:
+                            os.kill(served["pid"], signal.SIGTERM)
+                        except OSError:
+                            pass
+    failures = [name for name, ok, _ in results if not ok]
+    print(f"\nverify: {len(results) - len(failures)}/{len(results)} request cases behaved as specified")
+    return failures
+
+
 def verify_unit(verbose):
     """The package's functions called directly — the contract parsers, the story state on synthetic journals, the
     schedule, the report readers: `unit/test_*.py`, plain unittest, in this process and in the first shard only.
@@ -10123,6 +10464,7 @@ def run_runner_groups(args, failures, group):
             print()
             CURRENT_GROUP[0] = "worktree"
             runner_failures += verify_worktrees(args.runner, args.verbose)
+            runner_failures += verify_requests(args.runner, args.verbose)
         if group in ("all", "setup"):
             print()
             CURRENT_GROUP[0] = "setup"

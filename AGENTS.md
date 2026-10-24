@@ -47,7 +47,7 @@ dca-marketplace/
 │   ├── skills/dca-knowledge/catalog/      # GENERATED mirror of dca-knowledge-catalog/bundle — never hand-edit
 │   └── skills/{dca-modelling,dca-discipline,dca-audit}/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
-│   ├── skills/factory-run/                # orchestrator + scripts/{dca_factory/ (the package: contract, reports, state, gate, tools, runner, cli), story-gate.py (decides) and factory-cli.py (shows, coordinates) as its entry points, factory.sh} + templates (profile, backlog, decision record, hook) + reference
+│   ├── skills/factory-run/                # orchestrator + scripts/{dca_factory/ (the package: contract, reports, state, spec, gate, tools, requests, runner, page, service, cli), story-gate.py (decides) and factory-cli.py (shows, coordinates) as its entry points, factory.sh} + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document,stage-integrate}/
 │   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-help,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; the factory explained; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
@@ -88,7 +88,10 @@ dca-marketplace/
   (`dca-factory.profile.yaml` at the project root) and `product/` — the description (product, tech, designed
   domain) and the epics with their stories, each story carrying its state and its decisions beside it —
   beside the glossaries and the generated context map. Run artefacts go to `.dca-factory/runs/`, which is
-  protocol and disposable; `.agents/factory/` is the installed pipeline alone.
+  protocol and disposable; `.agents/factory/` is the installed pipeline alone. `factory.sh up` runs the factory as a
+  process of its own and `serve` shows it in a browser (127.0.0.1, a token per start); a press there, like
+  `factory.sh request`, writes a request under `.dca-factory/requests/` that the factory works headless with the
+  skill a session would run — `factory-run/reference/requests.md`.
 - **dca-craft** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/ubiquitous-language`, `/context-map`, `/product-discovery`,
   `/review-ddd`, `/review-hexagonal`, `/review-clean-code`; agents `e2e-tester`, `ddd-reviewer`,
   `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the

@@ -233,6 +233,27 @@ gate reports and the run journal — or — for whoever changes the pipeline —
 did not hold, what held, and what it could not observe. The last one is not decoration: a check
 that was not observed is not a check that passed.
 
+## The factory without a session
+
+The factory can run as a process of its own and be driven from a browser — with any tool the profile names,
+because it needs nothing but its files and the runner:
+
+```
+bash .agents/factory/factory.sh up --serve      # the factory in the background, and its page
+bash .agents/factory/factory.sh request wish "show the newest books first"
+bash .agents/factory/factory.sh requests        # what was asked and where each stands
+bash .agents/factory/factory.sh down            # ends after the running stage
+```
+
+`up` starts `run --watch --stay` outside any session and names a factory that is up already instead of starting
+a second. `serve` prints a URL on 127.0.0.1 — each checkout on a port of its own, a token per start — with the
+cockpit's tabs; every press there writes a **request**, the same file `factory.sh request` writes: a wish, a
+release, an answer, an acceptance or a correction, a description change, a discovery, a story to run now, a stop.
+The factory works the requests before its next story and between the stages of a running one, each with the skill
+a session would run, headless, and commits what it wrote. A skill that has to ask a person writes a decision record
+— beside the story, or under `product/decisions/` — and the request waits until it is answered on the page or in
+any session. `reference/requests.md` in the `factory-run` skill has the details.
+
 ## One entry point
 
 `factory.sh setup` puts the runner next to the gate, so everything a person does with the pipeline
@@ -247,6 +268,9 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh run [--story <id> [--from <stage>]] [--watch] [--keep-going] [--parallel <n>]` | `factory-run` | one story through the six stages in its worktree, from where its files say, then integrated · `--from` names the stage (or `integrate`) and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch`, past a stopped story with `--keep-going`, up to `<n>` at once with `--parallel` |
 | `factory.sh status [--all] [--story <id>] [--epic <id>] [--live] [--format md\|json] [--usage] [--refusals] [--brief]` | `factory-status` | what runs, what waits for you, what comes next and the totals · `--all` the backlog by epic with times and tokens · one story's words, criteria, passes, stages and decisions · one epic with its stories · every token class per stage · the gate refusals, form against substance |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
+| `factory.sh up [--serve] [--port <n>]` · `down [--now]` | *(the page, the cockpit)* | the factory as a process of its own, until `down` · `--serve` the page too |
+| `factory.sh serve [--port <n>] [--open]` | *(the page)* | the factory in a browser on this machine alone, every press a request |
+| `factory.sh request <kind> …` · `requests [--retry\|--drop <id>]` | every skill a request runs | one request the factory works before its next story · what was asked and where it stands |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |
 | `factory.sh update [--from <dir>] [--copy\|--link] [--adopt <skill>,…\|all]` | `factory-update` | the newest pipeline found, same tools; the mode the project has, or the one named; `--adopt` takes over a method skill's copy the install did not make, which every later update then refreshes |
 | `factory.sh verify --story <id>` · `--fixtures` | `factory-verify` | observe a delivered story · check the machinery |

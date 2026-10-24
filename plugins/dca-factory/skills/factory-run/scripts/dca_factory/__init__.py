@@ -6,7 +6,10 @@
     spec       what holds: the living spec per context, the story's criteria as entries, the delta, the merge
     gate       what decides: the checks, their registry, the stamps a passed stage writes
     tools      an agent tool as a record, probed once against its binary
-    runner     what the runner asks between stages: its tables, a story's worktree, the skeletons
+    requests   what a person asks the factory to do: one file per request, checked when written, listed in order
+    runner     what the runner asks between stages: its tables, a story's worktree, the skeletons, a request worked
+    page       the page `serve` shows: one HTML file, its script inline
+    service    the factory as a process of its own: up, down, the worker, and the page's server
     cli        what a person, a stage or factory.sh asks about the pipeline: status, help, usage, the readers
 
 Each module imports from the ones above it in this list, never from one below. stdlib only.

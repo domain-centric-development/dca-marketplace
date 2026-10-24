@@ -77,14 +77,16 @@
 #              The prompt names them as paths; otherwise a stage searches templates or a dependency's jar
 #              for what one node lists. `factory.sh setup` takes it from the method's conventions file
 # model.<tool>.<stage>  the model <tool> (claude, codex, opencode) runs <stage> on (plan, test,
-#              build, tidy, judge, document); model.<tool> is that tool's default for every stage
+#              build, tidy, judge, document — or builder, verifier, review, and request: a person's request
+#              the factory works headless); model.<tool> is that tool's default for every stage
 #              without a key of its own. Values are the tool's own model names or aliases. Always
 #              bound to a tool: a profile is shared, and a model name means nothing to another tool —
 #              the gate refuses an unqualified model key. Unset: the tool's default. A --model/-m
 #              in FACTORY_<TOOL>_ARGS overrides it for one person, and the run says so
 # tool         the tool a run starts its units with where `factory.sh run --tool` names none;
 #              tool.<unit> per unit — tool.builder, tool.verifier, tool.review.<perspective> (tool.review for
-#              all), with `stages: separate` tool.<stage>, and tool.integrate. A unit is one process: in the
+#              all), with `stages: separate` tool.<stage>, tool.integrate, and tool.request (tool.request.<kind>
+#              for one kind of request: wish, answer, …). A unit is one process: in the
 #              shared default plan to tidy is the builder, judge with document the verifier. `--tool` names
 #              one tool for every unit of a run. Every tool named here is checked before the first stage
 # effort.<tool>.<unit>  the reasoning effort (low, medium, high, xhigh, max) <tool> runs <unit> at —

@@ -81,6 +81,16 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
 | `/factory-discover` | the discoveries: every topic, its proposed epics and which are epics already, its proposed description changes — what `factory.sh discover --list` prints, shown and explained |
 | `/factory-discover <topic>` | the discovery of that topic: the question catalogue, the research, the report with its sources and proposals (steps 1–7) |
 
+## Run for a request
+
+When the factory runs you for a person's request — the prompt says *request `<id>` … you run headless* — follow
+`factory-run/reference/requests.md`, *Run headless*. Here that means: the request's words are the problem or the
+deliverable; name the topic yourself from them, short and hyphenated, unless a report on the same matter exists —
+then continue that one. Ask the catalogue's open questions not in the chat but as **one** project record, all of
+them as its question with your proposed answers as options where the files suggest them, and end; the report so far
+stays. Documents come only from the project's files and `originals/`; excerpts are the default. Run the gate (step
+6) before you end. Releasing a proposal stays the person's — a separate request.
+
 ## Do not
 
 - Do not decide which problem to solve or which option to take; propose and say what would decide.
