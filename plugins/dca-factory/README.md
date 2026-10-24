@@ -631,7 +631,9 @@ are no input to the check, so skill links and settings the install left untracke
 nor is what the pipeline writes itself — `.dca-factory/`, the run folder and the evidence, tracked or not — so a
 running factory's files never refuse a person's commit beside it.
 `FACTORY_PRECOMMIT_CHECKS="compile architecture"` narrows the hook on a slow stack, and a required check
-left out is reported as not run here, never as passed. That is the enforcement boundary — a tool's
+left out is reported as not run here, never as passed. A commit that stages only the backlog — stories, epics,
+decisions, findings — and the pipeline's own files changes no code: it runs what the profile's `checks.backlog:`
+names (`test`, where a test reads the backlog), nothing when the line is absent. That is the enforcement boundary — a tool's
 own hooks are a fast feedback loop, but only git is common to every tool, and a hook can be skipped
 with `--no-verify`, so CI runs `--change` as well.
 

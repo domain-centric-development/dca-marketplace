@@ -81,7 +81,7 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    DEFAULTS, evidence_rel, JOURNAL, METHOD_PROFILE, PLACES, PLACES_REL, read_flat,
+    DEFAULTS, evidence_rel, findings_rel, JOURNAL, METHOD_PROFILE, PLACES, PLACES_REL, read_flat,
     runs_top,
     ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
     DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
@@ -3237,6 +3237,21 @@ def pipeline_owned():
     return lambda path: path.replace("\\", "/").startswith(prefixes)
 
 
+def backlog_paths(cwd, env):
+    """The staged paths when every one of them is backlog or the pipeline's own protocol — the epics with their
+    stories, decisions and findings, the project's findings, `.dca-factory/` — else None. A commit that stages
+    nothing is None: it is checked as any other."""
+    code, names = git(cwd, "diff", "--cached", "--name-only", "--no-renames", env=env)
+    paths = [p for p in names.splitlines() if p] if code == 0 else []
+    if not paths:
+        return None
+    epics = (PLACES_REL.get("epics") or DEFAULTS["epics"]).strip("/")
+    prefixes = tuple(folder.strip("/") + "/" for folder in (epics, findings_rel()) if folder)
+    owned = pipeline_owned()
+    backlog = lambda path: path.replace("\\", "/").startswith(prefixes) or owned(path)
+    return paths if all(backlog(p) for p in paths) else None
+
+
 def red(result, check, message, must, strict):
     """A red check fails the verdict — unless a policy is declared and this check is not in it.
     Then the policy decides: the red run is reported, and it is not what the commit is judged by."""
@@ -3992,6 +4007,22 @@ def change_check(result, cwd, profile, staged, only):
     scope = split_list(only) or list(CHANGE_CHECKS)
     test_keys = [k for k in test_command_keys(profile)] + sorted(
         r for r in required if (r == "e2eTest" or r.startswith("test.")) and r not in test_command_keys(profile))
+    # A commit of the backlog alone — stories, decisions, findings, the pipeline's protocol — changes no code: it
+    # runs what `checks.backlog` names (a project whose tests read the backlog names them), by each check's or
+    # test command's own key, and nothing more. An explicit `--checks` scope is the person's and wins.
+    test_scope = None
+    paths = backlog_paths(cwd, env) if staged and not split_list(only) else None
+    if paths:
+        named = split_list(profile.get("checks.backlog"))
+        unknown = sorted(n for n in named if n not in CHANGE_CHECKS and n not in test_keys)
+        if unknown:
+            result.fail("policy", f"`checks.backlog:` names {', '.join(unknown)} — it takes compile, architecture, "
+                                  f"format and the profile's test-command keys (test, e2eTest, test.<name>)")
+        test_scope = {n for n in named if n in test_keys}
+        scope = [n for n in named if n in CHANGE_CHECKS and n != "test"] + (["test"] if test_scope else [])
+        result.note("scope", f"the commit changes only the backlog and the pipeline's own files "
+                             f"({len(paths)} path(s)) — `checks.backlog` runs "
+                             + (", ".join(named) if named else "no check"))
     for check in CHANGE_CHECKS:
         if check == "test":
             required_tests = [k for k in test_keys if k in required]
@@ -4002,6 +4033,10 @@ def change_check(result, cwd, profile, staged, only):
                 continue
             commands = {}
             for key in test_keys:
+                if test_scope is not None and key not in test_scope:
+                    result.skip(key, "not run in this scope" + (" — it is required, so a later scope (CI) has "
+                                                                "to run it" if key in required else ""))
+                    continue
                 if profile.get(key):
                     commands.setdefault(profile[key], []).append(key)
                 elif key in required:

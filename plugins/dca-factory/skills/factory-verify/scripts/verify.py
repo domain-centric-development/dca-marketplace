@@ -5604,12 +5604,12 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 25\nrequried: compile\n" + PROFILE)),
+         dict(profile="contract: 26\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"
                                 "carrier.discover: product-discovery\nmodel.claude.tidy: haiku\nknowledge.read: a.md\n"
-                                "stageTimeout: 30m\nhttp.stub: none\nadopt.breakProof: all\n")),
+                                "stageTimeout: 30m\nhttp.stub: none\nadopt.breakProof: all\nchecks.backlog: test\n")),
 
         # --- the shape the selector depends on ------------------------------
         # The documented limit, as a case: a selector resolves through a source file *named after
@@ -6405,6 +6405,60 @@ def run_groups(args):
                              "factory refuses no person's commit",
                              code == 0 and "untracked: .dca-factory" not in output
                              and "the pipeline writes itself left out" in output, output.strip().splitlines()[-4:]))
+    for root in throwaway():
+        # a commit of the backlog alone changes no code: it runs what `checks.backlog` names, nothing without it
+        change_project(root, "compile: false\ntest: sh suite.sh\ne2eTest: false\nrequired: compile test e2eTest\n",
+                       state="broken", repository=True)
+        write_file(root, "product/epics/epic-a/story-a/story.md", "---\nid: story-a\nstatus: draft\n---\n")
+        write_file(root, ".dca-factory/evidence/story-a/journal.tsv", "2026-10-24T08:00:00Z\tbacklog\tstart\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_change(args.gate, root, "--staged")
+        verdicts = checks_by_verdict(output)
+        expectations.append(("change: a commit of the backlog alone runs no check without `checks.backlog`, and "
+                             "names the required ones as left to CI",
+                             code == 0 and "only the backlog and the pipeline's own files (2 path(s))" in output
+                             and "runs no check" in output and "compile" in verdicts["skip"]
+                             and "test" in verdicts["skip"] and "ran 1 case" not in output,
+                             output.strip().splitlines()[-5:]))
+        with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("checks.backlog: test\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: the profile is code — a commit that stages it with the backlog runs every check",
+                             code == 1 and "only the backlog" not in output and "compile" in checks_by_verdict(output)["fail"],
+                             output.strip().splitlines()[-4:]))
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "profile", "--no-verify"],
+                       cwd=root, capture_output=True)
+        write_file(root, "product/epics/epic-a/story-a/story.md", "---\nid: story-a\nstatus: approved\n---\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_change(args.gate, root, "--staged")
+        verdicts = checks_by_verdict(output)
+        expectations.append(("change: `checks.backlog: test` runs the `test:` command alone on a backlog commit",
+                             code == 1 and "runs test" in output and "1 failing case(s)" in output
+                             and "compile" in verdicts["skip"] and "e2eTest" in verdicts["skip"],
+                             output.strip().splitlines()[-5:]))
+        code, output = run_change(args.gate, root, "--staged", "--checks", "compile")
+        expectations.append(("change: an explicit `--checks` scope wins over `checks.backlog`",
+                             code == 1 and "only the backlog" not in output
+                             and "compile" in checks_by_verdict(output)["fail"] and "failing case" not in output,
+                             output.strip().splitlines()[-4:]))
+        write_file(root, "src/state", "fixed\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: a commit of the backlog with code beside it runs every check",
+                             code == 1 and "only the backlog" not in output and "compile" in checks_by_verdict(output)["fail"],
+                             output.strip().splitlines()[-4:]))
+        subprocess.run(["git", "reset", "-q", "src/state"], cwd=root, capture_output=True)
+        write_file(root, "src/state", "broken\n")
+        with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("checks.backlog: test smoke\n")
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "profile", "--no-verify"],
+                       cwd=root, capture_output=True)
+        write_file(root, "product/epics/epic-a/story-a/story.md", "---\nid: story-a\nstatus: draft\n---\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: `checks.backlog` naming no check and no test command fails the policy",
+                             code == 1 and "`checks.backlog:` names smoke" in output, output.strip().splitlines()[-5:]))
     for root in throwaway():
         # the hook is the same command; `git commit -a` hands it a temporary index
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", repository=True)

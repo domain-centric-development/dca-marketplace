@@ -477,6 +477,13 @@ this run's scope (`--checks`) is reported as not run here, for a later scope suc
 run does not fail on it. Once `required:` is declared, the policy decides: a check outside it that
 ran red or ran nothing is reported, and does not fail the verdict.
 
+A staged commit of the backlog alone — every path under the epics (stories, epics, decisions, findings), the
+project's findings or what the pipeline writes itself (`.dca-factory/`) — changes no code, and its scope is the
+profile's `checks.backlog:` line: checks and test commands by their own keys (`test` is the `test:` command
+alone), nothing when the line is absent. A required check it leaves out is named as not run here, as above. One
+path outside them, the profile included, and every check runs; an explicit `--checks` wins over the line. A name
+the line carries that is no check and no declared test command fails the policy. The key needs file contract 26.
+
 Without `required:` nothing is mandatory, and what runs still counts: a declared command that runs
 red fails, a command that is not declared is skipped and named. So "skipped and named, never failed"
 holds for what the project did not declare, not for what `required:` names. A gate that does not know

@@ -108,6 +108,11 @@
 #              (Gradle: `./gradlew test --rerun`), since only a report from this run counts. Gradle's
 #              `--rerun` is a task option: it reruns the one task named before it, so a line with several
 #              tasks needs one `--rerun` per task, or `--rerun-tasks` for all of them
+# checks.backlog  what a commit runs that stages only the backlog — stories, epics, decisions, findings —
+#              and the pipeline's own files (`.dca-factory/`): checks and test commands by their own keys, as
+#              `required:` names them (`test` is the `test:` command alone). Absent: such a commit runs no
+#              check, and a required one is named as left to CI. Name the commands whose tests read the
+#              backlog — a test that checks titles against the open stories — and nothing slower
 # product      the product description (default: product/overview.md) — what is built, for whom, its
 #              surfaces, how it works, how it looks. Mandatory before the first story, with `tech`
 # tech         the technical description (default: product/tech.md) — stack, frontend approach,
@@ -160,7 +165,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 25
+contract: 26
 
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}
@@ -171,6 +176,7 @@ architecture: {{ARCHITECTURE_COMMAND}}
 format: {{FORMAT_COMMAND}}
 formatFix: {{FORMAT_FIX_COMMAND}}
 #required: compile test architecture
+#checks.backlog: test
 #acceptance: pages
 #stages: separate
 #parallel: 2
