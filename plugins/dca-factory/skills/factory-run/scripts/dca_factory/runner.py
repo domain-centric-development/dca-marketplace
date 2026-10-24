@@ -1343,6 +1343,11 @@ def document_skeleton(runs, story_id, cwd="."):
 #: the allow-list about three times per story, each a wasted turn; without a delete the build left a planned removal.
 STAGE_SHELL_HEADS = ("cd", "ls", "cat", "head", "tail", "wc", "sort", "grep", "diff", "pwd",
                      "git status", "git diff", "git log", "git ls-files", "git apply --check", "git rm")
+#: The cli flags a skill run for a request may call (WP-91): what the dialog skills read and record with — never one
+#: that starts a run, a request, the factory or its page (`--run`, `--work-request`, `--request`, `--up`, `--serve`).
+REQUEST_CLI_FLAGS = ("--contract", "--free-id", "--window-start", "--window-end", "--list-decisions", "--spec-delta",
+                     "--spec-check", "--findings", "--reopen", "--owned-confirm", "--status", "--discover-list",
+                     "--help-view", "--journal-line")
 STAGE_SHELL = ("cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git status, git diff, git log, git ls-files, "
                "git apply --check, and git rm (a file the plan removes)")
 
@@ -2049,8 +2054,9 @@ class Run:
                 if read:
                     catalog += f" Before you write code, read once: {', '.join(read)}."
         cli_path = self.cli_rel()
-        return (f"Where things are: the stack profile is {PROFILE_FILE}; the story's run folder {self.runs}/{story}/; "
-                f"its evidence folder {self.evidence_rel()}/{story}/; what the gate checks in a stage's file: "
+        folders = (f"; the story's run folder {self.runs}/{story}/; its evidence folder {self.evidence_rel()}/{story}/"
+                   if story else "")
+        return (f"Where things are: the stack profile is {PROFILE_FILE}{folders}; what the gate checks in a stage's file: "
                 f"`{self.py} {cli_path} --contract <stage>`.{common}{catalog} The shell you have without asking: "
                 f"the gate, the cli, the profile's commands, and {STAGE_SHELL}.")
 
@@ -3231,26 +3237,31 @@ class Run:
                          f"{', '.join(records)}). Read the answer and go on from there — write nothing the answer and "
                          f"the request do not settle.")
         story = (request.get("story") or "").split()
-        lines.append(self.where_things_are(tool, story[0] if len(story) == 1 else "<story>")
+        lines.append(self.where_things_are(tool, story[0] if len(story) == 1 else None)
                      + " For a request, also `bash .agents/factory/factory.sh` backlog, status, decisions, discover, "
                      "spec-delta and help.")
         return "\n\n".join(lines)
 
     def request_allowed(self):
-        """A request's shell: a stage's, and the runner's reading verbs — never `run`, `up` or `request`."""
-        heads = [f"Bash(bash .agents/factory/factory.sh {verb}:*)"
-                 for verb in ("backlog", "status", "decisions", "discover", "spec-delta", "help")]
-        return ",".join([self.allowed_commands(), *heads])
+        """A request's shell: a stage's, with the cli narrowed to the flags the dialog skills read and record with, and
+        the runner's reading verbs — no flag and no verb that starts a run, a request, the factory or its page."""
+        cli = f"Bash({self.py} .agents/factory/factory-cli.py:*)"
+        heads = [head for head in self.allowed_commands().split(",") if head != cli]
+        heads += [f"Bash({self.py} .agents/factory/factory-cli.py {flag}:*)" for flag in REQUEST_CLI_FLAGS]
+        heads += [f"Bash(bash .agents/factory/factory.sh {verb}:*)"
+                  for verb in ("backlog", "status", "decisions", "discover", "spec-delta", "help")]
+        return ",".join(heads)
 
     def people_paths(self):
         """What a request may write and the factory commits: the project description and the backlog — the folder the
         epics lie in with everything beside them, the description's files, the discovery, `docs/` — and the agents'
-        instructions a description writes a line into."""
+        instructions a description writes a line into. Never the spec: what holds is merged by the gate that
+        delivers, not by a person's request. (folders, files, excluded folders)"""
         self.profile()
         rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).strip("/")
         folders = {os.path.dirname(rel("epics")) or rel("epics"), rel("epics"), rel("discovery"), "docs"}
         files = {rel("product"), rel("tech"), rel("domain"), "AGENTS.md", "CLAUDE.md"}
-        return tuple(sorted(f + "/" for f in folders if f and f != ".")), files
+        return tuple(sorted(f + "/" for f in folders if f and f != ".")), files, (rel("spec") + "/",)
 
     def dirty_files(self):
         """{path: digest} of everything git sees changed or new in the main checkout, outside the factory's folder."""
@@ -3279,15 +3290,17 @@ class Run:
         backlog or the description. A path a person had changed before, or code, stays as it is and is named."""
         after = self.dirty_files()
         changed = sorted(p for p, digest in after.items() if before.get(p) != digest)
-        folders, files = self.people_paths()
-        mine = [p for p in changed if p not in before and (p in files or p.startswith(folders))]
+        folders, files, never = self.people_paths()
+        mine = [p for p in changed if p not in before and (p in files or p.startswith(folders))
+                and not p.startswith(never)]
         theirs = [p for p in changed if p in before]
         stray = [p for p in changed if p not in before and p not in mine]
         if theirs:
             print(f"factory: request {request['id']} changed what was changed by hand before — left uncommitted: "
                   f"{', '.join(theirs[:8])}")
         if stray:
-            err(f"factory: request {request['id']} changed what is neither backlog nor description — left uncommitted: "
+            err(f"factory: request {request['id']} changed what is neither backlog nor description (code, the spec) — "
+                f"left uncommitted: "
                 f"{', '.join(stray[:8])}")
         if not mine:
             return ""
@@ -3296,13 +3309,15 @@ class Run:
             git(self.home, "add", "--", *mine)
             message = (f"chore(backlog): {request['kind']} {target_text(request)}\n\nRequest: {request['id']}\n"
                        f"By: {request.get('by', '')}\n")
-            done = git(self.home, *git_identity(self.home), "commit", "--no-verify", "--quiet", "-m", message, "--",
-                       *mine)
+            # through the commit hook, as a person's backlog commit: it runs what the profile's `checks.backlog:` names
+            done = git(self.home, *git_identity(self.home), "commit", "--quiet", "-m", message, "--", *mine)
+            if done[0] != 0:
+                git(self.home, "reset", "--quiet", "--", *mine)
         finally:
             self.drop_lock()
         if done[0] != 0:
             err(f"factory: what request {request['id']} wrote could not be committed — {done[1]}; it stays in the "
-                "checkout")
+                "checkout, unstaged")
             return ""
         return git(self.home, "rev-parse", "--short", "HEAD")[1].strip()
 

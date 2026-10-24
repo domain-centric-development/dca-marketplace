@@ -35,7 +35,7 @@ from .state import claim_path, dead_runner, read_claim, running_stages, stale_af
 from .reports import parse_time
 from .requests import (
     default_by, drop_request, Duplicate, stamp_utc, factory_dir, ID_WORD, KINDS, RequestError, retry_request, write_request)
-from .page import PAGE
+from .page import PAGE, SCRIPT_HASH
 
 
 FACTORY_FILE = "factory.json"       # the factory `up` started: pid, start, log, who
@@ -322,8 +322,15 @@ def free_port(cwd, wanted=None):
     return None
 
 
+#: A port the page left a moment ago (TIME_WAIT) is its own again at once, so a bookmark holds across a restart; on
+#: Windows the option would let another process bind the same port beside it, so there it stays off.
+REUSE_ADDRESS = os.name != "nt"
+
+
 def bindable(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        if REUSE_ADDRESS:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             probe.bind(("127.0.0.1", port))
             return True
@@ -409,7 +416,7 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False):
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
-    allow_reuse_address = False
+    allow_reuse_address = REUSE_ADDRESS
 
 
 #: The views the page may read — fixed argument lists, the one value they take checked to be an id.
@@ -490,14 +497,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(data)))
         self.common_headers()
+        if self.command == "POST" and code >= 400:
+            # refused before its body was read: the body would be read as the next request on this connection
+            self.send_header("Connection", "close")
         if kind.startswith("text/html"):
             self.send_header("Content-Security-Policy",
-                             "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                             f"default-src 'none'; script-src '{SCRIPT_HASH}'; style-src 'unsafe-inline'; "
                              "connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; "
                              "frame-ancestors 'none'")
         self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(data)
+        self.wfile.write(data)
 
     def json(self, code, value):
         self.answer(code, json.dumps(value, ensure_ascii=False))

@@ -13,6 +13,8 @@ fixture's "test runner" is a marker file, so red and green cost milliseconds ins
 
 import argparse
 import ast
+import base64
+import contextlib
 import glob
 import hashlib
 import importlib.util
@@ -10091,6 +10093,7 @@ case "$FACTORY_STAGE" in
       printf -- '---\\nid: %s-q\\nrequest: %s\\nstage: request\\nasked: 2026-10-24T10:00:00Z\\n---\\n\\n# Which epic?\\n\\n## Question\\nq\\n\\n## Options\\n- a: sample\\n- b: a new one\\n\\n## Recommendation\\na\\n' "$rid" "$rid" > "product/decisions/$rid-q.md"
     else
       printf '%s %s\\n' "$FACTORY_STAGE" "$rid" >> product/notes.md
+      [ -n "${FIXTURE_REQ_SPEC:-}" ] && { mkdir -p product/spec/sample; printf 'x\\n' > product/spec/sample/scenarios.md; }
     fi
     exit 0 ;;
 esac
@@ -10196,6 +10199,34 @@ def verify_requests(runner, verbose=False):
               "Apply the factory-backlog skill with the arguments: show the newest first" in prompts
               and "written by Ann" in prompts and "factory-run/reference/requests.md" in prompts
               and "request: " in prompts and "product/decisions/" in prompts, prompts[:400])
+
+    # a request never commits the spec
+    for root in throwaway():
+        log, env = fixture(root, status="draft", FIXTURE_REQ_SPEC="1")
+        run_runner(runner, root, "request", "wish", "touches the spec", env=env)
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        committed = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"], cwd=root, capture_output=True,
+                                   text=True).stdout.split()
+        check("requests: a request's commit never takes the spec — it stays in the checkout and is named",
+              "product/notes.md" in committed and not any(p.startswith("product/spec/") for p in committed)
+              and os.path.isfile(os.path.join(root, "product", "spec", "sample", "scenarios.md"))
+              and "product/spec/sample/scenarios.md" in out, f"{committed} {out.strip()[-300:]}")
+
+    # a request's commit goes through the hook: refused there, what it wrote stays in the checkout, unstaged
+    for root in throwaway():
+        log, env = fixture(root, status="draft")
+        hook = os.path.join(root, ".git", "hooks", "pre-commit")
+        with open(hook, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("#!/bin/sh\necho 'backlog check refused' >&2\nexit 1\n")
+        os.chmod(hook, 0o755)
+        run_runner(runner, root, "request", "wish", "refused by the hook", env=env)
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=root, capture_output=True,
+                                text=True).stdout.split()
+        check("requests: a commit the hook refuses leaves what the request wrote in the checkout, unstaged, and says so",
+              "chore(backlog)" not in git_log(root) and not staged
+              and os.path.isfile(os.path.join(root, "product", "notes.md"))
+              and "could not be committed" in out and "unstaged" in out, f"{staged} {out.strip()[-300:]}")
 
     # written while a story runs: worked between its stages — one about that story only after it
     for root in throwaway():
@@ -10376,6 +10407,23 @@ def verify_requests(runner, verbose=False):
                       "another, a write that is no JSON, and an id that is an option",
                       [c for c, _ in refusals] == [403, 403, 403, 403, 403, 415, 400] and not requests_of(first_root),
                       [c for c, _ in refusals])
+                # a refused write closes its connection: its unread body is never read as the next request
+                body = b'{"kind":"wish","words":"x"}'
+                with socket.create_connection(("127.0.0.1", port), timeout=10) as raw:
+                    raw.sendall((f"POST /api/request HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: "
+                                 f"application/json\r\nContent-Length: {len(body)}\r\n\r\n").encode() + body
+                                + f"GET /api/meta HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Factory-Token: {token}\r\n\r\n"
+                                .encode())
+                    answered = b""
+                    with contextlib.suppress(OSError):
+                        while True:
+                            chunk = raw.recv(65536)
+                            if not chunk:
+                                break
+                            answered += chunk
+                check("serve: a refused write closes its connection — its body is never read as a request",
+                      answered.count(b"HTTP/1.1 ") == 1 and b"Connection: close" in answered
+                      and b"501" not in answered, answered[:300])
                 code, view = call("/api/view/status")
                 check("serve: the page reads the factory's own status view", code == 200 and view.get("project") and
                       "requests" in view, str(view)[:200])
@@ -10396,9 +10444,14 @@ def verify_requests(runner, verbose=False):
                         policy = response.headers.get("Content-Security-Policy", "")
                 except urllib.error.HTTPError as error:
                     code, policy = error.code, ""
-                check("serve: the page is one HTML file whose policy allows no script, style or connection from "
-                      "elsewhere", code == 200 and "<script>" in page and "<script src" not in page and "<link" not in page
-                      and "default-src 'none'" in policy and "connect-src 'self'" in policy, f"{code} {policy}")
+                script = re.search(r"<script>(.*?)</script>", page, re.S)
+                digest = "sha256-" + base64.b64encode(hashlib.sha256(script.group(1).encode("utf-8")).digest()).decode() \
+                    if script else ""
+                check("serve: the page is one HTML file whose policy allows its own script alone, by its hash, and no "
+                      "style or connection from elsewhere",
+                      code == 200 and script and "<script src" not in page and "<link" not in page
+                      and "default-src 'none'" in policy and "connect-src 'self'" in policy
+                      and f"script-src '{digest}'" in policy and "unsafe-inline'; style" not in policy, f"{code} {policy}")
             finally:
                 for served in servers:
                     if served.get("pid"):

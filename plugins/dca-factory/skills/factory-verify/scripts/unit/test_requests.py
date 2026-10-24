@@ -34,10 +34,14 @@ def record(story="", rid="", stage="plan", extra=""):
 class Actions(unittest.TestCase):
     """The request a view's press writes is the factory's: `request_of` reads the action's slash command."""
 
+    def setUp(self):
+        contract.set_places({})
+
     def test_each_session_command_has_its_request(self):
         cases = {
             "/factory-run US-1": ("run", {"story": "US-1"}, "", ""),
             "/factory-run show the newest first": ("wish", {}, "show the newest first", ""),
+            "/factory-run faster": ("wish", {}, "faster", ""),
             "/factory-backlog release US-1 US-2": ("release", {"story": "US-1 US-2"}, "", ""),
             "/factory-backlog stories shop": ("stories", {"epic": "shop"}, "", ""),
             "/factory-backlog journey shop": ("journey", {"epic": "shop"}, "", ""),
@@ -50,10 +54,12 @@ class Actions(unittest.TestCase):
             "/dca-describe tech: PostgreSQL 17": ("describe", {}, "tech: PostgreSQL 17", ""),
             "/factory-discover": ("discover", {}, "", "words"),
         }
-        for skill, (kind, fields, words, still) in cases.items():
-            with self.subTest(skill=skill):
-                self.assertEqual(requests.request_of(skill),
-                                 dict(kind=kind, fields=fields, words=words, open=still))
+        with project() as p:
+            p.story("US-1")
+            for skill, (kind, fields, words, still) in cases.items():
+                with self.subTest(skill=skill):
+                    self.assertEqual(requests.request_of(skill),
+                                     dict(kind=kind, fields=fields, words=words, open=still))
 
     def test_what_no_request_does_has_none(self):
         for skill in ("/factory-setup", "/factory-update", "/factory-verify US-1", "", None):

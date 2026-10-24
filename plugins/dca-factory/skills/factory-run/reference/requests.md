@@ -92,12 +92,16 @@ archived is history, not inventory
 - **In a parallel run** a request takes the next free slot before any story; one about a running story waits.
 - Each request is one process (`factory-cli.py --work-request <id>`) in the main checkout, under the runner's
   claim, with the tool `tool.request.<kind>`, `tool.request` or `tool:` names, `model.<tool>.request` and
-  `effort.<tool>.request` as for a stage. Its shell is a stage's plus `factory.sh` backlog, status, decisions,
-  discover, spec-delta and help — never `run`, `up` or `request`.
+  `effort.<tool>.request` as for a stage. Its shell is a stage's, with `factory-cli.py` narrowed to the flags the
+  dialog skills read and record with, plus `factory.sh` backlog, status, decisions, discover, spec-delta and help —
+  no flag and no verb that starts a run, a request, the factory or its page.
 - **What it wrote is committed on its own** — `chore(backlog): <kind> <target>`, `Request:` and `By:` in the
   body — the paths it changed that were clean before and belong to the backlog or the description (the folder the
-  epics lie in and everything in it, the description's files, the discovery, `docs/`, `AGENTS.md`). A path a person
-  had changed before stays uncommitted and is named; so is anything else, code above all.
+  epics lie in and everything in it, the description's files, the discovery, `docs/`, `AGENTS.md`), never the spec —
+  what holds is merged by the gate that delivers. A path a person had changed before stays uncommitted and is named;
+  so is anything else, code and the spec above all. The commit goes through the commit hook like a person's backlog
+  commit, so it runs what the profile's `checks.backlog:` names; refused, what the request wrote stays in the
+  checkout, unstaged, and the request says why.
 
 ## Run headless — what a skill does for a request
 
@@ -136,8 +140,10 @@ or request's output as server-sent events. Every press writes a request (or call
 - **Bound to 127.0.0.1 alone.** Each checkout takes a port of its own — one derived from the checkout's path
   between 8700 and 8899, so a bookmark holds, and the next free one where another factory's page has it;
   `--port` names one. `.dca-factory/serve.json` records the pid, the port and the URL.
+- **One script, by its hash**: the page's policy allows its own inline script alone (`script-src 'sha256-…'`).
 - **A token per start**, in the URL (`http://127.0.0.1:<port>/?t=<token>`) and on every call; the `Host` header
-  must name this server (no DNS rebinding); a write must carry this page's `Origin`, be JSON and at most 64 KiB.
+  must name this server (no DNS rebinding); a write must carry this page's `Origin`, be JSON and at most 64 KiB; a
+  refused write closes its connection.
   A view's argument is one id. Any other web page the browser has open can neither read the factory nor write a
   request.
 - What it does not do: authenticate a person beyond `by:`. Whoever can open the URL on this machine acts as

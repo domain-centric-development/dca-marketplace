@@ -6,6 +6,10 @@ marks, the words and which request a press writes come from the factory (`action
 Kept as a module so it ships, installs and is hashed with the package.
 """
 
+import base64
+import hashlib
+import re
+
 PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -516,9 +520,14 @@ document.addEventListener("keydown", event => {
   } catch (e) { banner(e.message); }
   $("by").addEventListener("change", () => { try { localStorage.setItem("factory.by", by()); } catch (e) {} });
   await refresh();
-  setInterval(() => { if (!document.hidden) refresh(); }, 3000);
+  setInterval(() => { if (!document.hidden) refresh(); }, 5000);
 })();
 </script>
 </body>
 </html>
 """
+
+
+#: The page's one script as its Content-Security-Policy names it: no other script runs, an injected one included.
+SCRIPT_HASH = "sha256-" + base64.b64encode(hashlib.sha256(
+    re.search(r"<script>(.*?)</script>", PAGE, re.S).group(1).encode("utf-8")).digest()).decode("ascii")

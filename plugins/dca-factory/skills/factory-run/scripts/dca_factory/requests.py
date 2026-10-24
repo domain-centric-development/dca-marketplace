@@ -26,7 +26,7 @@ import typing
 from .contract import (
     decision_files, decision_options, find_story, GateError, is_delivered, location,
     place, project_decisions_dir, read_front_matter, read_profile, read_text, resolve_profile, shown, split_front,
-    STAGES, story_id_of, git)
+    STAGES, story_files, story_folder, story_id_of, git)
 from .state import acceptance_records, is_acceptance
 from .gate import discovery_items, REASON_CODES
 
@@ -278,6 +278,17 @@ def validate(cwd, kind_name, fields, words):
 
 
 # --- a session's command as a request ----------------------------------------------------------------------------------
+def names_story(word):
+    """Whether one word is the id of a story under the epics, as the profile places them."""
+    if not ID_WORD.match(word):
+        return False
+    wanted = word.lower()
+    with contextlib.suppress(GateError, OSError):
+        return any(os.path.basename(story_folder(path)).lower() == wanted or story_id_of(path).lower() == wanted
+                   for path in story_files(place("epics")))
+    return False
+
+
 def request_of(skill):
     """The request that does what a view's action does in a session — `/factory-run <story>`, `/factory-backlog …`,
     `/factory-decisions <story> <record>: answer <key>`, `/dca-describe <change>`, `/factory-discover <words>` — as
@@ -286,8 +297,11 @@ def request_of(skill):
     text = " ".join(str(skill or "").split())
     head, _, rest = text.partition(" ")
     if head == "/factory-run":
-        return dict(kind="run", fields=dict(story=rest), words="", open="") if ID_WORD.match(rest or "-") and rest \
-            else (dict(kind="wish", fields={}, words=rest, open="") if rest else None)
+        # as the skill reads it: a story's id runs that story, every other word is a wish
+        if not rest:
+            return None
+        return dict(kind="run", fields=dict(story=rest), words="", open="") if names_story(rest) \
+            else dict(kind="wish", fields={}, words=rest, open="")
     if head == "/factory-backlog":
         verb, _, tail = rest.partition(" ")
         if verb == "release" and tail:
