@@ -51,10 +51,14 @@ class LayersTest(unittest.TestCase):
                 "spec/domain/model/criterion.py": "",
                 "spec/application/merge.py": "",
                 "sharedkernel/domain/model/moment.py": "from ....delivery.domain.model import story\n",
+                "spec/adapter/outgoing/backlog.py": "from ....delivery.adapter.outgoing import files\n"
+                                                    "from ....delivery import api\n",
+                "delivery/api/__init__.py": "",
             })
             found = architecture.layer_findings(root)
         self.assertEqual(["DCA-HEX-001", "DCA-HEX-002", "DCA-HEX-006", "DCA-LAY-003", "DCA-ONI-001", "DCA-ONI-002",
-                          "DCA-STR-002", "DCA-STR-003", "DCA-STR-004"], rules(found), found)
+                          "DCA-STR-002", "DCA-STR-003", "DCA-STR-004", "DCA-STR-006"], rules(found), found)
+        self.assertEqual(1, sum("DCA-STR-006" in f for f in found), found)       # the api is the way in
         self.assertEqual(2, sum("DCA-HEX-001" in f for f in found), found)        # the adapter and the legacy module
         self.assertFalse(any("building_blocks" in f or "dataclasses" in f for f in found), found)
 

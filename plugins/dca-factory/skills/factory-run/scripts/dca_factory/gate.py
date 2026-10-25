@@ -96,6 +96,7 @@ from .delivery.adapter.outgoing.files.decision_record_files import (
     records_of, resume_stage, stamp_applied)
 from .delivery.adapter.outgoing.files.decision_record_files import needs_human_ids
 from .delivery.domain.model.correction import REASON_CODES
+from .discovery.api import check_report
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .reports import (
@@ -1786,119 +1787,6 @@ def check_outcome_raised(result, profile, cwd, runs, story_id, front):
         result.fail("outcome", "; ".join(problems))
     else:
         result.ok("outcome", "the outcome event exists: " + "; ".join(found))
-
-
-#: The sections of a discovery report, in order (WP-85) — the craft's five parts, the proposed work and the sources.
-DISCOVERY_SECTIONS = ("Problem", "Users and evidence", "Options", "Outcome", "Risks and open questions",
-                      "Proposed work", "Sources")
-
-
-#: The fields every proposed body of work carries before it can become an epic; `domain_contact` may stay `open`.
-DISCOVERY_FIELDS = ("intent", "goal", "metric")
-
-
-#: An optional section between the proposed work and the sources: a change the findings make to the project
-#: description, one `### <file> — <section>` each with `- change:`. Discover writes it, never the description:
-#: a released change goes through the description skill.
-DESCRIPTION_CHANGES = "Proposed description changes"
-
-
-DESCRIPTION_FILES = ("overview.md", "tech.md", "domain.md")
-
-
-def discovery_items(text, section):
-    """The `### <name>` blocks of one `## <section>` of a discovery report: [(name, {field: value})]."""
-    marker = f"\n## {section}"
-    if marker not in text:
-        return []
-    body = text.split(marker, 1)[1].split("\n## ", 1)[0]
-    return [(item.splitlines()[0].strip(),
-             {k.lower(): v for k, v in re.findall(r"^\s*-\s*([A-Za-z_]+):\s*(.*?)\s*$", item, re.M)})
-            for item in re.split(r"^### ", body, flags=re.M)[1:]]
-
-
-SOURCE_LINE = re.compile(r"^\s*-\s*\[(S\d+)\]\s*(.+?)\s*$")
-
-
-CITATION = re.compile(r"\[(S\d+)\]")
-
-
-READ_ON = re.compile(r"\bread \d{4}-\d{2}-\d{2}\b")
-
-
-def check_discovery(result, cwd, profile, topic):
-    """`product/discovery/<topic>/discovery.md`: the sections in order, every citation a listed source, every
-    source resolving — an excerpt under the topic's folder, a project file, or a URL with the date it was read —
-    every proposed body of work with intent, goal and metric, and the topic's `originals/` ignored by git."""
-    folder = os.path.join(location(profile, "discovery"), topic).replace(os.sep, "/")
-    report = f"{folder}/discovery.md"
-    if not os.path.isfile(os.path.join(cwd, report)):
-        result.fail("discovery", f"no {report} — `factory-discover {topic}` writes it")
-        return
-    text = read_text(os.path.join(cwd, report))
-    headings = [h.strip() for h in re.findall(r"^## (.+)$", text, re.M)]
-    missing = [h for h in DISCOVERY_SECTIONS if h not in headings]
-    order = [h for h in headings if h in DISCOVERY_SECTIONS]
-    problems = []
-    if missing:
-        problems.append("missing " + ", ".join(f"`## {h}`" for h in missing))
-    elif order != list(DISCOVERY_SECTIONS):
-        problems.append("the sections are out of order — " + " → ".join(DISCOVERY_SECTIONS))
-    sources = {}
-    for line in (section_of(text, "sources") or []):
-        match = SOURCE_LINE.match(line)
-        if match:
-            sources[match.group(1)] = match.group(2)
-    body = text.split("\n## Sources", 1)[0]
-    unknown = sorted(set(CITATION.findall(body)) - set(sources), key=lambda c: int(c[1:]))
-    if unknown:
-        problems.append("cited but not under `## Sources`: " + ", ".join(f"[{c}]" for c in unknown))
-    for sid, entry in sources.items():
-        url = re.search(r"https?://\S+", entry)
-        if url:
-            if not READ_ON.search(entry):
-                problems.append(f"{sid}: a web source names the date it was read (`read YYYY-MM-DD`)")
-            continue
-        paths = [bare_path(p) for p in re.findall(r"`([^`]+)`", entry)] or \
-            [bare_path(p) for p in re.findall(r"(?<!\S)([\w.-]+/[\w./-]+\.[A-Za-z0-9]{1,6}(?::L?\d+(?:[-–:]\d+)?)?)", entry)]
-        if not paths:
-            problems.append(f"{sid}: names no file and no URL")
-            continue
-        for path in paths:
-            if not (os.path.isfile(os.path.join(cwd, folder, path)) or os.path.isfile(os.path.join(cwd, path))):
-                problems.append(f"{sid}: {path} is not there — an excerpt lives under {folder}/sources/")
-    items = discovery_items(text, "Proposed work")
-    if "Proposed work" in headings and not items:
-        problems.append("`## Proposed work` proposes nothing — one `### <id>` per body of work, or a line saying why none")
-    for name, fields in items:
-        lacking = [f for f in DISCOVERY_FIELDS if not fields.get(f) or fields[f].lower() == "open" or "{{" in fields[f]]
-        if lacking:
-            problems.append(f"proposed `{name}` lacks {', '.join(lacking)}")
-    if DESCRIPTION_CHANGES in headings:
-        # the position is a finding only when both neighbours are there — a missing one is reported above
-        if "Proposed work" in headings and "Sources" in headings and \
-                not headings.index("Proposed work") < headings.index(DESCRIPTION_CHANGES) < headings.index("Sources"):
-            problems.append(f"`## {DESCRIPTION_CHANGES}` stands between `## Proposed work` and `## Sources`")
-        changes = discovery_items(text, DESCRIPTION_CHANGES)
-        if not changes:
-            problems.append(f"`## {DESCRIPTION_CHANGES}` proposes nothing — one `### <file> — <section>` per change, "
-                            f"or leave the section out")
-        for name, fields in changes:
-            if not any(name.startswith(f) for f in DESCRIPTION_FILES):
-                problems.append(f"description change `{name}` names none of {', '.join(DESCRIPTION_FILES)} — "
-                                f"`### <file> — <section>`")
-            if not fields.get("change") or "{{" in fields["change"]:
-                problems.append(f"description change `{name}` says no `- change:`")
-    ignore = os.path.join(cwd, folder, ".gitignore")
-    if not (os.path.isfile(ignore) and re.search(r"^/?originals/?\s*$", read_text(ignore), re.M)):
-        problems.append(f"{folder}/.gitignore does not ignore `originals/` — the handed-over originals stay out of git")
-    if problems:
-        result.fail("discovery", f"{report}: " + "; ".join(problems))
-    else:
-        changes = len(discovery_items(text, DESCRIPTION_CHANGES))
-        result.ok("discovery", f"{report}: {len(DISCOVERY_SECTIONS)} sections, {len(sources)} source(s) resolving, "
-                               f"{len(items)} proposed body(ies) of work"
-                               + (f", {changes} proposed description change(s)" if changes else ""))
 
 
 def read_mapping(runs, story_id):
@@ -4905,7 +4793,9 @@ def main(argv):
     if args.check_discovery:
         result = Result()
         try:
-            check_discovery(result, cwd, read_profile(resolve_profile(args.profile, cwd)), args.check_discovery)
+            folder = location(read_profile(resolve_profile(args.profile, cwd)), "discovery")
+            checked = check_report(cwd, folder, args.check_discovery)
+            (result.ok if checked.passed else result.fail)("discovery", checked.said)
         except GateError as error:
             result.fail("discovery", str(error))
         for state, check, message in result.entries:

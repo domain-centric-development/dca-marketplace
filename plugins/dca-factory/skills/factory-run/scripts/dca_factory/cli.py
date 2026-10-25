@@ -81,15 +81,17 @@ from .spec.api import (
     lint_context,
     derived, merge, read_delta, read_spec, render_spec, renamed_rules, story_entries)
 from .gate import (
-    criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_signals, story_spec, discovery_items, perspectives_of, story_ids)
+    criteria_of, scenarios_of, spec_target, story_signals, story_spec, perspectives_of, story_ids)
 from .tools import (
     isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
 from .delivery.adapter.outgoing.files.status_facts import (
-    epic_files, follow_newest, front_text, story_facts, story_records)
+    follow_newest, story_facts, story_records)
+from .delivery.adapter.outgoing.files.epic_files import epic_files, front_text
 from .delivery.application.status import actions
 from .delivery.application.status.actions import offered, RUNNER
 from .delivery.application.status.show_status import ShowStatusQuery
 from .delivery.application.status.texts import figures, signals_line, stamp_text, took_text
+from .discovery.api import list_reports
 from .delivery.adapter.outgoing.files.request_files import out_path
 from .delivery.adapter.outgoing.files.story_files import names_story
 from .delivery.application.decisions.list_decisions import ListDecisionsQuery
@@ -137,33 +139,22 @@ def resolve(epics, argument):
 
 def discovery_model(cwd, epics):
     """Every discovery topic with its proposed epics — and which of them the backlog already holds — and its
-    proposed description changes. What the report says, read the way `--check-discovery` reads it."""
-    profile = read_profile(resolve_profile(None, cwd))
-    folder = location(profile, "discovery")
-    held = epic_files(epics)
-    topics = []
-    for name in sorted(os.listdir(os.path.join(cwd, folder))) if os.path.isdir(os.path.join(cwd, folder)) else []:
-        report = f"{folder}/{name}/discovery.md".replace(os.sep, "/")
-        if not os.path.isfile(os.path.join(cwd, report)):
-            continue
-        text = read_text(os.path.join(cwd, report))
-        title = re.search(r"^# (?:Discovery:\s*)?(.+)$", text, re.M)
-        proposals = []
-        for pid, fields in discovery_items(text, "Proposed work"):
-            epic = next((e["epic"] for e in held if pid in (e["epic"], e["folder"])), "")
-            proposals.append(dict(id=pid, **{k: fields.get(k, "") for k in ("intent", "goal", "metric", "domain_contact")},
-                                  epic=epic, actions=[] if epic else offered(make_action(
-                                      text="the proposal, written as an epic", skill=f"/factory-backlog epic {pid} --from {report}",
-                                      label="make epic", primary=True))))
-        changes = [dict(target=target, change=fields.get("change", ""), why=fields.get("why", ""),
-                        actions=offered(make_action(text="the change, written into the description",
-                                                    skill=f"/dca-describe {target}: {fields.get('change', '')}",
-                                                    label="apply")))
-                   for target, fields in discovery_items(text, DESCRIPTION_CHANGES)]
-        mark_pending([a for item in proposals + changes for a in item["actions"]], pending_requests(cwd))
-        topics.append(dict(topic=name, report=report, title=title.group(1).strip() if title else name,
-                           proposals=proposals, description_changes=changes))
-    return dict(project=os.path.basename(os.path.abspath(cwd)), store=folder.replace(os.sep, "/") + "/", topics=topics)
+    proposed description changes, as discovery says them; with what a person can do with each."""
+    folder = location(read_profile(resolve_profile(None, cwd)), "discovery")
+    model = list_reports(cwd, folder)
+    for topic in model["topics"]:
+        for proposal in topic["proposals"]:
+            proposal["actions"] = [] if proposal["epic"] else offered(make_action(
+                text="the proposal, written as an epic",
+                skill=f"/factory-backlog epic {proposal['id']} --from {topic['report']}", label="make epic",
+                primary=True))
+        for change in topic["description_changes"]:
+            change["actions"] = offered(make_action(text="the change, written into the description",
+                                                    skill=f"/dca-describe {change['target']}: {change['change']}",
+                                                    label="apply"))
+        mark_pending([a for item in topic["proposals"] + topic["description_changes"] for a in item["actions"]],
+                     pending_requests(cwd))
+    return dict(project=os.path.basename(os.path.abspath(cwd)), store=model["store"], topics=model["topics"])
 
 
 def discovery_list(cwd, epics, fmt="text", colour="auto"):

@@ -1,0 +1,1 @@
+"""Discovery's adapters."""

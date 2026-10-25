@@ -126,6 +126,7 @@ def layer_findings(package):
     - DCA-STR-002  the shared kernel imports no bounded context, nor a module that belongs to one;
     - DCA-STR-003  a context's application imports no other context's application;
     - DCA-STR-004  a context's domain or application imports no other context's domain;
+    - DCA-STR-006  an adapter or the open host service of a context reaches another context through its `api` alone;
     - DCA-ONI-002  a domain imports nothing from outside the package but the pure standard library;
     - DCA-LAY-003  an application reaches the outside through its ports: the pure standard library, nothing else.
     """
@@ -162,6 +163,9 @@ def layer_findings(package):
                 elif to_owner not in (owner, "sharedkernel"):
                     rule = "DCA-STR-003" if to_layer == "application" else "DCA-STR-004"
                     found.append(f"{where} {rule} the application of {owner} imports the {to_layer} of {to_owner}")
+            elif owner in CONTEXTS and to_owner in CONTEXTS and to_owner != owner \
+                    and not (target == f"{to_owner}.api" or target.startswith(f"{to_owner}.api.")):
+                found.append(f"{where} DCA-STR-006 {owner} reaches {target} — another context through its api alone")
             elif layer == "incoming" and to_owner == owner and to_layer == "outgoing":
                 found.append(f"{where} DCA-HEX-006 the incoming adapter imports the outgoing adapter {target}")
     return found

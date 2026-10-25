@@ -4379,7 +4379,7 @@ def verify_setup(runner, verbose=False):
     package = package_dir(runner)
     layered = architecture.layer_findings(package)
     check("package: every import follows the layers — DCA-ONI-001/002, DCA-HEX-001/002/006, DCA-LAY-003, "
-          "DCA-STR-002/003/004", not layered, layered[:8])
+          "DCA-STR-002/003/004/006", not layered, layered[:8])
     bare = architecture.value_findings(package)
     check("package: no bare primitive or time type in a domain field or a domain signature — each is a value object",
           not bare, bare[:8])

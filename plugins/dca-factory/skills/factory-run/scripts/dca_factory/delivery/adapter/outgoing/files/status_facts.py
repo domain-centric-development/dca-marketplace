@@ -20,10 +20,10 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownErr
 from .....state import (
     cached_claims, claim_path, flaky_tests, listener_line, PRODUCT_HEADINGS, read_claim, resolve_window,
     running_stages, schedule_data, story_title)
-from ....application.shared.front import created_of
 from ....application.status.texts import parse_time
 from ....domain.model.usage import USAGE_FIELDS
 from ..process.factory_process import ended, worker
+from .epic_files import epic_files
 from .story_files import names_story
 
 GateError = MarkdownError
@@ -228,33 +228,6 @@ def story_records(cwd: str, story_id: str, story_path: typing.Optional[str] = No
         return records_of(story_id, story_path)
     except GateError:
         return []
-
-
-def front_text(value: typing.Any) -> str:
-    """One front-matter value as text — a list (`key:` with `- item` lines) joined, never its Python form."""
-    if isinstance(value, list):
-        return ", ".join(str(v) for v in value)
-    return str(value or "")
-
-
-def epic_files(epics: str) -> typing.List[Facts]:
-    """Every epic folder with an epic.md, the one with no story yet included — the status lists the epics
-    from their own files, not from the stories that name them."""
-    found: typing.List[Facts] = []
-    if not os.path.isdir(epics):
-        return found
-    for name in sorted(os.listdir(epics)):
-        path = os.path.join(epics, name, "epic.md")
-        if not os.path.isfile(path):
-            continue
-        try:
-            front = read_front_matter(path)[0]
-        except GateError:
-            front = {}
-        found.append(dict(epic=str(front.get("id") or name), folder=name, created=created_of(front), path=shown(path),
-                          **{k: front_text(front.get(k))
-                             for k in ("title", "goal", "metric", "discovery", "intent", "domain_contact")}))
-    return found
 
 
 def story_round(runs: str, story_id: str) -> int:

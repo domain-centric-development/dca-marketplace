@@ -14,19 +14,18 @@ import re
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ADOPT_ORDER, confirmed_defects, CRITERION, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
+    confirmed_defects, CRITERION, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
     EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest,
-    find_story, GateError, git, git_blob, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint,
+    find_story, GateError, git, git_blob, in_worktree, is_delivered, JOURNAL, layout_hint,
     MAX_ROUNDS, order_for, OWNED_DIGEST, place, PLACES_REL, POST_GATED, PROFILE_FILE, read_profile, resolve_profile,
     SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, STATE_KEYS, STORY_BRANCH, story_digest, STORY_FILE,
     story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned, DECISIONS_DIR)
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    acceptance_records, acceptance_state, accepted, answer_section, decision_options, decisions_store,
-    needs_human_ids, NOTHING, plain, records_of, resume_stage)
+    acceptance_records, acceptance_state, accepted, answer_section, decisions_store,
+    needs_human_ids, NOTHING, records_of, resume_stage)
 from .delivery.application.shared.front import is_acceptance
 from .delivery.domain.model.story_state import RUNNABLE
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of

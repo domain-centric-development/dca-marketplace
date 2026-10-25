@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
 from ..delivery.adapter.outgoing.files.decision_record_files import DecisionInboxFiles, DecisionRecordFiles
-from ..delivery.adapter.outgoing.files.discovery_files import DiscoveryReportFiles
+from ..delivery.adapter.outgoing.discovery.reports import DiscoveryReportFiles
 from ..delivery.adapter.outgoing.files.epic_files import EpicFiles
 from ..delivery.adapter.outgoing.files.journal_files import StoryJournalFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
