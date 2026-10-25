@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import typing
 
-from .....gate import MAIN_TESTS
+from ..git.integration import MAIN_TESTS
 from .kept_files import TESTS_BASELINE
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir

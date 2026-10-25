@@ -9,6 +9,7 @@ import unittest
 from support import write
 from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from dca_factory import gate
+from dca_factory.delivery.adapter.outgoing.git import integration
 
 
 def git(cwd, *args, check=True):
@@ -44,7 +45,7 @@ class MainTests(unittest.TestCase):
         git(self.root, "commit", "-qam", "another story's case")
         git(self.root, "checkout", "-q", "story/STORY-1")
         git(self.root, "merge", "--no-edit", "-q", "main", check=False)      # stops on the test both changed
-        gate.record_main_tests(self.root, self.runs, "STORY-1", "main")
+        integration.record_main_tests(self.root, self.runs, "STORY-1", "main")
 
     def tearDown(self):
         self.scratch.cleanup()
@@ -53,14 +54,14 @@ class MainTests(unittest.TestCase):
         write(os.path.join(self.root, TEST), text)
 
     def test_the_record_holds_the_tests_the_main_line_changed_with_both_versions(self):
-        with open(os.path.join(evidence_dir(self.runs, "STORY-1"), gate.MAIN_TESTS), encoding="utf-8") as handle:
+        with open(os.path.join(evidence_dir(self.runs, "STORY-1"), integration.MAIN_TESTS), encoding="utf-8") as handle:
             rows = [line.split("\t") for line in handle.read().splitlines()]
         self.assertEqual([row[2] for row in rows], [TEST])          # a production file the main line changed is no test
         self.assertNotEqual(rows[0][0], rows[0][1])
 
     def test_a_resolution_that_takes_the_storys_side_whole_loses_the_main_lines_case(self):
         self.resolve(STORY)
-        lost = gate.main_tests_lost(self.root, self.runs, "STORY-1")
+        lost = integration.main_tests_lost(self.root, self.runs, "STORY-1")
         self.assertEqual([rel for rel, _ in lost], [TEST])
         self.assertTrue(any("sideShop" in line for line in lost[0][1]))
         result = gate.Result()
@@ -69,17 +70,17 @@ class MainTests(unittest.TestCase):
 
     def test_both_cases_kept_hold_and_the_story_may_still_change_what_the_base_had(self):
         self.resolve(STORY.replace("\n}\n", "\n  @Test void sideShop() { assertTrue(side.open()); }\n}\n"))
-        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [])
         # a line the main line kept from the base is the story's to change — tests-kept judges that, not this check
         self.resolve(MAIN.replace("assertTrue(shop.open())", "assertTrue(shop.isOpen())"))
-        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [])
         result = gate.Result()
         gate.check_main_tests(result, self.root, self.runs, "STORY-1")
         self.assertIn("main-tests", {check for kind, check, _ in result.entries if kind == "pass"})
 
     def test_a_test_file_the_resolution_removed_is_lost_whole(self):
         os.remove(os.path.join(self.root, TEST))
-        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [(TEST, ["(the file is gone)"])])
+        self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [(TEST, ["(the file is gone)"])])
 
     def answer(self, stage, answered=True):
         """A record of the story, asked at <stage>, that names the test file; answered by a person or still open."""
@@ -97,18 +98,18 @@ class MainTests(unittest.TestCase):
         with open(record, encoding="utf-8") as handle:
             text = handle.read()
         write(record, text.replace(f"`{TEST}`", "`OtherShopTest.java`"))
-        self.assertEqual([rel for rel, _ in gate.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
+        self.assertEqual([rel for rel, _ in integration.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
         write(record, text.replace(f"`{TEST}`", "`ShopTest.java`"))
-        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [])
 
     def test_a_file_an_answered_integrate_decision_names_is_not_asked_back(self):
         self.resolve(STORY)
         self.answer("integrate", answered=False)
-        self.assertEqual([rel for rel, _ in gate.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
+        self.assertEqual([rel for rel, _ in integration.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
         self.answer("build")
-        self.assertEqual([rel for rel, _ in gate.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
+        self.assertEqual([rel for rel, _ in integration.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
         self.answer("integrate")
-        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [])
         result = gate.Result()
         gate.check_main_tests(result, self.root, self.runs, "STORY-1")
         kinds = {kind for kind, check, _ in result.entries if check == "main-tests"}
@@ -145,7 +146,7 @@ class ResignedHelpers(unittest.TestCase):
         write(os.path.join(self.root, TEST), R_MAIN)
         git(self.root, "commit", "-qam", "another story's case")
         git(self.root, "checkout", "-q", "story/STORY-1")
-        gate.record_main_tests(self.root, self.runs, "STORY-1", "main")    # as the merge would stop
+        integration.record_main_tests(self.root, self.runs, "STORY-1", "main")    # as the merge would stop
         git(self.root, "merge", "--no-edit", "-q", "main", check=False)
         write(os.path.join(evidence_dir(self.runs, "STORY-1"), "target"), "main\n")
 
@@ -157,22 +158,22 @@ class ResignedHelpers(unittest.TestCase):
 
     def test_a_case_adapted_to_the_new_signature_is_not_lost_and_is_named(self):
         self.resolve(R_STORY.replace("\n}\n", "\n  @Test void sideShop() {\n    assertTrue(side.open(9));\n  }\n}\n"))
-        self.assertEqual(gate.main_tests_lost(self.root, self.runs, "STORY-1"), [])
-        self.assertEqual(gate.main_tests_adapted(self.root, self.runs, "STORY-1"), [(TEST, ["assertTrue(side.open());"])])
+        self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [])
+        self.assertEqual(integration.main_tests_adapted(self.root, self.runs, "STORY-1"), [(TEST, ["assertTrue(side.open());"])])
         result = gate.Result()
         gate.check_main_tests(result, self.root, self.runs, "STORY-1")
         self.assertIn("main-tests", {check for kind, check, _ in result.entries if kind == "pass"})
 
     def test_a_case_that_went_whole_is_still_lost(self):
         self.resolve(R_STORY)
-        lost = gate.main_tests_lost(self.root, self.runs, "STORY-1")
+        lost = integration.main_tests_lost(self.root, self.runs, "STORY-1")
         self.assertEqual([rel for rel, _ in lost], [TEST])
         self.assertIn("@Test void sideShop() {", lost[0][1])
 
     def test_a_line_calling_what_the_story_left_alone_is_lost(self):
         write(os.path.join(self.root, SHOP), "class Shop {\n  public boolean open() { return true; }\n}\n")
         self.resolve(R_STORY.replace("\n}\n", "\n  @Test void sideShop() {\n    assertTrue(side.open(9));\n  }\n}\n"))
-        lost = gate.main_tests_lost(self.root, self.runs, "STORY-1")
+        lost = integration.main_tests_lost(self.root, self.runs, "STORY-1")
         self.assertEqual(lost, [(TEST, ["assertTrue(side.open());"])])
 
 

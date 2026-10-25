@@ -63,9 +63,7 @@ A command the profile does not declare is skipped and named, never failed.
 """
 
 import argparse
-import collections
 import contextlib
-import difflib
 import glob
 import hashlib
 import hmac
@@ -88,10 +86,10 @@ from .delivery.adapter.outgoing.files.story_layout import (
     duplicate_ids, file_digest, find_story, is_delivered, story_digest,
     story_files, story_folder, story_id_of, story_kind)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    DEFAULTS, evidence_dir, evidence_rel, factory_home, findings_rel, FLAKY_FINDINGS, HOME_VARIABLE, in_worktree,
+    DEFAULTS, evidence_dir, evidence_rel, factory_home, findings_rel, FLAKY_FINDINGS, in_worktree,
     JOURNAL, location, place, PLACES, PLACES_REL, PROFILE_FILE, read_profile,
     resolve_profile, runs_top, set_places, shown)
-from .delivery.adapter.outgoing.git.repository import git, git_blob, git_identity
+from .delivery.adapter.outgoing.git.repository import git, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
     answered_decisions, decisions_store, project_decisions_rel, record_path,
     records_of)
@@ -106,7 +104,7 @@ from .delivery.adapter.outgoing.build.test_reports import (
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
 from .spec.api import (
     derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
-from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED, remote_main
+from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED
 from .delivery.adapter.outgoing.files.story_record import INVARIANT_BREAKS
 from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open, record_judge_signal
 from .delivery.adapter.outgoing.files.snapshots import (
@@ -133,15 +131,17 @@ from .delivery.domain.service.design_checks import DesignChecks
 from .delivery.domain.service.kept_checks import KeptChecks
 from .delivery.domain.service.spec_checks import SpecChecks
 from .delivery.domain.service.delivery_checks import DeliveryChecks
+from .delivery.domain.service.integration_checks import IntegrationChecks
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
 from .delivery.adapter.outgoing.files.test_files import locate_tests
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, split_list
 from .delivery.adapter.outgoing.files.test_files import read_mapping
 from .delivery.adapter.outgoing.files.design_files import BREAK_IGNORE, STEP, locate_selector, read_invariant_rows
-from .delivery.adapter.outgoing.files.kept_files import RED_TREE, meaningful_lines, read_red_digests, red_ledger_path, red_tree, tidy_moves, unproven_tests
+from .delivery.adapter.outgoing.files.kept_files import RED_TREE, read_red_digests, red_ledger_path, red_tree, tidy_moves, unproven_tests
 from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
 from .delivery.adapter.outgoing.spec.story_spec_files import moved_tests, story_spec
 from .delivery.adapter.outgoing.files.delivery_files import SKIP_DIRS, TEST_DIR, TEST_FILE
+from .delivery.adapter.outgoing.git.integration import integration_target
 
 
 def story_ids(epics):
@@ -1827,228 +1827,10 @@ def record_tests_baseline(cwd, runs, story_id):
     write_mark(runs, story_id, TESTS_BASELINE, "\n".join(blobs))
 
 
-def tree_tests(cwd, tree):
-    """{test file: blob} of a tree object, relative to the project as `test_files` finds them; None without one."""
-    if not tree or tree == "none":
-        return None
-    code, out = git(cwd, "ls-tree", "-r", "-z", tree)
-    if code:
-        return None
-    skipped = SKIP_DIRS | {runs_top()}
-    found = {}
-    for entry in out.split("\0"):
-        meta, _, rel = entry.partition("\t")
-        parts = meta.split()
-        if len(parts) != 3 or parts[1] != "blob" or not TEST_FILE.search(os.path.basename(rel)):
-            continue
-        if any(d in skipped or d.startswith(".") for d in rel.split("/")[:-1]):
-            continue
-        found[rel] = parts[2]
-    return found
-
-
-def rebase_tests_baseline(cwd, runs, story_id, new, old=None):
-    """After the runner brought the main line into a story's branch: "existed before this story" is the main line
-    as it was merged. Every test in the main line's tree `new` is held to the main line's version, so a test the
-    main line changed while the story waited is not the story's change; one the main line removed leaves the
-    baseline (where `old`, the base before, says it was tracked). `new` is the main line's tree, never the story's
-    branch — nothing the story changed, committed by the runner before the merge or not, gets into the baseline."""
-    path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
-    main = tree_tests(cwd, new)
-    if not os.path.isfile(path) or main is None:
-        return
-    before = tree_tests(cwd, old) or {}
-    entries = {}
-    for line in read_text(path).splitlines():
-        if "  " in line:
-            blob, rel = line.split("  ", 1)
-            entries[rel] = blob
-    rebased = {rel: blob for rel, blob in entries.items() if rel in main or rel not in before}
-    rebased.update(main)
-    if rebased != entries:
-        write_mark(runs, story_id, TESTS_BASELINE, "\n".join(f"{blob}  {rel}" for rel, blob in sorted(rebased.items())))
-
-
-#: The main line's side of the tests a merge met (#151): written when merging the main line into a story stops on a
-#: conflict — every test file the main line changed since the story's base, as `<base blob | ->\t<main blob>\t<file>`
-#: — so the integrate gate tells a resolution that dropped what the main line added to a test from the story's own
-#: change, and the runner sends it back to the integrate stage.
-MAIN_TESTS = "main-tests"
-
-
-def record_main_tests(cwd, runs, story_id, target):
-    """During a merge that stopped on conflicts in the story's worktree (`HEAD` the story, `target` the main line):
-    the test files the main line changed since the two parted, with both versions. Nothing to hold, no record."""
-    base = git(cwd, "merge-base", "HEAD", target)[1].strip()
-    before, main = tree_tests(cwd, base) or {}, tree_tests(cwd, target) or {}
-    rows = [f"{before.get(rel, '-')}\t{blob}\t{rel}" for rel, blob in sorted(main.items()) if before.get(rel) != blob]
-    path = os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)
-    if rows:
-        write_mark(runs, story_id, MAIN_TESTS, "\n".join(rows))
-    elif os.path.isfile(path):
-        os.remove(path)
-
-
-def main_tests_lost(cwd, runs, story_id, waive=True):
-    """[(test file, [line, …])]: what the main line added to a test while the story ran that the story's tree no
-    longer holds — a case another story added, an assertion it changed. Lines the main line kept from the base are
-    the story's to change (and `tests-kept` holds the story to them); the main line's own lines are not. A file an
-    answered integrate decision names is the person's to settle (`waive`, #163): it is left out."""
-    lost = _main_tests_lost(cwd, runs, story_id)
-    return [(rel, lines) for rel, lines in lost if not main_tests_waiver(cwd, story_id, rel)] if waive else lost
-
-
-def main_tests_adapted(cwd, runs, story_id):
-    """[(test file, [line, …])]: the main line's test lines the merge rewrote to a name the story re-signed (#163)."""
-    adapted = []
-    _main_tests_lost(cwd, runs, story_id, adapted)
-    return adapted
-
-
-def main_tests_waiver(cwd, story_id, rel):
-    """The ids of the story's answered integrate decisions that name this test file — by its path or its file name, as
-    a record names it — a person answered how its
-    main-line lines are resolved, so the check holds the resolution to that answer, not to the lines (#163). Read in
-    the main checkout, where the records are: the integrate step has taken the worktree's links down."""
-    try:
-        records = records_of(story_id, cwd=factory_home() or cwd)
-    except (GateError, OSError):
-        return []
-    return [str(front.get("id", "")).strip() for _p, front, body, state, _a in records
-            if state in ("answered", "applied") and str(front.get("stage", "")).strip() == "integrate"
-            and (rel in body or re.search(rf"(?<![\w./-]){re.escape(os.path.basename(rel))}(?![\w.-])", body))]
-
-
-#: A name called or declared on a line: `Name(`, `obj.Name(`, `new Name(` — the words before a parenthesis that are no
-#: statement of the language.
-CALLED = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^<>()]*>)?\s*\(")
-NOT_CALLS = {"if", "for", "foreach", "while", "switch", "catch", "return", "new", "typeof", "nameof", "sizeof", "lock",
-             "using", "fixed", "base", "this", "super", "await", "throw", "when", "assert", "synchronized", "with"}
-
-
-#: A name declared on a line: a word — a type, a modifier, `def`, `record` — then the name and its parameters
-#: (`public Money Total(`, `record Command(`, `def total(`); never `.Name(`, `= Name(`, `return Name(`, `new Name(`.
-DECLARED = re.compile(r"(?:^|\s)([A-Za-z_][\w.<>\[\],?]*[\w>\]?]|>)\s+([A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*\(")
-NOT_DECLARING = {"return", "new", "await", "throw", "yield", "else", "case", "in", "is", "as", "and", "or", "not",
-                 "await", "typeof", "nameof", "var", "val", "let"}
-
-
-def called_names(line):
-    return {name for name in CALLED.findall(line) if name not in NOT_CALLS}
-
-
-def declared_names(line):
-    return {name for before, name in DECLARED.findall(line)
-            if before.split(".")[-1] not in NOT_DECLARING and name not in NOT_CALLS}
-
-
-def rewritten(line, lines):
-    """Whether the file still has `line` in another form — a line alike to at least 60 % — so a missing line is not
-    a case that went whole."""
-    for other in lines:
-        matcher = difflib.SequenceMatcher(None, line, other, autojunk=False)
-        if matcher.real_quick_ratio() >= 0.6 and matcher.quick_ratio() >= 0.6 and matcher.ratio() >= 0.6:
-            return True
-    return False
-
-
-def resigned_names(cwd, target):
-    """The names the story's own change in production code re-signed or removed: every name declared on a line of a
-    non-test file the story's tree no longer has as `target` (the main line) has it. A main-line test line that calls
-    one of them was adapted to the story's new signature, or could not compile — not lost (#163)."""
-    code, diff = git(cwd, "diff", "--no-color", "--unified=0", target, "--")
-    if code:
-        return set()
-    names, test = set(), False
-    for line in diff.splitlines():
-        if line.startswith("+++ ") or line.startswith("--- "):
-            rel = line[4:].strip()
-            if rel != "/dev/null":
-                test = bool(TEST_FILE.search(os.path.basename(rel[2:] if rel[:2] in ("a/", "b/") else rel)))
-            continue
-        if line[:1] == "-" and not test:
-            names |= declared_names(line[1:])
-    return names
-
-
-def _main_tests_lost(cwd, runs, story_id, adapted=None):
-    """The main line's added test lines the story's tree lacks. A missing line that calls a name the story's own
-    production change re-signed or removed is the merge adapting another story's helper to it — collected in
-    `adapted`, not lost; a test case's own lines (its head, its attributes) name no such name and stay asked for."""
-    path = os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)
-    if not os.path.isfile(path):
-        return []
-    lost, resigned = [], None
-    for line in read_text(path).splitlines():
-        parts = line.split("\t")
-        if len(parts) != 3:
-            continue
-        before_blob, main_blob, rel = parts
-        code, main_text = git_blob(cwd, main_blob)
-        if code:
-            continue
-        base_text = "" if before_blob == "-" else git_blob(cwd, before_blob)[1]
-        # compared without their indentation: a resolution may indent a case anew
-        was = [l.strip() for l in meaningful_lines(base_text, rel)]
-        main = [l.strip() for l in meaningful_lines(main_text, rel)]
-        added = [main[j] for tag, _i1, _i2, j1, j2 in
-                 difflib.SequenceMatcher(None, was, main, autojunk=False).get_opcodes()
-                 if tag in ("insert", "replace") for j in range(j1, j2)]
-        full = os.path.join(cwd, rel)
-        if not os.path.isfile(full):
-            lost.append((rel, ["(the file is gone)"]))
-            continue
-        with open(full, encoding="utf-8", errors="replace") as handle:
-            now = [l.strip() for l in meaningful_lines(handle.read(), rel)]
-        left = collections.Counter(now)
-        missing = []
-        for wanted in added:
-            if left[wanted] > 0:
-                left[wanted] -= 1
-            else:
-                missing.append(wanted)
-        if missing:
-            if resigned is None:
-                target = merge_target(runs, story_id, cwd)
-                resigned = resigned_names(cwd, target) if target else set()
-            kept = [line for line in missing if called_names(line) & resigned and rewritten(line, now)]
-            if kept and adapted is not None:
-                adapted.append((rel, kept))
-            missing = [line for line in missing if line not in kept]
-        if missing:
-            lost.append((rel, missing))
-    return lost
-
-
-def lost_text(lost):
-    """The lost lines as a reader takes them in: each file with its first lines."""
-    return "; ".join(f"{rel} lost {', '.join(repr(l) for l in lines[:2])}"
-                     + (f" and {len(lines) - 2} more line(s)" if len(lines) > 2 else "") for rel, lines in lost)
-
-
 def check_main_tests(result, cwd, runs, story_id):
-    """#151: the merge's resolution keeps the main line's side of every test it met. A line the main line added to a
-    test while the story ran — another story's case — that the story's tree lacks is the resolution's change, never
-    the story's: refused here by name, and the runner sends it back to the integrate stage."""
-    if not os.path.isfile(os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)):
-        return
-    lost = main_tests_lost(cwd, runs, story_id)
-    target = integration_target(runs, story_id) or "the main line"
-    for rel, lines in main_tests_adapted(cwd, runs, story_id):
-        result.note("main-tests", f"{rel}: {len(lines)} line(s) of the main line call what the story re-signed — taken as "
-                                  f"adapted, not asked back: {', '.join(repr(l) for l in lines[:2])}"
-                                  + (" …" if len(lines) > 2 else ""))
-    for rel, _lines in main_tests_lost(cwd, runs, story_id, waive=False):
-        ids = main_tests_waiver(cwd, story_id, rel)
-        if ids:
-            result.note("main-tests", f"{rel} keeps the resolution {', '.join(ids)} answered — the main line's lines "
-                                      f"there are not asked back")
-    if lost:
-        result.fail("main-tests", f"the merge's resolution changed a test the main line holds: {lost_text(lost)} — the "
-                                  f"integrate stage puts the main line's side back (`git show {target}:<file>`) beside "
-                                  f"the story's")
-    else:
-        result.ok("main-tests", "every test the main line changed while the story ran keeps the main line's side")
+    """The merge's resolution kept the main line's side of every test it met (`IntegrationChecks.main_tests`)."""
+    take(result, IntegrationChecks.main_tests(stage_story(story_id, "", {}, "", ()),
+                                              StageEvidenceFiles(cwd, runs, place("epics"), {})))
 
 
 def decision_covers(cwd, story_id, ids):
@@ -2562,8 +2344,8 @@ def _adopt(run):
 
 @check("integrate", stages=("integrate",))
 def _integrated(run):
-    check_integrated(run.result, run.cwd, run.runs, run.story_id)
-    check_main_tests(run.result, run.cwd, run.runs, run.story_id)
+    take(run.result, IntegrationChecks.integrated(run.story, run.evidence))
+    take(run.result, IntegrationChecks.main_tests(run.story, run.evidence))
     # The spec as the main line holds it now: a key another story added meanwhile, or a criterion it changed, is a
     # question to a person — never a silent last-writer-wins (WP-98 R3). With claims on a remote the main line is the
     # remote's, merged into this worktree (WP-93 D).
@@ -2958,59 +2740,6 @@ def main(argv):
         for finish in PASSED.get(args.stage, ()):
             finish(run)
     return journal_gate(result, args, story_id, story_path, result.report(story_id, args.stage, args.json, args.brief))
-
-
-CONFLICT_MARKER = re.compile(r"^(<{7} |={7}$|>{7} )", re.M)
-
-
-def integration_target(runs, story_id):
-    """The branch of the main checkout the story integrates into — recorded when its worktree was made."""
-    path = os.path.join(evidence_dir(runs, story_id), "target")
-    return read_text(path).strip() if os.path.isfile(path) else ""
-
-
-def merge_target(runs, story_id, cwd=None):
-    """What a story integrates against: the main checkout's branch — or, where the profile claims stories on a remote
-    (WP-93), that branch as the remote has it, fetched: the main line every factory shares."""
-    target = integration_target(runs, story_id)
-    config = claim_config_here(factory_home() or cwd)
-    return remote_main(config["remote"], target) if config and target else target
-
-
-def check_integrated(result, cwd, runs, story_id):
-    """The story's branch carries the main line and nothing half-merged: no unmerged path, no conflict marker in
-    a file the story's commit changes, and its commit sits on the target's tip — a target that moved since is
-    integrated again (`moved`), not refused."""
-    if not in_worktree(cwd):
-        result.fail("integrate", f"the integrate gate runs in the story's worktree, with {HOME_VARIABLE} naming the "
-                                 f"main checkout — the runner's integrate step starts it")
-        return
-    if not integration_target(runs, story_id):
-        result.fail("integrate", f"no target recorded for {story_id} (<evidence>/<story>/target) — the worktree was not made "
-                                 f"by the runner")
-        return
-    target = merge_target(runs, story_id, cwd)
-    code, unmerged = git(cwd, "diff", "--name-only", "--diff-filter=U")
-    if unmerged.strip():
-        result.fail("conflicts", "unmerged: " + ", ".join(unmerged.split()) + " — the merge is not finished")
-        return
-    code, changed = git(cwd, "diff", "--name-only", f"{target}...HEAD")
-    marked = []
-    for rel in changed.split("\n") if code == 0 else []:
-        full = os.path.join(cwd, rel.strip())
-        if rel.strip() and os.path.isfile(full):
-            with contextlib.suppress(OSError, UnicodeDecodeError):
-                with open(full, encoding="utf-8") as handle:
-                    if CONFLICT_MARKER.search(handle.read()):
-                        marked.append(rel.strip())
-    if marked:
-        result.fail("conflicts", "a conflict marker is left in " + ", ".join(marked))
-    else:
-        result.ok("conflicts", "no unmerged path, no conflict marker in the story's files")
-    tip = git(cwd, "rev-parse", target)[1].strip()
-    parent = git(cwd, "rev-parse", "HEAD~1")[1].strip() if git(cwd, "rev-parse", "HEAD")[1].strip() != tip else tip
-    if tip and parent and tip != parent:
-        result.fail("moved", f"{target} moved on since the story was merged with it — the integrate step merges again")
 
 
 def integrate_into_home(result, cwd, story_path, story_id, front, runs, close=None):

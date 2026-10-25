@@ -625,3 +625,37 @@ class PipelineFacts(Value):
 
     folder: Place
     touched: typing.Optional[typing.Tuple[Place, ...]]
+
+
+@dataclasses.dataclass(frozen=True)
+class Integration(Value):
+    """The story's branch against the main line: whether the gate runs in the story's worktree (and the variable
+    that names the main checkout), whether its target is recorded, the target, the paths left unmerged, the story's
+    files with a conflict marker left, and whether the target moved on since the merge."""
+
+    worktree: Presence
+    home_variable: Detail
+    recorded: Presence
+    target: Detail
+    unmerged: typing.Tuple[Place, ...]
+    marked: typing.Tuple[Place, ...]
+    moved: Presence
+
+
+@dataclasses.dataclass(frozen=True)
+class MainTestLines(Value):
+    """A test file and lines of it: the main line's lines a merge rewrote, or lost."""
+
+    place: Place
+    lines: typing.Tuple[Detail, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class MainTests(Value):
+    """The main line's side of the tests a merge met: the lines rewritten to a name the story re-signed, the files
+    an answered integrate decision settles (with its ids), the lines the resolution lost, and the target."""
+
+    adapted: typing.Tuple[MainTestLines, ...]
+    waived: typing.Tuple[typing.Tuple[Place, typing.Tuple[RecordId, ...]], ...]
+    lost: Detail
+    target: Detail

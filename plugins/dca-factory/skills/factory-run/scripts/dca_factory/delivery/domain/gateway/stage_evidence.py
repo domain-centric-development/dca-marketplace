@@ -11,7 +11,7 @@ from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage import StageName
 from ..model.stage_story import (
-    DecidedRecord, DocumentFacts, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
+    DecidedRecord, DocumentFacts, Integration, MainTests, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
     StoryPass, SpecTests, StoryCommit, MappedTest, PlannedTestChange, RedProof, StageChanges,
     AssertionFact, ClauseRow, CommandKey, ContextMapFacts, Count, InvariantFacts, PlannedFile, PortName, Selector, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
     InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
@@ -165,4 +165,11 @@ class StageEvidence(DomainGateway, typing.Protocol):
         ...
 
     def pipeline(self, story: StoryId) -> PipelineFacts:
+        ...
+
+    def integration(self, story: StoryId) -> Integration:
+        ...
+
+    def main_tests(self, story: StoryId) -> typing.Optional[MainTests]:
+        """The main line's side of the tests the merge met — None where the merge met none."""
         ...

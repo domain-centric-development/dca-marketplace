@@ -11,6 +11,7 @@ from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import evid
 from dca_factory import gate
 from dca_factory.delivery.adapter.outgoing.files import snapshots
 from dca_factory.delivery.adapter.outgoing.files import kept_files as gate_kept
+from dca_factory.delivery.adapter.outgoing.git import integration
 
 
 def git(cwd, *args):
@@ -67,7 +68,7 @@ class BaseAfterMerge(unittest.TestCase):
         new = git(self.root, "rev-parse", "HEAD^{tree}")
         # the story weakened KeptTest — on its branch, committed or not: never in the main line's tree
         write(os.path.join(self.root, "src", "test", "KeptTest.java"), "class KeptTest { }\n")
-        gate.rebase_tests_baseline(self.root, self.runs, story, new, old)
+        integration.rebase_tests_baseline(self.root, self.runs, story, new, old)
         after = baseline(self.runs, story)
         self.assertEqual(after["src/test/KeptTest.java"], before["src/test/KeptTest.java"])
         self.assertEqual(after["src/test/ChangedTest.java"], git(self.root, "rev-parse", "HEAD:src/test/ChangedTest.java"))

@@ -3,6 +3,7 @@ story."""
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import typing
@@ -11,14 +12,14 @@ from .....contract import CONTRACT, GateError, HAPPY_MARK, order_for, SELECTOR, 
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
-    evidence_dir, factory_home, in_worktree, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
+    evidence_dir, factory_home, HOME_VARIABLE, in_worktree, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
 from ....application.shared.front import is_acceptance
 from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AnswerField, AssertionAt, ChangedTest, DocumentFacts, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
+    AnswerField, AssertionAt, ChangedTest, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
     TestChange, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
@@ -44,6 +45,9 @@ from .kept_files import bare_path, row_cells
 from .run_marks import current_stage_files, STORY_DIGEST, verdict_in
 from .snapshots import NOT_OBSERVED
 from .story_layout import story_digest
+from ..git.integration import (
+    CONFLICT_MARKER, integration_target, lost_text, MAIN_TESTS, main_tests_adapted, main_tests_lost, main_tests_waiver,
+    merge_target)
 from .test_files import locate_tests, plan_levels, stage_bytes, unfinished_levels
 from .....spec.api import delta_problems, derived, placement_problems, read_delta, rule_problems, story_entries, touches
 from ..spec.story_spec_files import moved_tests, spec_backing, story_spec
@@ -749,6 +753,47 @@ class StageEvidenceFiles:
         touched = sorted({line.split("\t", 1)[1] for record in records for line in read_text(record).splitlines()
                           if "\t" in line and line.split("\t", 1)[1].startswith(PIPELINE_DIR)})
         return PipelineFacts(Place(PIPELINE_DIR), tuple(Place(t) for t in touched))
+
+    def integration(self, story: StoryId) -> Integration:
+        cwd, runs, story_id = self._cwd, self._runs, story.value
+        home = Detail(HOME_VARIABLE)
+        if not in_worktree(cwd):
+            return Integration(Presence.ABSENT, home, Presence.ABSENT, Detail(""), (), (), Presence.ABSENT)
+        if not integration_target(runs, story_id):
+            return Integration(Presence.PRESENT, home, Presence.ABSENT, Detail(""), (), (), Presence.ABSENT)
+        target = merge_target(runs, story_id, cwd)
+        _code, unmerged = git(cwd, "diff", "--name-only", "--diff-filter=U")
+        if unmerged.strip():
+            return Integration(Presence.PRESENT, home, Presence.PRESENT, Detail(target),
+                               tuple(Place(p) for p in unmerged.split()), (), Presence.ABSENT)
+        code, changed = git(cwd, "diff", "--name-only", f"{target}...HEAD")
+        marked = []
+        for rel in changed.split("\n") if code == 0 else []:
+            full = os.path.join(cwd, rel.strip())
+            if rel.strip() and os.path.isfile(full):
+                with contextlib.suppress(OSError, UnicodeDecodeError):
+                    with open(full, encoding="utf-8") as handle:
+                        if CONFLICT_MARKER.search(handle.read()):
+                            marked.append(Place(rel.strip()))
+        tip = git(cwd, "rev-parse", target)[1].strip()
+        parent = git(cwd, "rev-parse", "HEAD~1")[1].strip() if git(cwd, "rev-parse", "HEAD")[1].strip() != tip else tip
+        moved = Presence.PRESENT if tip and parent and tip != parent else Presence.ABSENT
+        return Integration(Presence.PRESENT, home, Presence.PRESENT, Detail(target), (), tuple(marked), moved)
+
+    def main_tests(self, story: StoryId) -> typing.Optional[MainTests]:
+        cwd, runs, story_id = self._cwd, self._runs, story.value
+        if not os.path.isfile(os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)):
+            return None
+        lost = main_tests_lost(cwd, runs, story_id)
+        adapted = tuple(MainTestLines(Place(rel), tuple(Detail(line) for line in lines))
+                        for rel, lines in main_tests_adapted(cwd, runs, story_id))
+        waived = []
+        for rel, _lines in main_tests_lost(cwd, runs, story_id, waive=False):
+            ids = main_tests_waiver(cwd, story_id, rel)
+            if ids:
+                waived.append((Place(rel), tuple(RecordId(i) for i in ids)))
+        return MainTests(adapted, tuple(waived), Detail(lost_text(lost) if lost else ""),
+                         Detail(integration_target(runs, story_id) or "the main line"))
 
 class DecisionStampFiles:
     """The decision records beside the story and its `## Assumptions`, the journal under the run folder <runs>."""
