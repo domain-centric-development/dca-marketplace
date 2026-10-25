@@ -7,6 +7,7 @@ import unittest
 
 from support import contract, project, state, write
 from dca_factory import runner
+from dca_factory.delivery.adapter.outgoing.tools import agents
 
 
 def a_run(p):
@@ -91,7 +92,6 @@ class ToolAndEffortPerUnit(unittest.TestCase):
             self.assertEqual(run.tool_for("verifier", "claude"), "claude")
 
     def test_the_effort_per_unit_is_passed_as_the_tool_takes_it_or_named_as_not_applied(self):
-        from dca_factory import tools
         with project() as p:
             write(os.path.join(p.root, contract.PROFILE_FILE),
                   "effort.claude: medium\neffort.claude.tidy: low\neffort.opencode: high\n")
@@ -102,9 +102,9 @@ class ToolAndEffortPerUnit(unittest.TestCase):
             self.assertIn("takes none", run.effort_choice("opencode", "build")[1])
             os.environ["FACTORY_CLAUDE_ARGS"] = "--effort max"
             self.assertIn("overridden", run.effort_choice("claude", "build")[1])
-            _env, argv = tools.tool_command(tools.TOOL["claude"], effort="low")
+            _env, argv = agents.tool_command(agents.TOOL["claude"], effort="low")
             self.assertEqual(argv[argv.index("--effort") + 1], "low")
-            _env, argv = tools.tool_command(tools.TOOL["codex"], effort="high")
+            _env, argv = agents.tool_command(agents.TOOL["codex"], effort="high")
             self.assertIn('model_reasoning_effort="high"', argv)
 
 

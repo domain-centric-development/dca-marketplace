@@ -1,293 +1,25 @@
-"""What a run left to read — test reports, a tool's usage, a command's outcome.
-
-JUnit, TRX and Playwright reports and the tests they name; a command run with its output and its missing-tool
-reading; the suites record; the tree snapshots a stage's changes are taken from; the usage a tool writes (its
-`--format json` stream, a session log). Each reader says "unknown" where the format says nothing, never a guess.
+"""What an agent tool's run left to read — its usage, the parts of a shared process, the calls it was denied, the
+lines `follow` shows — through one reader per output format, and the session logs a session's usage is read from.
 """
 
+from __future__ import annotations
+
 import glob
-import hashlib
 import json
 import os
 import re
+import typing
 from datetime import datetime, timezone
-from xml.etree import ElementTree
-from .contract import GateError, read_profile, resolve_profile, SHARED_WINDOWS, STAGE_ORDER
-from .sharedkernel.adapter.outgoing.markdown.front_matter import read_text
-from .delivery.application.status.texts import parse_time
-from .delivery.domain.model.usage import USAGE_FIELDS
 
+from .....contract import read_profile, resolve_profile, SHARED_WINDOWS, STAGE_ORDER
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError as GateError, read_text
+from ....application.status.texts import parse_time
+from ....domain.model.usage import USAGE_FIELDS
 
-#: Where test runners leave a report of what they actually executed. These are file-format
-#: conventions rather than knowledge about any one tool: JUnit XML (Gradle, Maven, most JVM
-#: runners) and TRX (the .NET test platform). A project whose reports live elsewhere says so with
-#: `testReport: <glob>`.
-REPORT_GLOBS = (
-    "**/build/test-results/**/*.xml",
-    "**/target/surefire-reports/*.xml",
-    "**/target/failsafe-reports/*.xml",
-    "**/test-results/**/*.xml",
-    "**/TestResults/**/*.trx",
-    "**/*.trx",
-)
-
-
-#: A selector no project can contain — the control run's subject (see `discriminates`): the class,
-#: the method, and the file a `{file}` placeholder would name for it.
-SENTINEL = ("dev.dca.factory.NoSuchTestClass", "noSuchTestMethod", "dev/dca/factory/NoSuchTest.py")
-
-
-def fill(fmt, cls, method, test_path=None):
-    """The runner's filter argument for one selector.
-
-    `{class}` and `{method}` are the selector's two halves. `{file}` is the source file the selector
-    was located in, relative to the project root and with forward slashes — the handle runners
-    that select by path want (`pytest tests/test_x.py::test_y`), which no dotted name gives them.
-    """
-    text = fmt.replace("{class}", cls).replace("{method}", method)
-    if test_path is not None:
-        text = text.replace("{file}", test_path.replace(os.sep, "/"))
-    return text
-
-
-NOISE = re.compile(r"\b\d+(\.\d+)?\s*(ms|s|sec|seconds|minutes)\b|\b\d{2}:\d{2}:\d{2}\b")
-
-
-def normalise(output, cwd):
-    text = output.replace(cwd, ".")
-    return NOISE.sub("<time>", text).strip()
-
-
-def report_state(cwd, profile):
-    """{path: (digest, mtime)} of every candidate report file right now."""
-    patterns = [profile["testReport"]] if profile.get("testReport") else list(REPORT_GLOBS)
-    state = {}
-    for pattern in patterns:
-        for path in glob.glob(os.path.join(cwd, pattern), recursive=True):
-            if not os.path.isfile(path):
-                continue
-            try:
-                with open(path, "rb") as handle:
-                    state[path] = (hashlib.sha256(handle.read()).hexdigest(),
-                                   os.path.getmtime(path))
-            except OSError:
-                continue
-    return state
-
-
-def clock_marker(cwd):
-    """A file written now, to read the *filesystem's* clock rather than this process's.
-
-    Comparing report timestamps against `time.time()` imports clock skew and the filesystem's
-    granularity into the check; comparing them against a file written at the same moment does not.
-    """
-    path = os.path.join(cwd, ".factory-gate-marker")
-    try:
-        with open(path, "w") as handle:
-            handle.write("")
-        stamp = os.path.getmtime(path)
-        os.remove(path)
-        return stamp
-    except OSError:
-        return None
-
-
-def reports_from_this_run(before, after, marker):
-    """The report files this invocation created or rewrote.
-
-    Two signals, because neither alone is enough. Content: a report whose bytes changed is new
-    evidence — but a deterministic runner can write the same bytes twice. Time against the marker:
-    a report touched after the invocation began is this run's — while a report left by an earlier
-    run keeps its older timestamp and stays out, which is the case this check exists for.
-    """
-    fresh = []
-    for path, (digest, mtime) in after.items():
-        was = before.get(path)
-        if was is None or was[0] != digest:
-            fresh.append(path)
-        elif marker is not None and mtime >= marker:
-            fresh.append(path)
-    return fresh
-
-
-#: One test, several report cases: a parametrised test reports `test_x[a]`, `test_x[b]`, …, and a
-#: JUnit writer may append the signature, `test_x(int)`. All of them are the mapped test, and one
-#: failing case fails it — so the outcomes merge, and failed wins.
-OUTCOME_RANK = {"failed": 2, "passed": 1, "skipped": 0}
-
-
-def executed_tests(paths):
-    """{(class, method): outcome} for every test a report says ran. Outcome is 'passed' or 'failed'.
-
-    Two formats, because two are enough to cover the runners this is used with. A report is the
-    only artefact that states what was *executed*: an exit code says how a process ended, and a
-    message says what a process printed — neither says a test ran.
-    """
-    ran = {}
-
-    def record(cls, method, outcome):
-        key = (cls, re.split(r"[(\[]", method, maxsplit=1)[0])
-        if OUTCOME_RANK[outcome] >= OUTCOME_RANK.get(ran.get(key), -1):
-            ran[key] = outcome
-    for path in paths:
-        try:
-            root = ElementTree.parse(path).getroot()
-        except (ElementTree.ParseError, OSError):
-            continue
-        for case in root.iter():
-            tag = case.tag.rsplit("}", 1)[-1]
-            if tag == "testcase":                                   # JUnit XML
-                cls = (case.get("classname") or "").strip()
-                method = (case.get("name") or "").strip()
-                outcome = "passed"
-                for child in case:
-                    if child.tag.rsplit("}", 1)[-1] in ("failure", "error"):
-                        outcome = "failed"
-                    elif child.tag.rsplit("}", 1)[-1] == "skipped":
-                        outcome = "skipped"
-                if method:
-                    record(cls, method, outcome)
-            elif tag == "UnitTestResult":                           # TRX
-                name = (case.get("testName") or "").strip()
-                outcome = (case.get("outcome") or "").strip().lower()
-                if name:
-                    cls, _, method = name.rpartition(".")
-                    record(cls, method,
-                           "passed" if outcome == "passed" else
-                           "skipped" if outcome in ("notexecuted", "skipped") else "failed")
-    return ran
-
-
-#: How a test's *reported* name is declared in code where it differs from the method name. Two
-#: forms cover the runners whose reports drop the method name; every other stack reports the method
-#: and never reaches this.
-DISPLAY_NAME = (
-    re.compile(r'@DisplayName\s*\(\s*"((?:[^"\\]|\\.)*)"'),           # JUnit 5
-    re.compile(r'DisplayName\s*=\s*"((?:[^"\\]|\\.)*)"'),              # xUnit [Fact(DisplayName=…)]
-    re.compile(r'Description\s*=\s*"((?:[^"\\]|\\.)*)"'),              # NUnit [Test(Description=…)]
-)
-
-
-def unescape_literal(text):
-    """A Java or C# string literal's content as the runtime sees it: `\\"` is `"`, `\\\\` is `\\`.
-    A report carries the name unescaped, so a title with a quote in it would otherwise never match."""
-    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), text)
-
-
-def display_name_of(test_path, method):
-    """The name this method is reported under, read from the code that declares it.
-
-    A report that carries a display name instead of a method name needs a mapping, and the only
-    honest place to get one is the declaration: the annotation sits on the method. Guessing from
-    class membership instead would let a sibling's result stand in for this test.
-    """
-    text = read_text(test_path) if test_path and os.path.isfile(test_path) else ""
-    if not text:
-        return None
-    lines = text.splitlines()
-    for index, line in enumerate(lines):
-        if re.search(rf"\b{re.escape(method)}\s*\(", line):
-            start = index
-            while start > max(0, index - 8) and not lines[start - 1].strip().endswith("}"):
-                start -= 1                    # stop where the declaration before this one ends
-            # One text, not one line at a time: a formatter wraps a long title onto the line after the annotation
-            block = "\n".join(lines[start:index + 1])
-            found = [m for pattern in DISPLAY_NAME for m in pattern.finditer(block)]
-            if found:
-                return unescape_literal(max(found, key=lambda m: m.start()).group(1))
-    return None
-
-
-def outcome_for(ran, cls, method, display=None):
-    """What a report says about this selector: (outcome, how it was matched) or (None, "").
-
-    The method name is the better key, but it is not always in the report — a JUnit XML writer puts
-    the *display* name in `name`, so a test with a readable title loses its method name there; the
-    display name declared on the method is the second key. The class narrows both: a run carries
-    every selector its command covers, or the whole suite, so a case of the right class under another
-    name is a sibling, not this test — the answer then names the cases it saw rather than guessing.
-    """
-    simple = cls.rsplit(".", 1)[-1]
-
-    def same_class(report_class):
-        # both qualified, and the report's class is another package's class of the same simple name
-        if "." in cls and "." in (report_class or "") and report_class.rsplit(".", 1)[-1] == simple \
-                and report_class.rsplit(".", 1)[0] != cls.rsplit(".", 1)[0]:
-            return False
-        return (not report_class or report_class == cls
-                or report_class.rsplit(".", 1)[-1] == simple
-                or report_class.endswith("." + simple)
-                or simple in report_class.split("."))
-
-    for (report_class, report_method), outcome in ran.items():
-        if report_method == method and same_class(report_class):
-            return outcome, "by name"
-    if display:
-        for (report_class, report_method), outcome in ran.items():
-            if report_method == display and same_class(report_class):
-                return outcome, f"by the display name declared in the code ({display!r})"
-    # Nothing below the name. Membership of the same class is not a mapping: a runner that ignores
-    # the filter, or a filter that matches a sibling, produces exactly one case for the class that
-    # is *not* this test — and counting it would let one test's outcome decide another's criterion.
-    # A report without this test's name, or without the display name its declaration sets, is no
-    # evidence, and the names it did carry are worth printing.
-    in_class = sorted(m for (report_class, m), _o in ran.items() if same_class(report_class))
-    if not in_class:
-        return None, ""
-    return None, (f"the report holds {len(in_class)} case(s) for that class "
-                  f"({', '.join(in_class[:4])}) and none is named {method!r}"
-                  + (f" or {display!r}" if display else "")
-                  + (", and no display name is declared on it" if not display else ""))
-
-
-# Several implementations of one behaviour, each proving the same scenarios. The scenario contract is
-# markdown: `## <id>`, then `Title:` and `Runs:` lines. A report names a scenario by carrying its
-# title as the test's name. Each implementation is checked against the contract — never against the
-# other one, because two implementations agreeing on a wrong result is not parity.
-SCENARIO_HEADING = re.compile(r"^##\s+(\S+)\s*$")
-
-
-def read_scenarios(path):
-    scenarios, current = [], None
-    for line in read_text(path).splitlines():
-        match = SCENARIO_HEADING.match(line)
-        if match:
-            current = {"id": match.group(1), "title": "", "runs": "always"}
-            scenarios.append(current)
-        elif current is not None and ":" in line and line.split(":", 1)[0].strip().lower() in ("title", "runs"):
-            key, value = line.split(":", 1)
-            current[key.strip().lower()] = value.strip()
-    return scenarios
-
-
-def reported_names(paths):
-    """{test name: outcome} as the report states the name — whole, because a title may hold dots."""
-    names = {}
-    for path in paths:
-        try:
-            root = ElementTree.parse(path).getroot()
-        except (ElementTree.ParseError, OSError):
-            continue
-        for case in root.iter():
-            tag = case.tag.rsplit("}", 1)[-1]
-            if tag == "testcase":
-                name, outcome = (case.get("name") or "").strip(), "passed"
-                for child in case:
-                    child_tag = child.tag.rsplit("}", 1)[-1]
-                    if child_tag in ("failure", "error"):
-                        outcome = "failed"
-                    elif child_tag == "skipped" and outcome != "failed":
-                        outcome = "skipped"
-            elif tag == "UnitTestResult":
-                name = (case.get("testName") or "").strip()
-                raw = (case.get("outcome") or "").strip().lower()
-                outcome = "passed" if raw == "passed" else \
-                    "skipped" if raw in ("notexecuted", "skipped", "inconclusive") else "failed"
-            else:
-                continue
-            if name and OUTCOME_RANK[outcome] >= OUTCOME_RANK.get(names.get(name), -1):
-                names[name] = outcome
-    return names
+#: An event, an entry, a usage as a tool writes it: JSON.
+Json = typing.Dict[str, typing.Any]
+#: A usage read, and the final message the output carries.
+Read = typing.Tuple[typing.Optional[Json], str]
 
 
 # What a stage cost, as the tool itself reports it. The runner saves each invocation's raw output and
@@ -296,7 +28,7 @@ def reported_names(paths):
 # reports nothing is `unknown` — never zero, because a zero would look like a cheap stage.
 
 
-def _claude_usage(raw):
+def _claude_usage(raw: str) -> Read:
     # `--output-format stream-json` writes one event per line and ends with a `result` event; the
     # older `--output-format json` wrote that event alone. Either way the result event is read.
     data = None
@@ -337,8 +69,9 @@ def _claude_usage(raw):
     return usage, str(data.get("result", ""))
 
 
-def _codex_usage(raw):
-    usage, seen, text = {k: 0 for k in USAGE_FIELDS}, False, ""
+def _codex_usage(raw: str) -> Read:
+    usage: Json = {k: 0 for k in USAGE_FIELDS}
+    seen, text = False, ""
     for line in raw.splitlines():
         try:
             event = json.loads(line)
@@ -358,11 +91,13 @@ def _codex_usage(raw):
     return (usage if seen else None), text
 
 
-def _opencode_usage(raw):
+def _opencode_usage(raw: str) -> Read:
     # `opencode run --format json`: one event per line; every model step ends in a `step_finish`
     # whose part carries that step's tokens, and the answer arrives as `text` parts. A local model
     # has no price (cost 0), which is reported as no price rather than as free.
-    usage, seen, text, cost = {k: 0 for k in USAGE_FIELDS}, False, [], 0.0
+    usage: Json = {k: 0 for k in USAGE_FIELDS}
+    seen, cost = False, 0.0
+    text: typing.List[str] = []
     for line in raw.splitlines():
         try:
             event = json.loads(line)
@@ -385,7 +120,7 @@ def _opencode_usage(raw):
     return (usage if seen else None), "".join(text).strip()
 
 
-def parse_usage(fmt, path):
+def parse_usage(fmt: str, path: str) -> Read:
     """({model, input, cache_read, cache_write, output, cost} or None, the final message text) — the reader of the
     format answers."""
     try:
@@ -397,7 +132,7 @@ def parse_usage(fmt, path):
     return reader.usage(raw) if reader else (None, raw)
 
 
-def claude_session_logs(session_id=None):
+def claude_session_logs(session_id: typing.Optional[str] = None) -> typing.List[str]:
     """The session's log and its subagents' logs, for CLAUDE_CODE_SESSION_ID or the given id."""
     session_id = session_id or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
     # The id may come from the journal, which is a file in the project: as a glob pattern, `*` would
@@ -411,7 +146,7 @@ def claude_session_logs(session_id=None):
     return main[:1] + sorted(glob.glob(os.path.join(os.path.dirname(main[0]), session_id, "subagents", "*.jsonl")))
 
 
-def codex_session_log(session_id=None):
+def codex_session_log(session_id: typing.Optional[str] = None) -> typing.Optional[str]:
     """The Codex session log of CODEX_SESSION_ID (or the given id) — found by its file name, which ends
     in the id, so no other session's log is opened."""
     session_id = session_id or os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID", "")
@@ -422,7 +157,7 @@ def codex_session_log(session_id=None):
     return found[0] if found else None
 
 
-def session_usage_allowed(cwd):
+def session_usage_allowed(cwd: str) -> bool:
     """Reading a tool's session log can be switched off: per person (FACTORY_SESSION_USAGE=off) or for
     the project (`sessionUsage: off` in the stack profile). In-session stages are then unknown."""
     if os.environ.get("FACTORY_SESSION_USAGE", "").strip().lower() in ("off", "0", "no", "false"):
@@ -431,16 +166,19 @@ def session_usage_allowed(cwd):
     return str(profile.get("sessionUsage", "on")).strip().lower() not in ("off", "0", "no", "false")
 
 
-def session_usage(kind, paths, start=None, end=None):
+def session_usage(kind: str, paths: typing.Iterable[str], start: typing.Optional[datetime] = None,
+                  end: typing.Optional[datetime] = None) -> typing.Optional[Json]:
     """{model, input, cache_read, cache_write, output} over the window, or None when nothing is read."""
-    def inside(stamp):
+    def inside(stamp: typing.Optional[datetime]) -> bool:
         return stamp is not None and (start is None or stamp >= start) and (end is None or stamp <= end)
     if kind == "claude-session":
         # One API response is written as several log entries — one per content block — that share its
         # message id. The entries repeat the input and cache counts, and the output count grows until
         # the last one: counting the first entry alone undercounts output many times over. So each
         # field is the largest any entry of that message states.
-        seen, models, per_message = set(), set(), {}
+        seen: typing.Set[typing.Any] = set()
+        models: typing.Set[str] = set()
+        per_message: typing.Dict[typing.Any, typing.Dict[str, int]] = {}
         for path in paths:
             try:
                 handle = open(path, encoding="utf-8", errors="replace")
@@ -470,11 +208,13 @@ def session_usage(kind, paths, start=None, end=None):
                         models.add(str(message["model"]))
         if not seen:
             return None
-        usage = {k: sum(c[k] for c in per_message.values()) for k in USAGE_FIELDS}
+        usage: Json = {k: sum(c[k] for c in per_message.values()) for k in USAGE_FIELDS}
         usage["model"] = ",".join(sorted(models)) or "unknown"
         return usage
     if kind == "codex-session":
-        before, after, models = None, None, set()
+        before: typing.Optional[Json] = None
+        after: typing.Optional[Json] = None
+        models = set()
         for path in paths:
             try:
                 handle = open(path, encoding="utf-8", errors="replace")
@@ -509,11 +249,11 @@ def session_usage(kind, paths, start=None, end=None):
     return None
 
 
-def usage_fields(usage):
+def usage_fields(usage: Json) -> str:
     return "\t".join(f"{k}={usage[k]}" for k in ("model",) + USAGE_FIELDS + (("cost",) if "cost" in usage else ()))
 
 
-def current_session():
+def current_session() -> typing.Tuple[str, str]:
     """(kind, id) of the session this command runs in, from the tool's own environment variable — each reader says
     which variable is its tool's."""
     for reader in READERS.values():
@@ -523,12 +263,12 @@ def current_session():
     return "in-session", ""
 
 
-def session_reader(kind):
+def session_reader(kind: str) -> typing.Optional[Reader]:
     """The reader whose session logs a journal's `tool=<kind>` names."""
     return next((r for r in READERS.values() if r.session_kind and r.session_kind == kind), None)
 
 
-def log_kind(path):
+def log_kind(path: str) -> str:
     """The session kind of a log a person names by path."""
     return next((r.session_kind for r in READERS.values() if r.session_kind and r.owns_log(path)), "in-session")
 
@@ -539,7 +279,7 @@ def log_kind(path):
 WINDOWS = ("backlog", "decisions")
 
 
-def usage_lines(fmt, path, model=None):
+def usage_lines(fmt: str, path: str, model: typing.Optional[str] = None) -> typing.List[str]:
     """One invocation's usage from a tool's raw output: the `model=… input=…` fields (or `unknown`), then the
     final message the output carries, if any."""
     if fmt in ("claude-session", "codex-session"):
@@ -556,7 +296,7 @@ def usage_lines(fmt, path, model=None):
     return lines + ([text.strip()] if text.strip() else [])
 
 
-def usage_from(fmt, path, model=None):
+def usage_from(fmt: str, path: str, model: typing.Optional[str] = None) -> int:
     print("\n".join(usage_lines(fmt, path, model)))
     return 0
 
@@ -569,7 +309,7 @@ PROCESS_RANKS = {"builder": (SHARED_WINDOWS["builder"][-1], 0.5), "review:": (SH
                  "verifier": (SHARED_WINDOWS["verifier"][0], 0.5)}
 
 
-def tokens_of(entry):
+def tokens_of(entry: typing.Mapping[str, typing.Any]) -> int:
     return sum(entry[k] for k in USAGE_FIELDS)
 
 
@@ -591,7 +331,7 @@ PART_SKILL = re.compile(r"(?:^|:)stage-(plan|test|build|tidy|judge|document)$")
 PART_SKILL_FILE = re.compile(r"(?:^|[/\s])stage-(plan|test|build|tidy|judge|document)/SKILL\.md\b")
 
 
-def part_of_call(block):
+def part_of_call(block: Json) -> typing.Optional[str]:
     """The stage a tool call begins — by the Skill tool or by reading the stage's SKILL.md — or None."""
     name, given = block.get("name"), block.get("input") or {}
     if name == "Skill":
@@ -610,7 +350,7 @@ PART_SKELETON = re.compile(r"factory-cli\.py\b.*?--(?:plan-skeleton\b|files-skel
 PART_GATE = re.compile(r"story-gate\.py\b.*?--stage\s+(plan|test|build|tidy|judge|document)\b")
 
 
-def part_marker(block):
+def part_marker(block: Json) -> typing.Tuple[typing.Optional[str], str]:
     """(stage, how) a tool call marks: `skill` — the stage's skill loaded —, `skeleton` or `gate`; (None, '')."""
     stage = part_of_call(block)
     if stage:
@@ -625,7 +365,7 @@ def part_marker(block):
     return (found.group(1), "gate") if found else (None, "")
 
 
-def next_part(current, block):
+def next_part(current: typing.Optional[str], block: Json) -> typing.Optional[str]:
     """The stage a call moves a shared process into, None where it stays. A gate call never moves it back: a later
     stage that runs an earlier stage's gate again checks its ground, it does not return to that stage."""
     stage, how = part_marker(block)
@@ -636,7 +376,7 @@ def next_part(current, block):
     return stage
 
 
-def stream_parts(path, fmt=None):
+def stream_parts(path: str, fmt: typing.Optional[str] = None) -> typing.Tuple[typing.List[Json], typing.Optional[float]]:
     """[{stage, start, end, input, cache_read, cache_write, output, weight}] of one shared process's stream,
     in the order its stages began (`next_part`: a stage's skill, skeleton or gate), and the process's reported cost (None when the stream has no result) — read from
     the common events, so every tool's stream gives its parts.
@@ -644,7 +384,11 @@ def stream_parts(path, fmt=None):
     An answer's own usage carries its input and cache tokens, but its output only as counted when the answer
     began; the final output is the process's alone. So the process's output is split over the parts by what each
     part wrote — its text, its tool calls' input and its thinking — an estimate, like the cost."""
-    parts, current, answers, cost, output_total = [], None, {}, None, None
+    parts: typing.List[Json] = []
+    current: typing.Optional[Json] = None
+    answers: typing.Dict[typing.Any, Json] = {}
+    cost: typing.Any = None
+    output_total: typing.Any = None
     for event in stream_events(path, fmt):
         moment = event.get("at")
         if event["kind"] == "result":
@@ -694,7 +438,7 @@ def stream_parts(path, fmt=None):
     return parts, cost
 
 
-def stream_denials(path, fmt=None):
+def stream_denials(path: str, fmt: typing.Optional[str] = None) -> typing.List[Json]:
     """[{stage, tool, command}] — the calls a stream's result names as denied permission, in the order they were
     made, each with the shared stage it fell in ('' outside one). A headless stage has nobody to grant a permission:
     the tool refuses the call, and the stage spends a turn on another way. A format that reports no denials gives
@@ -720,7 +464,7 @@ def stream_denials(path, fmt=None):
 FOLLOW_ARGS = ("file_path", "notebook_path", "pattern", "command", "skill", "url", "path", "description", "prompt")
 
 
-def _short(text, width=110):
+def _short(text: typing.Any, width: int = 110) -> str:
     text = " ".join(str(text).split())
     here = os.getcwd() + os.sep
     text = text.replace(here, "")                     # a path inside the project, as the project names it
@@ -746,7 +490,7 @@ def _short(text, width=110):
 # Every event may carry `at` (a datetime) where the format has a time.
 
 
-def _json_lines(raw):
+def _json_lines(raw: str) -> typing.List[Json]:
     try:
         whole = json.loads(raw)                    # a single JSON document: the result event alone
         return [whole] if isinstance(whole, dict) else []
@@ -763,7 +507,7 @@ def _json_lines(raw):
     return events
 
 
-def _at(event):
+def _at(event: Json) -> typing.Optional[datetime]:
     return parse_time(str(event.get("timestamp", ""))) if event.get("timestamp") else None
 
 
@@ -773,30 +517,31 @@ class Reader:
     fmt = ""
     session_kind = ""
 
-    def usage(self, raw):
+    def usage(self, raw: str) -> Read:
         return None, raw
 
-    def events(self, raw):
+    def events(self, raw: str) -> typing.List[Json]:
         return []
 
-    def session_logs(self, session_id=None):
+    def session_logs(self, session_id: typing.Optional[str] = None) -> typing.List[str]:
         return []
 
-    def session_of_env(self):
+    def session_of_env(self) -> str:
         return ""
 
-    def owns_log(self, path):
+    def owns_log(self, path: str) -> bool:
         return False
 
-    def session_usage(self, paths, start=None, end=None):
+    def session_usage(self, paths: typing.Iterable[str], start: typing.Optional[datetime] = None,
+                      end: typing.Optional[datetime] = None) -> typing.Optional[Json]:
         return None
 
-    def project_logs(self, cwd, since=None):
+    def project_logs(self, cwd: str, since: typing.Optional[datetime] = None) -> typing.List[str]:
         """The logs a stage process of this tool writes for the project, changed since `since` — where the tool keeps
         them per project folder; [] otherwise."""
         return []
 
-    def limit(self, raw):
+    def limit(self, raw: str) -> typing.Optional[Json]:
         """Where the process stopped at the tool's usage limit: {"until": the reset as epoch seconds, or None where the
         output names none; "text": what the tool said} — else None. Only a tool whose output at the limit was recorded
         is read; any other answers None, and the runner treats its exit as any other."""
@@ -806,11 +551,11 @@ class Reader:
 class ClaudeReader(Reader):
     fmt, session_kind = "claude-json", "claude-session"
 
-    def usage(self, raw):
+    def usage(self, raw: str) -> Read:
         return _claude_usage(raw)
 
-    def events(self, raw):
-        out = []
+    def events(self, raw: str) -> typing.List[Json]:
+        out: typing.List[Json] = []
         for event in _json_lines(raw):
             kind, at = event.get("type"), _at(event)
             if kind == "system" and event.get("subtype") == "init":
@@ -829,12 +574,13 @@ class ClaudeReader(Reader):
                                     "id": block.get("id"), "at": at})
                     elif block.get("type") == "text" and str(block.get("text", "")).strip():
                         out.append({"kind": "text", "text": str(block["text"]), "at": at})
-                usage, raw_usage = {}, message.get("usage") or {}
+                usage: typing.Dict[str, int] = {}
+                raw_usage = message.get("usage") or {}
                 for field, name in (("input", "input_tokens"), ("cache_read", "cache_read_input_tokens"),
                                     ("cache_write", "cache_creation_input_tokens"), ("output", "output_tokens")):
                     if isinstance(raw_usage.get(name), (int, float)):
                         usage[field] = int(raw_usage[name])
-                creation = raw_usage.get("cache_creation") if isinstance(raw_usage.get("cache_creation"), dict) else {}
+                creation: typing.Any = raw_usage.get("cache_creation") if isinstance(raw_usage.get("cache_creation"), dict) else {}
                 if isinstance(creation.get("ephemeral_1h_input_tokens"), (int, float)):
                     usage["cache_write_1h"] = int(creation["ephemeral_1h_input_tokens"])
                 out.append({"kind": "answer", "id": message.get("id"), "usage": usage, "written": written, "at": at})
@@ -857,7 +603,7 @@ class ClaudeReader(Reader):
                             "failed": str(event.get("subtype")) if event.get("is_error") else "", "at": at})
         return out
 
-    def limit(self, raw):
+    def limit(self, raw: str) -> typing.Optional[Json]:
         # Recorded 2026-10-13 (`claude -p --output-format stream-json`): the result carries `api_error:
         # usage_limit_reached` (status 429) and "You've hit your session limit · resets 7:10am (Europe/Berlin)"; the
         # `rate_limit_event` before it, `status: rejected`, names the reset as `resetsAt` in epoch seconds.
@@ -874,20 +620,21 @@ class ClaudeReader(Reader):
                 until = int(info["resetsAt"])
         return {"until": until, "text": str(result.get("result", "")).strip()}
 
-    def session_logs(self, session_id=None):
+    def session_logs(self, session_id: typing.Optional[str] = None) -> typing.List[str]:
         return claude_session_logs(session_id)
 
-    def session_of_env(self):
+    def session_of_env(self) -> str:
         return os.environ.get("CLAUDE_CODE_SESSION_ID", "")
 
-    def owns_log(self, path):
+    def owns_log(self, path: str) -> bool:
         return "/.claude/" in path.replace(os.sep, "/") or bool(os.environ.get("CLAUDE_CONFIG_DIR")) \
             and os.path.abspath(path).startswith(os.path.abspath(os.environ["CLAUDE_CONFIG_DIR"]))
 
-    def session_usage(self, paths, start=None, end=None):
+    def session_usage(self, paths: typing.Iterable[str], start: typing.Optional[datetime] = None,
+                      end: typing.Optional[datetime] = None) -> typing.Optional[Json]:
         return session_usage("claude-session", paths, start, end)
 
-    def project_logs(self, cwd, since=None):
+    def project_logs(self, cwd: str, since: typing.Optional[datetime] = None) -> typing.List[str]:
         home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
         folder = os.path.join(home, "projects", re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(cwd)))
         floor = since.timestamp() if since else 0
@@ -898,11 +645,12 @@ class ClaudeReader(Reader):
 class CodexReader(Reader):
     fmt, session_kind = "codex-jsonl", "codex-session"
 
-    def usage(self, raw):
+    def usage(self, raw: str) -> Read:
         return _codex_usage(raw)
 
-    def events(self, raw):
-        out, turn = [], 0
+    def events(self, raw: str) -> typing.List[Json]:
+        out: typing.List[Json] = []
+        turn = 0
         for event in _json_lines(raw):
             kind, item, at = event.get("type"), event.get("item") or {}, _at(event)
             if kind == "thread.started":
@@ -935,17 +683,18 @@ class CodexReader(Reader):
                         "denied": [], "failed": "", "at": None})
         return out
 
-    def session_logs(self, session_id=None):
+    def session_logs(self, session_id: typing.Optional[str] = None) -> typing.List[str]:
         found = codex_session_log(session_id)
         return [found] if found else []
 
-    def session_of_env(self):
+    def session_of_env(self) -> str:
         return os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID", "")
 
-    def owns_log(self, path):
+    def owns_log(self, path: str) -> bool:
         return "/.codex/" in path.replace(os.sep, "/")
 
-    def session_usage(self, paths, start=None, end=None):
+    def session_usage(self, paths: typing.Iterable[str], start: typing.Optional[datetime] = None,
+                      end: typing.Optional[datetime] = None) -> typing.Optional[Json]:
         return session_usage("codex-session", paths, start, end)
 
 
@@ -958,11 +707,12 @@ OPENCODE_TOOLS = {"read": "Read", "bash": "Bash", "edit": "Edit", "write": "Writ
 class OpencodeReader(Reader):
     fmt = "opencode-json"
 
-    def usage(self, raw):
+    def usage(self, raw: str) -> Read:
         return _opencode_usage(raw)
 
-    def events(self, raw):
-        out, steps, cost, seen = [], 0, 0.0, False
+    def events(self, raw: str) -> typing.List[Json]:
+        out: typing.List[Json] = []
+        steps, cost, seen = 0, 0.0, False
         for event in _json_lines(raw):
             kind, part = event.get("type"), event.get("part") or {}
             at = datetime.fromtimestamp(event["timestamp"] / 1000, timezone.utc) \
@@ -1002,7 +752,7 @@ class OpencodeReader(Reader):
 READERS = {reader.fmt: reader for reader in (ClaudeReader(), CodexReader(), OpencodeReader())}
 
 
-def reader_of(raw, fmt=None):
+def reader_of(raw: str, fmt: typing.Optional[str] = None) -> Reader:
     """The reader of a stream: the one named, else the one whose events the first lines look like."""
     if fmt in READERS:
         return READERS[fmt]
@@ -1017,7 +767,7 @@ def reader_of(raw, fmt=None):
     return READERS["claude-json"]
 
 
-def stream_events(path, fmt=None):
+def stream_events(path: str, fmt: typing.Optional[str] = None) -> typing.List[Json]:
     try:
         raw = read_text(path)
     except (OSError, GateError):
@@ -1025,7 +775,7 @@ def stream_events(path, fmt=None):
     return reader_of(raw, fmt).events(raw)
 
 
-def stream_limit(path, fmt=None):
+def stream_limit(path: str, fmt: typing.Optional[str] = None) -> typing.Optional[Json]:
     """The tool's usage limit in one process's output, as `Reader.limit` reads it — None where it ran into none."""
     try:
         raw = read_text(path)
@@ -1034,7 +784,7 @@ def stream_limit(path, fmt=None):
     return reader_of(raw, fmt).limit(raw)
 
 
-def follow_render(event, denied=frozenset()):
+def follow_render(event: Json, denied: typing.AbstractSet[str] = frozenset()) -> typing.List[str]:
     """The lines one common event stands for — [] for an event that shows nothing. `denied` holds the ids of the
     calls the stream's result names as denied permission: known once the process ended, so a running one shows such
     a call as any failed call, by the reason the tool gave. One rendering for every tool: the readers turn each
@@ -1068,7 +818,7 @@ def follow_render(event, denied=frozenset()):
     return []
 
 
-def follow_lines(text, fmt=None):
+def follow_lines(text: str, fmt: typing.Optional[str] = None) -> typing.Tuple[typing.List[str], bool]:
     events = reader_of(text, fmt).events(text)
     ended = any(e["kind"] == "result" for e in events)
     denied = {call_id for e in events if e["kind"] == "result" for call_id, _n, _i in e.get("denied") or []}

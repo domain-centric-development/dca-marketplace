@@ -5,6 +5,8 @@ rules, allow-list, permission block, plugins). The runner asks `tool_invocation`
 tool is one more row.
 """
 
+from __future__ import annotations
+
 import contextlib
 import json
 import os
@@ -21,9 +23,9 @@ class Tool(typing.NamedTuple):
     """One agent tool the runner can start a stage with. Everything the runner knows about a tool is here; bash
     asks for an invocation (`--tool-invocation`) and runs it."""
     name: str
-    command: tuple            #: the binary and its fixed arguments; the prompt goes last
-    help: tuple               #: how its flags are probed: the help of the subcommand the command runs
-    isolation: tuple          #: flag groups that keep the person's own setup out, each passed only where probed
+    command: typing.Tuple[str, ...]  #: the binary and its fixed arguments; the prompt goes last
+    help: typing.Tuple[str, ...]  #: how its flags are probed: the help of the subcommand the command runs
+    isolation: typing.Tuple[typing.Tuple[str, ...], ...]  #: flag groups that keep the person's own setup out, each passed only where probed
     usage: str                #: the raw output's format, for `--usage-from`
     skills: str               #: the project folder the tool discovers skills in
     model_flag: str           #: the flag that names a model
@@ -33,9 +35,9 @@ class Tool(typing.NamedTuple):
     deny: bool = False        #: the protected folders are refused through `--disallowedTools Edit(//<dir>/**)`
     allow_list: bool = False  #: the shell a stage has is passed as `--allowed-tools`
     permission_env: str = ""  #: the environment variable a permission block is passed in
-    isolation_env: tuple = () #: environment variables that do the same where the tool has no flag: (name, value),
+    isolation_env: typing.Tuple[typing.Tuple[str, str], ...] = ()  #: environment variables that do the same where the tool has no flag: (name, value),
                               #: `{empty}` an empty folder of the pipeline's own
-    effort: tuple = ()        #: how the tool takes a reasoning effort, `{level}` the value: flag words; () — none
+    effort: typing.Tuple[str, ...] = ()  #: how the tool takes a reasoning effort, `{level}` the value: flag words; () — none
     plugins: bool = False     #: it loads the method skills from its plugins, so its skill folder holds the pipeline's
 
 
@@ -76,7 +78,7 @@ TOOL = {tool.name: tool for tool in TOOLS}
 STAGE_TOOLS = "Read,Write,Edit,Glob,Grep,Bash,Skill"
 
 
-def tool_help(tool):
+def tool_help(tool: Tool) -> str:
     """The tool's help text, probed once per binary and kept beside the temp files keyed by the binary's path, size
     and time — every stage of a run gets the same flags, and a tool that is updated is probed again. "" when the
     binary is not there. FACTORY_TOOL_HELP_<TOOL> stands in for the probe."""
@@ -112,7 +114,7 @@ def tool_help(tool):
     return text
 
 
-def empty_folder():
+def empty_folder() -> str:
     """A folder of the pipeline's own that holds nothing: what a tool reads as its configuration folder when the
     person's must stay out."""
     folder = os.path.join(tempfile.gettempdir(), f"dca-factory-empty-{os.getuid() if hasattr(os, 'getuid') else 0}")
@@ -123,11 +125,11 @@ def empty_folder():
     return tempfile.mkdtemp(prefix="dca-factory-empty-")
 
 
-def has_flag(help_text, flag):
+def has_flag(help_text: str, flag: str) -> bool:
     return re.search(r"(^|[\s,])" + re.escape(flag) + r"([\s,=<\[]|$)", help_text, re.M) is not None
 
 
-def isolation_args(tool):
+def isolation_args(tool: Tool) -> typing.List[str]:
     """The isolation flags this binary knows: an older one refuses a flag it does not know and the stage would not
     start, so each is passed only where the help names it — or every one where there is no binary to ask."""
     if os.environ.get("FACTORY_ISOLATION", "on") == "off":
@@ -140,7 +142,7 @@ def isolation_args(tool):
     return words
 
 
-def unprobed_flags(tool):
+def unprobed_flags(tool: Tool) -> typing.Optional[typing.Tuple[typing.List[str], typing.List[str]]]:
     """What the binary's help does not name, as (required, isolation): a fixed, model, add-dir or allow-list flag the
     record passes — a stage started with it fails — and an isolation flag the runner then leaves out, so the stage runs
     with the tool's own setup. None when the binary is not there."""
@@ -150,11 +152,13 @@ def unprobed_flags(tool):
     flags = [w for w in tool.command[len(tool.help) - 1:] if w.startswith("-")] + [tool.model_flag]
     flags += ["--add-dir"] if tool.add_dirs in ("all", "writable") else []
     flags += ["--allowed-tools", "--disallowedTools"] if tool.allow_list else []
-    missing = lambda names: sorted({flag for flag in names if not has_flag(help_text, flag)})
+    def missing(names: typing.Iterable[str]) -> typing.List[str]:
+        return sorted({flag for flag in names if not has_flag(help_text, flag)})
     return missing(flags), missing(group[0] for group in tool.isolation)
 
 
-def permission_block(allowed, protected, linked, cwd=None, home=None):
+def permission_block(allowed: str, protected: typing.Iterable[str], linked: typing.Iterable[str],
+                     cwd: typing.Optional[str] = None, home: typing.Optional[str] = None) -> str:
     """OpenCode's permission block: the same shell as Claude's allow-list; every edit allowed but under the protected
     folders, which its edit rules match relative to the project (an absolute pattern matches nothing there — probed
     2.0.20); the linked folders as external ones it may use, and the protected ones among them refused there."""
@@ -176,7 +180,9 @@ def permission_block(allowed, protected, linked, cwd=None, home=None):
     return json.dumps({"permission": {"bash": bash, "edit": edit, "external_directory": external}})
 
 
-def tool_command(tool, model="", writable=(), readable=(), protected=(), allowed="", effort=""):
+def tool_command(tool: Tool, model: str = "", writable: typing.Sequence[str] = (), readable: typing.Sequence[str] = (),
+                 protected: typing.Sequence[str] = (), allowed: str = "",
+                 effort: str = "") -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
     """What starts one stage with this tool: the variables it is started with and its arguments, the prompt not
     among them — the caller appends it."""
     # a variable the person set is theirs and wins — a config folder that carries their local providers, say
@@ -204,7 +210,8 @@ def tool_command(tool, model="", writable=(), readable=(), protected=(), allowed
     return env, argv
 
 
-def tool_invocation(tool, model="", writable=(), readable=(), protected=(), allowed=""):
+def tool_invocation(tool: Tool, model: str = "", writable: typing.Sequence[str] = (),
+                    readable: typing.Sequence[str] = (), protected: typing.Sequence[str] = (), allowed: str = "") -> str:
     """The same command line as shell words for a caller to `eval`, with the prompt left as `"$prompt"` — the
     caller's variable, never text quoted here."""
     env, argv = tool_command(tool, model, writable, readable, protected, allowed)
@@ -212,7 +219,7 @@ def tool_invocation(tool, model="", writable=(), readable=(), protected=(), allo
     return " ".join(words + ['"$prompt"'])
 
 
-def tools_shell():
+def tools_shell() -> typing.Optional[typing.List[str]]:
     """The tool table as the runner reads it at its start: the names, each tool's skill folder, usage format,
     extra-flags variable and model flag, as `<tool>:<value>` words — every one checked to be a plain word."""
     bad = [w for t in TOOLS for w in (t.name, t.skills, t.usage, t.args_env, t.model_flag) if not TOOL_WORD.fullmatch(w)]
@@ -220,7 +227,8 @@ def tools_shell():
         print(f"factory-cli: the tool table holds a value the runner cannot take as a word: {', '.join(bad)}",
               file=sys.stderr)
         return None
-    pairs = lambda field: "' " + " ".join(f"{t.name}:{getattr(t, field)}" for t in TOOLS) + " '"
+    def pairs(field: str) -> str:
+        return "' " + " ".join(f"{t.name}:{getattr(t, field)}" for t in TOOLS) + " '"
     return [f"TOOL_NAMES=({' '.join(t.name for t in TOOLS)})", f"TOOL_SKILLS={pairs('skills')}",
             f"TOOL_USAGE={pairs('usage')}", f"TOOL_ARGS_ENV={pairs('args_env')}",
             f"TOOL_MODEL_FLAG={pairs('model_flag')}", f"TOOL_SKILL_DIRS=({' '.join(t.skills for t in TOOLS)})",

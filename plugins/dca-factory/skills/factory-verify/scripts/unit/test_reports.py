@@ -5,7 +5,10 @@ import os
 import tempfile
 import unittest
 
-from support import reports, write
+from support import write
+from dca_factory.delivery.application.status import texts
+from dca_factory.delivery.adapter.outgoing.tools import streams
+from dca_factory.delivery.adapter.outgoing.build import test_reports
 
 JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="com.example.WidgetTest" tests="5">
@@ -53,18 +56,18 @@ class Reports(unittest.TestCase):
 class ExecutedTests(Reports):
 
     def test_junit_cases_read_as_passed_failed_and_skipped(self):
-        ran = reports.executed_tests([self.file("TEST-widget.xml", JUNIT)])
+        ran = test_reports.executed_tests([self.file("TEST-widget.xml", JUNIT)])
         cls = "com.example.WidgetTest"
         self.assertEqual({m: ran[(cls, m)] for m in ("showsIt", "hidesIt", "breaks", "later")},
                          {"showsIt": "passed", "hidesIt": "failed", "breaks": "failed", "later": "skipped"})
 
     def test_the_cases_of_one_parametrised_test_merge_and_failed_wins(self):
-        ran = reports.executed_tests([self.file("TEST-widget.xml", JUNIT)])
+        ran = test_reports.executed_tests([self.file("TEST-widget.xml", JUNIT)])
         self.assertEqual(ran[("com.example.WidgetTest", "counts")], "failed")
         self.assertNotIn(("com.example.WidgetTest", "counts[1]"), ran)
 
     def test_trx_names_split_into_class_and_method(self):
-        ran = reports.executed_tests([self.file("run.trx", TRX)])
+        ran = test_reports.executed_tests([self.file("run.trx", TRX)])
         self.assertEqual(ran, {("Example.Widgets.WidgetTests", "ShowsIt"): "passed",
                                ("Example.Widgets.WidgetTests", "HidesIt"): "failed",
                                ("Example.Widgets.WidgetTests", "Later"): "skipped",
@@ -73,10 +76,10 @@ class ExecutedTests(Reports):
     def test_a_file_that_is_no_xml_report_is_skipped(self):
         broken = self.file("broken.xml", "<testsuite><testcase name='x'>")
         playwright_json = self.file("results.json", json.dumps({"suites": [{"specs": [{"title": "shows it"}]}]}))
-        self.assertEqual(reports.executed_tests([broken, playwright_json, "/no/such/report.xml"]), {})
+        self.assertEqual(test_reports.executed_tests([broken, playwright_json, "/no/such/report.xml"]), {})
 
     def test_reported_names_keep_a_title_whole(self):
-        names = reports.reported_names([self.file("playwright.xml", PLAYWRIGHT_JUNIT), self.file("run.trx", TRX)])
+        names = test_reports.reported_names([self.file("playwright.xml", PLAYWRIGHT_JUNIT), self.file("run.trx", TRX)])
         self.assertEqual(names["Widgets › shows the thing. Fast"], "passed")
         self.assertEqual(names["Widgets › hides it"], "failed")
         self.assertEqual(names["Example.Widgets.WidgetTests.Odd"], "skipped")
@@ -85,39 +88,39 @@ class ExecutedTests(Reports):
 class OutcomeFor(Reports):
 
     def ran(self):
-        return reports.executed_tests([self.file("TEST-widget.xml", JUNIT)])
+        return test_reports.executed_tests([self.file("TEST-widget.xml", JUNIT)])
 
     def test_a_selector_is_found_by_its_method_name(self):
-        self.assertEqual(reports.outcome_for(self.ran(), "com.example.WidgetTest", "hidesIt"), ("failed", "by name"))
+        self.assertEqual(test_reports.outcome_for(self.ran(), "com.example.WidgetTest", "hidesIt"), ("failed", "by name"))
 
     def test_a_display_name_is_the_second_key(self):
-        outcome, how = reports.outcome_for(self.ran(), "com.example.WidgetTest", "showsWidget",
+        outcome, how = test_reports.outcome_for(self.ran(), "com.example.WidgetTest", "showsWidget",
                                            display="Widget is shown to a visitor")
         self.assertEqual(outcome, "passed")
         self.assertIn("by the display name", how)
 
     def test_a_sibling_of_the_class_never_stands_in_for_the_test(self):
-        outcome, how = reports.outcome_for(self.ran(), "com.example.WidgetTest", "missing")
+        outcome, how = test_reports.outcome_for(self.ran(), "com.example.WidgetTest", "missing")
         self.assertIsNone(outcome)
         self.assertIn("none is named 'missing'", how)
 
     def test_a_class_of_the_same_name_in_another_package_is_not_this_one(self):
-        self.assertEqual(reports.outcome_for(self.ran(), "org.other.WidgetTest", "showsIt"), (None, ""))
+        self.assertEqual(test_reports.outcome_for(self.ran(), "org.other.WidgetTest", "showsIt"), (None, ""))
 
     def test_the_display_name_is_read_from_the_declaration(self):
         path = self.file("WidgetTest.java", 'class WidgetTest {\n  @Test\n  @DisplayName("Say \\"hi\\"")\n'
                                             '  void greets() {}\n  @Test\n  void plain() {}\n}\n')
-        self.assertEqual(reports.display_name_of(path, "greets"), 'Say "hi"')
-        self.assertIsNone(reports.display_name_of(path, "plain"))
+        self.assertEqual(test_reports.display_name_of(path, "greets"), 'Say "hi"')
+        self.assertIsNone(test_reports.display_name_of(path, "plain"))
         csharp = self.file("WidgetTests.cs", '[Fact(DisplayName = "Shows it")]\npublic void ShowsIt() {}\n')
-        self.assertEqual(reports.display_name_of(csharp, "ShowsIt"), "Shows it")
+        self.assertEqual(test_reports.display_name_of(csharp, "ShowsIt"), "Shows it")
 
     def test_a_display_name_a_formatter_wrapped_is_read_across_the_line_break(self):
         path = self.file("LongTest.java", 'class LongTest {\n  @Test\n  void before() {}\n\n  @Test\n'
                                           '  @DisplayName(\n      "A title too long for one line")\n'
                                           '  void wrapped() {}\n}\n')
-        self.assertEqual(reports.display_name_of(path, "wrapped"), "A title too long for one line")
-        self.assertIsNone(reports.display_name_of(path, "before"))
+        self.assertEqual(test_reports.display_name_of(path, "wrapped"), "A title too long for one line")
+        self.assertIsNone(test_reports.display_name_of(path, "before"))
 
 
 class Usage(Reports):
@@ -128,7 +131,7 @@ class Usage(Reports):
                              "claude-b": {"inputTokens": 1, "outputTokens": 2}}}
 
     def test_a_claude_result_sums_its_models(self):
-        usage, text = reports.parse_usage("claude-json", self.file("out.json", json.dumps(self.RESULT)))
+        usage, text = streams.parse_usage("claude-json", self.file("out.json", json.dumps(self.RESULT)))
         self.assertEqual(usage, {"model": "claude-a,claude-b", "input": 11, "cache_read": 100, "cache_write": 20,
                                  "output": 7, "cost": "0.1235"})
         self.assertEqual(text, "done")
@@ -137,14 +140,14 @@ class Usage(Reports):
         stream = "\n".join(json.dumps(e) for e in (
             {"type": "system"}, {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}},
             self.RESULT))
-        usage, text = reports.parse_usage("claude-json", self.file("out.jsonl", stream))
+        usage, text = streams.parse_usage("claude-json", self.file("out.jsonl", stream))
         self.assertEqual((usage["input"], text), (11, "done"))
 
     def test_a_stream_cut_off_before_its_result_has_no_usage_and_its_last_answer(self):
         stream = "\n".join(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": t}]}})
                            for t in ("first", "last"))
-        self.assertEqual(reports.parse_usage("claude-json", self.file("out.jsonl", stream)), (None, "last"))
-        self.assertEqual(reports.parse_usage("claude-json", self.file("raw.txt", "command not found")),
+        self.assertEqual(streams.parse_usage("claude-json", self.file("out.jsonl", stream)), (None, "last"))
+        self.assertEqual(streams.parse_usage("claude-json", self.file("raw.txt", "command not found")),
                          (None, "command not found"))
 
     def test_codex_counts_the_cached_part_of_its_input_apart(self):
@@ -152,7 +155,7 @@ class Usage(Reports):
             {"type": "turn.completed", "usage": {"input_tokens": 100, "cached_input_tokens": 60, "output_tokens": 7}},
             {"type": "turn.completed", "usage": {"input_tokens": 10, "output_tokens": 3}},
             {"type": "item.completed", "item": {"type": "agent_message", "text": "done"}}))
-        self.assertEqual(reports.parse_usage("codex-jsonl", self.file("codex.jsonl", stream)),
+        self.assertEqual(streams.parse_usage("codex-jsonl", self.file("codex.jsonl", stream)),
                          ({"input": 50, "cache_read": 60, "cache_write": 0, "output": 10}, "done"))
 
     def test_opencode_sums_its_steps_and_a_zero_cost_is_no_price(self):
@@ -160,17 +163,17 @@ class Usage(Reports):
                                                            "cache": {"read": 3, "write": 4}}, "cost": 0}}
         stream = "\n".join(json.dumps(e) for e in (
             {"type": "text", "part": {"text": "do"}}, step, {"type": "text", "part": {"text": "ne"}}, step))
-        self.assertEqual(reports.parse_usage("opencode-json", self.file("oc.jsonl", stream)),
+        self.assertEqual(streams.parse_usage("opencode-json", self.file("oc.jsonl", stream)),
                          ({"input": 10, "cache_read": 6, "cache_write": 8, "output": 6}, "done"))
 
     def test_an_unknown_format_reports_nothing(self):
-        self.assertEqual(reports.parse_usage("other", self.file("x.txt", "raw")), (None, "raw"))
-        self.assertEqual(reports.parse_usage("claude-json", "/no/such/file"), (None, ""))
+        self.assertEqual(streams.parse_usage("other", self.file("x.txt", "raw")), (None, "raw"))
+        self.assertEqual(streams.parse_usage("claude-json", "/no/such/file"), (None, ""))
 
     def test_a_time_without_a_zone_is_utc(self):
-        self.assertEqual(reports.parse_time("2026-10-10T10:00:00Z"), reports.parse_time("2026-10-10T10:00:00"))
-        self.assertIsNone(reports.parse_time("yesterday"))
-        self.assertIsNone(reports.parse_time(""))
+        self.assertEqual(texts.parse_time("2026-10-10T10:00:00Z"), texts.parse_time("2026-10-10T10:00:00"))
+        self.assertIsNone(texts.parse_time("yesterday"))
+        self.assertIsNone(texts.parse_time(""))
 
 
 def answer(message_id, at, usage, skill=None, text=""):
@@ -194,7 +197,7 @@ class StreamParts(Reports):
             answer("m3", "2026-10-10T10:02:00Z", {"input_tokens": 5, "cache_creation_input_tokens": 8,
                                                   "cache_creation": {"ephemeral_1h_input_tokens": 8}}, text="bbbb"),
             {"type": "result", "total_cost_usd": 1.5, "modelUsage": {"m": {"outputTokens": 100}}})
-        parts, cost = reports.stream_parts(path)
+        parts, cost = streams.stream_parts(path)
         self.assertEqual(cost, 1.5)
         self.assertEqual([p["stage"] for p in parts], ["plan", "test"])
         plan, test = parts
@@ -209,15 +212,15 @@ class StreamParts(Reports):
                            call("Read", {"file_path": "/p/.claude/skills/stage-test/SKILL.md"}),
                            call("Read", {"file_path": "/p/.claude/skills/stage-test/reference/more.md"}),
                            call("Bash", {"command": "grep stage-build src/"}))
-        self.assertEqual([p["stage"] for p in reports.stream_parts(path)[0]], ["plan", "test"])
+        self.assertEqual([p["stage"] for p in streams.stream_parts(path)[0]], ["plan", "test"])
 
     def test_a_stream_that_loads_no_stage_has_no_parts(self):
         path = self.stream(answer("m1", "2026-10-10T10:00:00Z", {"input_tokens": 1}, text="hi"),
                            {"type": "result", "total_cost_usd": 0.5})
-        self.assertEqual(reports.stream_parts(path), ([], 0.5))
+        self.assertEqual(streams.stream_parts(path), ([], 0.5))
 
     def test_a_stream_that_is_gone_has_no_parts(self):
-        self.assertEqual(reports.stream_parts("/no/such/stream"), ([], None))
+        self.assertEqual(streams.stream_parts("/no/such/stream"), ([], None))
 
 
 if __name__ == "__main__":

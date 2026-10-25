@@ -7,8 +7,10 @@ import shutil
 import time
 import unittest
 
-from support import contract, project, reports, state
+from support import contract, project, state
 from dca_factory import cli
+from dca_factory.delivery.domain.model import usage
+from dca_factory.delivery.adapter.outgoing.tools import streams
 
 STREAMS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "streams")
 SECOND = "2026-10-10T10:00:00Z"
@@ -31,22 +33,22 @@ class FrozenStream(unittest.TestCase):
             self.assertTrue(state.freeze_stream(journal, path))
             self.assertFalse(state.freeze_stream(journal, path))
             events = state.journal_events(p.runs, "S-1")
-            parts, _cost = reports.stream_parts(path)
+            parts, _cost = streams.stream_parts(path)
             self.assertEqual([e["name"] for e in events if e["kind"] == "part"], [x["stage"] for x in parts])
-            self.assertEqual(state.journal_denials(events, "builder"), reports.stream_denials(path))
+            self.assertEqual(state.journal_denials(events, "builder"), streams.stream_denials(path))
             self.assertEqual(sum(1 for e in events if e["kind"] == state.STREAM_FROZEN), 1)
 
     def test_the_view_answers_the_same_with_the_stream_gone(self):
         with project() as p:
             path = window(p)
-            parts, _cost = reports.stream_parts(path)
+            parts, _cost = streams.stream_parts(path)
             state.freeze_stream(state.journal_path(p.runs, "S-1"), path)
             os.remove(path)
             rows = cli.window_parts(state.journal_events(p.runs, "S-1"), "builder")
             self.assertEqual([r["stage"] for r in rows], list(dict.fromkeys(x["stage"] for x in parts)))
-            for field in reports.USAGE_FIELDS:
+            for field in usage.USAGE_FIELDS:
                 self.assertEqual(sum(r[field] for r in rows), sum(x[field] for x in parts), field)
-            self.assertEqual(sum(r["denied"] for r in rows), len(reports.stream_denials(os.path.join(STREAMS, "claude-recorded.jsonl"))))
+            self.assertEqual(sum(r["denied"] for r in rows), len(streams.stream_denials(os.path.join(STREAMS, "claude-recorded.jsonl"))))
 
     def test_a_stream_is_frozen_only_once_its_process_has_ended_by_the_journal_never_by_its_file_time(self):
         with project() as p:
@@ -180,7 +182,7 @@ class ResumedBuilder(unittest.TestCase):
     def test_its_stages_are_read_from_the_skeletons_and_the_gates_and_an_earlier_gate_does_not_go_back(self):
         with project() as p:
             path = p.evidence("S-1", "builder.100000.out", resumed_builder(*RESUMED))
-            self.assertEqual([x["stage"] for x in reports.stream_parts(path)[0]], ["plan", "test", "build", "tidy"])
+            self.assertEqual([x["stage"] for x in streams.stream_parts(path)[0]], ["plan", "test", "build", "tidy"])
 
     def test_a_stream_an_older_reading_froze_is_frozen_again_and_read_once(self):
         with project() as p:

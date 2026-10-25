@@ -101,7 +101,7 @@ from .discovery.api import check_report
 from .infrastructure.description import check_description
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
-from .reports import (
+from .delivery.adapter.outgoing.build.test_reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
 from .spec.api import (

@@ -42,6 +42,6 @@ new discovery: a future crossing, shown so it is not forgotten.
 | `web/` | the host that shows every context at once — the page and its server; it calls read models and use cases only |
 | `infrastructure/` | the composition root: wires each port to its adapter |
 
-The modules not yet moved into a context (`contract`, `reports`, `state`, `gate`, `tools`, `runner`, `cli`) sit at
+The modules not yet moved into a context (`contract`, `state`, `gate`, `runner`, `cli`) sit at
 the package's top until their move; `factory-verify` holds the layers of everything moved
 (`architecture.py`) and `mypy --strict` its types (`mypy.ini`).

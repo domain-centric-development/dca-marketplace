@@ -15,7 +15,7 @@ from .....contract import (
     STAGE_ORDER, story_kind)
 from .decision_record_files import decision_files, records_of
 from .....gate import perspectives_of, story_signals
-from .....reports import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
+from ..tools.streams import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from .....state import (
     cached_claims, claim_path, flaky_tests, listener_line, read_claim, resolve_window,

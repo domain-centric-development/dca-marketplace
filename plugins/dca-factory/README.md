@@ -603,7 +603,7 @@ what must be true before the next one starts.
 (`dca_factory/`), copied into the project as `.agents/factory/` so every tool and every CI run execute the same
 check. The package is built the way it teaches (`docs/context-map.md`): the building blocks, the bounded contexts
 `delivery` and `spec` in DCA layers, a shared kernel, the web host and the composition root — and the modules not
-yet moved into a context (contract, reports, state, gate, tools, runner, cli). It
+yet moved into a context (contract, state, gate, runner, cli). It
 *decides*: the readers, the backlog, the checks per stage, the decision records, `--change`, `--parity`
 and the file contract. Everything that *shows or coordinates* — status, help, usage and cost, the
 session logs, the checkout claim, the schedule, `--resolve` — is `factory-cli.py` beside it, the
@@ -690,7 +690,7 @@ contracts plus the gate keep an in-session run honest.
 Portable *in form* is not the same as verified *in fact*, and the difference is worth stating
 rather than leaving a reader to find it in a failing run.
 
-**Agent tools.** Claude Code, Codex and OpenCode each have a record in `dca_factory/tools.py` — the command, how its
+**Agent tools.** Claude Code, Codex and OpenCode each have a record in `dca_factory/delivery/adapter/outgoing/tools/agents.py` — the command, how its
 flags are probed, the isolation, the usage format, the skill folder, the model flag, how linked and protected
 folders are named — and the runner starts a stage with what `factory-cli.py --tool-invocation <tool>` returns. Every
 flag is checked against the binary's help once per binary, before the first stage (`factory-cli.py --tool-probe

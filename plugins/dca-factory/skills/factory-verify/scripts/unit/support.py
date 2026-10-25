@@ -15,7 +15,7 @@ if SCRIPTS not in sys.path:
     sys.path.insert(0, SCRIPTS)
 os.environ.pop("FACTORY_HOME", None)                        # a case runs in no story's worktree
 
-from dca_factory import contract, reports, state  # noqa: E402,F401
+from dca_factory import contract, state  # noqa: E402,F401
 
 
 STORY = """---

@@ -63,9 +63,7 @@ from .contract import DECISIONS_DIR
 from .delivery.application.shared.front import CREATED_KEY, created_of
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of, sections_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
-from .reports import (
-    stream_parts,
-    tokens_of, usage_from, WINDOWS, follow_lines)
+from .delivery.adapter.outgoing.tools.streams import follow_lines, stream_parts, tokens_of, usage_from, WINDOWS
 from .delivery.application.status.texts import parse_time
 from .delivery.domain.model.usage import USAGE_FIELDS
 from .state import (
@@ -82,8 +80,7 @@ from .spec.api import (
     derived, merge, read_delta, read_spec, render_spec, renamed_rules, story_entries)
 from .gate import (
     criteria_of, scenarios_of, spec_target, story_signals, story_spec, perspectives_of, story_ids)
-from .tools import (
-    isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
+from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_invocation, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
     follow_newest, story_facts, story_records)
 from .delivery.adapter.outgoing.files.epic_files import epic_files, front_text

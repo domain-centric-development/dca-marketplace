@@ -12,10 +12,8 @@ Built the way it teaches (WP-152; the map and the glossaries in the plugin's `do
 and the modules not yet moved into a context, each importing from the ones above it here, never from one below:
 
     contract   what a project file says: places, the profile, stories and epics, the stage table
-    reports    what a run left to read: test reports, a command's outcome, tree snapshots, a tool's usage
     state      where a story stands: the journal, the owned files, the story state, the schedule, the claim
     gate       what decides: the checks, their registry, the stamps a passed stage writes
-    tools      an agent tool as a record, probed once against its binary
     runner     what the runner asks between stages: its tables, a story's worktree, the skeletons, a request worked
     cli        what a person, a stage or factory.sh asks about the pipeline: status, help, usage, the readers
 
