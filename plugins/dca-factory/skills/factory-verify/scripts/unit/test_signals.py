@@ -8,6 +8,7 @@ import unittest
 from support import write
 from dca_factory import gate, state
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
+from dca_factory.delivery.adapter.outgoing.files import signals as journal_signals
 
 BODY = """# A story
 
@@ -43,7 +44,7 @@ class Signals(unittest.TestCase):
         records = [record("question", "applied", "b"), record("question", "open"),
                    record("acceptance", "answered", "accepted")]
         self.assertIsNone(gate.story_signals(self.runs, "S-1", records, BODY)["plan_open"])
-        state.journal_signal(self.runs, "S-1", "plan", open=len(gate.plan_left_open(PLAN)))
+        journal_signals.journal_signal(self.runs, "S-1", "plan", open=len(gate.plan_left_open(PLAN)))
         signals = gate.story_signals(self.runs, "S-1", records, BODY)
         self.assertEqual((signals["asked"], signals["answered"]), (2, 1))
         self.assertEqual((signals["assumptions_open"], signals["assumptions_answered"], signals["plan_open"]), (1, 2, 1))
@@ -51,8 +52,8 @@ class Signals(unittest.TestCase):
 
     def test_each_rules_verdict_is_counted_from_the_last_group_the_test_gate_wrote(self):
         self.assertIsNone(gate.story_signals(self.runs, "S-1", [], "")["rules"])
-        state.journal_signal(self.runs, "S-1", "rules", [("rule", "x.TitleTest#a", dict(element="Title", rules="1", verdict="unchecked"))])
-        state.journal_signal(self.runs, "S-1", "rules", [
+        journal_signals.journal_signal(self.runs, "S-1", "rules", [("rule", "x.TitleTest#a", dict(element="Title", rules="1", verdict="unchecked"))])
+        journal_signals.journal_signal(self.runs, "S-1", "rules", [
             ("rule", "x.TitleTest#a", dict(element="Title", rules="1", verdict="red")),
             ("rule", "x.TitleTest#b", dict(element="Title", rules="2,3", verdict="killed")),
             ("rule", "x.DueTest#c", dict(element="Due", rules="1", verdict="survived"))])

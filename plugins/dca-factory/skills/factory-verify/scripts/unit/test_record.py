@@ -13,6 +13,10 @@ from dca_factory.delivery.domain.model import usage
 from dca_factory.delivery.adapter.outgoing.tools import streams
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journals
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.delivery.adapter.outgoing.files import usage_files
+from dca_factory.delivery.adapter.outgoing.files import windows
+from dca_factory.delivery.adapter.outgoing.files import story_record
+from dca_factory.delivery.adapter.outgoing.files import stream_records
 
 STREAMS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "streams")
 SECOND = "2026-10-10T10:00:00Z"
@@ -32,19 +36,19 @@ class FrozenStream(unittest.TestCase):
         with project() as p:
             path = window(p)
             journal = journals.journal_path(p.runs, "S-1")
-            self.assertTrue(state.freeze_stream(journal, path))
-            self.assertFalse(state.freeze_stream(journal, path))
+            self.assertTrue(stream_records.freeze_stream(journal, path))
+            self.assertFalse(stream_records.freeze_stream(journal, path))
             events = journals.journal_events(p.runs, "S-1")
             parts, _cost = streams.stream_parts(path)
             self.assertEqual([e["name"] for e in events if e["kind"] == "part"], [x["stage"] for x in parts])
-            self.assertEqual(state.journal_denials(events, "builder"), streams.stream_denials(path))
-            self.assertEqual(sum(1 for e in events if e["kind"] == state.STREAM_FROZEN), 1)
+            self.assertEqual(usage_files.journal_denials(events, "builder"), streams.stream_denials(path))
+            self.assertEqual(sum(1 for e in events if e["kind"] == stream_records.STREAM_FROZEN), 1)
 
     def test_the_view_answers_the_same_with_the_stream_gone(self):
         with project() as p:
             path = window(p)
             parts, _cost = streams.stream_parts(path)
-            state.freeze_stream(journals.journal_path(p.runs, "S-1"), path)
+            stream_records.freeze_stream(journals.journal_path(p.runs, "S-1"), path)
             os.remove(path)
             rows = cli.window_parts(journals.journal_events(p.runs, "S-1"), "builder")
             self.assertEqual([r["stage"] for r in rows], list(dict.fromkeys(x["stage"] for x in parts)))
@@ -58,15 +62,15 @@ class FrozenStream(unittest.TestCase):
             journal = journals.journal_path(p.runs, "S-1")
             os.utime(path, (time.time() + 3600, time.time() + 3600))      # a move or a copy sets it anew
             journals.journal_append(p.runs, "S-1", "stage-start", "builder", "tool=claude")
-            state.freeze_streams(journal)
+            stream_records.freeze_streams(journal)
             self.assertFalse(any(e["kind"] == "part" for e in journals.journal_events(p.runs, "S-1")))
             journals.journal_append(p.runs, "S-1", "usage", "builder", "tool=claude", "input=1")
-            state.freeze_streams(journal)
+            stream_records.freeze_streams(journal)
             self.assertTrue(any(e["kind"] == "part" for e in journals.journal_events(p.runs, "S-1")))
 
     def test_a_retry_after_the_usage_limit_belongs_to_its_process(self):
-        self.assertEqual(state.stream_process("builder.101500-limit1.out"), "builder")
-        self.assertEqual(state.stream_process("review-ddd.101500.out"), "review-ddd")
+        self.assertEqual(stream_records.stream_process("builder.101500-limit1.out"), "builder")
+        self.assertEqual(stream_records.stream_process("review-ddd.101500.out"), "review-ddd")
 
 
 JUDGE = ("## Verdict\nverdict: pass\n\n## Confirmed defects\n"
@@ -86,7 +90,7 @@ def material(p):
     journals.journal_append(p.runs, "S-1", "usage", "builder", "tool=claude", "input=1", "seconds=40")
     p.handover("S-1", "plan", "# Plan\n\n## Open assumptions\n- the order\n")
     p.handover("S-1", "judge", JUDGE)
-    p.evidence("S-1", state.INVARIANT_BREAKS, "Total\t1\tx.TotalTest#a\tkilled\n")
+    p.evidence("S-1", story_record.INVARIANT_BREAKS, "Total\t1\tx.TotalTest#a\tkilled\n")
     return path
 
 
@@ -96,8 +100,8 @@ class Record(unittest.TestCase):
         with project() as p:
             p.story("S-1")
             material(p)
-            self.assertEqual(state.record_story(p.runs, "S-1"), {})
-            self.assertIsNone(state.record_story(p.runs, "S-1"))
+            self.assertEqual(story_record.record_story(p.runs, "S-1"), {})
+            self.assertIsNone(story_record.record_story(p.runs, "S-1"))
             events = journals.journal_events(p.runs, "S-1")
             self.assertEqual([e["kind"] for e in events].count("record"), 1)
             from dca_factory import gate
@@ -110,15 +114,15 @@ class Record(unittest.TestCase):
         with project() as p:
             p.story("S-1")
             window(p)
-            self.assertIsNone(state.record_story(p.runs, "S-1"))
-            self.assertIsNone(state.recorded(journals.journal_events(p.runs, "S-1")))
+            self.assertIsNone(story_record.record_story(p.runs, "S-1"))
+            self.assertIsNone(story_record.recorded(journals.journal_events(p.runs, "S-1")))
 
     def test_material_that_is_gone_is_named_not_counted(self):
         with project() as p:
             p.story("S-1")
             journals.journal_append(p.runs, "S-1", "usage", "builder", "tool=claude", "seconds=40")
             journals.journal_append(p.runs, "S-1", "gate", "plan", "exit=0", "by=runner")
-            self.assertEqual(state.record_story(p.runs, "S-1"), {"unknown": "plan,streams"})
+            self.assertEqual(story_record.record_story(p.runs, "S-1"), {"unknown": "plan,streams"})
             from dca_factory import gate
             self.assertIsNone(gate.story_signals(p.runs, "S-1", [], "")["plan_open"])
 
@@ -132,28 +136,28 @@ class Prune(unittest.TestCase):
             p.evidence("S-1", "tree-after-builder.txt", "x\n")
             p.evidence("S-1", "gate-build.101500.txt", "gate:pass\n")
             parts_before = cli.window_parts(journals.journal_events(p.runs, "S-1"), "builder") \
-                if state.record_story(p.runs, "S-1") is not None else None
-            self.assertEqual(state.prune_raw(p.runs, p.epics, days=7), [("S-1", 2)])
+                if story_record.record_story(p.runs, "S-1") is not None else None
+            self.assertEqual(story_record.prune_raw(p.runs, p.epics, days=7), [("S-1", 2)])
             folder = profiles.evidence_dir(p.runs, "S-1")
             self.assertEqual(sorted(os.listdir(folder)),
-                             ["gate-build.101500.txt", state.INVARIANT_BREAKS, "journal.tsv"])
+                             ["gate-build.101500.txt", story_record.INVARIANT_BREAKS, "journal.tsv"])
             self.assertTrue(os.path.isfile(os.path.join(p.runs, "S-1", "plan.md")))
             self.assertEqual(cli.window_parts(journals.journal_events(p.runs, "S-1"), "builder"), parts_before)
-            self.assertEqual(state.prune_raw(p.runs, p.epics, days=7), [])
+            self.assertEqual(story_record.prune_raw(p.runs, p.epics, days=7), [])
 
     def test_a_young_or_undelivered_story_keeps_its_material(self):
         with project() as p:
             delivered_story(p, "S-1", days_ago=2)
             material(p)
-            self.assertEqual(state.prune_raw(p.runs, p.epics, days=7), [])
+            self.assertEqual(story_record.prune_raw(p.runs, p.epics, days=7), [])
             p.story("S-1")
-            self.assertEqual(state.prune_raw(p.runs, p.epics, days=0), [])
-            self.assertTrue(state.raw_material(profiles.evidence_dir(p.runs, "S-1")))
+            self.assertEqual(story_record.prune_raw(p.runs, p.epics, days=0), [])
+            self.assertTrue(story_record.raw_material(profiles.evidence_dir(p.runs, "S-1")))
 
     def test_the_days_come_from_the_profile(self):
-        self.assertEqual(state.keep_days({}), 7)
-        self.assertEqual(state.keep_days({"evidence.keepDays": "30"}), 30)
-        self.assertEqual(state.keep_days({"evidence.keepDays": "soon"}), 7)
+        self.assertEqual(story_record.keep_days({}), 7)
+        self.assertEqual(story_record.keep_days({"evidence.keepDays": "30"}), 30)
+        self.assertEqual(story_record.keep_days({"evidence.keepDays": "soon"}), 7)
 
 
 def resumed_builder(*commands):
@@ -193,24 +197,24 @@ class ResumedBuilder(unittest.TestCase):
             journals.journal_append(p.runs, "S-1", "usage", "builder", "tool=claude")
             # what 0.90.0 wrote: one part, the stream line without a version
             journals.journal_append(p.runs, "S-1", "stream", "builder.100000.out", "process=builder", "parts=0", "denied=0")
-            self.assertTrue(state.parts_incomplete(journals.journal_events(p.runs, "S-1"), "builder"))
-            state.freeze_streams(journal)
-            state.freeze_streams(journal)
+            self.assertTrue(stream_records.parts_incomplete(journals.journal_events(p.runs, "S-1"), "builder"))
+            stream_records.freeze_streams(journal)
+            stream_records.freeze_streams(journal)
             events = journals.journal_events(p.runs, "S-1")
-            self.assertEqual([r["stage"] for r in state.journal_parts(events, "builder")], ["plan", "test", "build", "tidy"])
-            self.assertEqual(sum(r["runs"] for r in state.journal_parts(events, "builder")), 4)
+            self.assertEqual([r["stage"] for r in stream_records.journal_parts(events, "builder")], ["plan", "test", "build", "tidy"])
+            self.assertEqual(sum(r["runs"] for r in stream_records.journal_parts(events, "builder")), 4)
             self.assertEqual(sum(1 for e in events if e["kind"] == "stream"), 2)
-            self.assertFalse(state.parts_incomplete(events, "builder"))
+            self.assertFalse(stream_records.parts_incomplete(events, "builder"))
 
     def test_a_run_frozen_with_no_part_whose_stream_is_gone_says_the_parts_are_incomplete(self):
         with project() as p:
             journals.journal_append(p.runs, "S-1", "part", "plan", "process=builder", "stream=builder.100000.out", "seconds=9")
             journals.journal_append(p.runs, "S-1", "stream", "builder.100000.out", "process=builder", "parts=1", "denied=0")
             events = journals.journal_events(p.runs, "S-1")
-            self.assertEqual([r["stage"] for r in state.journal_parts(events, "builder")], ["plan"])
-            self.assertFalse(state.parts_incomplete(events, "builder"))      # its stages' skills were seen
+            self.assertEqual([r["stage"] for r in stream_records.journal_parts(events, "builder")], ["plan"])
+            self.assertFalse(stream_records.parts_incomplete(events, "builder"))      # its stages' skills were seen
             journals.journal_append(p.runs, "S-1", "stream", "builder.110000.out", "process=builder", "parts=0", "denied=0")
-            self.assertTrue(state.parts_incomplete(journals.journal_events(p.runs, "S-1"), "builder"))
+            self.assertTrue(stream_records.parts_incomplete(journals.journal_events(p.runs, "S-1"), "builder"))
 
 
 class OneWayToRead(unittest.TestCase):

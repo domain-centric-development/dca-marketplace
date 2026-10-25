@@ -16,6 +16,9 @@ from dca_factory import cli, gate, runner
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
+from dca_factory.delivery.adapter.outgoing.git import worktrees
+from dca_factory.delivery.adapter.outgoing.files import snapshots
+from dca_factory.delivery.adapter.outgoing.claims import remote_claims
 
 PROFILE = "claim_remote: origin\n"
 EPIC = "---\nintent: x\ngoal: y\nmetric: ThingShown\ndomain_contact: z\n---\n# sample\n"
@@ -123,13 +126,13 @@ class Claim(unittest.TestCase):
             runs_a, epics_a = at(a)
             quiet(cli.claim_command, a, runs_a, epics_a, "S-01")
             runs_b, epics_b = at(b)
-            real, calls = state.fetch_remote, []
+            real, calls = remote_claims.fetch_remote, []
 
             def stale_first(cwd, name):                    # the fetch before the push saw no claim yet
                 calls.append(name)
                 return (0, "") if len(calls) == 1 else real(cwd, name)
-            with mock.patch.object(state, "fetch_remote", side_effect=stale_first):
-                code, said = quiet(state.claim_story, b, runs_b, CONFIG, "main", "S-01", "sample", "the first thing")
+            with mock.patch.object(remote_claims, "fetch_remote", side_effect=stale_first):
+                code, said = quiet(remote_claims.claim_story, b, runs_b, CONFIG, "main", "S-01", "sample", "the first thing")
             self.assertEqual(code, 3, said)
 
     def test_an_own_claim_resumes_and_the_same_person_on_another_host_is_foreign(self):
@@ -149,14 +152,14 @@ class Claim(unittest.TestCase):
             runs_a, epics_a = at(a)
             quiet(cli.claim_command, a, runs_a, epics_a, "S-01")
             runs_b, _e = at(b)
-            code, said = quiet(state.claim_story, b, runs_b, CONFIG, "main", "S-01", "sample", "a different thing")
+            code, said = quiet(remote_claims.claim_story, b, runs_b, CONFIG, "main", "S-01", "sample", "a different thing")
             self.assertEqual(code, 4, said)
             self.assertIn("id collision", said)
             hook = os.path.join(r.bare, "hooks", "pre-receive")
             write(hook, "#!/bin/sh\nwhile read old new ref; do case $ref in refs/heads/story/*) "
                         "echo 'branch names need a ticket key' >&2; exit 1;; esac; done\n")
             os.chmod(hook, 0o755)
-            code, said = quiet(state.claim_story, b, runs_b, CONFIG, "main", "S-02", "sample", "the second thing")
+            code, said = quiet(remote_claims.claim_story, b, runs_b, CONFIG, "main", "S-02", "sample", "the second thing")
             self.assertEqual(code, 4, said)
             self.assertIn("not a lost race", said)
 
@@ -166,8 +169,8 @@ class Claim(unittest.TestCase):
             runs_a, epics_a = at(a)
             quiet(cli.claim_command, a, runs_a, epics_a, "S-01")
             runs_b, _e = at(b)
-            self.assertEqual(quiet(state.release_claim, b, runs_b, CONFIG, "S-01")[0], 1)
-            self.assertEqual(quiet(state.release_claim, b, runs_b, CONFIG, "S-01", True)[0], 0)
+            self.assertEqual(quiet(remote_claims.release_claim, b, runs_b, CONFIG, "S-01")[0], 1)
+            self.assertEqual(quiet(remote_claims.release_claim, b, runs_b, CONFIG, "S-01", True)[0], 0)
             self.assertEqual(sh(r.root, "--git-dir", r.bare, "branch", "--list", "story/*"), "")
             plain = r.clone("plain", "pia@example.com")
             os.remove(os.path.join(plain, profiles.PROFILE_FILE))
@@ -182,12 +185,12 @@ class Ids(unittest.TestCase):
         with remote() as r:
             a, b = r.clone("a", "ana@example.com"), r.clone("b", "ben@example.com")
             runs_a, epics_a = at(a)
-            quiet(state.claim_story, a, runs_a, CONFIG, "main", "S-05", "sample", "a claimed one")
+            quiet(remote_claims.claim_story, a, runs_a, CONFIG, "main", "S-05", "sample", "a claimed one")
             sh(a, "commit", "--quiet", "--allow-empty", "-m", "feat: gone\n\nStory: S-07")
             sh(a, "push", "--quiet", "origin", "HEAD:main")
             runs_b, epics_b = at(b)
             write(os.path.join(epics_b, "sample", "S-03", "story.md"), STORY.format(id="S-03", title="t", id_lower="s-03"))
-            self.assertEqual(state.free_id(b, epics_b, CONFIG, "main", "S"), "S-08")
+            self.assertEqual(remote_claims.free_id(b, epics_b, CONFIG, "main", "S"), "S-08")
 
 
 class Published(unittest.TestCase):
@@ -200,9 +203,9 @@ class Published(unittest.TestCase):
             os.makedirs(os.path.join(runs, "S-01"), exist_ok=True)
             write(os.path.join(profiles.evidence_dir(runs, "S-01"), "target"), "main\n")
             quiet(runner.worktree_prepare, a, runs, "S-01")
-            wt = state.worktree_of("S-01", a)
+            wt = worktrees.worktree_of("S-01", a)
             write(os.path.join(wt, "src", "thing.txt"), "the first thing\n")
-            write(os.path.join(profiles.evidence_dir(runs, "S-01"), state.STAGES_MADE), "src/thing.txt\n")
+            write(os.path.join(profiles.evidence_dir(runs, "S-01"), snapshots.STAGES_MADE), "src/thing.txt\n")
             write(os.path.join(runs, "S-01", "tests.md"),
                   "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n| shows-s-01 | a.ThingTest#shows |\n")
             self.assertEqual(quiet(runner.integrate_prepare, a, runs, epics, "S-01")[0], 0)
@@ -225,7 +228,7 @@ class Published(unittest.TestCase):
             sh(host, "merge", "--quiet", "--squash", "origin/story/S-01")
             sh(host, "commit", "--quiet", "-m", "Merge request !12")
             sh(host, "push", "--quiet", "origin", "HEAD:main")
-            quiet(state.refresh_claims, a, runs, CONFIG, "main")
+            quiet(remote_claims.refresh_claims, a, runs, CONFIG, "main")
             self.assertEqual(sh(r.root, "--git-dir", r.bare, "branch", "--list", "story/*"), "")
             self.assertNotEqual(state.story_state(a, runs, "S-01", front)[0], "published")
 
@@ -236,9 +239,9 @@ class Published(unittest.TestCase):
         os.makedirs(os.path.join(runs, story), exist_ok=True)
         write(os.path.join(profiles.evidence_dir(runs, story), "target"), "main\n")
         quiet(runner.worktree_prepare, clone, runs, story)
-        wt = state.worktree_of(story, clone)
+        wt = worktrees.worktree_of(story, clone)
         write(os.path.join(wt, "src", f"{story}.txt"), "x\n")
-        write(os.path.join(profiles.evidence_dir(runs, story), state.STAGES_MADE), f"src/{story}.txt\n")
+        write(os.path.join(profiles.evidence_dir(runs, story), snapshots.STAGES_MADE), f"src/{story}.txt\n")
         write(os.path.join(runs, story, "tests.md"), "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n"
                                                     f"| shows-{story.lower()} | a.ThingTest#{story.replace('-', '')} |\n")
         quiet(runner.integrate_prepare, clone, runs, epics, story)
@@ -269,7 +272,7 @@ class Published(unittest.TestCase):
             story = read_file(os.path.join(wt_b, "product", "epics", "sample", "S-02", "story.md"))
             self.assertIn("status: approved", story)
             self.assertNotIn("delivered_by", story)
-            self.assertFalse(os.path.isfile(os.path.join(profiles.evidence_dir(runs_b, "S-02"), state.PUBLISHED)))
+            self.assertFalse(os.path.isfile(os.path.join(profiles.evidence_dir(runs_b, "S-02"), remote_claims.PUBLISHED)))
 
     def test_a_hand_delivery_of_a_story_another_factory_claimed_is_refused(self):
         with remote() as r:
@@ -302,7 +305,7 @@ class Published(unittest.TestCase):
             write(os.path.join(profiles.evidence_dir(runs_b, "S-02"), "target"), "main\n")
             write(os.path.join(runs_b, "S-02", "plan.md"), "# Plan\n\n## Spec delta\n- adds shows-s-01\n")
             quiet(runner.worktree_prepare, b, runs_b, "S-02")
-            wt = state.worktree_of("S-02", b)
+            wt = worktrees.worktree_of("S-02", b)
             quiet(runner.integrate_prepare, b, runs_b, epics_b, "S-02")
             story_path = layout.find_story(epics_b, "S-02")
             front, body = markdown.read_front_matter(story_path)

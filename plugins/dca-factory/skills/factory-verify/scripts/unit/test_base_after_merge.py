@@ -8,6 +8,7 @@ import unittest
 
 from support import state, write
 from dca_factory import gate
+from dca_factory.delivery.adapter.outgoing.files import snapshots
 
 
 def git(cwd, *args):
@@ -42,9 +43,9 @@ class BaseAfterMerge(unittest.TestCase):
 
     def test_a_tracked_file_the_ignore_rules_name_is_no_change_against_a_commits_tree(self):
         base = git(self.root, "rev-parse", "HEAD^{tree}")
-        self.assertEqual(state.tree_changes(self.root, base, state.git_tree(self.root), self.runs), [])
+        self.assertEqual(snapshots.tree_changes(self.root, base, snapshots.git_tree(self.root), self.runs), [])
         write(os.path.join(self.root, ".vscode", "settings.json"), '{ "a": 1 }\n')
-        self.assertEqual(state.tree_changes(self.root, base, state.git_tree(self.root), self.runs),
+        self.assertEqual(snapshots.tree_changes(self.root, base, snapshots.git_tree(self.root), self.runs),
                          [("modified", ".vscode/settings.json")])
 
     def test_the_tests_baseline_moves_onto_the_main_line_and_keeps_the_storys_own_change(self):

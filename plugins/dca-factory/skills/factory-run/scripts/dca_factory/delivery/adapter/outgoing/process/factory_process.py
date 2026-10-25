@@ -24,7 +24,8 @@ import typing
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .....gate import posix_shell
 from ....application.status.texts import parse_time
-from .....state import claim_path, dead_runner, read_claim, running_stages, stale_after
+from ..claims.checkout_claim import claim_path, dead_runner, read_claim
+from ..files.run_marks import running_stages, stale_after
 from ..files.request_files import default_by, factory_dir, stamp_utc
 
 #: What the worker, the page or an ended factory is, as its file and the claim say it.

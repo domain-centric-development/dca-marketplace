@@ -100,8 +100,8 @@ class BuildingBlocksTest(unittest.TestCase):
         self.assertFalse(issubclass(Missing, bb.DomainException))
 
     def test_every_marker_of_the_java_library_is_here(self):
-        for name in ("Value", "Id", "Entity", "AggregateRoot", "DomainEvent", "DomainService", "DomainException",
-                     "Repository", "Store", "InputPort", "OutputPort", "UseCase", "UseCaseException"):
+        for name in ("Value", "Id", "Entity", "AggregateRoot", "DomainEvent", "DomainService", "DomainGateway",
+                     "DomainException", "Repository", "Store", "InputPort", "OutputPort", "UseCase", "UseCaseException"):
             self.assertTrue(hasattr(bb, name), name)
 
 

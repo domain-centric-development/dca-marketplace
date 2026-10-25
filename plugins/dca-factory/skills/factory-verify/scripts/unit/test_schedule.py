@@ -4,6 +4,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from support import project, state
+from dca_factory.delivery.adapter.outgoing.files import run_marks
+from dca_factory.delivery.adapter.outgoing.files import usage_files
 
 
 def schedule(p, **kwargs):
@@ -138,20 +140,20 @@ class RunnerSteps(unittest.TestCase):
         with project() as p:
             p.story("A-1")
             self.journal(p, "A-1", ("stage-start", "document"), ("stage-end", "document"), ("step-start", "integrate"))
-            self.assertEqual([(s, st) for s, st, _t in state.running_stages(p.runs)], [("A-1", "integrate")])
+            self.assertEqual([(s, st) for s, st, _t in run_marks.running_stages(p.runs)], [("A-1", "integrate")])
             self.assertEqual(schedule(p)["stories"]["A-1"]["state"], "running")
             self.journal(p, "A-1", ("step-start", "integrate"), ("stage-start", "integrate"))
-            self.assertEqual([st for _s, st, _t in state.running_stages(p.runs)], ["integrate"])
+            self.assertEqual([st for _s, st, _t in run_marks.running_stages(p.runs)], ["integrate"])
             self.journal(p, "A-1", ("step-start", "integrate"), ("step-start", "format"), ("step-end", "format"))
-            self.assertEqual([st for _s, st, _t in state.running_stages(p.runs)], ["integrate"])
+            self.assertEqual([st for _s, st, _t in run_marks.running_stages(p.runs)], ["integrate"])
 
     def test_an_ended_step_runs_no_more_and_counts_as_no_stage_run(self):
         with project() as p:
             p.story("A-1")
             self.journal(p, "A-1", ("stage-start", "plan"), ("stage-end", "plan"), ("step-start", "integrate"),
                          ("step-end", "integrate"))
-            self.assertEqual(state.running_stages(p.runs), [])
-            self.assertEqual(sorted(state.journal_usage(p.runs, "A-1")), ["plan"])
+            self.assertEqual(run_marks.running_stages(p.runs), [])
+            self.assertEqual(sorted(usage_files.journal_usage(p.runs, "A-1")), ["plan"])
 
 
 

@@ -29,6 +29,7 @@ from dca_factory.delivery.adapter.outgoing.files import decision_record_files as
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
+from dca_factory.delivery.adapter.outgoing.files import windows
 
 
 def validate(cwd, kind, fields, words):
@@ -348,11 +349,11 @@ class RequestUsage(unittest.TestCase):
             os.environ["FACTORY_REQUEST"] = "R1"
             try:
                 for story in ("S-1", "S-2"):
-                    state.mark_window(here, runs, story, "backlog", "start")
-                    state.mark_window(here, runs, story, "backlog", "end")
+                    windows.mark_window(here, runs, story, "backlog", "start")
+                    windows.mark_window(here, runs, story, "backlog", "end")
             finally:
                 del os.environ["FACTORY_REQUEST"]
-            state.mark_window(here, runs, "S-3", "decisions", "start")
+            windows.mark_window(here, runs, "S-3", "decisions", "start")
             cost = wiring.book_request_cost(here, runs)
             booked = book_request_usage(cost, "R1", "claude", "model=m\tinput=10\tcache_read=100\t"
                                                                     "cache_write=20\toutput=40\tcost=1.0\tseconds=9")

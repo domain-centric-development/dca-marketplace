@@ -13,6 +13,7 @@ from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as p
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 from dca_factory.delivery.adapter.outgoing.files import owned_files as owned
+from dca_factory.delivery.adapter.outgoing.files import run_marks
 
 DELIVERED = """---
 id: {id}
@@ -92,12 +93,12 @@ class Evidence(unittest.TestCase):
     def test_the_newest_delivering_report_decides_and_a_waiting_one_is_no_pass(self):
         with project() as p:
             p.story("S-1")
-            self.assertEqual(state.gate_passed_on_record(p.root, p.runs, "S-1"), "")
+            self.assertEqual(run_marks.gate_passed_on_record(p.root, p.runs, "S-1"), "")
             first = p.evidence("S-1", "gate-adopt.100000.txt", "gate:pass story S-1 stage adopt\n")
             os.utime(first, (1, 1))
-            self.assertTrue(state.gate_passed_on_record(p.root, p.runs, "S-1"))
+            self.assertTrue(run_marks.gate_passed_on_record(p.root, p.runs, "S-1"))
             p.evidence("S-1", "gate-document.110000.txt", "gate:wait acceptance — x\ngate:wait story S-1 stage document\n")
-            self.assertEqual(state.gate_passed_on_record(p.root, p.runs, "S-1"), "")
+            self.assertEqual(run_marks.gate_passed_on_record(p.root, p.runs, "S-1"), "")
 
 
 class Migration(unittest.TestCase):
@@ -170,8 +171,8 @@ class Answered(unittest.TestCase):
             path = p.story("S-1", text="---\nid: S-1\nstatus: approved\n---\n# S\n\n## Assumptions\n\n"
                                        "- open: which way?\n\n## Out of scope\n- nothing\n")
             p.evidence("S-1", ".story-digest", layout.story_digest(path) + "\n")
-            self.assertTrue(state.write_answered(path, p.runs, "S-1-01", "The first way."))
-            self.assertFalse(state.write_answered(path, p.runs, "S-1-01", "The first way."))
+            self.assertTrue(owned.write_answered(path, p.runs, "S-1-01", "The first way."))
+            self.assertFalse(owned.write_answered(path, p.runs, "S-1-01", "The first way."))
             text = read(path)
             self.assertIn("- open: which way?\n- answered: The first way. (S-1-01)\n\n## Out of scope", text)
             mark = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), ".story-digest"))
@@ -180,7 +181,7 @@ class Answered(unittest.TestCase):
     def test_a_story_without_assumptions_gains_the_section(self):
         with project() as p:
             path = p.story("S-1")
-            state.write_answered(path, p.runs, "S-1-01", "Yes.")
+            owned.write_answered(path, p.runs, "S-1-01", "Yes.")
             self.assertTrue(read(path).endswith("## Assumptions\n\n- answered: Yes. (S-1-01)\n"))
 
 

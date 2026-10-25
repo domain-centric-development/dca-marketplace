@@ -150,6 +150,13 @@ class DomainService:
     __slots__ = ()
 
 
+class DomainGateway(typing.Protocol):
+    """Marker for Domain Gateways — an interface the domain declares to obtain facts it does not hold, in its own
+    language, implemented by an outgoing adapter. It never writes to the outside: it enriches the model so the model
+    can decide. A domain service or an aggregate calls it where a lookup is needed for some of what it decides on
+    only, so the use case does not read every fact up front; the rationale stands beside its declaration."""
+
+
 class DomainException(Exception):
     """The base of every business rule the domain model reports as broken.
 

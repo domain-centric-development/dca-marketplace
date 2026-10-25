@@ -15,6 +15,7 @@ from .sharedkernel.adapter.outgoing.profile.profile_files import (
 from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE
 from .sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError
 from .delivery.adapter.outgoing.files.story_layout import DECISIONS_DIR, flat_stories, STORY_FILE
+from .delivery.domain.model.story_state import MAX_ROUNDS  # noqa: F401 — read by the gate and the runner
 from .delivery.domain.model.stage import PIPELINE, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait
 
 
@@ -24,8 +25,6 @@ GateError = MarkdownError
 
 EPIC_FIELDS = ("intent", "goal", "metric", "domain_contact")
 
-
-MAX_ROUNDS = 3
 
 
 #: Codex stops loading project documents at 32 KiB by default and truncates silently; other tools

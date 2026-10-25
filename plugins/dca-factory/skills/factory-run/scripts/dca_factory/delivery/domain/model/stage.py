@@ -134,3 +134,8 @@ class Pipeline(DomainService):
     @staticmethod
     def order(kind: StoryKind) -> typing.Tuple[StageName, ...]:
         return tuple(s.name for s in PIPELINE if Trait.IN_ORDER in s.traits and kind in s.kinds)
+
+    @staticmethod
+    def hand_over(name: StageName) -> typing.Optional[HandOver]:
+        """The file the stage writes, None for a stage that writes none."""
+        return next((s.hand_over for s in PIPELINE if s.name == name), None)
