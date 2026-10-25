@@ -82,8 +82,9 @@ from .delivery.adapter.outgoing.files.journal_files import journal_events, journ
 from .spec.api import (
     lint_context,
     derived, read_delta, renamed_rules, story_entries)
-from .gate import (
-    spec_target, story_spec, perspectives_of, story_ids)
+from .gate import story_ids
+from .delivery.adapter.outgoing.files.delivery_files import perspectives_of
+from .delivery.adapter.outgoing.spec.story_spec_files import spec_target, story_spec
 from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_invocation, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
     follow_newest, story_facts)

@@ -54,10 +54,11 @@ from .delivery.adapter.outgoing.files.journal_files import journal_path, journal
 from .spec.api import (
     context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
-    BUILT_IN_PERSPECTIVES, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET, in_places,
-    integration_target, lost_text, main_tests_lost, merge_target, people_places, perspectives_of, plan_proposals,
-    rebase_tests_baseline, record_main_tests, run as run_command, spec_target, stale_red_proof, story_journals,
-    story_spec, tail)
+    CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET, in_places, integration_target, lost_text,
+    main_tests_lost, merge_target, people_places, rebase_tests_baseline, record_main_tests, run as run_command,
+    stale_red_proof, story_journals, tail)
+from .delivery.adapter.outgoing.files.delivery_files import BUILT_IN_PERSPECTIVES, perspectives_of, plan_proposals
+from .delivery.adapter.outgoing.spec.story_spec_files import spec_target, story_spec
 from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
 from .delivery.adapter.outgoing.files.design_files import (
     CLAUSES_MARKER, INVARIANTS_MARKER, plan_invariants, read_clause_rows, read_invariant_rows, scenario_clauses)

@@ -5,12 +5,21 @@ from __future__ import annotations
 import os
 import typing
 
-from .....gate import story_spec
-from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
-from .....spec.api import derived, merge, read_delta, read_spec, render_spec, story_entries
+from .....contract import GateError, MAPPING_ROW, SELECTOR
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
+from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
+from .....spec.api import (
+    context_files, derived, feature_name, journeys_path, merge, read_context, read_delta, read_spec, render_spec,
+    scenarios_path, story_entries)
+from ....application.shared.front import accepted, is_acceptance
 from ....application.shared.story_spec import SpecChange
 from ....domain.model.story import StoryId
+from ..files.decision_record_files import records_of
+from ..files.kept_files import human_line
 from ..files.story_layout import find_story, story_kind
+
+Front = typing.Mapping[str, typing.Any]
+Entries = typing.List[typing.Dict[str, typing.Any]]
 
 
 class StorySpecFiles:
@@ -46,3 +55,50 @@ class StorySpecFiles:
                 handle.write(render_spec(read_spec(target)[0], merge(own, read["story"], read_delta(""), {}),
                                          str(front.get("context", "")).strip() or "Spec"))
         return SpecChange(tuple(item["key"] for item in added), target)
+
+
+def spec_target(front: Front) -> typing.Optional[str]:
+    """The spec file a story changes: its feature's `scenarios.md` under its context — the context's own for a story
+    without `feature:` —, or `journeys.md` for a journey item; None for a story that names no context."""
+    if story_kind(front) == "journey":
+        return journeys_path()
+    return scenarios_path(front["context"], front.get("feature")) if str(front.get("context", "")).strip() else None
+
+
+def story_spec(front: Front) -> typing.Tuple[typing.Optional[str], Entries, typing.Set[str], str]:
+    """(the file the story's criteria go to, what the spec holds where the story's keys are looked up — every
+    criterion of the context with its feature —, the context's features, the story's feature). A journey's is
+    `journeys.md` alone."""
+    target = spec_target(front)
+    if not target:
+        return None, [], set(), ""
+    if story_kind(front) == "journey":
+        return target, [dict(item, feature="") for item in read_spec(target)[1]], set(), ""
+    context = front["context"]
+    return (target, read_context(context), {name for name, _p in context_files(context) if name},
+            feature_name(front.get("feature")))
+
+
+def spec_backing(cwd: str, story_id: str, body: str, story_path: typing.Optional[str] = None) -> str:
+    """What backs a change of what holds: the story's `## Changed expectations` in a person's words, or a decision a
+    human answered for this story. "" where nothing does."""
+    if any(l.strip().startswith(("-", "*")) and human_line(l.strip()[1:].strip())
+           for l in section_of(body, "changed expectations") or []):
+        return "the story's `## Changed expectations`"
+    try:
+        answered = [str(f["id"]).strip() for _p, f, _b, state, a in records_of(story_id, story_path)
+                    if state in ("answered", "applied") and not (is_acceptance(f) and accepted(a))]
+    except GateError:
+        answered = []
+    return f"decision {', '.join(answered)}" if answered else ""
+
+
+def moved_tests(runs: str, story_id: str) -> typing.Dict[str, typing.List[str]]:
+    """{key: [selector]} from tests.md's `## Moved tests` table — a test of the spec this story renamed or moved."""
+    path = os.path.join(runs, story_id, "tests.md")
+    moved: typing.Dict[str, typing.List[str]] = {}
+    for line in (section_of(read_text(path), "moved tests") or []) if os.path.isfile(path) else []:
+        row = MAPPING_ROW.match(line.strip())
+        if row and row.group(1) not in ("criterion", "key", "---") and SELECTOR.match(row.group(2).strip()):
+            moved.setdefault(row.group(1), []).append(row.group(2).strip())
+    return moved

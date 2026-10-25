@@ -11,10 +11,12 @@ from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage import StageName
 from ..model.stage_story import (
-    DecidedRecord, KeptTests, MappedTest, PlannedTestChange, RedProof, StageChanges,
+    DecidedRecord, DocumentFacts, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
+    StoryPass, SpecTests, StoryCommit, MappedTest, PlannedTestChange, RedProof, StageChanges,
     AssertionFact, ClauseRow, CommandKey, ContextMapFacts, Count, InvariantFacts, PlannedFile, PortName, Selector, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
     InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
 from ..model.story import StoryId
+from ..model.story_state import Detail
 
 
 class StageEvidence(DomainGateway, typing.Protocol):
@@ -126,4 +128,41 @@ class StageEvidence(DomainGateway, typing.Protocol):
     def red_proof(self, story: StoryId, stage: StageName,
                   tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[RedProof]:
         """The red ledger against the tests as they are — None where the story has none."""
+        ...
+
+    def spec_delta(self, story: StageStory) -> typing.Optional[SpecDelta]:
+        """The plan's spec delta as the spec reads it — None where there is no plan or the story changes no spec."""
+        ...
+
+    def spec_backing(self, story: StageStory) -> typing.Optional[Detail]:
+        """What backs a change of what holds: the story's `## Changed expectations`, or a decision a person answered
+        — None where nothing does."""
+        ...
+
+    def spec_tests(self, story: StageStory, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[SpecTests]:
+        """The tests the story's spec names — None where the story changes no spec."""
+        ...
+
+    def story_commit(self, story: StageStory, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[StoryCommit]:
+        """The story's commit against its test files — None where it names no test file."""
+        ...
+
+    def story_pass(self, story: StageStory) -> StoryPass:
+        ...
+
+    def outcome(self, story: StageStory) -> OutcomeFacts:
+        """The story's published events in the production code."""
+        ...
+
+    def document(self, story: StoryId) -> DocumentFacts:
+        ...
+
+    def proposals(self, story: StoryId) -> typing.Optional[ProposalFacts]:
+        """The plan's proposed terms against the glossaries — None where the plan proposes none."""
+        ...
+
+    def reviews(self, story: StoryId) -> ReviewFacts:
+        ...
+
+    def pipeline(self, story: StoryId) -> PipelineFacts:
         ...

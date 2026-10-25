@@ -80,7 +80,7 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, MAPPING_ROW, order_for, SELECTOR, STAGE, STAGE_CHECKS, STAGE_FILES, STAGES, TESTED_KINDS, VERSION)
+    ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, order_for, SELECTOR, STAGE, STAGE_CHECKS, STAGE_FILES, STAGES, TESTED_KINDS, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import (
     append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
     PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
@@ -93,9 +93,8 @@ from .sharedkernel.adapter.outgoing.profile.profile_files import (
     resolve_profile, runs_top, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git, git_blob, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    answered_decisions, decisions_store, NOTHING, project_decisions_rel, record_path,
+    answered_decisions, decisions_store, project_decisions_rel, record_path,
     records_of)
-from .delivery.adapter.outgoing.files.decision_record_files import needs_human_ids
 from .delivery.domain.model.correction import REASON_CODES
 from .delivery.application.description.check_description import CheckDescriptionCommand
 from .discovery.api import check_report
@@ -106,14 +105,12 @@ from .delivery.adapter.outgoing.build.test_reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
 from .spec.api import (
-    context_files, delta_problems, derived, feature_name, journeys_path, merge, merge_context, placement_problems, rule_problems,
-    lint_context, read_context, read_delta, read_spec, render_spec, scenarios_path, story_entries,
-    touches)
+    derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
 from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED, remote_main
 from .delivery.adapter.outgoing.files.story_record import INVARIANT_BREAKS
 from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open, record_judge_signal
 from .delivery.adapter.outgoing.files.snapshots import (
-    git_tree, NOT_OBSERVED, record_base, record_changes)
+    git_tree, record_base, record_changes)
 from .delivery.adapter.outgoing.files.owned_files import owned_end, run_owned
 from .delivery.adapter.outgoing.files.run_marks import (
     backlog_digest, current_stage_files, last_ended, step_open,
@@ -130,17 +127,21 @@ from .delivery.domain.service.story_checks import StoryChecks
 from .delivery.domain.service.decision_checks import Applying, DecisionChecks
 from .delivery.domain.model.stage import StageName
 from .delivery.domain.model.stage_story import (
-    CommandKey, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable, TitleCheck, TitleFound)
+    CommandKey, Count, HandOverName, MappedTest, Place, Presence, ScenarioKey, Selector, TestTable, TitleCheck, TitleFound)
 from .delivery.domain.model.story_state import Detail
 from .delivery.domain.service.design_checks import DesignChecks
 from .delivery.domain.service.kept_checks import KeptChecks
+from .delivery.domain.service.spec_checks import SpecChecks
+from .delivery.domain.service.delivery_checks import DeliveryChecks
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
 from .delivery.adapter.outgoing.files.test_files import locate_tests
-from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, publishes_of, split_list
+from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, split_list
 from .delivery.adapter.outgoing.files.test_files import read_mapping
 from .delivery.adapter.outgoing.files.design_files import BREAK_IGNORE, STEP, locate_selector, read_invariant_rows
-from .delivery.adapter.outgoing.files.kept_files import RED_TREE, bare_path, human_line, meaningful_lines, read_red_digests, red_ledger_path, red_tree, row_cells, tidy_moves, unproven_tests
+from .delivery.adapter.outgoing.files.kept_files import RED_TREE, meaningful_lines, read_red_digests, red_ledger_path, red_tree, tidy_moves, unproven_tests
 from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
+from .delivery.adapter.outgoing.spec.story_spec_files import moved_tests, story_spec
+from .delivery.adapter.outgoing.files.delivery_files import SKIP_DIRS, TEST_DIR, TEST_FILE
 
 
 def story_ids(epics):
@@ -728,100 +729,6 @@ def check_project(result, cwd, profile):
     return checked.complete
 
 
-def glossary_files(cwd, profile):
-    named = profile.get("glossary")
-    if named:
-        matches = [
-            os.path.join(root, f)
-            for root, _dirs, files in os.walk(cwd)
-            for f in files
-            if os.path.join(root, f).endswith(named)
-        ]
-        if matches:
-            return matches
-    found = []
-    for root, dirs, files in os.walk(cwd):
-        dirs[:] = [d for d in dirs if d not in ("build", "out", "bin", "obj", "target", "node_modules", ".git")]
-        found += [os.path.join(root, f) for f in files if f.lower() == "glossary.md"]
-    return found
-
-
-def proposal_words(term):
-    """The words the gate looks for in a glossary for one proposed term: the term as written, the domain
-    word before a parenthesis and the code word inside it — `Titel (title)` is found by `titel` or by
-    `title`. Case does not count."""
-    term = term.strip().strip("`*").lower()
-    words = {term}
-    match = re.match(r"^(.*?)\s*\(([^)]*)\)\s*$", term)
-    if match:
-        words |= {match.group(1).strip(), match.group(2).strip()}
-    return {w for w in words if w}
-
-
-def plan_proposals(plan):
-    """The terms a plan proposes under `## Glossary proposals`: the part before the colon of each list item."""
-    proposals, collecting = [], False
-    for line in plan.splitlines():
-        if line.strip().lower().startswith("## glossary proposals"):
-            collecting = True
-            continue
-        if collecting and line.startswith("## "):
-            break
-        if collecting and line.strip().startswith("-") and ":" in line:
-            proposals.append(line.strip()[1:].split(":", 1)[0].strip().strip("`*"))
-    return proposals
-
-
-def check_proposals_landed(result, runs, story_id, cwd, profile):
-    """Every term the plan proposed is either in a glossary now or named as still open. A proposal that
-    quietly disappears is how a model's private vocabulary enters a code base. A term is found in a
-    glossary by any of its words (`proposal_words`), and it is named open only under `## Not documented`
-    of document.md — a row the pipeline pre-filled under `## Glossary` names it, it does not account for it."""
-    plan_path = os.path.join(runs, story_id, "plan.md")
-    try:
-        plan = read_text(plan_path)
-    except GateError:
-        return
-    proposals = plan_proposals(plan)
-    if not proposals:
-        return
-    files = glossary_files(cwd, profile)
-    if not files:
-        result.skip(
-            "glossary",
-            f"{len(proposals)} term(s) proposed in the plan, but the project keeps no glossary",
-        )
-        return
-    corpus = "\n".join(read_text(f).lower() for f in files)
-    open_section = ""
-    try:
-        document = read_text(os.path.join(runs, story_id, "document.md"))
-        collecting = False
-        for line in document.splitlines():
-            if line.startswith("## "):
-                collecting = line[3:].strip().lower() == "not documented"
-                continue
-            if collecting:
-                open_section += line.lower() + "\n"
-    except GateError:
-        pass
-    missing = [
-        term
-        for term in proposals
-        if not any(word in corpus for word in proposal_words(term))
-        and not any(word in open_section for word in proposal_words(term))
-    ]
-    if missing:
-        result.fail(
-            "glossary",
-            f"proposed but neither in a glossary nor named as open under `## Not documented`: {', '.join(missing)} — "
-            f"a term the code uses and no glossary defines is private vocabulary (a term is found by the word before "
-            f"the parenthesis or the word inside it, case aside)",
-        )
-    else:
-        result.ok("glossary", f"{len(proposals)} proposed term(s) accounted for")
-
-
 def check_backlog(cwd, epics, profile, only=None):
     """The plan gate's backlog checks over every story that is not done, or over `only`: front
     matter, the epic's completeness, the criteria, the status and the context on the map. Nothing of
@@ -880,87 +787,6 @@ def check_backlog(cwd, epics, profile, only=None):
     print(f"backlog: {checked} story(ies) checked" + (f", refused: {', '.join(refused)}" if refused
                                                      else " — every one holds for the plan gate"))
     return 1 if refused else 0
-
-
-#: A source file of the project's code: the gate reads no profile key for where the code lives, so it reads every
-#: file with a code extension outside the build's and the tools' folders and outside the tests.
-CODE_FILE = re.compile(r"\.(java|kt|scala|groovy|cs|fs|py|ts|tsx|js|jsx|mjs|go|rb|php|rs|swift)$")
-
-
-#: A test folder by name — `test`, `tests`, `test-utils`, `Foo.Tests`, and the camel-cased source set a build tool
-#: names (`integrationTest`, `functionalTests`): a capital T after a lowercase letter, so `latest` and `contest` are not.
-TEST_DIR = re.compile(r"(?i:^(tests?|specs?|__tests__)$|^tests?[-_.]|[-_.]tests?$)|[a-z]Tests?$")
-
-
-#: A line that names a type without using it: an import, a using, a package or namespace line.
-IMPORT_LINE = re.compile(r"^\s*(?:import|using|package|namespace|from\s+\S+\s+import)\b.*$", re.M)
-
-
-def production_files(cwd):
-    found = []
-    skipped = SKIP_DIRS | {runs_top()}
-    for root, dirs, files in os.walk(cwd):
-        dirs[:] = sorted(d for d in dirs if d not in skipped and not d.startswith(".") and not TEST_DIR.search(d))
-        for name in sorted(files):
-            if CODE_FILE.search(name) and not TEST_FILE.search(name):
-                found.append(os.path.relpath(os.path.join(root, name), cwd).replace(os.sep, "/"))
-    return found
-
-
-def check_outcome_raised(result, profile, cwd, runs, story_id, front):
-    """Contract 14 (WP-84 V1): delivered means the outcome event exists. Every event of `publishes:` is a type the
-    production code declares, and a production file the story changed — the aggregate that raises it or the use case
-    that publishes it — refers to it beyond the declaration: another file, or the declaring file itself where the
-    event is nested in the aggregate that raises it."""
-    if story_kind(front) != "story" or contract_of(profile) < 14:
-        return
-    events = publishes_of(front)
-    if not events:
-        return
-    files = production_files(cwd)
-    texts = {rel: read_text(os.path.join(cwd, rel)) for rel in files}
-    record = os.path.join(evidence_dir(runs, story_id), "changed.txt")
-    changed, scope = None, "the story changed"
-    if os.path.isfile(record) and not read_text(record).startswith(NOT_OBSERVED):
-        changed = {parts[1] for parts in (line.split("\t", 1) for line in read_text(record).splitlines())
-                   if len(parts) == 2 and parts[0] in ("added", "modified")}
-    if changed is None:
-        scope = "the project has (no record of what the story changed)"
-    problems, found = [], []
-    for event in events:
-        declares = re.compile(rf"\b(?:class|record|interface|struct|enum|object|type)\s+{re.escape(event)}\b")
-        declared = [rel for rel, text in texts.items() if declares.search(text)]
-        if not declared:
-            problems.append(f"no type `{event}` in the production code — the story says it publishes it")
-            continue
-        mention = re.compile(rf"(?<!\w){re.escape(event)}(?!\w)")
-
-        constructs = re.compile(rf"\bnew\s+{re.escape(event)}\b|(?<!\w){re.escape(event)}\s*\.\s*\w+\s*\(")
-
-        def raises(rel, text):
-            # The event's own file (`TaskCompleted.java`) never raises it: its factory names it, nothing else does.
-            # An import, using or package line names it without raising it. A declaring file raises it where the
-            # event is nested in it (the aggregate) and constructed there — `new TaskCompleted(…)`, `TaskCompleted.of(…)`.
-            if os.path.splitext(os.path.basename(rel))[0] == event.rsplit(".", 1)[-1]:
-                return False
-            body = IMPORT_LINE.sub("", text)
-            return bool(constructs.search(body)) if rel in declared else bool(mention.search(body))
-        raising = [rel for rel, text in texts.items() if raises(rel, text)]
-        raisers = [rel for rel in raising if changed is None or rel in changed]
-        if not raisers and raising:
-            problems.append(f"`{event}` is declared in {declared[0]} and raised in {raising[0]}, but by nothing the "
-                            f"story changed — `publishes:` belongs on the story that introduces the event; this "
-                            f"story drops the line")
-            continue
-        if not raisers:
-            problems.append(f"`{event}` is declared in {declared[0]}, but nothing {scope} refers to it — the "
-                            f"aggregate raises it or the use case publishes it")
-            continue
-        found.append(f"{event} (declared in {declared[0]}, raised in {raisers[0]})")
-    if problems:
-        result.fail("outcome", "; ".join(problems))
-    else:
-        result.ok("outcome", "the outcome event exists: " + "; ".join(found))
 
 
 def check_mapping(result, runs, story_id, criteria):
@@ -1159,55 +985,6 @@ def recorded_run(invocation, cwd, profile=None, with_reports=False):
     return code, output, ran, ""
 
 
-#: The judge's built-in perspectives — part of the method, never switched off; `reviews:` in the profile adds more.
-BUILT_IN_PERSPECTIVES = ("ddd", "hexagonal", "clean-code")
-
-
-#: A review report carries its findings under these ranks (the review skills' own format).
-REVIEW_RANKS = ("must-fix", "should-fix", "nit")
-
-
-def perspectives_of(profile):
-    """`(name, carrier)` per perspective: the three built-ins and the profile's `reviews:`, each with the skill
-    `review.<name>:` names — the plugin prefix dropped — or `review-<name>` where the profile names none."""
-    names = list(BUILT_IN_PERSPECTIVES)
-    for extra in re.split(r"[,\s]+", str(profile.get("reviews", "")).strip()):
-        if extra and extra not in names:
-            names.append(extra)
-    out = []
-    for name in names:
-        carrier = str(profile.get(f"review.{name}", "")).split()
-        out.append((name, (carrier[0].rsplit(":", 1)[-1] if carrier else f"review-{name}")))
-    return out
-
-
-def check_reviews(result, runs, story_id, profile):
-    """One review file per perspective, `reviews/<name>.md`, in the review skills' report format. A missing
-    file is a note — the judge then ran that pass itself and says so — a file without a findings section is
-    not a review and is refused: the judge would converge from nothing while the report claims a perspective."""
-    folder = os.path.join(runs, story_id, "reviews")
-    read, missing, malformed = [], [], []
-    for name, _carrier in perspectives_of(profile):
-        path = os.path.join(folder, f"{name}.md")
-        if not os.path.isfile(path):
-            missing.append(name)
-            continue
-        text = read_text(path).lower()
-        if not any(rank in text for rank in REVIEW_RANKS) and "nothing found" not in text and "no finding" not in text:
-            malformed.append(name)
-            continue
-        read.append(name)
-    if malformed:
-        result.fail("reviews", f"reviews/{', reviews/'.join(malformed)}.md carries no must-fix, should-fix or nit "
-                               f"section and says of no finding that there is none — not a review report")
-        return
-    if missing:
-        result.note("reviews", f"no review file for {', '.join(missing)} (reviews/<perspective>.md) — the judge ran "
-                               f"that pass itself, and `## Perspectives covered` says so")
-    if read:
-        result.ok("reviews", f"{len(read)} review file(s) for the judge to converge from: {', '.join(read)}")
-
-
 def check_compiles(result, profile, cwd):
     command = profile.get("compile")
     if not command:
@@ -1218,109 +995,6 @@ def check_compiles(result, profile, cwd):
         result.ok("compiles", f"`{command}` succeeded{reused}")
     else:
         result.fail("compiles", f"`{command}` failed:\n{tail(output)}")
-
-
-#: A markdown table row, split into its cells. The first cell names the thing, the **last**
-#: names how it was checked — the tables differ in width, so counting from the left is wrong.
-PATHLIKE = re.compile(r"`([\w./-]+\.[A-Za-z0-9]{1,6}(?::L?\d+(?:[-–:]\d+)?|#[\w.-]+)?)`")
-
-
-def check_story_pass(result, runs, story_id, story_path, front):
-    """The document gate delivers a story, so it asks what delivery rests on: every stage of this pass
-    wrote its file after the one before it, the judge passed it, and the story is the one that was planned.
-    A document written for an earlier pass, or over a judge who asked for changes, delivers nothing."""
-    order = order_for(story_kind(front))
-    folder = os.path.join(runs, story_id)
-    texts = current_stage_files(runs, story_id, order)
-    gaps = [f"{STAGE_FILES[s]} ({'written for an earlier pass' if os.path.isfile(os.path.join(folder, STAGE_FILES[s])) else 'missing'})"
-            for s in order if s not in texts]
-    if gaps:
-        result.fail("story-pass", f"{', '.join(gaps)} — the document gate delivers a story whose stages all ran, "
-                                  f"in order, in this pass; the story runs on from the first of them")
-        return
-    verdict = verdict_in(texts["judge"])
-    if verdict == "pass":
-        record_judge_signal(runs, story_id, texts["judge"])
-    if verdict != "pass":
-        result.fail("story-pass", f"{STAGE_FILES['judge']} says `verdict: {verdict or 'none'}` — only a judge's "
-                                  f"`pass` lets a story be delivered")
-        return
-    planned = os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)
-    if not os.path.isfile(planned):
-        result.skip("story-pass", f"no {STORY_DIGEST} from the plan gate — whether the story changed since it was "
-                                  f"planned is not checked")
-        return
-    if read_text(planned).strip() != story_digest(story_path):
-        result.fail("story-pass", f"{story_path} changed after it was planned — a criterion no stage planned, "
-                                  f"tested or built cannot be delivered; the story runs again from plan")
-        return
-    result.ok("story-pass", f"every stage of this pass ran in order, the judge passed it, and the story is the "
-                            f"one that was planned")
-
-
-def check_documented(result, runs, story_id, cwd):
-    """The document stage may only write statements that can be checked. Two of them can be
-    checked here: a file it says it updated exists, and every glossary row names where its
-    definition came from. A documented path that does not resolve outlives the story."""
-    path = os.path.join(runs, story_id, "document.md")
-    try:
-        text = read_text(path)
-    except GateError as error:
-        result.fail("documented", str(error))
-        return
-    if needs_human_ids(text) is not None:
-        result.fail(
-            "documented",
-            f"{path}: the stage stopped with a needs-human section — read it and decide",
-        )
-        return
-
-    section, missing, unsourced, files = None, [], [], 0
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("## "):
-            section = stripped[3:].strip().lower()
-            continue
-        cells = row_cells(stripped)
-        if len(cells) < 3 or cells[0].lower() in ("term", "file") or set(cells[0]) <= {"-", " "}:
-            continue
-        name, source = cells[0].strip("`"), cells[-1]
-        if section == "documents updated" and name.strip().lower() in NOTHING:
-            if not source:
-                unsourced.append("the row saying nothing was updated (no `Verified by`)")
-            continue
-        if section == "documents updated":
-            files += 1
-            target = bare_path(name)
-            if target and not os.path.exists(os.path.join(cwd, target)):
-                missing.append(name)
-            if not source:
-                unsourced.append(f"{name} (no `Verified by`)")
-        elif section == "glossary" and not source:
-            unsourced.append(f"glossary term {name!r}")
-
-    for name in PATHLIKE.findall(text):
-        target = bare_path(name)
-        # A path, or a bare file name with a line (`BookId.java:8`) — that is a citation, and a
-        # citation resolves from the project root or sends the reader nowhere.
-        if ("/" in target or target != name) and not os.path.exists(os.path.join(cwd, target)):
-            missing.append(name)
-
-    if missing:
-        result.fail(
-            "documented",
-            f"{path}: names things that do not exist: {', '.join(sorted(set(missing)))} — a "
-            f"documented path that does not resolve sends the next reader nowhere. Write every "
-            f"path as it resolves from the project root, not as a package- or namespace-relative "
-            f"shorthand.",
-        )
-    if unsourced:
-        result.fail(
-            "documented",
-            f"{path}: unsourced claims: {', '.join(unsourced)} — every row says how it was checked",
-        )
-    if not missing and not unsourced:
-        result.ok("documented", f"{files} document(s) updated, every claim resolves")
 
 
 def check_stage_commands(result, profile, cwd, stage):
@@ -2128,15 +1802,6 @@ def retry_outside(result, cwd, profile, command, code, output, ran, owner):
     return 0, ran
 
 
-TEST_FILE = re.compile(
-    r"(^test_.*\.py$|_test\.(py|go|rb|exs?)$|Tests?\.(java|kt|cs|scala|groovy)$|IT\.(java|kt)$"
-    r"|Spec\.(scala|groovy|kt)$|\.(test|spec)\.(js|jsx|ts|tsx|mjs)$|_spec\.rb$)")
-
-
-SKIP_DIRS = {".git", "build", "target", "bin", "obj", "node_modules", "dist", ".gradle",
-             ".agents", ".claude", ".codex", ".opencode", "__pycache__", ".venv", "venv"}
-
-
 def test_files(cwd):
     found = []
     skipped = SKIP_DIRS | {runs_top()}
@@ -2599,36 +2264,6 @@ def parity(result, config_path):
             result.note(name, f"not proven here (bound to another configuration): {', '.join(unproven)}")
 
 
-# The runner snapshots the working tree before and after every stage (path and sha256 of every file
-# git reports as differing from HEAD, untracked ones included, and `deleted` for a tracked file that is
-# gone). What a stage changed follows from two snapshots and the list of tracked files,
-# deterministically. What the whole story changed follows from two git trees: the one recorded at the
-# story's first stage, written without committing anything, and the working tree now — so a project
-# without a commit, where `git diff` has nothing to compare against, still gets its diff, and a stage
-# run again does not move the story's starting point. Both are written as files the next stage reads
-# first, instead of reconstructing them. Paths are relative to the project, which may be a directory
-# inside a larger repository.
-#: The installed pipeline: every stage reads it, `factory.sh setup` and `update` alone change it. A stage's change
-#: there is not hidden as the pipeline's own — it is refused (`pipeline`), because it is the gate judging itself.
-PIPELINE_DIR = ".agents/factory/"
-
-
-def check_pipeline_untouched(result, runs, story_id):
-    """No stage of the story changed the installed pipeline: every changed-files record of the story is read, so a
-    change made by any stage is refused at the next gate, whichever stage made it. Silent without a record."""
-    records = sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), "changed-*.txt")))
-    if not records:
-        return
-    touched = sorted({line.split("\t", 1)[1] for record in records for line in read_text(record).splitlines()
-                      if "\t" in line and line.split("\t", 1)[1].startswith(PIPELINE_DIR)})
-    if touched:
-        result.fail("pipeline", f"a stage changed the installed pipeline: {', '.join(touched[:6])}"
-                                f"{' …' if len(touched) > 6 else ''} — a stage reads {PIPELINE_DIR} and never writes "
-                                f"it; put it back (`factory.sh update`, or git) and the stage runs again")
-    else:
-        result.ok("pipeline", f"no stage of {story_id} changed {PIPELINE_DIR}")
-
-
 def acceptance_applies(cwd, runs, story_id, profile):
     """Whether this story waits for a human before it is delivered. `pages`: it has a criterion
     whose test the end-user command runs, in a project with a browser — something to look at."""
@@ -2899,16 +2534,20 @@ def _plan(run):
 
 @check("document", stages=("document",))
 def _document(run):
-    check_story_pass(run.result, run.runs, run.story_id, run.story_path, run.front)
-    check_outcome_raised(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front)
-    check_documented(run.result, run.runs, run.story_id, run.cwd)
-    check_proposals_landed(run.result, run.runs, run.story_id, run.cwd, run.profile)
-    check_reviews(run.result, run.runs, run.story_id, run.profile)
+    passed = DeliveryChecks.story_pass(run.story, run.evidence)
+    take(run.result, passed.findings)
+    if passed.judge_passed is Presence.PRESENT:
+        record_judge_signal(run.runs, run.story_id,
+                            current_stage_files(run.runs, run.story_id, order_for(run.kind))["judge"])
+    take(run.result, DeliveryChecks.outcome_raised(run.story, run.contract, run.evidence))
+    take(run.result, DeliveryChecks.documented(run.story, run.evidence))
+    take(run.result, DeliveryChecks.proposals_landed(run.story, run.evidence))
+    take(run.result, DeliveryChecks.reviews(run.story, run.evidence))
 
 
 @check("pipeline", stages=lambda s: s.name != "plan")
 def _pipeline(run):
-    check_pipeline_untouched(run.result, run.runs, run.story_id)
+    take(run.result, DeliveryChecks.pipeline_untouched(run.story, run.evidence))
 
 
 @check("owned")
@@ -2971,7 +2610,7 @@ def _spec_tests(run):
 
 @check("tests-committed", stages=("integrate",), kinds=TESTED_KINDS)
 def _tests_committed(run):
-    check_tests_committed(run.result, run.cwd, run.front, run.mapping)
+    check_tests_committed(run.result, run.cwd, run.front, run.mapping, run.runs)
 
 
 @check("tests-real", stages=("test", "adopt"))
@@ -3444,168 +3083,28 @@ def commit_delivery(result, home, story_id, front, close=None):
     result.ok("committed", f"the delivery's files committed on the main line: {', '.join(paths)}")
 
 
-def spec_target(front):
-    """The spec file a story changes: its feature's `scenarios.md` under its context — the context's own for a story
-    without `feature:` —, or `journeys.md` for a journey item; None for a story that names no context."""
-    if story_kind(front) == "journey":
-        return journeys_path()
-    return scenarios_path(front["context"], front.get("feature")) if str(front.get("context", "")).strip() else None
-
-
-def story_spec(front):
-    """(the file the story's criteria go to, what the spec holds where the story's keys are looked up — every
-    criterion of the context with its feature —, the context's features, the story's feature). A journey's is
-    `journeys.md` alone."""
-    target = spec_target(front)
-    if not target:
-        return None, [], set(), ""
-    if story_kind(front) == "journey":
-        return target, [dict(item, feature="") for item in read_spec(target)[1]], set(), ""
-    context = front["context"]
-    return (target, read_context(context), {name for name, _p in context_files(context) if name},
-            feature_name(front.get("feature")))
-
-
-def spec_backing(cwd, story_id, body, story_path=None):
-    """What backs a change of what holds: the story's `## Changed expectations` in a person's words, or a decision a
-    human answered for this story. "" where nothing does."""
-    if any(l.strip().startswith(("-", "*")) and human_line(l.strip()[1:].strip())
-           for l in section_of(body, "changed expectations") or []):
-        return "the story's `## Changed expectations`"
-    try:
-        answered = [str(f["id"]).strip() for _p, f, _b, state, a in records_of(story_id, story_path)
-                    if state in ("answered", "applied") and not (is_acceptance(f) and accepted(a))]
-    except GateError:
-        answered = []
-    return f"decision {', '.join(answered)}" if answered else ""
-
-
 def check_spec_delta(result, cwd, runs, story_id, story_path, front, body):
-    """WP-98: the plan's `## Spec delta` against the story and the spec as it stands. What follows from comparing them
-    the gate derives; what the plan names must agree with it, a removal must name a criterion the spec holds, a
-    renamed rule must leave nothing under its old text, and every change or removal of what holds needs a person's
-    sentence behind it — the plan stage asks where there is none."""
-    plan_path = os.path.join(runs, story_id, "plan.md")
-    if not os.path.isfile(plan_path):
-        return
-    target, spec, features, feature = story_spec(front)
-    if not target:
-        return
-    story = story_entries(body)
-    delta = read_delta(read_text(plan_path))
-    problems = delta_problems(story, spec, delta) \
-        + rule_problems(section_of(body, "changed expectations") or [], story, spec, delta)
-    if story_kind(front) != "journey":
-        problems += placement_problems(story, spec, delta, feature, features)
-    if problems:
-        result.fail("spec-delta", f"{shown(plan_path)} `## Spec delta` against {shown(target)}: " + "; ".join(problems))
-        return
-    touched = touches(story, spec, delta)
-    if touched:
-        backing = spec_backing(cwd, story_id, body, story_path)
-        if not backing:
-            result.fail("spec-delta", f"the story changes or removes what holds ({', '.join(touched)} in {shown(target)}) "
-                                      f"and no person said so — no `## Changed expectations` in the story, no answered "
-                                      f"decision. The plan stage asks (one record naming the keys); the answer backs it.")
-            return
-        result.ok("spec-delta", f"{', '.join(touched)} changed or removed in {shown(target)}, backed by {backing}")
-        return
-    found = derived(story, spec)
-    result.ok("spec-delta", f"{sum(v == 'adds' for v in found.values())} added, {sum(v == 'holds' for v in found.values())} "
-                            f"held in {shown(target)} — nothing that holds changes")
-
-
-def moved_tests(runs, story_id):
-    """{key: [selector]} from tests.md's `## Moved tests` table — a test of the spec this story renamed or moved."""
-    path = os.path.join(runs, story_id, "tests.md")
-    moved = {}
-    for line in (section_of(read_text(path), "moved tests") or []) if os.path.isfile(path) else []:
-        row = MAPPING_ROW.match(line.strip())
-        if row and row.group(1) not in ("criterion", "key", "---") and SELECTOR.match(row.group(2).strip()):
-            moved.setdefault(row.group(1), []).append(row.group(2).strip())
-    return moved
+    """The plan's spec delta against the story and the spec (`SpecChecks.delta`)."""
+    story = stage_story(story_id, story_path, front, body, ())
+    take(result, SpecChecks.delta(story, StageEvidenceFiles(cwd, runs, place("epics"), {})))
 
 
 def check_spec_tests(result, cwd, runs, story_id, front, mapping):
-    """WP-98 M3: every `Test:` line of the spec the story changes still names a test that is there — one this story
-    renamed or moved is named under tests.md's `## Moved tests` (or is the story's own criterion), and the gate
-    writes the new selector at delivery."""
-    target, spec, _features, _feature = story_spec(front)
-    if not target:
-        return
-    plan = os.path.join(runs, story_id, "plan.md")
-    # a criterion the story takes away takes its test with it (WP-106 B): the delta's removals are not asked for
-    removed = set(read_delta(read_text(plan))["removes"]) if os.path.isfile(plan) else set()
-    moved = moved_tests(runs, story_id)
-    if moved:
-        # a row names the test as it is now: the old one is gone, and the delivery writes the row into the spec
-        probe = Result()
-        check_exists(probe, cwd, moved)
-        absent = [message.split(" — ")[0] for state, _c, message in probe.entries if state == "fail"]
-        if absent:
-            result.fail("spec-tests", f"tests.md's `## Moved tests` names a test that is not there: {'; '.join(absent)}"
-                                      f" — a row names the test as it is now, not the one it replaced")
-            return
-    own = set(mapping or {}) | set(moved) | removed
-    wanted = {item["key"]: item["tests"] for item in spec if item["tests"] and item["key"] not in own}
-    if not wanted:
-        return
-    probe = Result()
-    check_exists(probe, cwd, wanted)
-    missing = [message.split(" — ")[0] for state, _c, message in probe.entries if state == "fail"]
-    if missing and in_worktree(cwd):
-        # The spec is the main checkout's; a story delivered there meanwhile names tests this worktree, branched
-        # before it, does not have yet. They are not gone: the integrate gate checks again on the main line.
-        there = Result()
-        check_exists(there, factory_home(), wanted)
-        gone_there = {message.split(":")[0] for state, _c, message in there.entries if state == "fail"}
-        missing = [m for m in missing if m.split(":")[0] in gone_there]
-    if missing:
-        result.fail("spec-tests", f"{shown(target)} names a test that is gone: {'; '.join(missing)} — a test this story "
-                                  f"renamed or moved goes under tests.md's `## Moved tests` (| <key> | <Class>#<method> |)")
-    else:
-        result.ok("spec-tests", f"every test line of {shown(target)} names a test that is there")
+    """Every test the story's spec names is still there (`SpecChecks.tests`)."""
+    take(result, SpecChecks.tests(stage_story(story_id, "", front, "", ()), table_tests(mapping),
+                                  StageEvidenceFiles(cwd, runs, place("epics"), {})))
 
 
-def check_tests_committed(result, cwd, front, mapping):
-    """What the main line takes is the story's commit, not its worktree: every test the story maps, and every one a
-    `Test:` line of its spec names, sits in a file that commit holds as the worktree has it. A file the story made and
-    no record took in (untracked, ignored, changed after the squash) would pass every check here and be gone with
-    the worktree — the spec then names a test the main line lacks."""
-    target, spec, _features, _feature = story_spec(front)
-    wanted = {key: list(selectors) for key, selectors in (mapping or {}).items()}
-    for item in spec if target else []:
-        if item["tests"]:
-            wanted.setdefault(item["key"], [])
-            wanted[item["key"]] += [t for t in item["tests"] if t not in wanted[item["key"]]]
-    if not wanted:
-        return
-    probe = Result()
-    located = check_exists(probe, cwd, wanted) or {}
-    files = sorted(set(located.values()))
-    if not files:
-        return
-    held = set(git(cwd, "ls-tree", "-r", "--name-only", "HEAD", "--", *files)[1].split("\n"))
-    prefix = git(cwd, "rev-parse", "--show-prefix")[1].strip()
-    # `git` strips its answer, so the first line's leading status column may be gone: the path is what follows the code
-    dirty = {line.split(None, 1)[1].split(" -> ")[-1] for line in
-             git(cwd, "status", "--porcelain", "--ignored", "--", *files)[1].split("\n") if len(line.split(None, 1)) == 2}
-    head = git(cwd, "rev-parse", "--short", "HEAD")[1].strip()
-    missing = []
-    for rel in files:
-        if rel not in held:
-            selectors = sorted(s for s, path in located.items() if path == rel)
-            missing.append(f"{rel} ({', '.join(selectors)}) is not in it")
-        elif prefix + rel in dirty or rel in dirty:
-            missing.append(f"{rel} differs from it")
-    if missing:
-        result.fail("tests-committed", f"the story's commit {head} lacks what its tests need: {'; '.join(missing)} — the "
-                                       f"worktree has the file, the main line would not: a file the stages made goes into "
-                                       f"the commit when a hand-over lists it (tests.md's `## Files`); an ignored one is "
-                                       f"the person's to add (`git add -f`) or to un-ignore")
-    else:
-        result.ok("tests-committed", f"the story's commit {head} holds every test file its mapping and its spec name "
-                                     f"({len(files)})")
+def check_tests_committed(result, cwd, front, mapping, runs=""):
+    """The story's commit holds every test file its mapping and its spec name (`SpecChecks.committed`)."""
+    take(result, SpecChecks.committed(stage_story("", "", front, "", ()), table_tests(mapping),
+                                      StageEvidenceFiles(cwd, runs, place("epics"), {})))
+
+
+def table_tests(mapping):
+    """The tests table's rows, unlocated."""
+    return tuple(MappedTest(ScenarioKey(key), Selector(selector), None, None, None)
+                 for key, selectors in (mapping or {}).items() for selector in selectors)
 
 
 def merge_spec(result, story_path, story_id, front, runs):

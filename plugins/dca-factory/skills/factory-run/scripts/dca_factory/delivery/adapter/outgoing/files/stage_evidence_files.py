@@ -7,7 +7,7 @@ import os
 import re
 import typing
 
-from .....contract import CONTRACT, GateError, HAPPY_MARK, SELECTOR, SHARED_WINDOWS, STAGE_FILES, STAGES, VERSION
+from .....contract import CONTRACT, GateError, HAPPY_MARK, order_for, SELECTOR, SHARED_WINDOWS, STAGE_FILES, STAGES, VERSION
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
@@ -18,7 +18,8 @@ from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AnswerField, AssertionAt, ChangedTest, MappedTest, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
+    AnswerField, AssertionAt, ChangedTest, DocumentFacts, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
+    PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
     TestChange, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
     ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
@@ -34,7 +35,20 @@ from .decision_record_files import (
 from .epic_files import epic_dependency_problem
 from .findings_files import findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, write_answered
-from .test_files import plan_levels, stage_bytes, unfinished_levels
+import glob
+from .delivery_files import (
+    glossary_files, IMPORT_LINE, PATHLIKE, perspectives_of, PIPELINE_DIR, plan_proposals, production_files,
+    proposal_words, REVIEW_RANKS)
+from .decision_record_files import NOTHING
+from .kept_files import bare_path, row_cells
+from .run_marks import current_stage_files, STORY_DIGEST, verdict_in
+from .snapshots import NOT_OBSERVED
+from .story_layout import story_digest
+from .test_files import locate_tests, plan_levels, stage_bytes, unfinished_levels
+from .....spec.api import delta_problems, derived, placement_problems, read_delta, rule_problems, story_entries, touches
+from ..spec.story_spec_files import moved_tests, spec_backing, story_spec
+from ....domain.model.verdict import FindingState
+from ....domain.service.test_checks import TestChecks
 from ..git.repository import git, git_blob
 from .decision_record_files import answered_decisions, records_of
 from .kept_files import (
@@ -179,7 +193,14 @@ def stage_story(story_id: str, story_path: str, front: Front, body: str,
         tuple(ScenarioClauses(ScenarioKey(key), tuple(Clause(Count(n), Detail(text)) for n, text in clauses))
               for key, clauses in scenario_clauses(body).items()),
         Count(sum(1 for line in section_of(body, "changed expectations") or []
-                  if line.strip().startswith(("-", "*")) and human_line(line.strip()[1:].strip()))))
+                  if line.strip().startswith(("-", "*")) and human_line(line.strip()[1:].strip()))),
+        Detail(str(front.get("feature") or "").strip()))
+
+
+def spec_front(story: StageStory) -> typing.Dict[str, typing.Any]:
+    """The fields of the story's front matter that place it in the spec."""
+    return {"context": story.context.value, "feature": story.feature.value or None, "status": story.status.value,
+            "kind": story.kind.value if story.kind in (StoryKind.JOURNEY, StoryKind.TASK) else ""}
 
 
 class StageEvidenceFiles:
@@ -507,6 +528,227 @@ class StageEvidenceFiles:
         digests = read_red_digests(self._runs, story.value)
         return RedProof(Count(len(digests)), Count(sum(1 for d in digests.values() if d is None)),
                         tuple(Detail(m) for m in unproven_tests(self._cwd, located, digests)), Presence.ABSENT)
+
+    def _absent(self, cwd: str, wanted: typing.Mapping[str, typing.Sequence[str]]) -> typing.List[str]:
+        """`<selector>: …` for each wanted test that is not there."""
+        looked = locate_tests(cwd, wanted)[1]
+        return [f.said.value.split(" — ")[0] for f in TestChecks.exist(looked) if f.state is FindingState.FAIL]
+
+    def spec_delta(self, story: StageStory) -> typing.Optional[SpecDelta]:
+        plan_path = os.path.join(self._runs, story.story.value, "plan.md")
+        if not os.path.isfile(plan_path):
+            return None
+        front, body = spec_front(story), read_front_matter(story.place.value)[1]
+        target, spec, features, feature = story_spec(front)
+        if not target:
+            return None
+        entries = story_entries(body)
+        delta = read_delta(read_text(plan_path))
+        problems = delta_problems(entries, spec, delta) \
+            + rule_problems(section_of(body, "changed expectations") or [], entries, spec, delta)
+        if story_kind(front) != "journey":
+            problems += placement_problems(entries, spec, delta, feature, features)
+        found = derived(entries, spec)
+        return SpecDelta(Place(shown(plan_path)), Place(shown(target)), tuple(Detail(p) for p in problems),
+                         tuple(ScenarioKey(k) for k in (touches(entries, spec, delta) if not problems else [])),
+                         Count(sum(v == "adds" for v in found.values())), Count(sum(v == "holds" for v in found.values())))
+
+    def spec_backing(self, story: StageStory) -> typing.Optional[Detail]:
+        body = read_front_matter(story.place.value)[1]
+        backing = spec_backing(self._cwd, story.story.value, body, story.place.value or None)
+        return Detail(backing) if backing else None
+
+    def spec_tests(self, story: StageStory, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[SpecTests]:
+        target, spec, _features, _feature = story_spec(spec_front(story))
+        if not target:
+            return None
+        plan = os.path.join(self._runs, story.story.value, "plan.md")
+        # a criterion the story takes away takes its test with it (WP-106 B): the delta's removals are not asked for
+        removed = set(read_delta(read_text(plan))["removes"]) if os.path.isfile(plan) else set()
+        moved = moved_tests(self._runs, story.story.value)
+        # a row names the test as it is now: the old one is gone, and the delivery writes the row into the spec
+        absent = self._absent(self._cwd, moved) if moved else []
+        if absent:
+            return SpecTests(Place(shown(target)), tuple(Detail(a) for a in absent), Count(0), ())
+        own = {t.key.value for t in tests} | set(moved) | removed
+        wanted = {item["key"]: item["tests"] for item in spec if item["tests"] and item["key"] not in own}
+        missing = self._absent(self._cwd, wanted) if wanted else []
+        if missing and in_worktree(self._cwd):
+            # The spec is the main checkout's; a story delivered there meanwhile names tests this worktree, branched
+            # before it, does not have yet. They are not gone: the integrate gate checks again on the main line.
+            gone_there = {m.split(":")[0] for m in self._absent(factory_home() or self._cwd, wanted)}
+            missing = [m for m in missing if m.split(":")[0] in gone_there]
+        return SpecTests(Place(shown(target)), (), Count(len(wanted)), tuple(Detail(m) for m in missing))
+
+    def story_commit(self, story: StageStory, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[StoryCommit]:
+        cwd = self._cwd
+        target, spec, _features, _feature = story_spec(spec_front(story))
+        wanted: typing.Dict[str, typing.List[str]] = {}
+        for test in tests:
+            wanted.setdefault(test.key.value, []).append(test.selector.value)
+        for item in spec if target else []:
+            if item["tests"]:
+                wanted.setdefault(item["key"], [])
+                wanted[item["key"]] += [t for t in item["tests"] if t not in wanted[item["key"]]]
+        if not wanted:
+            return None
+        located = locate_tests(cwd, wanted)[0]
+        files = sorted(set(located.values()))
+        if not files:
+            return None
+        held = set(git(cwd, "ls-tree", "-r", "--name-only", "HEAD", "--", *files)[1].split("\n"))
+        prefix = git(cwd, "rev-parse", "--show-prefix")[1].strip()
+        # `git` strips its answer, so the first line's leading status column may be gone: the path is what follows the
+        # code
+        dirty = {line.split(None, 1)[1].split(" -> ")[-1] for line in
+                 git(cwd, "status", "--porcelain", "--ignored", "--", *files)[1].split("\n")
+                 if len(line.split(None, 1)) == 2}
+        head = git(cwd, "rev-parse", "--short", "HEAD")[1].strip()
+        missing = []
+        for rel in files:
+            if rel not in held:
+                selectors = sorted(sel for sel, path in located.items() if path == rel)
+                missing.append(f"{rel} ({', '.join(selectors)}) is not in it")
+            elif prefix + rel in dirty or rel in dirty:
+                missing.append(f"{rel} differs from it")
+        return StoryCommit(Detail(head), Count(len(files)), tuple(Detail(m) for m in missing))
+
+    def story_pass(self, story: StageStory) -> StoryPass:
+        runs, story_id = self._runs, story.story.value
+        order = order_for(story.kind.value)
+        folder = os.path.join(runs, story_id)
+        texts = current_stage_files(runs, story_id, order)
+        gaps = tuple(PassGap(HandOverName(STAGE_FILES[s]),
+                             Presence.PRESENT if os.path.isfile(os.path.join(folder, STAGE_FILES[s])) else Presence.ABSENT)
+                     for s in order if s not in texts)
+        planned = os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)
+        digest = PlannedDigest.MISSING if not os.path.isfile(planned) else \
+            PlannedDigest.SAME if read_text(planned).strip() == story_digest(story.place.value) else PlannedDigest.CHANGED
+        return StoryPass(gaps, Detail(verdict_in(texts["judge"]) or "" if "judge" in texts else ""), digest)
+
+    def outcome(self, story: StageStory) -> OutcomeFacts:
+        cwd = self._cwd
+        texts = {rel: read_text(os.path.join(cwd, rel)) for rel in production_files(cwd)}
+        record = os.path.join(evidence_dir(self._runs, story.story.value), "changed.txt")
+        changed: typing.Optional[typing.FrozenSet[Place]] = None
+        if os.path.isfile(record) and not read_text(record).startswith(NOT_OBSERVED):
+            changed = frozenset(Place(parts[1]) for parts in (line.split("\t", 1) for line in read_text(record).splitlines())
+                                if len(parts) == 2 and parts[0] in ("added", "modified"))
+        events = []
+        for name in story.publishes:
+            event = name.value
+            declares = re.compile(rf"\b(?:class|record|interface|struct|enum|object|type)\s+{re.escape(event)}\b")
+            declared = [rel for rel, text in texts.items() if declares.search(text)]
+            mention = re.compile(rf"(?<!\w){re.escape(event)}(?!\w)")
+            constructs = re.compile(rf"\bnew\s+{re.escape(event)}\b|(?<!\w){re.escape(event)}\s*\.\s*\w+\s*\(")
+
+            def raises(rel: str, text: str) -> bool:
+                # The event's own file (`TaskCompleted.java`) never raises it: its factory names it, nothing else does.
+                # An import, using or package line names it without raising it. A declaring file raises it where the
+                # event is nested in it (the aggregate) and constructed there — `new TaskCompleted(…)`,
+                # `TaskCompleted.of(…)`.
+                if os.path.splitext(os.path.basename(rel))[0] == event.rsplit(".", 1)[-1]:
+                    return False
+                body = IMPORT_LINE.sub("", text)
+                return bool(constructs.search(body)) if rel in declared else bool(mention.search(body))
+            raising = [rel for rel, text in texts.items() if raises(rel, text)] if declared else []
+            events.append(OutcomeEvent(name, tuple(Place(d) for d in declared), tuple(Place(r) for r in raising)))
+        return OutcomeFacts(tuple(events), changed)
+
+    def document(self, story: StoryId) -> DocumentFacts:
+        path = os.path.join(self._runs, story.value, "document.md")
+        try:
+            text = read_text(path)
+        except GateError as error:
+            return DocumentFacts(Place(path), Detail(str(error)), Presence.ABSENT, Count(0), (), ())
+        if needs_human_ids(text) is not None:
+            return DocumentFacts(Place(path), None, Presence.PRESENT, Count(0), (), ())
+        section: typing.Optional[str] = None
+        missing: typing.List[str] = []
+        unsourced: typing.List[str] = []
+        files = 0
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("## "):
+                section = stripped[3:].strip().lower()
+                continue
+            cells = row_cells(stripped)
+            if len(cells) < 3 or cells[0].lower() in ("term", "file") or set(cells[0]) <= {"-", " "}:
+                continue
+            name, source = cells[0].strip("`"), cells[-1]
+            if section == "documents updated" and name.strip().lower() in NOTHING:
+                if not source:
+                    unsourced.append("the row saying nothing was updated (no `Verified by`)")
+                continue
+            if section == "documents updated":
+                files += 1
+                target = bare_path(name)
+                if target and not os.path.exists(os.path.join(self._cwd, target)):
+                    missing.append(name)
+                if not source:
+                    unsourced.append(f"{name} (no `Verified by`)")
+            elif section == "glossary" and not source:
+                unsourced.append(f"glossary term {name!r}")
+        for name in PATHLIKE.findall(text):
+            target = bare_path(name)
+            # A path, or a bare file name with a line (`BookId.java:8`) — that is a citation, and a citation resolves
+            # from the project root or sends the reader nowhere.
+            if ("/" in target or target != name) and not os.path.exists(os.path.join(self._cwd, target)):
+                missing.append(name)
+        return DocumentFacts(Place(path), None, Presence.ABSENT, Count(files), tuple(Detail(m) for m in missing),
+                             tuple(Detail(u) for u in unsourced))
+
+    def proposals(self, story: StoryId) -> typing.Optional[ProposalFacts]:
+        plan = self._run_file(story, "plan.md")
+        proposals = plan_proposals(plan) if plan is not None else []
+        if not proposals:
+            return None
+        files = glossary_files(self._cwd, self._profile)
+        if not files:
+            return ProposalFacts(Count(len(proposals)), Presence.ABSENT, ())
+        corpus = "\n".join(read_text(f).lower() for f in files)
+        # a term is named open only under `## Not documented` of document.md — a row the pipeline pre-filled under
+        # `## Glossary` names it, it does not account for it
+        open_section = ""
+        document = self._run_file(story, "document.md")
+        collecting = False
+        for line in (document or "").splitlines():
+            if line.startswith("## "):
+                collecting = line[3:].strip().lower() == "not documented"
+                continue
+            if collecting:
+                open_section += line.lower() + "\n"
+        missing = [term for term in proposals
+                   if not any(word in corpus for word in proposal_words(term))
+                   and not any(word in open_section for word in proposal_words(term))]
+        return ProposalFacts(Count(len(proposals)), Presence.PRESENT, tuple(Detail(m) for m in missing))
+
+    def reviews(self, story: StoryId) -> ReviewFacts:
+        folder = os.path.join(self._runs, story.value, "reviews")
+        read: typing.List[str] = []
+        missing: typing.List[str] = []
+        malformed: typing.List[str] = []
+        for name, _carrier in perspectives_of(self._profile):
+            path = os.path.join(folder, f"{name}.md")
+            if not os.path.isfile(path):
+                missing.append(name)
+                continue
+            text = read_text(path).lower()
+            if not any(rank in text for rank in REVIEW_RANKS) and "nothing found" not in text \
+                    and "no finding" not in text:
+                malformed.append(name)
+                continue
+            read.append(name)
+        return ReviewFacts(tuple(Detail(r) for r in read), tuple(Detail(m) for m in missing),
+                           tuple(Detail(m) for m in malformed))
+
+    def pipeline(self, story: StoryId) -> PipelineFacts:
+        records = sorted(glob.glob(os.path.join(evidence_dir(self._runs, story.value), "changed-*.txt")))
+        if not records:
+            return PipelineFacts(Place(PIPELINE_DIR), None)
+        touched = sorted({line.split("\t", 1)[1] for record in records for line in read_text(record).splitlines()
+                          if "\t" in line and line.split("\t", 1)[1].startswith(PIPELINE_DIR)})
+        return PipelineFacts(Place(PIPELINE_DIR), tuple(Place(t) for t in touched))
 
 class DecisionStampFiles:
     """The decision records beside the story and its `## Assumptions`, the journal under the run folder <runs>."""

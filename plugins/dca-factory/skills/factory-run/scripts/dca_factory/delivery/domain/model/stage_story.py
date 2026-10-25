@@ -75,6 +75,8 @@ class StageStory(Value):
     clauses: typing.Tuple[ScenarioClauses, ...] = ()
     #: the lines of its `## Changed expectations` a person wrote
     changed_expectations: Count = Count(0)
+    #: the feature of its context it changes, as its `feature:` names it — "" where it names none
+    feature: Detail = Detail("")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -504,3 +506,122 @@ class RedProof(Value):
     unbound: Count
     moved: typing.Tuple[Detail, ...]
     reproof: Presence
+
+
+@dataclasses.dataclass(frozen=True)
+class SpecDelta(Value):
+    """The plan's `## Spec delta` against the story and the spec as it stands, as the spec's rules read it: what is
+    wrong with it, the criteria that hold and that the story changes or removes, how many it adds and leaves."""
+
+    plan: Place
+    target: Place
+    problems: typing.Tuple[Detail, ...]
+    touched: typing.Tuple[ScenarioKey, ...]
+    adds: Count
+    holds: Count
+
+
+@dataclasses.dataclass(frozen=True)
+class SpecTests(Value):
+    """The tests the spec the story changes names: the moved tests that are not there, how many the spec names
+    outside the story's own, and the ones of those that are gone."""
+
+    target: Place
+    absent_moved: typing.Tuple[Detail, ...]
+    wanted: Count
+    missing: typing.Tuple[Detail, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class StoryCommit(Value):
+    """The story's commit against the test files its mapping and its spec name: its short id, how many files, and
+    the ones it lacks or holds otherwise than the worktree."""
+
+    head: Detail
+    files: Count
+    missing: typing.Tuple[Detail, ...]
+
+
+class PlannedDigest(enum.Enum):
+    """The story against the digest its plan gate recorded: no digest, the story changed since, or the same."""
+
+    MISSING = "missing"
+    CHANGED = "changed"
+    SAME = "same"
+
+
+@dataclasses.dataclass(frozen=True)
+class PassGap(Value):
+    """A stage of this pass without its hand-over: missing, or written for an earlier pass."""
+
+    hand_over: HandOverName
+    earlier: Presence
+
+
+@dataclasses.dataclass(frozen=True)
+class StoryPass(Value):
+    """What a delivery rests on: the stages of this pass that did not write their file after the one before, the
+    judge's verdict, and the story against the one planned."""
+
+    gaps: typing.Tuple[PassGap, ...]
+    verdict: Detail
+    planned: PlannedDigest
+
+
+@dataclasses.dataclass(frozen=True)
+class OutcomeEvent(Value):
+    """An outcome event the story publishes: the production files that declare it, and those that raise it."""
+
+    event: EventName
+    declared: typing.Tuple[Place, ...]
+    raising: typing.Tuple[Place, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class OutcomeFacts(Value):
+    """The story's outcome events in the production code, and the files the story changed — None where no record
+    says."""
+
+    events: typing.Tuple[OutcomeEvent, ...]
+    changed: typing.Optional[typing.FrozenSet[Place]]
+
+
+@dataclasses.dataclass(frozen=True)
+class DocumentFacts(Value):
+    """What the document stage wrote, read for what can be checked: why it cannot be read, whether it stopped with
+    a question, how many documents it says it updated, the paths it names that do not resolve, its rows that say
+    nothing of how they were checked."""
+
+    place: Place
+    unreadable: typing.Optional[Detail]
+    asks: Presence
+    files: Count
+    missing: typing.Tuple[Detail, ...]
+    unsourced: typing.Tuple[Detail, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class ProposalFacts(Value):
+    """The terms the plan proposed, whether the project keeps a glossary, and the terms neither in one nor named
+    open."""
+
+    proposed: Count
+    glossary: Presence
+    missing: typing.Tuple[Detail, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class ReviewFacts(Value):
+    """The review perspectives: the ones with a report, without a file, with a file that is no report."""
+
+    read: typing.Tuple[Detail, ...]
+    missing: typing.Tuple[Detail, ...]
+    malformed: typing.Tuple[Detail, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class PipelineFacts(Value):
+    """The installed pipeline's folder, and the files of it a stage changed — None where no stage left a record."""
+
+    folder: Place
+    touched: typing.Optional[typing.Tuple[Place, ...]]
