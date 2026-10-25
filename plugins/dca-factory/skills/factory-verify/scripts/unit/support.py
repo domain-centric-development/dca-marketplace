@@ -16,6 +16,7 @@ if SCRIPTS not in sys.path:
 os.environ.pop("FACTORY_HOME", None)                        # a case runs in no story's worktree
 
 from dca_factory import contract, state  # noqa: E402,F401
+from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 
 
 STORY = """---
@@ -83,7 +84,7 @@ class Project:
         """The journal's `wrote` event for the hand-over as it is on disk now."""
         name = contract.STAGE_FILES[stage]
         digest = contract.file_digest(os.path.join(self.runs, story_id, name))
-        return state.journal_append(self.runs, story_id, "wrote", name, f"sha={digest}", at=at)
+        return journal.journal_append(self.runs, story_id, "wrote", name, f"sha={digest}", at=at)
 
     def write_and_journal(self, story_id, stage, text=None, at=None):
         self.handover(story_id, stage, text)

@@ -26,6 +26,7 @@ from dca_factory.delivery.application.requests.write_request import WriteRequest
 from dca_factory.delivery.application.shared.requests import DuplicateRequest, operations_of, RequestRefused, STATES
 from dca_factory.infrastructure import delivery as wiring
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
+from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 
 
 def validate(cwd, kind, fields, words):
@@ -354,7 +355,7 @@ class RequestUsage(unittest.TestCase):
             booked = book_request_usage(cost, "R1", "claude", "model=m\tinput=10\tcache_read=100\t"
                                                                     "cache_write=20\toutput=40\tcost=1.0\tseconds=9")
             self.assertEqual(booked, [("S-1", "backlog"), ("S-2", "backlog")])
-            usage = [e["fields"] for e in state.journal_events(runs, "S-1") if e["kind"] == "usage"]
+            usage = [e["fields"] for e in journal.journal_events(runs, "S-1") if e["kind"] == "usage"]
             self.assertEqual([(u["request"], u["input"], u["output"], u["cost"]) for u in usage],
                              [("R1", "5", "20", "0.5000")])
             self.assertEqual(book_request_usage(cost, "R2", "claude", "unknown"), [])

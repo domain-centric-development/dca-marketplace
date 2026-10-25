@@ -8,6 +8,7 @@ import unittest
 
 from support import state, write
 from dca_factory import contract, gate
+from dca_factory.delivery.adapter.outgoing.git import repository
 
 TEST = "src/test/java/com/example/ShopTest.java"
 INDENTED = "    package com.example;\nclass ShopTest {\n  @Test void opens() { assertTrue(shop.open()); }\n}\n"
@@ -30,10 +31,10 @@ class GitBlob(unittest.TestCase):
         self.scratch.cleanup()
 
     def test_a_blob_keeps_its_first_lines_indentation_and_its_last_newline(self):
-        self.assertEqual(contract.git_blob(self.root, f"HEAD:{TEST}"), (0, INDENTED))
+        self.assertEqual(repository.git_blob(self.root, f"HEAD:{TEST}"), (0, INDENTED))
 
     def test_a_blob_that_does_not_exist_answers_with_a_code(self):
-        self.assertNotEqual(contract.git_blob(self.root, "HEAD:nothing.txt")[0], 0)
+        self.assertNotEqual(repository.git_blob(self.root, "HEAD:nothing.txt")[0], 0)
 
     def test_a_test_whose_first_line_is_indented_and_unchanged_is_kept(self):
         gate.record_tests_baseline(self.root, self.runs, "STORY-1")

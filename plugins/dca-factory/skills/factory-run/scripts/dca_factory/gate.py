@@ -84,13 +84,13 @@ from .contract import (
     ALL_KINDS, append_finding_rows, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, DEFAULTS,
     delivered_on, DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder,
     evidence_dir, evidence_rel, factory_home, file_digest, find_story, findings_cells, findings_path, findings_rel,
-    findings_rows, FLAKY_FINDINGS, GateError, git, git_blob, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
-    INSTRUCTION_FILES, is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint, location, MAPPING_ROW, MAX_ROUNDS,
-    METHOD_PROFILE, open_findings, order_for, place, PLACES, PLACES_REL, PLAIN_COLUMN, PROFILE_FILE,
-    project_findings_head, project_findings_path, read_flat, read_profile, record_findings, resolve_profile,
-    runs_top, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES,
-    story_digest, story_files, story_folder, story_id_of, story_kind, TESTED_KINDS,
-    unknown_profile_keys, VERSION)
+    findings_rows, FLAKY_FINDINGS, GateError, HAPPY_MARK, HOME_VARIABLE, in_worktree, INSTRUCTION_FILES,
+    is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, METHOD_PROFILE,
+    open_findings, order_for, place, PLACES, PLACES_REL, PLAIN_COLUMN, PROFILE_FILE, project_findings_head,
+    project_findings_path, read_flat, read_profile, record_findings, resolve_profile, runs_top, SELECTOR,
+    set_places, SHARED_WINDOWS, shown, STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, story_digest,
+    story_files, story_folder, story_id_of, story_kind, TESTED_KINDS, unknown_profile_keys, VERSION)
+from .delivery.adapter.outgoing.git.repository import git, git_blob, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
     ANSWER_FIELDS, answered_decisions, decisions_store, NOTHING, project_decisions_rel, read_decisions, record_path,
     records_of, resume_stage, stamp_applied)
@@ -109,12 +109,12 @@ from .spec.api import (
     lint_context, read_context, read_delta, read_spec, render_spec, scenarios_path, story_entries,
     touches)
 from .state import (
-    backlog_digest, claim_config_here, current_stage_files, flaky_tests, git_tree, INVARIANT_BREAKS, journal_append,
-    journal_events, journal_signal, last_ended, latest_signal, listed_files, MODEL_PROCESSES, NOT_OBSERVED,
-    observe_writes, OWNED_CHANGED, owned_changes, owned_end, plan_left_open, PUBLISHED,
-    record_base, record_changes, record_judge_signal, record_owned, remote_main, run_owned, snapshot_reason,
-    stage_open, step_open, STORY_DIGEST, tree_changes, verdict_in, window_open, write_answered, write_mark,
-    write_story_fields)
+    backlog_digest, claim_config_here, current_stage_files, git_tree, INVARIANT_BREAKS, journal_signal, last_ended,
+    latest_signal, listed_files, MODEL_PROCESSES, NOT_OBSERVED, observe_writes, OWNED_CHANGED, owned_changes,
+    owned_end, plan_left_open, PUBLISHED, record_base, record_changes, record_judge_signal, record_owned,
+    remote_main, run_owned, snapshot_reason, stage_open, step_open, STORY_DIGEST, tree_changes, verdict_in,
+    window_open, write_answered, write_mark, write_story_fields)
+from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
 from .delivery.adapter.outgoing.files.decision_record_files import (
     ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, answer_sentence)
 from .delivery.application.shared.front import is_acceptance

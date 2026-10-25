@@ -7,6 +7,7 @@ import unittest
 
 from support import write
 from dca_factory import gate, state
+from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 
 BODY = """# A story
 
@@ -67,7 +68,7 @@ class Signals(unittest.TestCase):
         gate.record_judge_signal(self.runs, "S-1", judge)
         signals = gate.story_signals(self.runs, "S-1", [], "")
         self.assertEqual((signals["findings"], signals["domain"]), ({"ddd": 1, "clean-code": 1}, {"domain-term": 1}))
-        self.assertEqual(sum(1 for e in state.journal_events(self.runs, "S-1") if e["kind"] == "signal"), 1)
+        self.assertEqual(sum(1 for e in journal.journal_events(self.runs, "S-1") if e["kind"] == "signal"), 1)
 
     def test_corrections_are_counted_by_their_reason_code(self):
         records = [record("acceptance", "applied", "correction: domain-invariant: a done task keeps its subtasks"),

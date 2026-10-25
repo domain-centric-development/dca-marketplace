@@ -18,8 +18,8 @@ from .....gate import perspectives_of, story_signals
 from ..tools.streams import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from .....state import (
-    cached_claims, claim_path, flaky_tests, listener_line, read_claim, resolve_window,
-    running_stages, schedule_data, story_title)
+    cached_claims, claim_path, listener_line, read_claim, resolve_window, running_stages, schedule_data, story_title)
+from .journal_files import flaky_tests
 from ....application.status.texts import parse_time
 from ....domain.model.usage import USAGE_FIELDS
 from ..process.factory_process import ended, worker

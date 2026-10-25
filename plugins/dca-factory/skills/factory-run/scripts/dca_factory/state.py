@@ -17,15 +17,18 @@ import sys
 import time
 from datetime import datetime, timezone
 from .contract import (
-    confirmed_defects, CRITERION, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
+    confirmed_defects, CRITERION, DECISIONS_DIR, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
     EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest,
-    find_story, GateError, git, git_blob, in_worktree, is_delivered, JOURNAL, layout_hint,
-    MAX_ROUNDS, order_for, OWNED_DIGEST, place, PLACES_REL, POST_GATED, PROFILE_FILE, read_profile, resolve_profile,
-    SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, STATE_KEYS, STORY_BRANCH, story_digest, STORY_FILE,
-    story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned, DECISIONS_DIR)
+    find_story, GateError, in_worktree, is_delivered, JOURNAL, layout_hint, MAX_ROUNDS, order_for, OWNED_DIGEST,
+    place, PLACES_REL, POST_GATED, PROFILE_FILE, read_profile, resolve_profile, SHARED_WINDOWS, shown, STAGE_FILES,
+    STAGE_ORDER, STATE_KEYS, STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of,
+    story_kind, WINDOW_DIGEST, worktree_owned)
+from .delivery.adapter.outgoing.git.repository import git, git_blob
 from .delivery.adapter.outgoing.files.decision_record_files import (
     acceptance_records, acceptance_state, accepted, answer_section, decisions_store,
     needs_human_ids, NOTHING, records_of, resume_stage)
+from .delivery.adapter.outgoing.files.journal_files import (
+    append_event, journal_append, journal_events, journal_path, journal_writer, read_events)
 from .delivery.application.shared.front import is_acceptance
 from .delivery.domain.model.story_state import RUNNABLE
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
@@ -35,105 +38,6 @@ from .delivery.adapter.outgoing.tools.streams import (
     stream_parts, tokens_of, usage_fields, WINDOWS)
 from .delivery.application.status.texts import parse_time
 from .delivery.domain.model.usage import USAGE_FIELDS
-
-
-def journal_path(runs, story_id):
-    return os.path.join(evidence_dir(runs, story_id), JOURNAL)
-
-
-def journal_events(runs, story_id):
-    """[{seq, at, kind, name, fields}] in order. A line from before sequence numbers takes its position."""
-    return read_events(journal_path(runs, story_id))
-
-
-def read_events(path):
-    events = []
-    if not os.path.isfile(path):
-        return events
-    for position, line in enumerate(read_text(path).splitlines(), 1):
-        parts = line.split("\t")
-        if len(parts) < 3:
-            continue
-        fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
-        seq = fields.pop("seq", "")
-        events.append({"seq": int(seq) if seq.isdigit() else position, "at": parts[0], "kind": parts[1],
-                       "name": parts[2], "fields": fields, "line": line})
-    # A union merge of two branches that ran the same story can repeat a number: the time decides between them.
-    events.sort(key=lambda e: (e["seq"], e["at"]))
-    return events
-
-
-def flaky_tests(runs, story_id):
-    """{test: [stage, …]} — the tests a gate over this story noted flaky (WP-113: red in a whole suite run, outside the
-    story's change, green on its own run), from the journal's `gate` events and their `flaky=` field."""
-    found = {}
-    for event in journal_events(runs, story_id):
-        if event["kind"] == "gate" and event["fields"].get("flaky"):
-            for test in event["fields"]["flaky"].split(","):
-                if test and event["name"] not in found.setdefault(test, []):
-                    found[test].append(event["name"])
-    return found
-
-
-@contextlib.contextmanager
-def journal_lock(path):
-    """One writer at a time on a journal: parallel reviewers and a stage's own gate append beside the runner. A
-    folder is made atomically on every platform; one left by a killed process is taken over after half a minute."""
-    lock = path + ".lock"
-    deadline = time.time() + 10
-    while True:
-        try:
-            os.mkdir(lock)
-            break
-        except FileExistsError:
-            with contextlib.suppress(OSError):
-                if time.time() - os.path.getmtime(lock) > 30:
-                    os.rmdir(lock)
-                    continue
-            if time.time() > deadline:
-                break                               # never block a run on a stale lock: append unlocked
-            time.sleep(0.02)
-    try:
-        yield
-    finally:
-        with contextlib.suppress(OSError):
-            os.rmdir(lock)
-
-
-def journal_append(runs, story_id, kind, name, *fields, at=None):
-    """Append one event with the next sequence number; returns it."""
-    return append_event(journal_path(runs, story_id), kind, name, *fields, at=at)
-
-
-def append_event(path, kind, name, *fields, at=None):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with journal_lock(path):
-        seq = 1 + max((e["seq"] for e in read_events(path)), default=0)
-        stamp = at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        cells = [stamp, kind, name] + [str(f) for f in fields if str(f)] + [f"seq={seq}"]
-        with open(path, "a", encoding="utf-8") as handle:
-            handle.write("\t".join(c.replace("\t", " ").replace("\n", " ") for c in cells) + "\n")
-    return seq
-
-
-class journal_writer:
-    """`with journal_writer(runs, story) as handle: handle.write("<time>\t<kind>\t<name>\t…\n")` — the old
-    append idiom, every line through `journal_append`, so a writer that composes its lines keeps doing so."""
-
-    def __init__(self, runs, story_id):
-        self.runs, self.story_id = runs, story_id
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_exc):
-        return False
-
-    def write(self, text):
-        for line in text.splitlines():
-            parts = line.split("\t")
-            if len(parts) >= 3:
-                journal_append(self.runs, self.story_id, parts[1], parts[2], *parts[3:], at=parts[0])
 
 
 def worktrees_dir():

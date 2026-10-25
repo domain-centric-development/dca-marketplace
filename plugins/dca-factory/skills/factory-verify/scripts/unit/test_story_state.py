@@ -7,6 +7,7 @@ import unittest
 
 from support import contract, project, state, write
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
+from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 
 SECOND = "2026-10-10T10:00:00Z"
 STAGES = ("plan", "test", "build", "tidy", "judge", "document")
@@ -22,9 +23,9 @@ class Journal(unittest.TestCase):
 
     def test_every_append_takes_the_next_number_and_keeps_its_line_whole(self):
         with project() as p:
-            self.assertEqual(state.journal_append(p.runs, "S-1", "stage-start", "plan", "tool=claude", at=SECOND), 1)
-            self.assertEqual(state.journal_append(p.runs, "S-1", "note", "a\tb\nc", "", "why=x y"), 2)
-            events = state.journal_events(p.runs, "S-1")
+            self.assertEqual(journal.journal_append(p.runs, "S-1", "stage-start", "plan", "tool=claude", at=SECOND), 1)
+            self.assertEqual(journal.journal_append(p.runs, "S-1", "note", "a\tb\nc", "", "why=x y"), 2)
+            events = journal.journal_events(p.runs, "S-1")
             self.assertEqual([(e["seq"], e["kind"], e["name"]) for e in events],
                              [(1, "stage-start", "plan"), (2, "note", "a b c")])
             self.assertEqual(events[0]["fields"], {"tool": "claude"})
@@ -32,25 +33,25 @@ class Journal(unittest.TestCase):
 
     def test_the_number_orders_the_events_not_the_clock(self):
         with project() as p:
-            path = state.journal_path(p.runs, "S-1")
-            state.append_event(path, "wrote", "plan.md", "sha=a", at="2026-10-10T10:00:05Z")
-            state.append_event(path, "wrote", "tests.md", "sha=b", at="2026-10-10T10:00:00Z")
-            self.assertEqual([e["name"] for e in state.read_events(path)], ["plan.md", "tests.md"])
+            path = journal.journal_path(p.runs, "S-1")
+            journal.append_event(path, "wrote", "plan.md", "sha=a", at="2026-10-10T10:00:05Z")
+            journal.append_event(path, "wrote", "tests.md", "sha=b", at="2026-10-10T10:00:00Z")
+            self.assertEqual([e["name"] for e in journal.read_events(path)], ["plan.md", "tests.md"])
 
     def test_a_line_without_a_number_takes_its_position(self):
         with project() as p:
-            path = write(state.journal_path(p.runs, "S-1"),
+            path = write(journal.journal_path(p.runs, "S-1"),
                          f"{SECOND}\tstage-start\tplan\n{SECOND}\tstage-end\tplan\texit=0\nbroken line\n")
-            self.assertEqual([(e["seq"], e["kind"]) for e in state.read_events(path)],
+            self.assertEqual([(e["seq"], e["kind"]) for e in journal.read_events(path)],
                              [(1, "stage-start"), (2, "stage-end")])
-            self.assertEqual(state.journal_append(p.runs, "S-1", "note", "x"), 3)
+            self.assertEqual(journal.journal_append(p.runs, "S-1", "note", "x"), 3)
 
     def test_gate_runs_read_as_pass_held_and_fail_and_a_file_gone_drops_its_write(self):
         with project() as p:
             for gate, code in (("plan", "exit=0"), ("document", "exit=3"), ("build", "exit=1")):
-                state.journal_append(p.runs, "S-1", "gate", gate, code)
-            state.journal_append(p.runs, "S-1", "wrote", "plan.md", "sha=abc")
-            state.journal_append(p.runs, "S-1", "wrote", "plan.md", "sha=gone")
+                journal.journal_append(p.runs, "S-1", "gate", gate, code)
+            journal.journal_append(p.runs, "S-1", "wrote", "plan.md", "sha=abc")
+            journal.journal_append(p.runs, "S-1", "wrote", "plan.md", "sha=gone")
             self.assertEqual(state.pass_marks(p.runs, "S-1"), {"pass:plan": 1, "held:document": 2, "fail:build": 3})
 
 
@@ -111,7 +112,7 @@ class PassOrder(unittest.TestCase):
             state.record_owned(p.runs, "S-1", path)
             p.handover("S-1", "build")                                         # the same bytes again
             self.assertEqual(state.owned_end(p.runs, "S-1", "build", ran="0"), 0)
-            last = state.journal_events(p.runs, "S-1")[-1]
+            last = journal.journal_events(p.runs, "S-1")[-1]
             self.assertEqual((last["kind"], last["name"], last["fields"].get("same")), ("wrote", "build.md", "1"))
             self.assertEqual(p.state_of("S-1"), ("in-progress", "tidy", "tidy.md not written yet"))
 
@@ -129,18 +130,18 @@ class PassOrder(unittest.TestCase):
             full_pass(p, "S-1", upto="tidy")
             state.record_owned(p.runs, "S-1", path)
             state.owned_end(p.runs, "S-1", "builder", ran="0")
-            same = [e["name"] for e in state.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
+            same = [e["name"] for e in journal.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
             self.assertEqual(same, ["plan.md", "tests.md", "build.md", "tidy.md"])
 
     def test_a_shared_window_marks_only_the_stages_it_carried_and_not_one_a_later_stage_built_on(self):
         with project() as p:
             path = p.story("S-1")
             full_pass(p, "S-1", upto="tidy")
-            state.journal_append(p.runs, "S-1", "stage-start", "builder", "stages=test,build,tidy", at=SECOND)
+            journal.journal_append(p.runs, "S-1", "stage-start", "builder", "stages=test,build,tidy", at=SECOND)
             state.record_owned(p.runs, "S-1", path)
             p.handover("S-1", "build", "# build, again\n")
             state.owned_end(p.runs, "S-1", "builder", ran="0")
-            same = [e["name"] for e in state.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
+            same = [e["name"] for e in journal.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
             self.assertEqual(same, ["tidy.md"])
 
     def test_a_shared_window_marks_a_file_left_as_it_was_that_an_earlier_stage_outdated(self):
@@ -148,11 +149,11 @@ class PassOrder(unittest.TestCase):
             path = p.story("S-1")
             full_pass(p, "S-1", upto="tidy")
             p.write_and_journal("S-1", "plan", "# plan, again\n", at=SECOND)
-            state.journal_append(p.runs, "S-1", "stage-start", "builder", "stages=test,build,tidy", at=SECOND)
+            journal.journal_append(p.runs, "S-1", "stage-start", "builder", "stages=test,build,tidy", at=SECOND)
             state.record_owned(p.runs, "S-1", path)
             p.handover("S-1", "build", "# build, again\n")
             state.owned_end(p.runs, "S-1", "builder", ran="0")
-            same = [e["name"] for e in state.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
+            same = [e["name"] for e in journal.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
             self.assertEqual(same, ["tests.md", "tidy.md"])
 
     def test_a_later_pass_of_a_post_gated_stage_holds_its_file(self):
@@ -161,7 +162,7 @@ class PassOrder(unittest.TestCase):
             full_pass(p, "S-1", upto="build")
             p.write_and_journal("S-1", "test", "# tests, again\n", at=SECOND)
             self.assertEqual(p.state_of("S-1")[1], "build")
-            state.journal_append(p.runs, "S-1", "gate", "build", "exit=0", at=SECOND)
+            journal.journal_append(p.runs, "S-1", "gate", "build", "exit=0", at=SECOND)
             self.assertEqual(p.state_of("S-1")[1], "tidy")
             self.assertTrue(state.gate_passed_since(p.runs, "S-1", "build", "build"))
 
@@ -170,7 +171,7 @@ class PassOrder(unittest.TestCase):
             p.story("S-1")
             full_pass(p, "S-1", upto="document", verdict="pass")
             self.assertEqual(p.state_of("S-1")[1:], ("document", "document.md is written, its gate has not passed yet"))
-            state.journal_append(p.runs, "S-1", "outdated", "document.md", "by=integrate")
+            journal.journal_append(p.runs, "S-1", "outdated", "document.md", "by=integrate")
             self.assertEqual(p.state_of("S-1")[1:], ("document", "document.md not written yet"))
 
 
@@ -179,7 +180,7 @@ class Refusals(unittest.TestCase):
     def refuse_plan(self, p, path, digest=True):
         p.run_file("S-1", ".gate-plan.txt", "gate:fail story\n")
         fields = ["exit=1"] + ([f"backlog={state.backlog_digest(path)}"] if digest else [])
-        state.journal_append(p.runs, "S-1", "gate", "plan", *fields)
+        journal.journal_append(p.runs, "S-1", "gate", "plan", *fields)
 
     def test_a_plan_refusal_holds_until_the_story_or_its_epic_changes(self):
         with project() as p:

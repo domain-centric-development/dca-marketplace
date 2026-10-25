@@ -10,7 +10,8 @@ import re
 import time
 import typing
 
-from .....contract import git, place, shown
+from .....contract import place, shown
+from ..git.repository import git
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import (
     MarkdownError, read_front_matter, read_text, split_front)
 from ....application.shared.requests import ID_WORD, KIND, Request, RequestRefused, STATES

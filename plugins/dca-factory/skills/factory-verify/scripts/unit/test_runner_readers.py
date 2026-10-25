@@ -8,6 +8,7 @@ import unittest
 from support import contract, project, state, write
 from dca_factory import runner
 from dca_factory.delivery.adapter.outgoing.tools import agents
+from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 
 
 def a_run(p):
@@ -41,7 +42,7 @@ class Readers(unittest.TestCase):
                 self.assertEqual(contract.place("runs"), p.root.replace(os.sep, "/") + "/.dca-factory/runs")   # places use /
                 self.assertEqual(run.verdict_of("S-1"), "approved")
                 run.journal_line("S-1", "2026-10-10T10:00:00Z\tnote\t-\twhy=from-the-tree")
-                self.assertEqual([e["kind"] for e in state.journal_events(p.runs, "S-1")], ["note"])
+                self.assertEqual([e["kind"] for e in journal.journal_events(p.runs, "S-1")], ["note"])
             finally:
                 # out of the tree before it is removed: Windows refuses to delete the working directory
                 os.chdir(p.root)

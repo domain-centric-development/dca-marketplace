@@ -1,19 +1,124 @@
-"""Each story's journal as a file: `<evidence>/<story>/journal.tsv`, one event a line."""
+"""Each story's journal as a file: `<evidence>/<story>/journal.tsv`, one event a line, numbered (`seq=`) — the
+story's record. One writer at a time on a journal; a line from before sequence numbers takes its position."""
 
 from __future__ import annotations
 
 import contextlib
 import glob
 import os
+import time
 import typing
 
-from .....contract import story_digest, story_id_of
-from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
-from .....state import journal_append, journal_events, journal_path, read_events
+from .....contract import evidence_dir, find_story, JOURNAL, place, story_digest, story_id_of
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from ....application.shared.story_journal import Window
+from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.story import StoryId
 from ....domain.model.usage import Usage, USAGE_FIELDS
-from .story_files import StoryFiles
+
+#: One event of a journal: its `seq`, `at`, `kind`, `name`, `fields` and the `line` as written.
+Event = typing.Dict[str, typing.Any]
+
+
+def journal_path(runs: str, story_id: str) -> str:
+    return os.path.join(evidence_dir(runs, story_id), JOURNAL)
+
+
+def journal_events(runs: str, story_id: str) -> typing.List[Event]:
+    """[{seq, at, kind, name, fields}] in order. A line from before sequence numbers takes its position."""
+    return read_events(journal_path(runs, story_id))
+
+
+def read_events(path: str) -> typing.List[Event]:
+    events: typing.List[Event] = []
+    if not os.path.isfile(path):
+        return events
+    for position, line in enumerate(read_text(path).splitlines(), 1):
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
+        seq = fields.pop("seq", "")
+        events.append({"seq": int(seq) if seq.isdigit() else position, "at": parts[0], "kind": parts[1],
+                       "name": parts[2], "fields": fields, "line": line})
+    # A union merge of two branches that ran the same story can repeat a number: the time decides between them.
+    events.sort(key=lambda e: (e["seq"], e["at"]))
+    return events
+
+
+def flaky_tests(runs: str, story_id: str) -> typing.Dict[str, typing.List[str]]:
+    """{test: [stage, …]} — the tests a gate over this story noted flaky (WP-113: red in a whole suite run, outside the
+    story's change, green on its own run), from the journal's `gate` events and their `flaky=` field."""
+    found: typing.Dict[str, typing.List[str]] = {}
+    for event in journal_events(runs, story_id):
+        if event["kind"] == "gate" and event["fields"].get("flaky"):
+            for test in event["fields"]["flaky"].split(","):
+                if test and event["name"] not in found.setdefault(test, []):
+                    found[test].append(event["name"])
+    return found
+
+
+@contextlib.contextmanager
+def journal_lock(path: str) -> typing.Iterator[None]:
+    """One writer at a time on a journal: parallel reviewers and a stage's own gate append beside the runner. A
+    folder is made atomically on every platform; one left by a killed process is taken over after half a minute."""
+    lock = path + ".lock"
+    deadline = time.time() + 10
+    while True:
+        try:
+            os.mkdir(lock)
+            break
+        except FileExistsError:
+            with contextlib.suppress(OSError):
+                if time.time() - os.path.getmtime(lock) > 30:
+                    os.rmdir(lock)
+                    continue
+            if time.time() > deadline:
+                break                               # never block a run on a stale lock: append unlocked
+            time.sleep(0.02)
+    try:
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            os.rmdir(lock)
+
+
+def journal_append(runs: str, story_id: str, kind: str, name: str, *fields: typing.Any,
+                   at: typing.Optional[str] = None) -> int:
+    """Append one event with the next sequence number; returns it."""
+    return append_event(journal_path(runs, story_id), kind, name, *fields, at=at)
+
+
+def append_event(path: str, kind: str, name: str, *fields: typing.Any, at: typing.Optional[str] = None) -> int:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with journal_lock(path):
+        seq = 1 + max((e["seq"] for e in read_events(path)), default=0)
+        stamp = at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        cells = [stamp, kind, name] + [str(f) for f in fields if str(f)] + [f"seq={seq}"]
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write("\t".join(c.replace("\t", " ").replace("\n", " ") for c in cells) + "\n")
+    return seq
+
+
+class journal_writer:
+    """`with journal_writer(runs, story) as handle: handle.write("<time>\t<kind>\t<name>\t…\n")` — the old
+    append idiom, every line through `journal_append`, so a writer that composes its lines keeps doing so."""
+
+    def __init__(self, runs: str, story_id: str) -> None:
+        self.runs, self.story_id = runs, story_id
+
+    def __enter__(self) -> journal_writer:
+        return self
+
+    def __exit__(self, *_exc: typing.Any) -> typing.Literal[False]:
+        return False
+
+    def write(self, text: str) -> None:
+        for line in text.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                journal_append(self.runs, self.story_id, parts[1], parts[2], *parts[3:], at=parts[0])
+
 
 #: The mark a request that wrote drafts leaves in each one's journal: its question pass ran on the story as it stands.
 QUESTIONED = "questioned"
@@ -37,10 +142,13 @@ class StoryJournalFiles:
 
     def __init__(self, cwd: str, runs: str) -> None:
         self._runs = runs
-        self._stories = StoryFiles(cwd)
+        self._epics = os.path.join(cwd, place("epics"))
 
     def question_pass_ran(self, story: StoryId) -> bool:
-        path = self._stories.path_of(story)
+        try:
+            path = find_story(self._epics, story.value)
+        except MarkdownError as error:
+            raise StoryNotFound(f"no story {story.value} under {place('epics')}/ — {error}") from None
         marks = [e for e in journal_events(self._runs, story.value) if e["kind"] == QUESTIONED]
         return bool(marks) and marks[-1]["fields"].get("digest") == story_digest(path)
 

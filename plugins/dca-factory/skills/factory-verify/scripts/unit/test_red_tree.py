@@ -6,6 +6,7 @@ import unittest
 
 from support import contract, project, write
 from dca_factory import gate, state
+from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 
 TESTS = """# Tests
 
@@ -29,8 +30,8 @@ class RedTree(unittest.TestCase):
         if red_tree:
             p.evidence("S-1", gate.RED_TREE, "4b825dc642cb6eb9a060e54bf8d69288fbee4904\n")
         for stage in ended:
-            state.journal_append(p.runs, "S-1", "stage-start", stage)
-            state.journal_append(p.runs, "S-1", "stage-end", stage, "exit=0")
+            journal.journal_append(p.runs, "S-1", "stage-start", stage)
+            journal.journal_append(p.runs, "S-1", "stage-end", stage, "exit=0")
         write(test_file, "class WidgetPageTest { void showsTheThing() { page.thing(); } }\n")
 
     def test_a_tidy_that_runs_again_keeps_its_moved_test(self):
