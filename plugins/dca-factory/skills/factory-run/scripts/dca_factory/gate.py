@@ -81,16 +81,19 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    DEFAULTS, evidence_rel, findings_rel, project_decisions_rel, JOURNAL, METHOD_PROFILE, PLACES, PLACES_REL, read_flat,
-    runs_top,
-    ALL_KINDS, ANSWER_FIELDS, answered_decisions, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, decisions_store, delivered_on,
-    DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir,
-    append_finding_rows, factory_home, FLAKY_FINDINGS, file_digest, find_story, findings_cells, findings_path, findings_rows, GateError, git, git_blob, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree,
-    INSTRUCTION_FILES, is_delivered, JOURNEY_ORDER, order_for, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, needs_human_ids,
-    NOTHING, open_findings, place, PLAIN_COLUMN, project_findings_head, project_findings_path, PROFILE_FILE, read_decisions, read_front_matter, read_profile, read_text, record_findings,
-    record_path, records_of, resolve_profile, resume_stage, section_of, SELECTOR, set_places, SHARED_WINDOWS, shown,
+    ALL_KINDS, ANSWER_FIELDS, answered_decisions, append_finding_rows, confirmed_defects, CONTEXT_MAP_CANDIDATES,
+    CONTRACT, CRITERION, decisions_store, DEFAULTS, delivered_on, DOC_BUDGET_BYTES, duplicate_ids,
+    epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, evidence_dir, evidence_rel, factory_home,
+    file_digest, find_story, findings_cells, findings_path, findings_rel, findings_rows, FLAKY_FINDINGS, GateError,
+    git, git_blob, git_identity, HAPPY_MARK, HOME_VARIABLE, in_worktree, INSTRUCTION_FILES, is_delivered, JOURNAL,
+    JOURNEY_ORDER, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, METHOD_PROFILE, needs_human_ids, NOTHING,
+    open_findings, order_for, place, PLACES, PLACES_REL, PLAIN_COLUMN, PROFILE_FILE, project_decisions_rel,
+    project_findings_head, project_findings_path, read_decisions, read_flat, read_profile, record_findings,
+    record_path, records_of, resolve_profile, resume_stage, runs_top, SELECTOR, set_places, SHARED_WINDOWS, shown,
     STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, stamp_applied, story_digest, story_files, story_folder,
     story_id_of, story_kind, TECH_HEADINGS, TESTED_KINDS, unknown_profile_keys, VERSION)
+from .sharedkernel.adapter.outgoing.markdown.sections import section_of
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)

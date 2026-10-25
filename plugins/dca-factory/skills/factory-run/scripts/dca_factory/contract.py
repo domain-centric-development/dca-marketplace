@@ -14,6 +14,10 @@ import subprocess
 import time
 import typing
 
+from .sharedkernel.adapter.outgoing.markdown.front_matter import (
+    MarkdownError as GateError, read_front_matter, read_text, split_front)
+from .sharedkernel.adapter.outgoing.markdown.sections import fields_of, section_of
+
 
 EPIC_FIELDS = ("intent", "goal", "metric", "domain_contact")
 
@@ -237,53 +241,6 @@ CONTRACT = 26
 VERSION = "0.93.0"
 
 
-def split_front(text):
-    """(front lines, body) by lines: the front matter is the lines between a first line `---` and the next line
-    `---` — a `---` inside a line is text. None where the text has no closed front matter. The body is everything
-    after the closing `---`, its line ending first, as written."""
-    lines = text.splitlines(keepends=True)
-    if not lines or lines[0].rstrip("\r\n") != "---":
-        return None
-    for index in range(1, len(lines)):
-        if lines[index].rstrip("\r\n") == "---":
-            return [line.rstrip("\r\n") for line in lines[1:index]], "".join([lines[index][3:]] + lines[index + 1:])
-    return None
-
-
-def read_front_matter(path):
-    """Return (front_matter_dict, body). Values are strings or lists of strings.
-
-    Supports the flat subset the backlog contract prescribes: `key: value` and
-    `key:` followed by `- item` lines. Nothing else is interpreted.
-    """
-    text = read_text(path)
-    if not text.startswith("---"):
-        raise GateError(f"{path}: no front matter (the file must start with ---)")
-    split = split_front(text)
-    if split is None:
-        raise GateError(f"{path}: front matter is not closed by ---")
-    front_lines, body = split
-    data, key = {}, None
-    for raw in front_lines:
-        line = raw.rstrip()
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if line.startswith(("-", " ", "\t")) and key:
-            data.setdefault(key, [])
-            if isinstance(data[key], list):
-                data[key].append(line.strip()[1:].strip() if line.strip().startswith("-") else line.strip())
-            continue
-        if ":" not in line:
-            raise GateError(f"{path}: cannot read front-matter line {line!r}")
-        key, value = line.split(":", 1)
-        key, value = key.strip(), value.strip()
-        # `key: ""` is YAML for an empty string: read quoted, it would count as a filled field.
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1].strip()
-        data[key] = value if value else []
-    return data, body
-
-
 def unquoted(value):
     """A profile value without the one pair of quotes around it — a quote inside it, at its end too, stays."""
     return value[1:-1] if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'" else value
@@ -366,17 +323,6 @@ def unknown_profile_keys(profile):
         near = [family[0] + tail] if family else difflib.get_close_matches(key, PROFILE_KEYS, n=1, cutoff=0.75)
         unknown.append((key, near[0] if near else None))
     return unknown
-
-
-def read_text(path):
-    if not os.path.isfile(path):
-        raise GateError(f"{path}: file not found")
-    with open(path, encoding="utf-8") as handle:
-        return handle.read()
-
-
-class GateError(Exception):
-    pass
 
 
 #: A story is a folder of its own under its epic, `<epics>/<epic>/<story>/`, with everything that belongs to it
@@ -986,32 +932,6 @@ def stage_order(kind="story"):
 
 
 ANSWER_FIELDS = ("answer", "by", "at")
-
-
-def section_of(text, heading):
-    """The lines under `## <heading>` up to the next `## `, or None when the section is absent."""
-    lines, inside, body = text.splitlines(), False, []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("## "):
-            if inside:
-                break
-            inside = stripped[3:].split("(")[0].strip().lower() == heading
-            continue
-        if inside:
-            body.append(line)
-    return body if inside or body else None
-
-
-def fields_of(lines):
-    """`key: value` pairs in a section, first occurrence wins."""
-    data = {}
-    for line in lines or []:
-        stripped = line.strip().lstrip("-").strip()
-        if ":" in stripped:
-            key, value = stripped.split(":", 1)
-            data.setdefault(key.strip().lower(), value.strip())
-    return data
 
 
 def decision_state(text):

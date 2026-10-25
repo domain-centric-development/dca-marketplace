@@ -66,6 +66,19 @@ jobs:
           name: verify-report-${{ matrix.os }}
           path: verify-report.xml
 
+  types:
+    # The factory's layered packages under `mypy --strict` (mypy.ini lists them) — a check of this repository only:
+    # a project runs the factory on the standard library alone and never installs mypy.
+    name: the factory's layers are typed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python -m pip install --quiet mypy
+      - run: python -m mypy
+
   derived:
     name: generated artifacts are current
     runs-on: ubuntu-latest

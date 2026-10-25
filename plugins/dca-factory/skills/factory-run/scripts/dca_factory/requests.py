@@ -24,9 +24,10 @@ import time
 import typing
 
 from .contract import (
-    decision_files, decision_options, find_story, GateError, is_delivered, location,
-    place, project_decisions_dir, read_front_matter, read_profile, read_text, resolve_profile, shown, split_front,
-    STAGES, story_digest, story_files, story_folder, story_id_of, git)
+    decision_files, decision_options, find_story, GateError, git, is_delivered, location, place,
+    project_decisions_dir, read_profile, resolve_profile, shown, STAGES, story_digest, story_files, story_folder,
+    story_id_of)
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text, split_front
 from .state import acceptance_records, is_acceptance, journal_append, journal_events, write_story_fields
 from .gate import discovery_items, REASON_CODES
 

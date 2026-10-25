@@ -31,6 +31,8 @@ import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 
+import architecture
+
 # The reports use `—` and `→`. A Windows console decodes stdout as cp1252 and a Python that
 # inherits that raises on the first arrow; the files this writes are UTF-8 in every other respect,
 # so the streams are too.
@@ -158,6 +160,18 @@ def cli_in(root):
 PACKAGE = "dca_factory"
 MODULES = ("contract", "reports", "state", "spec", "gate", "tools", "requests", "runner", "page", "service", "cli")
 GATE_SIDE = ("contract", "reports", "state", "spec", "gate")        # what decides; tools, runner and cli show and start
+#: What is built in layers (WP-152): the building blocks, the shared kernel, the contexts, the web host, the root.
+LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "web", "infrastructure")
+
+
+def package_modules(folder):
+    """Every module under a package folder, its subpackages' too, by its path below it with `/`, sorted."""
+    found = []
+    for top, dirs, files in os.walk(folder):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        below = os.path.relpath(top, folder).replace(os.sep, "/")
+        found += [name if below == "." else f"{below}/{name}" for name in files if name.endswith(".py")]
+    return sorted(found)
 
 
 def package_dir(beside):
@@ -169,13 +183,30 @@ def package_text(beside, modules=MODULES):
     return {m: open(os.path.join(package_dir(beside), m + ".py"), encoding="utf-8").read() for m in modules}
 
 
+def dotted_modules(package):
+    """Every module of the package as its import name, the modules not yet moved into a context last — in their
+    order, so a name they import from a context is theirs in a namespace that merges them."""
+    names = [m[:-3].replace("/", ".") for m in package_modules(package)]
+    names = [n[: -len(".__init__")] for n in names if n.endswith(".__init__")] + \
+        [n for n in names if not n.endswith("__init__") and n not in MODULES and n != "fonts"]
+    return [f"{PACKAGE}.{n}" for n in names] + [f"{PACKAGE}.{n}" for n in MODULES]
+
+
 # A probe run in a fresh interpreter: every module of the package beside argv[1], its names in one namespace `pkg`.
 PACKAGE_PROBE = ("import importlib, os, sys, types\n"
                  "sys.dont_write_bytecode = True\n"
                  "sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[1])))\n"
                  "pkg = types.SimpleNamespace()\n"
-                 f"for m in {MODULES!r}:\n"
-                 "    pkg.__dict__.update({k: v for k, v in vars(importlib.import_module('dca_factory.' + m)).items()"
+                 f"MODULES = {MODULES!r}\n"
+                 "found = []\n"
+                 "for top, dirs, files in os.walk(os.path.join(sys.path[0], 'dca_factory')):\n"
+                 "    dirs[:] = [d for d in dirs if d != '__pycache__']\n"
+                 "    below = os.path.relpath(top, sys.path[0]).replace(os.sep, '/').replace('/', '.')\n"
+                 "    found += [below + ('' if f == '__init__.py' else '.' + f[:-3]) for f in files if f.endswith('.py')]\n"
+                 "found = sorted(m for m in found if m not in ['dca_factory.' + n for n in MODULES + ('fonts',)]) \\\n"
+                 "    + ['dca_factory.' + m for m in MODULES]\n"
+                 "for m in found:\n"
+                 "    pkg.__dict__.update({k: v for k, v in vars(importlib.import_module(m)).items()"
                  " if not k.startswith('__')})\n")
 
 
@@ -189,7 +220,7 @@ def pipeline_sha(root):
                     else f"missing  {name}\n")
     package = os.path.join(folder, PACKAGE)
     if os.path.isdir(package):
-        for name in sorted(n for n in os.listdir(package) if n.endswith(".py")):
+        for name in package_modules(package):
             listing += f"{hashlib.sha256(open(os.path.join(package, name), 'rb').read()).hexdigest()}  {PACKAGE}/{name}\n"
     else:
         listing += f"missing  {PACKAGE}/\n"
@@ -4337,12 +4368,23 @@ def verify_setup(runner, verbose=False):
             owners.setdefault(symbol, []).append(name)
     shadowed = sorted(f"{symbol}: {', '.join(at)}" for symbol, at in owners.items() if len(at) > 1)
     check("package: no module defines a function, class or constant another module defines", not shadowed, shadowed)
+    # a module not yet moved into a context imports from the ones above it; what is in a context, the shared kernel
+    # and the building blocks, it imports from wherever it is — the layer check below holds those
     upward = [f"{name} imports from {source}" for name in MODULES
-              for source in re.findall(r"^from \.(\w+) import", modules[name], re.M)
-              if source not in MODULES or MODULES.index(source) >= MODULES.index(name)]
+              for source in re.findall(r"^from \.(\w+)\b[\w.]* import", modules[name], re.M)
+              if source not in LAYERED and (source not in MODULES or MODULES.index(source) >= MODULES.index(name))]
     merged = [name for name in MODULES if "globals().update" in modules[name] or "import *" in modules[name]]
     check("package: every module imports by name from the modules above it — no star, no namespace merge, no cycle",
           not upward and not merged, upward + merged)
+    package = package_dir(runner)
+    layered = architecture.layer_findings(package)
+    check("package: every import follows the layers — DCA-ONI-001/002, DCA-HEX-001/002/006, DCA-LAY-003, "
+          "DCA-STR-002/003/004", not layered, layered[:8])
+    bare = architecture.value_findings(package)
+    check("package: no bare primitive or time type in a domain field or a domain signature — each is a value object",
+          not bare, bare[:8])
+    cycles = architecture.cycle_findings(package)
+    check("package: no import cycle among the package's modules", not cycles, cycles[:4])
     entries = {name: open(os.path.join(os.path.dirname(runner), name), encoding="utf-8").read()
                for name in ("story-gate.py", "factory-cli.py")}
     check("package: story-gate.py and factory-cli.py are entry points — no bytecode, the package's main, nothing more",
@@ -4404,8 +4446,8 @@ def gate_module(path):
     if folder not in sys.path:
         sys.path.insert(0, folder)
     namespace = types.SimpleNamespace()
-    for name in MODULES:
-        namespace.__dict__.update({k: v for k, v in vars(importlib.import_module(f"{PACKAGE}.{name}")).items()
+    for name in dotted_modules(os.path.join(folder, PACKAGE)):
+        namespace.__dict__.update({k: v for k, v in vars(importlib.import_module(name)).items()
                                    if not k.startswith("__")})
     return namespace
 

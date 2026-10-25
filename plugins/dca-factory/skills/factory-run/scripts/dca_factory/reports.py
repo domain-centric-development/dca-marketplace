@@ -12,8 +12,8 @@ import os
 import re
 from datetime import datetime, timezone
 from xml.etree import ElementTree
-from .contract import (
-    GateError, read_profile, read_text, resolve_profile, SHARED_WINDOWS, STAGE_ORDER)
+from .contract import GateError, read_profile, resolve_profile, SHARED_WINDOWS, STAGE_ORDER
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 
 
 #: Where test runners leave a report of what they actually executed. These are file-format

@@ -55,11 +55,14 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, CREATED_KEY, created_of, decision_files, decision_options, decision_state, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on,
-    EPIC_FILE, epic_folder, evidence_dir, evidence_rel, factory_home, find_story, git, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint,
-    finding_records, location, needs_human_ids, open_findings, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
-    recommended_option, record_path, records_of, resolve_profile, section_of, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files,
-    story_id_of, story_kind, TECH_HEADINGS, VERSION)
+    ALL_KINDS, CONTRACT, CREATED_KEY, created_of, decision_files, decision_options, decision_state, DECISIONS_DIR,
+    decisions_store, DEFAULTS, delivered_by, delivered_on, EPIC_FILE, epic_folder, evidence_dir, evidence_rel,
+    factory_home, find_story, finding_records, FINDINGS_FILE, FORM_CHECKS, GateError, git, is_delivered,
+    layout_hint, location, needs_human_ids, open_findings, place, PROFILE_FILE, read_profile, recommended_option,
+    record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER,
+    story_files, story_id_of, story_kind, TECH_HEADINGS, VERSION)
+from .sharedkernel.adapter.outgoing.markdown.sections import section_of
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .reports import (
     FOLLOW_ARGS, READERS, reader_of, session_reader, parse_time, part_of_call, session_usage_allowed, _short,
     stream_parts, tokens_of, USAGE_FIELDS, usage_from, WINDOWS)

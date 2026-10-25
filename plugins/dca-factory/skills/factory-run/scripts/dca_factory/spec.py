@@ -21,7 +21,9 @@ expectations`, or an answered decision.
 import os
 import re
 
-from .contract import place, read_text, section_of
+from .contract import place
+from .sharedkernel.adapter.outgoing.markdown.sections import section_of
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 
 SCENARIOS_FILE = "scenarios.md"
 JOURNEYS_FILE = "journeys.md"

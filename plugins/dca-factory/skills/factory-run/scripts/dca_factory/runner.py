@@ -21,11 +21,13 @@ import sys
 import threading
 import time
 from .contract import (
-    ALL_KINDS, CONTRACT, DECISIONS_DIR, DEFAULTS, METHOD_PROFILE, METHOD_ROOT, read_flat, evidence_dir, evidence_rel, find_story, FINDINGS_FILE, flat_stories,
-    delivered_by, delivered_on, GateError, git, git_identity, is_delivered, legacy_story_digest, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
-    record_path, resolve_profile, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_FILES, STAGE_ORDER, STAGES,
-    STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of, story_kind, worktree_places, decisions_store,
-    needs_human_ids, OWNED_DIGEST, WINDOW_DIGEST, stamp_applied)
+    ALL_KINDS, CONTRACT, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on, evidence_dir,
+    evidence_rel, find_story, FINDINGS_FILE, flat_stories, GateError, git, git_identity, is_delivered,
+    legacy_story_digest, MAPPING_ROW, METHOD_PROFILE, METHOD_ROOT, needs_human_ids, NOTHING, OWNED_DIGEST, place,
+    PROFILE_FILE, read_flat, read_profile, record_path, resolve_profile, SELECTOR, set_places, SHARED_WINDOWS,
+    shown, STAGE, STAGE_FILES, STAGE_ORDER, STAGES, stamp_applied, STORY_BRANCH, story_digest, STORY_FILE,
+    story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_places)
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .reports import (
     stream_limit, tokens_of, usage_lines)
 from .state import (
@@ -1565,7 +1567,7 @@ class Run:
                 if not os.path.isdir(path):
                     listing += f"missing  {name}\n"
                     continue
-                for module in sorted(n for n in os.listdir(path) if n.endswith(".py")):
+                for module in package_modules(path):
                     listing += f"{file_sha(os.path.join(path, module))}  {name}{module}\n"
             elif os.path.isfile(path):
                 listing += f"{file_sha(path)}  {name}\n"
@@ -3842,6 +3844,17 @@ def open_decision_files(cwd, story_id):
 STAMP = ".agents/factory/gate.installed"
 #: The files the install puts into .agents/factory/, in the stamp's order; a name ending in `/` is the package.
 PIPELINE_FILES = ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh", "dca_factory/")
+
+
+def package_modules(folder):
+    """Every module of the package under <folder>, its subpackages' too, by its path below the folder with `/` —
+    in the order the install's hash lists them (the C locale's, as Python sorts)."""
+    found = []
+    for top, dirs, files in os.walk(folder):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        below = os.path.relpath(top, folder).replace(os.sep, "/")
+        found += [name if below == "." else f"{below}/{name}" for name in files if name.endswith(".py")]
+    return sorted(found)
 
 
 def file_sha(path):

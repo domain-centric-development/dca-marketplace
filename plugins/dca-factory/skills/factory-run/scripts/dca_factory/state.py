@@ -18,12 +18,15 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ADOPT_ORDER, confirmed_defects, CRITERION, decision_options, DECISIONS_DIR, decisions_store, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
-    EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest, find_story,
-    GateError, git, git_blob, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, order_for, layout_hint, plain, MAX_ROUNDS, needs_human_ids, NOTHING,
-    OWNED_DIGEST, place, PLACES_REL, POST_GATED, PROFILE_FILE, read_front_matter, read_profile, read_text, records_of,
-    resolve_profile, resume_stage, section_of, SHARED_WINDOWS, shown, split_front, STAGE_FILES, STAGE_ORDER, STATE_KEYS, story_digest,
-    STORY_BRANCH, STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
+    ADOPT_ORDER, confirmed_defects, CRITERION, decision_options, DECISIONS_DIR, decisions_store, DEFAULTS,
+    delivered_by, delivered_on, depends_on, duplicate_ids, EPIC_FILE, epic_folder, epic_graph, epic_order,
+    evidence_dir, evidence_rel, factory_home, file_digest, find_story, GateError, git, git_blob, in_worktree,
+    is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint, MAX_ROUNDS, needs_human_ids, NOTHING, order_for,
+    OWNED_DIGEST, place, PLACES_REL, plain, POST_GATED, PROFILE_FILE, read_profile, records_of, resolve_profile,
+    resume_stage, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, STATE_KEYS, STORY_BRANCH, story_digest,
+    STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
+from .sharedkernel.adapter.outgoing.markdown.sections import section_of
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text, split_front
 from .reports import (
     current_session, log_kind, parse_time, session_reader, PROCESS_RANKS, session_usage,
     session_usage_allowed, stream_denials, stream_parts, tokens_of, USAGE_FIELDS, usage_fields, WINDOWS)

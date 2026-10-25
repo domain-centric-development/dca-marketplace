@@ -209,8 +209,8 @@ STAMP=".agents/factory/gate.installed"
 # what was installed, so a runner can tell the pipeline it is about to trust from one a stage, a hand or a merge
 # changed since. The runner (dca_factory/runner.py, the same digest) takes it at its start and compares before every
 # gate it runs; a stage that rewrote the gate through a link is stopped at the next gate, whatever tool it ran in.
-# The modules in the C locale's order, as Python sorts them.
-# A name ending in `/` is the package: every module in it, so a module added or removed changes the hash too.
+# A name ending in `/` is the package: every module in it and in its subpackages, by its path below the folder in
+# the C locale's order, as Python sorts them — so a module added, moved or removed changes the hash too.
 PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh dca_factory/"
 pipeline_hash() {                           # pipeline_hash [<folder>] — one SHA-256 over PIPELINE_FILES
   local dir=${1:-$HOME_DIR/.agents/factory} hash file module LC_ALL=C
@@ -218,8 +218,8 @@ pipeline_hash() {                           # pipeline_hash [<folder>] — one S
   for file in $PIPELINE_FILES; do
     case $file in
       */) if [ -d "$dir/$file" ]; then
-            for module in "$dir/$file"*.py; do
-              [ -f "$module" ] && printf '%s  %s\n' "$($hash "$module" | cut -d" " -f1)" "$file${module##*/}"
+            ( cd "$dir" && find "$file" -name '*.py' -type f ) | LC_ALL=C sort | while IFS= read -r module; do
+              printf '%s  %s\n' "$($hash "$dir/$module" | cut -d" " -f1)" "$module"
             done
           else printf 'missing  %s\n' "$file"; fi ;;
       *)  if [ -f "$dir/$file" ]; then printf '%s  %s\n' "$($hash "$dir/$file" | cut -d" " -f1)" "$file"
@@ -1012,8 +1012,8 @@ install_project() {                         # install_project <tool> <skill fold
   # The package first, swapped in whole: a module the new release no longer has must not stay behind, and no
   # __pycache__ travels with it.
   rm -rf .agents/factory/.dca_factory.new
-  must "create the package folder" mkdir -p .agents/factory/.dca_factory.new
-  must "copy the package to .agents/factory/dca_factory" cp "$from/factory-run/scripts/dca_factory/"*.py .agents/factory/.dca_factory.new/
+  must "copy the package to .agents/factory/dca_factory" copy_tree "$from/factory-run/scripts/dca_factory/." \
+    .agents/factory/.dca_factory.new
   rm -rf .agents/factory/dca_factory
   must "put the package in place" mv .agents/factory/.dca_factory.new .agents/factory/dca_factory
   must "copy the gate to $GATE" cp "$from/factory-run/scripts/story-gate.py" "$GATE"

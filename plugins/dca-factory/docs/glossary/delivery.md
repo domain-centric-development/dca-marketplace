@@ -1,0 +1,231 @@
+# Glossary — Bounded Context: delivery
+
+What is built next, by whom it is decided, and how it is delivered: the backlog, the decisions a person takes, the
+stages and their gates, the project description every stage reads, and what it all cost. One model — story, epic,
+decision record, journal — shared by five features; the story moves draft → approved → delivered across them.
+
+Code: `dca_factory/delivery/` — `domain/model/` flat, `application/<feature>/` one module per use case,
+`application/shared/` the output ports, `adapter/incoming/` and `adapter/outgoing/`.
+
+---
+
+## Features
+
+### Backlog (backlog)
+
+**Definition:** What is to be built: epics and their stories, drafts written and released, journeys proposed for a
+delivered epic.
+
+**Type:** Feature
+
+**Related terms:** `Epic`, `Story`, `Draft`, `Release`, `Journey` — use cases `release_stories`
+
+### Decisions (decisions)
+
+**Definition:** What a run may not decide itself and a person does: a question answered, a delivery accepted or
+corrected.
+
+**Type:** Feature
+
+**Related terms:** `Decision record`, `Answer`, `Acceptance`, `Correction` — use cases `answer_question`,
+`accept_delivery`
+
+### Delivery (delivery)
+
+**Definition:** A story run through its stages, each closed by its gate, with the evidence and the journal it leaves.
+
+**Type:** Feature
+
+**Related terms:** `Stage`, `Gate`, `Evidence`, `Journal`, `Round`
+
+### Description (description)
+
+**Definition:** The project description every stage reads: the product (overview), the technical decisions (tech),
+the designed domain (domain).
+
+**Type:** Feature
+
+### Cost (cost)
+
+**Definition:** What a story's delivery used, in tokens and in money: a process's usage measured, priced and booked
+on the stories it worked on.
+
+**Type:** Feature
+
+**Related terms:** `Usage`, `Price` — use cases `book_request_cost`
+
+---
+
+## Aggregate Roots
+
+### Story (Story)
+
+**Definition:** One work order small enough for a single run: acceptance criteria under keys, the feature it changes,
+its dependencies. Its state is in its front matter: a draft until a person releases it, approved until a gate
+delivers it, delivered after; history once delivered — what holds is the spec's.
+
+**Type:** Aggregate Root
+
+**Identity:** `StoryId` — the `id:` of its front matter, else its folder's name
+
+**Related terms:**
+- `Epic` (referenced by its id — the folder the story stands in)
+- `Decision record` (beside the story, referenced by the story's id)
+- `Assumption` (Value Object, a line under `## Assumptions`)
+
+**Operations:** release (`release`) — a draft becomes approved, its release an answered assumption; deliver
+(`deliver`); reopen (`reopen`) — a delivered story taken back for a correction
+
+### Decision record (DecisionRecord)
+
+**Definition:** A question a stage or a request's skill could not answer itself, kept beside its story (or the
+project's own, without one): the options, a recommendation, and the person's answer once given. Open until answered;
+answered, a stage applies it. An answer is never overwritten — a change of mind is a new question.
+
+**Type:** Aggregate Root
+
+**Identity:** `RecordId` — the `id:` of its front matter, else its file's name
+
+**Related terms:**
+- `Option` (Value Object — a key and its text)
+- `Answer` (Value Object — the answer, by whom, when)
+- `Acceptance` (a decision record that asks for a look at a delivered story)
+
+**Operations:** answer (`answer`); accept (`accept`) — an acceptance answered `accepted`; correct (`correct`) — an
+acceptance answered with a reason code; apply (`apply`) — the stage that applied the answer stamps it
+
+### Epic (Epic)
+
+**Definition:** A body of work with an intent, a goal, an outcome event to measure it (`metric:`) and a domain contact;
+over once its stories are delivered.
+
+**Type:** Aggregate Root
+
+**Identity:** `EpicId` — the epic's folder, or the `id:` of its `epic.md`
+
+**Operations:** create from a proposal (`epic-from`) — at discovery's release
+
+---
+
+## Value Objects
+
+### Story id (StoryId) · Record id (RecordId) · Epic id (EpicId)
+
+**Definition:** The name of one story, decision record or epic for its whole life — one word, no path.
+
+**Type:** Value Object
+
+### Story status (StoryStatus)
+
+**Definition:** Where a story stands in its life: `draft`, `approved`, `delivered`, `superseded`.
+
+**Type:** Value Object
+
+### Decision state (DecisionState)
+
+**Definition:** Where a record stands: `open` (no answer), `draft` (an answer section not yet complete), `answered`,
+`applied`.
+
+**Type:** Value Object
+
+### Option (Option) · Option key (OptionKey)
+
+**Definition:** One choice a record offers, under a key of one to three letters or digits (`a`, `B`, `1`).
+
+**Type:** Value Object
+
+### Answer (Answer)
+
+**Definition:** The person's answer to a record — an option's key or their words —, who gave it and when.
+
+**Type:** Value Object
+
+### Person (Person)
+
+**Definition:** Who asks or answers, as they name themselves — a repository's `user.name` where they did not say.
+
+**Type:** Value Object
+
+### Moment (Moment)
+
+**Definition:** When something happened, in UTC to the second (`2026-10-25T10:00:00Z`).
+
+**Type:** Value Object
+
+### Assumption (Assumption)
+
+**Definition:** A line under a story's `## Assumptions`; `answered:` where a person settled it — a release by a
+request is one.
+
+**Type:** Value Object
+
+### Usage (Usage)
+
+**Definition:** What one process used: tokens read, read from the cache, written to the cache, written — on a model —
+and its cost where it was priced. A request's usage is booked in even shares on the stories it worked on.
+
+**Type:** Value Object
+
+**Operations:** share (`share`)
+
+---
+
+## Concepts
+
+### Draft
+
+**Definition:** A story with `status: draft`: written, not yet released — no stage runs it.
+
+**Type:** Concept
+
+### Release (release)
+
+**Definition:** A person's go for a draft: it becomes approved and runs. The factory releases a draft itself only
+where its question pass ran on it as it stands and no record holds it.
+
+**Type:** Concept
+
+### Question pass (questioned)
+
+**Definition:** The pass of a backlog skill over the drafts it wrote, asking what they leave open; the factory marks
+each draft it covered with the story's digest (`questioned`).
+
+**Type:** Concept
+
+### Journey
+
+**Definition:** An end-to-end path through a delivered epic, proposed as an item of its own (`kind: journey`); spec
+keeps the journeys that hold.
+
+**Type:** Concept
+
+### Acceptance
+
+**Definition:** A decision record that asks a person to look at a delivered story: answered `accepted`, or a
+correction with a reason code.
+
+**Type:** Concept
+
+### Stage · Gate · Round
+
+**Definition:** A step of a story's run — plan, test, build, tidy, judge, document — closed by its gate, the
+deterministic check that lets the next stage start; a round is one more pass after a refusal.
+
+**Type:** Concept
+
+### Evidence · Journal
+
+**Definition:** What a run leaves to prove it: the reports and snapshots, and the story's journal — one line per event,
+the story's record.
+
+**Type:** Concept
+
+### Request (request)
+
+**Definition:** A person's press, kept as one file until it is done: an asynchronous command for one of the use cases
+— write a wish, release, answer, accept, correct, run, stop. No term of the model: the queue is an incoming adapter
+and a store; `settle` decides which press needs no judgement and executes its use case.
+
+**Type:** Concept
+
+**Operations:** write (`write`), take back (`drop`), retry (`retry`), settle (`settle`), work (`work`)
