@@ -65,7 +65,6 @@ A command the profile does not declare is skipped and named, never failed.
 import argparse
 import contextlib
 import glob
-import hashlib
 import json
 import os
 import re
@@ -84,13 +83,12 @@ from .delivery.adapter.outgoing.files.story_layout import (
     duplicate_ids, file_digest, find_story, is_delivered, story_digest,
     story_files, story_folder, story_id_of, story_kind)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    DEFAULTS, evidence_dir, evidence_rel, factory_home, findings_rel, FLAKY_FINDINGS, in_worktree,
-    JOURNAL, location, place, PLACES, PLACES_REL, PROFILE_FILE, read_profile,
+    DEFAULTS, evidence_dir, evidence_rel, factory_home, FLAKY_FINDINGS, in_worktree,
+    JOURNAL, location, place, PLACES, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    answered_decisions, decisions_store, project_decisions_rel, record_path,
-    records_of)
+    answered_decisions, decisions_store, record_path)
 from .delivery.domain.model.correction import REASON_CODES
 from .delivery.application.description.check_description import CheckDescriptionCommand
 from .discovery.api import check_report
@@ -98,7 +96,7 @@ from .infrastructure.description import check_description
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .delivery.adapter.outgoing.build.test_reports import (
-    display_name_of, read_scenarios, reported_names, unescape_literal)
+    display_name_of, unescape_literal)
 from .spec.api import (
     derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
 from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED
@@ -117,7 +115,7 @@ from .delivery.adapter.outgoing.files.decision_record_files import (
 from .delivery.application.shared.front import is_acceptance
 from .delivery.domain.model.verdict import FindingState
 from .delivery.domain.service.backlog_checks import BacklogChecks
-from .delivery.domain.service.profile_checks import MODEL_TOOLS, ProfileChecks  # noqa: F401 — MODEL_TOOLS: read by the verify suite
+from .delivery.domain.service.profile_checks import ProfileChecks
 from .delivery.domain.service.story_checks import StoryChecks
 from .delivery.domain.service.decision_checks import Applying, DecisionChecks
 from .delivery.domain.model.stage import StageName
@@ -132,6 +130,9 @@ from .delivery.domain.service.integration_checks import IntegrationChecks
 from .delivery.domain.service.test_verdicts import BreakProof, TestVerdicts
 from .delivery.domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult
 from .delivery.domain.model.verdict import Finding
+from .delivery.domain.service.change_checks import CHANGE_CHECKS, ChangeChecks
+from .delivery.domain.model.stage_story import CommandRun
+from .delivery.adapter.outgoing.git.change import parity_facts, snapshot
 from .delivery.domain.service.suite_checks import red as red_finding, SuiteChecks
 from .delivery.domain.model.verdict import CheckName, Said
 from .delivery.adapter.outgoing.build.suite_runs import command_run, suite_commands, suite_run
@@ -148,9 +149,10 @@ from .delivery.adapter.outgoing.spec.story_spec_files import moved_tests, story_
 from .delivery.adapter.outgoing.files.delivery_files import TEST_DIR, TEST_FILE
 from .delivery.adapter.outgoing.git.integration import integration_target
 from .delivery.adapter.outgoing.build import commands
-from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, TOOL_FOLDERS, command_for, open_suites_record, run, tail, test_command_keys
+from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, command_for, open_suites_record, run, tail, test_command_keys
 from .delivery.adapter.outgoing.build.suite_runs import SuiteOwner, test_files
 from .delivery.adapter.outgoing.build.breaks import apply_break, break_copy, break_patch, break_path, characterization_tests, qualify_selector
+from .delivery.adapter.outgoing.git.change import backlog_paths
 
 
 def story_ids(epics):
@@ -920,94 +922,6 @@ def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None, s
 # The same checks outside a story: a direct edit, a commit and CI get one verdict for one tree. The
 # profile declares the commands; its `required:` line declares which of them must hold. Without
 # that line the check reports what it ran and what it skipped, and fails only on a red command.
-CHANGE_CHECKS = ("compile", "test", "architecture", "format")
-
-
-def staged_snapshot(result, cwd, env):
-    """The index tree, or None when the working tree differs from it.
-
-    Refuse on drift rather than materialise the index: a check that runs the tests against an
-    unstaged fix certifies a commit that does not contain it."""
-    code, top = git(cwd, "rev-parse", "--show-toplevel", env=env)
-    if code:
-        result.fail("snapshot", "--staged needs a git repository")
-        return None
-    code, tree = git(cwd, "write-tree", env=env)
-    if code:
-        result.fail("snapshot", f"the index cannot be written as a tree: {tail(tree, 300)}")
-        return None
-    _, unstaged = git(cwd, "diff", "--name-only", env=env)
-    _, untracked = git(cwd, "ls-files", "--others", "--exclude-standard", env=env)
-    # The agent tools' own folders — skill links, a settings file the install wrote — are no input to
-    # any check here, and refusing every commit over them would stop the first commit after an install.
-    # Nor is what the pipeline writes itself while a runner works — `.dca-factory/`, the run folder and
-    # the evidence beside it: a person's commit is not refused by a running factory's protocol.
-    tooling = lambda p: any(folder in "/" + p for folder in TOOL_FOLDERS)
-    owned = pipeline_owned()
-    left = [p for p in unstaged.splitlines() + untracked.splitlines() if p and owned(p)]
-    drift = [f"modified, not staged: {p}" for p in unstaged.splitlines() if p and not tooling(p) and not owned(p)] \
-        + [f"untracked: {p}" for p in untracked.splitlines() if p and not tooling(p) and not owned(p)]
-    if drift:
-        shown = "\n".join("  " + line for line in drift[:10])
-        more = f"\n  … and {len(drift) - 10} more" if len(drift) > 10 else ""
-        result.fail(
-            "snapshot",
-            f"the working tree is not what the commit contains — the checks would run against "
-            f"these, and the commit would not:\n{shown}{more}\nStage them, or set them aside "
-            f"(`git stash push --keep-index --include-untracked`), then commit again.",
-        )
-        return None
-    result.ok("snapshot", f"index tree {tree[:12]} — the working tree matches it"
-                          + (f" ({len(left)} file(s) the pipeline writes itself left out)" if left else ""))
-    return tree
-
-
-def pipeline_owned():
-    """Whether a path is one the pipeline writes itself, outside any story's commit: under `.dca-factory/`, the
-    run folder or the evidence beside it, as the profile places them."""
-    runs = (PLACES_REL.get("runs") or DEFAULTS["runs"]).strip("/")
-    prefixes = tuple(dict.fromkeys(folder + "/" for folder in (".dca-factory", runs, evidence_rel()) if folder))
-    return lambda path: path.replace("\\", "/").startswith(prefixes)
-
-
-def backlog_places():
-    """The backlog and the description — what a person writes and nothing the project's checks read: the epics with
-    their stories, decisions and findings, the project's findings and decision records, the discovery and the
-    description's files. Never the spec, never `docs/` (a project's tests may read what it holds). (folders, files)"""
-    rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).strip("/")
-    folders = {rel("epics"), findings_rel(), project_decisions_rel(), rel("discovery")}
-    return (tuple(sorted(f.strip("/") + "/" for f in folders if f and f.strip("/") not in ("", "."))),
-            {rel("product"), rel("tech"), rel("domain")})
-
-
-def people_places():
-    """What a request may write and the factory commits: the backlog and the description (`backlog_places`), and
-    beside them the folder the epics lie in with everything in it, `docs/` and the agents' instructions a
-    description writes a line into. Never the spec: what holds is merged by the gate that delivers.
-    (folders, files, never)"""
-    rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).strip("/")
-    folders, files = backlog_places()
-    more = {os.path.dirname(rel("epics")) or rel("epics"), "docs"}
-    return (tuple(sorted(set(folders) | {f.strip("/") + "/" for f in more if f.strip("/") not in ("", ".")})),
-            files | {"AGENTS.md", "CLAUDE.md"}, (rel("spec") + "/",))
-
-
-def in_places(path, places):
-    """Whether a path lies in (folders, files[, never])."""
-    path = path.replace("\\", "/")
-    folders, files, never = (tuple(places) + ((),))[:3]
-    return (path in files or path.startswith(folders)) and not (never and path.startswith(never))
-
-
-def backlog_paths(cwd, env):
-    """The staged paths when every one of them is the backlog or the description (`backlog_places`) or the pipeline's
-    own protocol, else None. A commit that stages nothing is None: it is checked as any other."""
-    code, names = git(cwd, "diff", "--cached", "--name-only", "--no-renames", env=env)
-    paths = [p for p in names.splitlines() if p] if code == 0 else []
-    if not paths:
-        return None
-    owned, places = pipeline_owned(), backlog_places()
-    return paths if all(in_places(p, places) or owned(p) for p in paths) else None
 
 
 def red(result, check, message, must, strict):
@@ -1050,24 +964,6 @@ def check_main_tests(result, cwd, runs, story_id):
                                               StageEvidenceFiles(cwd, runs, place("epics"), {})))
 
 
-def decision_covers(cwd, story_id, ids):
-    """A test `rel` a decision among `ids` may change: asked by the test or build stage, naming the file, or
-    listed by the plan that ran again for it."""
-    try:
-        records = [(front, body) for _p, front, body, _s, _a in records_of(story_id, cwd=cwd)
-                   if str(front["id"]).strip() in ids]
-    except GateError:
-        records = []
-
-    def covers(rel, planned):
-        if rel in planned:
-            return True
-        return any(getattr(STAGE.get(str(front.get("stage", "")).strip()), "lists", False)
-                   or os.path.basename(rel) in body
-                   for front, body in records)
-    return covers
-
-
 def check_existing_tests(result, cwd, runs, story_id, story_body=""):
     """The tests that existed before the story still expect what they did (`KeptChecks.tests_kept`)."""
     story = stage_story(story_id, "", {}, story_body, ())
@@ -1102,38 +998,30 @@ def check_required_suites(result, profile, cwd, already=None, owner=None):
 
 
 def change_check(result, cwd, profile, staged, only):
-    # `required:` names profile keys: compile, architecture, format, and each test command by its own
-    # key (`test`, `e2eTest`, `test.<name>`) — an end-user suite that needs a running system can be
-    # declared without making every commit wait for one.
+    """The profile's checks outside a story (`ChangeChecks`): a direct edit, a commit (`staged`: the index, refused
+    where the working tree differs) and CI get one verdict for one tree."""
     required = set(split_list(profile.get("required")))
-    unknown = sorted(r for r in required
-                     if r not in CHANGE_CHECKS and r != "e2eTest" and not r.startswith("test."))
-    if unknown:
-        result.fail("policy", f"`required:` names {', '.join(unknown)} — it takes compile, architecture, "
-                              f"format and test-command keys (test, e2eTest, test.<name>)")
-    if required:
-        result.ok("policy", "required: " + " ".join(sorted(required)))
-    else:
-        result.note("policy", "the profile declares no `required:` — nothing is mandatory: what is declared "
-                              "runs and fails when red, what is not is named")
+    strict = Presence.PRESENT if required else Presence.ABSENT
+    take(result, ChangeChecks.policy(frozenset(CommandKey(r) for r in required)))
     env = dict(os.environ)
     tree = None
     paths = backlog_paths(cwd, env) if staged and not split_list(only) else None
     if staged:
         if paths and not split_list(profile.get("checks.backlog")):
-            # nothing runs over the working tree: what else is changed there cannot reach a check of this commit
-            result.note("snapshot", "the backlog alone, and `checks.backlog` names no check — what else the working "
-                                    "tree holds is not this commit's")
+            take(result, (ChangeChecks.backlog_alone(),))
         else:
-            tree = staged_snapshot(result, cwd, env)
-            if tree is None:
+            index = snapshot(cwd, env)
+            found = ChangeChecks.snapshot(index)
+            take(result, (found,))
+            if found.state is not FindingState.PASS:
                 return
+            tree = index.tree.value
         # The profile's commands must not inherit a temporary index (`git commit -a`): a test that
         # runs git in a repository of its own would read this commit's index as its own.
         os.environ.pop("GIT_INDEX_FILE", None)
     else:
         code, head = git(cwd, "rev-parse", "--short", "HEAD", env=env)
-        result.note("snapshot", "the working tree as it is" + (f", on top of {head}" if code == 0 else ""))
+        take(result, (ChangeChecks.working_tree(Detail(head) if code == 0 else None),))
     scope = split_list(only) or list(CHANGE_CHECKS)
     test_keys = [k for k in test_command_keys(profile)] + sorted(
         r for r in required if (r == "e2eTest" or r.startswith("test.")) and r not in test_command_keys(profile))
@@ -1143,114 +1031,53 @@ def change_check(result, cwd, profile, staged, only):
     test_scope = None
     if paths:
         named = split_list(profile.get("checks.backlog"))
-        unknown = sorted(n for n in named if n not in CHANGE_CHECKS and n not in test_keys)
-        if unknown:
-            result.fail("policy", f"`checks.backlog:` names {', '.join(unknown)} — it takes compile, architecture, "
-                                  f"format and the profile's test-command keys (test, e2eTest, test.<name>)")
+        take(result, ChangeChecks.backlog_scope(tuple(CommandKey(n) for n in named),
+                                                tuple(CommandKey(k) for k in test_keys), Count(len(paths))))
         test_scope = {n for n in named if n in test_keys}
         scope = [n for n in named if n in CHANGE_CHECKS and n != "test"] + (["test"] if test_scope else [])
-        result.note("scope", f"the commit changes only the backlog and the pipeline's own files "
-                             f"({len(paths)} path(s)) — `checks.backlog` runs "
-                             + (", ".join(named) if named else "no check"))
     for check in CHANGE_CHECKS:
         if check == "test":
             required_tests = [k for k in test_keys if k in required]
             if check not in scope:
-                result.skip(check, "not run in this scope" + (
-                    f" — {', '.join(required_tests)} required, so a later scope (CI) has to run it"
-                    if required_tests else ""))
+                take(result, (ChangeChecks.out_of_scope(CheckName(check),
+                                                        tuple(CommandKey(k) for k in required_tests)),))
                 continue
             commands = {}
             for key in test_keys:
                 if test_scope is not None and key not in test_scope:
-                    result.skip(key, "not run in this scope" + (" — it is required, so a later scope (CI) has "
-                                                                "to run it" if key in required else ""))
+                    take(result, (ChangeChecks.test_out_of_scope(CommandKey(key), Presence.PRESENT if key in required else Presence.ABSENT),))
                     continue
                 if profile.get(key):
                     commands.setdefault(profile[key], []).append(key)
                 elif key in required:
-                    result.fail("test", f"no `{key}:` command in the stack profile — and `{key}` is required")
+                    take(result, (ChangeChecks.missing_test(CommandKey(key)),))
             if not commands and not required_tests:
-                result.skip("test", "no test command in the stack profile")
+                take(result, (ChangeChecks.no_test(),))
             for command, keys in commands.items():
                 run_test_command(result, cwd, profile, "/".join(keys), command,
                                  any(k in required for k in keys), bool(required))
             continue
-        must = check in required
+        must = Presence.PRESENT if check in required else Presence.ABSENT
         if check not in scope:
-            result.skip(check, "not run in this scope" + (" — it is required, so a later "
-                               "scope (CI) has to run it" if must else ""))
+            take(result, (ChangeChecks.test_out_of_scope(CommandKey(check), must),))
             continue
-        key = check
-        command = profile.get(key)
+        command = profile.get(check)
         if not command:
-            (result.fail if must else result.skip)(
-                check, f"no `{key}:` command in the stack profile" + (f" — and `{check}` is required" if must else ""))
+            take(result, (ChangeChecks.missing(CheckName(check), CommandKey(check), must),))
             continue
         code, output = run(command, cwd)
-        if code == 0:
-            result.ok(check, f"`{command}` succeeded")
-        else:
-            red(result, check, f"`{command}` failed:\n{tail(output)}", must, bool(required))
+        take(result, (ChangeChecks.command(CheckName(check), CommandRun(Detail(command), Count(code),
+                                                                       Detail(tail(output)), Detail("")),
+                                           must, strict),))
     if tree:
         _, after = git(cwd, "write-tree", env=env)
         if after != tree:
-            result.fail("snapshot", f"the index changed while the checks ran ({tree[:12]} → "
-                                    f"{after[:12]}) — what was checked is not what would be committed")
+            take(result, (ChangeChecks.index_changed(Detail(tree), Detail(after)),))
 
 
 def parity(result, config_path):
-    config = read_profile(config_path)
-    if not config:
-        raise GateError(f"{config_path}: no parity config (`scenarios:` and `implementation.<name>:` lines)")
-    base = os.path.dirname(os.path.abspath(config_path))
-    contract = os.path.join(base, config.get("scenarios", ""))
-    if not config.get("scenarios") or not os.path.isfile(contract):
-        raise GateError(f"{config_path}: `scenarios:` names no readable contract ({contract})")
-    scenarios = read_scenarios(contract)
-    with open(contract, "rb") as handle:
-        digest = hashlib.sha256(handle.read()).hexdigest()[:12]
-    # A scenario without its `Title:` line binds to no test: dropped, it would leave parity silently.
-    untitled = [s["id"] for s in scenarios if not s["title"]]
-    scenarios = [s for s in scenarios if s["title"]]
-    if untitled:
-        result.fail("contract", f"{', '.join(untitled)} in {config['scenarios']} carry no `Title:` line — "
-                                f"the title is what binds a scenario to a test")
-    result.ok("contract", f"{len(scenarios)} scenario(s) in {config['scenarios']} (sha256 {digest})")
-    implementations = sorted(k for k in config if k.startswith("implementation."))
-    if not implementations:
-        result.fail("implementations", f"{config_path} declares no `implementation.<name>: <report glob>`")
-    for key in implementations:
-        name = key.split(".", 1)[1]
-        paths = sorted(p for p in glob.glob(os.path.join(base, config[key]), recursive=True) if os.path.isfile(p))
-        if not paths:
-            result.fail(name, f"no report matches {config[key]} — run its suite first")
-            continue
-        names = reported_names(paths)
-        newest = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(max(os.path.getmtime(p) for p in paths)))
-        bound = [s for s in scenarios if s["title"] in names]
-        if not bound:
-            result.fail(name, f"{len(paths)} report(s) name no scenario of the contract — the binding "
-                              f"(the title as the test's name) is gone")
-            continue
-        problems, unproven = [], []
-        for scenario in scenarios:
-            outcome = names.get(scenario["title"])
-            mandatory = scenario["runs"].strip().lower() == "always"
-            if outcome == "passed":
-                continue
-            if not mandatory and outcome in (None, "skipped"):
-                unproven.append(scenario["id"])
-                continue
-            problems.append(f"{scenario['id']} {outcome or 'missing'} — {scenario['title']!r}")
-        if problems:
-            result.fail(name, f"{len(problems)} scenario(s) not proven by {len(paths)} report(s):\n"
-                        + "\n".join("  " + p for p in problems))
-        else:
-            result.ok(name, f"{len(scenarios) - len(unproven)} scenario(s) passed in {len(paths)} "
-                            f"report(s), newest {newest}")
-        if unproven:
-            result.note(name, f"not proven here (bound to another configuration): {', '.join(unproven)}")
+    """Every implementation's reports against one scenario contract (`ChangeChecks.parity`)."""
+    take(result, ChangeChecks.parity(parity_facts(config_path)))
 
 
 def acceptance_applies(cwd, runs, story_id, profile):

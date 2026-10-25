@@ -5,9 +5,11 @@ import os
 import unittest
 
 from support import contract
-from dca_factory import cli, gate
+from dca_factory import cli
 from dca_factory.delivery.adapter.outgoing.tools import streams
 from dca_factory.delivery.adapter.outgoing.tools import agents
+from dca_factory.delivery.adapter.outgoing.build import commands
+from dca_factory.delivery.domain.service import profile_checks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 STREAMS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "streams")
@@ -120,13 +122,13 @@ class NamesFromTheRecords(unittest.TestCase):
     """A list of the tools beside `TOOLS` drifts from it: each one is held to the records."""
 
     def test_the_model_keys_know_exactly_the_recorded_tools(self):
-        self.assertEqual(set(gate.MODEL_TOOLS), {t.name for t in agents.TOOLS})
+        self.assertEqual(set(profile_checks.MODEL_TOOLS), {t.name for t in agents.TOOLS})
 
     def test_a_worktree_links_every_recorded_skill_folder(self):
         self.assertTrue({t.skills for t in agents.TOOLS} <= set(profiles.WORKTREE_LINKED))
 
     def test_the_tool_folders_a_change_check_leaves_out_are_the_records(self):
-        self.assertEqual(set(gate.TOOL_FOLDERS), {"/" + t.skills.split("/")[0] + "/" for t in agents.TOOLS})
+        self.assertEqual(set(commands.TOOL_FOLDERS), {"/" + t.skills.split("/")[0] + "/" for t in agents.TOOLS})
 
 
 if __name__ == "__main__":

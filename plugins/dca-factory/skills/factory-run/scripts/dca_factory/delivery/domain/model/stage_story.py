@@ -784,3 +784,48 @@ class SuiteCommands(Value):
 
     declared: typing.Tuple[typing.Tuple[CommandKey, typing.Optional[Detail]], ...]
     required: typing.FrozenSet[CommandKey]
+
+
+@dataclasses.dataclass(frozen=True)
+class Snapshot(Value):
+    """The commit's index against the working tree: why no tree could be written, the tree, what differs from it
+    outside the pipeline's own and the tools' folders, and how many files the pipeline wrote itself."""
+
+    refused: typing.Optional[Detail]
+    tree: Detail
+    drift: typing.Tuple[Detail, ...]
+    left: Count
+
+
+@dataclasses.dataclass(frozen=True)
+class ParityScenario(Value):
+    """A scenario of a parity contract: its id, its title — what binds it to a test — and whether every
+    configuration has to prove it."""
+
+    id: Detail
+    title: Detail
+    always: Presence
+
+
+@dataclasses.dataclass(frozen=True)
+class ImplementationReports(Value):
+    """One implementation's reports: its name, the glob, how many reports match, the newest, and the outcome each
+    test name has in them."""
+
+    name: Detail
+    glob: Detail
+    reports: Count
+    newest: Detail
+    outcomes: typing.Tuple[typing.Tuple[Detail, Detail], ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class ParityFacts(Value):
+    """A parity config: its file, the contract's file and digest, its scenarios, and each implementation's
+    reports."""
+
+    config: Place
+    scenarios_file: Detail
+    digest: Detail
+    scenarios: typing.Tuple[ParityScenario, ...]
+    implementations: typing.Tuple[ImplementationReports, ...]

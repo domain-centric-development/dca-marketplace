@@ -53,7 +53,8 @@ from .delivery.adapter.outgoing.files.owned_files import write_story_fields
 from .delivery.adapter.outgoing.files.journal_files import journal_path, journal_writer
 from .spec.api import (
     context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
-from .gate import contract_of, criteria_of, HANDOVER_BUDGET, in_places, people_places, stale_red_proof, story_journals
+from .gate import contract_of, criteria_of, HANDOVER_BUDGET, stale_red_proof, story_journals
+from .delivery.adapter.outgoing.git.change import in_places, people_places
 from .delivery.adapter.outgoing.build.commands import run as run_command, tail
 from .delivery.adapter.outgoing.git.integration import (
     CONFLICT_MARKER, integration_target, lost_text, main_tests_lost, merge_target, rebase_tests_baseline,
