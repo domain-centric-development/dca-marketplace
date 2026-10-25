@@ -62,11 +62,6 @@ def stage_open(runs: str, story_id: str, stage: str) -> bool:
     return last == "stage-start"
 
 
-#: Processes a model key may name beside the stages: the shared builder and verifier, the reviewers, and a person's
-#: request worked headless (WP-91).
-MODEL_PROCESSES = ("builder", "verifier", "review", "request")
-
-
 def verdict_in(text: str) -> str:
     for line in text.splitlines():
         if line.strip().lower().startswith("verdict:"):

@@ -233,6 +233,16 @@ deterministic check that lets the next stage start; a round is one more pass aft
 
 **Type:** Concept
 
+### Check · Finding (Finding) · Stage evidence (StageEvidence)
+
+**Definition:** A gate is a set of checks, each a domain service over the story as the gate reads it (`StageStory`)
+— `StoryChecks`, `ProfileChecks`, `BacklogChecks`. A check returns findings: passed, failed, skipped (unproven),
+noted, or waiting for a person — and what it says, for a refusal the stage's next instruction. What a check alone
+needs and only reads — the profile, the run folder, the epic, the context map — it asks the domain gateway
+`StageEvidence`.
+
+**Type:** Concept
+
 ### Evidence · Journal
 
 **Definition:** What a run leaves to prove it: the reports and snapshots, and the story's journal — one line per event,

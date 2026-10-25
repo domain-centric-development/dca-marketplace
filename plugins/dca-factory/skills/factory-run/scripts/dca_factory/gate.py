@@ -81,20 +81,18 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, DOC_BUDGET_BYTES, EPIC_FIELDS, GateError, HAPPY_MARK,
-    INSTRUCTION_FILES, JOURNEY_ORDER, layout_hint, MAPPING_ROW, MAX_ROUNDS, order_for, SELECTOR, SHARED_WINDOWS,
+    ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, MAPPING_ROW, order_for, SELECTOR, SHARED_WINDOWS,
     STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, TESTED_KINDS, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import (
-    append_finding_rows, confirmed_defects, findings_cells, findings_path, findings_rows, open_findings,
+    append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
     PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
-from .delivery.adapter.outgoing.files.epic_files import epic_dependency_problem
 from .delivery.adapter.outgoing.files.story_layout import (
-    delivered_on, duplicate_ids, EPIC_FILE, epic_folder, file_digest, find_story, is_delivered, story_digest,
+    duplicate_ids, file_digest, find_story, is_delivered, story_digest,
     story_files, story_folder, story_id_of, story_kind)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_dir, evidence_rel, factory_home, findings_rel, FLAKY_FINDINGS, HOME_VARIABLE, in_worktree,
     JOURNAL, location, METHOD_PROFILE, place, PLACES, PLACES_REL, PROFILE_FILE, read_flat, read_profile,
-    resolve_profile, runs_top, set_places, shown, unknown_profile_keys)
+    resolve_profile, runs_top, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git, git_blob, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
     ANSWER_FIELDS, answered_decisions, decisions_store, NOTHING, project_decisions_rel, read_decisions, record_path,
@@ -118,31 +116,20 @@ from .delivery.adapter.outgoing.files.story_record import INVARIANT_BREAKS
 from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open, record_judge_signal
 from .delivery.adapter.outgoing.files.snapshots import (
     git_tree, listed_files, NOT_OBSERVED, record_base, record_changes, snapshot_reason, tree_changes)
-from .delivery.adapter.outgoing.files.owned_files import owned_changes, owned_end, run_owned, write_answered
+from .delivery.adapter.outgoing.files.owned_files import owned_end, run_owned, write_answered
 from .delivery.adapter.outgoing.files.run_marks import (
-    backlog_digest, current_stage_files, last_ended, MODEL_PROCESSES, OWNED_CHANGED, stage_open, step_open,
+    backlog_digest, current_stage_files, last_ended, stage_open, step_open,
     STORY_DIGEST, verdict_in, window_open, write_mark)
 from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned, write_story_fields
 from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
 from .delivery.adapter.outgoing.files.decision_record_files import (
     ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, answer_sentence)
 from .delivery.application.shared.front import is_acceptance
-
-
-def check_owned(result, runs, story_id, story_path):
-    """Inside a window, and after one that changed what is the person's, the gate refuses."""
-    marked = os.path.join(evidence_dir(runs, story_id), OWNED_CHANGED)
-    if os.path.isfile(marked):
-        parts = [line.split(":", 1)[1].strip() for line in read_text(marked).splitlines() if line.startswith("changed:")]
-        result.fail("owned", f"{', '.join(parts)} changed under a stage — a person looks at it and confirms "
-                             f"(`factory-cli.py --owned-confirm {story_id}`) before the story runs on")
-        return
-    changed = owned_changes(runs, story_id, story_path)
-    if changed:
-        result.fail("owned", f"{', '.join(changed)} changed while this stage runs — the story and the answers are the "
-                             f"person's; a stage writes its question into a record, never an answer, and never the story")
-    elif changed is not None:
-        result.ok("owned", "the story and the answers are as the stage found them")
+from .delivery.domain.model.verdict import FindingState
+from .delivery.domain.service.backlog_checks import BacklogChecks
+from .delivery.domain.service.profile_checks import MODEL_TOOLS, ProfileChecks  # noqa: F401 — MODEL_TOOLS: read by the verify suite
+from .delivery.domain.service.story_checks import StoryChecks
+from .delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, publishes_of, split_list
 
 
 def story_ids(epics):
@@ -271,64 +258,9 @@ def criteria_of(story_path, body, front=None):
     return found
 
 
-def happy_paths(body):
-    """The keys marked `(happy path)` under the acceptance criteria."""
-    section = body.split("## Acceptance criteria", 1)[-1].split("\n## ", 1)[0] if "## Acceptance criteria" in body else ""
-    return [m.group(1) for m in (HAPPY_MARK.match(l.strip()) for l in section.splitlines()) if m]
-
-
 def contract_of(profile):
     declared = str(profile.get("contract", "")).strip()
     return int(declared) if declared.isdigit() else CONTRACT
-
-
-#: A finding row a task closes: `<story>#<n>`, the row's number in that story's findings.md.
-CLOSES_ROW = re.compile(r"^([A-Za-z0-9][\w.-]*)#(\d+)$")
-
-
-def closes_of(front):
-    """The finding rows a task names under `closes:` — a list, or one line of comma-separated rows."""
-    value = front.get("closes") or []
-    items = value if isinstance(value, list) else str(value).strip("[] ").split(",")
-    return [str(item).strip() for item in items if str(item).strip()]
-
-
-def closed_rows(row_id):
-    """(findings file, row) for `<story>#<n>`, or `<name>#<n>` of a project finding file (`<product>/findings/<name>.md`,
-    where no story has that id) — the file None where neither or the row is not there."""
-    match = CLOSES_ROW.match(row_id)
-    if not match:
-        return None, None
-    try:
-        path = findings_path(find_story(place("epics"), match.group(1)))
-    except GateError:
-        path = project_findings_path(match.group(1))
-    row = next((r for r in findings_rows(path) if r[0] == match.group(2)), None)
-    return (path if row else None), row
-
-
-def check_task(result, story_path, front, body):
-    """WP-106: a task changes nothing an actor sees — so it has no criterion (a criterion is behaviour, and behaviour
-    is a story's, with a red test), and the finding rows it closes are there and open."""
-    criteria = criteria_of(story_path, body, front)
-    if criteria:
-        result.fail("task", f"{shown(story_path)}: a `kind: task` has acceptance criteria ({', '.join(key for key, _text in criteria)}) "
-                            f"— a criterion is behaviour; behaviour that changes is a story with a red test")
-        return
-    wrong = []
-    for row_id in closes_of(front):
-        path, row = closed_rows(row_id)
-        if not path:
-            wrong.append(f"{row_id} (no such finding row)")
-        elif row[6] != "open":
-            wrong.append(f"{row_id} ({row[6]} already)")
-    if wrong:
-        result.fail("task", f"`closes:` names rows a task cannot close: {'; '.join(wrong)} — `<story>#<n>`, an open row "
-                            f"of that story's findings.md, or `<name>#<n>` of a project finding file")
-    else:
-        closes = closes_of(front)
-        result.ok("task", "a task: no criterion, the existing suite is its evidence"
-                          + (f"; closes {', '.join(closes)}" if closes else ""))
 
 
 def check_task_suites(result, profile, cwd, owner=None):
@@ -369,38 +301,6 @@ def close_findings(result, front):
         closed.append(row_id)
     if closed:
         result.ok("findings", f"closed {', '.join(closed)} — set to done in their findings.md")
-
-
-def check_happy_path(result, story_path, front, body, profile):
-    """Contract 9: exactly one happy path per story, marked in the backlog — never picked by a plan. A
-    journey has none: it is a guard, not acceptance, and it names the stories it depends on."""
-    if story_kind(front) == "journey":
-        needs = front.get("depends_on")
-        if isinstance(needs, str):
-            needs = [n.strip() for n in needs.strip("[] ").split(",") if n.strip()]
-        if not needs:
-            result.fail("journey", f"{story_path}: a `kind: journey` item names the stories whose steps it walks "
-                                   f"under `depends_on:` — it becomes ready when they are delivered")
-        else:
-            result.ok("journey", f"journey over {', '.join(needs) if isinstance(needs, list) else needs}")
-        return
-    if story_kind(front) == "task":
-        check_task(result, story_path, front, body)
-        return
-    if story_kind(front) == "adopt":
-        result.skip("happy-path", "an adopted story tests nothing new — the levels are the existing tests'")
-        return
-    if contract_of(profile) < 9:
-        result.skip("happy-path", f"the profile declares contract {contract_of(profile)} — the happy-path mark "
-                                  f"is contract 9's")
-        return
-    marked = happy_paths(body)
-    if len(marked) == 1:
-        result.ok("happy-path", f"happy path: {marked[0]}")
-    else:
-        result.fail("happy-path", f"{story_path}: {len(marked)} scenarios marked `(happy path)` — exactly one per "
-                                  f"story shows its value and gets the end-to-end test; mark it in the backlog "
-                                  f"(`#### <key> (happy path)`)" + (f": {', '.join(marked)}" if marked else ""))
 
 
 TITLE_LINE = re.compile(r"^Title:\s*(\S.*?)\s*$")
@@ -1182,8 +1082,6 @@ def story_signals(runs, story_id, records, body):
                 corrections=corrections)
 
 
-
-
 def check_invariant_breaks(result, profile, cwd, runs, story_id, mapping):
     """WP-148 A: every rule the plan names is shown to be guarded by its unit test. Its test seen red before the
     build proves it as a criterion's red run does; one green already — the rule exists — needs its break, one change
@@ -1242,194 +1140,21 @@ def check_invariant_breaks(result, profile, cwd, runs, story_id, mapping):
                                             + "; ".join(m for st, c, m in probe.entries if sel in m)[:300])
 
 
-def epic_of(story_path, front, epics):
-    named = front.get("epic")
-    if isinstance(named, list) or not named:
-        raise GateError(f"{story_path}: front matter has no `epic:`")
-    for candidate in (
-        os.path.join(epic_folder(story_path), EPIC_FILE),
-        os.path.join(epics, str(named), EPIC_FILE),
-    ):
-        if os.path.isfile(candidate):
-            return candidate, str(named)
-    raise GateError(
-        f"{story_path}: epic {named!r} has no epic.md — create "
-        f"{os.path.join(epics, str(named), 'epic.md')}"
-    )
+def take(result, findings):
+    """A domain check's findings into the result, as the gate reports them."""
+    for finding in findings:
+        getattr(result, "ok" if finding.state is FindingState.PASS else finding.state.value)(finding.check.value,
+                                                                                           finding.said.value)
 
 
 def check_contract(result, profile):
-    """The profile may declare which gate contract it was written for.
-
-    Undeclared is the normal case and no finding: a profile with today's keys is what the template
-    writes. A *higher* number than this gate knows is a refusal — the project has keys this script
-    would ignore, and ignoring a key silently is how a check disappears without anyone noticing.
-    A key outside the profile's schema (`PROFILE_KEYS`, `PROFILE_FAMILIES`) is a note, named with the nearest
-    known key: nobody reads it, which is worth knowing and no reason to stop a story.
-    """
-    for key, near in unknown_profile_keys(profile):
-        result.note("profile", f"`{key}:` is no key the pipeline reads — ignored"
-                               + (f"; did you mean `{near}:`?" if near else ""))
-    declared = str(profile.get("contract", "")).strip()
-    if not declared:
-        result.note("contract", f"profile declares no `contract:` — read as {CONTRACT} "
-                                f"(gate {VERSION})")
-        return
-    if not declared.isdigit():
-        result.fail("contract", f"profile's `contract: {declared}` is not a number")
-        return
-    if int(declared) > CONTRACT:
-        result.fail(
-            "contract",
-            f"the profile is written for gate contract {declared} and this gate implements "
-            f"{CONTRACT} (gate {VERSION}) — run `factory.sh update` before trusting a run, "
-            f"because this script would ignore whatever the newer contract added",
-        )
-    elif int(declared) < CONTRACT:
-        result.note(
-            "contract",
-            f"the profile declares contract {declared} and this gate implements {CONTRACT} "
-            f"(gate {VERSION}) — still read, and worth bringing up to date",
-        )
-    else:
-        result.ok("contract", f"profile and gate agree on contract {CONTRACT} (gate {VERSION})")
-
-
-def check_status(result, story_path, front):
-    """A story a human has not released is not a story the pipeline builds. A story
-    without the field at all is not blocked — the project may not use the field."""
-    status = str(front.get("status", "")).strip().lower()
-    if not status:
-        result.skip("approved", f"{story_path}: no `status:` field — nothing to release")
-    elif status == "approved":
-        result.ok("approved", "story is approved")
-    elif status == "adopted":
-        result.ok("approved", "story is adopted — it describes behaviour the project already has; adopted, never built")
-    elif status == "delivered":
-        result.ok("approved", f"story is delivered ({delivered_on(front) or 'no date'}) — checked, nothing runs")
-    else:
-        result.fail(
-            "approved",
-            f"{story_path}: status is {status!r} — a human releases the story "
-            f"(`status: approved`) before code is written. The most expensive mistake is "
-            f"well-built wrong code.",
-        )
-
-
-def check_rounds(result, runs, story_id):
-    """The repeat counter lives in a file, so an in-session run cannot lose count and a
-    resumed run sees the same number."""
-    path = os.path.join(evidence_dir(runs, story_id), ".rounds")
-    if not os.path.isfile(path):
-        return
-    try:
-        rounds = int(read_text(path).strip() or "0")
-    except (ValueError, GateError):
-        result.fail("rounds", f"{path}: not a number")
-        return
-    if rounds >= MAX_ROUNDS:
-        result.fail(
-            "rounds",
-            f"{path}: {rounds} rounds without convergence — stop and escalate. A loop that "
-            f"finds the same thing three times finds it the fourth time too.",
-        )
-    else:
-        result.ok("rounds", f"round {rounds + 1} of at most {MAX_ROUNDS}")
-
-
-def find_first(cwd, candidates):
-    for candidate in candidates:
-        if os.path.isfile(os.path.join(cwd, candidate)):
-            return candidate
-    return None
-
-
-def normal_name(name):
-    name = name.strip().strip("`*_\"' ").lower()
-    return re.sub(r"\s+(bounded\s+)?context$", "", name).strip()
-
-
-def map_names(text):
-    """The names a context map gives: whole table cells, headings, bold names, list items and the nodes of a
-    Mermaid diagram. A context is on the map when it is one of them — not when its name is part of another's
-    (`order` inside `order-fulfilment`) or of a sentence."""
-    names, in_diagram = set(), False
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_diagram = stripped.lower().startswith("```mermaid") and not in_diagram
-            continue
-        if in_diagram:
-            names |= {normal_name(t) for t in re.findall(r"[\w-]+", stripped)}
-            names |= {normal_name(t) for t in re.findall(r"[\[(\"]([^\])\"]+)[\])\"]", stripped)}
-            continue
-        if stripped.startswith("|"):
-            names |= {normal_name(cell) for cell in stripped.strip("|").split("|")}
-        elif stripped.startswith("#"):
-            names.add(normal_name(stripped.lstrip("#")))
-        elif re.match(r"[-*+]\s", stripped):
-            names.add(normal_name(re.split(r"\s[—–:-]\s|:", stripped[2:], maxsplit=1)[0]))
-        names |= {normal_name(m) for m in re.findall(r"\*\*([^*]+)\*\*", stripped)}
-    return names - {""}
-
-
-def check_context_map(result, cwd, profile, context):
-    """A story names the context it changes; that context must be on the map. The designed map
-    (`domain:`) is read first, so a story for a context that is designed but not built yet passes;
-    then the one generated from the code (`contextMap:`), then the conventional places. A project
-    without a map is not blocked — it has nothing to contradict yet."""
-    named_domain = str(profile.get("domain", "")).strip()
-    if named_domain and not os.path.isfile(os.path.join(cwd, named_domain)):
-        result.fail("context-map", f"the profile's `domain: {named_domain}` names no file")
-        return
-    candidates = [location(profile, "domain")]
-    named = profile.get("contextMap")
-    if named and os.path.isfile(os.path.join(cwd, named)):
-        candidates.append(named)
-    path = find_first(cwd, candidates + list(CONTEXT_MAP_CANDIDATES))
-    if not path:
-        result.skip("context-map", "the project keeps no context map")
-        return
-    if normal_name(context) in map_names(read_text(os.path.join(cwd, path))):
-        result.ok("context-map", f"context {context!r} is on {path}")
-    else:
-        result.fail(
-            "context-map",
-            f"{path}: context {context!r} does not appear — a story either changes a context that "
-            f"exists on the map, or it is a scoping question, not a story",
-        )
-
-
-MODEL_TOOLS = ("claude", "codex", "opencode")
+    """The profile's contract and its unknown keys (`ProfileChecks.contract`)."""
+    take(result, ProfileChecks.contract(StageEvidenceFiles(".", "", "", profile)))
 
 
 def check_models(result, profile):
-    """`model.<tool>.<stage>` and `model.<tool>`: the model a tool runs a stage on. The key names the tool
-    because model names are the tool's: a profile is checked in and shared, and an unqualified
-    `model.tidy: <a model name>` would break a colleague's run with another tool at the first stage it names.
-    So the unqualified forms are refused, and so is a key whose tool or stage is misspelled — an
-    ignored key is a cost saving nobody gets while everyone believes in it."""
-    keys = [key for key in profile if key == "model" or key.startswith("model.")]
-    if not keys:
-        return
-    bad = []
-    for key in keys:
-        parts = key.split(".")
-        if len(parts) == 1 or (len(parts) == 2 and parts[1] in STAGE_ORDER):
-            bad.append(f"`{key}` names no tool — write `model.<tool>.<stage>` or `model.<tool>` "
-                       f"({', '.join(MODEL_TOOLS)})")
-        elif parts[1] not in MODEL_TOOLS:
-            bad.append(f"`{key}`: no tool `{parts[1]}` ({', '.join(MODEL_TOOLS)})")
-        elif len(parts) == 3 and parts[2] not in STAGE_ORDER + MODEL_PROCESSES:
-            bad.append(f"`{key}`: no stage `{parts[2]}` ({', '.join(STAGE_ORDER + MODEL_PROCESSES)})")
-        elif len(parts) > 3:
-            bad.append(f"`{key}` is not `model.<tool>.<stage>`")
-        elif not str(profile[key]).strip():
-            bad.append(f"`{key}` has no value")
-    if bad:
-        result.fail("models", "; ".join(bad))
-    else:
-        result.ok("models", f"{len(keys)} model key(s), each bound to a tool")
+    """The profile's model keys, each bound to a tool (`ProfileChecks.models`)."""
+    take(result, ProfileChecks.models(StageEvidenceFiles(".", "", "", profile)))
 
 
 #: Where the method keeps the project's conventions; `verify_command:` there is the architecture command the
@@ -1442,25 +1167,6 @@ def check_project(result, cwd, profile):
     for verdict in checked.verdicts:
         getattr(result, verdict.state)(verdict.part, verdict.said)
     return checked.complete
-
-
-def check_instruction_size(result, cwd):
-    """A note, not a check: instructions past a tool's document budget are truncated silently,
-    so a run can be missing half its rules without anything saying so."""
-    for name in INSTRUCTION_FILES:
-        path = os.path.join(cwd, name)
-        if not os.path.isfile(path):
-            continue
-        size = os.path.getsize(path)
-        if size > DOC_BUDGET_BYTES:
-            result.skip(
-                "instruction-size",
-                f"{name} is {size} bytes, past the {DOC_BUDGET_BYTES}-byte budget some tools load "
-                f"— the rest is truncated silently; move detail into referenced files",
-            )
-        else:
-            result.ok("instruction-size", f"{name} is {size} bytes, within a tool's budget")
-        return
 
 
 def glossary_files(cwd, profile):
@@ -1589,17 +1295,15 @@ def check_backlog(cwd, epics, profile, only=None):
                 result.note("approved", f"{path}: a draft — released with `status: approved` once it is written")
             elif status and status not in ("approved", "adopted"):
                 result.fail("approved", f"{path}: status {status!r} is none of draft, approved, adopted, superseded")
-            context = str(front.get("context", "")).strip()
-            if not context:
-                result.fail("story", f"{path}: front matter has no `context:` — a story names the bounded "
-                                     f"context it changes")
-            criteria = criteria_of(path, body, front)
-            if context:
-                result.ok("story", f"{label} in context {context} with {len(criteria)} criterion(s)")
-                check_context_map(result, cwd, profile, context)
-            check_epic(result, path, front, epics)
-            check_outcome_named(result, profile, path, front, epics)
-            check_happy_path(result, path, front, body, profile)
+            story = stage_story(label, path, front, body, criteria_of(path, body, front))
+            evidence = StageEvidenceFiles(cwd, "", epics, profile)
+            contract = ProfileChecks.contract_number(evidence)
+            take(result, StoryChecks.context(story))
+            if story.context.value:
+                take(result, BacklogChecks.context_map(story, evidence))
+            take(result, BacklogChecks.epic(story, evidence))
+            take(result, BacklogChecks.outcome(story, contract, evidence))
+            take(result, StoryChecks.happy_path(story, contract, evidence))
         except GateError as error:
             result.fail("story", str(error))
         checked += 1
@@ -1619,32 +1323,6 @@ def check_backlog(cwd, epics, profile, only=None):
     return 1 if refused else 0
 
 
-def check_epic(result, story_path, front, epics):
-    epic_path, epic_name = epic_of(story_path, front, epics)
-    epic_front, _ = read_front_matter(epic_path)
-    # A key with no value parses as an empty list, and `str([])` is "[]" — non-empty, so the field
-    # would count as filled. A mandatory field is a sentence, so only a non-empty string counts.
-    missing = [f for f in EPIC_FIELDS
-               if not (isinstance(epic_front.get(f), str) and epic_front[f].strip())]
-    if missing:
-        result.fail(
-            "epic",
-            f"{epic_path}: epic {epic_name!r} is incomplete — missing "
-            f"{', '.join(missing)}. An epic states why it exists (intent), what "
-            f"changes for the user (goal), which outcome event measures it (metric) "
-            f"and who answers domain questions (domain_contact).",
-        )
-    elif str(epic_front.get("discovery") or "").strip() and \
-            not os.path.isfile(str(epic_front["discovery"]).strip().strip("`")):
-        result.fail("epic", f"{epic_path}: `discovery: {str(epic_front['discovery']).strip()}` names a report that is "
-                            f"not there — the epic links the discovery it came from, or no `discovery:` line")
-    else:
-        result.ok("epic", f"epic {epic_name!r} complete ({', '.join(EPIC_FIELDS)})")
-    problem = epic_dependency_problem(epics, epic_name)
-    if problem:
-        result.fail("epic", f"{epic_path}: {problem}")
-
-
 #: A source file of the project's code: the gate reads no profile key for where the code lives, so it reads every
 #: file with a code extension outside the build's and the tools' folders and outside the tests.
 CODE_FILE = re.compile(r"\.(java|kt|scala|groovy|cs|fs|py|ts|tsx|js|jsx|mjs|go|rb|php|rs|swift)$")
@@ -1659,13 +1337,6 @@ TEST_DIR = re.compile(r"(?i:^(tests?|specs?|__tests__)$|^tests?[-_.]|[-_.]tests?
 IMPORT_LINE = re.compile(r"^\s*(?:import|using|package|namespace|from\s+\S+\s+import)\b.*$", re.M)
 
 
-def publishes_of(front):
-    """The outcome events a story's `publishes:` names — one, or a list."""
-    value = front.get("publishes")
-    items = value if isinstance(value, list) else split_list(value)
-    return [str(item).strip().strip("`") for item in items if str(item).strip().strip("`")]
-
-
 def production_files(cwd):
     found = []
     skipped = SKIP_DIRS | {runs_top()}
@@ -1675,25 +1346,6 @@ def production_files(cwd):
             if CODE_FILE.search(name) and not TEST_FILE.search(name):
                 found.append(os.path.relpath(os.path.join(root, name), cwd).replace(os.sep, "/"))
     return found
-
-
-def check_outcome_named(result, profile, story_path, front, epics):
-    """Contract 14 (WP-84 V1): the event a story declares under `publishes:` is the epic's outcome event — a word of
-    its `metric:`. Two names for one outcome are found here, before a line of code is written."""
-    if story_kind(front) != "story" or contract_of(profile) < 14:
-        return
-    events = publishes_of(front)
-    if not events:
-        return
-    epic_path, epic_name = epic_of(story_path, front, epics)
-    metric = str(read_front_matter(epic_path)[0].get("metric", ""))
-    foreign = [e for e in events if not re.search(rf"(?<!\w){re.escape(e)}(?!\w)", metric)]
-    if foreign:
-        result.fail("outcome", f"the story publishes {', '.join(foreign)}, which epic {epic_name!r}'s `metric:` does not "
-                               f"name ({metric.strip() or 'empty'}) — the story names the epic's outcome event as the "
-                               f"epic does, or the epic's metric is corrected first")
-    else:
-        result.ok("outcome", f"the story publishes {', '.join(events)}, the outcome event epic {epic_name!r} is measured by")
 
 
 def check_outcome_raised(result, profile, cwd, runs, story_id, front):
@@ -3039,10 +2691,6 @@ def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None):
 CHANGE_CHECKS = ("compile", "test", "architecture", "format")
 
 
-def split_list(value):
-    return [part for part in re.split(r"[\s,]+", str(value or "").strip()) if part]
-
-
 TOOL_FOLDERS = ("/.claude/", "/.codex/", "/.opencode/")
 
 
@@ -4276,6 +3924,9 @@ class GateRun:
         self.mapping, self.located = {}, {}
         self.__dict__.update(fields)
         self.kind = story_kind(self.front)
+        self.evidence = StageEvidenceFiles(self.cwd, self.runs, self.args.epics, self.profile)
+        self.story = stage_story(self.story_id, self.story_path, self.front, self.body, self.criteria)
+        self.contract = ProfileChecks.contract_number(self.evidence)
         # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
         self.expected = "red" if self.stage.red and self.kind == "story" else "green"
 
@@ -4331,36 +3982,32 @@ def run_checks(run):
 
 @check("story")
 def _story(run):
-    if not str(run.front.get("context", "")).strip():
-        run.result.fail("story", f"{run.story_path}: front matter has no `context:` — a story names the bounded "
-                                 f"context it changes")
-    else:
-        run.result.ok("story", f"{run.story_id} in context {run.front['context']} with {len(run.criteria)} criterion(s)")
+    take(run.result, StoryChecks.context(run.story))
 
 
 @check("contract")
 def _contract(run):
-    check_contract(run.result, run.profile)
+    take(run.result, ProfileChecks.contract(run.evidence))
 
 
 @check("status")
 def _status(run):
-    check_status(run.result, run.story_path, run.front)
+    take(run.result, StoryChecks.status(run.story))
 
 
 @check("epic")
 def _epic(run):
-    check_epic(run.result, run.story_path, run.front, run.args.epics)
+    take(run.result, BacklogChecks.epic(run.story, run.evidence))
 
 
 @check("outcome", stages=("plan",), kinds=TESTED_KINDS)
 def _outcome_named(run):
-    check_outcome_named(run.result, run.profile, run.story_path, run.front, run.args.epics)
+    take(run.result, BacklogChecks.outcome(run.story, run.contract, run.evidence))
 
 
 @check("rounds")
 def _rounds(run):
-    check_rounds(run.result, run.runs, run.story_id)
+    take(run.result, StoryChecks.rounds(run.story, run.evidence))
 
 
 @check("suites")
@@ -4383,11 +4030,11 @@ def _decisions(run):
 
 @check("plan", stages=("plan",))
 def _plan(run):
-    check_happy_path(run.result, run.story_path, run.front, run.body, run.profile)
-    check_context_map(run.result, run.cwd, run.profile, str(run.front.get("context", "")).strip())
-    check_instruction_size(run.result, run.cwd)
+    take(run.result, StoryChecks.happy_path(run.story, run.contract, run.evidence))
+    take(run.result, BacklogChecks.context_map(run.story, run.evidence))
+    take(run.result, ProfileChecks.instruction_size(run.evidence))
     check_project(run.result, run.cwd, run.profile)
-    check_models(run.result, run.profile)
+    take(run.result, ProfileChecks.models(run.evidence))
 
 
 @check("document", stages=("document",))
@@ -4406,7 +4053,7 @@ def _pipeline(run):
 
 @check("owned")
 def _owned(run):
-    check_owned(run.result, run.runs, run.story_id, run.story_path)
+    take(run.result, StoryChecks.owned(run.story, run.evidence))
 
 
 @check("adopt", stages=("adopt",))

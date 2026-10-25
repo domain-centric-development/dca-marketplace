@@ -23,26 +23,6 @@ from .delivery.domain.model.stage import PIPELINE, StoryKind, TESTED_KINDS as DO
 GateError = MarkdownError
 
 
-EPIC_FIELDS = ("intent", "goal", "metric", "domain_contact")
-
-
-
-#: Codex stops loading project documents at 32 KiB by default and truncates silently; other tools
-#: have comparable budgets. Reported as a note, never a failure — the size is not this story's fault.
-DOC_BUDGET_BYTES = 32 * 1024
-
-
-CONTEXT_MAP_CANDIDATES = (
-    "product/domain.md",
-    "docs/context-map.md",
-    "docs/architecture/context-map.md",
-    "context-map.md",
-)
-
-
-INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md")
-
-
 CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)(?:\s*\(happy path\))?\s*:\s*(\S.*)$")
 
 
@@ -71,8 +51,6 @@ CONTRACT = 26
 
 
 VERSION = "0.94.0"
-
-
 
 
 # --- what is the person's: the story and the answers (WP-94) --------------------------------------------------

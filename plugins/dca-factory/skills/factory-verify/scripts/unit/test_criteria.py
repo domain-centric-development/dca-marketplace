@@ -5,6 +5,7 @@ import unittest
 
 from support import contract, project, write
 from dca_factory import gate
+from dca_factory.delivery.adapter.outgoing.files import stage_evidence_files
 
 
 def criteria(section):
@@ -83,7 +84,7 @@ class HappyPathAndTitles(unittest.TestCase):
             "- When I look\n- Then it shows\n- shows-nothing: nothing\n\n## Notes\n- other (happy path): no\n")
 
     def test_only_the_criteria_section_marks_a_happy_path(self):
-        self.assertEqual(gate.happy_paths(self.BODY), ["shows-the-thing"])
+        self.assertEqual(stage_evidence_files.happy_paths(self.BODY), ["shows-the-thing"])
 
     def test_a_title_line_names_the_scenario_else_the_key_in_words(self):
         self.assertEqual(gate.scenario_titles(self.BODY),
