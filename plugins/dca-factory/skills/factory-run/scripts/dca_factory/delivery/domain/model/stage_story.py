@@ -741,3 +741,46 @@ class RedLedger(Value):
     changed_on: typing.Tuple[RecordId, ...]
     built_before: Presence
     moved: typing.FrozenSet[Selector]
+
+
+@dataclasses.dataclass(frozen=True)
+class CommandRun(Value):
+    """One run of a profile command: the command, its exit code, the end of its output, and where it came from when
+    the gate did not start it."""
+
+    command: Detail
+    code: Count
+    output: Detail
+    reused: Detail
+
+
+@dataclasses.dataclass(frozen=True)
+class Retried(Value):
+    """A red test outside the story, run again alone: the test and the invocation that ran it."""
+
+    test: Detail
+    alone: Detail
+
+
+@dataclasses.dataclass(frozen=True)
+class SuiteRun(Value):
+    """A test command run whole: its key, the run, how many cases ran and failed by its reports (after a retry of
+    red tests outside the story), the ones green alone (flaky), the ones red again, and whether its exit code is
+    the only evidence the profile allows."""
+
+    key: Detail
+    run: CommandRun
+    executed: Count
+    failed: Count
+    flaky: typing.Tuple[Retried, ...]
+    still: typing.Tuple[Retried, ...]
+    exit_code_only: Presence
+
+
+@dataclasses.dataclass(frozen=True)
+class SuiteCommands(Value):
+    """The test commands the profile declares and the ones its policy requires: every key a run may need, with its
+    command where the profile names one."""
+
+    declared: typing.Tuple[typing.Tuple[CommandKey, typing.Optional[Detail]], ...]
+    required: typing.FrozenSet[CommandKey]

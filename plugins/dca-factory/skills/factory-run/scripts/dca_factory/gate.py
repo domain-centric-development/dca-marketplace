@@ -98,7 +98,7 @@ from .infrastructure.description import check_description
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .delivery.adapter.outgoing.build.test_reports import (
-    display_name_of, fill, outcome_for, read_scenarios, reported_names, unescape_literal)
+    display_name_of, read_scenarios, reported_names, unescape_literal)
 from .spec.api import (
     derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
 from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED
@@ -130,20 +130,24 @@ from .delivery.domain.service.spec_checks import SpecChecks
 from .delivery.domain.service.delivery_checks import DeliveryChecks
 from .delivery.domain.service.integration_checks import IntegrationChecks
 from .delivery.domain.service.test_verdicts import BreakProof, TestVerdicts
+from .delivery.domain.service.suite_checks import red as red_finding, SuiteChecks
+from .delivery.domain.model.verdict import CheckName, Said
+from .delivery.adapter.outgoing.build.suite_runs import command_run, suite_commands, suite_run
 from .delivery.domain.model.stage_story import Expectation
 from .delivery.adapter.outgoing.build.test_runs import red_ledger, run_tests
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
 from .delivery.adapter.outgoing.files.test_files import locate_tests
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, split_list
 from .delivery.adapter.outgoing.files.test_files import read_mapping
-from .delivery.adapter.outgoing.files.design_files import BREAK_IGNORE, STEP, locate_selector, read_invariant_rows
+from .delivery.adapter.outgoing.files.design_files import BREAK_IGNORE, STEP, read_invariant_rows
 from .delivery.adapter.outgoing.files.kept_files import RED_TREE, read_red_digests, red_ledger_path, red_tree, tidy_moves, unproven_tests
 from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
 from .delivery.adapter.outgoing.spec.story_spec_files import moved_tests, story_spec
-from .delivery.adapter.outgoing.files.delivery_files import SKIP_DIRS, TEST_DIR, TEST_FILE
+from .delivery.adapter.outgoing.files.delivery_files import TEST_DIR, TEST_FILE
 from .delivery.adapter.outgoing.git.integration import integration_target
 from .delivery.adapter.outgoing.build import commands
-from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, TOOL_FOLDERS, command_for, open_suites_record, recorded_run, run, tail, test_command_keys
+from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, TOOL_FOLDERS, command_for, open_suites_record, run, tail, test_command_keys
+from .delivery.adapter.outgoing.build.suite_runs import SuiteOwner, test_files
 
 
 def story_ids(epics):
@@ -277,13 +281,12 @@ def contract_of(profile):
 def check_task_suites(result, profile, cwd, owner=None):
     """At a task's build and tidy gates: every test command the profile declares, run whole — nothing a test was
     written for, so everything the stories before delivered has to hold."""
-    keys = [key for key in test_command_keys(profile) if profile.get(key)]
-    if not keys:
-        result.fail("suite", "a task proves itself on the existing suite, and the stack profile declares no test "
-                             "command — declare `test:` (and its siblings)")
+    found = SuiteChecks.task(suite_commands(profile))
+    take(result, found)
+    if found:
         return
     seen = set()
-    for key in keys:
+    for key in [key for key in test_command_keys(profile) if profile.get(key)]:
         if profile[key] in seen:
             continue
         seen.add(profile[key])
@@ -836,15 +839,10 @@ def mapped_tests(run):
 
 
 def check_compiles(result, profile, cwd):
+    """The profile's `compile:` command passes (`SuiteChecks.command`)."""
     command = profile.get("compile")
-    if not command:
-        result.skip("compiles", "no `compile:` command in the stack profile")
-        return
-    code, output, _ran, reused = recorded_run(command, cwd)
-    if code == 0:
-        result.ok("compiles", f"`{command}` succeeded{reused}")
-    else:
-        result.fail("compiles", f"`{command}` failed:\n{tail(output)}")
+    take(result, (SuiteChecks.command(COMPILES, command_run(cwd, command)) if command
+                  else SuiteChecks.missing(COMPILES, CommandKey("compile")),))
 
 
 def check_stage_commands(result, profile, cwd, stage):
@@ -852,14 +850,8 @@ def check_stage_commands(result, profile, cwd, stage):
     then one line in the profile, not an edit to a stage."""
     for key in STAGE_CHECKS.get(stage, ()):
         command = profile.get(key)
-        if not command:
-            result.skip(key, f"no `{key}:` command in the stack profile")
-            continue
-        code, output, _ran, reused = recorded_run(command, cwd)
-        if code == 0:
-            result.ok(key, f"`{command}` succeeded{reused}")
-        else:
-            result.fail(key, f"`{command}` failed:\n{tail(output)}")
+        take(result, (SuiteChecks.command(CheckName(key), command_run(cwd, command)) if command
+                      else SuiteChecks.missing(CheckName(key), CommandKey(key)),))
 
 
 def check_test_state(result, profile, cwd, mapping, expected, located=None, runs=None, story=None, guard=False,
@@ -1158,162 +1150,23 @@ def backlog_paths(cwd, env):
 
 
 def red(result, check, message, must, strict):
-    """A red check fails the verdict — unless a policy is declared and this check is not in it.
-    Then the policy decides: the red run is reported, and it is not what the commit is judged by."""
-    if strict and not must:
-        result.note(check, message + " — optional (not in `required:`), so it does not decide")
-    else:
-        result.fail(check, message)
+    """A red check fails the verdict — unless a policy is declared and this check is not in it (`suite_checks.red`)."""
+    take(result, (red_finding(CheckName(check), Said(message), Presence.PRESENT if must else Presence.ABSENT,
+                              Presence.PRESENT if strict else Presence.ABSENT),))
 
 
 def run_test_command(result, cwd, profile, key, command, required, strict=False, owner=None):
     """A test command passes only when its reports show it executed tests and none failed. With `owner` (a story's
-    whole suite) a red test outside the story runs again alone once (`retry_outside`)."""
-    code, output, ran, reused = recorded_run(command, cwd, profile, with_reports=True)
-    code, ran = retry_outside(result, cwd, profile, command, code, output, ran, owner)
-    judge_test_run(result, profile, key, command, code, output, ran, required, strict, reused=reused)
+    whole suite) a red test outside the story runs again alone once."""
+    judge_suite(result, suite_run(cwd, profile, key, command, owner), required, strict)
 
 
-def judge_test_run(result, profile, key, command, code, output, ran, required, strict=False, reused=""):
-    """The verdict on one run of a test command, from its exit code and the reports it wrote.
-    `reused` names where the run came from when this check did not start it."""
-    executed = sum(1 for outcome in ran.values() if outcome != "skipped")
-    failed = sum(1 for outcome in ran.values() if outcome == "failed")
-    if code != 0 or failed:
-        red(result, "test", f"`{command}` ({key}) failed — {failed} failing case(s):\n{tail(output)}",
-            required, strict)
-    elif executed:
-        result.ok("test", f"`{command}` ({key}) ran {executed} case(s), none failed{reused}")
-    elif profile.get("testEvidence") == "exit-code":
-        result.skip("test", f"`{command}` ({key}) exited 0 and writes no report "
-                            f"(`testEvidence: exit-code`) — nothing shows a test ran")
-    else:
-        message = (f"`{command}` ({key}) exited 0, but no report written by this run shows an "
-                   f"executed test — a runner that matched nothing exits 0 too")
-        (result.fail if required else result.note if strict else result.skip)("test", message)
-
-
-#: WP-113: a whole suite red in a test the story did not write, change or name is run again for that test alone, once.
-#: Green alone, the red was the suite's load or order, not this story: the gate passes with `flaky <test>` noted. More
-#: red tests than this outside the story is a broken suite, not a flake — nothing is run again.
-FLAKY_LIMIT = 3
-
-
-class SuiteOwner(typing.NamedTuple):
-    """Whose change a whole suite run judges: the story's run folder, id and criterion-to-test table."""
-    runs: str
-    story_id: str
-    mapping: dict
-
-
-def story_test_files(cwd, owner):
-    """The test files the story wrote or changed — not in its baseline, or another blob than there — or None without a
-    baseline: then which tests are the story's cannot be told, and none is run again."""
-    path = os.path.join(evidence_dir(owner.runs, owner.story_id), TESTS_BASELINE)
-    if not os.path.isfile(path):
-        return None
-    before = {}
-    for line in read_text(path).splitlines():
-        if "  " in line:
-            blob, rel = line.split("  ", 1)
-            before[rel] = blob
-    files = test_files(cwd)
-    if not files:
-        return []
-    try:
-        completed = subprocess.run(["git", "hash-object", "--stdin-paths"], cwd=cwd, input="\n".join(files) + "\n",
-                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    blobs = completed.stdout.split()
-    if completed.returncode or len(blobs) != len(files):
-        return None
-    return [rel for rel, blob in zip(files, blobs) if before.get(rel) != blob]
-
-
-def story_owns(cwd, owner, own_files, cls, method):
-    """Whether a reported test is the story's: named in its table, or a class of a test file it wrote or changed —
-    by the file's name or by a declaration in it. When in doubt it is the story's: its red proof must stay exact."""
-    for selectors in (owner.mapping or {}).values():
-        for selector in selectors:
-            match = SELECTOR.match(selector)
-            if match and match.group(2) == method and (
-                    match.group(1) == cls or cls.endswith("." + match.group(1)) or match.group(1).endswith("." + cls)):
-                return True
-    names = [n for n in re.split(r"[.$+/:]", cls) if n][-2:]
-    for rel in own_files:
-        stem = os.path.splitext(os.path.basename(rel))[0]
-        if stem in names:
-            return True
-        text = read_text(os.path.join(cwd, rel)) if os.path.isfile(os.path.join(cwd, rel)) else ""
-        if names and re.search(rf"\b{re.escape(names[-1])}\b", text):
-            return True
-    return False
-
-
-def alone_invocation(cwd, profile, command, cls, method):
-    """The profile's way to run one test of `command` — `<command> <filterFlag> "<filterFormat>"` — or None where the
-    profile names none (no filter, or the exit code as the only evidence): then nothing is run again."""
-    if str(profile.get("testEvidence", "")).strip() == "exit-code":
-        return None
-    flag, fmt = profile.get("filterFlag", ""), profile.get("filterFormat", "")
-    if not flag and not fmt:
-        return None
-    fmt = fmt or "{class}.{method}"
-    test_path = None
-    if "{file}" in fmt:
-        located = locate_selector(cwd, f"{cls}#{method}") if SELECTOR.match(f"{cls}#{method}") else None
-        if not located:
-            return None
-        test_path = os.path.relpath(located, cwd).replace(os.sep, "/")
-    return f'{command} {flag} "{fill(fmt, cls, method, test_path)}"'.strip()
-
-
-def retry_outside(result, cwd, profile, command, code, output, ran, owner):
-    """(code, ran) after the red tests outside the story ran again, each alone and once (WP-113).
-
-    Only when every red test is outside the story and the profile can select one: a red test of the story's own stands
-    as it is. Green alone, the test is noted `flaky` — the report, the journal (`flaky=`) and the status carry it — and
-    the run counts as green; red again, the run stays red and the report names the test as outside the story."""
-    if owner is None:
-        return code, ran
-    failed = sorted(key for key, outcome in ran.items() if outcome == "failed")
-    if not failed or len(failed) > FLAKY_LIMIT:
-        return code, ran
-    own_files = story_test_files(cwd, owner)
-    if own_files is None or any(story_owns(cwd, owner, own_files, cls, method) for cls, method in failed):
-        return code, ran
-    flaky, still = [], []
-    for cls, method in failed:
-        alone = alone_invocation(cwd, profile, command, cls, method)
-        if not alone:
-            return code, ran
-        _code, _output, ran_alone, _reused = recorded_run(alone, cwd, profile, with_reports=True)
-        outcome, _how = outcome_for(ran_alone, cls, method)
-        (flaky if outcome == "passed" else still).append((cls, method, alone))
-    if still:
-        result.note("suite", f"{', '.join(f'{c}#{m}' for c, m, _a in still)} — outside this story's change (not "
-                             f"written, changed or named in its table), red again on its own run "
-                             f"(`{still[0][2]}`): the suite is red, not this story's code alone")
-        return code, ran
-    ran = dict(ran)
-    for cls, method, alone in flaky:
-        ran[(cls, method)] = "passed"
-        result.flaky.append(f"{cls}#{method}")
-        result.note("flaky", f"flaky {cls}#{method} — red in `{command}`, green on its own run (`{alone}`); a test "
-                             f"this story did not write, change or name, so no round is counted")
-    return 0, ran
-
-
-def test_files(cwd):
-    found = []
-    skipped = SKIP_DIRS | {runs_top()}
-    for root, dirs, files in os.walk(cwd):
-        dirs[:] = sorted(d for d in dirs if d not in skipped and not d.startswith("."))
-        for name in sorted(files):
-            if TEST_FILE.search(name):
-                found.append(os.path.relpath(os.path.join(root, name), cwd).replace(os.sep, "/"))
-    return found
+def judge_suite(result, suite, required, strict=False):
+    """A suite's run judged (`SuiteChecks.suite`); a test noted flaky is carried in the result."""
+    judged = SuiteChecks.suite(suite, Presence.PRESENT if required else Presence.ABSENT,
+                               Presence.PRESENT if strict else Presence.ABSENT)
+    take(result, judged.findings)
+    result.flaky += [test.value for test in judged.flaky]
 
 
 def record_tests_baseline(cwd, runs, story_id):
@@ -1361,36 +1214,26 @@ def check_existing_tests(result, cwd, runs, story_id, story_body=""):
 
 
 def check_required_suites(result, profile, cwd, already=None, owner=None):
-    """At build and tidy: the test commands the policy requires, run whole.
+    """At build and tidy: the test commands the policy requires, run whole (`SuiteChecks`).
 
-    The mapped tests say this story's behaviour holds; they say nothing about the behaviour the
-    stories before it delivered. Without a policy the stage gates stay as they were. A command the
-    test-state check already ran whole (`already`: `{command: (key, code, output, ran)}`) is judged
-    from that run — one process per command per gate, not two."""
+    The mapped tests say this story's behaviour holds; they say nothing about the behaviour the stories before it
+    delivered. Without a policy the stage gates stay as they were. A command the test-state check already ran whole
+    (`already`: `{command: (key, code, output, ran)}`) is judged from that run — one process per command per gate,
+    not two."""
     already = already or {}
-    required = set(split_list(profile.get("required")))
-    if not required:
-        return
-    # A required test key without its command fails here as it does in `--change`: silently passed,
-    # the stage gate would certify a suite nobody can run.
-    wanted = sorted(set(test_command_keys(profile)) | {r for r in required if r == "e2eTest" or r.startswith("test.")})
-    for key in wanted:
-        if key in required and not profile.get(key):
-            result.fail("suite", f"no `{key}:` command in the stack profile — and `{key}` is required")
-    keys = [k for k in test_command_keys(profile) if k in required and profile.get(k)]
-    if not keys and not any(k in required for k in wanted):
-        result.skip("suite", "`required:` names no declared test command")
+    commands = suite_commands(profile)
+    take(result, SuiteChecks.required(commands))
+    required = {key.value for key in commands.required}
     seen = set()
-    for key in keys:
+    for key in [k for k in test_command_keys(profile) if k in required and profile.get(k)]:
         if profile[key] in seen:
             continue
         seen.add(profile[key])
         before = len(result.entries)
         if profile[key] in already:
             _key, code, output, ran = already[profile[key]]
-            code, ran = retry_outside(result, cwd, profile, profile[key], code, output, ran, owner)
-            judge_test_run(result, profile, key, profile[key], code, output, ran, True, True,
-                           reused=" (the run the mapped tests were read from)")
+            judge_suite(result, suite_run(cwd, profile, key, profile[key], owner, (code, output, ran),
+                                          reused=" (the run the mapped tests were read from)"), True, True)
         else:
             run_test_command(result, cwd, profile, key, profile[key], True, True, owner=owner)
         result.entries[before:] = [(state, "suite" if check != "flaky" else check, message)
@@ -1758,6 +1601,10 @@ def run_checks(run):
         return
     for entry in process:
         entry.run(run)
+
+
+#: The check a gate's compile command reports under.
+COMPILES = CheckName("compiles")
 
 
 @check("story")
