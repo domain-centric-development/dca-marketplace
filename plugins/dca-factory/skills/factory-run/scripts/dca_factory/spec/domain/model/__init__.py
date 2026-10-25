@@ -1,0 +1,1 @@
+"""Spec's model, flat."""

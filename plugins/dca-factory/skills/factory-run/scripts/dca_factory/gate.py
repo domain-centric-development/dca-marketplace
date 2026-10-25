@@ -98,7 +98,7 @@ from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matt
 from .reports import (
     clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
     reported_names, reports_from_this_run, SENTINEL, unescape_literal)
-from .spec import (
+from .spec.api import (
     context_files, delta_problems, derived, feature_name, journeys_path, merge, merge_context, placement_problems, rule_problems,
     lint_context, read_context, read_delta, read_spec, render_spec, scenarios_path, story_entries,
     touches)

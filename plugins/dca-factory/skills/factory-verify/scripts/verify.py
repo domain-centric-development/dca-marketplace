@@ -158,8 +158,8 @@ def cli_in(root):
 
 
 PACKAGE = "dca_factory"
-MODULES = ("contract", "reports", "state", "spec", "gate", "tools", "runner", "cli")
-GATE_SIDE = ("contract", "reports", "state", "spec", "gate")        # what decides; tools, runner and cli show and start
+MODULES = ("contract", "reports", "state", "gate", "tools", "runner", "cli")
+GATE_SIDE = ("contract", "reports", "state", "gate")        # what decides; tools, runner and cli show and start
 #: What is built in layers (WP-152): the building blocks, the shared kernel, the contexts, the web host, the root.
 LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "web", "infrastructure")
 

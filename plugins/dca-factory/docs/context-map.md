@@ -39,8 +39,9 @@ new discovery: a future crossing, shown so it is not forgotten.
 | `building_blocks.py` | the markers of `dca-building-blocks`, in Python — a dependency of every context, depending on none |
 | `sharedkernel/` | what several contexts read alike: a project's markdown (front matter, sections, the text) |
 | `web/` | the host that shows every context at once — the page and its server; it calls read models and use cases only |
+| `spec/api/` | spec's open host service: what delivery calls, in the published language — a criterion as an entry, a delta as the plan reads |
 | `infrastructure/` | the composition root: wires each port to its adapter |
 
-The modules not yet moved into a context (`contract`, `reports`, `state`, `spec`, `gate`, `tools`, `runner`, `page`,
-`service`, `cli`) sit at the package's top until their move; `factory-verify` holds the layers of everything moved
+The modules not yet moved into a context (`contract`, `reports`, `state`, `gate`, `tools`, `runner`, `cli`) sit at
+the package's top until their move; `factory-verify` holds the layers of everything moved
 (`architecture.py`) and `mypy --strict` its types (`mypy.ini`).

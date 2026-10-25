@@ -35,7 +35,7 @@ from .state import (
     back_in, claim, freeze_all, freeze_stream, gate_passed_on_record, record_story, git_tree, has_worktree, journal_path, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of, step_open,
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, uncommitted_story, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
-from .spec import (
+from .spec.api import (
     context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
     in_places, merge_target, people_places, run as run_command, story_journals, tail,

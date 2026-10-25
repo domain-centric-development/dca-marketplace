@@ -7,7 +7,8 @@ import os
 import unittest
 
 from support import contract, project, write
-from dca_factory import cli, runner, spec
+from dca_factory import cli, runner
+from dca_factory.spec import api as spec
 
 STORY = """---
 id: S-1

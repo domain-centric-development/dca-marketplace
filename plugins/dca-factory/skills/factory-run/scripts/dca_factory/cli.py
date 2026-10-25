@@ -77,7 +77,7 @@ from .state import (
     remote_main, run_stories, schedule, schedule_data, session_owner, stage_rank,
     start, story_state, story_title, worktree_of, write_story_fields)
 from .delivery.application.shared.front import is_acceptance
-from .spec import (
+from .spec.api import (
     lint_context,
     derived, merge, read_delta, read_spec, render_spec, renamed_rules, story_entries)
 from .gate import (
