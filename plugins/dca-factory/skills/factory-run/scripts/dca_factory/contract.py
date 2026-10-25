@@ -199,17 +199,6 @@ def evidence_dir(runs, story_id=None):
 JOURNAL = "journal.tsv"
 
 
-#: The technical description's headings — the decisions a stage may not take in passing.
-TECH_HEADINGS = (
-    "Stack",
-    "Frontend approach",
-    "Persistence",
-    "Runtime",
-    "Integrations",
-    "Version policy",
-)
-
-
 CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)(?:\s*\(happy path\))?\s*:\s*(\S.*)$")
 
 

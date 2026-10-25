@@ -101,10 +101,6 @@ class StatusFacts(OutputPort, typing.Protocol):
     def duplicate_pipeline_note(self) -> typing.Optional[str]:
         ...
 
-    def description_parts(self, profile: typing.Dict[str, str]) -> typing.List[Facts]:
-        """The project description's three parts as they stand: product, tech, domain."""
-        ...
-
     def finding_records(self) -> typing.List[Facts]:
         ...
 

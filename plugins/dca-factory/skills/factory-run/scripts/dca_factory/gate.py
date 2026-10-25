@@ -89,14 +89,16 @@ from .contract import (
     METHOD_PROFILE, open_findings, order_for, place, PLACES, PLACES_REL, PLAIN_COLUMN, PROFILE_FILE,
     project_findings_head, project_findings_path, read_flat, read_profile, record_findings, resolve_profile,
     runs_top, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES,
-    story_digest, story_files, story_folder, story_id_of, story_kind, TECH_HEADINGS, TESTED_KINDS,
+    story_digest, story_files, story_folder, story_id_of, story_kind, TESTED_KINDS,
     unknown_profile_keys, VERSION)
 from .delivery.adapter.outgoing.files.decision_record_files import (
     ANSWER_FIELDS, answered_decisions, decisions_store, NOTHING, project_decisions_rel, read_decisions, record_path,
     records_of, resume_stage, stamp_applied)
 from .delivery.adapter.outgoing.files.decision_record_files import needs_human_ids
 from .delivery.domain.model.correction import REASON_CODES
+from .delivery.application.description.check_description import CheckDescriptionCommand
 from .discovery.api import check_report
+from .infrastructure.description import check_description
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .reports import (
@@ -109,7 +111,7 @@ from .spec.api import (
 from .state import (
     backlog_digest, claim_config_here, current_stage_files, flaky_tests, git_tree, INVARIANT_BREAKS, journal_append,
     journal_events, journal_signal, last_ended, latest_signal, listed_files, MODEL_PROCESSES, NOT_OBSERVED,
-    observe_writes, OWNED_CHANGED, owned_changes, owned_end, plan_left_open, PRODUCT_HEADINGS, PUBLISHED,
+    observe_writes, OWNED_CHANGED, owned_changes, owned_end, plan_left_open, PUBLISHED,
     record_base, record_changes, record_judge_signal, record_owned, remote_main, run_owned, snapshot_reason,
     stage_open, step_open, STORY_DIGEST, tree_changes, verdict_in, window_open, write_answered, write_mark,
     write_story_fields)
@@ -1421,64 +1423,16 @@ def check_models(result, profile):
         result.ok("models", f"{len(keys)} model key(s), each bound to a tool")
 
 
-def description_part(cwd, profile, key, headings):
-    """One part of the project description as it stands: where it is, whether it is there, which required
-    headings are missing or empty, and every `## ` heading it carries. Guidance in HTML comments does not count
-    as content, so an untouched template is empty."""
-    path = location(profile, key)
-    full = os.path.join(cwd, path)
-    part = dict(part=key, path=path.replace(os.sep, "/"), present=os.path.isfile(full), missing=[], empty=[],
-                sections=[], required=list(headings))
-    if not part["present"]:
-        return part
-    text = re.sub(r"<!--.*?-->", "", read_text(full), flags=re.S)
-    sections, order, current = {}, [], None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            current = line[3:].strip().lower()
-            sections[current] = []
-            order.append(line[3:].strip())
-        elif current is not None:
-            sections[current].append(line)
-    part["sections"] = order
-    part["missing"] = [h for h in headings if h.lower() not in sections]
-    part["empty"] = [h for h in headings if h.lower() in sections and not "".join(sections[h.lower()]).strip()]
-    return part
-
-
-def check_described(result, cwd, profile, key, headings, what):
-    """One part of the project description. Absent is a note — the gate does not block a project
-    that has none, the backlog skill does. A key that names a missing file is a broken reference,
-    and a heading missing or empty is a description nobody finished: both fail."""
-    named = str(profile.get(key, "")).strip()
-    part = description_part(cwd, profile, key, headings)
-    path, missing, empty = part["path"], part["missing"], part["empty"]
-    if not part["present"]:
-        if named:
-            result.fail(key, f"the profile's `{key}: {named}` names no file")
-        else:
-            result.note(key, f"no {what} at {path} — `/factory-setup` writes it before the first story")
-        return False
-    if missing or empty:
-        detail = "; ".join(filter(None, [
-            f"missing `## {'`, `## '.join(missing)}`" if missing else "",
-            f"empty `## {'`, `## '.join(empty)}`" if empty else "",
-        ]))
-        result.fail(key, f"{path}: {detail} — every heading gets one honest line, never a placeholder")
-        return False
-    result.ok(key, f"{path} fills all {len(headings)} headings of the {what}")
-    return True
-
-
 #: Where the method keeps the project's conventions; `verify_command:` there is the architecture command the
 #: profile's `architecture:` was copied from at setup. Two files, two owners — the method's and the factory's —
 #: and nothing merges them, so the pair is compared and a difference is named.
 def check_project(result, cwd, profile):
-    """The two mandatory parts of the project description: the product and the technical decisions.
-    The designed context map (`domain:`) is read by the context check and stays optional here."""
-    product = check_described(result, cwd, profile, "product", PRODUCT_HEADINGS, "product description")
-    tech = check_described(result, cwd, profile, "tech", TECH_HEADINGS, "technical description")
-    return product and tech
+    """The two mandatory parts of the project description — the description feature's check, said as the gate
+    says its checks."""
+    checked = check_description(cwd, profile).execute(CheckDescriptionCommand())
+    for verdict in checked.verdicts:
+        getattr(result, verdict.state)(verdict.part, verdict.said)
+    return checked.complete
 
 
 def check_instruction_size(result, cwd):

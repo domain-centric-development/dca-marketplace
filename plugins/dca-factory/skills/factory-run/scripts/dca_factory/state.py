@@ -170,17 +170,6 @@ def uncommitted_story(home, path, ref="HEAD", changed=True):
     return ""
 
 
-#: The product description's headings — what is built, for whom, through which surfaces.
-PRODUCT_HEADINGS = (
-    "What and for whom",
-    "Surfaces",
-    "How it works",
-    "Look and feel",
-    "Qualities",
-    "Not part of the product",
-)
-
-
 def write_story_fields(path, **fields):
     """Set — or with None remove — flat keys in a story's front matter; everything else stays byte for byte.
     The gate's one write into a story: `status: delivered`, `delivered:` and `delivered_by:` at the gate that

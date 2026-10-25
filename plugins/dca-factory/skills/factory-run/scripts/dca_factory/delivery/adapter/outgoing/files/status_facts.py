@@ -12,13 +12,13 @@ import typing
 
 from .....contract import (
     delivered_on, evidence_dir, find_story, finding_records, read_profile, resolve_profile, SHARED_WINDOWS, shown,
-    STAGE_ORDER, story_kind, TECH_HEADINGS)
+    STAGE_ORDER, story_kind)
 from .decision_record_files import decision_files, records_of
-from .....gate import description_part, perspectives_of, story_signals
+from .....gate import perspectives_of, story_signals
 from .....reports import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from .....state import (
-    cached_claims, claim_path, flaky_tests, listener_line, PRODUCT_HEADINGS, read_claim, resolve_window,
+    cached_claims, claim_path, flaky_tests, listener_line, read_claim, resolve_window,
     running_stages, schedule_data, story_title)
 from ....application.status.texts import parse_time
 from ....domain.model.usage import USAGE_FIELDS
@@ -337,11 +337,6 @@ class StatusFactFiles:
 
     def duplicate_pipeline_note(self) -> typing.Optional[str]:
         return duplicate_pipeline_note(self._cwd)
-
-    def description_parts(self, profile: typing.Dict[str, str]) -> typing.List[Facts]:
-        return [description_part(self._cwd, profile, "product", PRODUCT_HEADINGS),
-                description_part(self._cwd, profile, "tech", TECH_HEADINGS),
-                description_part(self._cwd, profile, "domain", ())]
 
     def finding_records(self) -> typing.List[Facts]:
         return finding_records(self._epics)

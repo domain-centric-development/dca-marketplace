@@ -12,6 +12,8 @@ from ...domain.model.usage import USAGE_FIELDS
 from ..requests.list_requests import ListRequestsQuery, ListRequestsUseCase
 from ..requests.pending import mark_pending
 from ..shared.requests import PENDING, RequestStore
+from ..description.parts import parts_as_they_stand
+from ..shared.description_store import DescriptionStore
 from ..shared.status_facts import StatusFacts
 from .actions import Action, entry_actions, make_action, offered, RUNNER
 from .texts import claim_age, figures, newest_first, parse_time, signal_totals, stamp_text, took_text, worker_text
@@ -34,9 +36,10 @@ class ShowStatusUseCase:
     """The status every view draws — the terminal, the page, the cockpit, a session's start: the order, the marks,
     the words, the figures and every action are decided here, a view composes none of its own."""
 
-    def __init__(self, facts: StatusFacts, requests: RequestStore) -> None:
+    def __init__(self, facts: StatusFacts, requests: RequestStore, description: DescriptionStore) -> None:
         self._facts = facts
         self._requests = requests
+        self._description = description
 
     def execute(self, query: ShowStatusQuery) -> Model:
         facts, live = self._facts, query.live
@@ -195,7 +198,7 @@ class ShowStatusUseCase:
             if note:
                 extra.append(note)
         # the project description as it stands — the foundation a person writes once and changes when things move
-        description = facts.description_parts(profile)
+        description = parts_as_they_stand(self._description)
         for part in description:
             part["mark"] = "done" if part["present"] and not part["missing"] and not part["empty"] else "question"
         findings = self._findings()

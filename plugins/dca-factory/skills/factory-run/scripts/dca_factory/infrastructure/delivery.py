@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
+from ..delivery.adapter.outgoing.files.description_files import DescriptionFiles
 from ..delivery.adapter.outgoing.files.decision_record_files import DecisionInboxFiles, DecisionRecordFiles
 from ..delivery.adapter.outgoing.discovery.reports import DiscoveryReportFiles
 from ..delivery.adapter.outgoing.files.epic_files import EpicFiles
@@ -66,7 +67,7 @@ def book_request_cost(cwd: str, runs: str) -> BookRequestCostUseCase:
 
 
 def show_status(cwd: str, epics: str, runs: str) -> ShowStatusUseCase:
-    return ShowStatusUseCase(StatusFactFiles(cwd, epics, runs), RequestFiles(cwd))
+    return ShowStatusUseCase(StatusFactFiles(cwd, epics, runs), RequestFiles(cwd), DescriptionFiles.of_project(cwd))
 
 
 def list_decisions(cwd: str) -> ListDecisionsUseCase:
