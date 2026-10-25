@@ -10642,6 +10642,32 @@ def verify_requests(runner, verbose=False):
                 check("serve: the page's faces and its icon are its own server's, served without the token",
                       len(faces) == 3 and all(status == 200 and size > 200 for _p, status, _t, size in drawn)
                       and all(kind == "font/woff2" for p, _s, kind, _n in drawn if p.startswith("/fonts/")), drawn)
+                # a follow still streaming when the page ends: its process ends with the page, not later
+                def pid_alive(pid):
+                    try:
+                        os.kill(pid, 0)
+                    except OSError:
+                        return False
+                    return True
+                with socket.create_connection(("127.0.0.1", port), timeout=10) as raw:
+                    raw.sendall((f"GET /api/follow?story=STORY-1 HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                                 f"X-Factory-Token: {token}\r\n\r\n").encode("ascii"))
+                    head = raw.recv(4096).decode("ascii", errors="replace")
+
+                    def children():
+                        listed = subprocess.run(["pgrep", "-P", str(served["pid"])], capture_output=True, text=True)
+                        return [int(pid) for pid in listed.stdout.split()]
+                    deadline = time.time() + 10
+                    while not children() and time.time() < deadline:
+                        time.sleep(0.1)
+                    following = children()
+                    os.kill(served["pid"], signal.SIGTERM)
+                    deadline = time.time() + 10
+                    while time.time() < deadline and any(pid_alive(pid) for pid in following):
+                        time.sleep(0.1)
+                check("serve: a follow still streaming ends with the page — its process does not outlive it",
+                      "200" in head.splitlines()[0] and following and not any(pid_alive(pid) for pid in following),
+                      f"{head.splitlines()[:1]} children {following}, alive {[p for p in following if pid_alive(p)]}")
             finally:
                 for served in servers:
                     if served.get("pid"):

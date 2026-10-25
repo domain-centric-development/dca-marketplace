@@ -446,6 +446,7 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False):
         pass
     finally:
         server.server_close()
+        server.end_followers()
         if (read_json(own_file(SERVE_FILE)) or {}).get("pid") == os.getpid():
             with contextlib.suppress(OSError):
                 os.remove(own_file(SERVE_FILE))
@@ -455,6 +456,22 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = REUSE_ADDRESS
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.followers, self.followers_lock = set(), threading.Lock()
+
+    def end_followers(self):
+        """The follow processes still streaming — a daemon thread dies with the page and never reaches its own
+        `finally`, so the page ends them, or they outlive it."""
+        with self.followers_lock:
+            followers, self.followers = list(self.followers), set()
+        for process in followers:
+            with contextlib.suppress(OSError):
+                process.terminate()
+        for process in followers:
+            with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+                process.wait(timeout=5)
 
 
 #: The views the page may read — fixed argument lists, the one value they take checked to be an id.
@@ -636,6 +653,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.close_connection = True
         process = subprocess.Popen(argv, cwd=self.server.project, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                    env=cli_env())
+        with self.server.followers_lock:
+            self.server.followers.add(process)
         lines = queue.Queue()
 
         def pump():
@@ -660,7 +679,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, OSError):
             return None
         finally:
-            with contextlib.suppress(OSError):
+            with self.server.followers_lock:
+                self.server.followers.discard(process)
+            with contextlib.suppress(OSError, subprocess.TimeoutExpired):
                 process.terminate()
                 process.wait(timeout=5)
 
