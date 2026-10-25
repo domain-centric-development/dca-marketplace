@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
-from ..delivery.adapter.outgoing.files.decision_record_files import DecisionRecordFiles
+from ..delivery.adapter.outgoing.files.decision_record_files import DecisionInboxFiles, DecisionRecordFiles
 from ..delivery.adapter.outgoing.files.discovery_files import DiscoveryReportFiles
 from ..delivery.adapter.outgoing.files.epic_files import EpicFiles
 from ..delivery.adapter.outgoing.files.journal_files import StoryJournalFiles
@@ -15,6 +15,7 @@ from ..delivery.application.backlog.release_stories import ReleaseStoriesUseCase
 from ..delivery.application.cost.book_request_cost import BookRequestCostUseCase
 from ..delivery.application.decisions.accept_delivery import AcceptDeliveryUseCase
 from ..delivery.application.decisions.answer_question import AnswerQuestionUseCase
+from ..delivery.application.decisions.list_decisions import ListDecisionsUseCase
 from ..delivery.application.requests.check_request import CheckRequestUseCase
 from ..delivery.application.requests.list_requests import ListRequestsUseCase
 from ..delivery.application.requests.pending_requests import PendingRequestsUseCase
@@ -66,3 +67,7 @@ def book_request_cost(cwd: str, runs: str) -> BookRequestCostUseCase:
 
 def show_status(cwd: str, epics: str, runs: str) -> ShowStatusUseCase:
     return ShowStatusUseCase(StatusFactFiles(cwd, epics, runs), RequestFiles(cwd))
+
+
+def list_decisions(cwd: str) -> ListDecisionsUseCase:
+    return ListDecisionsUseCase(DecisionInboxFiles(cwd), RequestFiles(cwd), StoryFiles(cwd))

@@ -335,6 +335,7 @@ STORY_FILE = "story.md"
 EPIC_FILE = "epic.md"
 
 
+#: A story's decision records: `<story>/decisions/` beside its `story.md`.
 DECISIONS_DIR = "decisions"
 
 
@@ -526,28 +527,10 @@ PROJECT_FINDINGS = "findings"
 FLAKY_FINDINGS = "flaky"
 
 
-#: The project's own decision records — a question that belongs to no story yet: the description, a discovery, an
-#: epic not written (WP-91) — beside the epics: `<product>/decisions/<name>.md`, the shape of a story's record with
-#: `id: <name>` and no `story:`. A skill run for a request asks there when it may not decide alone.
-PROJECT_DECISIONS = "decisions"
-
-
 def findings_dir():
     """The project's findings folder beside the epics: `product/findings` for `product/epics`."""
     epics = place("epics").rstrip("/")
     return os.path.join(os.path.dirname(epics) or ".", PROJECT_FINDINGS)
-
-
-def project_decisions_dir():
-    """The project's decision records beside the epics: `product/decisions` for `product/epics`."""
-    epics = place("epics").rstrip("/")
-    return os.path.join(os.path.dirname(epics) or ".", PROJECT_DECISIONS)
-
-
-def project_decisions_rel():
-    """The project's decision records relative to the project, as the profile places the epics."""
-    epics = (PLACES_REL.get("epics") or DEFAULTS["epics"]).rstrip("/")
-    return os.path.join(os.path.dirname(epics) or ".", PROJECT_DECISIONS).replace("\\", "/")
 
 
 def findings_rel():
@@ -816,40 +799,6 @@ def epic_dependency_problem(epics, epic):
     return None
 
 
-#: What a table row writes when there is nothing to list: a document stage that changed nothing says
-#: so in one row and why, and that row names no file.
-NOTHING = {"", "—", "–", "-", "none", "n/a", "nothing"}
-
-
-# --- decisions: the question a stage may not answer, kept where the answer can land ------------
-#
-# A stage that cannot decide writes `## needs-human` and the run stops. The question itself lives
-# in a record of its own in the story's folder, `<story>/decisions/<nn>.md` with `id: <story>-<nn>` —
-# markdown with front matter, committed with the project, in the people's place because the answer
-# is a person's — since the stage file has no place for an answer and no second session would find
-# one there. State is read from the record, never stored in it: no `## Answer` is open; an
-# `## Answer` with `answer:`, `by:` and `at:` is answered; a gate-written `## Applied` is applied.
-# A draft that lacks the actor or the time is not an answer — an unconfirmed draft unblocks nothing.
-def decisions_store(story_path):
-    """The records in the story's folder: `<story>/decisions/` beside its `story.md`."""
-    return os.path.join(story_folder(story_path), DECISIONS_DIR)
-
-
-def records_of(story_id, story_path=None, cwd=None):
-    """This story's records, read from the folder beside it — the story found by its id where no path is given,
-    under `cwd` where the project is not the working directory (a scratch copy)."""
-    if not story_id:
-        return []
-    epics = os.path.join(cwd, place("epics")) if cwd else place("epics")
-    return read_decisions(decisions_store(story_path or find_story(epics, story_id)), story_id)
-
-
-def record_path(story_id, rid, story_path=None):
-    """Where a record with this id lives (or would): `<story>/decisions/<nn>.md` for `id: <story>-<nn>`."""
-    store = decisions_store(story_path or find_story(place("epics"), story_id))
-    return os.path.join(store, rid[len(story_id) + 1:] + ".md") if rid.startswith(story_id + "-") else os.path.join(store, rid + ".md")
-
-
 class Stage(typing.NamedTuple):
     """One row of the pipeline. Everything the gate, the cli and the runner know about a stage is here; nothing
     outside the table names a stage to decide on it."""
@@ -923,182 +872,6 @@ POST_GATED = tuple(s.name for s in STAGES if s.post_gated)
 def stage_order(kind="story"):
     """The run order of a story of this kind."""
     return tuple(s.name for s in STAGES if s.in_order and kind in s.kinds)
-
-
-ANSWER_FIELDS = ("answer", "by", "at")
-
-
-def decision_state(text):
-    """('open' | 'draft' | 'answered' | 'applied', answer fields)."""
-    answer = fields_of(section_of(text, "answer"))
-    if section_of(text, "applied") is not None:
-        return "applied", answer
-    if section_of(text, "answer") is None:
-        return "open", answer
-    if all(answer.get(field) for field in ANSWER_FIELDS):
-        return "answered", answer
-    return "draft", answer
-
-
-#: One option of a record's `## Options`, in every form a stage writes it: an optional list marker, optional bold,
-#: the label (`a`, `B`, `1`, `(a)`), then `.` `)` `:` or a dash (` — ` ` – ` ` - `) before the text — `- a: …`,
-#: `- **a — …** …`, `- **b.** …`, `1) …`. The canonical form, the one the template and the stages write, is `- a: …`.
-OPTION_LINE = re.compile(r"^(?:-\s*|[*+]\s+)?(?:\*\*)?\(?([A-Za-z0-9]{1,3})(?:\*\*)?(?:[.):]|\s+[\u2014\u2013-](?=\s|$))\s*(.*)$")
-
-
-def plain(text):
-    """Markdown bold taken out and runs of white space made one: how an option reads outside its record."""
-    return " ".join(text.replace("**", "").split())
-
-
-def decision_options(text):
-    """[{key, line, text}] — the options of a record's `## Options`, the one reader every view and the gate use:
-    `key` the label as written, `line` the option's first line, `text` with its continuation lines, both plain."""
-    options = []
-    for raw in section_of(text, "options") or []:
-        match = OPTION_LINE.match(raw.strip())
-        if match:
-            options.append(dict(key=match.group(1), line=plain(match.group(2)), text=plain(match.group(2))))
-        elif options and raw.strip():
-            options[-1]["text"] = plain(options[-1]["text"] + " " + raw)
-    return options
-
-
-def recommended_option(text, options=None):
-    """The key of the option the record's `## Recommendation` opens with (`a — …`, `**b.**`, `Option 1.`), when it
-    names one of its options; else None."""
-    options = decision_options(text) if options is None else options
-    lines = [line.strip() for line in section_of(text, "recommendation") or [] if line.strip()]
-    first = re.match(r"^[*`\s]*(?:option\s+)?\(?([A-Za-z0-9]{1,3})\b", lines[0], re.I) if lines else None
-    if not first:
-        return None
-    return next((o["key"] for o in options if o["key"].lower() == first.group(1).lower()), None)
-
-
-def read_decisions(store, story_id):
-    """[(path, front, body, state, answer)] for every record that names this story, in id order.
-
-    A record the gate cannot read is a refusal, not a skip: a broken record hides a question."""
-    if not os.path.isdir(store):
-        return []
-    records = []
-    for name in sorted(os.listdir(store)):
-        if not name.endswith(".md"):
-            continue
-        path = os.path.join(store, name)
-        front, body = read_front_matter(path)
-        if str(front.get("story", "")).strip() != story_id:
-            raise GateError(
-                f"{shown(path)}: names story {front.get('story')!r}, but it lies beside {story_id} — a record "
-                f"lives in its own story's `{DECISIONS_DIR}/` folder")
-        if str(front.get("id", "")).strip() != f"{story_id}-{name[:-3]}":
-            raise GateError(
-                f"{shown(path)}: `id:` is {front.get('id')!r}, the file is named {name[:-3]!r} — a "
-                f"record is found by its file name: `<story>/{DECISIONS_DIR}/<nn>.md` carries `id: <story>-<nn>`")
-        state, answer = decision_state(body)
-        records.append((path, front, body, state, answer))
-    return records
-
-
-def applying_stage(front, answer):
-    """The stage that applies an answer: the one the answer names (`applies: test` — an answer that changes a
-    test goes back to the test stage, whoever asked), else the record's `stage:`, the stage that asked."""
-    named = str((answer or {}).get("applies", "")).strip().lower()
-    return named if named in STAGE_ORDER else str(front.get("stage", "")).strip()
-
-
-def resume_stage(front, answer):
-    """Where the story resumes for an answer: the earlier of the stage that asked and the one the answer
-    names. A plan's question answered `applies: test` still re-plans — the plan lists the tests that change —
-    and the test stage after it takes the changed expectation."""
-    asked, named = str(front.get("stage", "")).strip(), applying_stage(front, answer)
-    order = lambda st: STAGE_ORDER.index(st) if st in STAGE_ORDER else len(STAGE_ORDER)
-    return min((asked, named), key=order) if asked in STAGE_ORDER else named
-
-
-def answered_decisions(cwd, story_id, stage):
-    """Ids of this story's answered or applied records the given stage applies."""
-    try:
-        records = records_of(story_id, cwd=cwd)
-    except GateError:
-        return []
-    return [str(front["id"]).strip() for _p, front, _b, state, answer in records
-            if state in ("answered", "applied") and applying_stage(front, answer) == stage]
-
-
-def nothing_line(line):
-    """`(none)`, `- None.`, `_None._`, `—` and the like: a line that says there is nothing."""
-    text = line.strip().lstrip("-*").strip().strip("_*()").strip().rstrip(".").strip()
-    return text.lower() in NOTHING
-
-
-def needs_human_ids(text):
-    """The decision ids a `## needs-human` section names (`decision: <id>`), or [] without one;
-    None when the file has no such section at all — or only the heading, left empty or filled with
-    `(none)` from the file template: that asks nobody anything, and reading it as a stop halts a
-    finished stage."""
-    section = section_of(text, "needs-human")
-    if section is None or all(nothing_line(line) for line in section):
-        return None
-    # the id alone: a stage may go on writing after it on the same line ("decision: s-01. The browser …")
-    ids = []
-    for key, value in fields_of(section).items():
-        match = re.match(r"`?([A-Za-z0-9][\w-]*)", value) if key == "decision" and value else None
-        if match:
-            ids.append(match.group(1))
-    return ids
-
-
-def stamp_applied(path, stage):
-    with open(path, "a", encoding="utf-8") as handle:
-        handle.write(f"\n## Applied\nat: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n"
-                     f"stage: {stage}\n")
-
-
-def decision_files(cwd):
-    """(id from the file name, front, body, state, error, path) for every record of every story, story by
-    story in the order of the files."""
-    for story_path in story_files(os.path.join(cwd, place("epics"))):
-        store = decisions_store(story_path)
-        if not os.path.isdir(store):
-            continue
-        story_id = story_id_of(story_path)
-        for name in sorted(os.listdir(store)):
-            if not name.endswith(".md"):
-                continue
-            path = os.path.join(store, name)
-            try:
-                front, body = read_front_matter(path)
-            except GateError as error:
-                yield f"{story_id}-{name[:-3]}", {}, "", "unreadable", error, path
-                continue
-            yield f"{story_id}-{name[:-3]}", front, body, decision_state(body)[0], None, path
-    yield from project_decision_files(cwd)
-
-
-def project_decision_files(cwd):
-    """The same six fields for every record of the project's own (`<product>/decisions/<name>.md`): its id is its
-    file's name, and a record that names a story belongs beside that story instead — read as unreadable here."""
-    epics = place("epics")
-    store = os.path.join(os.path.dirname(os.path.join(cwd, epics).rstrip("/")) or ".", PROJECT_DECISIONS)
-    if not os.path.isdir(store):
-        return
-    for name in sorted(os.listdir(store)):
-        if not name.endswith(".md"):
-            continue
-        path = os.path.join(store, name)
-        try:
-            front, body = read_front_matter(path)
-            if str(front.get("story", "")).strip():
-                raise GateError(f"{shown(path)}: names story {front.get('story')!r} — a story's record lives in its "
-                                f"own `{DECISIONS_DIR}/` folder, a project record names no story")
-            if str(front.get("id", "")).strip() != name[:-3]:
-                raise GateError(f"{shown(path)}: `id:` is {front.get('id')!r}, the file is named {name[:-3]!r} — a "
-                                f"project record is found by its file name")
-        except GateError as error:
-            yield name[:-3], {}, "", "unreadable", error, path
-            continue
-        yield name[:-3], front, body, decision_state(body)[0], None, path
 
 
 def git(cwd, *args, env=None):

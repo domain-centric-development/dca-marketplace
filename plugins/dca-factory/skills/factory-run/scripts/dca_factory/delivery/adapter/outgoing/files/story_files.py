@@ -91,6 +91,9 @@ class StoryFiles:
     def delete_by_id(self, aggregate_id: StoryId) -> None:
         os.remove(self.path_of(aggregate_id))
 
+    def names_story(self, word: str) -> bool:
+        return names_story(word)
+
     @staticmethod
     def read(path: str) -> Story:
         front, body = read_front_matter(path)

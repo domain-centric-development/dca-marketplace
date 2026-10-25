@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from support import contract, project, write
+from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 
 
 class FrontMatter(unittest.TestCase):
@@ -156,50 +157,50 @@ class Selectors(unittest.TestCase):
 class Decisions(unittest.TestCase):
 
     def test_a_record_without_an_answer_is_open(self):
-        self.assertEqual(contract.decision_state("## Question\nwhich?\n")[0], "open")
+        self.assertEqual(records.decision_state("## Question\nwhich?\n")[0], "open")
 
     def test_an_answer_missing_a_field_is_a_draft(self):
-        self.assertEqual(contract.decision_state("## Answer\nanswer: a\nby: someone\n")[0], "draft")
+        self.assertEqual(records.decision_state("## Answer\nanswer: a\nby: someone\n")[0], "draft")
 
     def test_an_answer_with_answer_by_and_at_is_answered(self):
-        status, answer = contract.decision_state("## Answer\n- answer: a\n- by: someone\n- at: 2026-10-10\n")
+        status, answer = records.decision_state("## Answer\n- answer: a\n- by: someone\n- at: 2026-10-10\n")
         self.assertEqual(status, "answered")
         self.assertEqual(answer, {"answer": "a", "by": "someone", "at": "2026-10-10"})
 
     def test_an_applied_section_wins(self):
-        self.assertEqual(contract.decision_state("## Answer\nanswer: a\n\n## Applied\nstage: plan\n")[0], "applied")
+        self.assertEqual(records.decision_state("## Answer\nanswer: a\n\n## Applied\nstage: plan\n")[0], "applied")
 
     def test_needs_human_names_the_ids_and_nothing_for_an_empty_section(self):
-        self.assertIsNone(contract.needs_human_ids("# plan\n"))
-        self.assertIsNone(contract.needs_human_ids("## needs-human\n(none)\n"))
-        self.assertIsNone(contract.needs_human_ids("## needs-human\n- None.\n"))
-        self.assertEqual(contract.needs_human_ids("## needs-human\ndecision: `S-1-01`. The browser …\n"), ["S-1-01"])
-        self.assertEqual(contract.needs_human_ids("## needs-human\nwhy: nobody can say\n"), [])
+        self.assertIsNone(records.needs_human_ids("# plan\n"))
+        self.assertIsNone(records.needs_human_ids("## needs-human\n(none)\n"))
+        self.assertIsNone(records.needs_human_ids("## needs-human\n- None.\n"))
+        self.assertEqual(records.needs_human_ids("## needs-human\ndecision: `S-1-01`. The browser …\n"), ["S-1-01"])
+        self.assertEqual(records.needs_human_ids("## needs-human\nwhy: nobody can say\n"), [])
 
     def test_a_record_lies_beside_its_own_story_under_its_own_name(self):
         with project() as p:
             path = p.story("S-1")
-            store = contract.decisions_store(path)
+            store = records.decisions_store(path)
             write(os.path.join(store, "01.md"), "---\nid: S-1-01\nstory: S-1\nstage: plan\n---\n## Question\n")
-            records = contract.read_decisions(store, "S-1")
-            self.assertEqual([(r[1]["id"], r[3]) for r in records], [("S-1-01", "open")])
+            found = records.read_decisions(store, "S-1")
+            self.assertEqual([(r[1]["id"], r[3]) for r in found], [("S-1-01", "open")])
             write(os.path.join(store, "02.md"), "---\nid: S-1-03\nstory: S-1\n---\n")
             with self.assertRaisesRegex(contract.GateError, "is named '02'"):
-                contract.read_decisions(store, "S-1")
+                records.read_decisions(store, "S-1")
 
     def test_a_record_naming_another_story_is_refused(self):
         with project() as p:
-            store = contract.decisions_store(p.story("S-1"))
+            store = records.decisions_store(p.story("S-1"))
             write(os.path.join(store, "01.md"), "---\nid: S-1-01\nstory: S-2\n---\n")
             with self.assertRaisesRegex(contract.GateError, "names story 'S-2'"):
-                contract.read_decisions(store, "S-1")
+                records.read_decisions(store, "S-1")
 
     def test_an_answer_resumes_at_the_earlier_of_the_asking_and_the_named_stage(self):
-        self.assertEqual(contract.applying_stage({"stage": "plan"}, {"applies": "test"}), "test")
-        self.assertEqual(contract.applying_stage({"stage": "plan"}, {"applies": "nowhere"}), "plan")
-        self.assertEqual(contract.resume_stage({"stage": "plan"}, {"applies": "test"}), "plan")
-        self.assertEqual(contract.resume_stage({"stage": "build"}, {"applies": "test"}), "test")
-        self.assertEqual(contract.resume_stage({"stage": "build"}, {}), "build")
+        self.assertEqual(records.applying_stage({"stage": "plan"}, {"applies": "test"}), "test")
+        self.assertEqual(records.applying_stage({"stage": "plan"}, {"applies": "nowhere"}), "plan")
+        self.assertEqual(records.resume_stage({"stage": "plan"}, {"applies": "test"}), "plan")
+        self.assertEqual(records.resume_stage({"stage": "build"}, {"applies": "test"}), "test")
+        self.assertEqual(records.resume_stage({"stage": "build"}, {}), "build")
 
 
 class StageTable(unittest.TestCase):

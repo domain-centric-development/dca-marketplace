@@ -6,6 +6,7 @@ import os
 import unittest
 
 from support import contract, project, state, write
+from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 
 SECOND = "2026-10-10T10:00:00Z"
 STAGES = ("plan", "test", "build", "tidy", "judge", "document")
@@ -225,13 +226,13 @@ class Decisions(unittest.TestCase):
 
     def test_an_open_record_makes_the_story_wait(self):
         with project() as p:
-            store = contract.decisions_store(p.story("S-1"))
+            store = records.decisions_store(p.story("S-1"))
             write(os.path.join(store, "01.md"), self.RECORD)
             self.assertEqual(p.state_of("S-1"), ("waiting", None, "decision S-1-01"))
 
     def test_an_answer_resumes_at_the_stage_that_applies_it_until_its_file_cites_the_id(self):
         with project() as p:
-            store = contract.decisions_store(p.story("S-1"))
+            store = records.decisions_store(p.story("S-1"))
             write(os.path.join(store, "01.md"), self.RECORD + "\n## Answer\nanswer: the first\nby: a person\nat: now\n")
             p.write_and_journal("S-1", "plan")
             self.assertEqual(p.state_of("S-1"), ("resumable", "plan", "decision S-1-01 answered — its stage applies it"))
@@ -241,7 +242,7 @@ class Decisions(unittest.TestCase):
     def test_a_story_edited_after_its_plan_runs_from_plan_though_an_answer_waits_at_a_later_stage(self):
         with project() as p:
             path = p.story("S-1")
-            store = contract.decisions_store(path)
+            store = records.decisions_store(path)
             write(os.path.join(store, "01.md"), self.RECORD.replace("stage: plan", "stage: test")
                   + "\n## Answer\nanswer: the first\nby: a person\nat: now\n")
             full_pass(p, "S-1", upto="build")

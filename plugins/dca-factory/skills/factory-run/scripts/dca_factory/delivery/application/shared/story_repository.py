@@ -24,3 +24,7 @@ class StoryRepository(Repository[Story, StoryId], typing.Protocol):
     def stories_of(self, epic: EpicId) -> typing.Sequence[Story]:
         """Every story of the epic, in the order of its folders."""
         ...
+
+    def names_story(self, word: str) -> bool:
+        """Whether one word is a story's id — its folder's name or its `id:`, in any case."""
+        ...

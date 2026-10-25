@@ -11,8 +11,9 @@ import os
 import typing
 
 from .....contract import (
-    decision_files, delivered_on, evidence_dir, find_story, finding_records, read_profile, records_of,
-    resolve_profile, shown, SHARED_WINDOWS, STAGE_ORDER, story_kind, TECH_HEADINGS)
+    delivered_on, evidence_dir, find_story, finding_records, read_profile, resolve_profile, SHARED_WINDOWS, shown,
+    STAGE_ORDER, story_kind, TECH_HEADINGS)
+from .decision_record_files import decision_files, records_of
 from .....gate import description_part, perspectives_of, story_signals
 from .....reports import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text

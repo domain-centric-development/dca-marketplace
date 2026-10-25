@@ -55,13 +55,13 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, decision_files, decision_options, decision_state, DECISIONS_DIR, DEFAULTS,
-    delivered_by, delivered_on, EPIC_FILE, epic_folder, evidence_dir, evidence_rel, factory_home, find_story,
-    FINDINGS_FILE, FORM_CHECKS, GateError, git, is_delivered, layout_hint, location,
-    open_findings, place, PROFILE_FILE, read_profile, recommended_option, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files, story_id_of,
-    story_kind, VERSION)
+    ALL_KINDS, CONTRACT, DEFAULTS, delivered_by, delivered_on, EPIC_FILE, epic_folder, evidence_dir, evidence_rel,
+    factory_home, find_story, FINDINGS_FILE, FORM_CHECKS, GateError, git, is_delivered, layout_hint, location,
+    open_findings, place, PROFILE_FILE, read_profile, resolve_profile, set_places, SHARED_WINDOWS, shown,
+    STAGE_FILES, STAGE_ORDER, story_files, story_id_of, story_kind, VERSION)
+from .contract import DECISIONS_DIR
 from .delivery.application.shared.front import CREATED_KEY, created_of
-from .sharedkernel.adapter.outgoing.markdown.sections import section_of
+from .sharedkernel.adapter.outgoing.markdown.sections import section_of, sections_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .reports import (
     stream_parts,
@@ -69,13 +69,13 @@ from .reports import (
 from .delivery.application.status.texts import parse_time
 from .delivery.domain.model.usage import USAGE_FIELDS
 from .state import (
-    acceptance_records, accepted, accepted_criteria, back_in, cached_claims, claim, claim_config_here, claim_path,
-    claim_story, fetch_remote, free_id, freeze_all, gate_passed_on_record, has_worktree,
-    ignore_journals_in, journal_append, journal_denials, journal_events, journal_parts, journal_usage,
-    journal_writer, listener_line, mark_listening, mark_stage, mark_window, OWNED_CHANGED, owned_end,
-    parts_incomplete, PUBLISHED, read_claim, record_owned, refresh_claims, release, release_claim,
-    remote_main, run_stories, schedule, schedule_data, session_owner, stage_rank,
-    start, story_state, story_title, worktree_of, write_story_fields)
+    accepted_criteria, back_in, cached_claims, claim, claim_config_here, claim_path, claim_story, fetch_remote,
+    free_id, freeze_all, gate_passed_on_record, has_worktree, ignore_journals_in, journal_append, journal_denials,
+    journal_events, journal_parts, journal_usage, journal_writer, listener_line, mark_listening, mark_stage,
+    mark_window, OWNED_CHANGED, owned_end, parts_incomplete, PUBLISHED, read_claim, record_owned, refresh_claims,
+    release, release_claim, remote_main, run_stories, schedule, schedule_data, session_owner, stage_rank, start,
+    story_state, story_title, worktree_of, write_story_fields)
+from .delivery.adapter.outgoing.files.decision_record_files import acceptance_records, accepted
 from .delivery.application.shared.front import is_acceptance
 from .spec.api import (
     lint_context,
@@ -92,6 +92,7 @@ from .delivery.application.status.show_status import ShowStatusQuery
 from .delivery.application.status.texts import figures, signals_line, stamp_text, took_text
 from .delivery.adapter.outgoing.files.request_files import out_path
 from .delivery.adapter.outgoing.files.story_files import names_story
+from .delivery.application.decisions.list_decisions import ListDecisionsQuery
 from .delivery.application.requests.list_requests import ListRequestsQuery
 from .delivery.application.requests.pending import mark_pending
 from .delivery.application.requests.pending_requests import PendingRequestsQuery
@@ -187,60 +188,12 @@ def discovery_list(cwd, epics, fmt="text", colour="auto"):
     return 0
 
 
-def record_actions(record):
-    """What a person can answer to an open record: an acceptance is accepted or corrected (a reason code and their
-    words); a question takes one of its options — the stage's recommendation first in weight — or their words."""
-    story, rid = record["story"], record["id"]
-    head = f"/factory-decisions {story} {rid}" if story else f"/factory-decisions {rid}"
-    if record["kind"] == "acceptance":
-        return offered(
-            make_action(text="the story does what you wanted", skill=f"{head}: answer accepted", label="accept",
-                        primary=True),
-            make_action(text="What should be different?", skill=f"{head}: answer correction:", label="correct"))
-    return offered(*[dict(make_action(text=o["text"], skill=f"{head}: answer {o['key']}", label=o["key"],
-                                      primary=o["key"] == record["recommended"]),
-                          note="the stage's recommendation" if o["key"] == record["recommended"] else "")
-                     for o in record["options"]],
-                   make_action(text="Your answer, in your words", skill=f"{head}: answer", label="answer"))
-
-
-def record_sections(body):
-    """What a record says beyond its title, as a view shows it beside the options: the question and its evidence,
-    or what an acceptance asks to look at — never the options, the recommendation or the answer, which the view
-    draws as the actions they are."""
-    return [s for s in sections_of(body, "options")[0]
-            if s["heading"].split("(")[0].strip().lower() not in ("recommendation", "answer")]
-
-
 def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     """The inbox: every record, what waits for a person first — open, drafts, answered, applied — read
     from the files alone; the same view as the status, in text, Markdown or JSON."""
-    records, pending = [], pending_requests(cwd)
-    for name, front, body, state, error, path in decision_files(cwd):
-        if error:
-            records.append(dict(rank=-1, id=name, state="unreadable", kind="question", story="?", stage="?",
-                                asked=None, text=str(error), options=[], recommended=None, path=shown(path)))
-            continue
-        story = str(front.get("story", "")).strip()
-        if story_id and story != story_id:
-            continue
-        answer = decision_state(body)[1]
-        options = [] if is_acceptance(front) else decision_options(body)
-        question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-        given = f" → {answer.get('answer')} ({answer.get('by')})" if state in ("answered", "applied") else ""
-        records.append(dict(rank={"open": 0, "draft": 1, "answered": 2, "applied": 3}[state],
-                            id=str(front.get("id", name)).strip(), state=state,
-                            kind="acceptance" if is_acceptance(front) else "question", story=story,
-                            stage=str(front.get("stage", "?")).strip(),
-                            asked=parse_time(str(front.get("asked", ""))), text=question + given,
-                            options=[dict(key=o["key"], text=o["text"]) for o in options],
-                            recommended=recommended_option(body, options), path=shown(path),
-                            sections=record_sections(body)))
-        records[-1]["actions"] = mark_pending(record_actions(records[-1]) if state in ("open", "draft") else [], pending)
-    records.sort(key=lambda r: (r["rank"], r["id"]))
+    model = wiring.list_decisions(cwd).execute(ListDecisionsQuery(story_id))
+    records = model["records"]
     waiting = [r for r in records if r["state"] in ("open", "draft", "unreadable")]
-    model = dict(project=os.path.basename(os.path.abspath(cwd)), story=story_id, records=records,
-                 waiting=len(waiting), store=f"{place('epics')}/<epic>/<story>/{DECISIONS_DIR}/")
     mark = lambda r: "look" if r["kind"] == "acceptance" and r["state"] in ("open", "draft") else \
         "stopped" if r["state"] == "unreadable" else decision_mark(r)
     headers = ["record", "state", "story / stage", "asked (UTC)", "question → answer"]
@@ -1447,35 +1400,6 @@ STORY_OWN_BLOCK, EPIC_OWN_BLOCK = "acceptance criteria", "stories"
 FIRST_SECTIONS = ("superseded",)
 
 
-def sections_of(body, own_block):
-    """Every `## ` section of a story's or an epic's file in the file's order, as {heading, text, kind} — the text
-    as Markdown, a wrapped line kept as written, comments left out, an empty section left out. Prose between the
-    title and the first section is a section without a heading. The section the detail draws as a block of its own
-    (`own_block`) is not among them; `at` says where it stood (the number of sections before it, or None). A section
-    of FIRST_SECTIONS moves to the front and says so in `kind` — the view draws the sections as given."""
-    parts, heading, lines = [], "", []
-    for line in body.splitlines() + ["## "]:
-        if line.startswith("## "):
-            parts.append((heading, lines))
-            heading, lines = line[3:].strip(), []
-        elif not line.startswith("# "):
-            lines.append(line)
-    sections, at = [], None
-    for name, lines in parts:
-        key = name.split("(")[0].strip().lower()
-        if name and key == own_block:
-            at = len(sections)
-            continue
-        text = re.sub(r"\n{3,}", "\n\n", re.sub(r"<!--.*?-->", "", "\n".join(lines), flags=re.S)).strip("\n")
-        if text.strip():
-            sections.append(dict(heading=name, text=textwrap.dedent(text).strip(),
-                                 kind=key if name and key in FIRST_SECTIONS else ""))
-    first = [s for s in sections if s["kind"]]
-    if first and at is not None:
-        at += sum(1 for s in sections[at:] if s["kind"])
-    return [*first, *(s for s in sections if not s["kind"])], at
-
-
 #: The front-matter fields an epic's head shows, by the heading of the section that may say the same: a section under
 #: one of these headings whose text says nothing beyond its field is left out of the detail.
 HEAD_FIELDS = {"intent": "intent", "goal": "goal", "outcome": "metric", "metric": "metric",
@@ -1538,7 +1462,7 @@ def situation_of_story(row, story, overview, body):
             line += " · " + took_text((datetime.now(timezone.utc) - moving["since"]).total_seconds())
         return dict(situation=line, view="pipeline")
     if state == "superseded":
-        reason = next((s["text"] for s in sections_of(body, STORY_OWN_BLOCK)[0] if s["kind"] == "superseded"), "")
+        reason = next((s["text"] for s in sections_of(body, STORY_OWN_BLOCK, FIRST_SECTIONS)[0] if s["kind"] == "superseded"), "")
         return dict(situation="superseded" + (f" — {first_sentence(reason)}" if reason else ""), view="story")
     if row["done"]:
         return dict(situation=f"delivered {stamp_text(row['delivered'])[:10]}" if row["delivered"] else "delivered",
@@ -1575,14 +1499,14 @@ def epic_situation(epic, overview):
 
 def story_sections(body):
     """A story's sections for its detail, its criteria's place among them, and why it is not built where it says."""
-    sections, at = sections_of(body, STORY_OWN_BLOCK)
+    sections, at = sections_of(body, STORY_OWN_BLOCK, FIRST_SECTIONS)
     return dict(sections=sections, criteria_at=at)
 
 
 def epic_sections(body, front):
     """An epic's sections for its detail without those its head already says (`without_head`), and its stories'
     place among the ones kept."""
-    sections, at = sections_of(body, EPIC_OWN_BLOCK)
+    sections, at = sections_of(body, EPIC_OWN_BLOCK, FIRST_SECTIONS)
     kept, gone = without_head(sections, front)
     return dict(sections=kept, stories_at=None if at is None else at - sum(1 for i in gone if i < at))
 

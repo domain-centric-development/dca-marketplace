@@ -39,7 +39,7 @@ As a reader I want the thing.
 class Sections(unittest.TestCase):
 
     def test_every_section_in_the_file_order_with_the_criteria_out_and_their_place_kept(self):
-        sections, at = cli.sections_of(STORY, cli.STORY_OWN_BLOCK)
+        sections, at = cli.sections_of(STORY, cli.STORY_OWN_BLOCK, cli.FIRST_SECTIONS)
         self.assertEqual([s["heading"] for s in sections], ["Superseded", "", "Story", "Notes"])
         self.assertEqual(sections[at - 1]["heading"], "Story")
         self.assertEqual(at, 3)
@@ -50,7 +50,7 @@ class Sections(unittest.TestCase):
         self.assertEqual({s["kind"] for s in sections[1:]}, {""})
 
     def test_a_wrapped_line_is_kept_and_a_comment_left_out(self):
-        notes = next(s for s in cli.sections_of(STORY, cli.STORY_OWN_BLOCK)[0] if s["heading"] == "Notes")
+        notes = next(s for s in cli.sections_of(STORY, cli.STORY_OWN_BLOCK, cli.FIRST_SECTIONS)[0] if s["heading"] == "Notes")
         self.assertEqual(notes["text"], "- a note that runs on\n  onto a second line")
 
     def test_the_text_view_joins_a_wrapped_list_line_to_its_item(self):

@@ -25,6 +25,7 @@ from dca_factory.delivery.application.requests.take_back_request import TakeBack
 from dca_factory.delivery.application.requests.write_request import WriteRequestCommand
 from dca_factory.delivery.application.shared.requests import DuplicateRequest, operations_of, RequestRefused, STATES
 from dca_factory.infrastructure import delivery as wiring
+from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 
 
 def validate(cwd, kind, fields, words):
@@ -224,7 +225,7 @@ class ProjectRecords(unittest.TestCase):
             write(os.path.join(folder, "20261024T100000Z-wish.md"),
                   record(rid="20261024T100000Z-wish", stage="request", extra="request: R-1\n"))
             write(os.path.join(folder, "misplaced.md"), record("US-1", "misplaced"))
-            found = {name: (state, error is None) for name, _f, _b, state, error, _p in contract.decision_files(p.root)}
+            found = {name: (state, error is None) for name, _f, _b, state, error, _p in records.decision_files(p.root)}
             self.assertEqual(found, {"US-1-01": ("open", True), "20261024T100000Z-wish": ("open", True),
                                      "misplaced": ("unreadable", False)})
             self.assertEqual([rid for _p, rid, _s in request_records(p.root, "R-1")],
@@ -258,7 +259,7 @@ class RecordText(unittest.TestCase):
     def test_a_record_shows_its_question_and_leaves_options_recommendation_and_answer_to_the_actions(self):
         body = record(story="s").split("---\n", 2)[2].replace("## Options", "## Question\nWhich `one`?\n\n## Options")
         body += "\n## Answer\nanswer: a\n"
-        self.assertEqual([(s["heading"], s["text"]) for s in cli.record_sections(body)], [("Question", "Which `one`?")])
+        self.assertEqual([(s["heading"], s["text"]) for s in records.record_sections(body)], [("Question", "Which `one`?")])
 
 
 ACCEPTANCE = """---
@@ -292,7 +293,7 @@ class Settled(unittest.TestCase):
                          ACCEPTANCE.format(rid="US-1-accept-1", story="US-1"))
             self.assertEqual(settle(p.root, p.runs, self.request("accept", story="US-1"), "2026-10-25T08:00:00Z"),
                              ["US-1-accept-1"])
-            self.assertEqual(contract.decision_state(contract.read_text(path))[1],
+            self.assertEqual(records.decision_state(contract.read_text(path))[1],
                              {"answer": "accepted", "by": "Ann", "at": "2026-10-25T08:00:00Z"})
 
     def test_an_option_is_written_for_a_requests_question_and_a_stages_question_goes_to_the_skill(self):
@@ -304,11 +305,11 @@ class Settled(unittest.TestCase):
             at = "2026-10-25T08:00:00Z"
             self.assertEqual(settle(p.root, p.runs, self.request("answer", record="US-1-01", option="b"), at),
                              ["US-1-01"])
-            self.assertEqual(contract.decision_state(contract.read_text(asked))[1]["answer"], "b")
+            self.assertEqual(records.decision_state(contract.read_text(asked))[1]["answer"], "b")
             self.assertIsNone(settle(p.root, p.runs, self.request("answer", record="US-1-02", option="a"), at))
             self.assertIsNone(settle(p.root, p.runs, dict(self.request("answer", record="US-1-01", option="a"),
                                                                    words="neither"), at))
-            self.assertEqual(contract.decision_state(contract.read_text(staged))[0], "open")
+            self.assertEqual(records.decision_state(contract.read_text(staged))[0], "open")
 
     def test_a_draft_its_question_pass_ran_on_is_released_and_one_changed_since_is_the_skills(self):
         with project() as p:

@@ -18,13 +18,15 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ADOPT_ORDER, confirmed_defects, CRITERION, decision_options, DECISIONS_DIR, decisions_store, DEFAULTS,
-    delivered_by, delivered_on, depends_on, duplicate_ids, EPIC_FILE, epic_folder, epic_graph, epic_order,
-    evidence_dir, evidence_rel, factory_home, file_digest, find_story, GateError, git, git_blob, in_worktree,
-    is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint, MAX_ROUNDS, needs_human_ids, NOTHING, order_for,
-    OWNED_DIGEST, place, PLACES_REL, plain, POST_GATED, PROFILE_FILE, read_profile, records_of, resolve_profile,
-    resume_stage, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, STATE_KEYS, STORY_BRANCH, story_digest,
-    STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
+    ADOPT_ORDER, confirmed_defects, CRITERION, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
+    EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest,
+    find_story, GateError, git, git_blob, in_worktree, is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint,
+    MAX_ROUNDS, order_for, OWNED_DIGEST, place, PLACES_REL, POST_GATED, PROFILE_FILE, read_profile, resolve_profile,
+    SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, STATE_KEYS, STORY_BRANCH, story_digest, STORY_FILE,
+    story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned, DECISIONS_DIR)
+from .delivery.adapter.outgoing.files.decision_record_files import (
+    acceptance_records, acceptance_state, accepted, answer_section, decision_options, decisions_store,
+    needs_human_ids, NOTHING, plain, records_of, resume_stage)
 from .delivery.application.shared.front import is_acceptance
 from .delivery.domain.model.story_state import RUNNABLE
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
@@ -215,19 +217,6 @@ def write_story_fields(path, **fields):
 OWNED_CHANGED = ".owned-changed"
 
 
-def answer_section(text):
-    """A record's `## Answer` section as written, up to the next `## ` heading — the person's part of it."""
-    lines, inside = [], False
-    for line in text.splitlines():
-        if line.strip().lower() == "## answer":
-            inside = True
-        elif inside and line.startswith("## "):
-            break
-        if inside:
-            lines.append(line)
-    return "\n".join(lines).rstrip() if lines else None      # a section appended after it leaves it as it was
-
-
 def owned_parts(story_path):
     """{part: sha256} of what is the person's: the story file, and the `## Answer` of every record that has one."""
     parts = {STORY_FILE: file_digest(story_path)} if story_path and os.path.isfile(story_path) else {}
@@ -273,17 +262,6 @@ def owned_changes(runs, story_id, story_path=None):
             before[part] = digest
     now = owned_parts(story_path or owned_story_path(story_id))
     return sorted(part for part in set(before) | set(now) if before.get(part) != now.get(part))
-
-
-def answer_sentence(body, answer):
-    """The sentence an answered record leaves in its story — deterministic: where the answer names an option of the
-    record's `## Options` by its label (`a`, `B`, `option b`), that option's first line; else the answer itself.
-    One line, markup and runs of white space taken out."""
-    given = " ".join(str(answer.get("answer", "")).split())
-    label = re.sub(r"^(?:option\s+)", "", given, flags=re.I).strip(" .):*")
-    if re.fullmatch(r"[A-Za-z0-9]{1,3}", label or ""):
-        given = next((o["line"] for o in decision_options(body) if o["key"].lower() == label.lower()), given)
-    return plain(given)
 
 
 def write_answered(story_path, runs, rid, sentence):
@@ -688,48 +666,6 @@ def write_mark(runs, story_id, name, content):
     os.makedirs(folder, exist_ok=True)
     with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
         handle.write(content + "\n")
-
-
-#: A story delivered only once a human looked at it: the record kind, the modes of `acceptance:`.
-ACCEPTANCE_KIND = "acceptance"
-
-
-ACCEPTANCE_MODES = ("none", "pages", "all")
-
-
-def acceptance_mode(profile):
-    mode = str(profile.get("acceptance", "none")).strip().lower() or "none"
-    if mode not in ACCEPTANCE_MODES:
-        raise GateError(f"`acceptance: {mode}` is none of {', '.join(ACCEPTANCE_MODES)}")
-    return mode
-
-
-def acceptance_records(cwd, story_id, story_path=None):
-    """This story's acceptance records, oldest first: [(id, front, state, answer, body)]."""
-    records = records_of(story_id, story_path)
-    found = [(str(f["id"]).strip(), f, state, answer, body) for _p, f, body, state, answer in records if is_acceptance(f)]
-    number = lambda rid: int(re.search(r"(\d+)$", rid).group(1)) if re.search(r"(\d+)$", rid) else 0
-    return sorted(found, key=lambda r: number(r[0]))
-
-
-def accepted(answer):
-    return str(answer.get("answer", "")).strip().lower().startswith("accept")
-
-
-def acceptance_state(cwd, story_id, story_path):
-    """('ask' | 'open' | 'accepted' | 'correction', id or None) for the story as it is now.
-
-    An answer holds for the story it was given for: the record carries the story's digest, and a
-    story changed since — a correction written in — is asked again once it has run."""
-    records = acceptance_records(cwd, story_id, story_path)
-    if not records:
-        return "ask", None
-    rid, front, state, answer, _body = records[-1]
-    if state in ("open", "draft"):
-        return "open", rid
-    if str(front.get("digest", "")).strip() != story_digest(story_path):
-        return "ask", rid
-    return ("accepted" if accepted(answer) else "correction"), rid
 
 
 #: The reports of a gate that delivers.

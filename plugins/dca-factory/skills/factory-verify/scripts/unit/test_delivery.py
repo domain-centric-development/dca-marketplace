@@ -8,6 +8,7 @@ import unittest
 
 from support import contract, project, state, write
 from dca_factory import cli, runner
+from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 
 DELIVERED = """---
 id: {id}
@@ -139,9 +140,9 @@ stage: plan
 class Answered(unittest.TestCase):
 
     def test_an_option_label_reads_as_the_options_text_and_a_free_answer_as_itself(self):
-        self.assertEqual(state.answer_sentence(RECORD, {"answer": "a"}), "The first way, with its cost.")
-        self.assertEqual(state.answer_sentence(RECORD, {"answer": "Option B"}), "The second way.")
-        self.assertEqual(state.answer_sentence(RECORD, {"answer": "Neither:\n  keep it  as is"}),
+        self.assertEqual(records.answer_sentence(RECORD, {"answer": "a"}), "The first way, with its cost.")
+        self.assertEqual(records.answer_sentence(RECORD, {"answer": "Option B"}), "The second way.")
+        self.assertEqual(records.answer_sentence(RECORD, {"answer": "Neither:\n  keep it  as is"}),
                          "Neither: keep it as is")
 
     def test_every_option_form_a_stage_writes_reads_as_its_label_and_text(self):
@@ -150,15 +151,15 @@ class Answered(unittest.TestCase):
                   "- **b – this story writes its scenarios.** Nothing else.\n"
                   "- c - neither\n- **d.** fourth\n- **e**: fifth\n- f) sixth\n(g) seventh\n- h. eighth\n"
                   "- a correction: not an option\n\n## Recommendation\n**Option b.** Because.\n")
-        options = contract.decision_options(record)
+        options = records.decision_options(record)
         self.assertEqual([o["key"] for o in options], list("abcdefgh"))
         self.assertEqual(options[0]["line"], "the check also knows the stories in flight. It also accepts")
         self.assertEqual(options[0]["text"], "the check also knows the stories in flight. It also accepts titles in flight.")
         self.assertEqual(options[2]["line"], "neither")
         self.assertEqual(options[7]["text"], "eighth - a correction: not an option")
-        self.assertEqual(contract.recommended_option(record), "b")
-        self.assertEqual(contract.recommended_option("## Options\n- a: x\n\n## Recommendation\nnone of them\n"), None)
-        self.assertEqual(state.answer_sentence(record, {"answer": "b"}), "this story writes its scenarios. Nothing else.")
+        self.assertEqual(records.recommended_option(record), "b")
+        self.assertEqual(records.recommended_option("## Options\n- a: x\n\n## Recommendation\nnone of them\n"), None)
+        self.assertEqual(records.answer_sentence(record, {"answer": "b"}), "this story writes its scenarios. Nothing else.")
 
     def test_the_line_goes_under_the_assumptions_once_and_the_planned_digest_follows(self):
         with project() as p:
