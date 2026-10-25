@@ -36,7 +36,8 @@ corrected.
 
 **Type:** Feature
 
-**Related terms:** `Stage`, `Gate`, `Evidence`, `Journal`, `Round`
+**Related terms:** `Stage`, `Gate`, `Evidence`, `Journal`, `Round`, `Delivery` — use cases `reopen_story`,
+`prove_delivery`, `deliver_by_hand`
 
 ### Description (description)
 
@@ -72,9 +73,12 @@ delivers it, delivered after; history once delivered — what holds is the spec'
 - `Epic` (referenced by its id — the folder the story stands in)
 - `Decision record` (beside the story, referenced by the story's id)
 - `Assumption` (Value Object, a line under `## Assumptions`)
+- `Delivery` (Value Object, its delivered lines)
 
 **Operations:** release (`release`) — a draft becomes approved, its release an answered assumption; deliver
-(`deliver`); reopen (`reopen`) — a delivered story taken back for a correction
+(`deliver`); reopen (`reopen`) — a delivered story taken back for a correction; adopt for proof
+(`adopt_for_proof`) — a claimed delivery handed to the adopt path, the claim returned to be kept; deliver by hand
+(`deliver_by_hand`) — a story a person built, delivered and claimed by them
 
 ### Decision record (DecisionRecord)
 
@@ -117,7 +121,8 @@ over once its stories are delivered.
 
 ### Story status (StoryStatus)
 
-**Definition:** Where a story stands in its life: `draft`, `approved`, `delivered`, `superseded`.
+**Definition:** Where a story stands in its life: `draft`, `approved`, `delivered`, `superseded`, `adopted` (the
+code exists — the adopt path checks it and builds nothing).
 
 **Type:** Value Object
 
@@ -156,6 +161,20 @@ over once its stories are delivered.
 
 **Definition:** A line under a story's `## Assumptions`; `answered:` where a person settled it — a release by a
 request is one.
+
+**Type:** Value Object
+
+### Delivery (Delivery) · Delivered on (DeliveredOn) · Delivered by (DeliveredBy)
+
+**Definition:** A story's delivered lines: when (`delivered:`, as written) and who claims it — `gate`, `hand:<who>`,
+or nothing for a story delivered before the line existed.
+
+**Type:** Value Object
+
+### Gate pass (GatePass)
+
+**Definition:** Whether the pass of the gate that delivered a story is on record — a delivery by the gate with its
+pass on record has nothing to prove.
 
 **Type:** Value Object
 

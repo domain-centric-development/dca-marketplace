@@ -61,12 +61,12 @@ from .sharedkernel.adapter.outgoing.profile.profile_files import (
     resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git
 from .delivery.adapter.outgoing.files.story_layout import (
-    delivered_by, delivered_on, EPIC_FILE, epic_folder, find_story, is_delivered, story_files,
+    delivered_on, EPIC_FILE, epic_folder, find_story, is_delivered, story_files,
     story_id_of, story_kind)
 from .delivery.application.shared.front import CREATED_KEY
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .delivery.adapter.outgoing.tools.streams import follow_lines, tokens_of, usage_from
-from .state import schedule, start, story_state
+from .state import schedule, start
 from .delivery.adapter.outgoing.claims.remote_claims import (
     cached_claims, claim_config_here, claim_story, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
     remote_main)
@@ -77,17 +77,15 @@ from .delivery.adapter.outgoing.files.windows import freeze_all, mark_stage, mar
 from .delivery.adapter.outgoing.files.usage_files import journal_usage
 from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.files.run_marks import (
-    accepted_criteria, back_in, gate_passed_on_record, OWNED_CHANGED, run_stories, story_title)
+    back_in, OWNED_CHANGED, run_stories, story_title)
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.adapter.outgoing.files.owned_files import record_owned, write_story_fields
 from .delivery.adapter.outgoing.files.journal_files import journal_append, journal_events, journal_writer
-from .delivery.adapter.outgoing.files.decision_record_files import acceptance_records
-from .delivery.application.shared.front import accepted
 from .spec.api import (
     lint_context,
-    derived, merge, read_delta, read_spec, render_spec, renamed_rules, story_entries)
+    derived, read_delta, renamed_rules, story_entries)
 from .gate import (
-    criteria_of, spec_target, story_spec, perspectives_of, story_ids)
+    spec_target, story_spec, perspectives_of, story_ids)
 from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_invocation, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
     follow_newest, story_facts)
@@ -111,12 +109,21 @@ from .delivery.application.requests.take_back_request import TakeBackRequestComm
 from .delivery.application.requests.write_request import WriteRequestCommand
 from .delivery.application.shared.requests import DuplicateRequest, KIND, KINDS, RequestRefused
 from .building_blocks import UseCaseException
+from .delivery.adapter.outgoing.claims.story_claims import claim_target
+from .delivery.adapter.outgoing.files.story_runs import CLAIM_FILE  # noqa: F401 — where `--prove` keeps the claim
+from .delivery.application.shared.story_repository import StoryNotFound
+from .delivery.application.delivery.deliver_by_hand import ChangesWhatHolds, ClaimedElsewhere, DeliverByHandCommand
+from .delivery.application.delivery.prove_delivery import ProveDeliveryCommand
+from .delivery.application.delivery.reopen_story import CheckoutHeld, NewWish, NoCorrection, NotCited, ReopenStoryCommand
+from .delivery.domain.model.moment import Moment
+from .delivery.domain.model.person import Person
+from .delivery.domain.model.story import AlreadyDelivered, NotDelivered, NothingToDeliver, NothingToProve, StoryId
 from .infrastructure import delivery as wiring
 from .delivery.adapter.outgoing.process import factory_process
 from .web import service as web
 from .runner import (
     contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
-    command_heads, first_word, model_for, needs_human_lines, open_decision_files, PASS_MARKS, plan_skeleton, run_main,
+    command_heads, first_word, model_for, needs_human_lines, open_decision_files, plan_skeleton, run_main,
     stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove, request_main,
     settle_command)
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
@@ -586,131 +593,79 @@ def backfill_created(cwd, epics):
     return 0
 
 
-def checkout_holders(cwd, epics, runs, exclude=None):
-    """The stories with unfinished code in the checkout — past their test stage, not delivered — as
-    the schedule counts them."""
-    holders = []
-    for path in story_files(epics):
-        try:
-            front, _body = read_front_matter(path)
-        except GateError:
-            continue
-        story_id = story_id_of(path, front)
-        if story_id == exclude or not os.path.isfile(os.path.join(runs, story_id, STAGE_FILES["test"])):
-            continue
-        if story_state(cwd, runs, story_id, front, path)[0] not in ("delivered", "superseded"):
-            holders.append(story_id)
-    return sorted(holders)
+def story_command(run):
+    """A story command's use case run; a story not found is the gate's error, as the readers raise it."""
+    try:
+        return run()
+    except StoryNotFound as error:
+        raise GateError(str(error)) from None
 
 
 def reopen(cwd, runs, epics, story_id):
-    """Take a delivered story back for a correction a human gave on looking at it.
-
-    Only with an answered acceptance record the story cites — the answer is in the story, not in a
-    prompt. Before a story was accepted every answer is a correction; after an acceptance, one that
-    changes or takes back a criterion is a new wish, and that is a new story, not this one."""
-    story_path = find_story(epics, story_id)
-    front, _body = read_front_matter(story_path)
-    if not is_delivered(front):
+    """Take a delivered story back for a correction a human gave on looking at it (`ReopenStoryUseCase`)."""
+    try:
+        result = story_command(lambda: wiring.reopen_story(cwd, epics, runs).execute(
+            ReopenStoryCommand(StoryId(story_id))))
+    except NotDelivered:
         print(f"reopen: {story_id} is not delivered — a correction before delivery goes into the story, "
               f"and the schedule runs it from plan")
         return 1
-    records = acceptance_records(cwd, story_id, story_path)
-    if not records or records[-1][2] not in ("answered", "applied") or accepted(records[-1][3]):
+    if isinstance(result, NoCorrection):
         print(f"reopen: {story_id} has no answered correction — /factory-decisions records the human's "
               f"correction as an acceptance record first")
-        return 1
-    rid = records[-1][0]
-    holders = checkout_holders(cwd, epics, runs, exclude=story_id)
-    if holders:
-        print(f"reopen: {', '.join(holders)} holds the checkout with unfinished code — one story at a time; "
-              f"reopen {story_id} once it is delivered")
-        return 1
-    text = read_text(story_path)
-    if rid not in text:
+    elif isinstance(result, CheckoutHeld):
+        print(f"reopen: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — one "
+              f"story at a time; reopen {story_id} once it is delivered")
+    elif isinstance(result, NotCited):
+        rid = result.record.value
         print(f"reopen: the story does not cite {rid} — write the correction into it first (criteria and "
               f"an `answered:` line naming {rid})")
-        return 1
-    # After an acceptance, the criteria as accepted are the record's list: a correction that changes one of
-    # them is a new wish.
-    earlier = [record for record in records[:-1] if accepted(record[3])]
-    if earlier:
-        before = dict(accepted_criteria(earlier[-1][4]))
-        now = dict(criteria_of(story_path, read_front_matter(story_path)[1]))
-        changed = sorted(key for key, value in before.items() if now.get(key) != value)
-        if changed:
-            print(f"reopen: after its acceptance the correction changes {', '.join(changed)} — that is a new "
-                  f"wish: a new story with `## Changed expectations`, not this one reopened")
-            return 1
-    kept = keep_pass(os.path.join(runs, story_id))
-    write_story_fields(story_path, status="approved", delivered=None, delivered_by=None)
-    print(f"reopen: {story_id} taken back for {rid} — it runs again from plan; the delivered pass is kept as "
-          f"{shown(kept) if kept else 'nothing (no run folder)'}, and the story no longer says delivered")
-    return 0
+    elif isinstance(result, NewWish):
+        print(f"reopen: after its acceptance the correction changes {', '.join(result.changed)} — that is a new "
+              f"wish: a new story with `## Changed expectations`, not this one reopened")
+    else:
+        print(f"reopen: {story_id} taken back for {result.record.value} — it runs again from plan; the delivered pass "
+              f"is kept as {shown(result.kept) if result.kept else 'nothing (no run folder)'}, and the story no "
+              f"longer says delivered")
+        return 0
+    return 1
 
 
 def deliver_by_hand(cwd, runs, epics, story_id, who, force=False):
-    """A story a person built: `status: delivered`, `delivered:` (UTC), `delivered_by: hand:<who>`. Works where the
-    factory never ran. The delivery is claimed, not proven — `--prove` checks it later through the adopt path. A
-    delivered story is not delivered a second time: a change of delivered behaviour is a new story."""
+    """A story a person built: `status: delivered`, `delivered:` (UTC), `delivered_by: hand:<who>`
+    (`DeliverByHandUseCase`). Works where the factory never ran; `--prove` checks it later."""
     who = " ".join(str(who or "").split())
     if not who:
         print("deliver-by-hand: `--by <who>` names the person who delivers — the line is their claim")
         return 1
-    story_path = find_story(epics, story_id)
-    front, _body = read_front_matter(story_path)
-    if is_delivered(front):
-        print(f"deliver-by-hand: {story_id} is delivered already ({delivered_by(front) or 'before delivered_by'}) — "
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        result = story_command(lambda: wiring.deliver_by_hand(cwd, epics, runs).execute(
+            DeliverByHandCommand(StoryId(story_id), Person(who), Moment(stamp), force)))
+    except AlreadyDelivered as error:
+        print(f"deliver-by-hand: {story_id} is delivered already ({error.by.value or 'before delivered_by'}) — "
               f"a change of its behaviour is a new story with `## Changed expectations`")
         return 1
-    status = str(front.get("status", "")).strip().lower()
-    if status == "superseded":
+    except NothingToDeliver:
         print(f"deliver-by-hand: {story_id} is superseded — nothing to deliver")
         return 1
-    config = claim_config_here(cwd)
-    if config:
-        refresh_claims(cwd, runs, config, claim_target(cwd), say=lambda _line: None)
-        held = cached_claims(runs).get(story_id)
-        if held and not held["own"]:
-            if not force:
-                print(f"deliver-by-hand: {story_id} is claimed by {held['who']} ({held['host']}) since {held['since']} — "
-                      f"another factory builds it; `--force` delivers it anyway")
-                return 1
-            with contextlib.suppress(OSError):
-                journal_append(runs, story_id, "note", "deliver-by-hand", f"over-claim={held['who']}", "forced=1")
-    # The spec takes the story's new criteria, without test lines — unproven until `--prove`. A story that changes or
-    # removes what holds needs a plan to derive its delta: that is `--prove`'s adopt path, not this helper.
-    _front, body = read_front_matter(story_path)
-    target, spec, _features, feature = story_spec(front)
-    preamble = read_spec(target)[0] if target else []
-    own = [item for item in spec if item["feature"] == feature] if story_kind(front) != "journey" else spec
-    story = story_entries(body) if target else []
-    elsewhere = {item["key"] for item in spec if item["feature"] != feature}
-    changing = [key for key, verb in derived(story, spec).items() if verb == "changes"] \
-        + sorted(item["key"] for item in story if item["key"] in elsewhere)
-    if changing:
-        print(f"deliver-by-hand: {story_id} changes what holds ({', '.join(changing)} in {shown(target)}) — the delta of a "
-              f"change is planned: `factory-cli.py --prove {story_id}` once it is delivered, or run it through the factory")
+    if isinstance(result, ClaimedElsewhere):
+        held = result.claim
+        print(f"deliver-by-hand: {story_id} is claimed by {held.who} ({held.host}) since {held.since} — "
+              f"another factory builds it; `--force` delivers it anyway")
         return 1
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by=f"hand:{who}")
-    added = [item for item in story if item["key"] not in {s["key"] for s in spec}]
-    if added:
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w", encoding="utf-8") as handle:
-            handle.write(render_spec(preamble, merge(own, story, read_delta(""), {}), str(front.get("context", "")).strip()
-                                     or "Spec"))
-        print(f"deliver-by-hand: {len(added)} criterion(s) into {shown(target)}, without a test line — unproven until "
-              f"`--prove`")
-    print(f"deliver-by-hand: {shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
+    if isinstance(result, ChangesWhatHolds):
+        print(f"deliver-by-hand: {story_id} changes what holds ({', '.join(result.change.keys)} in "
+              f"{shown(result.change.where)}) — the delta of a change is planned: `factory-cli.py --prove {story_id}` "
+              f"once it is delivered, or run it through the factory")
+        return 1
+    if result.unproven.keys:
+        print(f"deliver-by-hand: {len(result.unproven.keys)} criterion(s) into {shown(result.unproven.where)}, without "
+              f"a test line — unproven until `--prove`")
+    print(f"deliver-by-hand: {shown(find_story(epics, story_id))} carries `status: delivered`, `delivered: {stamp}`, "
           f"`delivered_by: hand:{who}` — delivered, claimed. Commit it with the trailer `Story: {story_id}`; "
           f"`factory-cli.py --prove {story_id}` turns the claim into proof.")
     return 0
-
-
-def claim_target(cwd):
-    """The branch the main checkout is on — the remote's branch of that name is the shared main line."""
-    return git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip() or "main"
 
 
 def claim_command(cwd, runs, epics, story_id):
@@ -871,62 +826,28 @@ def spec_check(cwd, runs, epics):
     return 1 if problems else 0
 
 
-#: Where `--prove` keeps the claim it took out of the story: one line in the story's evidence.
-CLAIM_FILE = "claim"
-
-
 def prove(cwd, runs, epics, story_id):
-    """A claimed delivery checked through the adopt path: the story becomes `status: adopted` — the code exists,
-    check it, build nothing — and loses its delivered lines (`delivered_on` would keep it delivered and
-    unscheduled). The claim is kept as one line of the evidence. The adopt gate then maps every criterion to a
-    green test, proves the tests the adoption writes with a break, has a fresh judge read them, and writes
-    `status: delivered`, `delivered_by: gate`. Not the way to deliver an edit: a change is a new story."""
-    story_path = find_story(epics, story_id)
-    front, _body = read_front_matter(story_path)
-    if not is_delivered(front):
+    """A claimed delivery checked through the adopt path (`ProveDeliveryUseCase`): the story becomes
+    `status: adopted`, its claim kept as one line of the evidence; the adopt gate then proves it and delivers it."""
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        result = story_command(lambda: wiring.prove_delivery(cwd, epics, runs).execute(
+            ProveDeliveryCommand(StoryId(story_id), Moment(stamp))))
+    except NotDelivered:
         print(f"prove: {story_id} is not delivered — `--prove` checks a claimed delivery; an open story runs as it is")
         return 1
-    by = delivered_by(front)
-    if by == "gate" and gate_passed_on_record(cwd, runs, story_id, story_path):
+    except NothingToProve:
         print(f"prove: {story_id} is delivered by the gate with its pass on record — nothing to prove")
         return 1
-    holders = checkout_holders(cwd, epics, runs, exclude=story_id)
-    if holders:
-        print(f"prove: {', '.join(holders)} holds the checkout with unfinished code — one story at a time; "
-              f"prove {story_id} once it is delivered")
+    if isinstance(result, CheckoutHeld):
+        print(f"prove: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — one "
+              f"story at a time; prove {story_id} once it is delivered")
         return 1
-    evidence = evidence_dir(runs, story_id)
-    os.makedirs(evidence, exist_ok=True)
-    with open(os.path.join(evidence, CLAIM_FILE), "a", encoding="utf-8") as handle:
-        handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\tdelivered_by={by or 'unknown'}"
-                     f"\tdelivered={delivered_on(front)}\n")
-    kept = keep_pass(os.path.join(runs, story_id))
-    write_story_fields(story_path, status="adopted", delivered=None, delivered_by=None)
+    by = result.claim.by.value or "unknown"
     print(f"prove: {story_id} is `status: adopted` — the adopt path checks it (`factory.sh run --story {story_id}`); "
-          f"the claim ({by or 'unknown'}) is kept in {shown(os.path.join(evidence, CLAIM_FILE))}"
-          + (f", the earlier pass as {shown(kept)}" if kept else ""))
+          f"the claim ({by}) is kept in {shown(result.claim_kept)}"
+          + (f", the earlier pass as {shown(result.kept)}" if result.kept else ""))
     return 0
-
-
-def keep_pass(folder):
-    """Before a story runs again from plan: its hand-overs and refusals, and the marks of the pass (`PASS_MARKS`, the
-    base tree the pass's diff was taken against among them), go to `<evidence>/<story>/pass-<n>/` — the next pass
-    records its own. The journal and the tree snapshots stay where they are; the history continues. Returns the
-    folder, or None without a run folder."""
-    if not os.path.isdir(folder):
-        return None
-    folder = os.path.normpath(folder)
-    evidence = evidence_dir(os.path.dirname(folder), os.path.basename(folder))
-    os.makedirs(evidence, exist_ok=True)
-    number = 1 + sum(1 for name in os.listdir(evidence) if name.startswith("pass-"))
-    target = os.path.join(evidence, f"pass-{number}")
-    os.makedirs(target)
-    for name in sorted(os.listdir(folder)):
-        os.replace(os.path.join(folder, name), os.path.join(target, name))
-    for name in PASS_MARKS:
-        if os.path.isfile(os.path.join(evidence, name)):
-            os.replace(os.path.join(evidence, name), os.path.join(target, name))
-    return target
 
 
 # --- the carriers the profile names ------------------------------------------------------

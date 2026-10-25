@@ -58,8 +58,9 @@ from .gate import (
     read_mapping, spec_target, stale_red_proof, story_spec,
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
     integration_target, INVARIANTS_MARKER, lost_text, main_tests_lost, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
-    MAIN_TESTS, read_invariant_rows, rebase_tests_baseline, record_main_tests, scenario_clauses, TESTS_BASELINE)
+    read_invariant_rows, rebase_tests_baseline, record_main_tests, scenario_clauses, TESTS_BASELINE)
 from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_command, TOOLS, tools_shell
+from .delivery.adapter.outgoing.files.story_runs import PASS_MARKS
 from .building_blocks import UseCaseException
 from .delivery.adapter.incoming.runner.usage import book_request_usage
 from .delivery.adapter.outgoing.files.decision_record_files import project_record_path, request_records
@@ -469,10 +470,6 @@ def move_path(cwd, src, dst):
     shutil.move(os.path.join(cwd, src), os.path.join(cwd, dst))
     return "mv"
 
-
-#: What the gate and the runner keep in a story's evidence folder that a new pass starts without: the red ledger, the
-#: story's digest, the tests baseline, the round count, the base tree and the red tree. The journal and the snapshots carry on.
-PASS_MARKS = (".tests-red", STORY_DIGEST, TESTS_BASELINE, ".rounds", "base-tree", "red-tree", STAGES_MADE, MAIN_TESTS)
 
 
 def migrate_evidence(cwd, runs, say):

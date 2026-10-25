@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
+from ..delivery.adapter.outgoing.claims.story_claims import RemoteStoryClaims
+from ..delivery.adapter.outgoing.files.acceptance_files import AcceptanceFiles
 from ..delivery.adapter.outgoing.files.description_files import DescriptionFiles
 from ..delivery.adapter.outgoing.files.detail_files import DetailFactFiles
 from ..delivery.adapter.outgoing.files.decision_record_files import DecisionInboxFiles, DecisionRecordFiles
@@ -13,6 +15,8 @@ from ..delivery.adapter.outgoing.files.project_files import ProjectFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
 from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles
+from ..delivery.adapter.outgoing.files.story_runs import StoryRunFiles
+from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.pipeline.stage_table import ContractStages
 from ..delivery.application.backlog.release_stories import ReleaseStoriesUseCase
 from ..delivery.application.cost.book_request_cost import BookRequestCostUseCase
@@ -27,6 +31,9 @@ from ..delivery.application.requests.take_back_request import TakeBackRequestUse
 from ..delivery.application.requests.write_request import WriteRequestUseCase
 from ..delivery.application.shared.request_check import RequestCheck
 from ..delivery.application.status.show_epic import ShowEpicUseCase
+from ..delivery.application.delivery.deliver_by_hand import DeliverByHandUseCase
+from ..delivery.application.delivery.prove_delivery import ProveDeliveryUseCase
+from ..delivery.application.delivery.reopen_story import ReopenStoryUseCase
 from ..delivery.application.status.show_help import ShowHelpUseCase
 from ..delivery.application.status.show_status import ShowStatusUseCase
 from ..delivery.application.status.show_story import ShowStoryUseCase
@@ -90,3 +97,16 @@ def show_epic(cwd: str, epics: str, runs: str) -> ShowEpicUseCase:
 
 def show_help(cwd: str, epics: str, runs: str) -> ShowHelpUseCase:
     return ShowHelpUseCase(show_status(cwd, epics, runs), ProjectFiles(cwd, epics, runs), StatusFactFiles(cwd, epics, runs))
+
+
+def reopen_story(cwd: str, epics: str, runs: str) -> ReopenStoryUseCase:
+    return ReopenStoryUseCase(StoryFiles(cwd, epics), AcceptanceFiles(cwd, epics), StoryRunFiles(cwd, epics, runs))
+
+
+def prove_delivery(cwd: str, epics: str, runs: str) -> ProveDeliveryUseCase:
+    return ProveDeliveryUseCase(StoryFiles(cwd, epics), StoryRunFiles(cwd, epics, runs))
+
+
+def deliver_by_hand(cwd: str, epics: str, runs: str) -> DeliverByHandUseCase:
+    return DeliverByHandUseCase(StoryFiles(cwd, epics), RemoteStoryClaims(cwd, runs), StorySpecFiles(epics),
+                                StoryJournalFiles(cwd, runs))

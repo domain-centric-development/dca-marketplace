@@ -6,7 +6,7 @@ import contextlib
 import os
 import typing
 
-from .story_layout import epic_folder, find_story, story_files, story_folder, story_id_of
+from .story_layout import delivered_by, delivered_on, epic_folder, find_story, story_files, story_folder, story_id_of
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
@@ -14,7 +14,7 @@ from .owned_files import write_story_fields
 from ....application.shared.requests import ID_WORD
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.epic import EpicId
-from ....domain.model.story import Assumption, Story, StoryId, StoryStatus
+from ....domain.model.story import Assumption, DeliveredBy, DeliveredOn, Delivery, Story, StoryId, StoryStatus
 from .epic_files import epic_dir
 from .request_files import write_atomic
 
@@ -52,10 +52,10 @@ def names_story(word: str) -> bool:
 
 
 class StoryFiles:
-    """The story repository as files, under the project the process works in."""
+    """The story repository as files, under the project the process works in — or under the epics folder given."""
 
-    def __init__(self, cwd: str) -> None:
-        self._epics = os.path.join(cwd, place("epics"))
+    def __init__(self, cwd: str, epics: typing.Optional[str] = None) -> None:
+        self._epics = epics or os.path.join(cwd, place("epics"))
 
     def path_of(self, story_id: StoryId) -> str:
         """The story's file; StoryNotFound with the reason where no single story has the id."""
@@ -81,8 +81,14 @@ class StoryFiles:
     def save(self, aggregate: Story) -> Story:
         path = self.path_of(aggregate.id)
         front, body = read_front_matter(path)
-        if status_of(front.get("status")) is not aggregate.status:
-            write_story_fields(path, status=aggregate.status.value)
+        state = dict(status=aggregate.status.value,
+                     delivered=aggregate.delivery.on.value or None if aggregate.delivery else None,
+                     delivered_by=aggregate.delivery.by.value or None if aggregate.delivery else None)
+        written_state = dict(status=status_of(front.get("status")).value, delivered=delivered_on(front) or None,
+                             delivered_by=delivered_by(front) or None)
+        changed = {key: value for key, value in state.items() if value != written_state[key]}
+        if changed:
+            write_story_fields(path, **changed)
         written = {line.strip() for line in section_of(body, ASSUMPTIONS) or []}
         for assumption in aggregate.assumptions:
             if assumption.value.strip() not in written:
@@ -99,5 +105,7 @@ class StoryFiles:
     def read(path: str) -> Story:
         front, body = read_front_matter(path)
         assumptions = [Assumption(line.rstrip()) for line in section_of(body, ASSUMPTIONS) or [] if line.strip()]
+        on, by = delivered_on(front), delivered_by(front)
+        delivery = Delivery(DeliveredOn(on), DeliveredBy(by)) if on or by else None
         return Story(StoryId(story_id_of(path, front)), EpicId(os.path.basename(epic_folder(path))),
-                     status_of(front.get("status")), assumptions)
+                     status_of(front.get("status")), assumptions, delivery)

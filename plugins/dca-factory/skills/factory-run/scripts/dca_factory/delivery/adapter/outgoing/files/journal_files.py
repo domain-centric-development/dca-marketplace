@@ -169,3 +169,7 @@ class StoryJournalFiles:
         if usage.cost is not None:
             cells.append(f"cost={usage.cost.value:.4f}")
         journal_append(self._runs, window.story.value, "usage", window.name, *cells)
+
+    def delivered_over_claim(self, story: StoryId, who: str) -> None:
+        with contextlib.suppress(OSError):
+            journal_append(self._runs, story.value, "note", "deliver-by-hand", f"over-claim={who}", "forced=1")

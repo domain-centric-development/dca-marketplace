@@ -33,3 +33,7 @@ class StoryJournal(Store, typing.Protocol):
     def book(self, window: Window, usage: Usage, tool: str, request: str) -> None:
         """One `usage` line on the window: the share of a request's usage, its tool and the request."""
         ...
+
+    def delivered_over_claim(self, story: StoryId, who: str) -> None:
+        """A note that the story was delivered by hand over another factory's claim, by force."""
+        ...
