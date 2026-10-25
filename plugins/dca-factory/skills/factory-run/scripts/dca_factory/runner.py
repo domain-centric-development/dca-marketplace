@@ -54,11 +54,12 @@ from .delivery.adapter.outgoing.files.journal_files import journal_path, journal
 from .spec.api import (
     context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
-    BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET, in_places,
-    integration_target, INVARIANTS_MARKER, lost_text, main_tests_lost, merge_target, people_places, perspectives_of,
-    plan_invariants, plan_proposals, read_clause_rows, read_invariant_rows, rebase_tests_baseline,
-    record_main_tests, run as run_command, scenario_clauses, spec_target, stale_red_proof, story_journals,
+    BUILT_IN_PERSPECTIVES, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET, in_places,
+    integration_target, lost_text, main_tests_lost, merge_target, people_places, perspectives_of, plan_proposals,
+    rebase_tests_baseline, record_main_tests, run as run_command, spec_target, stale_red_proof, story_journals,
     story_spec, tail, TESTS_BASELINE)
+from .delivery.adapter.outgoing.files.design_files import (
+    CLAUSES_MARKER, INVARIANTS_MARKER, plan_invariants, read_clause_rows, read_invariant_rows, scenario_clauses)
 from .delivery.adapter.outgoing.files.test_files import read_mapping
 from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_command, TOOLS, tools_shell
 from .delivery.adapter.outgoing.files.story_runs import PASS_MARKS

@@ -7,17 +7,20 @@ import os
 import re
 import typing
 
-from .....contract import CONTRACT, GateError, HAPPY_MARK, STAGE_FILES, VERSION
+from .....contract import CONTRACT, GateError, HAPPY_MARK, SELECTOR, STAGE_FILES, VERSION
+from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
-    evidence_dir, location, place, shown, unknown_profile_keys)
+    evidence_dir, factory_home, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
 from ....application.shared.front import is_acceptance
 from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AnswerField, ByteSize, CommandKey, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
+    AnswerField, AssertionAt, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
+    ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
+    ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
     ScenarioKey, StageStory, UnknownKey)
 from ....domain.model.story import DeliveredOn, StoryId
@@ -31,6 +34,9 @@ from .epic_files import epic_dependency_problem
 from .findings_files import findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, write_answered
 from .test_files import plan_levels, stage_bytes, unfinished_levels
+from .design_files import (
+    adapter_level_keys, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
+    plan_invariants, read_clause_rows, read_invariant_rows, scenario_clauses)
 from .run_marks import OWNED_CHANGED
 from .story_layout import delivered_on, EPIC_FILE, epic_folder, find_story, story_kind
 
@@ -160,7 +166,9 @@ def stage_story(story_id: str, story_path: str, front: Front, body: str,
         StatusWord(str(front.get("status", "")).strip().lower()), DeliveredOn(delivered_on(front)),
         tuple(ScenarioKey(key) for key, _text in criteria), tuple(ScenarioKey(k) for k in happy_paths(body)),
         tuple(StoryId(s) for s in depends_on_of(front)), tuple(RowId(r) for r in closes_of(front)),
-        tuple(EventName(e) for e in publishes_of(front)))
+        tuple(EventName(e) for e in publishes_of(front)),
+        tuple(ScenarioClauses(ScenarioKey(key), tuple(Clause(Count(n), Detail(text)) for n, text in clauses))
+              for key, clauses in scenario_clauses(body).items()))
 
 
 class StageEvidenceFiles:
@@ -282,7 +290,8 @@ class StageEvidenceFiles:
         if not os.path.isfile(os.path.join(self._runs, story.value, "plan.md")):
             return None
         return PlanLevels(tuple(ScenarioKey(k) for k in unfinished_levels(self._runs, story.value)),
-                          frozenset(ScenarioKey(k) for k in plan_levels(self._runs, story.value)))
+                          frozenset(ScenarioKey(k) for k in plan_levels(self._runs, story.value)),
+                          frozenset(ScenarioKey(k) for k in adapter_level_keys(self._runs, story.value)))
 
     def hand_over_sizes(self, story: StoryId,
                         names: typing.Tuple[HandOverName, ...]) -> typing.Tuple[HandOverSize, ...]:
@@ -292,6 +301,71 @@ class StageEvidenceFiles:
             if os.path.isfile(path):
                 found.append(HandOverSize(name, ByteSize(stage_bytes(path, name.value))))
         return tuple(found)
+
+    def _run_file(self, story: StoryId, name: str) -> typing.Optional[str]:
+        path = os.path.join(self._runs, story.value, name)
+        return read_text(path) if os.path.isfile(path) else None
+
+    def invariants(self, story: StageStory) -> typing.Optional[InvariantFacts]:
+        plan = self._run_file(story.story, "plan.md")
+        if plan is None:
+            return None
+        tests = self._run_file(story.story, "tests.md")
+        named = plan_invariants(plan) or {}
+        listed = sum(1 for line in section_of(plan, "invariants") or [] if line.strip().startswith("-"))
+        rows = read_invariant_rows(tests) if tests is not None else None
+        return InvariantFacts(
+            Count(listed), tuple(ElementName(e) for e in plan_domain_elements(plan)),
+            tuple(ElementRules(ElementName(e), tuple(Rule(r) for r in rules)) for e, rules in named.items()),
+            tuple(InvariantRow(ElementName(element), tuple(Count(n) for n in numbers),
+                               Selector(selector) if selector and SELECTOR.match(selector) else None,
+                               Detail(selector) if selector and not SELECTOR.match(selector) else None)
+                  for element, numbers, selector in rows) if rows is not None else None)
+
+    def test_place(self, selector: Selector) -> typing.Optional[Place]:
+        found = locate_selector(self._cwd, selector.value)
+        return Place(found) if found else None
+
+    def clause_rows(self, story: StoryId) -> typing.Optional[typing.Tuple[ClauseRow, ...]]:
+        tests = self._run_file(story, "tests.md")
+        rows = read_clause_rows(tests) if tests is not None else None
+        return tuple(ClauseRow(ScenarioKey(key), Count(n), Detail(location), Detail(level))
+                     for key, n, location, level in rows) if rows is not None else None
+
+    def assertion_at(self, file: Place, line: Count, among: typing.Tuple[Place, ...]) -> AssertionFact:
+        path = os.path.join(self._cwd, file.value)
+        own = {os.path.normpath(place.value) for place in among}
+        presence = Presence.PRESENT if os.path.normpath(path) in own else Presence.ABSENT
+        if not os.path.isfile(path):
+            return AssertionFact(AssertionAt.NO_FILE, presence)
+        return AssertionFact(AssertionAt.ASSERTS if asserts_at(path, line.value) else AssertionAt.NOTHING, presence)
+
+    def doubles(self, test: Place) -> typing.Tuple[PortName, ...]:
+        named = str(self._profile.get("mockMarkers", "")).strip()
+        markers = [m.strip() for m in named.split(",") if m.strip()] if named else list(MOCK_MARKERS)
+        method = read_flat(os.path.join(factory_home() or self._cwd, METHOD_PROFILE))
+        suffixes = {str(method.get("input_port_suffix", "")).strip() or "InputPort", "UseCase"}
+        try:
+            with open(os.path.join(self._cwd, test.value), encoding="utf-8") as handle:
+                return tuple(PortName(name) for name in mocked_ports(handle.read(), markers, suffixes))
+        except (OSError, UnicodeDecodeError):
+            return ()
+
+    def plan_files(self, story: StoryId) -> typing.Optional[typing.Tuple[PlannedFile, ...]]:
+        plan = self._run_file(story, "plan.md")
+        lines = section_of(plan, "files") if plan is not None else None
+        if lines is None:
+            return None
+        planned = []
+        for line in lines:
+            match = PLAN_FILE_LINE.match(line)
+            if not match or any(c in match.group(1) for c in "*<>{}"):
+                continue
+            rel = match.group(1).strip()
+            planned.append(PlannedFile(
+                Place(rel), FileChange(match.group(2).lower()),
+                Presence.PRESENT if os.path.lexists(os.path.join(self._cwd, rel)) else Presence.ABSENT))
+        return tuple(planned)
 
 class DecisionStampFiles:
     """The decision records beside the story and its `## Assumptions`, the journal under the run folder <runs>."""

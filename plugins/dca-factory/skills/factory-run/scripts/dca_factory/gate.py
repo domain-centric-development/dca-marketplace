@@ -91,7 +91,7 @@ from .delivery.adapter.outgoing.files.story_layout import (
     story_files, story_folder, story_id_of, story_kind)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_dir, evidence_rel, factory_home, findings_rel, FLAKY_FINDINGS, HOME_VARIABLE, in_worktree,
-    JOURNAL, location, METHOD_PROFILE, place, PLACES, PLACES_REL, PROFILE_FILE, read_flat, read_profile,
+    JOURNAL, location, place, PLACES, PLACES_REL, PROFILE_FILE, read_profile,
     resolve_profile, runs_top, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git, git_blob, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
@@ -134,18 +134,17 @@ from .delivery.domain.model.stage import StageName
 from .delivery.domain.model.stage_story import (
     CommandKey, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable, TitleCheck, TitleFound)
 from .delivery.domain.model.story_state import Detail
+from .delivery.domain.service.design_checks import DesignChecks
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
 from .delivery.adapter.outgoing.files.test_files import locate_tests
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, publishes_of, split_list
-from .delivery.adapter.outgoing.files.test_files import contains, in_package, read_mapping
+from .delivery.adapter.outgoing.files.test_files import read_mapping
+from .delivery.adapter.outgoing.files.design_files import ASSERTION_STATEMENT, BREAK_IGNORE, STEP, locate_selector, read_invariant_rows
 
 
 def story_ids(epics):
     """Every story id under the epics, in the order of the files — front matter first, else the file name."""
     return [story_id_of(path) for path in story_files(epics)]
-
-
-STEP = re.compile(r"^-\s+(Given|When|Then|And|But)\b\s*(.*)$")
 
 
 SCENARIO_KEY = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -381,412 +380,25 @@ def carries_title(path, method, title):
                for m in re.finditer(r"""(["'`])((?:\\.|(?!\1).)*)\1""", text))
 
 
-def adapter_level_keys(runs, story_id):
-    """The keys the plan gave `integration (adapter: …)` — an incoming adapter's translation, tested against a stubbed
-    input port by design (stage-test)."""
-    text = read_text(os.path.join(runs, story_id, "plan.md")) if os.path.isfile(os.path.join(runs, story_id, "plan.md")) else ""
-    return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*integration\s*\(\s*adapter",
-                                            text, re.M)}
-
-
-#: The kinds of a plan's `## Changes` row that carry invariants: the domain's own types. A use case, a port, an
-#: adapter or a read model has none of its own — its rules are the domain's, reached through the use case.
-DOMAIN_KINDS = re.compile(r"\b(aggregate|entity|value object|value|domain service)\b", re.I)
-
-
-def first_identifier(cell):
-    """The name a table cell or a list item starts with — `Task`, `` `TaskCompleted(eventId, …)` ``, `Task — field
-    state` all start with their element's name; what follows it is description, never part of the name."""
-    match = re.search(r"[A-Za-z_][\w.]*", cell)
-    return match.group(0) if match else ""
-
-
-def plan_domain_elements(plan):
-    """The elements of the plan's `## Changes` table whose kind is a domain type, in the table's order."""
-    elements = []
-    for line in section_of(plan, "changes") or []:
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 2 or set(cells[0]) <= set("-: ") or cells[0].strip("` ").lower() == "element":
-            continue
-        name = first_identifier(cells[0])
-        if name and DOMAIN_KINDS.search(cells[1]) and not re.search(r"\bevent\b", cells[1], re.I):
-            elements.append(name)
-    return elements
-
-
-def split_rules(text):
-    """A plan invariant line's rules, split at `;` outside parentheses and backticks — `complete() (open → done;
-    done → no change)` is one rule."""
-    rules, depth, tick, current = [], 0, False, ""
-    for char in text:
-        if char == "`":
-            tick = not tick
-        elif not tick and char in "([":
-            depth += 1
-        elif not tick and char in ")]" and depth:
-            depth -= 1
-        if char == ";" and depth == 0 and not tick:
-            rules.append(current.strip())
-            current = ""
-        else:
-            current += char
-    if current.strip():
-        rules.append(current.strip())
-    return [r for r in rules if r]
-
-
-def plan_invariants(plan):
-    """`## Invariants` as {element: [rule, …]}: one line per domain type, `- <Element>: <rule>; <rule>`, or
-    `- <Element>: none — <why>` (an empty list). None when the section is absent."""
-    lines = section_of(plan, "invariants")
-    if lines is None:
-        return None
-    found = {}
-    for line in lines:
-        match = re.match(r"^\s*-\s+(.+?)\s*:\s*(.+?)\s*$", line)
-        if not match:
-            continue
-        name = first_identifier(match.group(1))
-        # The part before the `:` is one element's name — bare, in backticks, or followed by a dash and a
-        # description. A sentence there (`- The aggregate Task: …`, `- Note on the rules: …`) names no element.
-        if not name or not re.fullmatch(rf"[`*]*{re.escape(name)}[`*]*(\s*\([^)]*\))?(\s+[—–-].*)?",
-                                        match.group(1).strip()):
-            continue
-        rules = match.group(2)
-        found[name] = [] if re.match(r"^none\b", rules, re.I) else split_rules(rules)
-    return found
-
-
-INVARIANTS_MARKER = "<!-- gate:invariants -->"
-
-
-def read_invariant_rows(text):
-    """The `gate:invariants` table of tests.md: [(element, [rule numbers], selector)] — `| TaskTitle | 1 | <rule> |
-    <Class>#<method> |`, several numbers as `1, 2`; the selector is the last cell. None when the table is absent."""
-    if INVARIANTS_MARKER not in text:
-        return None
-    rows = []
-    for line in text.split(INVARIANTS_MARKER, 1)[1].splitlines():
-        stripped = line.strip()
-        if stripped.startswith("##"):
-            break
-        cells = [c.strip().strip("`") for c in stripped.strip("|").split("|")] if stripped.startswith("|") else []
-        if len(cells) < 3 or cells[0].lower() == "element" or set(cells[0]) <= set("-: "):
-            continue
-        numbers = [int(n) for n in re.findall(r"\d+", cells[1])]
-        rows.append((first_identifier(cells[0]), numbers, cells[-1]))
-    return rows
-
-
-def locate_selector(cwd, selector):
-    """The file that holds `<Class>#<method>`: a file named after the class, in its package, that mentions the method."""
-    match = SELECTOR.match(selector)
-    if not match:
-        return None
-    cls, method = match.groups()
-    simple = cls.rsplit(".", 1)[-1]
-    candidates = []
-    for root, dirs, files in os.walk(cwd):
-        dirs[:] = [d for d in dirs if d not in BREAK_IGNORE and not d.startswith(".")]
-        candidates += [os.path.join(root, f) for f in files if os.path.splitext(f)[0] == simple]
-    found = [path for path in in_package(candidates, cls) if contains(path, method)]
-    return found[0] if found else None
+def check_clauses(result, profile, cwd, runs, story_id, front, body, mapping, located):
+    """Every expectation of every scenario names the line that asserts it (`DesignChecks.clauses`) — over a story
+    read from its body alone."""
+    story = stage_story(story_id, "", front, body, ())
+    evidence = StageEvidenceFiles(cwd, runs, place("epics"), profile)
+    tests = tuple(MappedTest(ScenarioKey(key), Selector(selector),
+                             Place((located or {})[selector]) if (located or {}).get(selector) else None, None, None)
+                  for key, selectors in (mapping or {}).items() for selector in selectors)
+    take(result, DesignChecks.clauses(story, ProfileChecks.contract_number(evidence), tests, evidence))
 
 
 def check_invariants(result, profile, cwd, runs, story_id, front, mapping):
-    """Contract 13: every domain type the plan changes names its invariants — its rules, the guards included, one
-    per `;` — and every rule has its own unit test in tests.md's `gate:invariants` table: a selector that exists as
-    class and method, and that is no criterion's test. A guard nobody named is code no test asked for; a rule whose
-    only test is a criterion's is a rule nobody tested on its own.
-
-    Contract 24 (#134): an adoption changes no domain type, so its plan names the ones its scenarios exercise — each
-    with its rules, or `- none — <why>` where they exercise none — and every rule is held the same way: an existing
-    unit test mapped, or a characterization test the adoption wrote, with its break."""
-    kind = story_kind(front)
-    if kind not in ("story", "adopt") or contract_of(profile) < (13 if kind == "story" else 24):
-        return
-    plan_path, tests_path = os.path.join(runs, story_id, "plan.md"), os.path.join(runs, story_id, "tests.md")
-    if not os.path.isfile(plan_path):
-        return
-    plan = read_text(plan_path)
-    if kind == "adopt":
-        if not any(line.strip().startswith("-") for line in section_of(plan, "invariants") or []):
-            result.fail("invariants", "plan.md: an adoption names the invariants of the domain types its scenarios "
-                                      "exercise under `## Invariants` — `- <Element>: <rule>; <rule>` per type, its "
-                                      "guards included, or `- none — <why>` where the scenarios exercise none")
-            return
-        elements = list(plan_invariants(plan) or {})
-    else:
-        elements = plan_domain_elements(plan)
-    named = plan_invariants(plan) or {}
-    if not elements and not any(named.values()):
-        if kind == "adopt":
-            result.ok("invariants", "the adoption's scenarios exercise no domain type with a rule of its own — "
-                                    "the plan says why")
-        return
-    missing = [e for e in elements if e not in named]
-    if missing:
-        result.fail("invariants", "plan.md changes domain types without an `## Invariants` line: "
-                                  + ", ".join(missing) + " — name each one's rules, its guards included "
-                                  "(`- <Element>: <rule>; <rule>`), or `- <Element>: none — <why>`")
-        return
-    if not any(named.values()):
-        result.ok("invariants", "every domain type the plan changes names why it has no invariant of its own")
-        return
-    rows = read_invariant_rows(read_text(tests_path)) if os.path.isfile(tests_path) else None
-    if rows is None:
-        result.fail("invariants", f"tests.md has no `{INVARIANTS_MARKER}` table under `## Invariants` — "
-                                  "`factory-cli.py --files-skeleton <story> test` writes it with one row per rule; "
-                                  "fill in each row's test")
-        return
-    criterion_tests = {sel for sels in mapping.values() for sel in sels}
-    covered, problems = set(), []
-    for element, numbers, selector in rows:
-        rules = named.get(element)
-        if rules is None:
-            problems.append(f"{element} is not in plan.md's `## Invariants`")
-            continue
-        wrong = [n for n in numbers if not 1 <= n <= len(rules)]
-        if not numbers or wrong:
-            problems.append(f"{element} has {len(rules)} rule(s), the row names {', '.join(map(str, wrong)) or 'none'}")
-            continue
-        if not selector:
-            continue                          # the skeleton's row, not filled: reported as untested below
-        if not SELECTOR.match(selector):
-            problems.append(f"{selector!r} is not `<Class>#<method>`")
-        elif selector in criterion_tests:
-            problems.append(f"{selector} is a criterion's test — an invariant gets a unit test of its own")
-        elif not locate_selector(cwd, selector):
-            problems.append(f"{selector} is not in the project (no file named after the class mentions the method)")
-        else:
-            covered.update((element, n) for n in numbers)
-    untested = [f"{e} {n} ({rules[n - 1][:60]})" for e, rules in named.items() for n in range(1, len(rules) + 1)
-                if (e, n) not in covered]
-    if problems:
-        result.fail("invariants", "the `gate:invariants` table: " + "; ".join(problems[:6]) + (" …" if len(problems) > 6 else ""))
-    elif untested:
-        result.fail("invariants", "invariants without a unit test of their own: " + "; ".join(untested[:6])
-                                  + (" …" if len(untested) > 6 else "") + " — the row's last cell, `<Class>#<method>`")
-    else:
-        result.ok("invariants", f"every rule the plan names has a unit test of its own "
-                                f"({sum(len(r) for r in named.values())} rules, {len(rows)} rows)")
-
-
-CLAUSES_MARKER = "<!-- gate:clauses -->"
-
-
-CLAUSE_LEVELS = ("unit", "port", "adapter", "e2e")
-
-
-#: Words that make a clause a statement about what is stored — it holds through the input port with the real store,
-#: never in an adapter test whose input ports are stubs, where the assertion only reads back the stub's answer.
-STATE_WORDS = re.compile(r"\b(bleibt|bleiben|unverändert|weiterhin|danach|gespeichert|gelöscht|remains?|stays?|"
-                         r"unchanged|still|afterwards|stored|persisted|deleted)\b", re.IGNORECASE)
-
-
-def scenario_clauses(body):
-    """{scenario key: [(n, "Then …" / "And …")]} — what each scenario says is observed: its `Then` and every `And` or
-    `But` after it, numbered from 1. The `Given` and `When` steps are the arrangement, not an expectation."""
-    clauses, key, phase, collecting = {}, None, None, False
-    for line in body.splitlines():
-        stripped = line.strip()
-        if stripped.lower().startswith("## acceptance criteria"):
-            collecting = True
-            continue
-        if collecting and line.startswith("## "):
-            break
-        if not collecting:
-            continue
-        if line.startswith("#### "):
-            key, phase = re.sub(r"\s*\(happy path\)$", "", line[5:].strip()), None
-            continue
-        step = STEP.match(stripped)
-        if not step or key is None:
-            continue
-        word, text = step.groups()
-        if word in ("Given", "When", "Then"):
-            phase = word
-        if phase == "Then" and word in ("Then", "And", "But"):
-            entries = clauses.setdefault(key, [])
-            entries.append((len(entries) + 1, f"{word} {text}".strip()))
-    return clauses
-
-
-def read_clause_rows(text):
-    """The `gate:clauses` table of tests.md: [(key, n, location, level)] — `| <key> | <n> | <clause> | <File>:<line> |
-    <level> |`. None when the table is absent."""
-    if CLAUSES_MARKER not in text:
-        return None
-    rows = []
-    for line in text.split(CLAUSES_MARKER, 1)[1].splitlines():
-        stripped = line.strip()
-        if stripped.startswith("##"):
-            break
-        cells = [c.strip().strip("`") for c in stripped.strip("|").split("|")] if stripped.startswith("|") else []
-        if len(cells) < 5 or cells[0].lower() == "criterion" or set(cells[0]) <= set("-: "):
-            continue
-        number = re.match(r"\d+", cells[1])
-        rows.append((cells[0], int(number.group()) if number else 0, cells[3], cells[4].lower()))
-    return rows
-
-
-def asserts_at(path, number):
-    """Whether the statement at line `number` of `path` asserts: the line or the three before it (a call chain's
-    start) carry an assertion library's call, a framework's expectation or a mock's verification."""
-    try:
-        lines = read_text(path).splitlines()
-    except OSError:
-        return False
-    if not 1 <= number <= len(lines):
-        return False
-    return bool(ASSERTION_STATEMENT.search(" ".join(lines[max(number - 4, 0):number])))
-
-
-def check_clauses(result, profile, cwd, runs, story_id, front, body, mapping, located):
-    """Contract 15: every expectation of every scenario — its `Then` and each `And` after it — names the line of the
-    test that asserts it, in tests.md's `gate:clauses` table, with the level it runs at. A clause without a line is
-    an expectation nobody asserted; a clause about what is stored, asserted in an adapter test against stubbed input
-    ports, asserts only the stub. Both reached the judge as majors, run after run."""
-    if story_kind(front) != "story" or contract_of(profile) < 15:
-        return
-    wanted = scenario_clauses(body)
-    if not wanted:
-        return
-    tests_path = os.path.join(runs, story_id, "tests.md")
-    rows = read_clause_rows(read_text(tests_path)) if os.path.isfile(tests_path) else None
-    if rows is None:
-        result.fail("clauses", f"tests.md has no `{CLAUSES_MARKER}` table under `## Clauses` — `factory-cli.py "
-                               "--files-skeleton <story> test` writes one row per `Then`/`And`; fill in each row's "
-                               "`<File>:<line>` and level")
-        return
-    given = {(key, n): (location, level) for key, n, location, level in rows}
-    problems, state_on_stub, counted = [], [], 0
-    for key, clauses in wanted.items():
-        own = {os.path.normpath(located[s]) for s in mapping.get(key, []) if located.get(s)}
-        for n, clause in clauses:
-            location, level = given.get((key, n), ("", ""))
-            if not location:
-                problems.append(f"{key} {n} ({clause[:50]}) has no assertion line")
-                continue
-            found = re.match(r"(.+?):L?(\d+)", location)
-            path = os.path.join(cwd, found.group(1)) if found else ""
-            if not found or not os.path.isfile(path):
-                problems.append(f"{key} {n}: `{location}` is no `<File>:<line>` in the project")
-                continue
-            if not asserts_at(path, int(found.group(2))):
-                problems.append(f"{key} {n}: `{location}` asserts nothing — no assertion at or just above that line")
-                continue
-            if own and os.path.normpath(path) not in own and not re.search(r"(^|/)tests?[^/]*/", found.group(1)):
-                problems.append(f"{key} {n}: `{location}` is in no test of {key} and no test source")
-                continue
-            if level not in CLAUSE_LEVELS:
-                problems.append(f"{key} {n}: level `{level or '—'}` is none of {', '.join(CLAUSE_LEVELS)}")
-                continue
-            if level == "adapter" and STATE_WORDS.search(clause):
-                state_on_stub.append(f"{key} {n} ({clause[:60]})")
-                continue
-            counted += 1
-    if problems:
-        result.fail("clauses", "the `gate:clauses` table: " + "; ".join(problems[:6]) + (" …" if len(problems) > 6 else ""))
-    elif state_on_stub:
-        result.fail("clauses", "clauses about what is stored, asserted at the adapter level: " + "; ".join(state_on_stub[:6])
-                               + " — an adapter test's input ports are stubs, so the assertion reads back the stub; "
-                               "assert the clause through the input port with the real store (`port`), or end to end")
-    else:
-        result.ok("clauses", f"every expectation of every scenario names its assertion ({counted} clause(s))")
-
-
-#: How a test declares a test double, across the common stacks — the profile's `mockMarkers:` (comma-separated)
-#: replaces the list for a stack it does not cover.
-MOCK_MARKERS = ("@MockitoBean", "@MockBean", "@Mock", "Mockito.mock(", "mock(", "new Mock<", "Substitute.For<",
-                "A.Fake<", "MagicMock(", "create_autospec(", "jest.mock(", "vi.mock(")
-
-
-def mocked_ports(text, markers, suffixes):
-    """The port types a test file declares as doubles: a marker followed, within the same declaration, by a type
-    whose name ends in one of `suffixes`."""
-    found = set()
-    for marker in markers:
-        for match in re.finditer(re.escape(marker), text):
-            window = text[match.end():match.end() + 160].split(";", 1)[0].split("{", 1)[0]
-            for name in re.findall(r"\b([A-Z]\w*)\b", window):
-                if name.endswith(tuple(suffixes)):
-                    found.add(name)
-    return sorted(found)
-
-
-def check_tests_real(result, profile, cwd, mapping, located, front, runs, story_id):
-    """WP-100: a criterion's test above the unit level runs through the real use case — it does not declare a double
-    of an input port. "The list stays unchanged" checked against a stub proves the stub. A unit test mocks what it
-    wants; an output port (a repository, a gateway) may be replaced at any level; and a criterion the plan gave
-    `integration (adapter: …)` tests the adapter's translation against a stubbed input port by design."""
-    if not mapping or not located:
-        return
-    adapter_keys = adapter_level_keys(runs, story_id)
-    named = str(profile.get("mockMarkers", "")).strip()
-    markers = [m.strip() for m in named.split(",") if m.strip()] if named else list(MOCK_MARKERS)
-    method = read_flat(os.path.join(factory_home() or cwd, METHOD_PROFILE))
-    suffixes = {str(method.get("input_port_suffix", "")).strip() or "InputPort", "UseCase"}
-    wrong = []
-    for key, selectors in sorted(mapping.items()):
-        if key in adapter_keys:
-            continue
-        for selector in selectors:
-            path = located.get(selector)
-            if not path or command_for(profile, path)[0] in (None, "test"):
-                continue
-            with contextlib.suppress(OSError, UnicodeDecodeError):
-                with open(os.path.join(cwd, path), encoding="utf-8") as handle:
-                    doubles = mocked_ports(handle.read(), markers, suffixes)
-                if doubles:
-                    wrong.append(f"{key} ({path}: {', '.join(doubles)})")
-    if wrong:
-        result.fail("tests-real", "a criterion's integrated or end-to-end test replaces the input port it is about — "
-                                  "it proves the double, not the use case; let it run through the real one and "
-                                  "replace only what lies outside (a repository, an external system): "
-                                  + "; ".join(sorted(set(wrong))))
-    else:
-        result.ok("tests-real", "every integrated and end-to-end test of a criterion runs through the real input port")
-
-
-#: A plan's `## Files` line that says what becomes of the file: `- `<path>` — changes: new …` or `… changes: removed …`.
-PLAN_FILE_LINE = re.compile(r"^\s*[-*]\s*`([^`]+)`\s*[—–-]+\s*changes:\s*(new|removed)\b", re.I)
-
-
-def check_plan_files(result, cwd, runs, story_id):
-    """WP-102: the plan's file list holds after the build — a file it says `removed` is gone, one it says `new` is
-    there. A deviation the build's file explains is still one: the plan changes, or the file does. The bench's
-    build left a placeholder the plan removed, wrote "deleting a file is outside this session's shell", and the
-    judge let it pass as a minor."""
-    path = os.path.join(runs, story_id, "plan.md")
-    lines = section_of(read_text(path), "files") if os.path.isfile(path) else None
-    if lines is None:
-        result.skip("plan-files", "plan.md has no `## Files` section — nothing to hold the build to")
-        return
-    wrong, held = [], 0
-    for line in lines:
-        match = PLAN_FILE_LINE.match(line)
-        if not match or any(c in match.group(1) for c in "*<>{}"):
-            continue
-        rel, change = match.group(1).strip(), match.group(2).lower()
-        present = os.path.lexists(os.path.join(cwd, rel))
-        if change == "removed" and present:
-            wrong.append(f"{rel} (planned removed, still there)")
-        elif change == "new" and not present:
-            wrong.append(f"{rel} (planned new, not there)")
-        else:
-            held += 1
-    if wrong:
-        result.fail("plan-files", "the build did not do what the plan's `## Files` says — remove the file "
-                                  "(`git rm`) or write it, or plan again; an explanation in build.md does not "
-                                  "change the plan: " + "; ".join(wrong))
-    elif held:
-        result.ok("plan-files", f"every file the plan says new or removed is so ({held})")
-    else:
-        result.ok("plan-files", "the plan's `## Files` names no file new or removed")
-
-
-BREAK_IGNORE = (".git", "build", "bin", "obj", "target", "node_modules", ".gradle", "TestResults", "out")
+    """Every rule of a domain type the plan names has a unit test of its own (`DesignChecks.invariants`) — for the
+    adopt gate, which reads the story without a run of its own."""
+    story = stage_story(story_id, "", front, "", ())
+    evidence = StageEvidenceFiles(cwd, runs, place("epics"), profile)
+    tests = tuple(MappedTest(ScenarioKey(key), Selector(selector), None, None, None)
+                  for key, selectors in (mapping or {}).items() for selector in selectors)
+    take(result, DesignChecks.invariants(story, ProfileChecks.contract_number(evidence), tests, evidence))
 
 
 def copy_for_break(cwd, copy):
@@ -2916,10 +2528,6 @@ def meaningful_lines(text, path):
     return [line.rstrip() for line in lines if line.strip()]
 
 
-#: A statement that checks: an assertion library's call, a framework's expectation, a mock's verification.
-ASSERTION_STATEMENT = re.compile(r"\b(?:assert\w*|expect\w*|andExpect\w*|verify\w*|should\w*)\b", re.IGNORECASE)
-
-
 TOKEN = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|\w+")
 
 
@@ -3761,11 +3369,10 @@ def _files_listed(run):
 @check("test-design", stages=lambda s: s.red)
 def _test_design(run):
     take(run.result, TestChecks.plan_levels(run.story, run.evidence))
-    check_invariants(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.mapping)
     tests = mapped_tests(run)
+    take(run.result, DesignChecks.invariants(run.story, run.contract, tests, run.evidence))
     take(run.result, TestChecks.levels(run.story, run.contract, tests, run.evidence))
-    check_clauses(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.body, run.mapping,
-                  run.located)
+    take(run.result, DesignChecks.clauses(run.story, run.contract, tests, run.evidence))
     take(run.result, TestChecks.titles(run.story, run.contract, tests, run.evidence))
 
 
@@ -3787,13 +3394,13 @@ def _tests_committed(run):
 @check("tests-real", stages=("test", "adopt"))
 def _tests_real(run):
     if contract_of(run.profile) >= 21:
-        check_tests_real(run.result, run.profile, run.cwd, run.mapping, run.located, run.front, run.runs, run.story_id)
+        take(run.result, DesignChecks.tests_real(run.story, mapped_tests(run), run.evidence))
 
 
 @check("plan-files", stages=("build",))
 def _plan_files(run):
     if contract_of(run.profile) >= 22:
-        check_plan_files(run.result, run.cwd, run.runs, run.story_id)
+        take(run.result, DesignChecks.plan_files(run.story, run.evidence))
 
 
 @check("size", stages=lambda s: s.sizes)

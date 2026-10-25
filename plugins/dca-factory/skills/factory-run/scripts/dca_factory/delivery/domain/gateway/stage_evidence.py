@@ -10,7 +10,7 @@ import typing
 from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage_story import (
-    CommandKey, ContextMapFacts, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
+    AssertionFact, ClauseRow, CommandKey, ContextMapFacts, Count, InvariantFacts, PlannedFile, PortName, Selector, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
     InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
 from ..model.story import StoryId
 
@@ -74,4 +74,28 @@ class StageEvidence(DomainGateway, typing.Protocol):
     def hand_over_sizes(self, story: StoryId,
                         names: typing.Tuple[HandOverName, ...]) -> typing.Tuple[HandOverSize, ...]:
         """The hand-overs of these names the story's run holds, with the bytes the stage wrote of each."""
+        ...
+
+    def invariants(self, story: StageStory) -> typing.Optional[InvariantFacts]:
+        """The plan's domain types and their invariants, and the tests' table of them — None where there is no plan."""
+        ...
+
+    def test_place(self, selector: Selector) -> typing.Optional[Place]:
+        """The file that holds the test: named after its class, in its package, mentioning its method."""
+        ...
+
+    def clause_rows(self, story: StoryId) -> typing.Optional[typing.Tuple[ClauseRow, ...]]:
+        """The tests' table of the lines that assert the scenarios' clauses — None where it has none."""
+        ...
+
+    def assertion_at(self, file: Place, line: Count, among: typing.Tuple[Place, ...]) -> AssertionFact:
+        """What the line of the file does, and whether the file is one of `among`."""
+        ...
+
+    def doubles(self, test: Place) -> typing.Tuple[PortName, ...]:
+        """The input ports a test file declares as doubles."""
+        ...
+
+    def plan_files(self, story: StoryId) -> typing.Optional[typing.Tuple[PlannedFile, ...]]:
+        """The files the plan says new or removed — None where its plan has no `## Files`."""
         ...

@@ -66,6 +66,8 @@ class StageStory(Value):
     depends_on: typing.Tuple[StoryId, ...]
     closes: typing.Tuple[RowId, ...]
     publishes: typing.Tuple[EventName, ...]
+    #: what each scenario says is observed: its `Then` and every `And` or `But` after it
+    clauses: typing.Tuple[ScenarioClauses, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -297,10 +299,13 @@ class TestLocation(Value):
 
 @dataclasses.dataclass(frozen=True)
 class PlanLevels(Value):
-    """The levels the plan gave: the keys its skeleton left without one, the keys it gave `browser-only`."""
+    """The levels the plan gave: the keys its skeleton left without one, the keys it gave `browser-only`, the keys
+    it gave `integration (adapter: …)` — an incoming adapter's translation, tested against a stubbed input port by
+    design."""
 
     unfinished: typing.Tuple[ScenarioKey, ...]
     browser_only: typing.FrozenSet[ScenarioKey]
+    adapter: typing.FrozenSet[ScenarioKey]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -314,3 +319,112 @@ class HandOverSize(Value):
 @dataclasses.dataclass(frozen=True)
 class HandOverName(Value):
     value: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ElementName(Value):
+    """A domain type the plan names — `Task`, `TaskTitle`."""
+
+    value: str
+
+
+@dataclasses.dataclass(frozen=True)
+class Rule(Value):
+    """One invariant of a domain type, as the plan words it — a guard included."""
+
+    value: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ElementRules(Value):
+    """A domain type's line under the plan's `## Invariants`: its rules, none where it says why it has none."""
+
+    element: ElementName
+    rules: typing.Tuple[Rule, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class InvariantRow(Value):
+    """A row of the tests' `gate:invariants` table: the type, the rule numbers it covers, and its unit test — the
+    selector where one is written as `<Class>#<method>`, the text where it is not."""
+
+    element: ElementName
+    numbers: typing.Tuple[Count, ...]
+    selector: typing.Optional[Selector]
+    malformed: typing.Optional[Detail]
+
+
+@dataclasses.dataclass(frozen=True)
+class InvariantFacts(Value):
+    """What the plan says of the domain types it changes, and the tests' table of their rules."""
+
+    listed: Count
+    elements: typing.Tuple[ElementName, ...]
+    named: typing.Tuple[ElementRules, ...]
+    rows: typing.Optional[typing.Tuple[InvariantRow, ...]]
+
+
+@dataclasses.dataclass(frozen=True)
+class Clause(Value):
+    """An expectation of a scenario — its `Then` or an `And`/`But` after it — numbered from 1."""
+
+    number: Count
+    text: Detail
+
+
+@dataclasses.dataclass(frozen=True)
+class ScenarioClauses(Value):
+    key: ScenarioKey
+    clauses: typing.Tuple[Clause, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class ClauseRow(Value):
+    """A row of the tests' `gate:clauses` table: the clause, the line that asserts it, the level it runs at."""
+
+    key: ScenarioKey
+    number: Count
+    location: Detail
+    level: Detail
+
+
+class AssertionAt(enum.Enum):
+    """What a line of a test file does: there is no such file, the statement asserts nothing, or it asserts."""
+
+    NO_FILE = "no file"
+    NOTHING = "nothing"
+    ASSERTS = "asserts"
+
+
+@dataclasses.dataclass(frozen=True)
+class AssertionFact(Value):
+    """A test file's line as an assertion: what the line does, and whether the file is one of the given tests."""
+
+    state: AssertionAt
+    among: Presence
+
+
+@dataclasses.dataclass(frozen=True)
+class PortName(Value):
+    """A port type a test declares as a double."""
+
+    value: str
+
+
+class FileChange(enum.Enum):
+    NEW = "new"
+    REMOVED = "removed"
+
+
+class Presence(enum.Enum):
+    PRESENT = "present"
+    ABSENT = "absent"
+
+
+@dataclasses.dataclass(frozen=True)
+class PlannedFile(Value):
+    """A file the plan's `## Files` says becomes new or is removed, and whether it is there after the build."""
+
+    place: Place
+    change: FileChange
+    presence: Presence
