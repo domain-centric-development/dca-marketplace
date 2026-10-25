@@ -8,7 +8,8 @@ import time
 import unittest
 
 from support import contract, project, state
-from dca_factory import cli
+from dca_factory.delivery.adapter.outgoing.files import detail_files as detail
+from dca_factory.delivery.application.status import show_story
 from dca_factory.delivery.domain.model import usage
 from dca_factory.delivery.adapter.outgoing.tools import streams
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journals
@@ -50,7 +51,7 @@ class FrozenStream(unittest.TestCase):
             parts, _cost = streams.stream_parts(path)
             stream_records.freeze_stream(journals.journal_path(p.runs, "S-1"), path)
             os.remove(path)
-            rows = cli.window_parts(journals.journal_events(p.runs, "S-1"), "builder")
+            rows = detail.window_parts(journals.journal_events(p.runs, "S-1"), "builder")
             self.assertEqual([r["stage"] for r in rows], list(dict.fromkeys(x["stage"] for x in parts)))
             for field in usage.USAGE_FIELDS:
                 self.assertEqual(sum(r[field] for r in rows), sum(x[field] for x in parts), field)
@@ -135,14 +136,14 @@ class Prune(unittest.TestCase):
             material(p)
             p.evidence("S-1", "tree-after-builder.txt", "x\n")
             p.evidence("S-1", "gate-build.101500.txt", "gate:pass\n")
-            parts_before = cli.window_parts(journals.journal_events(p.runs, "S-1"), "builder") \
+            parts_before = detail.window_parts(journals.journal_events(p.runs, "S-1"), "builder") \
                 if story_record.record_story(p.runs, "S-1") is not None else None
             self.assertEqual(story_record.prune_raw(p.runs, p.epics, days=7), [("S-1", 2)])
             folder = profiles.evidence_dir(p.runs, "S-1")
             self.assertEqual(sorted(os.listdir(folder)),
                              ["gate-build.101500.txt", story_record.INVARIANT_BREAKS, "journal.tsv"])
             self.assertTrue(os.path.isfile(os.path.join(p.runs, "S-1", "plan.md")))
-            self.assertEqual(cli.window_parts(journals.journal_events(p.runs, "S-1"), "builder"), parts_before)
+            self.assertEqual(detail.window_parts(journals.journal_events(p.runs, "S-1"), "builder"), parts_before)
             self.assertEqual(story_record.prune_raw(p.runs, p.epics, days=7), [])
 
     def test_a_young_or_undelivered_story_keeps_its_material(self):
@@ -223,11 +224,11 @@ class OneWayToRead(unittest.TestCase):
     def test_the_readers_hold_no_stream_or_hand_over_parser(self):
         import inspect
         from dca_factory import gate
-        for reader in (gate.story_signals, cli.window_parts):
+        for reader in (gate.story_signals, detail.window_parts):
             text = inspect.getsource(reader)
             for parser in ("stream_parts", "stream_denials", "plan.md", "judge.md", "INVARIANT_BREAKS", "read_text"):
                 self.assertNotIn(parser, text, f"{reader.__name__} reads {parser}")
-        model = inspect.getsource(cli.story_model)
+        model = inspect.getsource(show_story)
         self.assertNotIn("stream_denials", model)
         self.assertNotIn(".out", model)
 

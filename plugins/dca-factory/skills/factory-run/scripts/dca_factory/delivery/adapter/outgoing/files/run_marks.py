@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 from .....contract import CRITERION, GateError, POST_GATED, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
 from .story_layout import delivered_by, EPIC_FILE, epic_folder
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
-from .decision_record_files import acceptance_records, accepted
+from .decision_record_files import acceptance_records
+from ....application.shared.front import accepted
 from .journal_files import journal_events
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text

@@ -8,7 +8,7 @@ import typing
 
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place, shown
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
-from ....application.shared.front import created_of
+from ....application.shared.front import created_of, front_text
 from .story_layout import depends_on, EPIC_FILE
 from ....domain.model.epic import EpicId
 
@@ -31,12 +31,6 @@ def epic_dir(epics: str, epic_id: str) -> typing.Optional[str]:
                 return os.path.dirname(path)
     return None
 
-
-def front_text(value: typing.Any) -> str:
-    """One front-matter value as text — a list (`key:` with `- item` lines) joined, never its Python form."""
-    if isinstance(value, list):
-        return ", ".join(str(v) for v in value)
-    return str(value or "")
 
 
 def epic_files(epics: str) -> typing.List[Facts]:

@@ -14,7 +14,7 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import DEFAULTS, p
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import Front, MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import fields_of, section_of, sections_of
 from ....application.shared.decision_record_repository import RecordNotFound
-from ....application.shared.front import is_acceptance
+from ....application.shared.front import accepted, is_acceptance
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.decision_record import Asker, DecisionRecord, DecisionState, OptionKey, RecordId, RecordKind
 from ....domain.model.story import StoryId
@@ -397,9 +397,6 @@ def acceptance_records(cwd: str, story_id: str, story_path: typing.Optional[str]
         return int(trailing.group(1)) if trailing else 0
     return sorted(found, key=lambda r: number(r[0]))
 
-
-def accepted(answer: typing.Mapping[str, typing.Any]) -> bool:
-    return str(answer.get("answer", "")).strip().lower().startswith("accept")
 
 
 def acceptance_state(cwd: str, story_id: str,

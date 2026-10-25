@@ -20,3 +20,15 @@ def created_of(front: typing.Mapping[str, typing.Any]) -> str:
     """An item's `created:` as written, '' where it has none or where it is no ISO date or UTC time."""
     value = str(front.get(CREATED_KEY) or "").strip().strip("'\"")
     return value if re.match(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$", value) else ""
+
+
+def accepted(answer: typing.Mapping[str, typing.Any]) -> bool:
+    """An answer that accepts the delivery: it begins with `accept`."""
+    return str(answer.get("answer", "")).strip().lower().startswith("accept")
+
+
+def front_text(value: typing.Any) -> str:
+    """One front-matter value as text — a list (`key:` with `- item` lines) joined, never its Python form."""
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value)
+    return str(value or "")

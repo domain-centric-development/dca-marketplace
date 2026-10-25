@@ -5,20 +5,12 @@ from __future__ import annotations
 import typing
 
 from ....application.status.texts import signals_line, stamp_text, took_text
+from ....application.status.show_epic import epic_mark
 from .terminal import (
     MARKS_MD, MARKS_TEXT, bold, column_widths, commands, dim, heading, how_lines, how_md, next_md, next_text, paint,
     section, table_md, table_text, tokens_text,
 )
 
-
-def epic_mark(epic: typing.Mapping[str, typing.Any]) -> str:
-    """The epic's own mark, from its stories: what needs you wins, then what stopped, what runs; ✓ when all
-    are delivered."""
-    marks = [r["mark"] for r in epic["rows"]]
-    for wanted in ("look", "question", "stopped", "running"):
-        if wanted in marks:
-            return wanted
-    return "done" if marks and all(m == "done" for m in marks) else "none"
 
 
 def epic_summary(item: typing.Mapping[str, typing.Any]) -> str:

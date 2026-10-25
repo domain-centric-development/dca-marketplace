@@ -61,15 +61,12 @@ from .sharedkernel.adapter.outgoing.profile.profile_files import (
     resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git
 from .delivery.adapter.outgoing.files.story_layout import (
-    DECISIONS_DIR, delivered_by, delivered_on, EPIC_FILE, epic_folder, find_story, is_delivered, story_files,
+    delivered_by, delivered_on, EPIC_FILE, epic_folder, find_story, is_delivered, story_files,
     story_id_of, story_kind)
-from .delivery.application.shared.front import CREATED_KEY, created_of
-from .sharedkernel.adapter.outgoing.markdown.sections import section_of, sections_of
+from .delivery.application.shared.front import CREATED_KEY
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
-from .delivery.adapter.outgoing.tools.streams import follow_lines, stream_parts, tokens_of, usage_from, WINDOWS
-from .delivery.application.status.texts import parse_time
-from .delivery.domain.model.usage import USAGE_FIELDS
-from .state import schedule, schedule_data, start, story_state
+from .delivery.adapter.outgoing.tools.streams import follow_lines, tokens_of, usage_from
+from .state import schedule, start, story_state
 from .delivery.adapter.outgoing.claims.remote_claims import (
     cached_claims, claim_config_here, claim_story, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
     remote_main)
@@ -77,29 +74,31 @@ from .delivery.adapter.outgoing.claims.checkout_claim import (
     claim, claim_path, listener_line, mark_listening, read_claim, release, session_owner)
 from .delivery.adapter.outgoing.files.story_record import ignore_journals_in
 from .delivery.adapter.outgoing.files.windows import freeze_all, mark_stage, mark_window
-from .delivery.adapter.outgoing.files.stream_records import journal_parts, parts_incomplete
-from .delivery.adapter.outgoing.files.usage_files import journal_denials, journal_usage
+from .delivery.adapter.outgoing.files.usage_files import journal_usage
 from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.files.run_marks import (
     accepted_criteria, back_in, gate_passed_on_record, OWNED_CHANGED, run_stories, story_title)
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.adapter.outgoing.files.owned_files import record_owned, write_story_fields
 from .delivery.adapter.outgoing.files.journal_files import journal_append, journal_events, journal_writer
-from .delivery.adapter.outgoing.files.decision_record_files import acceptance_records, accepted
-from .delivery.application.shared.front import is_acceptance
+from .delivery.adapter.outgoing.files.decision_record_files import acceptance_records
+from .delivery.application.shared.front import accepted
 from .spec.api import (
     lint_context,
     derived, merge, read_delta, read_spec, render_spec, renamed_rules, story_entries)
 from .gate import (
-    criteria_of, scenarios_of, spec_target, story_signals, story_spec, perspectives_of, story_ids)
+    criteria_of, spec_target, story_spec, perspectives_of, story_ids)
 from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_invocation, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
-    follow_newest, story_facts, story_records)
-from .delivery.adapter.outgoing.files.epic_files import epic_files, front_text
+    follow_newest, story_facts)
+from .delivery.adapter.outgoing.files.epic_files import epic_files
 from .delivery.application.status import actions
-from .delivery.application.status.actions import offered, RUNNER
+from .delivery.application.status.actions import offered
 from .delivery.application.status.show_status import ShowStatusQuery
-from .delivery.application.status.texts import figures, stamp_text, took_text
+from .delivery.application.status.show_story import ShowStoryQuery, UnknownStory
+from .delivery.application.status.show_epic import ShowEpicQuery, UnknownEpic
+from .delivery.application.status.show_help import ShowHelpQuery
+from .delivery.application.status.texts import stamp_text
 from .discovery.api import list_reports
 from .delivery.adapter.outgoing.files.request_files import out_path
 from .delivery.adapter.outgoing.files.story_files import names_story
@@ -121,7 +120,7 @@ from .runner import (
     stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove, request_main,
     settle_command)
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
-from .delivery.adapter.incoming.cli.status_view import epic_mark, render_short_md, render_short_text, render_status_md, render_status_text, token_rows
+from .delivery.adapter.incoming.cli.status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
 from .delivery.adapter.incoming.cli.story_view import render_story_md, render_story_text, stage_caption, stage_cells
 from .delivery.adapter.incoming.cli.epic_view import render_epic_md, render_epic_text
 from .delivery.adapter.incoming.cli.help_view import render_help_md, render_help_text
@@ -477,6 +476,24 @@ def status_brief(cwd, epics, runs, session_start=False):
     return 0
 
 
+def story_model(cwd, epics, runs, story_id, live=False):
+    try:
+        return wiring.show_story(cwd, epics, runs).execute(ShowStoryQuery(story_id, live))
+    except UnknownStory:
+        raise GateError(f"no story {story_id} under {epics}/") from None
+
+
+def epic_model(cwd, epics, runs, epic_id, live=False):
+    try:
+        return wiring.show_epic(cwd, epics, runs).execute(ShowEpicQuery(epic_id, live))
+    except UnknownEpic as unknown:
+        raise GateError(f"no epic {epic_id} under {epics}/ — the epics: {', '.join(unknown.known) or 'none'}") from None
+
+
+def help_model(cwd, epics, runs):
+    return wiring.show_help(cwd, epics, runs).execute(ShowHelpQuery())
+
+
 def status(cwd, epics, runs, story_filter=None, fmt="text", colour="auto", live=False, part="all", every=False,
            epic_filter=None):
     """The person's view. Short by default (WP-146): what runs, what waits for them, the next stories in the schedule's
@@ -523,150 +540,6 @@ def factory_help(cwd, epics, runs, fmt="text", colour="auto"):
     return 0
 
 
-BUILD_FILES = ("build.gradle", "build.gradle.kts", "pom.xml", "package.json", "pyproject.toml", "go.mod", "Cargo.toml")
-
-
-HELP_COMMANDS = (
-    ("deliver a wish", "your words become a backlog story — which epic, the criteria — and it runs at once",
-     "/factory-run <your words>", ""),
-    ("where it stands", "what runs, what waits for you, what comes next, the totals — short",
-     "/factory-status", "status"),
-    ("every story", "the backlog by epic, newest first, with times and tokens", "/factory-status all", "status --all"),
-    ("one story", "its words, criteria, stages, passes and tokens", "/factory-status <story>", "status --story <story>"),
-    ("one epic", "what it is for, its text, its stories with their state", "/factory-status <epic>",
-     "status --epic <epic>"),
-    ("follow a stage", "what the running stage reads, edits and runs, as it happens — whoever started it", "",
-     "follow"),
-    ("start the factory", "a process of its own in the background: your requests and the backlog, until it is "
-                          "ended — --serve the page too", "", "up [--serve]"),
-    ("end the factory", "after its running stage; --now interrupts that stage too", "", "down"),
-    ("the page", "the factory in the browser, on this machine alone — every press a request", "", "serve"),
-    ("ask the factory", "one request it works before its next story: a wish, a release, an answer, an acceptance, …",
-     "", "request <kind> …"),
-    ("the requests", "what you asked and where each stands — retry or drop one", "", "requests"),
-    ("find the problem", "a problem or a wished deliverable → a report with sources and proposed epics, each with "
-                         "its outcome event", "/factory-discover <topic>", "discover --check <topic>"),
-    ("the discoveries", "every topic, its proposed epics and which are epics already, its proposed description changes",
-     "/factory-discover", "discover --list"),
-    ("release a proposal", "a discovery's proposed epic becomes an epic in the backlog",
-     "/factory-backlog epic <id> --from <report>", ""),
-    ("cut stories", "the next stories of an epic, each a draft", "/factory-backlog stories <epic>", ""),
-    ("release stories", "drafts become approved after the question pass — open questions keep them drafts",
-     "/factory-backlog release <story> …", ""),
-    ("guard an epic", "a delivered, unguarded epic gets its journey — the timeline to its outcome event and its "
-                      "journey item as a draft", "/factory-backlog journey <epic>", ""),
-    ("change the description", "one statement of the product, the stack or the domain, in your words",
-     "/dca-describe <change>", ""),
-    ("the backlog", "the epics and stories, their state, the next one", "/factory-backlog", "backlog"),
-    ("check the backlog", "the plan gate's checks over every open story, writing nothing", "/factory-backlog",
-     "backlog --check"),
-    ("the inbox", "the open questions and acceptances, and how to answer them", "/factory-decisions", "decisions"),
-    ("give up a claim", "with `claim_remote:` — a story's claim on the remote taken back (another's with --force)", "",
-     "release <story>"),
-    ("deliver again", "with `claim_remote:` — a published story whose merge request lost the race, merged again",
-     "", "integrate <story>"),
-    ("the profile", "what detection finds against the stack profile", "/factory-setup", "setup --check"),
-    ("observe a story", "what a delivered story changed, measured from its files", "/factory-verify <story>",
-     "verify --story <story>"),
-    ("the machinery", "the pipeline's own suite against fixtures — for whoever changes the pipeline",
-     "/factory-verify --fixtures", "verify --fixtures"),
-    ("one stage by hand", "stage-plan … stage-document are the six stages the run calls; by hand only to redo one "
-                          "stage of a story that has the ones before", "/stage-<stage> <story>", ""),
-    ("update the pipeline", "the newest pipeline found, same tools", "/factory-update", "update"),
-    ("this help", "the flow, the commands, the marks, the files", "/factory-help", "help"),
-)
-
-
-HELP_MARKS = (("look", "waits for your look — an acceptance"), ("question", "waits for your answer"),
-              ("stopped", "stopped — read why before it runs again"), ("running", "running"),
-              ("done", "done — a story, an epic, a decision"), ("none", "nothing to do there now"))
-
-
-def help_model(cwd, epics, runs):
-    profile_path = resolve_profile(None, cwd)
-    profile = read_profile(profile_path)
-    status_view = status_model(cwd, epics, runs)
-    described = all(os.path.isfile(os.path.join(cwd, location(profile, k))) for k in ("product", "tech"))
-    has_build = any(os.path.isfile(os.path.join(cwd, name)) for name in BUILD_FILES) \
-        or any(name.endswith((".sln", ".slnx", ".csproj")) for name in os.listdir(cwd))
-    marks = {m["mark"] for m in status_view["waiting"]}
-    rows = status_view["rows"]
-    delivered = bool(rows) and all(r["state"] in ("delivered", "superseded") for r in rows)
-    has_stories = bool(rows) and not delivered
-    waiting_mark = "look" if "look" in marks else ("question" if "question" in marks else "")
-    started = described and has_build
-    # what waits for a person comes first: nothing of theirs moves until it is answered
-    if waiting_mark:
-        here = "decide"
-    elif not started:
-        here = "describe"
-    elif not profile_path:
-        here = "set up"
-    elif not has_stories:
-        here = "backlog"
-    else:
-        here = "run"
-    # A foundation, done once and changed when the product or the stack moves, and a cycle that recurs with
-    # every body of work. The foundation's steps can be done; the cycle's never are — there the flow marks
-    # only where the project is now (waiting, running, next).
-    flow = [
-        dict(step="describe", part="foundation",
-             what="product, technical decisions, designed domain — a new project with its skeleton: /dca-new project",
-             skill="/dca-describe", shell="", done=started),
-        dict(step="set up", part="foundation", what="the stack profile: build, test, format and browser commands, the carriers",
-             skill="/factory-setup", shell="setup --check" if profile_path else "setup", done=bool(profile_path)),
-        dict(step="discover", part="cycle", what="optional: which problem is worth solving — a report with sources and "
-                                                 "proposed epics, each with its outcome event",
-             skill="/factory-discover <topic>", shell="discover --list"),
-        dict(step="backlog", part="cycle", what="epics and stories with acceptance criteria; a story runs once released",
-             skill="/factory-backlog", shell="backlog"),
-        dict(step="run", part="cycle", what="plan → test → build → tidy → judge → document, a gate between the stages",
-             skill="/factory-run [<story>]", shell="run [--story <story>]"),
-        dict(step="decide", part="cycle", what="a question a stage may not decide alone, or a result to look at: "
-                                               "accepted delivers it, a correction goes back into the story",
-             skill="/factory-decisions", shell="decisions"),
-        dict(step="delivered", part="cycle", what="what is delivered — stories, epics and their outcome events; an epic "
-                                                  "without a journey test shows as unguarded",
-             skill="/factory-status", shell="status"),
-    ]
-    for n, f in enumerate(flow, 1):
-        f["number"] = n
-        if f["step"] == here:
-            f["mark"] = waiting_mark if here == "decide" else \
-                "running" if here == "run" and status_view["running"] else "next"
-        else:
-            f["mark"] = "done" if f.pop("done", False) else "none"
-        f.pop("done", None)
-    if waiting_mark:
-        nxt = status_view["next"]
-    elif not described and has_build:
-        nxt = dict(text="Describe the project — drafted from its code, confirmed by you.",
-                   action=make_action(skill="/dca-describe", shell=""))
-    elif not has_build:
-        nxt = dict(text="Start the project — the description and a skeleton from a generator, in one pass.",
-                   action=make_action(skill="/dca-new project", shell=""))
-    elif not profile_path:
-        nxt = dict(text="Set the factory up — the stack profile is missing.",
-                   action=make_action(skill="/factory-setup", shell=f"{RUNNER} setup"))
-    else:
-        nxt = status_view["next"]
-    files = [("description", ", ".join(location(profile, k) for k in ("product", "tech", "domain")),
-              "what is built, on which stack, in which contexts"),
-             ("spec", location(profile, "spec").rstrip("/") + "/",
-              "what holds: per context scenarios.md with a test line each, and its glossary.md; journeys.md"),
-             ("epics", epics.replace(os.sep, "/") + "/", "the changes: an epic.md per epic, a folder per story with its story.md; a delivered story says so itself"),
-             ("stack profile", (profile_path or PROFILE_FILE).replace(os.sep, "/"),
-              "the project's commands and the skills each stage uses"),
-             ("decisions", f"{epics.replace(os.sep, '/')}/<epic>/<story>/{DECISIONS_DIR}/",
-              "one record per question or acceptance, in its story's folder"),
-             ("a story's run", f"{runs}/<story>/", "hand-overs, marks, the journal — protocol, disposable")]
-    return dict(project=status_view["project"], flow=flow, commands=[dict(zip(("name", "what", "skill", "shell"), c))
-                                                                    for c in HELP_COMMANDS],
-                marks=[dict(mark=m, meaning=t) for m, t in HELP_MARKS],
-                files=[dict(name=n, where=w, holds=h) for n, w, h in files],
-                runner=RUNNER, next=nxt)
-
-
 def utc_text(moment):
     """A time as the backlog writes it: UTC, to the second, `Z`."""
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -711,302 +584,6 @@ def backfill_created(cwd, epics):
           f"{written['epic']} epic{'' if written['epic'] == 1 else 's'}, from the commit that added each"
           + (f" — {from_file} not in git yet, from the file's own time" if from_file else ""))
     return 0
-
-
-def pass_label(index, pass_, records):
-    """First delivery, then what started each later pass: a human's correction, or a re-plan."""
-    if index == 0:
-        return "first delivery"
-    corrections = [str(f["id"]).strip() for _p, f, _b, st, a in records
-                   if is_acceptance(f) and st in ("answered", "applied") and not accepted(a)
-                   and parse_time(str(a.get("at", ""))) and parse_time(str(a.get("at", ""))) <= pass_["start"]]
-    return "correction" if corrections else "again from plan"
-
-
-def window_parts(events, window):
-    """The parts of every run of one shared window of a story, summed per stage, in the stages' order — from the
-    journal's `part` lines (WP-150): [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or
-    None), denied}]."""
-    order = SHARED_WINDOWS.get(window, ())
-    rows = journal_parts(events, window)
-    return sorted(rows, key=lambda r: order.index(r["stage"]) if r["stage"] in order else len(order))
-
-
-def window_running(entry, runs, story_id, moving, live):
-    """A shared window whose process still runs has no usage line yet — the tool reports it at its end. Its row
-    shows what the newest stream says so far: the tokens of its parts, and with `live` the time since it began;
-    the cost stays the tool's and comes with the end."""
-    if not entry or moving["stage"] not in SHARED_WINDOWS or entry["measured"] >= entry["runs"]:
-        return
-    outs = glob.glob(os.path.join(evidence_dir(runs, story_id), f"{moving['stage']}.*.out"))
-    parts = stream_parts(max(outs, key=os.path.getmtime))[0] if outs else []
-    for field in USAGE_FIELDS:
-        entry[field] = entry.get(field, 0) + sum(p[field] for p in parts)
-    entry["tokens"] += sum(p[field] for p in parts for field in USAGE_FIELDS)
-    if live and moving.get("since"):
-        entry["seconds"] += max((datetime.now(timezone.utc) - moving["since"]).total_seconds(), 0)
-    entry["running"] = True
-
-
-def story_model(cwd, epics, runs, story_id, live=False):
-    overview = status_model(cwd, epics, runs, live)
-    row = next((r for r in overview["rows"] if r["story"] == story_id), None)
-    if row is None:
-        raise GateError(f"no story {story_id} under {epics}/")
-    data = schedule_data(cwd, epics, runs)["stories"][story_id]
-    facts = story_facts(cwd, runs, story_id, data.get("front"))
-    records = story_records(cwd, story_id, data.get("path"))
-    try:
-        criteria = len(criteria_of(data["path"], data["body"], data.get("front")))
-    except GateError:
-        criteria = 0
-    accepted_by = next((str(f["id"]).strip() for _p, f, _b, st, a in reversed(records)
-                        if is_acceptance(f) and st in ("answered", "applied") and accepted(a)), None)
-    passes = []
-    for i, p in enumerate(facts["passes"]):
-        before = facts["passes"][i - 1]["end"] if i else None
-        passes.append(dict(p, label=pass_label(i, p, records),
-                           waited=(p["start"] - before).total_seconds() if before and p["start"] else 0))
-    # why a stage ran more than once per pass: the questions it asked, else a repeat (a gate refused it)
-    questions = {}
-    for _p, front, _b, _st, _a in records:
-        if not is_acceptance(front):
-            questions.setdefault(str(front.get("stage", "")).strip(), []).append(str(front["id"]).strip())
-    for stage, entry in facts["stages"].items():
-        if stage in WINDOWS:
-            entry["why"] = {"backlog": "writing the story", "decisions": "answering its questions"}[stage] \
-                + (f" · {entry['runs']} sessions" if entry["runs"] > 1 else "")
-            continue
-        extra = entry["runs"] - sum(1 for p in facts["passes"] if stage in p["stages"])
-        # a shared window carries several stages: a question any of those stages asked is its
-        covered = SHARED_WINDOWS.get(stage, (stage,))
-        asked = [rid for name in covered for rid in questions.get(name, [])][:max(extra, 0)]
-        repeats = max(extra, 0) - len(asked)
-        why = [f"{len(asked)} question" + ("s" if len(asked) > 1 else "") + f" ({', '.join(asked)})"] if asked else []
-        if repeats:
-            why.append(f"{repeats} repeat" + ("s" if repeats > 1 else "") + " (a gate refused)")
-        entry["why"] = " · ".join(why)
-    decisions = []
-    for _p, front, body, state, answer in records:
-        question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-        given = str(answer.get("answer", "")).strip() if state in ("answered", "applied") else ""
-        text = (f"{given}" if is_acceptance(front) and given else
-                f"{given} — {question}" if given else f"open — {question}")
-        decisions.append(dict(id=str(front["id"]).strip(), state=state,
-                              kind="acceptance" if is_acceptance(front) else "question", text=text))
-    events = journal_events(runs, story_id)
-    for window in SHARED_WINDOWS:
-        if window in facts["stages"]:
-            facts["stages"][window]["parts"] = window_parts(events, window)
-            facts["stages"][window]["parts_incomplete"] = parts_incomplete(events, window)
-    for moving in overview["running"]:
-        if moving["story"] == story_id and not moving["interrupted"]:
-            window_running(facts["stages"].get(moving["stage"]), runs, story_id, moving, live)
-    # the calls a stage was denied: each a turn spent on another way
-    for stage, entry in facts["stages"].items():
-        entry["denials"] = journal_denials(events, stage)
-        entry["denied"] = len(entry["denials"])
-        if entry["denied"]:
-            entry["why"] = " · ".join(w for w in (entry.get("why", ""), f"{entry['denied']} denied") if w)
-    models = sorted({m for e in facts["stages"].values() for m in e["models"]})
-    not_applied = sorted({r for e in facts["stages"].values() if e["not_applied"] for r in e["requested"]})
-    front, body = data.get("front") or {}, data.get("body") or ""
-    for entry in facts["stages"].values():
-        entry.update(figures(entry))
-    # a delivered story is corrected in the person's words: the correction goes back into it
-    actions = row["actions"] + (mark_pending(offered(make_action(text="What should be different?",
-                                                                 skill=f"/factory-decisions {story_id}: answer correction:",
-                                                                 label="correct")), pending_requests(cwd))
-                                if row["done"] else [])
-    return dict(row=row, story=story_id, title=data.get("title", ""), epic=data.get("epic", ""),
-                path=shown(data["path"]) if data.get("path") else "", kind=story_kind(front),
-                created=created_of(front), intent=front_text(front.get("intent")),
-                description=story_description(body), scenarios=scenarios_of(body),
-                superseded=data.get("state") == "superseded", **story_sections(body),
-                **story_situation(row, data, overview, body),
-                context=str(front.get("context", "")).strip(), criteria=criteria, accepted_by=accepted_by,
-                passes=passes, stages=facts["stages"], decisions=decisions, models=models, not_applied=not_applied,
-                signals=story_signals(runs, story_id, records, body),
-                priced=facts["priced"] > 0, waiting=[w for w in overview["waiting"] if w["story"] == story_id],
-                next=overview["next"], actions=actions)
-
-
-def story_description(body):
-    """What a story is about, in its own words: its `## Story` section — or, for a task, which has none, the prose
-    between its title and its first section. Comments left out."""
-    lines = section_of(body, "story")
-    if lines is None:
-        lines = []
-        for line in body.splitlines():
-            if line.startswith("## "):
-                break
-            if not line.startswith("# "):
-                lines.append(line)
-    text = re.sub(r"<!--.*?-->", "", "\n".join(lines), flags=re.S)
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
-
-
-#: The sections a detail shows in a block of its own instead of as text: a story's criteria (as scenarios), an
-#: epic's stories (with their state). Their place among the sections is kept as an index.
-STORY_OWN_BLOCK, EPIC_OWN_BLOCK = "acceptance criteria", "stories"
-
-#: A section a detail puts first, whatever its place in the file: why a story is not built.
-FIRST_SECTIONS = ("superseded",)
-
-
-#: The front-matter fields an epic's head shows, by the heading of the section that may say the same: a section under
-#: one of these headings whose text says nothing beyond its field is left out of the detail.
-HEAD_FIELDS = {"intent": "intent", "goal": "goal", "outcome": "metric", "metric": "metric",
-               "domain contact": "domain_contact", "domain": "domain_contact"}
-
-#: The sentence the epic template writes under `## Outcome` — it says nothing beyond the outcome event the head shows.
-OUTCOME_BOILERPLATE = ("The epic is measured by the outcome event `{metric}`: as long as it is not published in "
-                       "production, the epic has not delivered, however much code exists.")
-
-
-def said_alike(text):
-    """A text as compared with a field: whitespace collapsed, a trailing period off."""
-    return " ".join(text.split()).rstrip(".").strip()
-
-
-def without_head(sections, front):
-    """The sections the head does not already show: one whose heading names a field of HEAD_FIELDS and whose text is
-    that field's value (or, for the outcome, the template's sentence about it) — compared after `said_alike` — is
-    left out; a section with more to say stays. Returns the sections kept and how many were left out before `at`."""
-    kept, gone = [], []
-    for index, one in enumerate(sections):
-        key = HEAD_FIELDS.get(one["heading"].split("(")[0].strip().lower())
-        value = front_text(front.get(key)).strip() if key else ""
-        same = {said_alike(value)} | ({said_alike(OUTCOME_BOILERPLATE.format(metric=value))} if key == "metric" else set())
-        if value and said_alike(one["text"]) in same:
-            gone.append(index)
-        else:
-            kept.append(one)
-    return kept, gone
-
-
-#: The longest a situation line quotes a reason before it cuts it.
-SITUATION_REASON = 90
-
-
-def first_sentence(text, limit=SITUATION_REASON):
-    """The first sentence of a section's text, list marks and line breaks out, cut at `limit` with an ellipsis."""
-    words = " ".join(line.strip().lstrip("-*").strip() for line in text.splitlines() if line.strip())
-    sentence = re.split(r"(?<=[.!?;])\s", words, maxsplit=1)[0].rstrip(".;")
-    return sentence if len(sentence) <= limit else sentence[:limit - 1].rstrip(" ,;—") + "…"
-
-
-def story_situation(row, story, overview, body):
-    """What is up with a story, in one line the factory decides — and which of its two views a detail opens with:
-    `pipeline` while it runs or waits for a person, `story` before it starts and once it is done or set aside. A line
-    that would only repeat the state the head shows is empty."""
-    found = situation_of_story(row, story, overview, body)
-    if said_alike(found["situation"]) == said_alike(str(row.get("state", ""))):
-        found["situation"] = ""
-    return found
-
-
-def situation_of_story(row, story, overview, body):
-    state = story.get("state", "")
-    moving = next((m for m in overview["running"] if m["story"] == row["story"] and not m["interrupted"]), None)
-    if moving:
-        line = f"running {moving['stage']}" + (f" · {moving['part']}" if moving.get("part") else "")
-        line += f" · round {moving['round']}" if (moving.get("round") or 1) > 1 else ""
-        if moving.get("since"):
-            line += " · " + took_text((datetime.now(timezone.utc) - moving["since"]).total_seconds())
-        return dict(situation=line, view="pipeline")
-    if state == "superseded":
-        reason = next((s["text"] for s in sections_of(body, STORY_OWN_BLOCK, FIRST_SECTIONS)[0] if s["kind"] == "superseded"), "")
-        return dict(situation="superseded" + (f" — {first_sentence(reason)}" if reason else ""), view="story")
-    if row["done"]:
-        return dict(situation=f"delivered {stamp_text(row['delivered'])[:10]}" if row["delivered"] else "delivered",
-                    view="story")
-    detail = str(story.get("detail", "")).strip()
-    if state == "blocked":
-        return dict(situation="blocked" + (f" — {first_sentence(detail)}" if detail else ""), view="story")
-    if row["mark"] in ("look", "question", "stopped"):
-        line = row["state"] + (f" — {first_sentence(detail)}" if row["mark"] == "stopped" and detail else "")
-        return dict(situation=line, view="story" if state == "unreleased" else "pipeline")
-    started = row["passes"] > 0 or state in ("in-progress", "resumable")
-    line = row["state"] + ("" if started else " — not started")
-    queue = overview.get("queue", {}).get("ready", [])
-    if row["story"] in queue:
-        place = queue.index(row["story"])
-        line += " · next in line" if place == 0 else f" · {place + 1}. in line"
-    return dict(situation=line, view="pipeline" if started else "story")
-
-
-def epic_situation(epic, overview):
-    """What is up with an epic beyond the progress its head shows, in one line: what is set aside, what runs, what
-    waits for a person — empty when nothing does. The detail is one page: head, sections, stories."""
-    ids = {r["story"] for r in epic["rows"]}
-    parts = []  # how much is delivered stands in the head (its progress) — the line says only what comes beside it
-    set_aside = sum(1 for r in epic["rows"] if r["state"] == "superseded")
-    parts += [f"{set_aside} superseded"] if set_aside else []
-    parts += [f"{m['story']} running {m['stage']}" for m in overview["running"] if m["story"] in ids and not m["interrupted"]]
-    waits = sum(1 for w in overview["waiting"] if w["story"] in ids and not w.get("draft"))
-    drafts = sum(1 for w in overview["waiting"] if w["story"] in ids and w.get("draft"))
-    parts += [f"{waits} wait{'s' if waits == 1 else ''} for you"] if waits else []
-    parts += [f"{drafts} draft{'' if drafts == 1 else 's'}"] if drafts else []
-    return dict(situation=" · ".join(parts))
-
-
-def story_sections(body):
-    """A story's sections for its detail, its criteria's place among them, and why it is not built where it says."""
-    sections, at = sections_of(body, STORY_OWN_BLOCK, FIRST_SECTIONS)
-    return dict(sections=sections, criteria_at=at)
-
-
-def epic_sections(body, front):
-    """An epic's sections for its detail without those its head already says (`without_head`), and its stories'
-    place among the ones kept."""
-    sections, at = sections_of(body, EPIC_OWN_BLOCK, FIRST_SECTIONS)
-    kept, gone = without_head(sections, front)
-    return dict(sections=kept, stories_at=None if at is None else at - sum(1 for i in gone if i < at))
-
-
-def epic_description(body, front):
-    """An epic's own text beside its fields: its body without the title, without `## Stories` (the stories come with
-    their state) and without a section the front matter already says — `## Intent`, `## Goal`, `## Outcome` (its
-    `metric:`). Comments left out."""
-    said = {"stories"} | {name for name, key in (("intent", "intent"), ("goal", "goal"), ("outcome", "metric"))
-                          if front_text(front.get(key))}
-    kept, skip = [], False
-    for line in body.splitlines():
-        if line.startswith("# "):
-            continue
-        if line.startswith("## "):
-            skip = line[3:].strip().lower() in said
-        if not skip:
-            kept.append(line)
-    text = re.sub(r"<!--.*?-->", "", "\n".join(kept), flags=re.S)
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
-
-
-def epic_model(cwd, epics, runs, epic_id, live=False):
-    """One epic as a person reads it (WP-146): its fields, its own text, its stories with their state — newest
-    first, as the backlog shows them — and what comes next."""
-    overview = status_model(cwd, epics, runs, live)
-    wanted = epic_id.lower()
-    folders = {f["folder"].lower(): f["epic"] for f in epic_files(epics)}
-    epic = next((e for e in overview["epics"] if e["epic"].lower() in (wanted, folders.get(wanted, "").lower())), None)
-    if epic is None:
-        known = ", ".join(e["epic"] for e in overview["epics"] if e["epic"]) or "none"
-        raise GateError(f"no epic {epic_id} under {epics}/ — the epics: {known}")
-    front, body = {}, ""
-    own = next((f for f in epic_files(epics) if epic["epic"] in (f["epic"], f["folder"])), None)
-    if own:
-        with contextlib.suppress(GateError, OSError):
-            front, body = read_front_matter(os.path.join(epics, own["folder"], EPIC_FILE))
-    journey = next((j for j in overview["journeys"] if j["epic"] == epic["epic"]), None)
-    return dict(epic=epic["epic"], title=epic.get("title", ""), path=epic.get("path", ""), created=epic.get("created", ""),
-                intent=epic.get("intent", ""), goal=epic.get("goal", ""), metric=epic.get("metric", ""),
-                domain_contact=epic.get("domain_contact", ""), discovery=epic.get("discovery", ""),
-                description=epic_description(body, front), mark=epic_mark(epic), rows=epic["rows"],
-                **epic_sections(body, front),
-                **epic_situation(epic, overview),
-                delivered=epic["delivered"], total=epic["total"], tokens=epic["tokens"], measured=epic["measured"],
-                seconds=epic["seconds"], journey=journey, next=overview["next"])
 
 
 def checkout_holders(cwd, epics, runs, exclude=None):

@@ -54,8 +54,8 @@ class StatusFacts(OutputPort, typing.Protocol):
         """(story, stage, started) of every stage the journals show running."""
         ...
 
-    def shared_windows(self) -> typing.Collection[str]:
-        """The shared processes that carry several stages."""
+    def shared_windows(self) -> typing.Mapping[str, typing.Tuple[str, ...]]:
+        """The shared processes that carry several stages, with the stages each carries."""
         ...
 
     def window_part(self, story_id: str, window: str) -> str:

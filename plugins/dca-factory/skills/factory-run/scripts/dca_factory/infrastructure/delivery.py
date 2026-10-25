@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
 from ..delivery.adapter.outgoing.files.description_files import DescriptionFiles
+from ..delivery.adapter.outgoing.files.detail_files import DetailFactFiles
 from ..delivery.adapter.outgoing.files.decision_record_files import DecisionInboxFiles, DecisionRecordFiles
 from ..delivery.adapter.outgoing.discovery.reports import DiscoveryReportFiles
 from ..delivery.adapter.outgoing.files.epic_files import EpicFiles
 from ..delivery.adapter.outgoing.files.journal_files import StoryJournalFiles
+from ..delivery.adapter.outgoing.files.project_files import ProjectFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
 from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles
@@ -24,7 +26,10 @@ from ..delivery.application.requests.retry_request import RetryRequestUseCase
 from ..delivery.application.requests.take_back_request import TakeBackRequestUseCase
 from ..delivery.application.requests.write_request import WriteRequestUseCase
 from ..delivery.application.shared.request_check import RequestCheck
+from ..delivery.application.status.show_epic import ShowEpicUseCase
+from ..delivery.application.status.show_help import ShowHelpUseCase
 from ..delivery.application.status.show_status import ShowStatusUseCase
+from ..delivery.application.status.show_story import ShowStoryUseCase
 
 
 def request_check(cwd: str) -> RequestCheck:
@@ -72,3 +77,16 @@ def show_status(cwd: str, epics: str, runs: str) -> ShowStatusUseCase:
 
 def list_decisions(cwd: str) -> ListDecisionsUseCase:
     return ListDecisionsUseCase(DecisionInboxFiles(cwd), RequestFiles(cwd), StoryFiles(cwd))
+
+
+def show_story(cwd: str, epics: str, runs: str) -> ShowStoryUseCase:
+    return ShowStoryUseCase(show_status(cwd, epics, runs), StatusFactFiles(cwd, epics, runs), DetailFactFiles(epics, runs),
+                            pending_requests(cwd))
+
+
+def show_epic(cwd: str, epics: str, runs: str) -> ShowEpicUseCase:
+    return ShowEpicUseCase(show_status(cwd, epics, runs), DetailFactFiles(epics, runs))
+
+
+def show_help(cwd: str, epics: str, runs: str) -> ShowHelpUseCase:
+    return ShowHelpUseCase(show_status(cwd, epics, runs), ProjectFiles(cwd, epics, runs), StatusFactFiles(cwd, epics, runs))
