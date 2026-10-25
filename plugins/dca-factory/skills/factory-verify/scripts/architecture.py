@@ -20,12 +20,15 @@ CONTEXTS = ("discovery", "delivery", "spec")
 EXEMPT = ("web/fonts.py",)
 
 #: What a domain module may import from the standard library: types, data classes, enums, patterns — nothing that
-#: reads a file, starts a process, asks the clock or the network (DCA-ONI-002). An application module takes the same
-#: list: it reaches the outside through its output ports alone (DCA-LAY-003).
+#: reads a file, starts a process, asks the clock or the network (DCA-ONI-002).
 PURE_STDLIB = frozenset((
     "__future__", "abc", "collections", "collections.abc", "dataclasses", "enum", "functools", "itertools",
     "re", "typing",
 ))
+
+#: An application module takes the same, and `datetime` to compute with times a read model shows — the clock itself
+#: it asks through an output port; everything else outside it reaches through its ports alone (DCA-LAY-003).
+APPLICATION_STDLIB = PURE_STDLIB | {"datetime"}
 
 #: A primitive or a time type: in the domain, each is wrapped in a value object (`value` its one field).
 PRIMITIVES = frozenset(("str", "int", "float", "bool", "datetime", "date", "time"))
@@ -137,7 +140,7 @@ def layer_findings(package):
                 name = target[1:]
                 if layer == "domain" and name not in PURE_STDLIB:
                     found.append(f"{where} DCA-ONI-002 the domain imports {name}")
-                elif layer == "application" and name not in PURE_STDLIB:
+                elif layer == "application" and name not in APPLICATION_STDLIB:
                     found.append(f"{where} DCA-LAY-003 the application imports {name} — an output port reaches it")
                 continue
             to_owner, to_layer = place_of(target)

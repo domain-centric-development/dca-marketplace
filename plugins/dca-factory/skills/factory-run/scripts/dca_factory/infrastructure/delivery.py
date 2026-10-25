@@ -8,6 +8,7 @@ from ..delivery.adapter.outgoing.files.discovery_files import DiscoveryReportFil
 from ..delivery.adapter.outgoing.files.epic_files import EpicFiles
 from ..delivery.adapter.outgoing.files.journal_files import StoryJournalFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
+from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles
 from ..delivery.adapter.outgoing.pipeline.stage_table import ContractStages
 from ..delivery.application.backlog.release_stories import ReleaseStoriesUseCase
@@ -21,6 +22,7 @@ from ..delivery.application.requests.retry_request import RetryRequestUseCase
 from ..delivery.application.requests.take_back_request import TakeBackRequestUseCase
 from ..delivery.application.requests.write_request import WriteRequestUseCase
 from ..delivery.application.shared.request_check import RequestCheck
+from ..delivery.application.status.show_status import ShowStatusUseCase
 
 
 def request_check(cwd: str) -> RequestCheck:
@@ -60,3 +62,7 @@ def settlement(cwd: str, runs: str) -> Settlement:
 
 def book_request_cost(cwd: str, runs: str) -> BookRequestCostUseCase:
     return BookRequestCostUseCase(StoryJournalFiles(cwd, runs))
+
+
+def show_status(cwd: str, epics: str, runs: str) -> ShowStatusUseCase:
+    return ShowStatusUseCase(StatusFactFiles(cwd, epics, runs), RequestFiles(cwd))

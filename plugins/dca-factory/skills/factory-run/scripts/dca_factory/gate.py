@@ -103,13 +103,14 @@ from .spec import (
     lint_context, read_context, read_delta, read_spec, render_spec, scenarios_path, story_entries,
     touches)
 from .state import (
-    claim_config_here, PUBLISHED, remote_main,
-    ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, backlog_digest,
-    current_stage_files, flaky_tests, git_tree, is_acceptance, journal_append, journal_events, journal_signal,
-    INVARIANT_BREAKS, last_ended, latest_signal, plan_left_open, record_judge_signal, listed_files, MODEL_PROCESSES,
-    NOT_OBSERVED, observe_writes, OWNED_CHANGED, owned_changes, owned_end, PRODUCT_HEADINGS, record_base,
-    record_changes, record_owned, run_owned, snapshot_reason, stage_open, step_open, STORY_DIGEST, tree_changes, verdict_in,
-    answer_sentence, window_open, write_answered, write_mark, write_story_fields)
+    ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, answer_sentence,
+    backlog_digest, claim_config_here, current_stage_files, flaky_tests, git_tree, INVARIANT_BREAKS, journal_append,
+    journal_events, journal_signal, last_ended, latest_signal, listed_files, MODEL_PROCESSES, NOT_OBSERVED,
+    observe_writes, OWNED_CHANGED, owned_changes, owned_end, plan_left_open, PRODUCT_HEADINGS, PUBLISHED,
+    record_base, record_changes, record_judge_signal, record_owned, remote_main, run_owned, snapshot_reason,
+    stage_open, step_open, STORY_DIGEST, tree_changes, verdict_in, window_open, write_answered, write_mark,
+    write_story_fields)
+from .delivery.application.shared.front import is_acceptance
 
 
 def check_owned(result, runs, story_id, story_path):

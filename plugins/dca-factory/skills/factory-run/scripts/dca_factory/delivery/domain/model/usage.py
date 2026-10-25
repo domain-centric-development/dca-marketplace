@@ -7,6 +7,9 @@ import typing
 
 from ....building_blocks import Value
 
+#: The token counts a usage carries, in the order the journal writes them.
+USAGE_FIELDS = ("input", "cache_read", "cache_write", "output")
+
 
 @dataclasses.dataclass(frozen=True)
 class TokenCount(Value):

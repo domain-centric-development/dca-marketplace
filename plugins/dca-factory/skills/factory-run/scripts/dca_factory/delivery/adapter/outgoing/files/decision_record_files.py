@@ -11,7 +11,8 @@ import typing
 from .....contract import (
     decision_files, decision_options, decision_state, project_decisions_dir, shown)
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import Front, read_text
-from .....state import acceptance_records, is_acceptance
+from .....state import acceptance_records
+from ....application.shared.front import is_acceptance
 from ....application.shared.decision_record_repository import RecordNotFound
 from ....domain.model.decision_record import Asker, DecisionRecord, DecisionState, OptionKey, RecordId, RecordKind
 from ....domain.model.story import StoryId

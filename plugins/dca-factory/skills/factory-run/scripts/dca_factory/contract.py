@@ -17,6 +17,7 @@ import typing
 from .sharedkernel.adapter.outgoing.markdown.front_matter import (
     MarkdownError as GateError, read_front_matter, read_text, split_front)
 from .sharedkernel.adapter.outgoing.markdown.sections import fields_of, section_of
+from .delivery.application.shared.front import CREATED_KEY
 
 
 EPIC_FIELDS = ("intent", "goal", "metric", "domain_contact")
@@ -673,17 +674,10 @@ STATE_KEYS = ("status", "delivered", "delivered_by")
 #: alone reads as well). The backlog skill writes it with the item, `update` fills it once from git for an item
 #: without it (the commit that added the file). The views order the backlog by it, newest first; an item without it
 #: comes last. It says nothing about what the story asks for, so the story's digest leaves it out too.
-CREATED_KEY = "created"
 
 
 #: The front-matter lines a story's digest leaves out: its state and when it was written.
 DIGEST_LEFT_OUT = STATE_KEYS + (CREATED_KEY,)
-
-
-def created_of(front):
-    """An item's `created:` as written, '' where it has none or where it is no ISO date or UTC time."""
-    value = str(front.get(CREATED_KEY) or "").strip().strip("'\"")
-    return value if re.match(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$", value) else ""
 
 
 def story_digest(path):

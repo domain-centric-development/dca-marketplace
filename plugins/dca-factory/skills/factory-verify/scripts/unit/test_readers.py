@@ -56,13 +56,13 @@ class EveryTool(unittest.TestCase):
         self.assertEqual(reports.stream_denials(stream("codex-stream.jsonl")), [])
 
     def test_follow_shows_every_tool_the_same_way(self):
-        lines, ended = cli.follow_lines(raw("claude-stream.jsonl"))
+        lines, ended = reports.follow_lines(raw("claude-stream.jsonl"))
         self.assertTrue(ended)
         self.assertIn("── plan", lines)
         self.assertIn("✗ denied: Permission to use Bash has been denied.", lines)
         self.assertTrue(lines[-1].startswith("■ done — 4 turns, $0.42"))
         for name in ("codex-stream.jsonl", "opencode-stream.jsonl"):
-            lines, ended = cli.follow_lines(raw(name))
+            lines, ended = reports.follow_lines(raw(name))
             self.assertIn("── plan", lines, name)
             self.assertIn("── test", lines, name)
             self.assertTrue(any(line.startswith("✗ ") for line in lines), (name, lines))
@@ -80,7 +80,7 @@ class RecordedStreams(unittest.TestCase):
             self.assertEqual([p["stage"] for p in reports.stream_parts(path)[0]], ["plan"], tool)
             usage, _text = reports.parse_usage(fmt, path)
             self.assertGreater(usage["output"], 0, tool)
-            lines, ended = cli.follow_lines(raw(f"{tool}-recorded.jsonl"))
+            lines, ended = reports.follow_lines(raw(f"{tool}-recorded.jsonl"))
             self.assertIn("── plan", lines, tool)
             self.assertTrue(ended and lines[-1].startswith("■ done"), (tool, lines[-3:]))
 

@@ -25,11 +25,15 @@ from .contract import (
     OWNED_DIGEST, place, PLACES_REL, plain, POST_GATED, PROFILE_FILE, read_profile, records_of, resolve_profile,
     resume_stage, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, STATE_KEYS, STORY_BRANCH, story_digest,
     STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST, worktree_owned)
+from .delivery.application.shared.front import is_acceptance
+from .delivery.domain.model.story_state import RUNNABLE
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text, split_front
 from .reports import (
-    current_session, log_kind, parse_time, session_reader, PROCESS_RANKS, session_usage,
-    session_usage_allowed, stream_denials, stream_parts, tokens_of, USAGE_FIELDS, usage_fields, WINDOWS)
+    current_session, log_kind, PROCESS_RANKS, session_reader, session_usage, session_usage_allowed, stream_denials,
+    stream_parts, tokens_of, usage_fields, WINDOWS)
+from .delivery.application.status.texts import parse_time
+from .delivery.domain.model.usage import USAGE_FIELDS
 
 
 def journal_path(runs, story_id):
@@ -655,9 +659,6 @@ def stage_open(runs, story_id, stage):
 MODEL_PROCESSES = ("builder", "verifier", "review", "request")
 
 
-RUNNABLE = ("ready", "in-progress", "resumable")
-
-
 def verdict_in(text):
     for line in text.splitlines():
         if line.strip().lower().startswith("verdict:"):
@@ -701,10 +702,6 @@ def acceptance_mode(profile):
     if mode not in ACCEPTANCE_MODES:
         raise GateError(f"`acceptance: {mode}` is none of {', '.join(ACCEPTANCE_MODES)}")
     return mode
-
-
-def is_acceptance(front):
-    return str(front.get("kind", "")).strip().lower() == ACCEPTANCE_KIND
 
 
 def acceptance_records(cwd, story_id, story_path=None):

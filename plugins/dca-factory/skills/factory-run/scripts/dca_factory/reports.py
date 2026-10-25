@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from xml.etree import ElementTree
 from .contract import GateError, read_profile, resolve_profile, SHARED_WINDOWS, STAGE_ORDER
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_text
+from .delivery.application.status.texts import parse_time
+from .delivery.domain.model.usage import USAGE_FIELDS
 
 
 #: Where test runners leave a report of what they actually executed. These are file-format
@@ -292,7 +294,6 @@ def reported_names(paths):
 # asks this script to read it; the numbers land in the story's journal next to the stage's start and
 # end, so they survive restarts, second sessions and new runs like everything else there. A tool that
 # reports nothing is `unknown` — never zero, because a zero would look like a cheap stage.
-USAGE_FIELDS = ("input", "cache_read", "cache_write", "output")
 
 
 def _claude_usage(raw):
@@ -394,17 +395,6 @@ def parse_usage(fmt, path):
         return None, ""
     reader = READERS.get(fmt)
     return reader.usage(raw) if reader else (None, raw)
-
-
-def parse_time(text):
-    text = str(text or "").strip()
-    if not text:
-        return None
-    try:
-        stamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
 
 
 def claude_session_logs(session_id=None):
@@ -1042,3 +1032,47 @@ def stream_limit(path, fmt=None):
     except (OSError, GateError):
         return None
     return reader_of(raw, fmt).limit(raw)
+
+
+def follow_render(event, denied=frozenset()):
+    """The lines one common event stands for — [] for an event that shows nothing. `denied` holds the ids of the
+    calls the stream's result names as denied permission: known once the process ended, so a running one shows such
+    a call as any failed call, by the reason the tool gave. One rendering for every tool: the readers turn each
+    format into the same events."""
+    kind = event.get("kind")
+    if kind == "session":
+        return [f"· session started{(' — ' + event['model']) if event.get('model') else ''}"]
+    if kind == "call":
+        given = event.get("input") or {}
+        lines = []
+        stage = part_of_call(event)
+        if stage:
+            lines.append(f"── {stage}")                             # a shared process begins this stage
+            if event.get("name") == "Skill":
+                return lines
+        arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
+        return lines + [f"▸ {event.get('name', 'tool')} {_short(arg, 100)}".rstrip()]
+    if kind == "error":
+        said = " — ".join([line.strip() for line in str(event.get("text") or "").splitlines() if line.strip()][:2]) \
+            or "failed"
+        return [f"✗ {'denied: ' if event.get('id') in denied else ''}{_short(said, 120)}"]
+    if kind == "text" and str(event.get("text", "")).strip():
+        return [f"  {_short(event['text'])}"]
+    if kind == "result":
+        bits = [f"{event['turns']} turns" if event.get("turns") is not None else "",
+                f"${float(event['cost']):.2f}" if event.get("cost") is not None else "",
+                f"{int(event['duration_ms']) // 1000}s" if event.get("duration_ms") else "",
+                f"{len(event['denied'])} denied" if event.get("denied") else ""]
+        state = "stopped: " + event["failed"] if event.get("failed") else "done"
+        return [f"■ {state}" + (" — " + ", ".join(b for b in bits if b) if any(bits) else "")]
+    return []
+
+
+def follow_lines(text, fmt=None):
+    events = reader_of(text, fmt).events(text)
+    ended = any(e["kind"] == "result" for e in events)
+    denied = {call_id for e in events if e["kind"] == "result" for call_id, _n, _i in e.get("denied") or []}
+    lines = []
+    for event in events:
+        lines += follow_render(event, denied)
+    return lines, ended

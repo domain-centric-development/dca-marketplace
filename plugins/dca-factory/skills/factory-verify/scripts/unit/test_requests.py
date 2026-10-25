@@ -10,8 +10,9 @@ import unittest
 
 from support import contract, project, write
 
-from dca_factory import cli, gate, service, state
-from dca_factory.delivery.adapter.incoming.requests.commands import request_of
+from dca_factory import cli, gate, state
+from dca_factory.delivery.adapter.outgoing.process import factory_process as service
+from dca_factory.delivery.application.status.actions import request_of
 from dca_factory.delivery.adapter.incoming.runner.usage import book_request_usage
 from dca_factory.delivery.adapter.outgoing.files import request_files
 from dca_factory.delivery.adapter.outgoing.files.decision_record_files import project_record_path, request_records

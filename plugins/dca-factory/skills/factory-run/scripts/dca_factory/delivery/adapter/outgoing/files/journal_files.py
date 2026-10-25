@@ -8,12 +8,11 @@ import os
 import typing
 
 from .....contract import story_digest, story_id_of
-from .....reports import USAGE_FIELDS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from .....state import journal_append, journal_events, journal_path, read_events
 from ....application.shared.story_journal import Window
 from ....domain.model.story import StoryId
-from ....domain.model.usage import Usage
+from ....domain.model.usage import Usage, USAGE_FIELDS
 from .story_files import StoryFiles
 
 #: The mark a request that wrote drafts leaves in each one's journal: its question pass ran on the story as it stands.

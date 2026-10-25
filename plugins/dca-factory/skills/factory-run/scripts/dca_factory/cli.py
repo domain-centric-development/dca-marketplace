@@ -55,34 +55,41 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, CREATED_KEY, created_of, decision_files, decision_options, decision_state, DECISIONS_DIR,
-    decisions_store, DEFAULTS, delivered_by, delivered_on, EPIC_FILE, epic_folder, evidence_dir, evidence_rel,
-    factory_home, find_story, finding_records, FINDINGS_FILE, FORM_CHECKS, GateError, git, is_delivered,
-    layout_hint, location, needs_human_ids, open_findings, place, PROFILE_FILE, read_profile, recommended_option,
-    record_path, records_of, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER,
-    story_files, story_id_of, story_kind, TECH_HEADINGS, VERSION)
+    ALL_KINDS, CONTRACT, decision_files, decision_options, decision_state, DECISIONS_DIR, DEFAULTS,
+    delivered_by, delivered_on, EPIC_FILE, epic_folder, evidence_dir, evidence_rel, factory_home, find_story,
+    FINDINGS_FILE, FORM_CHECKS, GateError, git, is_delivered, layout_hint, location,
+    open_findings, place, PROFILE_FILE, read_profile, recommended_option, resolve_profile, set_places, SHARED_WINDOWS, shown, STAGE_FILES, STAGE_ORDER, story_files, story_id_of,
+    story_kind, VERSION)
+from .delivery.application.shared.front import CREATED_KEY, created_of
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .reports import (
-    FOLLOW_ARGS, READERS, reader_of, session_reader, parse_time, part_of_call, session_usage_allowed, _short,
-    stream_parts, tokens_of, USAGE_FIELDS, usage_from, WINDOWS)
+    stream_parts,
+    tokens_of, usage_from, WINDOWS, follow_lines)
+from .delivery.application.status.texts import parse_time
+from .delivery.domain.model.usage import USAGE_FIELDS
 from .state import (
-    cached_claims, story_title, claim_config_here, claim_story, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
-    remote_main,
-    acceptance_records, accepted, accepted_criteria, back_in, claim, claim_path, freeze_all, gate_passed_on_record,
-    has_worktree,
-    flaky_tests, ignore_journals_in, is_acceptance, journal_append, parts_incomplete, journal_denials, journal_events, journal_parts, journal_usage, journal_writer, listener_line, mark_listening,
-    mark_stage, mark_window, OWNED_CHANGED, owned_end, PRODUCT_HEADINGS, read_claim, record_owned, release,
-    resolve_window, run_stories, RUNNABLE, running_stages, schedule, schedule_data, session_owner, stage_rank, start, story_state,
-    verdict_in, worktree_of, write_story_fields)
+    acceptance_records, accepted, accepted_criteria, back_in, cached_claims, claim, claim_config_here, claim_path,
+    claim_story, fetch_remote, free_id, freeze_all, gate_passed_on_record, has_worktree,
+    ignore_journals_in, journal_append, journal_denials, journal_events, journal_parts, journal_usage,
+    journal_writer, listener_line, mark_listening, mark_stage, mark_window, OWNED_CHANGED, owned_end,
+    parts_incomplete, PUBLISHED, read_claim, record_owned, refresh_claims, release, release_claim,
+    remote_main, run_stories, schedule, schedule_data, session_owner, stage_rank,
+    start, story_state, story_title, worktree_of, write_story_fields)
+from .delivery.application.shared.front import is_acceptance
 from .spec import (
     lint_context,
     derived, merge, read_delta, read_spec, render_spec, renamed_rules, story_entries)
 from .gate import (
-    criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_signals, story_spec, description_part, discovery_items, perspectives_of, story_ids)
+    criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_signals, story_spec, discovery_items, perspectives_of, story_ids)
 from .tools import (
     isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
-from .delivery.adapter.incoming.requests.commands import request_of
+from .delivery.adapter.outgoing.files.status_facts import (
+    epic_files, follow_newest, front_text, story_facts, story_records)
+from .delivery.application.status import actions
+from .delivery.application.status.actions import offered, RUNNER
+from .delivery.application.status.show_status import ShowStatusQuery
+from .delivery.application.status.texts import figures, signals_line, stamp_text, took_text
 from .delivery.adapter.outgoing.files.request_files import out_path
 from .delivery.adapter.outgoing.files.story_files import names_story
 from .delivery.application.requests.list_requests import ListRequestsQuery
@@ -94,7 +101,8 @@ from .delivery.application.requests.write_request import WriteRequestCommand
 from .delivery.application.shared.requests import DuplicateRequest, KIND, KINDS, RequestRefused
 from .building_blocks import UseCaseException
 from .infrastructure import delivery as wiring
-from . import service
+from .delivery.adapter.outgoing.process import factory_process
+from .web import service as web
 from .runner import (
     contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
     command_heads, first_word, model_for, needs_human_lines, open_decision_files, PASS_MARKS, plan_skeleton, run_main,
@@ -399,60 +407,19 @@ def dangling_skill_links(cwd):
     return found
 
 
-#: A foreign claim older than this reads as possibly forgotten — a factory that stopped without releasing it.
-STALE_CLAIM_DAYS = 3
+def make_action(text="", skill="", shell="", look="", label="", primary=False):
+    """An action, every way — `actions.make_action`, with this project's stories to tell a story's id from a wish."""
+    return actions.make_action(names_story, text=text, skill=skill, shell=shell, look=look, label=label,
+                               primary=primary)
 
 
-def claim_age(since, now=None):
-    """`3 h`, `6 d`, and whether it is stale — from the claim's UTC stamp; the stamp itself where it is unreadable."""
-    from datetime import datetime, timezone
-    try:
-        began = datetime.strptime(since, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except (TypeError, ValueError):
-        return since or "?", False
-    hours = max(0, int(((now or datetime.now(timezone.utc)) - began).total_seconds() // 3600))
-    return (f"{hours} h" if hours < 48 else f"{hours // 24} d"), hours >= STALE_CLAIM_DAYS * 24
+def status_model(cwd, epics, runs, live=False):
+    """Where the factory stands — the status read model, over the project's files."""
+    return wiring.show_status(cwd, epics, runs).execute(ShowStatusQuery(live))
 
 
-def foreign_claims(epics, runs):
-    """The claims other factories hold, as the last fetch saw them (no fetch here — a session's start and the cockpit
-    stay quick and offline): `held` — who holds which story and for how long, `stale` past three days; `orphan` — a
-    claim whose story this checkout does not have; `collision` — a claim on an id this checkout uses for another
-    story. Each with what a person does about it."""
-    found = []
-    for story, c in sorted(cached_claims(runs).items()):
-        if c["own"]:
-            continue
-        try:
-            path = find_story(epics, story)
-        except GateError:
-            path = None
-        age, stale = claim_age(c["since"])
-        entry = dict(story=story, who=c["who"], host=c["host"], since=c["since"], age=age, stale=stale,
-                     title=c["title"])
-        if not path:
-            found.append(dict(entry, kind="orphan", action=make_action(
-                text="this checkout has no such story — take the claim away",
-                shell=f"{RUNNER} release {story} --force")))
-            continue
-        front, body = read_front_matter(path)
-        epic = str(front.get("epic") or os.path.basename(epic_folder(path))).strip()
-        title = story_title(front, body) or story
-        if (c["epic"] and c["epic"] != epic) or (c["title"] and c["title"] != title):
-            found.append(dict(entry, kind="collision", action=make_action(
-                text=f"another factory claimed {story} for \"{c['title']}\" — give yours another id",
-                skill="/factory-backlog", shell=f"python3 .agents/factory/factory-cli.py --free-id {re.sub(r'[-_]?[0-9]+$', '', story)}")))
-            continue
-        found.append(dict(entry, kind="held", action=make_action(
-            text="not built here" + ("; a stale claim may be forgotten — ask its holder, or take it away" if stale
-                                     else ""),
-            shell=f"{RUNNER} release {story} --force" if stale else "")))
-    return found
-
-
-def foreign_claim_lines(epics, runs):
+def foreign_claim_lines(claims):
     """The foreign claims as the session's start says them: one line each kind, like the findings."""
-    claims = foreign_claims(epics, runs)
     held = [f"{c['story']} ({c['who']} on {c['host']}, {c['age']}{' — stale?' if c['stale'] else ''})"
             for c in claims if c["kind"] == "held"]
     lines = []
@@ -500,7 +467,7 @@ def status_brief(cwd, epics, runs, session_start=False):
     listening = listener_line(cwd)
     if listening:
         print(f"factory: {listening}")
-    for line in foreign_claim_lines(epics, runs):
+    for line in foreign_claim_lines(view["claims"]):
         print(f"factory: {line}")
     findings = open_findings(epics)
     if findings:
@@ -550,89 +517,6 @@ def status_brief(cwd, epics, runs, session_start=False):
               "process per stage. A managing session writes backlog and decision files only; the worker is the "
               "one writer in the checkout.")
     return 0
-
-
-def duplicate_pipeline_note(cwd):
-    """A session sees the person's plugins as well as the project's skills. With the dca-factory plugin
-    enabled and a project copy installed, a stage run in the session may pick either copy — the
-    runner's stage processes see only the project, a session does not."""
-    if not os.path.isfile(os.path.join(cwd, ".claude", "skills", "factory-run", "SKILL.md")):
-        return None
-    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    for settings in (os.path.join(home, "settings.json"), os.path.join(cwd, ".claude", "settings.json"),
-                     os.path.join(cwd, ".claude", "settings.local.json")):
-        try:
-            with open(settings, encoding="utf-8") as handle:
-                enabled = (json.load(handle) or {}).get("enabledPlugins") or {}
-        except (OSError, ValueError):
-            continue
-        if any(str(key).startswith("dca-factory@") and value for key, value in enabled.items()):
-            return ("note: the dca-factory plugin is enabled and the project has its own copy — a stage run in a "
-                    "session may pick the plugin's skills; the runner's stages see only the project's")
-    return None
-
-
-def activity_logs(cwd, owner, since):
-    """The session logs a running stage writes into while it works: the worker's own session and its
-    subagents where the claim names a session, else the tool's logs for this project directory that
-    changed since the stage started (a runner's stage process has a session of its own)."""
-    kind, _, session_id = (owner or "").partition(":")
-    reader = session_reader(kind)
-    if reader:
-        return reader.session_logs(session_id)
-    return [path for reader in READERS.values() for path in reader.project_logs(cwd, since)]
-
-
-def last_tool_call(path):
-    """`Name: first words of its input` of the newest tool call in a Claude or Codex session log."""
-    try:
-        with open(path, "rb") as handle:
-            handle.seek(max(0, os.path.getsize(path) - 262144))
-            lines = handle.read().decode("utf-8", errors="replace").splitlines()
-    except OSError:
-        return ""
-    for line in reversed(lines):
-        try:
-            entry = json.loads(line)
-        except ValueError:
-            continue
-        content = (entry.get("message") or {}).get("content") if isinstance(entry.get("message"), dict) else None
-        for block in reversed(content if isinstance(content, list) else []):
-            if isinstance(block, dict) and block.get("type") == "tool_use":
-                given = block.get("input") or {}
-                detail = next((str(given[k]) for k in ("command", "description", "skill", "file_path", "pattern")
-                               if isinstance(given, dict) and given.get(k)), "")
-                detail = " ".join(detail.split())
-                return f"{block.get('name')}" + (f": {detail[:70]}" + ("…" if len(detail) > 70 else "") if detail else "")
-        payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
-        if payload.get("type") in ("function_call", "local_shell_call"):
-            return str(payload.get("name") or payload.get("type"))
-    return ""
-
-
-def activity_line(cwd, owner, started, now, output=None):
-    """The sign of life inside a stage: a stage writes to the journal only at its start and its end,
-    while its session log grows with every tool call — and a runner's stage process its output (<output>, what
-    `follow` shows), read where no session log is. Session logs only where they may be read."""
-    if output and os.path.isfile(output) and os.path.getmtime(output) >= (parse_time(started) or now).timestamp():
-        age = int(now.timestamp() - os.path.getmtime(output))
-        lines, _ended = follow_lines(read_text(output))
-        last = next((line.strip() for line in reversed(lines) if line.strip()), "")
-        return f"activity: {age_text(age)}" + (f" — {last}" if last else "")
-    if not session_usage_allowed(cwd):
-        return "activity: not read — session logs are switched off (sessionUsage)"
-    logs = [path for path in activity_logs(cwd, owner, parse_time(started)) if os.path.isfile(path)]
-    if not logs:
-        return "activity: unknown — no session log of this stage found on this machine"
-    newest = max(logs, key=os.path.getmtime)
-    call = last_tool_call(newest)
-    return f"activity: {age_text(int(now.timestamp() - os.path.getmtime(newest)))}" \
-        + (f" — last tool call {call}" if call else "")
-
-
-def age_text(seconds):
-    """`40 s ago`, `3 min ago` — how long since a sign of life."""
-    return f"{seconds} s ago" if seconds < 120 else f"{seconds // 60} min ago"
 
 
 def status(cwd, epics, runs, story_filter=None, fmt="text", colour="auto", live=False, part="all", every=False,
@@ -895,511 +779,8 @@ MARKS_MD = {"look": "👀", "question": "❓", "stopped": "⛔", "running": "⏳
 COLOURS = {"look": "33", "question": "33", "stopped": "31", "running": "34", "done": "32", "none": "2", "next": "36"}
 
 
-def stamp_text(value):
-    """`2026-09-25 14:31` in UTC, or `—`."""
-    moment = parse_time(value) if isinstance(value, str) else value
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M") if moment else "—"
-
-
-def took_text(seconds):
-    if not seconds:
-        return "—"
-    seconds = int(round(seconds))
-    if seconds < 60:
-        return f"{seconds} s"
-    minutes = seconds // 60
-    return f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
-
-
 def tokens_text(tokens, measured=True):
     return f"{tokens:,}" if measured and tokens else "not measured"
-
-
-def journal_timeline(runs, story_id):
-    """[(time, kind, stage, fields)] of a story's journal, by time — a union merge interleaves lines."""
-    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
-    if not os.path.isfile(journal):
-        return []
-    events = []
-    # A union merge can hold one window twice — read on one branch, still pending on the other: the read
-    # one first, so the pending one is the duplicate that is skipped.
-    for line in sorted(read_text(journal).splitlines(), key=lambda l: ("log=" in l or "session=" in l)):
-        parts = line.split("\t")
-        if len(parts) < 3 or parse_time(parts[0]) is None:
-            continue
-        fields = dict(p.split("=", 1) for p in parts[3:] if "=" in p)
-        if "unknown" in parts[3:]:
-            fields["unknown"] = "1"
-        events.append((parse_time(parts[0]), parts[1], parts[2], fields))
-    return sorted(events, key=lambda e: e[0])
-
-
-def usage_tokens(fields, resolve=True):
-    """(tokens, new tokens, model) of one usage line, or None where nothing was measured."""
-    if fields.get("unknown"):
-        return None
-    if "window" in fields and ("log" in fields or "session" in fields) and "input" not in fields:
-        read = resolve_window(fields) if resolve else None
-        if read is None:
-            return None
-        fields = dict(fields, **{k: str(v) for k, v in read.items()})
-    counts = {k: int(fields.get(k, 0) or 0) for k in USAGE_FIELDS}
-    return (sum(counts.values()), counts, fields.get("model", ""),
-            float(fields["cost"]) if fields.get("cost") else None)
-
-
-def story_facts(cwd, runs, story_id, front=None):
-    """What a story's journal says: when it started and ended, how long its stages took, its passes
-    (a pass begins at every plan start), and its tokens — per stage and per pass. When it was delivered
-    is the story's own line, `delivered:`, not the journal's."""
-    events = journal_timeline(runs, story_id)
-    stages, passes, open_starts, counted = {}, [], {}, set()
-    for moment, kind, stage, fields in events:
-        if kind == "usage" and fields.get("window"):
-            if (stage, fields["window"]) in counted:
-                continue
-            counted.add((stage, fields["window"]))
-        if kind == "stage-start":
-            if stage == STAGE_ORDER[0] or not passes:
-                passes.append(dict(start=moment, end=None, seconds=0, tokens=0, measured=0, runs=0, stages=set()))
-            passes[-1]["stages"].add(stage)
-            open_starts[stage] = moment
-            entry = stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS},
-                                                  cost=0.0, priced=0, requested=set(), not_applied=0))
-            entry["runs"] += 1
-            passes[-1]["runs"] += 1
-            if fields.get("tool"):
-                entry.setdefault("tools", set()).add(fields["tool"])
-            if fields.get("effort") and not str(fields["effort"]).startswith("no"):
-                entry.setdefault("efforts", set()).add(fields["effort"])
-            if fields.get("model_requested"):
-                entry["requested"].add(fields["model_requested"])
-            if str(fields.get("model_applied", "")).startswith("no"):
-                entry["not_applied"] += 1
-        elif kind == "window-start":
-            open_starts[stage] = moment
-            stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS},
-                                          cost=0.0, priced=0, requested=set(), not_applied=0))["runs"] += 1
-        elif kind == "window-end" and stage in open_starts:
-            stages[stage]["seconds"] += (moment - open_starts.pop(stage)).total_seconds()
-        elif kind == "stage-end" and stage in open_starts:
-            took = (moment - open_starts.pop(stage)).total_seconds()
-            stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS}, cost=0.0,
-                                          priced=0, requested=set(), not_applied=0))["seconds"] += took
-            if passes:
-                passes[-1]["seconds"] += took
-                passes[-1]["end"] = moment
-        elif kind == "usage":
-            read = usage_tokens(fields)
-            entry = stages.setdefault(stage, dict(runs=0, seconds=0, tokens=0, measured=0, models=set(), **{k: 0 for k in USAGE_FIELDS},
-                                                  cost=0.0, priced=0, requested=set(), not_applied=0))
-            if read is None:
-                continue
-            tokens, counts, model, cost = read
-            entry["tokens"] += tokens
-            for k in USAGE_FIELDS:
-                entry[k] = entry.get(k, 0) + counts[k]
-            entry["measured"] += 1
-            if model and model != "unknown":
-                entry["models"].update(model.split(","))
-            if cost is not None:
-                entry["cost"] += cost
-                entry["priced"] += 1
-            if passes and stage not in WINDOWS:
-                passes[-1]["tokens"] += tokens
-                passes[-1]["measured"] += 1
-    started = events[0][0] if events else None
-    tokens = sum(e["tokens"] for e in stages.values())
-    invocations = sum(e["runs"] for e in stages.values())
-    measured = sum(e["measured"] for e in stages.values())
-    return dict(started=started, delivered=parse_time(delivered_on(front or {})), stages=stages,
-                passes=passes, tokens=tokens, runs=invocations, measured=measured,
-                seconds=sum(e["seconds"] for e in stages.values()),
-                cost=sum(e["cost"] for e in stages.values()), priced=sum(e["priced"] for e in stages.values()))
-
-
-def story_records(cwd, story_id, story_path=None):
-    try:
-        return records_of(story_id, story_path)
-    except GateError:
-        return []
-
-
-RUNNER = "bash .agents/factory/factory.sh"
-
-
-def make_action(text="", skill="", shell="", look="", label="", primary=False):
-    """What to do, every way: `skill` in an agent session, `shell` in a terminal — empty where a
-    terminal cannot do it (writing a story needs an agent) —, and `request` from a page. `label` is the
-    word on its button and `primary` marks the one to press: a view draws them, it never chooses them."""
-    action = dict(text=text, skill=skill, shell=shell, look=look, label=label, primary=primary)
-    request = request_of(skill, names_story)        # the same press from a page: the request it writes (WP-91)
-    if request:
-        action["request"] = request
-    return action
-
-
-def offered(*actions):
-    """The actions a page can press — those a request does — in the order given."""
-    return [a for a in actions if a and a.get("request")]
-
-
-#: Where a person starts something in their own words: a wish, a change to the description, a discovery.
-def entry_actions():
-    return dict(
-        wish=make_action(text="What should the product do that it does not do yet?", skill="/factory-backlog",
-                         label="wish", primary=True),
-        describe=make_action(text="e.g. tech: the shop runs on PostgreSQL 17", skill="/dca-describe",
-                             label="describe", primary=True),
-        discover=make_action(text="What problem is worth solving, or what should exist?", skill="/factory-discover",
-                             label="discover", primary=True))
-
-
-def story_attention(cwd, story_id, story, profile):
-    """(mark, state words, action) for one story — the words a person uses."""
-    state, detail = story["state"], story.get("detail", "")
-    records = story_records(cwd, story_id, story.get("path"))
-    open_records = [(path, front) for path, front, _body, st, _a in records if st in ("open", "draft")]
-    record = shown(open_records[0][0]) if open_records else ""
-    by_hand = f"write the answer into {record} under `## Answer`" if record else ""
-    if state == "waiting" and any(is_acceptance(f) for _p, f in open_records):
-        record = next(shown(p) for p, f in open_records if is_acceptance(f))
-        return "look", "waiting for your acceptance", make_action(
-            skill="/factory-decisions", look=str(profile.get("run", "")).strip() or "start the application",
-            shell=f"write accepted or your correction into {record} under `## Answer`", label="look at it",
-            primary=True)
-    if state == "waiting":
-        return "question", "waiting for your answer", make_action(skill="/factory-decisions", shell=by_hand,
-                                                                  label="answer", primary=True)
-    if state == "unreleased":
-        return "question", "draft — waits for your release", make_action(
-            text="release it", skill=f"/factory-backlog release {story_id}",
-            shell=f"set `status: approved` in {str(story.get('path', 'the story')).replace(os.sep, '/')}",
-            label="release", primary=True)
-    if state == "stopped":
-        return "stopped", "stopped", make_action(text=detail, skill=f"/factory-status {story_id}",
-                                            shell=f"{RUNNER} status --story {story_id}")
-    if "possibly interrupted" in detail:
-        return "stopped", "interrupted?", make_action(text=detail, skill=f"/factory-run {story_id}",
-                                                 shell=f"{RUNNER} run --story {story_id}", label="run it again")
-    if state == "running":
-        return "running", "running", make_action()
-    if state == "delivered":
-        return "done", f"delivered, {detail}" if detail else "delivered", make_action()
-    if state == "published":
-        return "look", "published — waits for its merge", make_action(
-            text="open the merge request from its branch; once merged, any factory's next look releases the claim",
-            shell=f"{RUNNER} integrate {story_id}  (only after another merge request landed first)")
-    if state == "claimed":
-        return "none", "claimed elsewhere", make_action(text=detail, shell=f"{RUNNER} release {story_id} --force")
-    if str(story.get("kind", "")) == "adopt" and state in ("ready", "in-progress", "resumable"):
-        return "none", "to adopt", make_action(text=detail)
-    if state == "blocked":
-        return "none", "blocked", make_action(text=detail)
-    if state in ("ready", "in-progress", "resumable"):
-        words = {"ready": "ready", "in-progress": "in progress", "resumable": "can continue"}[state]
-        return "none", words, make_action(text=detail)
-    return "none", state, make_action(text=detail)
-
-
-def status_model(cwd, epics, runs, live=False):
-    epics_dir = epics                                 # the folder; `epics` below becomes the list it holds
-    profile = read_profile(resolve_profile(None, cwd))
-    data = schedule_data(cwd, epics, runs)
-    stories, order = data["stories"], data["order"]
-    now = datetime.now(timezone.utc)
-    rows, waiting, attention = [], [], {}
-    for story_id in order:
-        story = stories[story_id]
-        facts = story_facts(cwd, runs, story_id, story.get("front"))
-        mark, words, action = story_attention(cwd, story_id, story, profile)
-        attention[story_id] = action
-        done = story["state"] == "delivered"
-        stage = "" if done else next((st for sid, st, _t in running_stages(runs) if sid == story_id),
-                                     story.get("start") or "")
-        journal = os.path.isfile(os.path.join(evidence_dir(runs, story_id), "journal.tsv"))
-        # the tests a gate of this story ran again alone and saw green: red in the whole suite, not the story's (WP-113)
-        flaky = sorted(flaky_tests(runs, story_id))
-        signals = story_signals(runs, story_id, story_records(cwd, story_id, story.get("path")), story.get("body") or "")
-        rows.append(dict(journal=journal, done=done, epic=story.get("epic", ""), story=story_id, flaky=flaky,
-                         signals=signals,
-                         title=story.get("title", ""), mark=mark, created=created_of(story.get("front") or {}),
-                         state=words, stage=stage or "—", passes=len(facts["passes"]) or 0,
-                         started=facts["started"], delivered=facts["delivered"], seconds=facts["seconds"],
-                         tokens=facts["tokens"], measured=facts["measured"], runs=facts["runs"],
-                         **{k: sum(e.get(k, 0) for e in facts["stages"].values()) for k in USAGE_FIELDS},
-                         cost=facts["cost"], priced=facts["priced"]))
-        if mark in ("look", "question", "stopped"):
-            waiting.append(dict(mark=mark, story=story_id, what=words, action=action, draft=story["state"] == "unreleased",
-                                record=open_record(cwd, story_id, story) if mark != "stopped" else ""))
-    for name, front, body, state, error, path in decision_files(cwd):
-        story_id = str(front.get("story", "")).strip() if not error else ""
-        if story_id in stories:
-            continue                                  # its story's row already says so
-        if error or state in ("open", "draft"):
-            waiting.append(dict(mark="question", story=story_id or name, what="an open question", record=shown(path), draft=False,
-                                action=make_action(skill="/factory-decisions",
-                                              shell=f"write the answer into {shown(path)} under `## Answer`",
-                                              label="answer", primary=True)))
-    running = []
-    held = read_claim(claim_path(cwd)) if live else None
-    for story_id, stage, started in running_stages(runs):
-        if story_id in stories and stories[story_id]["state"] in ("delivered", "superseded"):
-            continue
-        interrupted = story_id in stories and stories[story_id]["state"] != "running"
-        entry = dict(story=story_id, stage=stage, since=parse_time(started), interrupted=interrupted,
-                     round=story_round(runs, story_id))
-        if stage in SHARED_WINDOWS and not interrupted:
-            entry["part"] = window_part_now(runs, story_id, stage)
-        if live:
-            since = parse_time(started)
-            entry["ago"] = took_text((now - since).total_seconds()) + " ago" if since else ""
-            output = (follow_newest(runs, story_id) or (None, None, None))[2]
-            entry["activity"] = activity_line(cwd, (held or {}).get("owner", ""), started, now, output).split(": ", 1)[-1]
-        running.append(entry)
-    epics = []
-    for row in rows:
-        if not epics or epics[-1]["epic"] != row["epic"]:
-            found = next((e for e in epics if e["epic"] == row["epic"]), None)
-            if found is None:
-                epics.append(dict(epic=row["epic"], rows=[]))
-            else:
-                epics.append(epics.pop(epics.index(found)))
-        epics[-1]["rows"].append(row)
-    for epic in epics:
-        epic["rows"].sort(key=lambda r: order.index(r["story"]))
-        epic.update(delivered=sum(r["done"] for r in epic["rows"]), total=len(epic["rows"]),
-                    tokens=sum(r["tokens"] for r in epic["rows"]), measured=sum(r["measured"] for r in epic["rows"]),
-                    seconds=sum(r["seconds"] for r in epic["rows"]), signals=signal_totals(epic["rows"]))
-    epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
-    journeys = journey_hints(stories, epics)
-    blank = dict(title="", goal="", metric="", discovery="", intent="", domain_contact="", created="", path="")
-    files = epic_files(epics_dir)
-    for epic in epics:
-        own = next((f for f in files if epic["epic"] in (f["epic"], f["folder"])), None)
-        epic.update({k: (own or blank)[k] for k in blank})
-    named = {e["epic"] for e in epics}
-    # an epic whose folder holds no story yet: listed after the others, its next step is cutting them
-    for own in files:
-        if own["epic"] not in named and own["folder"] not in named:
-            epics.append(dict(epic=own["epic"], rows=[], delivered=0, total=0, tokens=0, measured=0, seconds=0,
-                              signals=signal_totals([]),
-                              **{k: own[k] for k in blank}))
-    empty = [e["epic"] for e in epics if not e["rows"]]
-    # The backlog newest first (WP-146): the epics by `created:`, the stories within an epic by theirs — the factory
-    # orders, every view shows the order as given. An item without the field comes after the dated ones, in the
-    # schedule's order, as does every tie.
-    for epic in epics:
-        epic["rows"] = newest_first(epic["rows"])
-    epics[:] = newest_first(epics)
-    # what comes next, in the schedule's order: the stories that can run, and how many cannot yet
-    queue = dict(ready=[r["story"] for r in rows if stories[r["story"]]["state"] in RUNNABLE
-                        and r["story"] not in {x["story"] for x in running}],
-                 blocked=sum(1 for r in rows if stories[r["story"]]["state"] == "blocked"),
-                 drafts=sum(1 for r in rows if stories[r["story"]]["state"] == "unreleased"))
-    # what a person can do with each story and each epic — every view draws these, none composes its own
-    for row in rows:
-        story_id = row["story"]
-        row["actions"] = offered(attention[story_id], make_action(
-            text=f"run {story_id} now, before the schedule's next", skill=f"/factory-run {story_id}",
-            shell=f"{RUNNER} run --story {story_id}", label="run now") if story_id in queue["ready"] else None)
-        row.update(figures(row))
-    guards = {hint["epic"]: hint for hint in journeys}
-    # a story whose release is asked for already is no draft the epic's button still has to release
-    pending = pending_requests(cwd)
-    asked = {r.get("story") for r in pending if r["kind"] == "release" and r.get("story")}
-    for epic in epics:
-        drafts = sum(1 for r in epic["rows"] if stories[r["story"]]["state"] == "unreleased")
-        to_release = sum(1 for r in epic["rows"] if stories[r["story"]]["state"] == "unreleased" and r["story"] not in asked)
-        epic["actions"] = offered(
-            make_action(text="the epic's next stories, written as drafts for you to release",
-                        skill=f"/factory-backlog stories {epic['epic']}", label="suggest stories",
-                        primary=not epic["total"]),
-            make_action(text="every draft of the epic, released where its question pass leaves nothing open",
-                        skill=f"/factory-backlog release {epic['epic']}",
-                        label=f"release {to_release} draft" + ("s" if to_release > 1 else "")) if to_release else None,
-            guards[epic["epic"]]["action"] if epic["epic"] in guards else None)
-        epic.update(figures(epic), drafts=drafts)
-    # the delivered stories, the newest delivery first; one without a time (delivered before the field) last
-    delivered_order = [r["story"] for r in newest_first([r for r in rows if r["done"]], key="delivered")]
-    nxt = data["next"]
-    if nxt:
-        next_line = dict(text=f"{nxt} can start from {stories[nxt]['start'] or 'plan'} — run it.",
-                         action=make_action(skill=f"/factory-run {nxt}", shell=f"{RUNNER} run --story {nxt}", label="run it",
-                                            primary=True))
-    elif empty and all(r["state"] in ("delivered", "superseded") for r in rows):
-        next_line = dict(text=f"The epic {empty[0]} has no story yet — cut its stories.",
-                         action=make_action(skill=f"/factory-backlog stories {empty[0]}", shell="", label="suggest stories",
-                                            primary=True))
-    elif not rows:
-        next_line = dict(text="The backlog is empty — write the first story.",
-                         action=make_action(skill="/factory-backlog", shell="", label="write a wish", primary=True))
-    elif all(r["state"] in ("delivered", "superseded") for r in rows):
-        next_line = dict(text="Every story is delivered — write the next one.",
-                         action=make_action(skill="/factory-backlog", shell="", label="write a wish", primary=True))
-    else:
-        holder = next((r for r in rows if r["mark"] in ("look", "question", "stopped")), None)
-        busy = next((r for r in rows if r["mark"] == "running"), None)
-        action = make_action()
-        if holder and stories[holder["story"]]["state"] == "unreleased":
-            text, action = f"{holder['story']} is a draft — release it, and it runs.", attention[holder["story"]]
-        elif holder:
-            until = {"look": "is accepted", "question": "has its answer", "stopped": "is unblocked"}[holder["mark"]]
-            text = f"Nothing else starts until {holder['story']} {until} — see Waiting for you."
-            action = attention[holder["story"]]
-        elif busy:
-            text = f"{busy['story']} is running — one story at a time; nothing to do but wait."
-        else:
-            text = data["reason"] + "."
-        next_line = dict(text=text, action=action)
-    extra = []
-    requests = request_counts(cwd)                    # what a person asked the factory to do (WP-91)
-    if any(requests.values()):
-        extra.append("requests: " + ", ".join(f"{n} {state}" for state, n in requests.items() if n)
-                     + " — `factory.sh requests`")
-    worker = service.worker(cwd) if live else None
-    if worker:
-        worker["since_text"] = stamp_text(worker.get("since")) + " UTC"
-    # a factory that ended on its own says why, where a person looks — not only in its log
-    gone = service.ended(cwd) if live and not (worker or {}).get("alive") else None
-    if gone:
-        gone["text"] = f"the factory ended on its own: {gone['why']}"
-        extra.append(f"{gone['text']} — its log: {gone['log']}")
-    if live:
-        if held:
-            how = {"up": ", started by `factory.sh up`", "session": ", a session's run"}.get((worker or {}).get("how"), "")
-            extra.append(f"worker: {held.get('owner')} since {stamp_text(held.get('since'))} UTC{how}"
-                         + (" — stopping after its stage" if (worker or {}).get("stopping") else ""))
-        listening = listener_line(cwd)
-        extra.append(listening or "listening: no session has looked at the backlog")
-        note = duplicate_pipeline_note(cwd)
-        if note:
-            extra.append(note)
-    # the project description as it stands — the foundation a person writes once and changes when things move
-    description = [description_part(cwd, profile, "product", PRODUCT_HEADINGS),
-                   description_part(cwd, profile, "tech", TECH_HEADINGS),
-                   description_part(cwd, profile, "domain", ())]
-    for part in description:
-        part["mark"] = "done" if part["present"] and not part["missing"] and not part["empty"] else "question"
-    # what else waits for a person: the judge's open minors, other factories' claims (WP-104)
-    findings = []
-    for found in finding_records(epics_dir):
-        story, plain, defect, kept = found["owner"], found["plain"], found["defect"], shown(found["path"])
-        # `plain` leads: the finding in one sentence a person understands at once (contract 23; '' in an older row).
-        # A project finding (`<product>/findings/<name>.md`, WP-146) belongs to no story: the backlog skill is handed
-        # its row, which a task's `closes:` names.
-        findings.append(dict(story=story, row=found["row"], project=found["project"], plain=plain, where=found["where"],
-                             severity=found["severity"], defect=defect, perspective=found["perspective"],
-                             fix=found["fix"], file=kept,
-                             action=make_action(text=f"fix it in a story, or set its Status to done or wont-fix in {kept}",
-                                                skill=f"/factory-backlog {found['row'] if found['project'] else story}: "
-                                                      f"{plain or defect}", label="to the backlog")))
-    # the review perspectives the profile asks for now — a view shows a story's `review:<name>` processes for these
-    # alone, never a reviewer a profile named before (an old `reviews/dca.md`, a `review:dca` in the journal)
-    perspectives = [dict(name=name, carrier=carrier) for name, carrier in perspectives_of(profile)]
-    # an action whose request is written already says so instead of offering it twice
-    mark_pending([a for row in rows for a in row["actions"]] + [a for epic in epics for a in epic["actions"]]
-                 + [w["action"] for w in waiting] + [next_line["action"]] + [f["action"] for f in findings], pending)
-    return dict(project=os.path.basename(os.path.abspath(cwd)), waiting=waiting, running=running, epics=epics,
-                worker=worker, ended=gone, requests=requests, findings=findings, claims=foreign_claims(epics_dir, runs), perspectives=perspectives,
-                description=description, queue=queue, delivered_order=delivered_order,
-                rows=rows, next=next_line, journeys=journeys,
-                priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
-                delivered=sum(r["done"] for r in rows), total=len(rows),
-                tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
-                seconds=sum(r["seconds"] for r in rows), signals=signal_totals(rows), entries=entry_actions(),
-                worker_text=service.worker_text(worker) if live else "",
-                **figures(dict(tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
-                               seconds=sum(r["seconds"] for r in rows), cost=sum(r["cost"] or 0 for r in rows),
-                               priced=any(r["priced"] for r in rows))))
-
-
-def figures(entry):
-    """An entry's figures as every view writes them — tokens, time worked, cost, when it was delivered (a story's;
-    an epic's `delivered` is a count) — beside the numbers."""
-    tokens, delivered = entry.get("tokens") or 0, entry.get("delivered")
-    return dict(tokens_text=f"{tokens:,}" if tokens else "",
-                seconds_text=took_text(entry.get("seconds")) if entry.get("seconds") else "",
-                cost_text=f"${entry['cost']:.2f}" if entry.get("priced") and entry.get("cost") else "",
-                delivered_text=stamp_text(delivered) if delivered and not isinstance(delivered, int) else "")
-
-
-RULE_VERDICTS = ("red", "killed", "survived", "no-break", "unchecked")
-
-
-def signal_totals(rows):
-    """The signals of several stories summed (WP-150 E) — the figures the bench rates: the rules named and each
-    verdict, the kill rate (killed / named) and the guarded rate ((red + killed) / named) — None where no rule was
-    named —, questions, assumptions, what plans left open, the judges' findings by perspective and domain code, the
-    corrections by code. A story whose gate recorded no rules (one built before 0.88.0) is counted as not measured,
-    never as zero."""
-    total = dict(stories=len(rows), measured=0, not_measured=0, named=0, **{v: 0 for v in RULE_VERDICTS},
-                 asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0,
-                 findings={}, domain={}, corrections={})
-    for row in rows:
-        signals = row.get("signals") or {}
-        if signals.get("rules") is None:
-            total["not_measured"] += 1
-        else:
-            total["measured"] += 1
-            for verdict, n in signals["rules"].items():
-                total[verdict] = total.get(verdict, 0) + n
-                total["named"] += n
-        for key in ("asked", "answered", "assumptions_open", "assumptions_answered", "plan_open"):
-            total[key] += signals.get(key) or 0
-        for key in ("findings", "domain", "corrections"):
-            for name, n in (signals.get(key) or {}).items():
-                total[key][name] = total[key].get(name, 0) + n
-    named = total["named"]
-    total["kill_rate"] = round(total["killed"] / named, 2) if named else None
-    total["guarded_rate"] = round((total["red"] + total["killed"]) / named, 2) if named else None
-    total["line"] = signals_line(total)
-    return total
-
-
-def signals_line(totals):
-    """The figures in one line — `kill rate 0.04 · guarded 1.00 · domain findings 2 concept · 1 term · corrections
-    1 term` —, '' where nothing was measured or found."""
-    parts = []
-    if totals.get("named"):
-        parts.append(f"kill rate {totals['kill_rate']:.2f} · guarded {totals['guarded_rate']:.2f} "
-                     f"({totals['named']} rules named)")
-    elif totals.get("measured") is not None and totals.get("stories") and not totals.get("measured"):
-        parts.append("rules not measured")
-    if totals.get("domain"):
-        parts.append("domain findings " + " · ".join(f"{n} {c.replace('domain-', '', 1)}"
-                                                     for c, n in sorted(totals["domain"].items())))
-    if totals.get("corrections"):
-        parts.append("corrections " + " · ".join(f"{n} {c.replace('domain-', '', 1)}"
-                                                 for c, n in sorted(totals["corrections"].items())))
-    return " · ".join(parts)
-
-
-def front_text(value):
-    """One front-matter value as text — a list (`key:` with `- item` lines) joined, never its Python form."""
-    if isinstance(value, list):
-        return ", ".join(str(v) for v in value)
-    return str(value or "")
-
-
-def epic_files(epics):
-    """Every epic folder with an epic.md, the one with no story yet included — the status lists the epics
-    from their own files, not from the stories that name them."""
-    found = []
-    if not os.path.isdir(epics):
-        return found
-    for name in sorted(os.listdir(epics)):
-        path = os.path.join(epics, name, "epic.md")
-        if not os.path.isfile(path):
-            continue
-        try:
-            front = read_front_matter(path)[0]
-        except GateError:
-            front = {}
-        found.append(dict(epic=str(front.get("id") or name), folder=name, created=created_of(front), path=shown(path),
-                          **{k: front_text(front.get(k))
-                             for k in ("title", "goal", "metric", "discovery", "intent", "domain_contact")}))
-    return found
 
 
 def utc_text(moment):
@@ -1446,75 +827,6 @@ def backfill_created(cwd, epics):
           f"{written['epic']} epic{'' if written['epic'] == 1 else 's'}, from the commit that added each"
           + (f" — {from_file} not in git yet, from the file's own time" if from_file else ""))
     return 0
-
-
-def created_moment(value):
-    """A `created:` (or `delivered:`) value as a UTC time to order by — a date alone at its midnight; None for none."""
-    value = str(value or "").strip()
-    if not value:
-        return None
-    try:
-        moment = datetime.fromisoformat(value.replace("Z", "+00:00") if "T" in value else value + "T00:00:00+00:00")
-    except ValueError:
-        return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
-
-
-def newest_first(items, key="created"):
-    """The items newest first by their `key` (a `created:` or a delivery time); the undated after them. Stable: the
-    order the items come in decides a tie and among the undated."""
-    def moment(item):
-        value = item.get(key)
-        return value if isinstance(value, datetime) else created_moment(value)
-    dated = sorted((i for i in items if moment(i)), key=lambda i: moment(i).astimezone(timezone.utc), reverse=True)
-    # sorted(reverse=True) keeps equal items in their order, so a tie stays in the schedule's
-    return dated + [i for i in items if not moment(i)]
-
-
-def story_round(runs, story_id):
-    """The round a story is in: 1, then one more for every gate refusal the runner counted (`.rounds`)."""
-    path = os.path.join(evidence_dir(runs, story_id), ".rounds")
-    text = read_text(path).strip() if os.path.isfile(path) else ""
-    return (int(text) if text.isdigit() else 0) + 1
-
-
-def open_record(cwd, story_id, story):
-    """The open record a waiting story waits on, as a path a person reads — '' where none is open."""
-    records = story_records(cwd, story_id, story.get("path"))
-    opened = [(path, front) for path, front, _b, st, _a in records if st in ("open", "draft")]
-    chosen = next((p for p, f in opened if is_acceptance(f)), opened[0][0] if opened else "")
-    return shown(chosen) if chosen else ""
-
-
-def journey_hints(stories, epics):
-    """An epic whose stories are all delivered and that has no `kind: journey` item: delivered, unguarded — the way
-    to its outcome event has no test. A hint, never a stop. An epic decides against a journey with `- none: <why>`
-    under `## Journey`; without the section it has decided nothing."""
-    hints = []
-    for epic in epics:
-        paths = [stories[r["story"]].get("path", "") for r in epic["rows"]]
-        kinds = []
-        for path in paths:
-            try:
-                kinds.append(story_kind(read_front_matter(path)[0]) if path else "story")
-            except GateError:
-                kinds.append("story")
-        built = [r for r, k in zip(epic["rows"], kinds) if k == "story"]
-        if not built or any(r["state"] != "delivered" for r in built) or "journey" in kinds or not paths[0]:
-            continue
-        epic_md = os.path.join(epic_folder(paths[0]), EPIC_FILE)
-        text = read_text(epic_md) if os.path.isfile(epic_md) else ""
-        heading = re.search(r"^## Journey\s*$", text, re.M)
-        section = text[heading.end():].split("\n## ", 1)[0] if heading else None
-        if section is not None and re.search(r"^\s*-\s*none:", section, re.M):
-            continue
-        said = "the epic names no journey" if section is None \
-            else "its journey is still open" if re.search(r"^\s*-\s*open:", section, re.M) or not section.strip() \
-            else "its journey has no journey test yet"
-        hints.append(dict(epic=epic["epic"], text=f"delivered, unguarded — {said}",
-                          action=make_action(skill=f"/factory-backlog journey {epic['epic']}", shell="",
-                                             label="add guard")))
-    return hints
 
 
 def paint(text, mark, colour):
@@ -2027,15 +1339,6 @@ def window_running(entry, runs, story_id, moving, live):
     if live and moving.get("since"):
         entry["seconds"] += max((datetime.now(timezone.utc) - moving["since"]).total_seconds(), 0)
     entry["running"] = True
-
-
-def window_part_now(runs, story_id, window):
-    """The stage a running shared window is in, from its newest stream — '' when it has not loaded one."""
-    outs = sorted(glob.glob(os.path.join(evidence_dir(runs, story_id), f"{window}.*.out")))
-    if not outs:
-        return ""
-    parts, _cost = stream_parts(max(outs, key=os.path.getmtime))
-    return parts[-1]["stage"] if parts else ""
 
 
 def story_model(cwd, epics, runs, story_id, live=False):
@@ -3035,67 +2338,12 @@ def carriers(profile):
     return sorted({value.rsplit(":", 1)[-1] for _, value in carrier_lines(profile)})
 
 
-def follow_render(event, denied=frozenset()):
-    """The lines one common event stands for — [] for an event that shows nothing. `denied` holds the ids of the
-    calls the stream's result names as denied permission: known once the process ended, so a running one shows such
-    a call as any failed call, by the reason the tool gave. One rendering for every tool: the readers turn each
-    format into the same events."""
-    kind = event.get("kind")
-    if kind == "session":
-        return [f"· session started{(' — ' + event['model']) if event.get('model') else ''}"]
-    if kind == "call":
-        given = event.get("input") or {}
-        lines = []
-        stage = part_of_call(event)
-        if stage:
-            lines.append(f"── {stage}")                             # a shared process begins this stage
-            if event.get("name") == "Skill":
-                return lines
-        arg = next((given[k] for k in FOLLOW_ARGS if isinstance(given, dict) and given.get(k)), "")
-        return lines + [f"▸ {event.get('name', 'tool')} {_short(arg, 100)}".rstrip()]
-    if kind == "error":
-        said = " — ".join([line.strip() for line in str(event.get("text") or "").splitlines() if line.strip()][:2]) \
-            or "failed"
-        return [f"✗ {'denied: ' if event.get('id') in denied else ''}{_short(said, 120)}"]
-    if kind == "text" and str(event.get("text", "")).strip():
-        return [f"  {_short(event['text'])}"]
-    if kind == "result":
-        bits = [f"{event['turns']} turns" if event.get("turns") is not None else "",
-                f"${float(event['cost']):.2f}" if event.get("cost") is not None else "",
-                f"{int(event['duration_ms']) // 1000}s" if event.get("duration_ms") else "",
-                f"{len(event['denied'])} denied" if event.get("denied") else ""]
-        state = "stopped: " + event["failed"] if event.get("failed") else "done"
-        return [f"■ {state}" + (" — " + ", ".join(b for b in bits if b) if any(bits) else "")]
-    return []
-
-
-def follow_lines(text, fmt=None):
-    events = reader_of(text, fmt).events(text)
-    ended = any(e["kind"] == "result" for e in events)
-    denied = {call_id for e in events if e["kind"] == "result" for call_id, _n, _i in e.get("denied") or []}
-    lines = []
-    for event in events:
-        lines += follow_render(event, denied)
-    return lines, ended
-
-
 def follow_outputs(runs, story, process=None):
     """[(stage, path)] of one story's stage outputs in the order they began, or of one process (`builder`,
     `review-ddd`, `plan`, …) alone."""
     pattern = os.path.join(evidence_dir(runs, story), f"{process}.*.out" if process else "*.out")
     outs = [p for p in glob.glob(pattern) if os.path.isfile(p)]
     return [(os.path.basename(p).split(".")[0], p) for p in sorted(outs, key=lambda p: (os.path.getmtime(p), p))]
-
-
-def follow_newest(runs, story=None, process=None):
-    """(story, stage, path) of the newest stage output, of one story or of every story — None if none."""
-    pattern = os.path.join(evidence_dir(runs, story or "*"), f"{process}.*.out" if process else "*.out")
-    outs = [p for p in glob.glob(pattern) if os.path.isfile(p)]
-    if not outs:
-        return None
-    path = max(outs, key=lambda p: (os.path.getmtime(p), p))
-    return (os.path.basename(os.path.dirname(path)),
-            os.path.basename(path).split(".")[0], path)
 
 
 def follow(runs, story, once, fmt, width, process=None, every=False, request=None):
@@ -3317,7 +2565,7 @@ def up_command(argv):
               file=sys.stderr)
         return 2
     placed()
-    return service.up(os.getcwd(), run_args, args.serve, args.port, args.by or "")
+    return factory_process.up(os.getcwd(), run_args, args.serve, args.port, args.by or "")
 
 
 def down_command(argv):
@@ -3327,7 +2575,7 @@ def down_command(argv):
     parser.add_argument("--by")
     args = parser.parse_args(argv)
     placed()
-    return service.down(os.getcwd(), args.now, not args.no_wait, args.by or "")
+    return factory_process.down(os.getcwd(), args.now, not args.no_wait, args.by or "")
 
 
 def serve_command(argv):
@@ -3339,8 +2587,14 @@ def serve_command(argv):
     args = parser.parse_args(argv)
     placed()
     if args.by_up:
-        return service.serve_here(os.getcwd(), args.port, by_up=True)
-    return service.serve(os.getcwd(), args.port, background=args.background, open_browser=args.open)
+        return web.serve_here(os.getcwd(), args.port, by_up=True)
+    served = factory_process.running_page(os.getcwd())
+    if served:
+        factory_process.say(f"the page runs already — {served['url']}")
+        return 0
+    if args.background:
+        return factory_process.start_page(os.getcwd(), args.port)
+    return web.serve_here(os.getcwd(), args.port, args.open)
 
 
 def worker_command(argv):
@@ -3348,8 +2602,8 @@ def worker_command(argv):
     parser.add_argument("--format", choices=("text", "json"), default="text")
     args = parser.parse_args(argv)
     placed()
-    info = service.worker(os.getcwd())
-    print(json.dumps(info) if args.format == "json" else service.worker_line(info))
+    info = factory_process.worker(os.getcwd())
+    print(json.dumps(info) if args.format == "json" else factory_process.worker_line(info))
     return 0
 
 
