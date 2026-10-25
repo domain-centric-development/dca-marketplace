@@ -131,7 +131,13 @@ from .delivery.domain.service.profile_checks import MODEL_TOOLS, ProfileChecks  
 from .delivery.domain.service.story_checks import StoryChecks
 from .delivery.domain.service.decision_checks import Applying, DecisionChecks
 from .delivery.domain.model.stage import StageName
+from .delivery.domain.model.stage_story import (
+    CommandKey, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable, TitleCheck, TitleFound)
+from .delivery.domain.model.story_state import Detail
+from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
+from .delivery.adapter.outgoing.files.test_files import locate_tests
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, publishes_of, split_list
+from .delivery.adapter.outgoing.files.test_files import contains, in_package, read_mapping
 
 
 def story_ids(epics):
@@ -375,53 +381,12 @@ def carries_title(path, method, title):
                for m in re.finditer(r"""(["'`])((?:\\.|(?!\1).)*)\1""", text))
 
 
-def check_titles(result, profile, cwd, front, body, mapping, located):
-    """Contract 9: an end-user test carries its scenario's title verbatim, as its display name."""
-    if story_kind(front) == "adopt" or contract_of(profile) < 9 or not mapping or not profile.get("e2eTest"):
-        return
-    titles = scenario_titles(body)
-    wrong = []
-    for key, selectors in sorted(mapping.items()):
-        for selector in selectors:
-            path = located.get(selector)
-            if not path or command_for(profile, path)[0] not in ("e2eTest", "test.journey") or key not in titles:
-                continue
-            if not carries_title(os.path.join(cwd, path), selector.split("#", 1)[-1], titles[key]):
-                wrong.append(f"{selector} ({key}) — \"{titles[key]}\"")
-    if wrong:
-        result.fail("test-titles", "end-user tests without their scenario's title as display name — write it "
-                                   "verbatim (the scenario's `Title:` line, else its key in words): " + "; ".join(wrong))
-    elif any(command_for(profile, located.get(sel) or "")[0] == "e2eTest"
-             for sels in mapping.values() for sel in sels if located.get(sel)):
-        result.ok("test-titles", "every end-user test carries its scenario's title")
-
-
-def plan_levels(runs, story_id):
-    """The keys the plan gave `browser-only` — a `Then` only a browser can observe, with its reason."""
-    text = read_text(os.path.join(runs, story_id, "plan.md")) if os.path.isfile(os.path.join(runs, story_id, "plan.md")) else ""
-    return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*browser-only", text, re.M)}
-
-
 def adapter_level_keys(runs, story_id):
     """The keys the plan gave `integration (adapter: …)` — an incoming adapter's translation, tested against a stubbed
     input port by design (stage-test)."""
     text = read_text(os.path.join(runs, story_id, "plan.md")) if os.path.isfile(os.path.join(runs, story_id, "plan.md")) else ""
     return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*integration\s*\(\s*adapter",
                                             text, re.M)}
-
-
-def check_plan_levels(result, runs, story_id):
-    """A plan line the pipeline's skeleton wrote and the stage never finished — a key with no level after it —
-    is a plan that was not made: refused at the test gate, before any test is read against it."""
-    path = os.path.join(runs, story_id, "plan.md")
-    if not os.path.isfile(path):
-        return
-    unfinished = [m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\s+→\s+level:\s*$", read_text(path), re.M)]
-    if unfinished:
-        result.fail("plan-levels", f"plan.md gives no level to {', '.join(unfinished[:6])}"
-                                   + (" …" if len(unfinished) > 6 else "")
-                                   + " — the skeleton's line is still empty; the plan stage gives each criterion "
-                                     "`level: e2e | integration | browser-only (<why>)`")
 
 
 #: The kinds of a plan's `## Changes` row that carry invariants: the domain's own types. A use case, a port, an
@@ -729,27 +694,6 @@ def check_clauses(result, profile, cwd, runs, story_id, front, body, mapping, lo
                                "assert the clause through the input port with the real store (`port`), or end to end")
     else:
         result.ok("clauses", f"every expectation of every scenario names its assertion ({counted} clause(s))")
-
-
-def check_levels(result, profile, runs, story_id, front, body, mapping, located):
-    """Contract 9: a scenario's test runs at the lowest level that observes its `Then`. A test the
-    end-user command runs belongs to the happy path or to a scenario the plan gave `browser-only`;
-    every other end-user test is a browser test where an integrated one would do."""
-    if story_kind(front) != "story" or contract_of(profile) < 9 or not mapping or not profile.get("e2eTest"):
-        return
-    allowed = set(happy_paths(body)) | plan_levels(runs, story_id)
-    wrong = []
-    for key, selectors in sorted(mapping.items()):
-        for selector in selectors:
-            path = located.get(selector)
-            if path and command_for(profile, path)[0] == "e2eTest" and key not in allowed:
-                wrong.append(f"{key} ({selector})")
-    if wrong:
-        result.fail("levels", "end-user tests for scenarios that are neither the happy path nor `browser-only` in "
-                              "the plan — integrate them (a `test.<name>:` source set), or give the plan's line "
-                              "`level: browser-only (<why>)`: " + "; ".join(wrong))
-    else:
-        result.ok("levels", "every end-user test belongs to the happy path or a browser-only scenario")
 
 
 #: How a test declares a test double, across the common stacks — the profile's `mockMarkers:` (comma-separated)
@@ -1406,173 +1350,44 @@ def check_outcome_raised(result, profile, cwd, runs, story_id, front):
         result.ok("outcome", "the outcome event exists: " + "; ".join(found))
 
 
-def read_mapping(runs, story_id):
-    """criterion key -> list of test selectors, from the gate:tests table."""
-    path = os.path.join(runs, story_id, "tests.md")
-    text = read_text(path)
-    if "<!-- gate:tests -->" not in text:
-        raise GateError(
-            f"{path}: no `<!-- gate:tests -->` table — the test stage records one row "
-            f"per acceptance criterion: | <criterion key> | <Class>#<method> |"
-        )
-    mapping = {}
-    for line in text.split("<!-- gate:tests -->", 1)[1].splitlines():
-        stripped = line.strip()
-        if stripped.startswith("##"):
-            break
-        row = MAPPING_ROW.match(stripped)
-        if not row:
-            continue
-        key, selector = row.group(1), row.group(2).strip()
-        if key in ("criterion", "---"):
-            continue
-        if not SELECTOR.match(selector):
-            raise GateError(
-                f"{path}: test selector {selector!r} is not `<Class>#<method>` "
-                f"(fully qualified class, then the test method)"
-            )
-        mapping.setdefault(key, []).append(selector)
-    return path, mapping
-
-
 def check_mapping(result, runs, story_id, criteria):
+    """The tests table names a test for every criterion and no other (`TestChecks.mapped`); the mapping, or {}."""
     try:
         path, mapping = read_mapping(runs, story_id)
     except GateError as error:
         result.fail("tests-mapped", str(error))
         return {}
-    uncovered = [key for key, _ in criteria if key not in mapping]
-    if uncovered:
-        result.fail(
-            "tests-mapped",
-            f"{path}: no end-user test for {', '.join(uncovered)} — every acceptance "
-            f"criterion needs at least one test, or the build gate can never fail on it.",
-        )
-    unknown = [key for key in mapping if key not in {k for k, _ in criteria}]
-    if unknown:
-        result.fail(
-            "tests-mapped",
-            f"{path}: test rows name criteria the story does not have: {', '.join(unknown)}",
-        )
-    if not uncovered and not unknown:
-        result.ok(
-            "tests-mapped",
-            f"{sum(len(v) for v in mapping.values())} test(s) mapped to "
-            f"{len(criteria)} criterion(s)",
-        )
+    table = TestTable(Place(path), tuple(ScenarioKey(key) for key in mapping),
+                      Count(sum(len(selectors) for selectors in mapping.values())))
+    take(result, TestChecks.mapped(tuple(ScenarioKey(key) for key, _text in criteria), table))
     return mapping
 
 
-def in_package(paths, cls):
-    """The files that hold `cls` itself: where the selector names a package or namespace, a file of that
-    simple name declaring another one is a different class — `a.WidgetTest` is not `b.WidgetTest`."""
-    if "." not in cls:
-        return paths
-    wanted = cls.rsplit(".", 1)[0]
-    declared = {}
-    for path in paths:
-        match = re.search(r"^\s*(?:package|namespace)\s+([\w.]+)", read_text(path) if os.path.isfile(path) else "", re.M)
-        declared[path] = match.group(1) if match else None
-    if not any(declared.values()):
-        return paths                          # nothing declares a package: a module path, or a stack without one
-    return [path for path in paths if declared[path] == wanted
-            or (declared[path] is None and wanted.replace(".", "/") in path.replace(os.sep, "/"))]
-
-
 def check_exists(result, cwd, mapping):
-    """A selector must point at a test that is actually there. Without this check a
-    missing test looks exactly like a red one, and the run would certify nothing.
-
-    Two shapes resolve a selector's class part to a file, and both are strict about it:
-
-    * **a file named after the class** — `com.example.WidgetTest#shows` lives in `WidgetTest.java`
-      wherever that file is. JUnit, xUnit, NUnit, MSTest, Kotlin: one class per file.
-    * **a file named by the module path** — `tests.test_widgets#test_shows` lives in
-      `tests/test_widgets.py`, and `tests.test_widgets.TestWidgets#test_shows` in the same file.
-      The class part is read as a dotted path; the longest prefix that *is* a file (by path, not by
-      basename) is the module, and every remaining segment must be declared in it. pytest, and any
-      stack whose tests are functions in a module.
-
-    A basename that happens to match elsewhere never counts for the second shape: `com.example`
-    would have to exist as `com/example.<ext>`, which is what keeps a Java class in a file not
-    named after it *not found*, exactly as before.
-    """
+    """Each mapped test is there (`TestChecks.exist`): {selector: file} for the ones found."""
     if not mapping:
-        return
-    sources, by_path = {}, {}
-    for root, dirs, files in os.walk(cwd):
-        dirs[:] = [
-            d
-            for d in dirs
-            if d not in ("build", "out", "bin", "obj", "target", "node_modules", ".git")
-        ]
-        for name in files:
-            full = os.path.join(root, name)
-            sources.setdefault(os.path.splitext(name)[0], []).append(full)
-            stem = os.path.splitext(os.path.relpath(full, cwd))[0].replace(os.sep, "/")
-            by_path.setdefault(stem, []).append(full)
-    located = {}
-    for key, selectors in sorted(mapping.items()):
-        for selector in selectors:
-            cls, method = SELECTOR.match(selector).groups()
-            simple = cls.rsplit(".", 1)[-1]
-            candidates = in_package(sources.get(simple, []), cls)
-            found = [path for path in candidates if contains(path, method)]
-            shape = "a file named after the class"
-            if not found and not candidates:
-                found = module_files(by_path, cls, method)
-                shape = "the module path"
-            if found:
-                # with `/` on every platform: the changed-files records and the hand-overs name paths that way
-                located[selector] = os.path.relpath(found[0], cwd).replace(os.sep, "/")
-                result.ok(
-                    "tests-exist",
-                    f"{selector} found in {located[selector]} ({key}, by {shape})",
-                )
-            elif candidates:
-                result.fail(
-                    "tests-exist",
-                    f"{selector}: {os.path.relpath(candidates[0], cwd)} has no {method} — "
-                    f"criterion {key!r} has no test, only a row in the table",
-                )
-            else:
-                result.fail(
-                    "tests-exist",
-                    f"{selector}: no source file for {simple} — criterion {key!r} has no "
-                    f"test, and a missing test is indistinguishable from a red one at "
-                    f"the runner",
-                )
+        return None
+    located, looked = locate_tests(cwd, mapping)
+    take(result, TestChecks.exist(looked))
     return located
 
 
-def contains(path, needle):
-    """Whether a source file mentions the identifier. Unreadable (binary) files do not."""
-    try:
-        with open(path, encoding="utf-8") as handle:
-            return needle in handle.read()
-    except (UnicodeDecodeError, OSError):
-        return False
-
-
-def module_files(by_path, cls, method):
-    """The files a dotted class part names as a module path, longest prefix first.
-
-    `a.b.C` is tried as the file `a/b/C.*`, then `a/b.*` holding `C`, then `a.*` holding `b` and
-    `C` — each as a path suffix of some source file, never as a bare basename. The remaining
-    segments and the method must all appear in the file, so a module that has the function but not
-    the class it is claimed to sit in is not a match either.
-    """
-    segments = cls.split(".")
-    for cut in range(len(segments), 0, -1):
-        prefix, rest = "/".join(segments[:cut]), segments[cut:]
-        hits = [path for stem, paths in by_path.items()
-                if stem == prefix or stem.endswith("/" + prefix)
-                for path in paths]
-        found = [path for path in hits
-                 if all(contains(path, name) for name in rest) and contains(path, method)]
-        if found:
-            return found
-    return []
+def mapped_tests(run):
+    """The tests table's rows as the test-design checks read them: each test's file, the command that runs it, and an
+    end-user test's title check."""
+    titles = scenario_titles(run.body)
+    rows = []
+    for key, selectors in (run.mapping or {}).items():
+        for selector in selectors:
+            path = (run.located or {}).get(selector)
+            command = command_for(run.profile, path)[0] if path else None
+            title = None
+            if path and command in ("e2eTest", "test.journey") and key in titles:
+                carries = carries_title(os.path.join(run.cwd, path), selector.split("#", 1)[-1], titles[key])
+                title = TitleCheck(Detail(titles[key]), TitleFound.TITLED if carries else TitleFound.UNTITLED)
+            rows.append(MappedTest(ScenarioKey(key), Selector(selector), Place(path) if path else None,
+                                   CommandKey(command) if command else None, title))
+    return tuple(rows)
 
 
 def posix_shell():
@@ -1774,47 +1589,6 @@ def check_reviews(result, runs, story_id, profile):
                                f"that pass itself, and `## Perspectives covered` says so")
     if read:
         result.ok("reviews", f"{len(read)} review file(s) for the judge to converge from: {', '.join(read)}")
-
-
-#: What a hand-over has to say fits in this many bytes for a story of n criteria: a base and a share per
-#: criterion, set from the bench's stories (the leanest files carried what the next stage needed at these
-#: sizes; the largest were half again as big and said nothing more). A note, never a refusal: the number
-#: is the measure `--contract` names, a stage with a reason writes it, and the measurement decides.
-HANDOVER_BUDGET = {"plan.md": (3000, 300), "tests.md": (1500, 200), "build.md": (1500, 150),
-                   "tidy.md": (1500, 0), "judge.md": (3000, 100), "document.md": (2500, 150)}
-
-
-#: Sections the pipeline writes into a hand-over; their bytes are not the stage's and do not count against
-#: its measure — a skeleton's `## Paths` alone ran to 1.5 kB in the bench.
-PIPELINE_SECTIONS = {"document.md": ("## Paths",)}
-
-
-def stage_bytes(path, name):
-    """The bytes of a hand-over that the stage wrote: the file without the sections the pipeline put there."""
-    text = read_text(path)
-    for heading in PIPELINE_SECTIONS.get(name, ()):
-        start = text.find("\n" + heading)
-        if start < 0:
-            continue
-        end = text.find("\n## ", start + 1)
-        text = text[:start] + (text[end:] if end >= 0 else "")
-    return len(text.encode("utf-8"))
-
-
-def check_size(result, runs, story_id, files, count):
-    """A note when a hand-over is larger than what it has to say for a story of `count` criteria."""
-    for name in files:
-        path = os.path.join(runs, story_id, name)
-        if name not in HANDOVER_BUDGET or not os.path.isfile(path):
-            continue
-        base, per = HANDOVER_BUDGET[name]
-        budget = base + per * count
-        size = stage_bytes(path, name)
-        if size > budget:
-            result.note("size", f"{name} is {size / 1000:.1f} kB of the stage's own text; what it has to say for {count} "
-                                f"criteria fits in {budget / 1000:.1f} kB (the contract's measure): keys and levels, not "
-                                f"the story's text; one citation per row; nothing the story, the plan or the code already "
-                                f"says. A note, not a refusal — never a reason to edit the file after the gate ran")
 
 
 def check_compiles(result, profile, cwd):
@@ -3986,12 +3760,13 @@ def _files_listed(run):
 
 @check("test-design", stages=lambda s: s.red)
 def _test_design(run):
-    check_plan_levels(run.result, run.runs, run.story_id)
+    take(run.result, TestChecks.plan_levels(run.story, run.evidence))
     check_invariants(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.mapping)
-    check_levels(run.result, run.profile, run.runs, run.story_id, run.front, run.body, run.mapping, run.located)
+    tests = mapped_tests(run)
+    take(run.result, TestChecks.levels(run.story, run.contract, tests, run.evidence))
     check_clauses(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.body, run.mapping,
                   run.located)
-    check_titles(run.result, run.profile, run.cwd, run.front, run.body, run.mapping, run.located)
+    take(run.result, TestChecks.titles(run.story, run.contract, tests, run.evidence))
 
 
 @check("spec-delta", stages=("test",))
@@ -4023,7 +3798,7 @@ def _plan_files(run):
 
 @check("size", stages=lambda s: s.sizes)
 def _size(run):
-    check_size(run.result, run.runs, run.story_id, run.stage.sizes, len(run.criteria))
+    take(run.result, TestChecks.size(run.story, tuple(HandOverName(name) for name in run.stage.sizes), run.evidence))
 
 
 @check("red-proof", stages=lambda s: s.lists, kinds=TESTED_KINDS)

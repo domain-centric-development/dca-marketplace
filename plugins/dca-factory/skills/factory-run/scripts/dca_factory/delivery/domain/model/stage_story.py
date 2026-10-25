@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import typing
 
 from ....building_blocks import Value
@@ -225,3 +226,91 @@ class DecisionsFacts(Value):
     store: Place
     records: typing.Tuple[DecisionFacts, ...]
     hand_overs: typing.Tuple[HandOverAsk, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class Selector(Value):
+    """A test as the tests table names it: `<Class>#<method>`."""
+
+    value: str
+
+
+@dataclasses.dataclass(frozen=True)
+class CommandKey(Value):
+    """A profile key of a test command — `test`, `e2eTest`, `test.journey`."""
+
+    value: str
+
+
+class TitleFound(enum.Enum):
+    """Whether an end-user test is reported under its scenario's title."""
+
+    TITLED = "titled"
+    UNTITLED = "untitled"
+
+
+@dataclasses.dataclass(frozen=True)
+class TitleCheck(Value):
+    """An end-user test's scenario title, and whether the test is reported under it."""
+
+    title: Detail
+    found: TitleFound
+
+
+@dataclasses.dataclass(frozen=True)
+class MappedTest(Value):
+    """One row of the tests table: the criterion, its test, the file it was found in, the command that runs that
+    file, and — for an end-user test of a titled scenario — its title check."""
+
+    key: ScenarioKey
+    selector: Selector
+    place: typing.Optional[Place]
+    command: typing.Optional[CommandKey]
+    title: typing.Optional[TitleCheck]
+
+
+@dataclasses.dataclass(frozen=True)
+class TestTable(Value):
+    """The test stage's table: where it stands and the criteria its rows name, row by row."""
+
+    place: Place
+    keys: typing.Tuple[ScenarioKey, ...]
+    tests: Count
+
+
+@dataclasses.dataclass(frozen=True)
+class Count(Value):
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
+class TestLocation(Value):
+    """Where a mapped test was looked for: the file it was found in by its shape, or the file named after its class
+    that lacks the method, or neither."""
+
+    key: ScenarioKey
+    selector: Selector
+    found: typing.Optional[Place]
+    candidate: typing.Optional[Place]
+    shape: Detail
+
+
+@dataclasses.dataclass(frozen=True)
+class PlanLevels(Value):
+    """The levels the plan gave: the keys its skeleton left without one, the keys it gave `browser-only`."""
+
+    unfinished: typing.Tuple[ScenarioKey, ...]
+    browser_only: typing.FrozenSet[ScenarioKey]
+
+
+@dataclasses.dataclass(frozen=True)
+class HandOverSize(Value):
+    """A hand-over and the bytes of it the stage wrote."""
+
+    name: HandOverName
+    size: ByteSize
+
+
+@dataclasses.dataclass(frozen=True)
+class HandOverName(Value):
+    value: str

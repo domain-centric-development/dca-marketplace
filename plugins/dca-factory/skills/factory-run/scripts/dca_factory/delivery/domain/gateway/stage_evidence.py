@@ -10,8 +10,8 @@ import typing
 from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage_story import (
-    ContextMapFacts, DecisionsFacts, EpicFacts, GateRelease, InstructionFile, ModelKey, OwnedFacts, Place,
-    ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
+    CommandKey, ContextMapFacts, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
+    InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
 from ..model.story import StoryId
 
 
@@ -61,4 +61,17 @@ class StageEvidence(DomainGateway, typing.Protocol):
 
     def record_place(self, story: StageStory, record: RecordId) -> Place:
         """Where the record by this id belongs."""
+        ...
+
+    def command(self, key: CommandKey) -> typing.Optional[ProfileText]:
+        """The profile's command under this key — None where it names none."""
+        ...
+
+    def plan_levels(self, story: StoryId) -> typing.Optional[PlanLevels]:
+        """The levels the story's plan gave — None where it has no plan yet."""
+        ...
+
+    def hand_over_sizes(self, story: StoryId,
+                        names: typing.Tuple[HandOverName, ...]) -> typing.Tuple[HandOverSize, ...]:
+        """The hand-overs of these names the story's run holds, with the bytes the stage wrote of each."""
         ...

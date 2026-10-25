@@ -6,6 +6,7 @@ import unittest
 from support import contract, project, write
 from dca_factory import gate
 from dca_factory.delivery.adapter.outgoing.files import stage_evidence_files
+from dca_factory.delivery.adapter.outgoing.files import test_files
 
 
 def criteria(section):
@@ -103,7 +104,7 @@ class Mapping(unittest.TestCase):
                              "| shows-it | com.example.WidgetUnitTest#showsIt |\n"
                              "| hides-it | com.example.WidgetTest#hidesIt |\n"
                              "\n## Invariants\n| other | com.example.X#y |\n")
-            _path, mapping = gate.read_mapping(p.runs, "S-1")
+            _path, mapping = test_files.read_mapping(p.runs, "S-1")
             self.assertEqual(mapping, {"shows-it": ["com.example.WidgetTest#showsIt", "com.example.WidgetUnitTest#showsIt"],
                                        "hides-it": ["com.example.WidgetTest#hidesIt"]})
 
@@ -111,13 +112,13 @@ class Mapping(unittest.TestCase):
         with project() as p:
             self.write_tests(p, "| shows-it | WidgetTest.showsIt |\n")
             with self.assertRaisesRegex(contract.GateError, "is not `<Class>#<method>`"):
-                gate.read_mapping(p.runs, "S-1")
+                test_files.read_mapping(p.runs, "S-1")
 
     def test_a_tests_file_without_the_table_marker_is_refused(self):
         with project() as p:
             write(os.path.join(p.runs, "S-1", "tests.md"), "| shows-it | com.example.WidgetTest#showsIt |\n")
             with self.assertRaisesRegex(contract.GateError, "no `<!-- gate:tests -->` table"):
-                gate.read_mapping(p.runs, "S-1")
+                test_files.read_mapping(p.runs, "S-1")
 
 
 if __name__ == "__main__":

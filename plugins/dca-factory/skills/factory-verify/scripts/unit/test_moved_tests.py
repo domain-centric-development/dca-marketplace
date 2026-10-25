@@ -8,6 +8,7 @@ from support import contract, project, write
 from dca_factory import gate
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
+from dca_factory.delivery.adapter.outgoing.files import test_files
 
 STORY = """---
 id: S-1
@@ -72,7 +73,7 @@ class MovedTests(unittest.TestCase):
         with project() as p:
             _path, front, body = self.setup(p, "com.example.WidgetPageTest#showsTheName")
             result = gate.Result()
-            mapping = gate.read_mapping(p.runs, "S-1")[1]
+            mapping = test_files.read_mapping(p.runs, "S-1")[1]
             gate.check_spec_tests(result, p.root, p.runs, "S-1", front, mapping)
             failed = [message for state, check, message in result.entries if state == "fail" and check == "spec-tests"]
             self.assertTrue(failed and "Moved tests" in failed[0] and "WidgetPageTest" in failed[0], result.entries)

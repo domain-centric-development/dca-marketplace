@@ -17,7 +17,7 @@ from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AnswerField, ByteSize, ContextMapFacts, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
+    AnswerField, ByteSize, CommandKey, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
     ScenarioKey, StageStory, UnknownKey)
 from ....domain.model.story import DeliveredOn, StoryId
@@ -30,6 +30,7 @@ from .decision_record_files import (
 from .epic_files import epic_dependency_problem
 from .findings_files import findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, write_answered
+from .test_files import plan_levels, stage_bytes, unfinished_levels
 from .run_marks import OWNED_CHANGED
 from .story_layout import delivered_on, EPIC_FILE, epic_folder, find_story, story_kind
 
@@ -272,6 +273,25 @@ class StageEvidenceFiles:
     def record_place(self, story: StageStory, record: RecordId) -> Place:
         return Place(shown(record_path(story.story.value, record.value, story.place.value)))
 
+
+    def command(self, key: CommandKey) -> typing.Optional[ProfileText]:
+        command = self._profile.get(key.value)
+        return ProfileText(str(command)) if command else None
+
+    def plan_levels(self, story: StoryId) -> typing.Optional[PlanLevels]:
+        if not os.path.isfile(os.path.join(self._runs, story.value, "plan.md")):
+            return None
+        return PlanLevels(tuple(ScenarioKey(k) for k in unfinished_levels(self._runs, story.value)),
+                          frozenset(ScenarioKey(k) for k in plan_levels(self._runs, story.value)))
+
+    def hand_over_sizes(self, story: StoryId,
+                        names: typing.Tuple[HandOverName, ...]) -> typing.Tuple[HandOverSize, ...]:
+        found = []
+        for name in names:
+            path = os.path.join(self._runs, story.value, name.value)
+            if os.path.isfile(path):
+                found.append(HandOverSize(name, ByteSize(stage_bytes(path, name.value))))
+        return tuple(found)
 
 class DecisionStampFiles:
     """The decision records beside the story and its `## Assumptions`, the journal under the run folder <runs>."""
