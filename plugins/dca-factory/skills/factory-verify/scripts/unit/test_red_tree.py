@@ -9,6 +9,7 @@ from dca_factory import gate, state
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
+from dca_factory.delivery.adapter.outgoing.files import kept_files
 
 TESTS = """# Tests
 
@@ -30,7 +31,7 @@ class RedTree(unittest.TestCase):
         test_file = write(os.path.join(p.root, PAGE_TEST), "class WidgetPageTest { void showsTheThing() {} }\n")
         p.evidence("S-1", ".tests-red", f"com.example.WidgetPageTest#showsTheThing\t{layout.file_digest(test_file)}\n")
         if red_tree:
-            p.evidence("S-1", gate.RED_TREE, "4b825dc642cb6eb9a060e54bf8d69288fbee4904\n")
+            p.evidence("S-1", kept_files.RED_TREE, "4b825dc642cb6eb9a060e54bf8d69288fbee4904\n")
         for stage in ended:
             journal.journal_append(p.runs, "S-1", "stage-start", stage)
             journal.journal_append(p.runs, "S-1", "stage-end", stage, "exit=0")

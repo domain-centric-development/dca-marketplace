@@ -10,6 +10,7 @@ from support import write
 from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from dca_factory import gate
 from dca_factory.delivery.adapter.outgoing.files import snapshots
+from dca_factory.delivery.adapter.outgoing.files import kept_files as gate_kept
 
 
 def git(cwd, *args):
@@ -19,7 +20,7 @@ def git(cwd, *args):
 
 
 def baseline(runs, story):
-    path = os.path.join(evidence_dir(runs, story), gate.TESTS_BASELINE)
+    path = os.path.join(evidence_dir(runs, story), gate_kept.TESTS_BASELINE)
     with open(path, encoding="utf-8") as handle:
         return dict(reversed(line.split("  ", 1)) for line in handle.read().splitlines() if "  " in line)
 

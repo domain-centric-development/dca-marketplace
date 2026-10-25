@@ -63,7 +63,6 @@ A command the profile does not declare is skipped and named, never failed.
 """
 
 import argparse
-import calendar
 import collections
 import contextlib
 import difflib
@@ -81,8 +80,7 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, MAPPING_ROW, order_for, SELECTOR, SHARED_WINDOWS,
-    STAGE, STAGE_CHECKS, STAGE_FILES, STAGES, TESTED_KINDS, VERSION)
+    ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, MAPPING_ROW, order_for, SELECTOR, STAGE, STAGE_CHECKS, STAGE_FILES, STAGES, TESTED_KINDS, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import (
     append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
     PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
@@ -115,11 +113,11 @@ from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, P
 from .delivery.adapter.outgoing.files.story_record import INVARIANT_BREAKS
 from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open, record_judge_signal
 from .delivery.adapter.outgoing.files.snapshots import (
-    git_tree, listed_files, NOT_OBSERVED, record_base, record_changes, snapshot_reason, tree_changes)
+    git_tree, NOT_OBSERVED, record_base, record_changes)
 from .delivery.adapter.outgoing.files.owned_files import owned_end, run_owned
 from .delivery.adapter.outgoing.files.run_marks import (
-    backlog_digest, current_stage_files, last_ended, stage_open, step_open,
-    STORY_DIGEST, verdict_in, window_open, write_mark)
+    backlog_digest, current_stage_files, last_ended, step_open,
+    STORY_DIGEST, verdict_in, write_mark)
 from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned, write_story_fields
 from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
 from .delivery.adapter.outgoing.files.decision_record_files import (
@@ -135,11 +133,14 @@ from .delivery.domain.model.stage_story import (
     CommandKey, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable, TitleCheck, TitleFound)
 from .delivery.domain.model.story_state import Detail
 from .delivery.domain.service.design_checks import DesignChecks
+from .delivery.domain.service.kept_checks import KeptChecks
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
 from .delivery.adapter.outgoing.files.test_files import locate_tests
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, publishes_of, split_list
 from .delivery.adapter.outgoing.files.test_files import read_mapping
-from .delivery.adapter.outgoing.files.design_files import ASSERTION_STATEMENT, BREAK_IGNORE, STEP, locate_selector, read_invariant_rows
+from .delivery.adapter.outgoing.files.design_files import BREAK_IGNORE, STEP, locate_selector, read_invariant_rows
+from .delivery.adapter.outgoing.files.kept_files import RED_TREE, bare_path, human_line, meaningful_lines, read_red_digests, red_ledger_path, red_tree, row_cells, tidy_moves, unproven_tests
+from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
 
 
 def story_ids(epics):
@@ -987,6 +988,9 @@ def check_exists(result, cwd, mapping):
 def mapped_tests(run):
     """The tests table's rows as the test-design checks read them: each test's file, the command that runs it, and an
     end-user test's title check."""
+    cached = getattr(run, "tests", None)
+    if cached is not None and cached[0] is run.mapping and cached[1] is run.located:
+        return cached[2]
     titles = scenario_titles(run.body)
     rows = []
     for key, selectors in (run.mapping or {}).items():
@@ -999,7 +1003,8 @@ def mapped_tests(run):
                 title = TitleCheck(Detail(titles[key]), TitleFound.TITLED if carries else TitleFound.UNTITLED)
             rows.append(MappedTest(ScenarioKey(key), Selector(selector), Place(path) if path else None,
                                    CommandKey(command) if command else None, title))
-    return tuple(rows)
+    run.tests = (run.mapping, run.located, tuple(rows))
+    return run.tests[2]
 
 
 def posix_shell():
@@ -1218,23 +1223,6 @@ def check_compiles(result, profile, cwd):
 #: A markdown table row, split into its cells. The first cell names the thing, the **last**
 #: names how it was checked — the tables differ in width, so counting from the left is wrong.
 PATHLIKE = re.compile(r"`([\w./-]+\.[A-Za-z0-9]{1,6}(?::L?\d+(?:[-–:]\d+)?|#[\w.-]+)?)`")
-
-
-#: A cited path usually carries where in the file it was read: `README.md:149`, `Book.cs:28-31`,
-#: `guide.md#anchor`. The location is not part of the file name, so it is stripped before the file
-#: is looked up — otherwise naming the line makes an existing file look missing.
-LOCATION_SUFFIX = re.compile(r"(?::L?\d+(?:[-–:]\d+)?|#[\w.-]+)$")
-
-
-def bare_path(name):
-    return LOCATION_SUFFIX.sub("", name.strip().strip("`")).strip()
-
-
-def row_cells(line):
-    """Cells of a markdown table row, or an empty list when the line is not one."""
-    if not line.startswith("|"):
-        return []
-    return [cell.strip() for cell in line.strip("|").split("|")]
 
 
 def check_story_pass(result, runs, story_id, story_path, front):
@@ -1697,7 +1685,7 @@ def check_test_state(result, profile, cwd, mapping, expected, located=None, runs
     if expected == "red":
         write_red_ledger(runs, story, now_red, located, cwd, kept)
     elif have_ledger and red_proof:
-        check_red_proof(result, cwd, located, read_red_digests(runs, story), story)
+        check_red_proof(result, cwd, runs, located, story)
     return whole_runs
 
 
@@ -1721,38 +1709,12 @@ def red_on_timeout(output):
     return bool(TIMEOUT_RED.search(output or "")) and not ASSERTION_RED.search(output or "")
 
 
-def check_red_proof(result, cwd, located, digests, story):
-    """At build and tidy: every test's red proof was taken against the test as it is now."""
-    unbound = [s for s, d in digests.items() if d is None]
-    if unbound and len(unbound) == len(digests):
-        result.skip("red-proof", "the red record names no test-file digests (written by an older gate) — "
-                                 "whether a test changed since it was seen failing is not checked")
-        return
-    moved = unproven_tests(cwd, located, digests)
-    if not moved:
-        result.ok("red-proof", f"{len(digests) - len(unbound)} test(s) are the version that was seen failing")
-    elif answered_decisions(cwd, story, "test"):
-        result.ok("red-proof", f"{', '.join(moved)} changed after it was seen failing, on decision "
-                               f"{', '.join(answered_decisions(cwd, story, 'test'))}")
-    else:
-        result.fail(
-            "red-proof",
-            f"{', '.join(moved)} changed after the test stage saw it fail — the red proof is about the "
-            f"earlier version, so its green now proves nothing. The test stage runs again and records "
-            f"it red as it is; a change of what it expects is a human's decision.",
-        )
-
-
-def unproven_tests(cwd, located, digests):
-    """`<selector> (<file>)` for each test whose file is no longer the version its red proof was taken against."""
-    moved = []
-    for selector, digest in sorted(digests.items()):
-        test_file = located.get(selector)
-        if not digest or not test_file or not os.path.isfile(os.path.join(cwd, test_file)):
-            continue
-        if file_digest(os.path.join(cwd, test_file)) != digest:
-            moved.append(f"{selector} ({test_file})")
-    return moved
+def check_red_proof(result, cwd, runs, located, story_id):
+    """Every test is the version the test stage saw fail (`KeptChecks.red_proof`) — after a whole run of the tests."""
+    tests = tuple(MappedTest(ScenarioKey(""), Selector(selector), Place(path), None, None)
+                  for selector, path in (located or {}).items() if path)
+    take(result, KeptChecks.red_proof(stage_story(story_id, "", {}, "", ()), StageName(""), tests,
+                                      StageEvidenceFiles(cwd, runs, place("epics"), {})))
 
 
 def stale_red_proof(cwd, runs, story, start=None):
@@ -1773,18 +1735,6 @@ def stale_red_proof(cwd, runs, story, start=None):
         # A tidy that runs again moved the tests itself: its gate re-proves them on the red tree (WP-151 A).
         return []
     return moved
-
-
-#: The tree at the test gate's pass (WP-151 A): the production code as the test stage left it — stubs that refuse to
-#: answer — and the tests seen red. The tidy gate rebuilds it with tidy's tests laid over, to see them red again.
-RED_TREE = "red-tree"
-
-
-def red_tree(runs, story_id):
-    """The recorded red tree's id, or None (an older story, outside git)."""
-    path = os.path.join(evidence_dir(runs, story_id), RED_TREE) if runs and story_id else None
-    tree = read_text(path).strip() if path and os.path.isfile(path) else ""
-    return tree if tree and tree != "none" else None
 
 
 def record_red_tree(result, cwd, runs, story_id):
@@ -1830,13 +1780,6 @@ def red_tree_copy(cwd, runs, tree):
         yield copy
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
-
-
-def tidy_moves(cwd, runs, story_id, located):
-    """The mapped tests whose file changed since the test stage saw them fail, by selector."""
-    return [selector for selector, digest in sorted(read_red_digests(runs, story_id).items())
-            if digest and located.get(selector) and os.path.isfile(os.path.join(cwd, located[selector]))
-            and file_digest(os.path.join(cwd, located[selector])) != digest]
 
 
 def reprove_red(result, profile, cwd, runs, story_id, mapping, located):
@@ -1891,31 +1834,6 @@ def reprove_red(result, profile, cwd, runs, story_id, mapping, located):
         for selector in proved:
             with contextlib.suppress(OSError):
                 journal_append(runs, story_id, "red-reproved", selector, "by=tidy")
-
-
-#: Which selectors the test stage saw fail. Kept as a file next to the round counter for the same
-#: reason: the build gate must not take a stage's word that a test was red once.
-def red_ledger_path(runs, story):
-    if not runs or not story:
-        return None
-    return os.path.join(evidence_dir(runs, story), ".tests-red")
-
-
-def read_red_digests(runs, story):
-    """{selector: sha256 of its test file when it was recorded red, or None for an older ledger}.
-
-    A red proof is a proof about one version of a test. The digest binds it to that version, so a
-    test weakened after it was seen failing no longer carries the proof into the build gate."""
-    path = red_ledger_path(runs, story)
-    if not path or not os.path.isfile(path):
-        return {}
-    digests = {}
-    with open(path, encoding="utf-8") as handle:
-        for line in handle:
-            selector, _, digest = line.strip().partition("\t")
-            if selector:
-                digests[selector] = digest.strip() or None
-    return digests
 
 
 def read_red_ledger(runs, story):
@@ -2210,12 +2128,6 @@ def retry_outside(result, cwd, profile, command, code, output, ran, owner):
     return 0, ran
 
 
-# A story may add tests and add cases to a test file; it may not change what a test that existed
-# before it expects, unless a human decided that. The plan gate runs before any stage of the story
-# touches a test, so it records the test files as git blobs; later gates compare against them.
-TESTS_BASELINE = ".tests-baseline"
-
-
 TEST_FILE = re.compile(
     r"(^test_.*\.py$|_test\.(py|go|rb|exs?)$|Tests?\.(java|kt|cs|scala|groovy)$|IT\.(java|kt)$"
     r"|Spec\.(scala|groovy|kt)$|\.(test|spec)\.(js|jsx|ts|tsx|mjs)$|_spec\.rb$)")
@@ -2474,160 +2386,6 @@ def check_main_tests(result, cwd, runs, story_id):
         result.ok("main-tests", "every test the main line changed while the story ran keeps the main line's side")
 
 
-def human_line(text):
-    """A line a person wrote: not empty, not "none", not a template placeholder or an HTML comment."""
-    text = re.sub(r"<!--.*?-->", "", text).strip()
-    return bool(text) and text.lower() not in NOTHING and "{{" not in text
-
-
-def changed_tests_in_plan(runs, story_id):
-    """{test file: backed-by cell} from the plan's `## Changed tests` table."""
-    path = os.path.join(runs, story_id, "plan.md")
-    rows = {}
-    if not os.path.isfile(path):
-        return rows
-    for line in section_of(read_text(path), "changed tests") or []:
-        cells = row_cells(line.strip())
-        if len(cells) < 2 or cells[0].lower() in ("test file", "file") or set(cells[0]) <= {"-", " "}:
-            continue
-        name = cells[0].strip("`").strip()
-        if name.lower() not in NOTHING:
-            rows[bare_path(name).replace(os.sep, "/")] = cells[-1]
-    return rows
-
-
-# What a test file's lines mean once comments are gone: an added `/* … */` around an old assertion keeps
-# every old line in the text and takes it out of the test. Applied to both versions alike, so a line
-# the story left alone compares equal whatever the stripping does to it.
-HASH_COMMENTS = (".py", ".rb", ".ex", ".exs")
-
-
-BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
-
-
-TRIPLE_QUOTED = re.compile(r'""".*?"""|\'\'\'.*?\'\'\'', re.S)
-
-
-DISABLED_BLOCK = re.compile(r"^[ \t]*#if\s+(false|0)\b.*?^[ \t]*#endif\b", re.S | re.M)
-
-
-# Lines that switch a test off without touching what it asserts: an added one is a changed test.
-SKIP_MARKER = re.compile(
-    r"@Disabled\b|@Ignore\b|@DisabledIf|@EnabledIf|\[Ignore\b|\bSkip\s*=|@pytest\.mark\.(skip|xfail)"
-    r"|\bpytest\.skip\(|\bunittest\.skip|@skip\b|\b(xit|xdescribe|xtest|fit|fdescribe)\s*\("
-    r"|\.(skip|only|todo)\s*\(|\bt\.Skip(Now|f)?\(|\bskip\s+[\"']")
-
-
-def meaningful_lines(text, path):
-    if path.endswith(HASH_COMMENTS):
-        text = TRIPLE_QUOTED.sub("", text)
-        lines = [re.sub(r"(^|\s)#.*$", "", line) for line in text.splitlines()]
-    else:
-        text = DISABLED_BLOCK.sub("", BLOCK_COMMENT.sub("", text))
-        lines = [re.sub(r"(^|\s)//.*$", "", line) for line in text.splitlines()]
-    return [line.rstrip() for line in lines if line.strip()]
-
-
-TOKEN = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|\w+")
-
-
-def statements(text):
-    """The statements of a test source, each as its word and literal tokens: split at `;`, at a brace, and at a line
-    end outside brackets unless the next line goes on with `.` (a call chain) — the shapes Java, C#, Kotlin, JS and
-    Python test files are written in."""
-    out, current, depth, quote, escaped = [], [], 0, "", False
-    lines = text.splitlines()
-    for index, line in enumerate(lines):
-        for char in line:
-            if quote:
-                current.append(char)
-                if escaped:
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == quote:
-                    quote = ""
-                continue
-            if char in "\"'":
-                quote = char
-            elif char in "([":
-                depth += 1
-            elif char in ")]":
-                depth = max(depth - 1, 0)
-            if char in ";{}" and depth == 0:
-                out.append("".join(current))
-                current = []
-                continue
-            current.append(char)
-        following = next((l.strip() for l in lines[index + 1:] if l.strip()), "")
-        if depth == 0 and not following.startswith(".") and not line.rstrip().endswith((".", ",", "+", "&&", "||")):
-            out.append("".join(current))
-            current = []
-        else:
-            current.append("\n")
-    out.append("".join(current))
-    return [TOKEN.findall(statement) for statement in out if statement.strip()]
-
-
-def assertions_kept(before, now):
-    """Whether every assertion the old test made is still made: each old assertion statement's tokens appear, in
-    order, in a statement of the new version that is an assertion too — more arguments, never fewer, never another
-    expected value. A changed arrangement (a constructor that gained a field, a renamed local) passes; a changed
-    expectation, a removed assertion or a weaker matcher does not."""
-    old = [tokens for tokens in statements(before) if ASSERTION_STATEMENT.search(" ".join(tokens))]
-    new = [tokens for tokens in statements(now) if ASSERTION_STATEMENT.search(" ".join(tokens))]
-    if not old:
-        return False
-    def within(small, large):
-        rest = iter(large)
-        return all(any(token == other for other in rest) for token in small)
-    used = set()
-    for tokens in old:
-        match = next((i for i, candidate in enumerate(new) if i not in used and within(tokens, candidate)), None)
-        if match is None:
-            return False
-        used.add(match)
-    return True
-
-
-def switched_off(before, now):
-    """Whether the new version carries more skip markers than the old one."""
-    count = lambda lines: sum(1 for line in lines if SKIP_MARKER.search(line))
-    return count(now) > count(before)
-
-
-def stage_windows(runs, story_id):
-    """(start, end) of every stage window in the story's journal, as epoch seconds; an open one ends now."""
-    journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")
-    windows, open_ = [], {}
-    if not os.path.isfile(journal):
-        return windows
-    stamp = lambda text: calendar.timegm(time.strptime(text[:19], "%Y-%m-%dT%H:%M:%S"))
-    for line in read_text(journal).splitlines():
-        parts = line.split("\t")
-        if len(parts) < 3 or parts[1] not in ("stage-start", "stage-end"):
-            continue
-        with contextlib.suppress(ValueError):
-            if parts[1] == "stage-start":
-                open_[parts[2]] = stamp(parts[0])
-            elif parts[2] in open_:
-                windows.append((open_.pop(parts[2]), stamp(parts[0])))
-    windows += [(start, time.time()) for start in open_.values()]
-    return windows
-
-
-def committed_by_a_stage(cwd, runs, story_id, rel):
-    """Whether a commit that changed `rel` was made inside one of the story's stage windows. A stage commits
-    nothing; a commit in its window is the stage's change, and the story is held to it like any other."""
-    windows = stage_windows(runs, story_id)
-    if not windows:
-        return False
-    code, out = git(cwd, "log", "--format=%ct", "-n", "50", "--", rel)
-    if code:
-        return False
-    return any(start - 1 <= int(t) <= end + 1 for t in out.split() if t.isdigit() for start, end in windows)
-
-
 def decision_covers(cwd, story_id, ids):
     """A test `rel` a decision among `ids` may change: asked by the test or build stage, naming the file, or
     listed by the plan that ran again for it."""
@@ -2647,103 +2405,9 @@ def decision_covers(cwd, story_id, ids):
 
 
 def check_existing_tests(result, cwd, runs, story_id, story_body=""):
-    path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
-    if not os.path.isfile(path):
-        result.skip("tests-kept", "no baseline of the tests that existed before this story "
-                                  "(the plan gate records one in a git repository)")
-        return
-    changed, lost, arranged = [], [], []
-    for line in read_text(path).splitlines():
-        if "  " not in line:
-            continue
-        blob, rel = line.split("  ", 1)
-        full = os.path.join(cwd, rel)
-        if not os.path.isfile(full):
-            changed.append(f"{rel} (removed)")
-            continue
-        # A run commits nothing while a story is open: a test committed since the baseline changed outside
-        # this story. The story is held to its own changes — against what is committed now.
-        # Not in a story's worktree: every commit on its branch is the runner's, holding the story's own change,
-        # and what the main line brought in is in the baseline already (`rebase_tests_baseline`).
-        head_code, head_blob = git(cwd, "rev-parse", f"HEAD:{rel}")
-        if not head_code and not in_worktree(cwd) and head_blob.strip() and head_blob.strip() != blob \
-                and not git(cwd, "cat-file", "-e", blob)[0] and not committed_by_a_stage(cwd, runs, story_id, rel):
-            blob = head_blob.strip()
-        code, before = git_blob(cwd, blob)
-        if code:
-            lost.append(rel)
-            continue
-        with open(full, encoding="utf-8", errors="replace") as handle:
-            now = meaningful_lines(handle.read(), rel)
-        was = meaningful_lines(before, rel)
-        # Additions only: every line the test had is still there, in the same order, outside a comment
-        # — and no added line switches it off.
-        remaining = iter(now)
-        if switched_off(was, now):
-            changed.append(f"{rel} (switched off)")
-        elif all(any(old == new for new in remaining) for old in was):
-            pass
-        elif assertions_kept("\n".join(was), "\n".join(now)):
-            arranged.append(rel)
-        else:
-            changed.append(rel)
-    if lost:
-        result.skip("tests-kept", f"the baseline of {', '.join(lost)} is gone from the object store (pruned by "
-                                  f"`git gc`?) — not compared")
-    if arranged:
-        result.note("tests-kept", f"{', '.join(arranged)} changed only around its assertions — every assertion it had "
-                                  f"is still there, at most with more arguments (a type the test builds gained a field)")
-    if not changed:
-        result.ok("tests-kept", "no test that existed before this story changed what it expects")
-        return
-    # A decision changes the tests it is about, not any test: one the test or the build stage asked about a
-    # test, one whose record names the file, or — for a plan's question — the tests the re-plan lists.
-    decided = answered_decisions(cwd, story_id, "test")
-    planned = changed_tests_in_plan(runs, story_id)
-    covering = decision_covers(cwd, story_id, decided)
-    if decided and all(covering(e.replace(" (removed)", "").replace(" (switched off)", ""), planned) for e in changed):
-        result.ok("tests-kept", f"{', '.join(changed)} changed on decision {', '.join(decided)}")
-        return
-    # The story may say itself that behaviour changes (`## Changed expectations`); the plan names the
-    # tests that change with it (`## Changed tests`), each backed by that section or by a decision a
-    # human answered. Nobody has to know which story wrote a test — or whether a story did at all.
-    # Only list items count: the template's instruction prose and its `{{…}}` placeholder are no
-    # human's approval.
-    story_says = [l for l in (section_of(story_body, "changed expectations") or [])
-                  if l.strip().startswith(("-", "*")) and human_line(l.strip()[1:].strip())]
-    try:
-        answered = {str(front["id"]).strip() for _p, front, _b, state, _a in
-                    records_of(story_id) if state in ("answered", "applied")}
-    except GateError:
-        answered = set()
-    listed = changed_tests_in_plan(runs, story_id)
-    backed, unbacked, unlisted = [], [], []
-    for entry in changed:
-        rel = entry.replace(" (removed)", "").replace(" (switched off)", "")
-        if rel not in listed:
-            unlisted.append(entry)
-        elif story_says or any(rid in listed[rel] for rid in answered):
-            backed.append(entry)
-        else:
-            unbacked.append(entry)
-    if backed and not unbacked and not unlisted:
-        result.ok("tests-kept", f"{', '.join(backed)} changed as the plan lists, backed by "
-                                + ("the story's `## Changed expectations`" if story_says else "an answered decision"))
-        return
-    if unlisted:
-        result.fail(
-            "tests-kept",
-            f"{', '.join(unlisted)} existed before this story and no longer expects what it did, and the "
-            f"plan's `## Changed tests` does not list it. Keep the old lines and add a case — or, where the "
-            f"story changes that behaviour, the plan lists the test with what backs the change.",
-        )
-    if unbacked:
-        result.fail(
-            "tests-kept",
-            f"{', '.join(unbacked)} is listed under the plan's `## Changed tests`, but nothing a human "
-            f"wrote backs it: the story has no `## Changed expectations`, and the row cites no answered "
-            f"decision. The plan stage asks (one record listing the tests), and the row cites its id.",
-        )
+    """The tests that existed before the story still expect what they did (`KeptChecks.tests_kept`)."""
+    story = stage_story(story_id, "", {}, story_body, ())
+    take(result, KeptChecks.tests_kept(story, StageEvidenceFiles(cwd, runs, place("epics"), {})))
 
 
 def check_required_suites(result, profile, cwd, already=None, owner=None):
@@ -2963,87 +2627,6 @@ def check_pipeline_untouched(result, runs, story_id):
                                 f"it; put it back (`factory.sh update`, or git) and the stage runs again")
     else:
         result.ok("pipeline", f"no stage of {story_id} changed {PIPELINE_DIR}")
-
-
-def check_files_listed(result, runs, story_id, stage, cwd=".", located=None):
-    """The test, build and tidy hand-overs name every file the stage changed, so the next stage can read
-    those instead of searching. Checked against the changed-files record, never against the claim.
-
-    A test file the stage put back to the version the test stage saw red is not the stage's change to
-    list: the red ledger holds that version's digest, and a file that matches it again was restored,
-    not changed — a stage that undid its own edit of a test would otherwise be refused for the undoing."""
-    record = os.path.join(evidence_dir(runs, story_id), f"changed-{stage}.txt")
-    handovers = [STAGE_FILES[stage]]
-    if last_ended(runs, story_id, (stage, "builder")) == "builder":
-        # A shared builder ran plan to tidy in one window: its record is the one that holds, and a file it
-        # changed is listed by whichever of its hand-overs belongs to the stage that changed it.
-        record = os.path.join(evidence_dir(runs, story_id), "changed-builder.txt")
-        handovers = [s.file for s in STAGES if s.lists
-                     if os.path.isfile(os.path.join(runs, story_id, s.file))]
-    base_file = os.path.join(evidence_dir(runs, story_id), "base-tree")
-    if window_open(runs, story_id, "builder") and stage in SHARED_WINDOWS["builder"] and os.path.isfile(base_file):
-        # A shared builder runs its own gates inside its window, before any changed-files record exists. What the
-        # story changed so far is the tree against its base: checked now, the builder can still list a file it
-        # forgot — found only by the runner afterwards, it costs a round.
-        base = read_text(base_file).strip()
-        now = git_tree(cwd) if base and base != "none" else None
-        rows = tree_changes(cwd, base, now, runs) if now else None
-        if rows is not None:
-            record = None
-            handovers = [s.file for s in STAGES if s.lists
-                         if os.path.isfile(os.path.join(runs, story_id, s.file))]
-            changed_now = [path for _kind, path in rows]
-    if record is not None and (not os.path.isfile(record) or stage_open(runs, story_id, stage)):
-        if stage_open(runs, story_id, stage):
-            # A stage that runs its own gate does so inside its window: its record is written at the
-            # stage's end, and the gate after `--stage-end` (the orchestrator's, the runner's) checks it.
-            result.skip("files-listed", f"the {stage} stage is still open — its changed-files record is written "
-                                        f"at its end, and the gate after the stage checks it")
-        else:
-            result.skip("files-listed", f"no changed-files record for {stage} — the stage was not snapshotted")
-        return
-    if record is None:
-        changed = changed_now
-    else:
-        reason = snapshot_reason(record)
-        if reason:
-            result.skip("files-listed", f"the {stage} stage's changes were not observed — {reason}")
-            return
-        changed = [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
-    found = [listed_files(os.path.join(runs, story_id, name)) for name in handovers]
-    listed = set().union(*[names for names in found if names is not None]) if any(n is not None for n in found) \
-        else None
-    if listed is None:
-        if not changed:
-            # A tidy that found nothing to tidy has nothing to list; the record says so, not the hand-over.
-            result.ok("files-listed", f"the {stage} stage changed no file, so {STAGE_FILES[stage]} has nothing to list")
-            return
-        result.fail("files-listed", f"{STAGE_FILES[stage]} has no `## Files` section (nor a `## Changed` or "
-                                    f"`## Moves` table) — list every file the stage changed, one line each")
-        return
-    missing = [path for path in changed if path not in listed and not any(path.endswith("/" + n) for n in listed)]
-    restored = []
-    if missing and located:
-        digests = read_red_digests(runs, story_id)
-        by_file = {test_file: digests.get(selector) for selector, test_file in located.items() if test_file}
-        for path in missing:
-            digest = by_file.get(path)
-            full = os.path.join(cwd, path)
-            if digest and os.path.isfile(full) and file_digest(full) == digest:
-                restored.append(path)
-        missing = [path for path in missing if path not in restored]
-    if missing:
-        result.fail("files-listed", f"{' / '.join(handovers)} does not list what the stage changed: "
-                                    f"{', '.join(missing[:8])}" + (" …" if len(missing) > 8 else ""))
-        return
-    put_back = (f"; {', '.join(restored)} restored to the version the test stage saw red — a restoration "
-                f"is not this stage's change to list") if restored else ""
-    unchanged = sorted(n for n in listed if "/" in n and n not in changed
-                       and not any(p.endswith("/" + n) or p == n for p in changed))
-    if unchanged:
-        result.note("files-listed", f"listed but not changed by this stage: {', '.join(unchanged[:5])}")
-    result.ok("files-listed", f"{' / '.join(handovers)} list(s) the {len(changed) - len(restored)} file(s) the stage "
-                              f"changed{put_back}")
 
 
 def acceptance_applies(cwd, runs, story_id, profile):
@@ -3362,8 +2945,8 @@ def _mapping(run):
 # before and the red proof were the stages' to hold, and they held.
 @check("files-listed", stages=lambda s: s.lists)
 def _files_listed(run):
-    check_files_listed(run.result, run.runs, run.story_id, run.stage.name, run.cwd, run.located)
-    check_existing_tests(run.result, run.cwd, run.runs, run.story_id, run.body)
+    take(run.result, KeptChecks.files_listed(run.story, StageName(run.stage.name), mapped_tests(run), run.evidence))
+    take(run.result, KeptChecks.tests_kept(run.story, run.evidence))
 
 
 @check("test-design", stages=lambda s: s.red)
@@ -3411,14 +2994,8 @@ def _size(run):
 @check("red-proof", stages=lambda s: s.lists, kinds=TESTED_KINDS)
 def _red_proof(run):
     # the red proof compares digests, so it belongs here, before any process
-    ledger = red_ledger_path(run.runs, run.story_id)
-    if run.expected == "green" and ledger and os.path.isfile(ledger):
-        if run.stage.name == "tidy" and red_tree(run.runs, run.story_id) \
-                and tidy_moves(run.cwd, run.runs, run.story_id, run.located):
-            run.result.ok("red-proof", "tidy changed a test it may rework — `red-reproof` runs it on the tree the "
-                                       "test stage left")
-            return
-        check_red_proof(run.result, run.cwd, run.located, read_red_digests(run.runs, run.story_id), run.story_id)
+    if run.expected == "green":
+        take(run.result, KeptChecks.red_proof(run.story, StageName(run.stage.name), mapped_tests(run), run.evidence))
 
 
 def whole_suites(run):

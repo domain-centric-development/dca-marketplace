@@ -23,6 +23,11 @@ class Place(Value):
 
 
 @dataclasses.dataclass(frozen=True)
+class Count(Value):
+    value: int
+
+
+@dataclasses.dataclass(frozen=True)
 class ScenarioKey(Value):
     """A criterion's key — the name the test stage binds."""
 
@@ -68,6 +73,8 @@ class StageStory(Value):
     publishes: typing.Tuple[EventName, ...]
     #: what each scenario says is observed: its `Then` and every `And` or `But` after it
     clauses: typing.Tuple[ScenarioClauses, ...] = ()
+    #: the lines of its `## Changed expectations` a person wrote
+    changed_expectations: Count = Count(0)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -281,11 +288,6 @@ class TestTable(Value):
 
 
 @dataclasses.dataclass(frozen=True)
-class Count(Value):
-    value: int
-
-
-@dataclasses.dataclass(frozen=True)
 class TestLocation(Value):
     """Where a mapped test was looked for: the file it was found in by its shape, or the file named after its class
     that lacks the method, or neither."""
@@ -428,3 +430,77 @@ class PlannedFile(Value):
     place: Place
     change: FileChange
     presence: Presence
+
+
+class Unobserved(enum.Enum):
+    """Why a stage's changes cannot be held to its list: the stage is still open, no record was taken, or the
+    record says why it saw nothing."""
+
+    STAGE_OPEN = "stage open"
+    NO_RECORD = "no record"
+    NOT_OBSERVED = "not observed"
+
+
+@dataclasses.dataclass(frozen=True)
+class StageChanges(Value):
+    """What a stage changed and what its hand-overs list: the files changed, the hand-overs read, the files they
+    list — None where none has a list —, and the changed tests that are the version the test stage saw red again."""
+
+    unobserved: typing.Optional[Unobserved]
+    reason: Detail
+    changed: typing.Tuple[Place, ...]
+    hand_overs: typing.Tuple[HandOverName, ...]
+    listed: typing.Optional[typing.FrozenSet[Place]]
+    restored: typing.FrozenSet[Place]
+
+
+class TestChange(enum.Enum):
+    """How a test that existed before the story differs now."""
+
+    CHANGED = "changed"
+    REMOVED = "removed"
+    SWITCHED_OFF = "switched off"
+
+
+@dataclasses.dataclass(frozen=True)
+class ChangedTest(Value):
+    place: Place
+    how: TestChange
+
+
+@dataclasses.dataclass(frozen=True)
+class KeptTests(Value):
+    """The tests that existed before the story, against their baseline: the ones that no longer expect what they
+    did, the ones whose baseline git lost, the ones changed only around their assertions."""
+
+    changed: typing.Tuple[ChangedTest, ...]
+    lost: typing.Tuple[Place, ...]
+    arranged: typing.Tuple[Place, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class DecidedRecord(Value):
+    """An answered decision about tests: the stage that asked it, and its text."""
+
+    record: RecordId
+    stage: typing.Optional[StageName]
+    text: Detail
+
+
+@dataclasses.dataclass(frozen=True)
+class PlannedTestChange(Value):
+    """A row of the plan's `## Changed tests`: the test, and what the row cites."""
+
+    place: Place
+    cites: Detail
+
+
+@dataclasses.dataclass(frozen=True)
+class RedProof(Value):
+    """The red ledger against the tests as they are: how many tests it names, how many without a file digest, the
+    tests whose file changed since, and — at tidy — whether tidy reworked a test the red tree can prove again."""
+
+    entries: Count
+    unbound: Count
+    moved: typing.Tuple[Detail, ...]
+    reproof: Presence

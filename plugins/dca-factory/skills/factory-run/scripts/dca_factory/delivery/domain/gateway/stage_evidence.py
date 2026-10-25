@@ -9,7 +9,9 @@ import typing
 
 from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
+from ..model.stage import StageName
 from ..model.stage_story import (
+    DecidedRecord, KeptTests, MappedTest, PlannedTestChange, RedProof, StageChanges,
     AssertionFact, ClauseRow, CommandKey, ContextMapFacts, Count, InvariantFacts, PlannedFile, PortName, Selector, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
     InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
 from ..model.story import StoryId
@@ -98,4 +100,30 @@ class StageEvidence(DomainGateway, typing.Protocol):
 
     def plan_files(self, story: StoryId) -> typing.Optional[typing.Tuple[PlannedFile, ...]]:
         """The files the plan says new or removed — None where its plan has no `## Files`."""
+        ...
+
+    def stage_changes(self, story: StoryId, stage: StageName,
+                      tests: typing.Tuple[MappedTest, ...]) -> StageChanges:
+        """What the stage changed — its changed-files record, or inside a shared builder's window the tree against
+        the story's base — and what its hand-overs list."""
+        ...
+
+    def kept_tests(self, story: StoryId) -> typing.Optional[KeptTests]:
+        """The tests that existed before the story against their baseline — None where no baseline was taken."""
+        ...
+
+    def decided_tests(self, story: StoryId) -> typing.Tuple[DecidedRecord, ...]:
+        """The answered decisions a test stage or a build stage asked."""
+        ...
+
+    def planned_test_changes(self, story: StoryId) -> typing.Tuple[PlannedTestChange, ...]:
+        ...
+
+    def answered_records(self, story: StoryId) -> typing.FrozenSet[RecordId]:
+        """The story's records that are answered or applied — none where its records cannot be read."""
+        ...
+
+    def red_proof(self, story: StoryId, stage: StageName,
+                  tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[RedProof]:
+        """The red ledger against the tests as they are — None where the story has none."""
         ...

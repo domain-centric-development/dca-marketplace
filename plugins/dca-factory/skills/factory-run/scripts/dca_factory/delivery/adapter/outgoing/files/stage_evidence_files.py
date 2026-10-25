@@ -7,18 +7,19 @@ import os
 import re
 import typing
 
-from .....contract import CONTRACT, GateError, HAPPY_MARK, SELECTOR, STAGE_FILES, VERSION
+from .....contract import CONTRACT, GateError, HAPPY_MARK, SELECTOR, SHARED_WINDOWS, STAGE_FILES, STAGES, VERSION
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
-    evidence_dir, factory_home, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
+    evidence_dir, factory_home, in_worktree, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
 from ....application.shared.front import is_acceptance
 from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AnswerField, AssertionAt, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
+    AnswerField, AssertionAt, ChangedTest, MappedTest, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
+    TestChange, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
     ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
@@ -34,6 +35,14 @@ from .epic_files import epic_dependency_problem
 from .findings_files import findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, write_answered
 from .test_files import plan_levels, stage_bytes, unfinished_levels
+from ..git.repository import git, git_blob
+from .decision_record_files import answered_decisions, records_of
+from .kept_files import (
+    assertions_kept, changed_tests_in_plan, committed_by_a_stage, human_line, meaningful_lines, read_red_digests,
+    red_tree, switched_off, TESTS_BASELINE, tidy_moves, unproven_tests)
+from .run_marks import last_ended, stage_open, window_open
+from .snapshots import git_tree, listed_files, snapshot_reason, tree_changes
+from .story_layout import file_digest
 from .design_files import (
     adapter_level_keys, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_clauses)
@@ -168,7 +177,9 @@ def stage_story(story_id: str, story_path: str, front: Front, body: str,
         tuple(StoryId(s) for s in depends_on_of(front)), tuple(RowId(r) for r in closes_of(front)),
         tuple(EventName(e) for e in publishes_of(front)),
         tuple(ScenarioClauses(ScenarioKey(key), tuple(Clause(Count(n), Detail(text)) for n, text in clauses))
-              for key, clauses in scenario_clauses(body).items()))
+              for key, clauses in scenario_clauses(body).items()),
+        Count(sum(1 for line in section_of(body, "changed expectations") or []
+                  if line.strip().startswith(("-", "*")) and human_line(line.strip()[1:].strip()))))
 
 
 class StageEvidenceFiles:
@@ -366,6 +377,136 @@ class StageEvidenceFiles:
                 Place(rel), FileChange(match.group(2).lower()),
                 Presence.PRESENT if os.path.lexists(os.path.join(self._cwd, rel)) else Presence.ABSENT))
         return tuple(planned)
+
+    def stage_changes(self, story: StoryId, stage: StageName,
+                      tests: typing.Tuple[MappedTest, ...]) -> StageChanges:
+        runs, story_id, name = self._runs, story.value, stage.value
+        record: typing.Optional[str] = os.path.join(evidence_dir(runs, story_id), f"changed-{name}.txt")
+        handovers = [STAGE_FILES[name]]
+        listing = [s.file for s in STAGES if s.lists if os.path.isfile(os.path.join(runs, story_id, s.file))]
+        if last_ended(runs, story_id, (name, "builder")) == "builder":
+            # A shared builder ran plan to tidy in one window: its record is the one that holds, and a file it
+            # changed is listed by whichever of its hand-overs belongs to the stage that changed it.
+            record, handovers = os.path.join(evidence_dir(runs, story_id), "changed-builder.txt"), listing
+        changed_now: typing.List[str] = []
+        base_file = os.path.join(evidence_dir(runs, story_id), "base-tree")
+        if window_open(runs, story_id, "builder") and name in SHARED_WINDOWS["builder"] and os.path.isfile(base_file):
+            # A shared builder runs its own gates inside its window, before any changed-files record exists. What the
+            # story changed so far is the tree against its base: checked now, the builder can still list a file it
+            # forgot — found only by the runner afterwards, it costs a round.
+            base = read_text(base_file).strip()
+            now = git_tree(self._cwd) if base and base != "none" else None
+            rows = tree_changes(self._cwd, base, now, runs) if now else None
+            if rows is not None:
+                record, handovers, changed_now = None, listing, [path for _kind, path in rows]
+
+        def unobserved(why: Unobserved, reason: str = "") -> StageChanges:
+            return StageChanges(why, Detail(reason), (), (), None, frozenset())
+
+        if record is not None and (not os.path.isfile(record) or stage_open(runs, story_id, name)):
+            # A stage that runs its own gate does so inside its window: its record is written at the stage's end,
+            # and the gate after `--stage-end` checks it.
+            return unobserved(Unobserved.STAGE_OPEN if stage_open(runs, story_id, name) else Unobserved.NO_RECORD)
+        if record is None:
+            changed = changed_now
+        else:
+            reason = snapshot_reason(record)
+            if reason:
+                return unobserved(Unobserved.NOT_OBSERVED, reason)
+            changed = [line.split("\t", 1)[1] for line in read_text(record).splitlines() if "\t" in line]
+        found = [listed_files(os.path.join(runs, story_id, h)) for h in handovers]
+        listed = set().union(*[names for names in found if names is not None]) if any(n is not None for n in found) \
+            else None
+        # A test file restored to the version the test stage saw red: the red ledger holds that version's digest.
+        digests = read_red_digests(runs, story_id)
+        by_file = {t.place.value: digests.get(t.selector.value) for t in tests if t.place is not None}
+        restored = frozenset(Place(path) for path in changed if by_file.get(path)
+                             and os.path.isfile(os.path.join(self._cwd, path))
+                             and file_digest(os.path.join(self._cwd, path)) == by_file[path])
+        return StageChanges(None, Detail(""), tuple(Place(p) for p in changed), tuple(HandOverName(h) for h in handovers),
+                            frozenset(Place(n) for n in listed) if listed is not None else None, restored)
+
+    def kept_tests(self, story: StoryId) -> typing.Optional[KeptTests]:
+        cwd, runs, story_id = self._cwd, self._runs, story.value
+        path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
+        if not os.path.isfile(path):
+            return None
+        changed: typing.List[ChangedTest] = []
+        lost: typing.List[Place] = []
+        arranged: typing.List[Place] = []
+        for line in read_text(path).splitlines():
+            if "  " not in line:
+                continue
+            blob, rel = line.split("  ", 1)
+            full = os.path.join(cwd, rel)
+            if not os.path.isfile(full):
+                changed.append(ChangedTest(Place(rel), TestChange.REMOVED))
+                continue
+            # A run commits nothing while a story is open: a test committed since the baseline changed outside this
+            # story. The story is held to its own changes — against what is committed now. Not in a story's
+            # worktree: every commit on its branch is the runner's, holding the story's own change, and what the
+            # main line brought in is in the baseline already (`rebase_tests_baseline`).
+            head_code, head_blob = git(cwd, "rev-parse", f"HEAD:{rel}")
+            if not head_code and not in_worktree(cwd) and head_blob.strip() and head_blob.strip() != blob \
+                    and not git(cwd, "cat-file", "-e", blob)[0] and not committed_by_a_stage(cwd, runs, story_id, rel):
+                blob = head_blob.strip()
+            code, before = git_blob(cwd, blob)
+            if code:
+                lost.append(Place(rel))
+                continue
+            with open(full, encoding="utf-8", errors="replace") as handle:
+                now = meaningful_lines(handle.read(), rel)
+            was = meaningful_lines(before, rel)
+            # Additions only: every line the test had is still there, in the same order, outside a comment — and no
+            # added line switches it off.
+            remaining = iter(now)
+            if switched_off(was, now):
+                changed.append(ChangedTest(Place(rel), TestChange.SWITCHED_OFF))
+            elif all(any(old == new for new in remaining) for old in was):
+                pass
+            elif assertions_kept("\n".join(was), "\n".join(now)):
+                arranged.append(Place(rel))
+            else:
+                changed.append(ChangedTest(Place(rel), TestChange.CHANGED))
+        return KeptTests(tuple(changed), tuple(lost), tuple(arranged))
+
+    def decided_tests(self, story: StoryId) -> typing.Tuple[DecidedRecord, ...]:
+        ids = answered_decisions(self._cwd, story.value, "test")
+        try:
+            records = {str(front["id"]).strip(): (front, body) for _p, front, body, _s, _a
+                       in records_of(story.value, cwd=self._cwd)}
+        except GateError:
+            records = {}
+        found = []
+        for rid in ids:
+            front, body = records.get(rid, ({}, ""))
+            stage = str(front.get("stage", "")).strip()
+            found.append(DecidedRecord(RecordId(rid), StageName(stage) if stage else None, Detail(body)))
+        return tuple(found)
+
+    def planned_test_changes(self, story: StoryId) -> typing.Tuple[PlannedTestChange, ...]:
+        return tuple(PlannedTestChange(Place(rel), Detail(str(cites)))
+                     for rel, cites in changed_tests_in_plan(self._runs, story.value).items())
+
+    def answered_records(self, story: StoryId) -> typing.FrozenSet[RecordId]:
+        try:
+            return frozenset(RecordId(str(front["id"]).strip()) for _p, front, _b, state, _a in records_of(story.value)
+                             if state in ("answered", "applied"))
+        except GateError:
+            return frozenset()
+
+    def red_proof(self, story: StoryId, stage: StageName,
+                  tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[RedProof]:
+        ledger = os.path.join(evidence_dir(self._runs, story.value), ".tests-red")
+        if not os.path.isfile(ledger):
+            return None
+        located = {t.selector.value: t.place.value for t in tests if t.place is not None}
+        if stage.value == "tidy" and red_tree(self._runs, story.value) \
+                and tidy_moves(self._cwd, self._runs, story.value, located):
+            return RedProof(Count(0), Count(0), (), Presence.PRESENT)
+        digests = read_red_digests(self._runs, story.value)
+        return RedProof(Count(len(digests)), Count(sum(1 for d in digests.values() if d is None)),
+                        tuple(Detail(m) for m in unproven_tests(self._cwd, located, digests)), Presence.ABSENT)
 
 class DecisionStampFiles:
     """The decision records beside the story and its `## Assumptions`, the journal under the run folder <runs>."""
