@@ -18,6 +18,8 @@ os.environ.pop("FACTORY_HOME", None)                        # a case runs in no 
 from dca_factory import contract, state  # noqa: E402,F401
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
 
 STORY = """---
@@ -61,14 +63,14 @@ class Project:
         os.makedirs(self.runs)
 
     def epic(self, name, deps=()):
-        return write(os.path.join(self.epics, name, contract.EPIC_FILE), EPIC.format(epic=name, deps=", ".join(deps)))
+        return write(os.path.join(self.epics, name, layout.EPIC_FILE), EPIC.format(epic=name, deps=", ".join(deps)))
 
     def story(self, story_id, epic="sample", status="approved", deps=(), text=None):
-        if not os.path.isfile(os.path.join(self.epics, epic, contract.EPIC_FILE)):
+        if not os.path.isfile(os.path.join(self.epics, epic, layout.EPIC_FILE)):
             self.epic(epic)
         body = text if text is not None else STORY.format(id=story_id, status=status, deps=", ".join(deps),
                                                           title=story_id)
-        return write(os.path.join(self.epics, epic, story_id, contract.STORY_FILE), body)
+        return write(os.path.join(self.epics, epic, story_id, layout.STORY_FILE), body)
 
     def handover(self, story_id, stage, text=None):
         """A stage's hand-over file under the run folder, as the stage would leave it."""
@@ -84,7 +86,7 @@ class Project:
     def wrote(self, story_id, stage, at=None):
         """The journal's `wrote` event for the hand-over as it is on disk now."""
         name = contract.STAGE_FILES[stage]
-        digest = contract.file_digest(os.path.join(self.runs, story_id, name))
+        digest = layout.file_digest(os.path.join(self.runs, story_id, name))
         return journal.journal_append(self.runs, story_id, "wrote", name, f"sha={digest}", at=at)
 
     def write_and_journal(self, story_id, stage, text=None, at=None):
@@ -92,8 +94,8 @@ class Project:
         return self.wrote(story_id, stage, at=at)
 
     def state_of(self, story_id):
-        path = contract.find_story(self.epics, story_id)
-        front, _body = contract.read_front_matter(path)
+        path = layout.find_story(self.epics, story_id)
+        front, _body = markdown.read_front_matter(path)
         return state.story_state(self.root, self.runs, story_id, front, path)
 
 

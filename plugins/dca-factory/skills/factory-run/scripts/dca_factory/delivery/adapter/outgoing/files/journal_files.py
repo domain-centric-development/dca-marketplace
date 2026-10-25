@@ -9,7 +9,7 @@ import os
 import time
 import typing
 
-from .....contract import find_story, story_digest, story_id_of
+from .story_layout import find_story, story_digest, story_id_of
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, JOURNAL, place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from ....application.shared.story_journal import Window

@@ -41,6 +41,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, _PACKAGE_DIR)
 from dca_factory import contract as _contract  # noqa: E402
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as _profile  # noqa: E402
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as _markdown  # noqa: E402
+from dca_factory.delivery.adapter.outgoing.files import story_layout as _layout  # noqa: E402
 CRITERION, MAPPING_ROW, SELECTOR = _contract.CRITERION, _contract.MAPPING_ROW, _contract.SELECTOR
 GateError = _contract.GateError
 
@@ -99,7 +101,7 @@ def read(path):
 def front_of(path):
     """The front matter of a file, read by the gate; {} where the gate cannot read it."""
     try:
-        return _contract.read_front_matter(path)[0]
+        return _markdown.read_front_matter(path)[0]
     except GateError:
         return {}
 
@@ -107,7 +109,7 @@ def front_of(path):
 def story_file(epics, story_id):
     """The story as the gate finds it — one file per id, or nothing."""
     try:
-        return _contract.find_story(epics, story_id)
+        return _layout.find_story(epics, story_id)
     except GateError:
         return None
 
@@ -217,7 +219,7 @@ def observe(project, runs, epics, story_id):
     run_dir = os.path.join(project, runs, story_id)
     journal_dir = _profile.evidence_dir(os.path.join(project, runs), story_id)
     journal = os.path.join(journal_dir, _profile.JOURNAL)
-    pruned = [l.split("\t") for l in _contract.read_text(journal).splitlines()
+    pruned = [l.split("\t") for l in _markdown.read_text(journal).splitlines()
               if l.split("\t")[1:2] == ["pruned"]] if os.path.isfile(journal) else []
     if pruned:
         days = next((f[5:] for f in pruned[-1] if f.startswith("days=")), "?")

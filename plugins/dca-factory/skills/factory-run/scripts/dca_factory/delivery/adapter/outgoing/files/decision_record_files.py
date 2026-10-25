@@ -8,7 +8,8 @@ import re
 import time
 import typing
 
-from .....contract import DECISIONS_DIR, find_story, STAGE_ORDER, story_digest, story_files, story_folder, story_id_of
+from .....contract import STAGE_ORDER
+from .story_layout import DECISIONS_DIR, find_story, story_digest, story_files, story_folder, story_id_of
 from .....sharedkernel.adapter.outgoing.profile.profile_files import DEFAULTS, place, PLACES_REL, shown
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import Front, MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import fields_of, section_of, sections_of
@@ -413,7 +414,7 @@ def acceptance_state(cwd: str, story_id: str,
     rid, front, state, answer, _body = records[-1]
     if state in ("open", "draft"):
         return "open", rid
-    if str(front.get("digest", "")).strip() != story_digest(story_path):
+    if str(front.get("digest", "")).strip() != story_digest(story_path or ""):
         return "ask", rid
     return ("accepted" if accepted(answer) else "correction"), rid
 

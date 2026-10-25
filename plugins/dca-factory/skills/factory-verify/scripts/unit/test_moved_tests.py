@@ -7,6 +7,7 @@ import unittest
 from support import contract, project, write
 from dca_factory import gate
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
 STORY = """---
 id: S-1
@@ -64,7 +65,7 @@ class MovedTests(unittest.TestCase):
               "class WidgetPortTest { void showsTheNameInBold() {} }\n")
         p.run_file("S-1", "plan.md", PLAN)
         p.run_file("S-1", "tests.md", TESTS.format(moved=moved))
-        front, body = contract.read_front_matter(path)
+        front, body = markdown.read_front_matter(path)
         return path, front, body
 
     def test_a_row_naming_the_test_it_replaced_is_refused(self):

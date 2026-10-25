@@ -10,6 +10,9 @@ from support import contract, project, state, write
 from dca_factory import cli, runner
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
+from dca_factory.delivery.adapter.outgoing.files import owned_files as owned
 
 DELIVERED = """---
 id: {id}
@@ -42,7 +45,7 @@ class HandDelivery(unittest.TestCase):
             path = p.story("S-1")
             code, said = quiet(cli.deliver_by_hand, p.root, p.runs, p.epics, "S-1", "Ana Lee")
             self.assertEqual(code, 0, said)
-            front, _ = contract.read_front_matter(path)
+            front, _ = markdown.read_front_matter(path)
             self.assertEqual((front["status"], front["delivered_by"]), ("delivered", "hand:Ana Lee"))
             self.assertTrue(front["delivered"])
             self.assertEqual(p.state_of("S-1"), ("delivered", None, "claimed by hand:Ana Lee"))
@@ -67,13 +70,13 @@ class Prove(unittest.TestCase):
             path = p.story("S-1", text=DELIVERED.format(id="S-1", by="delivered_by: hand:ana\n"))
             code, said = quiet(cli.prove, p.root, p.runs, p.epics, "S-1")
             self.assertEqual(code, 0, said)
-            front, _ = contract.read_front_matter(path)
+            front, _ = markdown.read_front_matter(path)
             self.assertEqual(front["status"], "adopted")
             self.assertNotIn("delivered", front)
             self.assertNotIn("delivered_by", front)
             claim = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), cli.CLAIM_FILE))
             self.assertIn("delivered_by=hand:ana", claim)
-            self.assertEqual(contract.story_kind(front), "adopt")
+            self.assertEqual(layout.story_kind(front), "adopt")
 
     def test_prove_refuses_an_open_story_and_a_gate_delivery_with_its_pass_on_record(self):
         with project() as p:
@@ -107,10 +110,10 @@ class Migration(unittest.TestCase):
             kept = p.story("H-1", text=DELIVERED.format(id="H-1", by="delivered_by: hand:ana\n"))
             said = []
             runner.migrate_delivery(p.root, p.epics, p.runs, said.append)
-            self.assertEqual(contract.read_front_matter(adopted)[0]["status"], "delivered")
-            self.assertEqual(contract.read_front_matter(adopted)[0]["delivered_by"], "hand:unknown")
-            self.assertEqual(contract.read_front_matter(proven)[0]["delivered_by"], "gate")
-            self.assertEqual(contract.read_front_matter(kept)[0]["delivered_by"], "hand:ana")
+            self.assertEqual(markdown.read_front_matter(adopted)[0]["status"], "delivered")
+            self.assertEqual(markdown.read_front_matter(adopted)[0]["delivered_by"], "hand:unknown")
+            self.assertEqual(markdown.read_front_matter(proven)[0]["delivered_by"], "gate")
+            self.assertEqual(markdown.read_front_matter(kept)[0]["delivered_by"], "hand:ana")
             again = []
             runner.migrate_delivery(p.root, p.epics, p.runs, again.append)
             self.assertEqual(again, [])
@@ -118,10 +121,10 @@ class Migration(unittest.TestCase):
     def test_a_planned_digest_of_the_old_function_is_taken_anew(self):
         with project() as p:
             path = p.story("S-1", text="---\nid: S-1\nstatus: approved\ntitle: a --- b\n---\n# S\n")
-            p.evidence("S-1", ".story-digest", contract.legacy_story_digest(path) + "\n")
+            p.evidence("S-1", ".story-digest", layout.legacy_story_digest(path) + "\n")
             runner.migrate_delivery(p.root, p.epics, p.runs, lambda _: None)
             mark = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), ".story-digest"))
-            self.assertEqual(mark.strip(), contract.story_digest(path))
+            self.assertEqual(mark.strip(), layout.story_digest(path))
 
 
 RECORD = """---
@@ -166,13 +169,13 @@ class Answered(unittest.TestCase):
         with project() as p:
             path = p.story("S-1", text="---\nid: S-1\nstatus: approved\n---\n# S\n\n## Assumptions\n\n"
                                        "- open: which way?\n\n## Out of scope\n- nothing\n")
-            p.evidence("S-1", ".story-digest", contract.story_digest(path) + "\n")
+            p.evidence("S-1", ".story-digest", layout.story_digest(path) + "\n")
             self.assertTrue(state.write_answered(path, p.runs, "S-1-01", "The first way."))
             self.assertFalse(state.write_answered(path, p.runs, "S-1-01", "The first way."))
             text = read(path)
             self.assertIn("- open: which way?\n- answered: The first way. (S-1-01)\n\n## Out of scope", text)
             mark = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), ".story-digest"))
-            self.assertEqual(mark.strip(), contract.story_digest(path))
+            self.assertEqual(mark.strip(), layout.story_digest(path))
 
     def test_a_story_without_assumptions_gains_the_section(self):
         with project() as p:
@@ -188,7 +191,7 @@ class StoryFields(unittest.TestCase):
             path = p.story("S-1")
             with open(path, "w", encoding="utf-8", newline="") as handle:
                 handle.write("---\r\nid: S-1\r\ntitle: a --- b\r\nstatus: approved\r\n---\r\n# S\r\n")
-            state.write_story_fields(path, status="delivered", delivered="2026-10-11T00:00:00Z", delivered_by="gate")
+            owned.write_story_fields(path, status="delivered", delivered="2026-10-11T00:00:00Z", delivered_by="gate")
             with open(path, encoding="utf-8", newline="") as handle:
                 text = handle.read()
             self.assertEqual(text, "---\r\nid: S-1\r\ntitle: a --- b\r\nstatus: delivered\r\n"

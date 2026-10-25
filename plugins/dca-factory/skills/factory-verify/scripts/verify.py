@@ -7564,7 +7564,7 @@ def run_groups(args):
             subprocess.run(command, cwd=root, capture_output=True, env=moved_env)
         write_file(root, "product/epics/sample/STORY-3/story.md", STORY.replace("STORY-1", "STORY-3"))       # not in git yet
         digest_of = lambda path: subprocess.run(
-            [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); from dca_factory.contract import "
+            [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); from dca_factory.delivery.adapter.outgoing.files.story_layout import "
              "story_digest; print(story_digest(sys.argv[2]))", os.path.dirname(os.path.abspath(args.cli)), path],
             capture_output=True, text=True).stdout.strip()
         story1 = os.path.join(root, "product/epics/sample/STORY-1/story.md")

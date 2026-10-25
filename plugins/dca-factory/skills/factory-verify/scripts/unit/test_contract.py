@@ -7,13 +7,16 @@ import unittest
 from support import contract, project, write
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
+from dca_factory.delivery.adapter.outgoing.files import epic_files as epics_files
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
 
 class FrontMatter(unittest.TestCase):
 
     def read(self, text):
         with tempfile.TemporaryDirectory() as root:
-            return contract.read_front_matter(write(os.path.join(root, "f.md"), text))
+            return markdown.read_front_matter(write(os.path.join(root, "f.md"), text))
 
     def test_flat_keys_and_dash_lists_are_read_with_the_body(self):
         front, body = self.read("---\nid: S-1\ncontext: Widgets\ndepends_on:\n  - A\n  - B\n---\n# Title\n")
@@ -73,72 +76,72 @@ class Profile(unittest.TestCase):
 class StoryFields(unittest.TestCase):
 
     def test_depends_on_reads_three_shapes(self):
-        self.assertEqual(contract.depends_on({"depends_on": "[A, 'B', \"C\"]"}), ["A", "B", "C"])
-        self.assertEqual(contract.depends_on({"depends_on": ["A", "B"]}), ["A", "B"])
-        self.assertEqual(contract.depends_on({"depends_on": "[]"}), [])
-        self.assertEqual(contract.depends_on({"depends_on": []}), [])
-        self.assertEqual(contract.depends_on({}), [])
+        self.assertEqual(layout.depends_on({"depends_on": "[A, 'B', \"C\"]"}), ["A", "B", "C"])
+        self.assertEqual(layout.depends_on({"depends_on": ["A", "B"]}), ["A", "B"])
+        self.assertEqual(layout.depends_on({"depends_on": "[]"}), [])
+        self.assertEqual(layout.depends_on({"depends_on": []}), [])
+        self.assertEqual(layout.depends_on({}), [])
 
     def test_story_kind_from_kind_and_status(self):
-        self.assertEqual(contract.story_kind({"kind": "Journey"}), "journey")
-        self.assertEqual(contract.story_kind({"status": "adopted"}), "adopt")
-        self.assertEqual(contract.story_kind({"status": "approved"}), "story")
-        self.assertEqual(contract.story_kind({}), "story")
+        self.assertEqual(layout.story_kind({"kind": "Journey"}), "journey")
+        self.assertEqual(layout.story_kind({"status": "adopted"}), "adopt")
+        self.assertEqual(layout.story_kind({"status": "approved"}), "story")
+        self.assertEqual(layout.story_kind({}), "story")
 
     def test_delivered_is_the_status_alone(self):
-        self.assertTrue(contract.is_delivered({"status": "Delivered"}))
-        self.assertTrue(contract.is_delivered({"status": "delivered", "delivered_by": "hand:ana"}))
-        self.assertFalse(contract.is_delivered({"status": "adopted", "delivered": "2026-10-10"}))
-        self.assertFalse(contract.is_delivered({"status": "approved"}))
+        self.assertTrue(layout.is_delivered({"status": "Delivered"}))
+        self.assertTrue(layout.is_delivered({"status": "delivered", "delivered_by": "hand:ana"}))
+        self.assertFalse(layout.is_delivered({"status": "adopted", "delivered": "2026-10-10"}))
+        self.assertFalse(layout.is_delivered({"status": "approved"}))
 
     def test_front_matter_is_read_by_lines(self):
         with project() as p:
-            front, body = contract.read_front_matter(p.story("S-1", text="---\ntitle: a --- b\nid: S-1\n---\n# T\n"))
+            front, body = markdown.read_front_matter(p.story("S-1", text="---\ntitle: a --- b\nid: S-1\n---\n# T\n"))
         self.assertEqual(front, {"title": "a --- b", "id": "S-1"})
         self.assertEqual(body, "\n# T\n")
 
     def test_the_story_digest_reads_by_lines_and_ignores_the_state_lines(self):
         with project() as p:
             plain = p.story("S-1", text="---\nid: S-1\ntitle: a --- b\nstatus: approved\nnotes:\n  status: kept\n---\nbody\n")
-            before = contract.story_digest(plain)
+            before = layout.story_digest(plain)
             with open(plain, "w", encoding="utf-8", newline="") as handle:
                 handle.write("---\r\nid: S-1\r\ntitle: a --- b\r\nstatus: delivered\r\ndelivered: 2026-10-11T00:00:00Z\r\n"
                              "delivered_by: hand:ana\r\nnotes:\r\n  status: kept\r\n---\r\nbody\r\n")
-            self.assertEqual(contract.story_digest(plain), before)
+            self.assertEqual(layout.story_digest(plain), before)
             with open(plain, "w", encoding="utf-8") as handle:
                 handle.write("---\nid: S-1\ntitle: a --- b\nstatus: approved\nnotes:\n  status: changed\n---\nbody\n")
-            self.assertNotEqual(contract.story_digest(plain), before)
+            self.assertNotEqual(layout.story_digest(plain), before)
 
     def test_a_story_id_is_its_id_else_its_folder(self):
         with project() as p:
             named = p.story("S-1")
             unnamed = p.story("folder-name", text="---\nstatus: approved\n---\n")
-            self.assertEqual(contract.story_id_of(named), "S-1")
-            self.assertEqual(contract.story_id_of(unnamed), "folder-name")
+            self.assertEqual(layout.story_id_of(named), "S-1")
+            self.assertEqual(layout.story_id_of(unnamed), "folder-name")
 
     def test_the_story_digest_ignores_status_and_delivered(self):
         with project() as p:
             path = p.story("S-1")
-            before = contract.story_digest(path)
+            before = layout.story_digest(path)
             p.story("S-1", status="delivered")
-            self.assertEqual(contract.story_digest(path), before)
-            p.story("S-1", text=contract.read_text(path) + "more\n")
-            self.assertNotEqual(contract.story_digest(path), before)
+            self.assertEqual(layout.story_digest(path), before)
+            p.story("S-1", text=markdown.read_text(path) + "more\n")
+            self.assertNotEqual(layout.story_digest(path), before)
 
     def test_find_story_refuses_a_second_story_with_the_same_id(self):
         with project() as p:
             p.story("S-1", epic="one")
             p.story("S-1", epic="two")
             with self.assertRaisesRegex(contract.GateError, "is not unique"):
-                contract.find_story(p.epics, "S-1")
-            self.assertEqual(list(contract.duplicate_ids(p.epics)), ["s-1"])
+                layout.find_story(p.epics, "S-1")
+            self.assertEqual(list(layout.duplicate_ids(p.epics)), ["s-1"])
 
     def test_find_story_names_the_flat_layout(self):
         with project() as p:
             p.epic("sample")
             write(os.path.join(p.epics, "sample", "S-9.md"), "---\nid: S-9\n---\n")
             with self.assertRaisesRegex(contract.GateError, "older flat layout"):
-                contract.find_story(p.epics, "S-9")
+                layout.find_story(p.epics, "S-9")
 
 
 class Selectors(unittest.TestCase):
@@ -235,7 +238,7 @@ class StageTable(unittest.TestCase):
 class Epics(unittest.TestCase):
 
     def test_epics_in_dependency_order_with_a_cycle_last(self):
-        order, cycle = contract.epic_order({"a": ["b"], "b": [], "c": ["d"], "d": ["c"], "e": ["unknown"]})
+        order, cycle = epics_files.epic_order({"a": ["b"], "b": [], "c": ["d"], "d": ["c"], "e": ["unknown"]})
         self.assertEqual(order, ["b", "a", "e", "c", "d"])
         self.assertEqual(cycle, {"c", "d"})
 
@@ -246,10 +249,10 @@ class Epics(unittest.TestCase):
             p.epic("c", deps=("c",))
             p.epic("d", deps=("nowhere",))
             p.epic("e")
-            self.assertIn("dependency cycle", contract.epic_dependency_problem(p.epics, "a"))
-            self.assertIn("depends on itself", contract.epic_dependency_problem(p.epics, "c"))
-            self.assertIn("'nowhere', which is no epic", contract.epic_dependency_problem(p.epics, "d"))
-            self.assertIsNone(contract.epic_dependency_problem(p.epics, "e"))
+            self.assertIn("dependency cycle", epics_files.epic_dependency_problem(p.epics, "a"))
+            self.assertIn("depends on itself", epics_files.epic_dependency_problem(p.epics, "c"))
+            self.assertIn("'nowhere', which is no epic", epics_files.epic_dependency_problem(p.epics, "d"))
+            self.assertIsNone(epics_files.epic_dependency_problem(p.epics, "e"))
 
 
 if __name__ == "__main__":

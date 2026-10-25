@@ -6,17 +6,20 @@ Nothing here runs a command or decides a stage; the modules above read through t
 can never disagree about what a file says.
 """
 
-import hashlib
 import os
 import re
 import typing
 
-from .sharedkernel.adapter.outgoing.markdown.front_matter import (
-    MarkdownError as GateError, read_front_matter, read_text, split_front)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    findings_dir, place, PROFILE_FILE, PROJECT_FINDINGS, shown)
-from .delivery.application.shared.front import CREATED_KEY
+    place, PROFILE_FILE, shown)
+from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE
+from .sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError
+from .delivery.adapter.outgoing.files.story_layout import DECISIONS_DIR, flat_stories, STORY_FILE
 from .delivery.domain.model.stage import PIPELINE, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait
+
+
+#: What the gate calls a project file it cannot read as it should — the shared kernel's `MarkdownError`.
+GateError = MarkdownError
 
 
 EPIC_FIELDS = ("intent", "goal", "metric", "domain_contact")
@@ -71,333 +74,6 @@ CONTRACT = 26
 VERSION = "0.94.0"
 
 
-#: A story is a folder of its own under its epic, `<epics>/<epic>/<story>/`, with everything that belongs to it
-#: inside: the story itself, its decision records and acceptances, the judge's findings that did not block.
-#: The epic is `<epics>/<epic>/epic.md` beside its story folders — one shape for both, a folder and its file.
-STORY_FILE = "story.md"
-
-
-EPIC_FILE = "epic.md"
-
-
-#: A story's decision records: `<story>/decisions/` beside its `story.md`.
-DECISIONS_DIR = "decisions"
-
-
-FINDINGS_FILE = "findings.md"
-
-
-def story_files(epics):
-    """Every story under the epics, sorted: `<epics>/<epic>/<story>/story.md`. A file beside the epics (a
-    README) or beside the story folders (`epic.md`) is not a story; a story file of the older flat layout
-    (`<epic>/<story>.md`) is not read — `layout_hint` names it and `factory.sh update` moves it."""
-    found = []
-    if not os.path.isdir(epics):
-        return found
-    for epic in sorted(os.listdir(epics)):
-        folder = os.path.join(epics, epic)
-        if not os.path.isdir(folder):
-            continue
-        for name in sorted(os.listdir(folder)):
-            path = os.path.join(folder, name, STORY_FILE)
-            if os.path.isfile(path):
-                found.append(path)
-    return found
-
-
-def story_folder(story_path):
-    """The story's own folder: where its decisions and findings live, and the name its id defaults to."""
-    return os.path.dirname(story_path)
-
-
-def epic_folder(story_path):
-    """The folder of the epic a story lies in: the parent of the story's folder."""
-    return os.path.dirname(story_folder(story_path))
-
-
-def flat_stories(epics):
-    """Story files of the older flat layout — `<epics>/<epic>/<story>.md` beside `epic.md` — which this gate
-    no longer reads."""
-    found = []
-    if not os.path.isdir(epics):
-        return found
-    for epic in sorted(os.listdir(epics)):
-        folder = os.path.join(epics, epic)
-        if os.path.isdir(folder):
-            found += [os.path.join(folder, name) for name in sorted(os.listdir(folder))
-                      if name.endswith(".md") and name != EPIC_FILE and not name.endswith(".findings.md")
-                      and os.path.isfile(os.path.join(folder, name))]
-    return found
-
-
-#: The finding as a person reads it first: one short sentence anyone understands at once ("the checkout controller
-#: checks the step twice"), beside the reviewer's `Defect` and the `Fix` (contract 23). A judge.md or a findings.md
-#: from before it carries no such column and reads with the sentence empty.
-PLAIN_COLUMN = "In plain words"
-FINDINGS_HEADER = f"| # | Perspective | File:line | Severity | {PLAIN_COLUMN} | Defect | Fix | Status |"
-OLD_FINDINGS_HEADER = "| # | Perspective | File:line | Severity | Defect | Fix | Status |"
-#: judge.md's `## Confirmed defects` columns as the judge writes them; an older table lacks `In plain words`.
-JUDGE_COLUMNS = ("Perspective", "File:line", "Severity", PLAIN_COLUMN, "Defect", "Fix")
-JUDGE_HEADER = "| " + " | ".join(JUDGE_COLUMNS) + " |"
-
-
-def findings_path(story_path):
-    """The judge's confirmed findings, kept in the story's folder like its decisions: `<story>/findings.md`."""
-    return os.path.join(story_folder(story_path), FINDINGS_FILE)
-
-
-def confirmed_defects(judge_text):
-    """The rows of judge.md's `## Confirmed defects` table: (perspective, file:line, severity, defect, fix, plain).
-    The cells are read by the header's names, so a table from before contract 23 — no `In plain words` — reads with
-    `plain` empty; a table without a header is read in the old order."""
-    rows, inside = [], False
-    names = [c.lower() for c in JUDGE_COLUMNS if c != PLAIN_COLUMN]
-    for line in judge_text.splitlines():
-        if line.startswith("## "):
-            inside = line[3:].strip().lower() == "confirmed defects"
-            continue
-        if not inside or not line.lstrip().startswith("|"):
-            continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if cells[0].lower() == "perspective":
-            names = [c.lower() for c in cells]
-            continue
-        if len(cells) < 5 or set(cells[0]) <= set("-: "):
-            continue
-        cell = dict(zip(names, cells))
-        rows.append((cell.get("perspective", ""), cell.get("file:line", ""), cell.get("severity", ""),
-                     cell.get("defect", ""), cell.get("fix", ""), cell.get(PLAIN_COLUMN.lower(), "")))
-    return rows
-
-
-def findings_cells(line):
-    """A findings row's cells as written, or None for a line that is no row: seven cells before contract 23, eight
-    with `In plain words` after `Severity`."""
-    if not line.startswith("|"):
-        return None
-    cells = [c.strip() for c in line.strip().strip("|").split("|")]
-    return cells if len(cells) in (7, 8) and cells[0].isdigit() else None
-
-
-def findings_rows(path):
-    """The rows of a findings file: (n, perspective, file:line, severity, defect, fix, status, plain) — `plain`
-    empty in a file from before contract 23."""
-    rows = []
-    if not os.path.isfile(path):
-        return rows
-    for line in read_text(path).splitlines():
-        cells = findings_cells(line)
-        if cells is None:
-            continue
-        if len(cells) == 7:
-            rows.append(tuple(cells) + ("",))
-        else:
-            n, perspective, where, severity, plain, defect, fix, status = cells
-            rows.append((n, perspective, where, severity, defect, fix, status, plain))
-    return rows
-
-
-def widen_findings(text):
-    """A findings file from before contract 23 in today's shape: the header, its rule and every row gain the empty
-    `In plain words` cell after `Severity`, so the rows appended after them stand in one table."""
-    lines = text.split("\n")
-    for index, line in enumerate(lines):
-        if line.strip() == OLD_FINDINGS_HEADER:
-            lines[index] = FINDINGS_HEADER
-            if index + 1 < len(lines) and set(lines[index + 1].strip()) <= set("|-: ") and lines[index + 1].strip():
-                lines[index + 1] = "|---|---|---|---|---|---|---|---|"
-            continue
-        cells = findings_cells(line)
-        if cells is not None and len(cells) == 7:
-            lines[index] = "| " + " | ".join(cells[:4] + [""] + cells[4:]) + " |"
-    return "\n".join(lines)
-
-
-def record_findings(story_path, story_id, front, runs):
-    """Keep the judge's confirmed defects in the story's folder, as `<story>/findings.md`, when the story is delivered:
-    a finding that did not block (a minor) would otherwise live in the run folder alone, which is protocol and
-    disposable. One row per finding, `open` until a person or a later story closes it; a row already there
-    (same file:line and defect) is not written twice. A file from before contract 23 is widened by the plain-words
-    column when a row is added to it. Returns (added, open)."""
-    judge = os.path.join(runs, story_id, "judge.md")
-    if not os.path.isfile(judge):
-        return 0, 0
-    new = confirmed_defects(read_text(judge))
-    path = findings_path(story_path)
-    have = findings_rows(path)
-    known = {(r[2], r[4]) for r in have}
-    added = [r for r in new if (r[1], r[3]) not in known]
-    if not have and not added:
-        return 0, 0
-    append_findings(story_path, story_id, front, added)
-    return len(added), sum(1 for r in findings_rows(path) if r[6] == "open")
-
-
-def append_findings(story_path, story_id, front, added):
-    """Append rows — (perspective, file:line, severity, defect, fix, plain) — to the story's findings.md, `open`,
-    numbered after the rows there; the file is made with its header when it is not there yet."""
-    head = (f"---\nstory: {story_id}\nepic: {front.get('epic', '')}\n---\n\n# Findings — {story_id}\n\n"
-            "The judge's confirmed defects that did not block the story, kept for a later story or a person's look. "
-            "The pipeline appends; a person sets `Status` to `done` or `wont-fix`.\n\n")
-    append_finding_rows(findings_path(story_path), head, added)
-
-
-def append_finding_rows(path, head, added):
-    """Append rows — (perspective, file:line, severity, defect, fix, plain) — to a findings file, `open`, numbered
-    after the rows there; the file is made with `head` (its front matter, title and sentence) and the table's header
-    when it is not there yet."""
-    if not added:
-        return
-    have = findings_rows(path)
-    if not os.path.isfile(path):
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        text = head + f"{FINDINGS_HEADER}\n|---|---|---|---|---|---|---|---|\n"
-    else:
-        text = widen_findings(read_text(path).rstrip("\n")) + "\n"
-    n = len(have)
-    for perspective, where, severity, defect, fix, plain in added:
-        n += 1
-        text += f"| {n} | {perspective} | {where} | {severity} | {plain} | {defect} | {fix} | open |\n"
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(text)
-
-
-def project_findings_path(name):
-    """`<product>/findings/<name>.md` — a project finding file by its name."""
-    return os.path.join(findings_dir(), f"{name}.md")
-
-
-def project_findings_head(name):
-    """The front matter, title and sentence a project finding file is made with."""
-    return (f"---\nfindings: {name}\n---\n\n# Findings — {name}\n\n"
-            "Findings that belong to no one story, kept for a task or a person's look. The pipeline appends; a person "
-            f"sets `Status` to `done` or `wont-fix`, a task closes a row with `closes: {name}#<n>`.\n\n")
-
-
-def finding_records(epics):
-    """Every open finding: a dict with `owner` (the story's id, or a project finding file's name), `row` (`<owner>#<n>`,
-    what a task's `closes:` names), `path` (its file), `project` (a project finding, under `<product>/findings/`),
-    `where`, `severity`, `defect`, `perspective`, `fix`, `plain` — the stories' first, then the project's."""
-    found = []
-    def add(owner, path, project):
-        for n, perspective, where, severity, defect, fix, status, plain in findings_rows(path):
-            if status == "open":
-                found.append(dict(owner=owner, row=f"{owner}#{n}", path=path, project=project, where=where,
-                                  severity=severity, defect=defect, perspective=perspective, fix=fix, plain=plain))
-    for story_path in story_files(epics):
-        add(story_id_of(story_path), findings_path(story_path), False)
-    folder = os.path.join(os.path.dirname(epics.rstrip("/")) or ".", PROJECT_FINDINGS)
-    if os.path.isdir(folder):
-        for name in sorted(os.listdir(folder)):
-            if name.endswith(".md"):
-                add(name[:-3], os.path.join(folder, name), True)
-    return found
-
-
-def open_findings(epics):
-    """Every open finding under the epics and in the project's findings: (owner, file:line, severity, defect,
-    perspective, fix, plain) — `plain` empty for a row from before contract 23."""
-    return [(r["owner"], r["where"], r["severity"], r["defect"], r["perspective"], r["fix"], r["plain"])
-            for r in finding_records(epics)]
-
-
-def story_id_of(path, front=None):
-    """A story's id: its front matter's `id:`, else its folder's name."""
-    if front is None:
-        try:
-            front, _ = read_front_matter(path)
-        except GateError:
-            front = {}
-    return str(front.get("id", "")).strip() or os.path.basename(story_folder(path))
-
-
-def find_story(epics, story_id):
-    """The one story file with this id. Two files with one id are refused, naming both: the schedule keys
-    stories by id, the run folder and the decisions are named after it, so a second one would silently
-    replace the first."""
-    wanted, matches = story_id.lower(), []
-    for path in story_files(epics):
-        if os.path.basename(story_folder(path)).lower() == wanted or story_id_of(path).lower() == wanted:
-            matches.append(path)
-    if len(matches) > 1:
-        raise GateError(f"story id {story_id!r} is not unique — {' and '.join(shown(m) for m in matches)}; "
-                        f"an id names one story in the whole project, give one of them another")
-    if matches:
-        return matches[0]
-    flat = [p for p in flat_stories(epics) if os.path.splitext(os.path.basename(p))[0].lower() == wanted]
-    if flat:
-        raise GateError(f"{shown(flat[0])} is in the older flat layout — a story is a folder now, "
-                        f"{epics}/<epic>/<story>/{STORY_FILE}; `factory.sh update` moves it")
-    raise GateError(
-        f"no story {story_id!r} under {epics}/ — a story is a folder {epics}/<epic>/<story>/ with its "
-        f"{STORY_FILE} (front matter, see the backlog contract)"
-    )
-
-
-def duplicate_ids(epics):
-    """{id: [paths]} for every id more than one story carries."""
-    by_id = {}
-    for path in story_files(epics):
-        by_id.setdefault(story_id_of(path).lower(), []).append(path)
-    return {sid: paths for sid, paths in by_id.items() if len(paths) > 1}
-
-
-def is_delivered(front):
-    """Delivered is one state, written into the story: `status: delivered` — by the gate that delivered it, or by
-    a person who delivered it by hand (`delivered_by: hand:<who>`). Built or adopted makes no difference once
-    delivered (one end state)."""
-    return str(front.get("status", "")).strip().lower() == "delivered"
-
-
-def delivered_on(front):
-    value = front.get("delivered", "")
-    return value.strip() if isinstance(value, str) else ""
-
-
-def delivered_by(front):
-    """Who claims the delivery: `gate`, `hand:<who>`, or "" for a story delivered before the line existed."""
-    value = front.get("delivered_by", "")
-    return value.strip() if isinstance(value, str) else ""
-
-
-#: The lines of a story's front matter the gate and a hand delivery write; a story's digest leaves them out, so
-#: a delivery does not read as "the story changed after it was planned".
-STATE_KEYS = ("status", "delivered", "delivered_by")
-
-
-#: When a story or an epic was written: `created:` in its front matter, a UTC time (`2026-10-18T09:12:00Z`; a date
-#: alone reads as well). The backlog skill writes it with the item, `update` fills it once from git for an item
-#: without it (the commit that added the file). The views order the backlog by it, newest first; an item without it
-#: comes last. It says nothing about what the story asks for, so the story's digest leaves it out too.
-
-
-#: The front-matter lines a story's digest leaves out: its state and when it was written.
-DIGEST_LEFT_OUT = STATE_KEYS + (CREATED_KEY,)
-
-
-def story_digest(path):
-    """The story as planned: SHA-256 over the file with LF line endings and the state lines (`STATE_KEYS`) and its
-    `created:` line left out — the front matter read by lines (`split_front`), an indented line never a key."""
-    text = read_text(path).replace("\r\n", "\n")
-    split = split_front(text)
-    if split is not None:
-        front_lines, body = split
-        kept = [line for line in front_lines
-                if line.startswith((" ", "\t", "-")) or line.split(":", 1)[0].strip().lower() not in DIGEST_LEFT_OUT]
-        text = "---\n" + "".join(line + "\n" for line in kept) + "---" + body
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def legacy_story_digest(path):
-    """`story_digest` as contract 17 had it — split on the first `---` anywhere. Read by the migration alone, to
-    take a planned story's mark anew with today's function."""
-    text = read_text(path)
-    parts = text.split("---", 2)
-    if len(parts) >= 3:
-        kept = [line for line in parts[1].splitlines()
-                if line.split(":", 1)[0].strip().lower() not in ("status", "delivered") or line.startswith((" ", "\t", "-"))]
-        text = "---" + "\n".join(kept) + "\n---" + parts[2]
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # --- what is the person's: the story and the answers (WP-94) --------------------------------------------------
@@ -411,19 +87,6 @@ OWNED_DIGEST = ".owned-digest"
 
 #: The hand-overs' digests at a window's start: what the window left as it was.
 WINDOW_DIGEST = ".window-digest"
-
-
-def story_kind(front):
-    """`story` (the default), `journey` — a guard over an epic's delivered stories, run as plan, test,
-    judge and document, green at its test gate —, `task` — a change no actor sees, run as plan, build, tidy, judge
-    and document on the existing suite — or `adopt`: a story with `status: adopted` describes behaviour the project
-    already has; plan, test and judge map it to green tests, the adopt gate delivers it."""
-    named = str(front.get("kind", "")).strip().lower()
-    if named in ("journey", "task"):
-        return named
-    if str(front.get("status", "")).strip().lower() == "adopted":
-        return "adopt"
-    return "story"
 
 
 def layout_hint(cwd, profile):
@@ -457,53 +120,6 @@ def layout_hint(cwd, profile):
     if not old:
         return None
     return "the layout changed — `factory.sh update` migrates it (once, and says what it moved): " + "; ".join(old)
-
-
-def epic_graph(epics):
-    """{epic id: [epic ids it depends on]} for every epic under the epics — `depends_on:` in its `epic.md`, the
-    same two shapes a story's takes. An epic's id is its `id:`, else its folder's name."""
-    graph = {}
-    if not os.path.isdir(epics):
-        return graph
-    for name in sorted(os.listdir(epics)):
-        path = os.path.join(epics, name, EPIC_FILE)
-        if not os.path.isfile(path):
-            continue
-        try:
-            front, _body = read_front_matter(path)
-        except GateError:
-            front = {}
-        graph[str(front.get("id") or name).strip()] = depends_on(front)
-    return graph
-
-
-def epic_order(graph):
-    """The epics in dependency order, ties by id; the ones on a cycle last, in id order. An epic named as a
-    dependency that does not exist is no node and does not hold anything up here — the check names it."""
-    order, placed, remaining = [], set(), sorted(graph)
-    while remaining:
-        free = [e for e in remaining if all(d in placed or d not in graph for d in graph[e])]
-        if not free:
-            break
-        order.append(free[0])
-        placed.add(free[0])
-        remaining.remove(free[0])
-    return order + remaining, set(remaining)
-
-
-def epic_dependency_problem(epics, epic):
-    """Why an epic's `depends_on:` cannot hold — an unknown epic, itself, a cycle — or None."""
-    graph = epic_graph(epics)
-    deps = graph.get(epic, [])
-    unknown = [d for d in deps if d not in graph]
-    if unknown:
-        return f"epic {epic!r} depends on {', '.join(repr(d) for d in unknown)}, which is no epic under {epics}/"
-    if epic in deps:
-        return f"epic {epic!r} depends on itself"
-    _order, cycle = epic_order(graph)
-    if epic in cycle:
-        return f"epic {epic!r} is on a dependency cycle between epics: {', '.join(sorted(cycle))}"
-    return None
 
 
 class Stage(typing.NamedTuple):
@@ -593,19 +209,6 @@ TASK_ORDER = stage_order("task")                             # nothing new to te
 def order_for(kind):
     """The run order of a story of this kind, from the stage table."""
     return {"journey": JOURNEY_ORDER, "adopt": ADOPT_ORDER, "task": TASK_ORDER}.get(kind, STAGE_ORDER)
-
-
-def depends_on(front):
-    """`depends_on: []`, `depends_on: [A, B]` or a `- A` list, as a list of ids."""
-    value = front.get("depends_on") or []
-    if isinstance(value, str):
-        value = [part for part in value.strip().strip("[]").split(",")]
-    return [str(part).strip().strip("'\"") for part in value if str(part).strip().strip("'\"")]
-
-
-def file_digest(path):
-    with open(path, "rb") as handle:
-        return hashlib.sha256(handle.read()).hexdigest()
 
 
 #: Checks about how a hand-over is written rather than whether the work is right: a refusal by one of them costs a

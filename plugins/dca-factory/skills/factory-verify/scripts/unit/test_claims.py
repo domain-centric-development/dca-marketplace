@@ -14,6 +14,8 @@ from unittest import mock
 from support import contract, state, write
 from dca_factory import cli, gate, runner
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
 PROFILE = "claim_remote: origin\n"
 EPIC = "---\nintent: x\ngoal: y\nmetric: ThingShown\ndomain_contact: z\n---\n# sample\n"
@@ -108,9 +110,9 @@ class Claim(unittest.TestCase):
             code, said = quiet(cli.claim_command, b, runs_b, epics_b, "S-01")
             self.assertEqual(code, 3, said)
             self.assertIn("claimed by ana@example.com", said)
-            front = contract.read_front_matter(contract.find_story(epics_b, "S-01"))[0]
+            front = markdown.read_front_matter(layout.find_story(epics_b, "S-01"))[0]
             self.assertEqual(state.story_state(b, runs_b, "S-01", front)[0], "claimed")
-            other = contract.read_front_matter(contract.find_story(epics_b, "S-02"))[0]
+            other = markdown.read_front_matter(layout.find_story(epics_b, "S-02"))[0]
             self.assertEqual(state.story_state(b, runs_b, "S-02", other)[0], "ready")
 
     def test_the_race_between_fetch_and_push_is_lost_by_the_second_push(self):
@@ -205,10 +207,10 @@ class Published(unittest.TestCase):
                   "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n| shows-s-01 | a.ThingTest#shows |\n")
             self.assertEqual(quiet(runner.integrate_prepare, a, runs, epics, "S-01")[0], 0)
             result = gate.Result()
-            front = contract.read_front_matter(contract.find_story(epics, "S-01"))[0]
+            front = markdown.read_front_matter(layout.find_story(epics, "S-01"))[0]
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: a}):
                 os.chdir(wt)
-                gate.publish_story(result, wt, contract.find_story(epics, "S-01"), "S-01", front, runs, CONFIG)
+                gate.publish_story(result, wt, layout.find_story(epics, "S-01"), "S-01", front, runs, CONFIG)
                 os.chdir(a)
             self.assertFalse([e for e in result.entries if e[0] == "fail"], result.entries)
             published = sh(a, "show", "origin/story/S-01:product/epics/sample/S-01/story.md")
@@ -241,10 +243,10 @@ class Published(unittest.TestCase):
                                                     f"| shows-{story.lower()} | a.ThingTest#{story.replace('-', '')} |\n")
         quiet(runner.integrate_prepare, clone, runs, epics, story)
         result = gate.Result()
-        front = contract.read_front_matter(contract.find_story(epics, story))[0]
+        front = markdown.read_front_matter(layout.find_story(epics, story))[0]
         with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: clone}):
             os.chdir(wt)
-            gate.publish_story(result, wt, contract.find_story(epics, story), story, front, runs, CONFIG)
+            gate.publish_story(result, wt, layout.find_story(epics, story), story, front, runs, CONFIG)
             os.chdir(clone)
         self.assertFalse([e for e in result.entries if e[0] == "fail"], result.entries)
         return runs, epics, wt
@@ -302,8 +304,8 @@ class Published(unittest.TestCase):
             quiet(runner.worktree_prepare, b, runs_b, "S-02")
             wt = state.worktree_of("S-02", b)
             quiet(runner.integrate_prepare, b, runs_b, epics_b, "S-02")
-            story_path = contract.find_story(epics_b, "S-02")
-            front, body = contract.read_front_matter(story_path)
+            story_path = layout.find_story(epics_b, "S-02")
+            front, body = markdown.read_front_matter(story_path)
             result = gate.Result()
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: b}):
                 with gate.places_in(wt):

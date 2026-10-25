@@ -8,6 +8,9 @@ import unittest
 from support import contract, project, state, write
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
+from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
+from dca_factory.delivery.adapter.outgoing.files import owned_files as owned
 
 SECOND = "2026-10-10T10:00:00Z"
 STAGES = ("plan", "test", "build", "tidy", "judge", "document")
@@ -109,7 +112,7 @@ class PassOrder(unittest.TestCase):
         with project() as p:
             path = p.story("S-1")
             full_pass(p, "S-1")
-            state.record_owned(p.runs, "S-1", path)
+            owned.record_owned(p.runs, "S-1", path)
             p.handover("S-1", "build")                                         # the same bytes again
             self.assertEqual(state.owned_end(p.runs, "S-1", "build", ran="0"), 0)
             last = journal.journal_events(p.runs, "S-1")[-1]
@@ -120,7 +123,7 @@ class PassOrder(unittest.TestCase):
         with project() as p:
             path = p.story("S-1")
             full_pass(p, "S-1")
-            state.record_owned(p.runs, "S-1", path)
+            owned.record_owned(p.runs, "S-1", path)
             state.owned_end(p.runs, "S-1", "build", ran="1")
             self.assertEqual(p.state_of("S-1")[1], "build")
 
@@ -128,7 +131,7 @@ class PassOrder(unittest.TestCase):
         with project() as p:
             path = p.story("S-1")
             full_pass(p, "S-1", upto="tidy")
-            state.record_owned(p.runs, "S-1", path)
+            owned.record_owned(p.runs, "S-1", path)
             state.owned_end(p.runs, "S-1", "builder", ran="0")
             same = [e["name"] for e in journal.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
             self.assertEqual(same, ["plan.md", "tests.md", "build.md", "tidy.md"])
@@ -138,7 +141,7 @@ class PassOrder(unittest.TestCase):
             path = p.story("S-1")
             full_pass(p, "S-1", upto="tidy")
             journal.journal_append(p.runs, "S-1", "stage-start", "builder", "stages=test,build,tidy", at=SECOND)
-            state.record_owned(p.runs, "S-1", path)
+            owned.record_owned(p.runs, "S-1", path)
             p.handover("S-1", "build", "# build, again\n")
             state.owned_end(p.runs, "S-1", "builder", ran="0")
             same = [e["name"] for e in journal.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
@@ -150,7 +153,7 @@ class PassOrder(unittest.TestCase):
             full_pass(p, "S-1", upto="tidy")
             p.write_and_journal("S-1", "plan", "# plan, again\n", at=SECOND)
             journal.journal_append(p.runs, "S-1", "stage-start", "builder", "stages=test,build,tidy", at=SECOND)
-            state.record_owned(p.runs, "S-1", path)
+            owned.record_owned(p.runs, "S-1", path)
             p.handover("S-1", "build", "# build, again\n")
             state.owned_end(p.runs, "S-1", "builder", ran="0")
             same = [e["name"] for e in journal.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
@@ -187,7 +190,7 @@ class Refusals(unittest.TestCase):
             path = p.story("S-1")
             self.refuse_plan(p, path)
             self.assertEqual(p.state_of("S-1")[:2], ("stopped", None))
-            p.story("S-1", text=contract.read_text(path) + "- shows-more: more\n")
+            p.story("S-1", text=markdown.read_text(path) + "- shows-more: more\n")
             self.assertEqual(p.state_of("S-1"),
                              ("in-progress", "plan", "the story changed after the plan gate refused it — planned again"))
 
@@ -195,15 +198,15 @@ class Refusals(unittest.TestCase):
         with project() as p:
             path = p.story("S-1")
             self.refuse_plan(p, path)
-            write(os.path.join(p.epics, "sample", contract.EPIC_FILE),
-                  contract.read_text(os.path.join(p.epics, "sample", contract.EPIC_FILE)) + "More.\n")
+            write(os.path.join(p.epics, "sample", layout.EPIC_FILE),
+                  markdown.read_text(os.path.join(p.epics, "sample", layout.EPIC_FILE)) + "More.\n")
             self.assertEqual(p.state_of("S-1")[:2], ("in-progress", "plan"))
 
     def test_a_plan_refusal_without_a_digest_stays_stopped(self):
         with project() as p:
             path = p.story("S-1")
             self.refuse_plan(p, path, digest=False)
-            p.story("S-1", text=contract.read_text(path) + "- shows-more: more\n")
+            p.story("S-1", text=markdown.read_text(path) + "- shows-more: more\n")
             self.assertEqual(p.state_of("S-1")[:2], ("stopped", None))
 
     def test_a_stage_gate_refusal_runs_the_stage_again(self):
@@ -247,17 +250,17 @@ class Decisions(unittest.TestCase):
             write(os.path.join(store, "01.md"), self.RECORD.replace("stage: plan", "stage: test")
                   + "\n## Answer\nanswer: the first\nby: a person\nat: now\n")
             full_pass(p, "S-1", upto="build")
-            p.evidence("S-1", ".story-digest", contract.story_digest(path) + "\n")
+            p.evidence("S-1", ".story-digest", layout.story_digest(path) + "\n")
             self.assertEqual(p.state_of("S-1")[:2], ("resumable", "test"))
-            p.story("S-1", text=contract.read_text(path) + "- answered: another use case (S-2-02)\n")
+            p.story("S-1", text=markdown.read_text(path) + "- answered: another use case (S-2-02)\n")
             self.assertEqual(p.state_of("S-1"),
                              ("in-progress", "plan", "the story changed after it was planned — every stage runs again"))
 
     def test_the_story_changed_under_a_stage_stops_it(self):
         with project() as p:
             path = p.story("S-1")
-            state.record_owned(p.runs, "S-1", path)
-            p.story("S-1", text=contract.read_text(path) + "edited\n")
+            owned.record_owned(p.runs, "S-1", path)
+            p.story("S-1", text=markdown.read_text(path) + "edited\n")
             with contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(state.owned_end(p.runs, "S-1", "plan"), 7)
             self.assertEqual(p.state_of("S-1")[:2], ("stopped", None))

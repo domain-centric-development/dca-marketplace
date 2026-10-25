@@ -28,6 +28,7 @@ from dca_factory.infrastructure import delivery as wiring
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
 
 def validate(cwd, kind, fields, words):
@@ -295,7 +296,7 @@ class Settled(unittest.TestCase):
                          ACCEPTANCE.format(rid="US-1-accept-1", story="US-1"))
             self.assertEqual(settle(p.root, p.runs, self.request("accept", story="US-1"), "2026-10-25T08:00:00Z"),
                              ["US-1-accept-1"])
-            self.assertEqual(records.decision_state(contract.read_text(path))[1],
+            self.assertEqual(records.decision_state(markdown.read_text(path))[1],
                              {"answer": "accepted", "by": "Ann", "at": "2026-10-25T08:00:00Z"})
 
     def test_an_option_is_written_for_a_requests_question_and_a_stages_question_goes_to_the_skill(self):
@@ -307,11 +308,11 @@ class Settled(unittest.TestCase):
             at = "2026-10-25T08:00:00Z"
             self.assertEqual(settle(p.root, p.runs, self.request("answer", record="US-1-01", option="b"), at),
                              ["US-1-01"])
-            self.assertEqual(records.decision_state(contract.read_text(asked))[1]["answer"], "b")
+            self.assertEqual(records.decision_state(markdown.read_text(asked))[1]["answer"], "b")
             self.assertIsNone(settle(p.root, p.runs, self.request("answer", record="US-1-02", option="a"), at))
             self.assertIsNone(settle(p.root, p.runs, dict(self.request("answer", record="US-1-01", option="a"),
                                                                    words="neither"), at))
-            self.assertEqual(records.decision_state(contract.read_text(staged))[0], "open")
+            self.assertEqual(records.decision_state(markdown.read_text(staged))[0], "open")
 
     def test_a_draft_its_question_pass_ran_on_is_released_and_one_changed_since_is_the_skills(self):
         with project() as p:
@@ -323,7 +324,7 @@ class Settled(unittest.TestCase):
             at = "2026-10-25T08:00:00Z"
             self.assertIsNone(settle(p.root, p.runs, self.request("release", story="US-2"), at))
             self.assertEqual(settle(p.root, p.runs, self.request("release", story="US-1"), at), ["US-1"])
-            front, body = contract.read_front_matter(path)
+            front, body = markdown.read_front_matter(path)
             self.assertEqual(front["status"], "approved")
             self.assertIn("- answered: the story is released for building (request R-9, Ann, 2026-10-25T08:00:00Z).", body)
 
@@ -333,7 +334,7 @@ class Settled(unittest.TestCase):
             mark_questioned(p.root, p.runs, [os.path.relpath(path, p.root)], "R-1")
             write(os.path.join(p.epics, "sample", "US-1", "decisions", "01.md"), record("US-1", "US-1-01", stage="backlog"))
             self.assertIsNone(settle(p.root, p.runs, self.request("release", story="US-1"), "2026-10-25T08:00:00Z"))
-            self.assertEqual(contract.read_front_matter(path)[0]["status"], "draft")
+            self.assertEqual(markdown.read_front_matter(path)[0]["status"], "draft")
 
 
 class RequestUsage(unittest.TestCase):

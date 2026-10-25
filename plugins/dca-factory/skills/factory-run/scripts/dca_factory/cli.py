@@ -55,14 +55,15 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, delivered_by, delivered_on, EPIC_FILE, epic_folder, find_story, FINDINGS_FILE, FORM_CHECKS,
-    GateError, is_delivered, layout_hint, open_findings, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, story_files,
-    story_id_of, story_kind, VERSION)
+    ALL_KINDS, CONTRACT, FORM_CHECKS, GateError, layout_hint, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, VERSION)
+from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE, open_findings
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_dir, evidence_rel, factory_home, location, place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git
-from .contract import DECISIONS_DIR
+from .delivery.adapter.outgoing.files.story_layout import (
+    DECISIONS_DIR, delivered_by, delivered_on, EPIC_FILE, epic_folder, find_story, is_delivered, story_files,
+    story_id_of, story_kind)
 from .delivery.application.shared.front import CREATED_KEY, created_of
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of, sections_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
@@ -73,9 +74,9 @@ from .state import (
     accepted_criteria, back_in, cached_claims, claim, claim_config_here, claim_path, claim_story, fetch_remote,
     free_id, freeze_all, gate_passed_on_record, has_worktree, ignore_journals_in, journal_denials, journal_parts,
     journal_usage, listener_line, mark_listening, mark_stage, mark_window, OWNED_CHANGED, owned_end,
-    parts_incomplete, PUBLISHED, read_claim, record_owned, refresh_claims, release, release_claim, remote_main,
-    run_stories, schedule, schedule_data, session_owner, stage_rank, start, story_state, story_title, worktree_of,
-    write_story_fields)
+    parts_incomplete, PUBLISHED, read_claim, refresh_claims, release, release_claim, remote_main, run_stories,
+    schedule, schedule_data, session_owner, stage_rank, start, story_state, story_title, worktree_of)
+from .delivery.adapter.outgoing.files.owned_files import record_owned, write_story_fields
 from .delivery.adapter.outgoing.files.journal_files import journal_append, journal_events, journal_writer
 from .delivery.adapter.outgoing.files.decision_record_files import acceptance_records, accepted
 from .delivery.application.shared.front import is_acceptance

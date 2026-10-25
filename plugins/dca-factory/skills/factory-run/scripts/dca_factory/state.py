@@ -17,19 +17,24 @@ import sys
 import time
 from datetime import datetime, timezone
 from .contract import (
-    confirmed_defects, CRITERION, DECISIONS_DIR, delivered_by, delivered_on, depends_on, duplicate_ids, EPIC_FILE,
-    epic_folder, epic_graph, epic_order, file_digest, find_story, GateError, is_delivered, layout_hint, MAX_ROUNDS,
-    order_for, OWNED_DIGEST, POST_GATED, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, STATE_KEYS, story_digest,
-    STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST)
+    CRITERION, GateError, layout_hint, MAX_ROUNDS, order_for, OWNED_DIGEST, POST_GATED, SHARED_WINDOWS, STAGE_FILES,
+    STAGE_ORDER, WINDOW_DIGEST)
+from .delivery.adapter.outgoing.files.findings_files import confirmed_defects
+from .delivery.adapter.outgoing.files.epic_files import epic_graph, epic_order
+from .delivery.adapter.outgoing.files.story_layout import (
+    DECISIONS_DIR, delivered_by, delivered_on, depends_on, duplicate_ids, EPIC_FILE, epic_folder, file_digest,
+    is_delivered, story_digest, STORY_FILE, story_files, story_folder, story_id_of,
+    story_kind)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_dir, evidence_rel, factory_home, in_worktree, JOURNAL, place, PLACES_REL, PROFILE_FILE,
     read_profile, resolve_profile, shown, STORY_BRANCH, worktree_owned)
 from .delivery.adapter.outgoing.git.repository import git, git_blob
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    acceptance_records, acceptance_state, accepted, answer_section, decisions_store,
-    needs_human_ids, NOTHING, records_of, resume_stage)
+    acceptance_records, acceptance_state, accepted, needs_human_ids, NOTHING, records_of, resume_stage)
 from .delivery.adapter.outgoing.files.journal_files import (
     append_event, journal_append, journal_events, journal_path, journal_writer, read_events)
+from .delivery.adapter.outgoing.files.owned_files import (
+    observe_writes, owned_parts, owned_story_path, rebaseline_owned)
 from .delivery.application.shared.front import is_acceptance
 from .delivery.domain.model.story_state import RUNNABLE
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
@@ -75,72 +80,7 @@ def uncommitted_story(home, path, ref="HEAD", changed=True):
     return ""
 
 
-def write_story_fields(path, **fields):
-    """Set — or with None remove — flat keys in a story's front matter; everything else stays byte for byte.
-    The gate's one write into a story: `status: delivered`, `delivered:` and `delivered_by:` at the gate that
-    delivers it, and their removal when a reopen or `--prove` takes the story back. The front matter is read by
-    lines (`split_front`): a `---` inside a line is text."""
-    if not os.path.isfile(path):
-        raise GateError(f"{path}: file not found")
-    with open(path, encoding="utf-8", newline="") as handle:      # the line endings as they are
-        text = handle.read()
-    if split_front(text) is None:
-        raise GateError(f"{path}: no front matter to write into")
-    newline = "\r\n" if "\r\n" in text.split("\n", 1)[0] + "\n" else "\n"
-    raw = text.splitlines(keepends=True)
-    close = next(i for i in range(1, len(raw)) if raw[i].rstrip("\r\n") == "---")
-    lines = [line.rstrip("\r\n") for line in raw[1:close]]
-    is_key = lambda line, key: not line.startswith((" ", "\t", "-")) and line.split(":", 1)[0].strip().lower() == key
-    for key, value in fields.items():
-        index = next((i for i, line in enumerate(lines) if is_key(line, key)), None)
-        if value is None:
-            if index is not None:
-                del lines[index]
-        elif index is not None:
-            lines[index] = f"{key}: {value}"
-        else:
-            # A state line goes after the last state line there is (`status`, `delivered`, …), else at the end.
-            after = max((i for i, line in enumerate(lines) if any(is_key(line, k) for k in STATE_KEYS)), default=None)
-            lines.insert(after + 1 if after is not None else len(lines), f"{key}: {value}")
-    with open(path, "w", encoding="utf-8", newline="") as handle:
-        handle.write(raw[0] + "".join(line + newline for line in lines) + raw[close] + "".join(raw[close + 1:]))
-    rebaseline_owned(path)
-
-
 OWNED_CHANGED = ".owned-changed"
-
-
-def owned_parts(story_path):
-    """{part: sha256} of what is the person's: the story file, and the `## Answer` of every record that has one."""
-    parts = {STORY_FILE: file_digest(story_path)} if story_path and os.path.isfile(story_path) else {}
-    store = decisions_store(story_path) if story_path else None
-    for name in sorted(os.listdir(store)) if store and os.path.isdir(store) else []:
-        if name.endswith(".md"):
-            answer = answer_section(read_text(os.path.join(store, name)))
-            if answer is not None:
-                parts[f"{DECISIONS_DIR}/{name} ## Answer"] = hashlib.sha256(answer.encode("utf-8")).hexdigest()
-    return parts
-
-
-def owned_story_path(story_id):
-    try:
-        return find_story(place("epics"), story_id)
-    except GateError:
-        return None
-
-
-def record_owned(runs, story_id, story_path=None):
-    """At a window's start: the digest of the person's parts, one line per part."""
-    story_path = story_path or owned_story_path(story_id)
-    folder = evidence_dir(runs, story_id)
-    os.makedirs(folder, exist_ok=True)
-    observe_writes(runs, story_id)               # what a person or an earlier window left, before this one writes
-    run_folder = os.path.join(runs, story_id)
-    with open(os.path.join(folder, WINDOW_DIGEST), "w", encoding="utf-8") as handle:
-        handle.writelines(f"{file_digest(os.path.join(run_folder, name))}  {name}\n" for name in STAGE_FILES.values()
-                          if os.path.isfile(os.path.join(run_folder, name)))
-    with open(os.path.join(folder, OWNED_DIGEST), "w", encoding="utf-8") as handle:
-        handle.writelines(f"{digest}  {part}\n" for part, digest in sorted(owned_parts(story_path).items()))
 
 
 def owned_changes(runs, story_id, story_path=None):
@@ -188,14 +128,6 @@ def write_answered(story_path, runs, rid, sentence):
         write_mark(runs, story_id, STORY_DIGEST, story_digest(story_path))
     rebaseline_owned(story_path)
     return True
-
-
-def rebaseline_owned(story_path):
-    """The gate wrote the story itself (delivered, reopened): an open window's digest takes the new state."""
-    story_id = story_id_of(story_path)
-    runs = place("runs")
-    if os.path.isfile(os.path.join(evidence_dir(runs, story_id), OWNED_DIGEST)):
-        record_owned(runs, story_id, story_path)
 
 
 def mark_window_files(runs, story_id, window):
@@ -605,23 +537,6 @@ def accepted_criteria(body):
         if match:
             found.append((match.group(1), ACCEPTED_TESTS.sub("", match.group(2)).strip()))
     return found
-
-
-def observe_writes(runs, story_id):
-    """Journal a `wrote <file> sha=<digest>` for every hand-over whose content changed since the journal last saw it,
-    in the stages' order — at a window's start and end and at every gate run, so the journal alone tells which file
-    was written after which. A file gone since is journaled `sha=gone`."""
-    folder = os.path.join(runs, story_id)
-    seen = {}
-    for event in journal_events(runs, story_id):
-        if event["kind"] == "wrote":
-            seen[event["name"]] = event["fields"].get("sha")
-    for stage in STAGE_ORDER:
-        name = STAGE_FILES[stage]
-        path = os.path.join(folder, name)
-        digest = file_digest(path) if os.path.isfile(path) else "gone"
-        if seen.get(name, "gone") != digest:
-            journal_append(runs, story_id, "wrote", name, f"sha={digest}")
 
 
 def pass_marks(runs, story_id):

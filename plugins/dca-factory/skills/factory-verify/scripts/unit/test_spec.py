@@ -10,6 +10,7 @@ from support import contract, project, write
 from dca_factory import cli, runner
 from dca_factory.spec import api as spec
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
 STORY = """---
 id: S-1
@@ -43,7 +44,7 @@ def read(path):
 class Entries(unittest.TestCase):
 
     def test_both_forms_are_read_with_their_rule_and_without_the_happy_path_mark(self):
-        found = spec.story_entries(contract.split_front(STORY)[1])
+        found = spec.story_entries(markdown.split_front(STORY)[1])
         self.assertEqual([(e["key"], e["rule"], e["form"]) for e in found],
                          [("shows-the-name", "A widget is shown with its name", "scenario"),
                           ("lists-in-order", "A widget is shown with its name", "line")])
@@ -52,7 +53,7 @@ class Entries(unittest.TestCase):
                                              "  the first one at the top."])
 
     def test_the_spec_file_reads_back_as_written(self):
-        entries = spec.story_entries(contract.split_front(STORY)[1])
+        entries = spec.story_entries(markdown.split_front(STORY)[1])
         entries[0]["tests"] = ["a.WidgetTest#showsTheName"]
         text = spec.render_spec([], entries, "Widgets")
         preamble, back = spec.parse_spec(text)
