@@ -113,7 +113,9 @@ archived is history, not inventory
   one's journal with its digest, left by the wish or the next-stories request that wrote it) and that no open record
   holds — `status: approved` and an `answered:` line, as the skill writes them. Everything else — words, a stage's
   question (it may change a test or the designed map), a draft changed since its pass — goes to the skill. The
-  journal says `tool=factory` and `by=factory`.
+  journal says `tool=factory` and `by=factory`. A press in a session's view takes the same shortcut without writing
+  a request: `factory.sh request <kind> … --settle` settles and commits at once under the checkout's commit lock,
+  factory up or not, and exits 3 with nothing written where the skill must work it — the view then sends the skill.
 - Each request is one process (`factory-cli.py --work-request <id>`) in the main checkout, under the runner's
   claim, with the tool `tool.request.<kind>`, `tool.request` or `tool:` names, `model.<tool>.request` and
   `effort.<tool>.request` as for a stage. Its shell is a stage's, with `factory-cli.py` narrowed to the flags the

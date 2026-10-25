@@ -87,7 +87,8 @@ from . import service
 from .runner import (
     contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
     command_heads, first_word, model_for, needs_human_lines, open_decision_files, PASS_MARKS, plan_skeleton, run_main,
-    stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove, request_main)
+    stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove, request_main,
+    settle_command)
 
 
 def resolve(epics, argument):
@@ -3164,7 +3165,8 @@ def placed(profile_arg=None):
 
 def request_command(argv):
     """`factory.sh request <kind> [<target>…] [<words>…] [--story|--epic|--record|--topic|--proposal <id>]
-    [--option <key>] [--from <stage>] [--by <who>]` — `-` as the words reads them from stdin."""
+    [--option <key>] [--from <stage>] [--by <who>] [--settle]` — `-` as the words reads them from stdin. `--settle`
+    settles it at once where the factory can, writing no request (exit 3 where a skill must work it)."""
     parser = argparse.ArgumentParser(prog="factory.sh request",
                                      description="write one request the factory works before its next story")
     parser.add_argument("kind", choices=[k.name for k in KINDS])
@@ -3177,6 +3179,8 @@ def request_command(argv):
     parser.add_argument("--option", help="an answer's option key, a correction's reason code")
     parser.add_argument("--from", dest="start", help="with run: the stage the story starts at")
     parser.add_argument("--by", help="who asks (default: git user.name)")
+    parser.add_argument("--settle", action="store_true",
+                        help="settle it now where the factory can, no request written; exit 3 where a skill must work it")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     args = parser.parse_args(argv)
     placed()
@@ -3197,6 +3201,8 @@ def request_command(argv):
     words = " ".join(rest)
     if words == "-":
         words = sys.stdin.read()
+    if args.settle:
+        return settle_press(kind.name, fields, words, args.by or "", args.format)
     try:
         request_id, path = write_request(os.getcwd(), kind.name, fields, words, args.by or "")
     except Duplicate as same:
@@ -3210,6 +3216,27 @@ def request_command(argv):
     else:
         print(f"factory: request {request_id} written ({shown(path)}) — the factory works it before its next story")
     return 0
+
+
+def settle_press(kind_name, fields, words, by, fmt):
+    """`request … --settle`: settled now, or exit 3 — the caller then runs the action's skill, as before."""
+    try:
+        # the runner's own lines go to stderr where the caller reads one JSON object from stdout
+        with contextlib.redirect_stdout(sys.stderr) if fmt == "json" else contextlib.nullcontext():
+            code, request_id, commit = settle_command(os.getcwd(), kind_name, fields, words, by)
+    except Duplicate as same:
+        print(json.dumps(dict(id=same.existing, settled=False, queued=True)) if fmt == "json" else f"factory: {same}")
+        return 0
+    except (RequestError, GateError) as error:
+        print(f"factory: request refused — {error}", file=sys.stderr)
+        return 2
+    if fmt == "json":
+        print(json.dumps(dict(id=request_id, settled=code == 0, commit=commit)))
+    elif code == 0:
+        print(f"factory: {kind_name} settled by the factory, no tool" + (f" — committed {commit}" if commit else ""))
+    elif code == 3:
+        print(f"factory: {kind_name} needs its skill — nothing written")
+    return code
 
 
 def requests_command(argv):

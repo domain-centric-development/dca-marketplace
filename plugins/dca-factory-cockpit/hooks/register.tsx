@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
-import type { Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, Glance, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
+import type { Action, Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, Glance, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, outcomeCell, type Cell } from './components'
 import { appendLines, clock, createLatch, day, exitWord, factoryNote, gateBy, glanceId, glanceText, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, seenOf, signalFields, sinceSeen, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish, type Seen } from './parse'
 
@@ -366,6 +366,44 @@ function send($: EngineInterface, text: string): void {
   })()
 }
 
+// A press: where the factory can settle it at once (an acceptance, an option for a request's own question, the release of
+// a questioned draft), `factory.sh request … --settle` writes and commits it without a model; where it cannot (exit 3),
+// the skill goes into this session as before. The factory decides which — the view only hands over its action.
+function press($: EngineInterface, action: Action): void {
+  const request = action.request
+  if (!request || request.open === 'words') {
+    send($, action.skill)
+    return
+  }
+  const fields = Object.entries(request.fields ?? {}).flatMap(([key, value]) => (value ? [`--${key}`, value] : []))
+  void (async () => {
+    const root = await $.session.root()
+    const ran = await $.process
+      .run(['bash', `${root}/${RUNNER}`, 'request', request.kind, ...fields, ...(request.words ? [request.words] : []), '--settle', '--format', 'json'], {
+        cwd: root,
+        timeoutMs: 60_000,
+      })
+      .catch(() => null)
+    if (ran?.exitCode === 3 || !ran) {
+      send($, action.skill)
+      return
+    }
+    if (ran.exitCode === 0) {
+      const done = (() => {
+        try {
+          return JSON.parse(ran.stdout) as { settled?: boolean; commit?: string }
+        } catch {
+          return {}
+        }
+      })()
+      $.ui.toast(done.settled ? `factory: ${action.label ?? request.kind} — done${done.commit ? `, committed ${done.commit}` : ''}` : `factory: ${ran.stdout.trim()}`)
+    } else {
+      $.ui.toast(`factory: ${(ran.stderr || ran.stdout).trim().split('\n').pop() ?? `exit ${ran.exitCode}`}`)
+    }
+    void refresh($, true)
+  })()
+}
+
 // A description file opened for the person's own hand, in the editor the system names for it.
 async function editFile($: EngineInterface, path: string): Promise<void> {
   const opened = await $.process.run(['open', path]).catch(() => null)
@@ -530,7 +568,7 @@ export const register: Register = on => {
   // unchanged factory costs nothing and the prompt cache holds. A slash command carries none.
   on('prompt.submit', async ($, e, next) => {
     const now = await read($, cockpit)
-    if (!now || e.command || e.isMeta) return next(e)
+    if (!now || e.text.trimStart().startsWith('/')) return next(e)
     const note = factoryNote(now.status)
     if (note === (await read($, told))) return next(e)
     await update($, told, () => note)
@@ -762,7 +800,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   })
   // An unguarded epic's own act, beside its hint — the epic's name opens the epic, this writes its journey.
   const guardCell = (hint: FactoryStatus['journeys'][number]): Cell =>
-    ui.offerCell(`guard-${hint.epic}`, hint.action, () => send($, hint.action.skill), { byClaude: true }, hint.action.label || 'add guard')
+    ui.offerCell(`guard-${hint.epic}`, hint.action, () => press($, hint.action), { byClaude: true }, hint.action.label || 'add guard')
   // An open record's answers as the factory offers them (`actions`): one press per option, the recommended one first in
   // weight, and a field for the person's own words; an acceptance is accepted or corrected. Each press hands its
   // command to /factory-decisions, which writes the answer into the record — the view composes none and writes nothing.
@@ -780,7 +818,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     if (record.kind === 'acceptance') {
       return [
         ui.section('Your answer'),
-        ui.actions(pressed.map(action => ui.offer(`accept-${record.id}`, action, () => send($, action.skill), { isPrimary: action.primary, byClaude: true }))),
+        ui.actions(pressed.map(action => ui.offer(`accept-${record.id}`, action, () => press($, action), { isPrimary: action.primary, byClaude: true }))),
         ...own,
       ]
     }
@@ -792,7 +830,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             ui.table(
               [COL.act, { name: 'option', width: 40, isWide: true }],
               pressed.map(action => [
-                ui.offerCell(`option-${record.id}-${action.label}`, action, () => send($, action.skill), { isPrimary: action.primary, byClaude: true },
+                ui.offerCell(`option-${record.id}-${action.label}`, action, () => press($, action), { isPrimary: action.primary, byClaude: true },
                   action.primary ? `${action.label} · recommended` : action.label ?? ''),
                 { text: action.text, color: C.muted },
               ]),
@@ -1247,7 +1285,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           { text: proposal.goal, color: C.muted },
           proposal.epic
             ? ui.open(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic, back: open }))
-            : (proposal.actions ?? []).map(action => ui.offerCell(`release-${topic.topic}-${proposal.id}`, action, () => send($, action.skill), { isPrimary: action.primary, byClaude: true }))[0] ?? { text: '' },
+            : (proposal.actions ?? []).map(action => ui.offerCell(`release-${topic.topic}-${proposal.id}`, action, () => press($, action), { isPrimary: action.primary, byClaude: true }))[0] ?? { text: '' },
         ]),
         'No proposed work in the report yet.',
       )}
@@ -1257,7 +1295,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           topic.description_changes.map((change, index) => [
             { text: change.target, color: C.wait },
             { text: change.change, color: C.muted },
-            (change.actions ?? []).map(action => ui.offerCell(`describe-${topic.topic}-${index}`, action, () => send($, action.skill), { byClaude: true }))[0] ?? { text: '' },
+            (change.actions ?? []).map(action => ui.offerCell(`describe-${topic.topic}-${index}`, action, () => press($, action), { byClaude: true }))[0] ?? { text: '' },
           ]),
         )}
     </Box>
@@ -1284,7 +1322,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           [
             // the epic's own presses, as the factory offers them: its next stories, its drafts released, its journey
             ...(epic.actions ?? []).map(action =>
-              ui.offer(`${EPIC_PRESS[action.request?.kind ?? ''] ?? action.request?.kind}-${epic.epic}`, action, () => send($, action.skill), { isPrimary: action.primary, byClaude: true })),
+              ui.offer(`${EPIC_PRESS[action.request?.kind ?? ''] ?? action.request?.kind}-${epic.epic}`, action, () => press($, action), { isPrimary: action.primary, byClaude: true })),
             Boolean(path) && ui.button(`open-epic-${epic.epic}`, 'open epic.md', () => void openFile($, `${now.root}/${path}`, `${epic.epic} / epic.md`, open), { hotkey: 'o' }),
           ],
           [
@@ -1501,7 +1539,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                   },
                   // the file's name and line; the path stands in the findings file the story's name opens
                   { text: finding.where.split('/').pop() ?? finding.where, color: C.muted },
-                  ui.offerCell(`finding-story-${index}`, finding.action, () => send($, finding.action.skill), { byClaude: true }, 'to backlog'),
+                  ui.offerCell(`finding-story-${index}`, finding.action, () => press($, finding.action), { byClaude: true }, 'to backlog'),
                 ]),
               ),
             ]

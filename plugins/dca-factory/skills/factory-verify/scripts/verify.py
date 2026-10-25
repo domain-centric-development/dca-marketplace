@@ -10463,6 +10463,38 @@ def verify_requests(runner, verbose=False):
               "REQ request:answer" not in lines(log) and not requests_of(root) and "answer: b" in committed
               and "by: Ann" in committed and "by=factory" in ended, f"{lines(log)} {requests_of(root)} {ended[-300:]!r}")
 
+    # the same shortcut on a press in a session's view: `request … --settle` settles at once, or writes nothing
+    for root in throwaway():
+        log, env = fixture(root, status="draft")
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md",
+                   DECISION.replace("stage: plan\n", "stage: backlog\nrequest: 20261024T100000000Z-wish\n"))
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "record"], cwd=root,
+                       capture_output=True)
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout
+        code, out = run_runner(runner, root, "request", "answer", "STORY-1-01", "b", "--by", "Ann", "--settle",
+                               "--format", "json", env=env)
+        committed = subprocess.run(["git", "show", "HEAD:product/epics/sample/STORY-1/decisions/01.md"], cwd=root,
+                                   capture_output=True, text=True).stdout
+        moved = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout != head
+        check("requests: --settle settles an option for a request's own question at once — committed, no request "
+              "written, no tool",
+              code == 0 and '"settled": true' in out and moved and "answer: b" in committed and "by: Ann" in committed
+              and not requests_of(root) and not lines(log), f"exit {code}; {out.strip()[-200:]} {requests_of(root)}")
+    for root in throwaway():
+        log, env = fixture(root, status="draft")
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md", DECISION)
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "record"], cwd=root,
+                       capture_output=True)
+        code, out = run_runner(runner, root, "request", "answer", "STORY-1-01", "b", "--settle", "--format", "json",
+                               env=env)
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", "product"], cwd=root, capture_output=True,
+                               text=True).stdout
+        check("requests: --settle on a stage's question writes nothing and exits 3 — its skill must work it",
+              code == 3 and '"settled": false' in out and not dirty and not requests_of(root),
+              f"exit {code}; {out.strip()[-200:]} {dirty!r} {requests_of(root)}")
+
     # a tool that fails: failed, not taken again; retry and drop
     for root in throwaway():
         log, env = fixture(root, status="draft", FIXTURE_REQ_FAIL="1")

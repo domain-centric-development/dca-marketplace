@@ -92,8 +92,11 @@ A button or field marked ✦ hands the work to Claude in this session: a skill r
 others only show or open something, or start the worker (▶).
 
 
-A press sends the matching slash command into the session through `$.command.run`, as if the person typed it
-(Claude Code refuses a plugin prompt that begins with `/`); a press on Run starts `factory.sh run` with
+A press first asks the factory to settle it at once (`factory.sh request <kind> … --settle`): an acceptance, an
+option for a request's own question and the release of a questioned draft are written and committed without a model.
+Where the factory says the skill must work it (exit 3), the press sends the matching slash command into the session
+through `$.command.run`, as if the person typed it (Claude Code refuses a plugin prompt that begins with `/`); a
+press on Run starts `factory.sh run` with
 `FACTORY_ALLOW_NESTED=1`, the runner's own switch for a deliberate start inside a session. Ending the session or
 reloading the plugin stops that worker; the runner gives its claim on the workspace back. One worker at a time:
 a second press while one starts does nothing.

@@ -46,7 +46,7 @@ from .tools import (
 from .requests import (
     find_request, KIND, list_requests, mark_questioned, out_path, prune_outputs, read_request, request_records,
     REQUEST_JOURNAL, requests_dir, RequestError, project_record_path, settle, stamp_utc, stories_of, target_text,
-    update_request, validate, written_keys)
+    update_request, validate, written_keys, checked_request, default_by)
 from .requests import journal as request_journal
 
 
@@ -1432,6 +1432,7 @@ class Run:
         self.add_dirs, self.read_dirs = [], []
         self.tool_in_flight = ""
         self.request_in_flight = ""         # the request whose process runs: a window it opens is its to measure
+        self.settled_commit = ""            # the commit of the last request the factory settled itself
         self.pipeline_sha = os.environ.get("FACTORY_RUNNER_PIPELINE_SHA", "")
         self.claimed = False
         self.lock_held = False
@@ -3447,24 +3448,29 @@ class Run:
 
     def settle_request(self, request, kind):
         """A request the factory settles itself (`settle`): written and committed at once, no tool started. None where
-        a skill must work it."""
+        a skill must work it. A request settled on a press (`settle_command`) has no file: nothing to keep or remove."""
         before = self.dirty_files()
         try:
             wrote = settle(self.home, place("runs"), request, utc())
         except (RequestError, GateError) as error:
-            update_request(request, state="failed", error=f"no longer holds — {error}")
+            if request.get("path"):
+                update_request(request, state="failed", error=f"no longer holds — {error}")
             request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", str(error))
+            err(f"factory: request {request['id']} no longer holds — {error}")
             return 1
         if wrote is None:
             return None
         request_journal("request-start", kind.name, request["id"], target_text(request),
                         f"by={request.get('by', '')}", "tool=factory", "attempt=1")
-        with contextlib.suppress(OSError):
-            os.remove(request["path"])
+        if request.get("path"):
+            with contextlib.suppress(OSError):
+                os.remove(request["path"])
         commit = self.commit_request(request, before)
+        self.settled_commit = commit
         if self.commit_refusal:
-            update_request(request, restore=True, state="failed", worker=None, error=self.commit_refusal,
-                           wrote=self.request_wrote(request, before), worked=utc())
+            if request.get("path"):
+                update_request(request, restore=True, state="failed", worker=None, error=self.commit_refusal,
+                               wrote=self.request_wrote(request, before), worked=utc())
             request_journal("request-end", kind.name, request["id"], "exit=0", "state=failed", "commit=refused")
             return 1
         request_journal("request-end", kind.name, request["id"], "exit=0", "state=done", "by=factory",
@@ -3980,6 +3986,20 @@ def request_main(argv):
     finally:
         if not worker:
             run.release()
+
+
+def settle_command(cwd, kind_name, fields, words, by):
+    """`factory.sh request <kind> … --settle`: the request settled at once where the factory can (`settle`), no file
+    written and no tool started — a press in a session's view takes the same shortcut a page's request takes.
+    Exit 0 settled (and committed), 3 where a skill must work it (nothing written), 2 refused, 1 failed. The settle
+    and its commit hold the checkout's commit lock, as the factory's own requests do, whether a factory is up or not."""
+    set_places(read_profile(resolve_profile(os.environ.get("FACTORY_PROFILE") or None, cwd)))
+    fields, words = checked_request(cwd, kind_name, fields, words)
+    run = Run(run_options([]), os.path.realpath(cwd), place("runs"), worker=os.environ.get("FACTORY_RUNNER_WORKER"))
+    request = dict(fields, id=f"{utc('%Y%m%dT%H%M%S')}-{kind_name}", kind=kind_name, words=words,
+                   by=" ".join((by or default_by(cwd)).split()), path=None)
+    code = run.settle_request(request, KIND[kind_name])
+    return (3 if code is None else code), request["id"], run.settled_commit
 
 
 def tools_ready(run, tool):

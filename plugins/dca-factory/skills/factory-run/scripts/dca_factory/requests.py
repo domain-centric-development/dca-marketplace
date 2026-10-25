@@ -426,10 +426,10 @@ def same_request(one, other):
     return all(str(one.get(k) or "") == str(other.get(k) or "") for k in keys) and one["words"] == other["words"]
 
 
-def write_request(cwd, kind_name, fields=None, words="", by=""):
-    """Write one request after `validate`: (id, path). Duplicate when the same request waits already."""
+def checked_request(cwd, kind_name, fields=None, words=""):
+    """`validate`, and against the requests that wait: (fields, words). Duplicate when the same request waits already;
+    refused where a record has another answer queued."""
     fields, words = validate(cwd, kind_name, fields, words)
-    folder = requests_dir()
     wanted = dict(fields, kind=kind_name, words=words)
     for existing in list_requests():
         if existing["state"] not in ("queued", "running", "waiting"):
@@ -441,6 +441,13 @@ def write_request(cwd, kind_name, fields=None, words="", by=""):
                 and wanted.get("record") and existing.get("record") == wanted.get("record"):
             raise RequestError(f"{wanted['record']} has an answer queued already ({existing['id']}) — take that back "
                                "first (`factory.sh requests --drop`) to answer otherwise")
+    return fields, words
+
+
+def write_request(cwd, kind_name, fields=None, words="", by=""):
+    """Write one request after `checked_request`: (id, path)."""
+    fields, words = checked_request(cwd, kind_name, fields, words)
+    folder = requests_dir()
     # to the millisecond, and later than every request there: the files sort in the order they were written,
     # whatever their kind — two in one millisecond included
     millis = int(time.time() * 1000)

@@ -2,9 +2,9 @@ import { expect, test } from 'claude-code/testing'
 
 
 // an action as the factory writes it into its JSON (dca-factory 0.93.0)
-const act = (label: string, skill: string, kind: string, more: { text?: string; primary?: boolean; open?: '' | 'words' } = {}) => ({
+const act = (label: string, skill: string, kind: string, more: { text?: string; primary?: boolean; open?: '' | 'words'; fields?: Record<string, string> } = {}) => ({
   text: more.text ?? '', skill, shell: '', label, primary: more.primary ?? false,
-  request: { kind, fields: {}, words: '', open: more.open ?? '' },
+  request: { kind, fields: more.fields ?? {}, words: '', open: more.open ?? '' },
 })
 
 const ROOT = '/p'
@@ -30,7 +30,7 @@ const STATUS = {
   epics: [
     { epic: 'books', rows: [ROW], delivered: 0, total: 1, tokens: 1_500_000, seconds: 120, title: 'Keep track of books', goal: 'one list', metric: 'BookAdded', discovery: '' },
     { epic: 'reminders', rows: [], delivered: 0, total: 0, tokens: 0, seconds: 0, title: 'Remind the reader', goal: '', metric: 'ReminderSent', discovery: 'product/discovery/forgetting/discovery.md',
-      actions: [act('suggest stories', '/factory-backlog stories reminders', 'stories', { primary: true })] },
+      actions: [act('suggest stories', '/factory-backlog stories reminders', 'stories', { primary: true, fields: { epic: 'reminders' } })] },
   ],
   description: [
     { part: 'product', path: 'product/overview.md', present: true, missing: ['How it works'], empty: [], sections: ['What and for whom', 'For whom'], required: [] },
@@ -66,7 +66,7 @@ const DECISIONS = {
                 act('b', '/factory-decisions add-book add-book-01: answer b', 'answer', { text: 'the shelf, read or not', primary: true }),
                 act('answer', '/factory-decisions add-book add-book-01: answer', 'answer', { open: 'words' })] },
     { id: 'add-book-accept-1', state: 'open', kind: 'acceptance', story: 'add-book', stage: 'document', asked: '2026-09-23T18:00:00Z', text: 'Accept add-book?', path: 'product/epics/books/add-book/decisions/accept-1.md',
-      actions: [act('accept', '/factory-decisions add-book add-book-accept-1: answer accepted', 'accept', { primary: true }),
+      actions: [act('accept', '/factory-decisions add-book add-book-accept-1: answer accepted', 'accept', { primary: true, fields: { story: 'add-book' } }),
                 act('correct', '/factory-decisions add-book add-book-accept-1: answer correction:', 'correct', { open: 'words' })] },
   ],
 }
@@ -127,11 +127,19 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`the cockpit walks the tabs, opens a story, sends commands and runs the worker (${surface})`, async ($, on) => {
     const sent: string[] = []
     const spawned: string[][] = []
+    const settles: string[][] = []
     on('session.root', async () => ({ value: ROOT }))
     on('fs.exists', async () => ({ value: true }))
     on('fs.list', async (_, e) => ({ value: (DIRS[e.path] ?? []).map(entry => ({ ...entry, size: 0, mtimeMs: 0, isLink: false })) }))
     on('fs.read', async (_, e) => (FILES[e.path] === undefined ? { deny: 'missing' } : { value: FILES[e.path] as string }))
     on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
+      // a press asks the factory to settle it first: an acceptance it settles (exit 0), the others need their skill
+      // (exit 3), so the command follows
+      if (e.argv.includes('--settle')) {
+        settles.push([...e.argv.slice(2)])
+        const settled = e.argv.includes('accept')
+        return { value: { exitCode: settled ? 0 : 3, stdout: JSON.stringify({ settled, commit: settled ? 'abc1234' : '' }), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+      }
       const out = e.argv.includes('spec-delta') ? SPEC_DELTA : e.argv.includes('--story') ? STORY : e.argv.includes('decisions') ? DECISIONS : e.argv.includes('--list') ? DISCOVERY : STATUS
       return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     })
@@ -173,6 +181,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.press({ key: 'epic-reminders' })
     expect(await pane.find({ text: /no stories yet/ })).toBeDefined()
     await pane.press({ key: 'stories-reminders' })
+    expect(settles.at(-1)).toEqual(['request', 'stories', '--epic', 'reminders', '--settle', '--format', 'json'])
     expect(sent.at(-1)).toBe('/dca-factory:factory-backlog stories reminders')
 
     // discover: the report's proposals, one already an epic, one released by a press
@@ -238,6 +247,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /what the spec will say/i })).toBeDefined()
     expect(await pane.find({ text: /new feature shelf/ })).toBeDefined()
     expect(await pane.find({ text: /the shelf replaces the list/ })).toBeDefined()
+    // accepting is settled by the factory at once: no command goes into the session
+    const before = sent.length
+    await pane.press({ key: 'accept-add-book-accept-1' })
+    expect(settles.at(-1)).toEqual(['request', 'accept', '--story', 'add-book', '--settle', '--format', 'json'])
+    expect(sent.length).toBe(before)
     await pane.press({ key: 'back' })
 
     // a story: pipeline and history from the journal
