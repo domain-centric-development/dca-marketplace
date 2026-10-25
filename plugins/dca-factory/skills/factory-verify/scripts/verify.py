@@ -2218,11 +2218,12 @@ def verify_runner(runner, verbose=False):
               f"table {names}; --all {every!r}; --stages {order!r}; shell {shell[:200]!r}")
         patched = os.path.join(root, "patched-plugin")
         shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), patched, symlinks=True)
-        patched_gate = os.path.join(patched, "factory-run", "scripts", PACKAGE, "contract.py")
+        patched_gate = os.path.join(patched, "factory-run", "scripts", PACKAGE, "delivery", "domain", "model", "stage.py")
         body = open(patched_gate, encoding="utf-8").read()
-        row = '    Stage("adopt", kinds=("adopt",), in_order=False),\n'
+        row = '    stage(StageName("adopt"), kinds=frozenset((StoryKind.ADOPT,)), without=(Trait.IN_ORDER,)),\n'
         with open(patched_gate, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(body.replace(row, '    Stage("probe", "probe.md", gated=False),\n' + row, 1))
+            handle.write(body.replace(row, '    stage(StageName("probe"), HandOver("probe.md"), without=(Trait.GATED,)),\n'
+                                      + row, 1))
         patched_runner = os.path.join(patched, "factory-run", "scripts", "factory.sh")
         code_bad, refused = run_runner(patched_runner, root, "run", "--story", "STORY-1", "--from", "nonsense",
                                        "--tool", "claude", "--dry-run")

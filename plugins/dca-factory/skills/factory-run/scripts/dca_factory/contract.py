@@ -15,6 +15,7 @@ import typing
 from .sharedkernel.adapter.outgoing.markdown.front_matter import (
     MarkdownError as GateError, read_front_matter, read_text, split_front)
 from .delivery.application.shared.front import CREATED_KEY
+from .delivery.domain.model.stage import PIPELINE, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait
 
 
 EPIC_FIELDS = ("intent", "goal", "metric", "domain_contact")
@@ -786,8 +787,7 @@ def epic_dependency_problem(epics, epic):
 
 
 class Stage(typing.NamedTuple):
-    """One row of the pipeline. Everything the gate, the cli and the runner know about a stage is here; nothing
-    outside the table names a stage to decide on it."""
+    """One row of the pipeline, flat — the domain's `Stage` in words and flags."""
     name: str
     file: str = ""            #: the hand-over it writes under the run folder ("" — a gate-only step)
     window: str = ""          #: the shared process that may carry it ("builder", "verifier"), "" — its own
@@ -805,33 +805,28 @@ class Stage(typing.NamedTuple):
     in_order: bool = True     #: a step of the story's run order (adopt and integrate are steps after it)
 
 
-ALL_KINDS = ("story", "journey", "adopt", "task")
+#: The kinds of story, in the domain's order.
+ALL_KINDS = tuple(kind.value for kind in StoryKind)
 
 
 #: A task (WP-106) changes nothing an actor sees — a refactoring, a finding without a change of behaviour, a dependency
 #: or build change: no criterion, so no test stage; the existing suite, run whole, is its evidence.
-TESTED_KINDS = ("story", "journey", "adopt")
+TESTED_KINDS = tuple(kind.value for kind in StoryKind if kind in DOMAIN_TESTED_KINDS)
 
 
-STAGES = (
-    Stage("plan", "plan.md", window="builder", kinds=ALL_KINDS),
-    Stage("test", "tests.md", window="builder", lists=True, kinds=TESTED_KINDS, post_gated=True, tested=True, red=True,
-          sizes=("plan.md", "tests.md")),
-    Stage("build", "build.md", window="builder", lists=True, guarded=True, post_gated=True, commands=("architecture", "format"),
-          tested=True, suite=True, sizes=("build.md",), kinds=("story", "task")),
-    # The tidy stage changes no behaviour, so its whole claim is that everything still holds: the same commands
-    # as the build stage, run again after the refactor.
-    Stage("tidy", "tidy.md", window="builder", lists=True, guarded=True, post_gated=True, commands=("architecture", "format"),
-          tested=True, suite=True, sizes=("tidy.md",), kinds=("story", "task")),
-    Stage("judge", "judge.md", window="verifier", kinds=ALL_KINDS, gated=False),
-    Stage("document", "document.md", window="verifier", kinds=("story", "journey", "task"), post_gated=True,
-          commands=("architecture",), sizes=("judge.md", "document.md")),
-    # Nothing built: the adopt gate delivers an adopted story after its judge.
-    Stage("adopt", kinds=("adopt",), in_order=False),
-    # The story on the main line as it is now: everything the tidy gate holds the story to, once more.
-    Stage("integrate", "integrate.md", kinds=ALL_KINDS, commands=("architecture", "format"), tested=True,
-          suite=True, in_order=False),
-)
+def flat_row(row):
+    """A stage of the domain's pipeline as the gate, the runner and the cli read it: words and flags."""
+    return Stage(row.name.value, row.hand_over.value if row.hand_over else "",
+                 row.window.value if row.window else "", tuple(k.value for k in StoryKind if k in row.kinds),
+                 Trait.GATED in row.traits, Trait.POST_GATED in row.traits, tuple(c.value for c in row.commands),
+                 Trait.TESTED in row.traits, Trait.RED in row.traits, tuple(h.value for h in row.sizes),
+                 Trait.LISTS in row.traits, Trait.GUARDED in row.traits, Trait.SUITE in row.traits,
+                 Trait.IN_ORDER in row.traits)
+
+
+#: The pipeline, one row per stage — the domain's (`delivery/domain/model/stage.py`), in the words the modules not
+#: yet moved read.
+STAGES = tuple(flat_row(row) for row in PIPELINE)
 
 
 STAGE = {stage.name: stage for stage in STAGES}
