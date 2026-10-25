@@ -6,6 +6,7 @@ import unittest
 
 from support import contract, project, write
 from dca_factory import gate
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 STORY = """---
 id: S-1
@@ -56,7 +57,7 @@ TESTS = """# Tests
 class MovedTests(unittest.TestCase):
 
     def setup(self, p, moved):
-        contract.set_places({})
+        profiles.set_places({})
         path = p.story("S-1", text=STORY)
         write(os.path.join(p.root, "product", "spec", "widgets", "scenarios.md"), SPEC)
         write(os.path.join(p.root, "src", "test", "java", "com", "example", "WidgetPortTest.java"),

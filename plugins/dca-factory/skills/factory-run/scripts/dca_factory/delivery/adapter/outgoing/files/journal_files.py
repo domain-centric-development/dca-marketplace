@@ -9,7 +9,8 @@ import os
 import time
 import typing
 
-from .....contract import evidence_dir, find_story, JOURNAL, place, story_digest, story_id_of
+from .....contract import find_story, story_digest, story_id_of
+from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, JOURNAL, place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from ....application.shared.story_journal import Window
 from ....application.shared.story_repository import StoryNotFound

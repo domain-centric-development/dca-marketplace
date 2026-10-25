@@ -6,7 +6,7 @@ import contextlib
 import os
 import typing
 
-from .....contract import place, shown
+from .....sharedkernel.adapter.outgoing.profile.profile_files import place, shown
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from ....application.shared.front import created_of
 from ....domain.model.epic import EpicId

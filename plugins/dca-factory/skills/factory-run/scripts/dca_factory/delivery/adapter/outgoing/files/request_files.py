@@ -10,7 +10,7 @@ import re
 import time
 import typing
 
-from .....contract import place, shown
+from .....sharedkernel.adapter.outgoing.profile.profile_files import place, shown
 from ..git.repository import git
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import (
     MarkdownError, read_front_matter, read_text, split_front)

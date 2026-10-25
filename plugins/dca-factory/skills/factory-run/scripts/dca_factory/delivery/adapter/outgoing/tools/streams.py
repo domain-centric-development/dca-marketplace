@@ -11,7 +11,8 @@ import re
 import typing
 from datetime import datetime, timezone
 
-from .....contract import read_profile, resolve_profile, SHARED_WINDOWS, STAGE_ORDER
+from .....contract import SHARED_WINDOWS, STAGE_ORDER
+from .....sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError as GateError, read_text
 from ....application.status.texts import parse_time
 from ....domain.model.usage import USAGE_FIELDS

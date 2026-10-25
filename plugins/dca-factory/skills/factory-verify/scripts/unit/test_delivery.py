@@ -9,6 +9,7 @@ import unittest
 from support import contract, project, state, write
 from dca_factory import cli, runner
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 DELIVERED = """---
 id: {id}
@@ -70,7 +71,7 @@ class Prove(unittest.TestCase):
             self.assertEqual(front["status"], "adopted")
             self.assertNotIn("delivered", front)
             self.assertNotIn("delivered_by", front)
-            claim = read(os.path.join(contract.evidence_dir(p.runs, "S-1"), cli.CLAIM_FILE))
+            claim = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), cli.CLAIM_FILE))
             self.assertIn("delivered_by=hand:ana", claim)
             self.assertEqual(contract.story_kind(front), "adopt")
 
@@ -119,7 +120,7 @@ class Migration(unittest.TestCase):
             path = p.story("S-1", text="---\nid: S-1\nstatus: approved\ntitle: a --- b\n---\n# S\n")
             p.evidence("S-1", ".story-digest", contract.legacy_story_digest(path) + "\n")
             runner.migrate_delivery(p.root, p.epics, p.runs, lambda _: None)
-            mark = read(os.path.join(contract.evidence_dir(p.runs, "S-1"), ".story-digest"))
+            mark = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), ".story-digest"))
             self.assertEqual(mark.strip(), contract.story_digest(path))
 
 
@@ -170,7 +171,7 @@ class Answered(unittest.TestCase):
             self.assertFalse(state.write_answered(path, p.runs, "S-1-01", "The first way."))
             text = read(path)
             self.assertIn("- open: which way?\n- answered: The first way. (S-1-01)\n\n## Out of scope", text)
-            mark = read(os.path.join(contract.evidence_dir(p.runs, "S-1"), ".story-digest"))
+            mark = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), ".story-digest"))
             self.assertEqual(mark.strip(), contract.story_digest(path))
 
     def test_a_story_without_assumptions_gains_the_section(self):

@@ -6,6 +6,7 @@ import unittest
 
 from support import contract, project, write
 from dca_factory import runner
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 
 def read(path):
@@ -17,10 +18,10 @@ class Layer(unittest.TestCase):
 
     def test_the_factory_profile_wins_and_the_method_fills_what_it_leaves_open(self):
         with project() as p:
-            write(os.path.join(p.root, contract.METHOD_PROFILE), "root: docs/\noverview: docs/what.md\n"
+            write(os.path.join(p.root, profiles.METHOD_PROFILE), "root: docs/\noverview: docs/what.md\n"
                                                                  "verify_command: make arch\n")
-            profile = write(os.path.join(p.root, contract.PROFILE_FILE), "test: make test\ntech: here/tech.md\n")
-            read_back = contract.read_profile(profile)
+            profile = write(os.path.join(p.root, profiles.PROFILE_FILE), "test: make test\ntech: here/tech.md\n")
+            read_back = profiles.read_profile(profile)
             self.assertEqual(read_back["architecture"], "make arch")
             self.assertEqual(read_back["product"], "docs/what.md")
             self.assertEqual(read_back["tech"], "here/tech.md")
@@ -28,8 +29,8 @@ class Layer(unittest.TestCase):
 
     def test_without_a_method_profile_nothing_changes(self):
         with project() as p:
-            profile = write(os.path.join(p.root, contract.PROFILE_FILE), "test: make test\n")
-            self.assertEqual(contract.read_profile(profile), {"test": "make test"})
+            profile = write(os.path.join(p.root, profiles.PROFILE_FILE), "test: make test\n")
+            self.assertEqual(profiles.read_profile(profile), {"test": "make test"})
 
 
 class Migration(unittest.TestCase):
@@ -43,7 +44,7 @@ class Migration(unittest.TestCase):
                   "- product: `docs/what.md` — x\n- tech: `product/tech.md` — y\n<!-- dca-describe: end -->\n")
             said = []
             runner.migrate_configuration(p.root, said.append)
-            method = contract.read_flat(os.path.join(p.root, contract.METHOD_PROFILE))
+            method = profiles.read_flat(os.path.join(p.root, profiles.METHOD_PROFILE))
             self.assertEqual(method, {"catalog_path": "x", "verify_command": "make arch", "overview": "docs/what.md"})
             self.assertFalse(os.path.exists(os.path.join(p.root, ".agents", "dca", "conventions.md")))
             self.assertIn("- configuration: `dca.profile.yaml`", read(os.path.join(p.root, "AGENTS.md")))
@@ -57,7 +58,7 @@ class Migration(unittest.TestCase):
                   "<!-- dca-describe: start -->\n- product: `product/overview.md` — x\n- tech: `project/tech.md` — y\n"
                   "<!-- dca-describe: end -->\n")
             runner.migrate_configuration(p.root, lambda _: None)
-            self.assertFalse(os.path.exists(os.path.join(p.root, contract.METHOD_PROFILE)))
+            self.assertFalse(os.path.exists(os.path.join(p.root, profiles.METHOD_PROFILE)))
 
 
 if __name__ == "__main__":

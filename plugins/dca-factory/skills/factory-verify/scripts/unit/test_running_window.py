@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from support import contract, project, write
 from dca_factory import cli
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 
 def stream(*stages):
@@ -25,7 +26,7 @@ class RunningWindow(unittest.TestCase):
 
     def test_the_tokens_of_the_parts_and_with_live_the_time_since_it_began(self):
         with project() as p:
-            write(os.path.join(contract.evidence_dir(p.runs, "S-1"), "builder.100000.out"), stream("plan", "test"))
+            write(os.path.join(profiles.evidence_dir(p.runs, "S-1"), "builder.100000.out"), stream("plan", "test"))
             since = datetime.now(timezone.utc) - timedelta(minutes=3)
             entry = self.entry()
             cli.window_running(entry, p.runs, "S-1", dict(stage="builder", since=since), live=True)
@@ -38,7 +39,7 @@ class RunningWindow(unittest.TestCase):
 
     def test_a_window_whose_usage_is_in_or_a_stage_of_its_own_stays_as_the_journal_says(self):
         with project() as p:
-            write(os.path.join(contract.evidence_dir(p.runs, "S-1"), "builder.100000.out"), stream("plan"))
+            write(os.path.join(profiles.evidence_dir(p.runs, "S-1"), "builder.100000.out"), stream("plan"))
             measured = self.entry(measured=1)
             cli.window_running(measured, p.runs, "S-1", dict(stage="builder", since=None), live=True)
             alone = self.entry()

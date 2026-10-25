@@ -17,12 +17,13 @@ import sys
 import time
 from datetime import datetime, timezone
 from .contract import (
-    confirmed_defects, CRITERION, DECISIONS_DIR, DEFAULTS, delivered_by, delivered_on, depends_on, duplicate_ids,
-    EPIC_FILE, epic_folder, epic_graph, epic_order, evidence_dir, evidence_rel, factory_home, file_digest,
-    find_story, GateError, in_worktree, is_delivered, JOURNAL, layout_hint, MAX_ROUNDS, order_for, OWNED_DIGEST,
-    place, PLACES_REL, POST_GATED, PROFILE_FILE, read_profile, resolve_profile, SHARED_WINDOWS, shown, STAGE_FILES,
-    STAGE_ORDER, STATE_KEYS, STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of,
-    story_kind, WINDOW_DIGEST, worktree_owned)
+    confirmed_defects, CRITERION, DECISIONS_DIR, delivered_by, delivered_on, depends_on, duplicate_ids, EPIC_FILE,
+    epic_folder, epic_graph, epic_order, file_digest, find_story, GateError, is_delivered, layout_hint, MAX_ROUNDS,
+    order_for, OWNED_DIGEST, POST_GATED, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, STATE_KEYS, story_digest,
+    STORY_FILE, story_files, story_folder, story_id_of, story_kind, WINDOW_DIGEST)
+from .sharedkernel.adapter.outgoing.profile.profile_files import (
+    DEFAULTS, evidence_dir, evidence_rel, factory_home, in_worktree, JOURNAL, place, PLACES_REL, PROFILE_FILE,
+    read_profile, resolve_profile, shown, STORY_BRANCH, worktree_owned)
 from .delivery.adapter.outgoing.git.repository import git, git_blob
 from .delivery.adapter.outgoing.files.decision_record_files import (
     acceptance_records, acceptance_state, accepted, answer_section, decisions_store,

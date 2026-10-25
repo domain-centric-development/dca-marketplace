@@ -55,10 +55,12 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, DEFAULTS, delivered_by, delivered_on, EPIC_FILE, epic_folder, evidence_dir, evidence_rel,
-    factory_home, find_story, FINDINGS_FILE, FORM_CHECKS, GateError, is_delivered, layout_hint, location,
-    open_findings, place, PROFILE_FILE, read_profile, resolve_profile, set_places, SHARED_WINDOWS, shown,
-    STAGE_FILES, STAGE_ORDER, story_files, story_id_of, story_kind, VERSION)
+    ALL_KINDS, CONTRACT, delivered_by, delivered_on, EPIC_FILE, epic_folder, find_story, FINDINGS_FILE, FORM_CHECKS,
+    GateError, is_delivered, layout_hint, open_findings, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, story_files,
+    story_id_of, story_kind, VERSION)
+from .sharedkernel.adapter.outgoing.profile.profile_files import (
+    DEFAULTS, evidence_dir, evidence_rel, factory_home, location, place, PROFILE_FILE, read_profile,
+    resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git
 from .contract import DECISIONS_DIR
 from .delivery.application.shared.front import CREATED_KEY, created_of

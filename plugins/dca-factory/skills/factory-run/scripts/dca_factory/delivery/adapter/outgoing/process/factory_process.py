@@ -21,7 +21,7 @@ import sys
 import time
 import typing
 
-from .....contract import place
+from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .....gate import posix_shell
 from ....application.status.texts import parse_time
 from .....state import claim_path, dead_runner, read_claim, running_stages, stale_after

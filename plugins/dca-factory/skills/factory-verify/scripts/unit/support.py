@@ -17,6 +17,7 @@ os.environ.pop("FACTORY_HOME", None)                        # a case runs in no 
 
 from dca_factory import contract, state  # noqa: E402,F401
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 
 STORY = """---
@@ -78,7 +79,7 @@ class Project:
         return write(os.path.join(self.runs, story_id, name), text)
 
     def evidence(self, story_id, name, text=""):
-        return write(os.path.join(contract.evidence_dir(self.runs, story_id), name), text)
+        return write(os.path.join(profiles.evidence_dir(self.runs, story_id), name), text)
 
     def wrote(self, story_id, stage, at=None):
         """The journal's `wrote` event for the hand-over as it is on disk now."""

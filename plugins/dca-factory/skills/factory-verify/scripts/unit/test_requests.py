@@ -27,6 +27,7 @@ from dca_factory.delivery.application.shared.requests import DuplicateRequest, o
 from dca_factory.infrastructure import delivery as wiring
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 
 def validate(cwd, kind, fields, words):
@@ -68,7 +69,7 @@ class Actions(unittest.TestCase):
     """The request a view's press writes is the factory's: `request_of` reads the action's slash command."""
 
     def setUp(self):
-        contract.set_places({})
+        profiles.set_places({})
 
     def test_each_session_command_has_its_request(self):
         cases = {
@@ -113,7 +114,7 @@ class Actions(unittest.TestCase):
 class Written(unittest.TestCase):
 
     def setUp(self):
-        contract.set_places({})
+        profiles.set_places({})
 
     def test_a_kind_names_what_it_must_and_nothing_else(self):
         with project() as p:
@@ -216,7 +217,7 @@ class Written(unittest.TestCase):
 class ProjectRecords(unittest.TestCase):
 
     def setUp(self):
-        contract.set_places({})
+        profiles.set_places({})
 
     def test_the_inbox_reads_the_projects_records_beside_the_stories(self):
         with project() as p:
@@ -242,7 +243,7 @@ class ProjectRecords(unittest.TestCase):
 class Outputs(unittest.TestCase):
 
     def setUp(self):
-        contract.set_places({})
+        profiles.set_places({})
 
     def test_an_output_is_pruned_once_its_request_is_gone_and_old(self):
         with project():
@@ -282,7 +283,7 @@ class Settled(unittest.TestCase):
     """What the factory settles without a tool, and what it leaves to a skill."""
 
     def setUp(self):
-        contract.set_places({})
+        profiles.set_places({})
 
     def request(self, kind, **fields):
         return dict(id="R-9", kind=kind, by="Ann", words="", **fields)
@@ -338,11 +339,11 @@ class Settled(unittest.TestCase):
 class RequestUsage(unittest.TestCase):
 
     def setUp(self):
-        contract.set_places({})
+        profiles.set_places({})
 
     def test_a_window_a_request_opened_is_booked_with_its_priced_share_and_a_session_window_is_not(self):
         with project():
-            runs, here = contract.place("runs"), os.getcwd()
+            runs, here = profiles.place("runs"), os.getcwd()
             os.environ["FACTORY_REQUEST"] = "R1"
             try:
                 for story in ("S-1", "S-2"):
@@ -364,7 +365,7 @@ class RequestUsage(unittest.TestCase):
 class Ended(unittest.TestCase):
 
     def setUp(self):
-        contract.set_places({})
+        profiles.set_places({})
 
     def test_a_factory_gone_without_a_down_says_why_and_a_stop_request_is_no_such_end(self):
         with project():

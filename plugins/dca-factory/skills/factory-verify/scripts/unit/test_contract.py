@@ -6,6 +6,7 @@ import unittest
 
 from support import contract, project, write
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 
 class FrontMatter(unittest.TestCase):
@@ -47,26 +48,26 @@ class FrontMatter(unittest.TestCase):
 class Profile(unittest.TestCase):
 
     def test_a_missing_profile_is_empty(self):
-        self.assertEqual(contract.read_profile(None), {})
-        self.assertEqual(contract.read_profile("/no/such/profile.yaml"), {})
+        self.assertEqual(profiles.read_profile(None), {})
+        self.assertEqual(profiles.read_profile("/no/such/profile.yaml"), {})
 
     def test_keys_are_flat_quotes_go_comments_are_skipped(self):
         with tempfile.TemporaryDirectory() as root:
             path = write(os.path.join(root, "p.yaml"),
                          "# profile\ncontract: 22\ntest: \"gradle test --tests '{class}' -q\"\nformat: 'spotless'\n"
                          "model.claude.build: opus\nnot a key\n")
-            self.assertEqual(contract.read_profile(path), {
+            self.assertEqual(profiles.read_profile(path), {
                 "contract": "22", "test": "gradle test --tests '{class}' -q", "format": "spotless",
                 "model.claude.build": "opus"})
 
     def test_a_double_quoted_value_keeps_a_single_quote_at_its_end(self):
         with tempfile.TemporaryDirectory() as root:
             path = write(os.path.join(root, "p.yaml"), "test: \"gradle test --tests '{class}'\"\n")
-            self.assertEqual(contract.read_profile(path)["test"], "gradle test --tests '{class}'")
+            self.assertEqual(profiles.read_profile(path)["test"], "gradle test --tests '{class}'")
 
     def test_location_falls_back_to_the_default_place(self):
-        self.assertEqual(contract.location({}, "epics"), "product/epics")
-        self.assertEqual(contract.location({"epics": "docs\\epics"}, "epics"), "docs/epics")
+        self.assertEqual(profiles.location({}, "epics"), "product/epics")
+        self.assertEqual(profiles.location({"epics": "docs\\epics"}, "epics"), "docs/epics")
 
 
 class StoryFields(unittest.TestCase):

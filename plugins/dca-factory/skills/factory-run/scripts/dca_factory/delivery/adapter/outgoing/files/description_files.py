@@ -7,7 +7,8 @@ import os
 import re
 import typing
 
-from .....contract import location, read_profile, resolve_profile
+from .....sharedkernel.adapter.outgoing.profile.profile_files import location, profile_of
+from .....sharedkernel.application.profile import Profile
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....domain.model.description import Heading, Part, Written
 
@@ -15,14 +16,14 @@ from ....domain.model.description import Heading, Part, Written
 class DescriptionFiles:
     """The description store as files, under the project <cwd>, placed by <profile>."""
 
-    def __init__(self, cwd: str, profile: typing.Mapping[str, typing.Any]) -> None:
+    def __init__(self, cwd: str, profile: Profile) -> None:
         self._cwd = cwd
-        self._profile = profile
+        self._profile = profile.values
 
     @classmethod
     def of_project(cls, cwd: str) -> DescriptionFiles:
         """The description as the project's own profile places it."""
-        return cls(cwd, read_profile(resolve_profile(None, cwd)))
+        return cls(cwd, profile_of(cwd))
 
     def path(self, part: Part) -> str:
         return str(location(self._profile, part.value)).replace(os.sep, "/")

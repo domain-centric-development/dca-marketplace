@@ -9,6 +9,7 @@ from support import contract, project, state, write
 from dca_factory import runner
 from dca_factory.delivery.adapter.outgoing.tools import agents
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 
 def a_run(p):
@@ -23,7 +24,7 @@ class Readers(unittest.TestCase):
 
     def test_the_profile_is_read_on_every_question(self):
         with project() as p:
-            profile = write(os.path.join(p.root, contract.PROFILE_FILE), "model.claude: sonnet\n")
+            profile = write(os.path.join(p.root, profiles.PROFILE_FILE), "model.claude: sonnet\n")
             run = a_run(p)
             self.assertEqual(run.model_key("claude", "build"), "sonnet")
             write(profile, "model.claude: sonnet\nmodel.claude.build: opus\n")
@@ -32,14 +33,14 @@ class Readers(unittest.TestCase):
 
     def test_in_a_worktree_the_places_are_the_main_checkouts_and_back_home_they_are_relative_again(self):
         with project() as p, tempfile.TemporaryDirectory() as tree:
-            write(os.path.join(p.root, contract.PROFILE_FILE), "carrier.guard: the-guard\n")
+            write(os.path.join(p.root, profiles.PROFILE_FILE), "carrier.guard: the-guard\n")
             p.run_file("S-1", "judge.md", "## Verdict\nverdict: `approved`\n")
             run = a_run(p)
             os.chdir(tree)
             os.environ["FACTORY_HOME"] = p.root
             try:
                 self.assertIn("the-guard", run.guard_sentence())
-                self.assertEqual(contract.place("runs"), p.root.replace(os.sep, "/") + "/.dca-factory/runs")   # places use /
+                self.assertEqual(profiles.place("runs"), p.root.replace(os.sep, "/") + "/.dca-factory/runs")   # places use /
                 self.assertEqual(run.verdict_of("S-1"), "approved")
                 run.journal_line("S-1", "2026-10-10T10:00:00Z\tnote\t-\twhy=from-the-tree")
                 self.assertEqual([e["kind"] for e in journal.journal_events(p.runs, "S-1")], ["note"])
@@ -48,7 +49,7 @@ class Readers(unittest.TestCase):
                 os.chdir(p.root)
                 os.environ.pop("FACTORY_HOME")
             run.profile()
-            self.assertEqual(contract.place("runs"), ".dca-factory/runs")
+            self.assertEqual(profiles.place("runs"), ".dca-factory/runs")
 
     def test_what_a_story_and_its_files_say(self):
         with project() as p:
@@ -81,7 +82,7 @@ class ToolAndEffortPerUnit(unittest.TestCase):
 
     def test_the_unit_names_its_tool_then_the_profile_default_then_the_runs(self):
         with project() as p:
-            write(os.path.join(p.root, contract.PROFILE_FILE),
+            write(os.path.join(p.root, profiles.PROFILE_FILE),
                   "tool: claude\ntool.verifier: codex\ntool.review: opencode\ntool.review.ddd: codex\n")
             run = a_run(p)
             self.assertEqual(run.tool_for("builder", "claude"), "claude")
@@ -94,7 +95,7 @@ class ToolAndEffortPerUnit(unittest.TestCase):
 
     def test_the_effort_per_unit_is_passed_as_the_tool_takes_it_or_named_as_not_applied(self):
         with project() as p:
-            write(os.path.join(p.root, contract.PROFILE_FILE),
+            write(os.path.join(p.root, profiles.PROFILE_FILE),
                   "effort.claude: medium\neffort.claude.tidy: low\neffort.opencode: high\n")
             run = a_run(p)
             self.assertEqual(run.effort_choice("claude", "tidy"), ("low", ""))

@@ -9,6 +9,7 @@ import unittest
 from support import contract, project, write
 from dca_factory import cli, runner
 from dca_factory.spec import api as spec
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 STORY = """---
 id: S-1
@@ -159,7 +160,7 @@ class HandAndMigration(unittest.TestCase):
 
     def test_a_hand_delivery_merges_its_new_criteria_without_a_test_line_and_refuses_a_change(self):
         with project() as p:
-            contract.set_places({})
+            profiles.set_places({})
             p.story("S-1", text=STORY)
             code, said = self.quiet(cli.deliver_by_hand, p.root, p.runs, p.epics, "S-1", "ana")
             self.assertEqual(code, 0, said)
@@ -172,7 +173,7 @@ class HandAndMigration(unittest.TestCase):
 
     def test_the_migration_merges_delivered_stories_in_order_and_moves_a_glossary_out_of_the_code(self):
         with project() as p:
-            contract.set_places({})
+            profiles.set_places({})
             p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
             p.run_file("S-1", "tests.md", "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n"
                                           "| shows-the-name | a.WidgetTest#showsTheName |\n"
@@ -192,7 +193,7 @@ class HandAndMigration(unittest.TestCase):
     def test_the_migration_leaves_a_delivered_story_whose_criteria_stand_in_feature_folders(self):
         """WP-105: a criterion moved into a feature folder is held there — the update does not merge it back."""
         with project() as p:
-            contract.set_places({})
+            profiles.set_places({})
             p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
             runner.migrate_spec(p.root, p.epics, p.runs, lambda _: None)
             root_file = os.path.join(p.root, "product", "spec", "widgets", "scenarios.md")
@@ -209,7 +210,7 @@ class HandAndMigration(unittest.TestCase):
         """A delivered story whose criterion the spec holds in other words — a later story changed it, in a feature
         folder — is not merged back into its own file; a criterion of it the spec lacks is."""
         with project() as p:
-            contract.set_places({})
+            profiles.set_places({})
             p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
             changed = STORY.replace('"Cog" is shown', '"Cog" is shown in bold')
             later = spec.story_entries(changed.split("---", 2)[2])
@@ -226,7 +227,7 @@ class HandAndMigration(unittest.TestCase):
 
     def test_the_migration_leaves_out_a_criterion_a_later_story_removed(self):
         with project() as p:
-            contract.set_places({})
+            profiles.set_places({})
             p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
             p.story("S-2", text=STORY.replace("S-1", "S-2").replace("status: approved",
                                                                     "status: delivered\ndelivered: 2026-10-02T00:00:00Z"))
@@ -242,7 +243,7 @@ class HandAndMigration(unittest.TestCase):
 
     def test_the_spec_check_names_a_delivered_criterion_the_spec_lacks(self):
         with project() as p:
-            contract.set_places({})
+            profiles.set_places({})
             p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
             self.assertEqual(self.quiet(cli.spec_check, p.root, p.runs, p.epics)[0], 1)
             runner.migrate_spec(p.root, p.epics, p.runs, lambda _: None)

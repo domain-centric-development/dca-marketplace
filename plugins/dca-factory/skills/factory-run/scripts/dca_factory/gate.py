@@ -81,15 +81,17 @@ import time
 import typing
 from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, append_finding_rows, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, DEFAULTS,
-    delivered_on, DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder,
-    evidence_dir, evidence_rel, factory_home, file_digest, find_story, findings_cells, findings_path, findings_rel,
-    findings_rows, FLAKY_FINDINGS, GateError, HAPPY_MARK, HOME_VARIABLE, in_worktree, INSTRUCTION_FILES,
-    is_delivered, JOURNAL, JOURNEY_ORDER, layout_hint, location, MAPPING_ROW, MAX_ROUNDS, METHOD_PROFILE,
-    open_findings, order_for, place, PLACES, PLACES_REL, PLAIN_COLUMN, PROFILE_FILE, project_findings_head,
-    project_findings_path, read_flat, read_profile, record_findings, resolve_profile, runs_top, SELECTOR,
-    set_places, SHARED_WINDOWS, shown, STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, story_digest,
-    story_files, story_folder, story_id_of, story_kind, TESTED_KINDS, unknown_profile_keys, VERSION)
+    ALL_KINDS, append_finding_rows, confirmed_defects, CONTEXT_MAP_CANDIDATES, CONTRACT, CRITERION, delivered_on,
+    DOC_BUDGET_BYTES, duplicate_ids, epic_dependency_problem, EPIC_FIELDS, EPIC_FILE, epic_folder, file_digest,
+    find_story, findings_cells, findings_path, findings_rows, GateError, HAPPY_MARK, INSTRUCTION_FILES,
+    is_delivered, JOURNEY_ORDER, layout_hint, MAPPING_ROW, MAX_ROUNDS, open_findings, order_for, PLAIN_COLUMN,
+    project_findings_head, project_findings_path, record_findings, SELECTOR, SHARED_WINDOWS, STAGE, STAGE_CHECKS,
+    STAGE_FILES, STAGE_ORDER, STAGES, story_digest, story_files, story_folder, story_id_of, story_kind,
+    TESTED_KINDS, VERSION)
+from .sharedkernel.adapter.outgoing.profile.profile_files import (
+    DEFAULTS, evidence_dir, evidence_rel, factory_home, findings_rel, FLAKY_FINDINGS, HOME_VARIABLE, in_worktree,
+    JOURNAL, location, METHOD_PROFILE, place, PLACES, PLACES_REL, PROFILE_FILE, read_flat, read_profile,
+    resolve_profile, runs_top, set_places, shown, unknown_profile_keys)
 from .delivery.adapter.outgoing.git.repository import git, git_blob, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
     ANSWER_FIELDS, answered_decisions, decisions_store, NOTHING, project_decisions_rel, read_decisions, record_path,

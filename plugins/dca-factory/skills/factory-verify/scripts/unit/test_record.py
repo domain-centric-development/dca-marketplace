@@ -12,6 +12,7 @@ from dca_factory import cli
 from dca_factory.delivery.domain.model import usage
 from dca_factory.delivery.adapter.outgoing.tools import streams
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journals
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 STREAMS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "streams")
 SECOND = "2026-10-10T10:00:00Z"
@@ -19,7 +20,7 @@ SECOND = "2026-10-10T10:00:00Z"
 
 def window(p, name="builder.100000.out", source="claude-recorded.jsonl"):
     """A shared builder's recorded stream beside S-1's journal."""
-    path = os.path.join(contract.evidence_dir(p.runs, "S-1"), name)
+    path = os.path.join(profiles.evidence_dir(p.runs, "S-1"), name)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     shutil.copy(os.path.join(STREAMS, source), path)
     return path
@@ -133,7 +134,7 @@ class Prune(unittest.TestCase):
             parts_before = cli.window_parts(journals.journal_events(p.runs, "S-1"), "builder") \
                 if state.record_story(p.runs, "S-1") is not None else None
             self.assertEqual(state.prune_raw(p.runs, p.epics, days=7), [("S-1", 2)])
-            folder = contract.evidence_dir(p.runs, "S-1")
+            folder = profiles.evidence_dir(p.runs, "S-1")
             self.assertEqual(sorted(os.listdir(folder)),
                              ["gate-build.101500.txt", state.INVARIANT_BREAKS, "journal.tsv"])
             self.assertTrue(os.path.isfile(os.path.join(p.runs, "S-1", "plan.md")))
@@ -147,7 +148,7 @@ class Prune(unittest.TestCase):
             self.assertEqual(state.prune_raw(p.runs, p.epics, days=7), [])
             p.story("S-1")
             self.assertEqual(state.prune_raw(p.runs, p.epics, days=0), [])
-            self.assertTrue(state.raw_material(contract.evidence_dir(p.runs, "S-1")))
+            self.assertTrue(state.raw_material(profiles.evidence_dir(p.runs, "S-1")))
 
     def test_the_days_come_from_the_profile(self):
         self.assertEqual(state.keep_days({}), 7)

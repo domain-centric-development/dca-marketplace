@@ -6,6 +6,7 @@ import unittest
 
 from support import project, write
 from dca_factory import contract, gate
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 RECORD = """---
 id: S-1-01
@@ -37,7 +38,7 @@ class IntegrateDecision(unittest.TestCase):
 
     def test_the_gates_before_wait_and_the_integrate_gate_stamps_it(self):
         with project() as p:
-            contract.set_places({})
+            profiles.set_places({})
             story = p.story("S-1")
             record = write(os.path.join(os.path.dirname(story), "decisions", "01.md"), RECORD)
             for gating in ("build", "tidy", "document"):

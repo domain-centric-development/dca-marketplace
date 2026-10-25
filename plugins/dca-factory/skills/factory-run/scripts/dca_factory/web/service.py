@@ -396,7 +396,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 @contextlib.contextmanager
 def in_project(project):
     """The places read from the project's profile, for a call that writes there from the server's thread."""
-    from ..contract import read_profile, resolve_profile, set_places
+    from ..sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile, set_places
     lock = SERVER_LOCK
     with lock:
         here = os.getcwd()

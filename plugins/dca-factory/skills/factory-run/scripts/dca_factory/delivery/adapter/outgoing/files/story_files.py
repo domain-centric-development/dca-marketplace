@@ -6,7 +6,8 @@ import contextlib
 import os
 import typing
 
-from .....contract import epic_folder, find_story, place, story_files, story_folder, story_id_of
+from .....contract import epic_folder, find_story, story_files, story_folder, story_id_of
+from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....state import write_story_fields

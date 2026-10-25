@@ -13,7 +13,7 @@ import os
 import re
 import typing
 
-from .....contract import place
+from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....domain.model.criterion import FeatureName, Line
 

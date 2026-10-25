@@ -8,9 +8,8 @@ import re
 import time
 import typing
 
-from .....contract import (
-    DECISIONS_DIR, DEFAULTS, find_story, place, PLACES_REL, shown, STAGE_ORDER, story_digest, story_files, story_folder,
-    story_id_of)
+from .....contract import DECISIONS_DIR, find_story, STAGE_ORDER, story_digest, story_files, story_folder, story_id_of
+from .....sharedkernel.adapter.outgoing.profile.profile_files import DEFAULTS, place, PLACES_REL, shown
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import Front, MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import fields_of, section_of, sections_of
 from ....application.shared.decision_record_repository import RecordNotFound

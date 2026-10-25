@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from ...contract import place
+from ...sharedkernel.adapter.outgoing.profile.profile_files import place
 from ..adapter.outgoing.files.epic_files import epic_holding
 
 

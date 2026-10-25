@@ -13,6 +13,7 @@ from unittest import mock
 
 from support import contract, state, write
 from dca_factory import cli, gate, runner
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 PROFILE = "claim_remote: origin\n"
 EPIC = "---\nintent: x\ngoal: y\nmetric: ThingShown\ndomain_contact: z\n---\n# sample\n"
@@ -54,7 +55,7 @@ class Remote:
         seed = os.path.join(root, "seed")
         sh(root, "clone", "--quiet", self.bare, seed)
         self.identity(seed, "seed@example.com")
-        write(os.path.join(seed, contract.PROFILE_FILE), PROFILE)
+        write(os.path.join(seed, profiles.PROFILE_FILE), PROFILE)
         write(os.path.join(seed, "product", "epics", "sample", "epic.md"), EPIC)
         for sid, title in (("S-01", "the first thing"), ("S-02", "the second thing")):
             write(os.path.join(seed, "product", "epics", "sample", sid, "story.md"),
@@ -83,13 +84,13 @@ def remote():
             yield Remote(os.path.realpath(root))
         finally:
             os.chdir(here)
-            contract.set_places({})
+            profiles.set_places({})
 
 
 def at(path):
     """Work in one clone: its places, its run folder."""
     os.chdir(path)
-    contract.set_places(contract.read_profile(contract.PROFILE_FILE))
+    profiles.set_places(profiles.read_profile(profiles.PROFILE_FILE))
     return os.path.join(path, ".dca-factory", "runs"), os.path.join(path, "product", "epics")
 
 
@@ -167,7 +168,7 @@ class Claim(unittest.TestCase):
             self.assertEqual(quiet(state.release_claim, b, runs_b, CONFIG, "S-01", True)[0], 0)
             self.assertEqual(sh(r.root, "--git-dir", r.bare, "branch", "--list", "story/*"), "")
             plain = r.clone("plain", "pia@example.com")
-            os.remove(os.path.join(plain, contract.PROFILE_FILE))
+            os.remove(os.path.join(plain, profiles.PROFILE_FILE))
             runs_p, epics_p = at(plain)
             self.assertEqual(quiet(cli.claim_command, plain, runs_p, epics_p, "S-02")[0], 0)
             self.assertEqual(sh(r.root, "--git-dir", r.bare, "branch", "--list", "story/*"), "")
@@ -195,17 +196,17 @@ class Published(unittest.TestCase):
             runs, epics = at(a)
             quiet(cli.claim_command, a, runs, epics, "S-01")
             os.makedirs(os.path.join(runs, "S-01"), exist_ok=True)
-            write(os.path.join(contract.evidence_dir(runs, "S-01"), "target"), "main\n")
+            write(os.path.join(profiles.evidence_dir(runs, "S-01"), "target"), "main\n")
             quiet(runner.worktree_prepare, a, runs, "S-01")
             wt = state.worktree_of("S-01", a)
             write(os.path.join(wt, "src", "thing.txt"), "the first thing\n")
-            write(os.path.join(contract.evidence_dir(runs, "S-01"), state.STAGES_MADE), "src/thing.txt\n")
+            write(os.path.join(profiles.evidence_dir(runs, "S-01"), state.STAGES_MADE), "src/thing.txt\n")
             write(os.path.join(runs, "S-01", "tests.md"),
                   "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n| shows-s-01 | a.ThingTest#shows |\n")
             self.assertEqual(quiet(runner.integrate_prepare, a, runs, epics, "S-01")[0], 0)
             result = gate.Result()
             front = contract.read_front_matter(contract.find_story(epics, "S-01"))[0]
-            with mock.patch.dict(os.environ, {contract.HOME_VARIABLE: a}):
+            with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: a}):
                 os.chdir(wt)
                 gate.publish_story(result, wt, contract.find_story(epics, "S-01"), "S-01", front, runs, CONFIG)
                 os.chdir(a)
@@ -231,17 +232,17 @@ class Published(unittest.TestCase):
         runs, epics = at(clone)
         quiet(cli.claim_command, clone, runs, epics, story)
         os.makedirs(os.path.join(runs, story), exist_ok=True)
-        write(os.path.join(contract.evidence_dir(runs, story), "target"), "main\n")
+        write(os.path.join(profiles.evidence_dir(runs, story), "target"), "main\n")
         quiet(runner.worktree_prepare, clone, runs, story)
         wt = state.worktree_of(story, clone)
         write(os.path.join(wt, "src", f"{story}.txt"), "x\n")
-        write(os.path.join(contract.evidence_dir(runs, story), state.STAGES_MADE), f"src/{story}.txt\n")
+        write(os.path.join(profiles.evidence_dir(runs, story), state.STAGES_MADE), f"src/{story}.txt\n")
         write(os.path.join(runs, story, "tests.md"), "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n"
                                                     f"| shows-{story.lower()} | a.ThingTest#{story.replace('-', '')} |\n")
         quiet(runner.integrate_prepare, clone, runs, epics, story)
         result = gate.Result()
         front = contract.read_front_matter(contract.find_story(epics, story))[0]
-        with mock.patch.dict(os.environ, {contract.HOME_VARIABLE: clone}):
+        with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: clone}):
             os.chdir(wt)
             gate.publish_story(result, wt, contract.find_story(epics, story), story, front, runs, CONFIG)
             os.chdir(clone)
@@ -266,7 +267,7 @@ class Published(unittest.TestCase):
             story = read_file(os.path.join(wt_b, "product", "epics", "sample", "S-02", "story.md"))
             self.assertIn("status: approved", story)
             self.assertNotIn("delivered_by", story)
-            self.assertFalse(os.path.isfile(os.path.join(contract.evidence_dir(runs_b, "S-02"), state.PUBLISHED)))
+            self.assertFalse(os.path.isfile(os.path.join(profiles.evidence_dir(runs_b, "S-02"), state.PUBLISHED)))
 
     def test_a_hand_delivery_of_a_story_another_factory_claimed_is_refused(self):
         with remote() as r:
@@ -296,7 +297,7 @@ class Published(unittest.TestCase):
             runs_b, epics_b = at(b)
             quiet(cli.claim_command, b, runs_b, epics_b, "S-02")
             os.makedirs(os.path.join(runs_b, "S-02"), exist_ok=True)
-            write(os.path.join(contract.evidence_dir(runs_b, "S-02"), "target"), "main\n")
+            write(os.path.join(profiles.evidence_dir(runs_b, "S-02"), "target"), "main\n")
             write(os.path.join(runs_b, "S-02", "plan.md"), "# Plan\n\n## Spec delta\n- adds shows-s-01\n")
             quiet(runner.worktree_prepare, b, runs_b, "S-02")
             wt = state.worktree_of("S-02", b)
@@ -304,7 +305,7 @@ class Published(unittest.TestCase):
             story_path = contract.find_story(epics_b, "S-02")
             front, body = contract.read_front_matter(story_path)
             result = gate.Result()
-            with mock.patch.dict(os.environ, {contract.HOME_VARIABLE: b}):
+            with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: b}):
                 with gate.places_in(wt):
                     gate.check_spec_delta(result, wt, runs_b, "S-02", story_path, front, body)
             self.assertTrue(any(e[0] == "fail" and e[1] == "spec-delta" for e in result.entries), result.entries)

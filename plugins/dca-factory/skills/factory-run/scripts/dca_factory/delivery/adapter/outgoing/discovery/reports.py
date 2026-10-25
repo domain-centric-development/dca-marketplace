@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typing
 
-from .....contract import location, read_profile, resolve_profile
+from .....sharedkernel.adapter.outgoing.profile.profile_files import location, read_profile, resolve_profile
 from .....discovery.api import proposals_in, report_of
 
 

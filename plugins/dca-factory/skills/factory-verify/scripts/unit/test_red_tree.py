@@ -7,6 +7,7 @@ import unittest
 from support import contract, project, write
 from dca_factory import gate, state
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
+from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 TESTS = """# Tests
 
@@ -22,7 +23,7 @@ PAGE_TEST = os.path.join("src", "test", "java", "com", "example", "WidgetPageTes
 class RedTree(unittest.TestCase):
 
     def setup(self, p, red_tree=True, ended=("build",)):
-        contract.set_places({})
+        profiles.set_places({})
         p.story("S-1")
         p.run_file("S-1", "tests.md", TESTS)
         test_file = write(os.path.join(p.root, PAGE_TEST), "class WidgetPageTest { void showsTheThing() {} }\n")
