@@ -14,7 +14,6 @@ from .decision_record_files import acceptance_records, accepted
 from .journal_files import journal_events
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
-from ..tools.streams import PROCESS_RANKS
 from ....application.status.texts import parse_time
 
 
@@ -221,18 +220,6 @@ def story_title(front: typing.Mapping[str, typing.Any], body: str) -> str:
     return ""
 
 
-OUTSIDE_RANKS = {"backlog": -1, "decisions": 98}
-
-
-def stage_rank(stage: str) -> float:
-    """Stage order for reports: the table's run order, the processes beside the stages they carry."""
-    if stage in STAGE_ORDER:
-        return STAGE_ORDER.index(stage)
-    process = "review:" if stage.startswith("review:") else stage
-    if process in PROCESS_RANKS:
-        anchor, offset = PROCESS_RANKS[process]
-        return STAGE_ORDER.index(anchor) + offset
-    return OUTSIDE_RANKS.get(stage, 99)
 
 
 #: What a stage name may look like for the runner: the cli prints the table as shell lines the runner evaluates,

@@ -11,7 +11,7 @@ import re
 import typing
 from datetime import datetime, timezone
 
-from .....contract import SHARED_WINDOWS, STAGE_ORDER
+from .....contract import STAGE_ORDER
 from .....sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError as GateError, read_text
 from ....application.status.texts import parse_time
@@ -300,14 +300,6 @@ def usage_lines(fmt: str, path: str, model: typing.Optional[str] = None) -> typi
 def usage_from(fmt: str, path: str, model: typing.Optional[str] = None) -> int:
     print("\n".join(usage_lines(fmt, path, model)))
     return 0
-
-
-#: Where a process that is no stage of the table sits among the stages in a report: beside a stage of a shared
-#: window, by an offset — the shared builder after the last stage it carries, the reviews just before the verifier's
-#: first stage, which converges them, the shared verifier after that stage; the backlog before every stage, the
-#: decisions after them.
-PROCESS_RANKS = {"builder": (SHARED_WINDOWS["builder"][-1], 0.5), "review:": (SHARED_WINDOWS["verifier"][0], -0.2),
-                 "verifier": (SHARED_WINDOWS["verifier"][0], 0.5)}
 
 
 def tokens_of(entry: typing.Mapping[str, typing.Any]) -> int:

@@ -4394,7 +4394,9 @@ def verify_setup(runner, verbose=False):
     check("stages: no list of stage names outside the gate's table — the gate, the cli and the runner read STAGES",
           not stage_lists(modules, runner_text), stage_lists(modules, runner_text))
     check("gate: carries no colour code and no session-log path — those are the cli's",
-          "\\x1b[" not in gate_text and ".claude/projects" not in gate_text and "\\x1b[" in cli_text)
+          "\\x1b[" not in gate_text and ".claude/projects" not in gate_text
+          and "\\x1b[" in package_text(runner, ("delivery/adapter/incoming/cli/terminal",))[
+              "delivery/adapter/incoming/cli/terminal"])
     parsed = [l.strip()[:80] for l in runner_text.splitlines()
               if "sed -n" in l and not l.strip().startswith("#")
               and re.search(r"profile|judge\.md|needs-human|\$DECISIONS|carrier\.|model\\\.", l)]

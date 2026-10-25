@@ -6,6 +6,7 @@ import unittest
 
 from support import contract  # noqa: F401 — puts the package on the path
 from dca_factory import cli
+from dca_factory.delivery.adapter.incoming.cli import terminal
 
 
 STORY = """# Show the thing
@@ -54,7 +55,7 @@ class Sections(unittest.TestCase):
         self.assertEqual(notes["text"], "- a note that runs on\n  onto a second line")
 
     def test_the_text_view_joins_a_wrapped_list_line_to_its_item(self):
-        lines = cli.paragraph_lines("- a note that runs on\n  onto a second line\n- another", "  ")
+        lines = terminal.paragraph_lines("- a note that runs on\n  onto a second line\n- another", "  ")
         self.assertEqual(lines, ["  - a note that runs on onto a second line", "  - another"])
 
     def test_an_epic_keeps_its_stories_place(self):
