@@ -6,11 +6,12 @@ import dataclasses
 import typing
 
 from ....building_blocks import Value
+from .decision_record import DecisionState, RecordId, RecordKind
 from .epic import EpicId
 from .schedule import ContextName
-from .stage import StoryKind
+from .stage import StageName, StoryKind
 from .story import DeliveredOn, StoryId
-from .story_state import Detail, Rounds, StatusWord
+from .story_state import Detail, HandOverText, Rounds, StatusWord
 
 
 @dataclasses.dataclass(frozen=True)
@@ -181,3 +182,46 @@ class EpicFacts(Value):
     discovery_missing: typing.Optional[ProfileText]
     dependency_problem: typing.Optional[Detail]
     metric: Metric
+
+
+@dataclasses.dataclass(frozen=True)
+class AnswerField(Value):
+    """A line a confirmed answer carries: `answer:`, `by:`, `at:`."""
+
+    value: str
+
+
+@dataclasses.dataclass(frozen=True)
+class DecisionFacts(Value):
+    """One decision record of the story, as its gate reads it: where it stands, the stage that asked it (open or a
+    draft) or applies its answer, its question, the answer and who gave it, the answer lines a draft lacks."""
+
+    record: RecordId
+    kind: RecordKind
+    state: DecisionState
+    stage: typing.Optional[StageName]
+    question: Detail
+    place: Place
+    answer: Detail
+    by: Detail
+    missing: typing.Tuple[AnswerField, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class HandOverAsk(Value):
+    """A stage's hand-over as the decisions check reads it: its text, and the records its `## needs-human` names —
+    None where it escalates nothing, none where it escalates without naming one."""
+
+    stage: StageName
+    place: Place
+    text: HandOverText
+    asks: typing.Optional[typing.Tuple[RecordId, ...]]
+
+
+@dataclasses.dataclass(frozen=True)
+class DecisionsFacts(Value):
+    """The story's decision records under their store, and the stages' hand-overs."""
+
+    store: Place
+    records: typing.Tuple[DecisionFacts, ...]
+    hand_overs: typing.Tuple[HandOverAsk, ...]

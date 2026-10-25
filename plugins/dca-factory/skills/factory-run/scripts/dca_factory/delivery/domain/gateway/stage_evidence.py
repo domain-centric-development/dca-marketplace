@@ -8,9 +8,10 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import DomainGateway
+from ..model.decision_record import RecordId
 from ..model.stage_story import (
-    ContextMapFacts, EpicFacts, GateRelease, InstructionFile, ModelKey, OwnedFacts, ProfileText, RowId, RowState,
-    RoundsRecord, StageStory, UnknownKey)
+    ContextMapFacts, DecisionsFacts, EpicFacts, GateRelease, InstructionFile, ModelKey, OwnedFacts, Place,
+    ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
 from ..model.story import StoryId
 
 
@@ -52,4 +53,12 @@ class StageEvidence(DomainGateway, typing.Protocol):
 
     def finding_row(self, row: RowId) -> typing.Optional[RowState]:
         """Where the named finding row stands — None where there is no such row."""
+        ...
+
+    def decisions(self, story: StageStory) -> DecisionsFacts:
+        """The story's decision records and the stages' hand-overs; the gate's error where the store cannot be read."""
+        ...
+
+    def record_place(self, story: StageStory, record: RecordId) -> Place:
+        """Where the record by this id belongs."""
         ...

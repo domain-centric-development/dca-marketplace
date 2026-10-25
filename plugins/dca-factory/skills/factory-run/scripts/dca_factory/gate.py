@@ -82,7 +82,7 @@ import typing
 from datetime import datetime, timezone
 from .contract import (
     ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, MAPPING_ROW, order_for, SELECTOR, SHARED_WINDOWS,
-    STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, TESTED_KINDS, VERSION)
+    STAGE, STAGE_CHECKS, STAGE_FILES, STAGES, TESTED_KINDS, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import (
     append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
     PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
@@ -95,8 +95,8 @@ from .sharedkernel.adapter.outgoing.profile.profile_files import (
     resolve_profile, runs_top, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git, git_blob, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    ANSWER_FIELDS, answered_decisions, decisions_store, NOTHING, project_decisions_rel, read_decisions, record_path,
-    records_of, resume_stage, stamp_applied)
+    answered_decisions, decisions_store, NOTHING, project_decisions_rel, record_path,
+    records_of)
 from .delivery.adapter.outgoing.files.decision_record_files import needs_human_ids
 from .delivery.domain.model.correction import REASON_CODES
 from .delivery.application.description.check_description import CheckDescriptionCommand
@@ -116,20 +116,22 @@ from .delivery.adapter.outgoing.files.story_record import INVARIANT_BREAKS
 from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open, record_judge_signal
 from .delivery.adapter.outgoing.files.snapshots import (
     git_tree, listed_files, NOT_OBSERVED, record_base, record_changes, snapshot_reason, tree_changes)
-from .delivery.adapter.outgoing.files.owned_files import owned_end, run_owned, write_answered
+from .delivery.adapter.outgoing.files.owned_files import owned_end, run_owned
 from .delivery.adapter.outgoing.files.run_marks import (
     backlog_digest, current_stage_files, last_ended, stage_open, step_open,
     STORY_DIGEST, verdict_in, window_open, write_mark)
 from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned, write_story_fields
 from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted, answer_sentence)
+    ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted)
 from .delivery.application.shared.front import is_acceptance
 from .delivery.domain.model.verdict import FindingState
 from .delivery.domain.service.backlog_checks import BacklogChecks
 from .delivery.domain.service.profile_checks import MODEL_TOOLS, ProfileChecks  # noqa: F401 — MODEL_TOOLS: read by the verify suite
 from .delivery.domain.service.story_checks import StoryChecks
-from .delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, publishes_of, split_list
+from .delivery.domain.service.decision_checks import Applying, DecisionChecks
+from .delivery.domain.model.stage import StageName
+from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, publishes_of, split_list
 
 
 def story_ids(epics):
@@ -2561,128 +2563,21 @@ def tail(output, limit=1200):
     return text[-limit:] if len(text) > limit else text
 
 
-def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None):
-    """Every question this story raised is recorded, and every answer it got has been applied.
-
-    Runs on every stage: an open question blocks the story wherever it stands, and a stage file
-    that escalates without a record has asked nobody. `gating` is the stage this gate call is for:
-    the plan gate runs *before* its stage, so there an answered plan question is the stage's input,
-    not yet something it failed to apply."""
+def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None, story=None):
+    """Every question this story raised is recorded, and every answer it got has been applied (`DecisionChecks`): an
+    answer applied is stamped in its record and becomes an `answered:` line of the story before it is said."""
     try:
-        store = decisions_store(story_path or find_story(place("epics"), story_id))
-        records = read_decisions(store, story_id)
+        if story is None:
+            path = story_path or find_story(place("epics"), story_id)
+            front, body = read_front_matter(path)
+            story = stage_story(story_id, path, front, body, ())
+        checked = DecisionChecks.check(story, StageName(gating or ""), StageEvidenceFiles(cwd, runs, place("epics"), {}))
     except GateError as error:
         result.fail("decisions", str(error))
         return
-    known = {str(front["id"]).strip(): (path, body, state) for path, front, body, state, _ in records}
-
-    # 1. a stage that stopped must have written a record for its question
-    stage_texts = {}
-    for stage, name in STAGE_FILES.items():
-        path = os.path.join(runs, story_id, name)
-        if not os.path.isfile(path):
-            continue
-        stage_texts[stage] = read_text(path)
-        ids = needs_human_ids(stage_texts[stage])
-        if ids is None:
-            continue
-        if not ids:
-            result.fail(
-                "decisions",
-                f"{path}: `## needs-human` names no `decision: <id>` — the question has to be a "
-                f"record under {shown(store)}/ so an answer has a place to land; without one, "
-                f"nobody was asked.",
-            )
-        for wanted in ids:
-            if wanted not in known:
-                result.fail(
-                    "decisions",
-                    f"{path}: `## needs-human` names decision {wanted!r}, but "
-                    f"{shown(record_path(story_id, wanted, story_path))} does not exist or names another story.",
-                )
-
-    # 2. every record: open blocks, a draft is still open, answered must be applied by its stage.
-    # An acceptance record is the document gate's own question; that gate reads it.
-    for path, front, body, state, answer in records:
-        if is_acceptance(front):
-            continue
-        rid = str(front["id"]).strip()
-        stage = str(front.get("stage", "")).strip() if state in ("open", "draft") else resume_stage(front, answer)
-        question = (body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-        rel = os.path.relpath(path, cwd).replace(os.sep, "/")     # one spelling on every platform
-        if state == "open":
-            result.fail(
-                "decisions",
-                f"{rid} is open — {question!r} (asked by stage {stage or '?'}). Answer it in {rel} "
-                f"under `## Answer` with `answer:`, `by:` and `at:`; the story waits until then.",
-            )
-        elif state == "draft":
-            missing = ", ".join(f"`{f}:`" for f in ANSWER_FIELDS if not answer.get(f))
-            result.fail(
-                "decisions",
-                f"{rid} has an `## Answer` that is not confirmed — {missing} missing in {rel}. "
-                f"A draft unblocks nothing; the person deciding signs it with a name and a time.",
-            )
-        elif state == "answered" and stage == "integrate":
-            # The integrate step has no stage file of its own to cite an answer in, and its agent runs only on a
-            # conflict: the step applies the answer when it runs — its gate stamps it; every gate before it waits.
-            if gating == "integrate":
-                stamp_applied(path, stage)
-                story = story_path or find_story(place("epics"), story_id)
-                written = write_answered(story, runs, rid, answer_sentence(body, answer))
-                result.ok("decisions", f"{rid} applied by the integrate step ({answer.get('answer')!r} by "
-                                       f"{answer.get('by')}) — stamped in {rel}"
-                                       + (f", the answer an `answered:` line in {shown(story)}" if written else ""))
-            else:
-                result.note("decisions", f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}) — the "
-                                         f"integrate step applies it; its gate stamps it.")
-        elif state == "answered":
-            text = stage_texts.get(stage)
-            still_asking = text is not None and rid in (needs_human_ids(text) or [])
-            # Before the plan stage runs, an answer it has to apply is its input — also one a judge's
-            # story conflict routed here, which the plan written before the conflict cannot cite yet.
-            if gating == "plan" and stage == "plan" and (text is None or still_asking or rid not in text):
-                result.note(
-                    "decisions",
-                    f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}) — the plan "
-                    f"stage runs next and applies it; the gate after it checks that it did.",
-                )
-            # A stage before the one that applies the answer ran first — the test stage recording a red proof a
-            # merge left stale: the answer waits for its own stage, whose gate checks that it was applied.
-            elif gating in STAGE_ORDER and stage in STAGE_ORDER \
-                    and STAGE_ORDER.index(gating) < STAGE_ORDER.index(stage) and (text is None or still_asking
-                                                                                   or rid not in text):
-                result.note(
-                    "decisions",
-                    f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}) — stage {stage} comes "
-                    f"after {gating} and applies it; its gate checks that it did.",
-                )
-            elif text is None or still_asking:
-                result.fail(
-                    "decisions",
-                    f"{rid} is answered ({answer.get('answer')!r} by {answer.get('by')}), but stage "
-                    f"{stage or '?'} has not run with it yet — re-run that stage "
-                    f"(`--from {stage}`); it applies the answer and cites `decision: {rid}`.",
-                )
-            elif rid not in text:
-                result.fail(
-                    "decisions",
-                    f"{rid} is answered and stage {stage} ran again, but "
-                    f"{os.path.join(runs, story_id, STAGE_FILES.get(stage, '?'))} does not cite "
-                    f"{rid} — say where the answer landed, so the record can be stamped applied.",
-                )
-            else:
-                stamp_applied(path, stage)
-                story = story_path or find_story(place("epics"), story_id)
-                written = write_answered(story, runs, rid, answer_sentence(body, answer))
-                result.ok("decisions", f"{rid} applied by stage {stage} ({answer.get('answer')!r} "
-                                       f"by {answer.get('by')}) — stamped in {rel}"
-                                       + (f", the answer an `answered:` line in {shown(story)}" if written else ""))
-        else:
-            result.ok("decisions", f"{rid} applied ({answer.get('answer')!r} by {answer.get('by')})")
-    if not records and not any(state == "fail" and check == "decisions"
-                               for state, check, _ in result.entries):
-        result.note("decisions", "no decision record for this story")
+    stamps = DecisionStampFiles(runs)
+    for item in checked.items:
+        take(result, (DecisionChecks.applied(item, stamps.apply(story, item)),) if isinstance(item, Applying) else (item,))
 
 
 # The same checks outside a story: a direct edit, a commit and CI get one verdict for one tree. The
@@ -4025,7 +3920,7 @@ def _suites(run):
 
 @check("decisions")
 def _decisions(run):
-    check_decisions(run.result, run.runs, run.story_id, run.cwd, run.stage.name, run.story_path)
+    check_decisions(run.result, run.runs, run.story_id, run.cwd, run.stage.name, run.story_path, run.story)
 
 
 @check("plan", stages=("plan",))

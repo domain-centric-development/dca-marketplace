@@ -7,23 +7,29 @@ import os
 import re
 import typing
 
-from .....contract import CONTRACT, GateError, HAPPY_MARK, VERSION
+from .....contract import CONTRACT, GateError, HAPPY_MARK, STAGE_FILES, VERSION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
-    evidence_dir, location, place, unknown_profile_keys)
+    evidence_dir, location, place, shown, unknown_profile_keys)
+from ....application.shared.front import is_acceptance
+from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
-from ....domain.model.stage import StoryKind
+from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    ByteSize, ContextMapFacts, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
+    AnswerField, ByteSize, ContextMapFacts, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
     ScenarioKey, StageStory, UnknownKey)
 from ....domain.model.story import DeliveredOn, StoryId
-from ....domain.model.story_state import Detail, Rounds, StatusWord
+from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
+from ....domain.service.decision_checks import Applying
+from .decision_record_files import (
+    ANSWER_FIELDS, answer_sentence, decisions_store, needs_human_ids, read_decisions, record_path, resume_stage,
+    stamp_applied)
 from .epic_files import epic_dependency_problem
 from .findings_files import findings_path, findings_rows, project_findings_path
-from .owned_files import owned_changes
+from .owned_files import owned_changes, write_answered
 from .run_marks import OWNED_CHANGED
 from .story_layout import delivered_on, EPIC_FILE, epic_folder, find_story, story_kind
 
@@ -238,3 +244,49 @@ class StageEvidenceFiles:
     def finding_row(self, row: RowId) -> typing.Optional[RowState]:
         path, found = closed_rows(row.value)
         return RowState(found[6]) if path and found else None
+
+    def decisions(self, story: StageStory) -> DecisionsFacts:
+        story_id = story.story.value
+        store = decisions_store(story.place.value)
+        records = []
+        for path, front, body, state, answer in read_decisions(store, story_id):
+            asked = state in ("open", "draft")
+            stage = str(front.get("stage", "")).strip() if asked else resume_stage(front, answer)
+            records.append(DecisionFacts(
+                RecordId(str(front["id"]).strip()), RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION,
+                DecisionState(state), StageName(stage) if stage else None,
+                Detail((body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()),
+                Place(os.path.relpath(path, self._cwd).replace(os.sep, "/")),     # one spelling on every platform
+                Detail(str(answer.get("answer"))), Detail(str(answer.get("by"))),
+                tuple(AnswerField(f) for f in ANSWER_FIELDS if not answer.get(f))))
+        hand_overs = []
+        for stage_name, name in STAGE_FILES.items():
+            path = os.path.join(self._runs, story_id, name)
+            if os.path.isfile(path):
+                text = read_text(path)
+                ids = needs_human_ids(text)
+                hand_overs.append(HandOverAsk(StageName(stage_name), Place(path), HandOverText(text),
+                                              tuple(RecordId(i) for i in ids) if ids is not None else None))
+        return DecisionsFacts(Place(shown(store)), tuple(records), tuple(hand_overs))
+
+    def record_place(self, story: StageStory, record: RecordId) -> Place:
+        return Place(shown(record_path(story.story.value, record.value, story.place.value)))
+
+
+class DecisionStampFiles:
+    """The decision records beside the story and its `## Assumptions`, the journal under the run folder <runs>."""
+
+    def __init__(self, runs: str) -> None:
+        self._runs = runs
+
+    def apply(self, story: StageStory, applying: Applying) -> typing.Optional[Place]:
+        rid = applying.record.record.value
+        found = next(((path, body, answer) for path, front, body, _state, answer
+                      in read_decisions(decisions_store(story.place.value), story.story.value)
+                      if str(front["id"]).strip() == rid), None)
+        if found is None:
+            return None
+        path, body, answer = found
+        stamp_applied(path, applying.stage.value)
+        written = write_answered(story.place.value, self._runs, rid, answer_sentence(body, answer))
+        return Place(shown(story.place.value)) if written else None
