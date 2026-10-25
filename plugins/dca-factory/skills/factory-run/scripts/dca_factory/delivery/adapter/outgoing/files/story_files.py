@@ -79,7 +79,11 @@ class StoryFiles:
                 if folder and os.path.dirname(os.path.dirname(path)) == folder]
 
     def save(self, aggregate: Story) -> Story:
-        path = self.path_of(aggregate.id)
+        return self.write(self.path_of(aggregate.id), aggregate)
+
+    @staticmethod
+    def write(path: str, aggregate: Story) -> Story:
+        """The story's state written into its file at `path` — a story in a worktree as well as in the checkout."""
         front, body = read_front_matter(path)
         state = dict(status=aggregate.status.value,
                      delivered=aggregate.delivery.on.value or None if aggregate.delivery else None,

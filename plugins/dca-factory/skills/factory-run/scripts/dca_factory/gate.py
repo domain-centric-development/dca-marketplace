@@ -108,7 +108,7 @@ from .delivery.adapter.outgoing.files.owned_files import owned_end, run_owned
 from .delivery.adapter.outgoing.files.run_marks import (
     backlog_digest, current_stage_files, last_ended, step_open,
     STORY_DIGEST, verdict_in, write_mark)
-from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned, write_story_fields
+from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned
 from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
 from .delivery.adapter.outgoing.files.decision_record_files import (
     ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state)
@@ -130,6 +130,12 @@ from .delivery.domain.service.integration_checks import IntegrationChecks
 from .delivery.domain.service.test_verdicts import BreakProof, TestVerdicts
 from .delivery.domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult
 from .delivery.domain.model.verdict import Finding
+from .delivery.domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
+from .delivery.domain.model.story_state import Acceptance, AcceptanceVerdict
+from .delivery.domain.model.decision_record import RecordId
+from .delivery.domain.model.moment import Moment
+from .delivery.domain.model.story import StoryId
+from .delivery.adapter.outgoing.files.story_files import StoryFiles
 from .delivery.domain.service.change_checks import CHANGE_CHECKS, ChangeChecks
 from .delivery.domain.model.stage_story import CommandRun
 from .delivery.adapter.outgoing.git.change import parity_facts, snapshot
@@ -1081,19 +1087,16 @@ def parity(result, config_path):
 
 
 def acceptance_applies(cwd, runs, story_id, profile):
-    """Whether this story waits for a human before it is delivered. `pages`: it has a criterion
-    whose test the end-user command runs, in a project with a browser — something to look at."""
-    mode = acceptance_mode(profile)
-    if mode in ("none", "all"):
-        return mode == "all"
-    if str(profile.get("browser", "none")).strip().lower() in ("", "none"):
-        return False
-    try:
-        _path, mapping = read_mapping(runs, story_id)
-    except GateError:
-        return False
-    located = check_exists(Result(), cwd, mapping) or {}
-    return any((command_for(profile, path) or ("", ""))[0] == "e2eTest" for path in located.values())
+    """Whether this story waits for a human before it is delivered (`AcceptanceRules.asks`)."""
+    mode = AcceptanceMode(acceptance_mode(profile))
+    browser = str(profile.get("browser", "none")).strip().lower() not in ("", "none")
+    end_user = False
+    if mode is AcceptanceMode.PAGES and browser:
+        with contextlib.suppress(GateError):
+            located = locate_tests(cwd, read_mapping(runs, story_id)[1])[0]
+            end_user = any((command_for(profile, path) or ("", ""))[0] == "e2eTest" for path in located.values())
+    return AcceptanceRules.asks(mode, Presence.PRESENT if browser else Presence.ABSENT,
+                                Presence.PRESENT if end_user else Presence.ABSENT) is Presence.PRESENT
 
 
 def ask_acceptance(cwd, runs, story_id, story_path, profile, criteria):
@@ -1537,19 +1540,15 @@ def record_flaky_findings(result, story_path, story_id, front, runs):
     for other in sorted(os.listdir(root)):
         if other != story_id and os.path.isdir(os.path.join(root, other)):
             for test in flaky_tests(runs, other):
-                others.setdefault(test, []).append(other)
+                others.setdefault(Detail(test), []).append(StoryId(other))
     open_rows = set()
     with contextlib.suppress(GateError, OSError):
-        open_rows = {(where, perspective) for _s, where, _sev, _d, perspective, _f, _p in open_findings(place("epics"))}
-    added = []
-    for test in sorted(mine):
-        if test not in others or (test, "flaky") in open_rows:
-            continue
-        seen = ", ".join([story_id] + others[test])
-        added.append(("flaky", test, "minor", f"red in a whole suite run and green on its own run, in {seen}",
-                      "find what it depends on — load, order, a timeout, shared state — and fix the test or the "
-                      "code, as a task", f"The test {test} fails now and then in the whole suite, in more than one "
-                                         f"story — it is fixed, not run again"))
+        open_rows = {where for _s, where, _sev, _d, perspective, _f, _p in open_findings(place("epics"))
+                     if perspective == "flaky"}
+    added = [("flaky", f.test.value, "minor", f.defect.value, f.fix.value, f.plain.value)
+             for f in AcceptanceRules.flaky(StoryId(story_id), frozenset(Detail(t) for t in mine),
+                                            {t: tuple(s) for t, s in others.items()},
+                                            frozenset(Detail(w) for w in open_rows))]
     if added:
         path = project_findings_path(FLAKY_FINDINGS)
         append_finding_rows(path, project_findings_head(FLAKY_FINDINGS), added)
@@ -1575,22 +1574,12 @@ def _document_passed(run):
     try:
         if run.kind != "task" and acceptance_applies(run.cwd, run.runs, story_id, run.profile):
             verdict, rid = acceptance_state(run.cwd, story_id, story_path)
-            if verdict == "accepted":
-                result.ok("acceptance", f"{rid} accepted — the story is delivered")
-            elif verdict == "open":
-                result.wait("acceptance", f"{rid} waits for a human's look — answer it through "
-                                          f"/factory-decisions; the story holds the checkout until then")
-                return
-            elif verdict == "correction":
-                result.fail("acceptance", f"{rid} asked for a correction that is not in the story yet — "
-                                          f"write it in (criteria, an `answered:` line naming {rid}); the "
-                                          f"story then runs again from plan")
-                return
-            else:
+            step = AcceptanceRules.at_delivery(Acceptance(AcceptanceVerdict(verdict), RecordId(rid) if rid else None))
+            take(result, step.findings)
+            if step.ask is Presence.PRESENT:
                 asked = ask_acceptance(run.cwd, run.runs, story_id, story_path, run.profile, run.criteria)
-                result.wait("acceptance", f"{asked} asks a human to accept the story before it is "
-                                          f"delivered — {shown(record_path(story_id, asked, story_path))}, "
-                                          f"answered through /factory-decisions")
+                take(result, AcceptanceRules.asked(Detail(asked), Detail(shown(record_path(story_id, asked, story_path)))))
+            if step.goes_on is Presence.ABSENT:
                 return
     except GateError as error:
         result.fail("acceptance", str(error))
@@ -2001,7 +1990,9 @@ def deliver(result, story_path, story_id, front, runs):
     elif merge_spec(result, story_path, story_id, front, runs) is False:
         return
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    write_story_fields(story_path, status="delivered", delivered=stamp, delivered_by="gate")
+    story = StoryFiles.read(story_path)
+    story.deliver_by_gate(Moment(stamp))
+    StoryFiles.write(story_path, story)
     result.written.append(story_folder(story_path))
     result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
                            f"`delivered_by: gate`")

@@ -189,3 +189,12 @@ class Story(AggregateRoot[StoryId]):
         self._status = StoryStatus.DELIVERED
         self._delivery = Delivery(DeliveredOn(at.value), DeliveredBy.hand(by))
         return self._delivery
+
+    def deliver_by_gate(self, at: Moment) -> Delivery:
+        """The gate that delivers it: built or adopted, one end state — delivered, by the gate. Returns the
+        delivery."""
+        if self._status is StoryStatus.DELIVERED:
+            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else DeliveredBy(""))
+        self._status = StoryStatus.DELIVERED
+        self._delivery = Delivery(DeliveredOn(at.value), BY_GATE)
+        return self._delivery
