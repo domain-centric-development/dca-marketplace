@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 import support  # noqa: F401 — puts the package on the path
-from dca_factory import gate
+from dca_factory.delivery.adapter.outgoing.build import commands
 
 
 class SuitesRecordTest(unittest.TestCase):
@@ -18,15 +18,15 @@ class SuitesRecordTest(unittest.TestCase):
 
     def test_the_tree_the_record_was_made_on_reads_it(self):
         with tempfile.TemporaryDirectory() as tree:
-            with mock.patch.object(gate, "SUITES_RECORD", self.record_for(tree)):
-                code, _output, _ran, reused = gate.recorded_run("false", tree)
+            with mock.patch.object(commands, "SUITES_RECORD", self.record_for(tree)):
+                code, _output, _ran, reused = commands.recorded_run("false", tree)
         self.assertEqual(0, code)
         self.assertIn("recorded at", reused)
 
     def test_a_scratch_copy_runs_the_invocation_itself(self):
         with tempfile.TemporaryDirectory() as tree, tempfile.TemporaryDirectory() as copy:
-            with mock.patch.object(gate, "SUITES_RECORD", self.record_for(tree)):
-                code, _output, _ran, reused = gate.recorded_run("false", copy)
+            with mock.patch.object(commands, "SUITES_RECORD", self.record_for(tree)):
+                code, _output, _ran, reused = commands.recorded_run("false", copy)
         self.assertNotEqual(0, code)
         self.assertEqual("", reused)
 

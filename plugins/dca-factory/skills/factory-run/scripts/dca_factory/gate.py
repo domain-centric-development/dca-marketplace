@@ -66,7 +66,6 @@ import argparse
 import contextlib
 import glob
 import hashlib
-import hmac
 import json
 import os
 import re
@@ -76,9 +75,8 @@ import sys
 import tempfile
 import time
 import typing
-from datetime import datetime, timezone
 from .contract import (
-    ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, order_for, SELECTOR, STAGE, STAGE_CHECKS, STAGE_FILES, STAGES, TESTED_KINDS, VERSION)
+    ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, order_for, SELECTOR, STAGE, STAGE_CHECKS, STAGES, TESTED_KINDS, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import (
     append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
     PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
@@ -100,8 +98,7 @@ from .infrastructure.description import check_description
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .delivery.adapter.outgoing.build.test_reports import (
-    clock_marker, display_name_of, executed_tests, fill, normalise, outcome_for, read_scenarios, report_state,
-    reported_names, reports_from_this_run, SENTINEL, unescape_literal)
+    display_name_of, fill, outcome_for, read_scenarios, reported_names, unescape_literal)
 from .spec.api import (
     derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
 from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED
@@ -116,7 +113,7 @@ from .delivery.adapter.outgoing.files.run_marks import (
 from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned, write_story_fields
 from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state, accepted)
+    ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state)
 from .delivery.application.shared.front import is_acceptance
 from .delivery.domain.model.verdict import FindingState
 from .delivery.domain.service.backlog_checks import BacklogChecks
@@ -132,6 +129,9 @@ from .delivery.domain.service.kept_checks import KeptChecks
 from .delivery.domain.service.spec_checks import SpecChecks
 from .delivery.domain.service.delivery_checks import DeliveryChecks
 from .delivery.domain.service.integration_checks import IntegrationChecks
+from .delivery.domain.service.test_verdicts import BreakProof, TestVerdicts
+from .delivery.domain.model.stage_story import Expectation
+from .delivery.adapter.outgoing.build.test_runs import red_ledger, run_tests
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
 from .delivery.adapter.outgoing.files.test_files import locate_tests
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, split_list
@@ -142,6 +142,8 @@ from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
 from .delivery.adapter.outgoing.spec.story_spec_files import moved_tests, story_spec
 from .delivery.adapter.outgoing.files.delivery_files import SKIP_DIRS, TEST_DIR, TEST_FILE
 from .delivery.adapter.outgoing.git.integration import integration_target
+from .delivery.adapter.outgoing.build import commands
+from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, TOOL_FOLDERS, command_for, open_suites_record, recorded_run, run, tail, test_command_keys
 
 
 def story_ids(epics):
@@ -833,158 +835,6 @@ def mapped_tests(run):
     return run.tests[2]
 
 
-def posix_shell():
-    """On Windows, the bash that runs profile commands; None elsewhere (the system shell does).
-
-    Not `shutil.which("bash")`: on a stock Windows that is `System32\\bash.exe`, the WSL launcher,
-    which starts a Linux distribution or fails without one — either way not a shell over this
-    tree. Order: `FACTORY_BASH`; the bash of the Git installation that `git` on PATH belongs to
-    (Git Bash, the supported route); any other `bash.exe` on PATH outside System32.
-    """
-    if os.name != "nt":
-        return None
-    named = os.environ.get("FACTORY_BASH", "").strip()
-    if named:
-        return named
-    git = shutil.which("git")
-    if git:
-        install = os.path.dirname(os.path.dirname(os.path.realpath(git)))     # <Git>/cmd/git.exe
-        for relative in ("bin/bash.exe", "usr/bin/bash.exe", "../bin/bash.exe"):
-            candidate = os.path.normpath(os.path.join(install, relative))
-            if os.path.isfile(candidate):
-                return candidate
-    for entry in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = os.path.join(entry, "bash.exe")
-        if os.path.isfile(candidate) and "system32" not in candidate.lower():
-            return candidate
-    return None
-
-
-# Commands whose shell could not find their program, in the order they were met. A missing tool is the
-# environment's fault, not the story's: the report names it as `environment`, and the runner stops once
-# on it instead of sending a stage into rounds it cannot win.
-MISSING_TOOLS = []
-
-
-MISSING_TOOL = re.compile(r"(?:^|\n)(?:[^\n:]*: )?(?:line \d+: |\d+: )?([^\s:]+): (?:command )?not found"
-                          r"|'([^']+)' is not recognized as an internal or external command")
-
-
-def missing_tool(code, output):
-    """The program a shell could not find (exit 127, or cmd.exe's 9009), else None."""
-    if code not in (127, 9009):
-        return None
-    found = MISSING_TOOL.search(output or "")
-    return (found.group(1) or found.group(2)) if found else "a program"
-
-
-def run(command, cwd):
-    """Run one profile command through a shell.
-
-    The profile is written for a POSIX shell — `a && b`, `sh runner.sh`, quoting — and the runner
-    and the commit hook are bash, so on Windows the same commands go through Git's bash (see
-    `posix_shell`). Without one, `cmd.exe` gets them, and a profile that leans on POSIX syntax
-    fails there loudly rather than subtly.
-    """
-    bash = posix_shell()
-    if bash:
-        completed = subprocess.run(
-            [bash, "-c", command], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
-        )
-    else:
-        completed = subprocess.run(
-            command, cwd=cwd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace"
-        )
-    output = completed.stdout + completed.stderr
-    tool = missing_tool(completed.returncode, output)
-    if tool and (tool, command) not in MISSING_TOOLS:
-        MISSING_TOOLS.append((tool, command))
-    return completed.returncode, output
-
-
-#: The runner's own record of the suite runs its gates made on one tree (WP-79 A3). Set by `main()` when
-#: `--record-suites` is on and the runner's key is in the environment; None in a stage's own gate run.
-SUITES_RECORD = None
-
-
-def suites_tree_key(cwd, runs):
-    """What a recorded run is keyed by: a digest of every source file's path and content — the run folder,
-    the tools' folders and the build outputs left out — plus HEAD where there is one. The gate report the
-    runner copies into the evidence folder between two gates must not turn an unchanged tree into a new one, and a
-    project before its `git init` has a tree as well."""
-    digest = hashlib.sha256()
-    code, head = git(cwd, "rev-parse", "HEAD")
-    digest.update((head.strip() if code == 0 else "no-head").encode("utf-8"))
-    skipped = SKIP_DIRS | {runs_top()}
-    for root, dirs, files in os.walk(cwd):
-        dirs[:] = sorted(d for d in dirs if d not in skipped and not d.startswith("."))
-        for name in sorted(files):
-            path = os.path.join(root, name)
-            rel = os.path.relpath(path, cwd).replace(os.sep, "/")
-            if run_owned(rel, runs) or any(folder in "/" + rel for folder in TOOL_FOLDERS):
-                continue
-            try:
-                with open(path, "rb") as handle:
-                    digest.update(rel.encode("utf-8") + b"\0" + hashlib.sha256(handle.read()).digest())
-            except OSError:
-                continue
-    return digest.hexdigest()
-
-
-def suites_signature(key, tree, invocation, code, ran_json):
-    return hmac.new(key.encode("utf-8"), f"{tree}\t{invocation}\t{code}\t{ran_json}".encode("utf-8"),
-                    hashlib.sha256).hexdigest()
-
-
-def open_suites_record(cwd, runs, story_id, key):
-    """The rows of `.verify/suites.tsv` for this tree whose signature the runner's key confirms. A row
-    written by anything else — a stage, a hand — carries no valid signature and is not read."""
-    path = os.path.join(evidence_dir(runs, story_id), "suites.tsv")
-    tree = suites_tree_key(cwd, runs)
-    rows = {}
-    if tree and os.path.isfile(path):
-        for line in read_text(path).splitlines():
-            parts = line.split("\t")
-            if len(parts) != 6:
-                continue
-            when, row_tree, invocation, code, ran_json, signature = parts
-            if row_tree == tree and hmac.compare_digest(
-                    signature, suites_signature(key, row_tree, invocation, code, ran_json)):
-                rows[invocation] = (when, int(code), json.loads(ran_json))
-    return {"path": path, "key": key, "tree": tree, "rows": rows, "cwd": os.path.realpath(cwd)}
-
-
-def recorded_run(invocation, cwd, profile=None, with_reports=False):
-    """(code, output, ran, reused) — the invocation run now, or the runner's own record of it on this tree.
-
-    Only a run that passed is recorded: a red run is run again, so a fix is seen by the run that judges
-    it. `ran` is what the reports of the run said was executed (empty when `with_reports` is off), and
-    `reused` is the suffix that tells the reader the verdict came from the record."""
-    record = SUITES_RECORD
-    if record and record.get("cwd") != os.path.realpath(cwd):
-        record = None                         # another tree — a break's scratch copy — has no record of its own
-    if record and record["tree"] and invocation in record["rows"]:
-        when, code, ran_rows = record["rows"][invocation]
-        return code, "", {(cls, method): outcome for cls, method, outcome in ran_rows}, \
-            f" (recorded at {when} for this tree)"
-    if with_reports:
-        before, marker = report_state(cwd, profile), clock_marker(cwd)
-        code, output = run(invocation, cwd)
-        ran = executed_tests(reports_from_this_run(before, report_state(cwd, profile), marker))
-    else:
-        code, output = run(invocation, cwd)
-        ran = {}
-    if record and record["tree"] and code == 0 and not any(outcome == "failed" for outcome in ran.values()):
-        when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        ran_json = json.dumps(sorted([cls, method, outcome] for (cls, method), outcome in ran.items()))
-        signature = suites_signature(record["key"], record["tree"], invocation, code, ran_json)
-        os.makedirs(os.path.dirname(record["path"]), exist_ok=True)
-        with open(record["path"], "a", encoding="utf-8") as handle:
-            handle.write("\t".join((when, record["tree"], invocation, str(code), ran_json, signature)) + "\n")
-        record["rows"][invocation] = (when, code, json.loads(ran_json))
-    return code, output, ran, ""
-
-
 def check_compiles(result, profile, cwd):
     command = profile.get("compile")
     if not command:
@@ -1012,375 +862,40 @@ def check_stage_commands(result, profile, cwd, stage):
             result.fail(key, f"`{command}` failed:\n{tail(output)}")
 
 
-#: Which declared command can run a given test. A mapped test may live in any test project or
-#: source set — the end-user tests in one, the unit tests in another — and running a selector
-#: against the wrong one matches nothing. A runner that matched nothing exits 0, which is
-#: indistinguishable from a passing test, so the choice may not be a guess: it is made from the
-#: file the test was found in.
-TEST_COMMAND_KEYS = ("e2eTest", "test")
-
-
-def test_command_keys(profile):
-    """Every command in the profile that runs tests, most specific first.
-
-    A project has more than two test source sets — unit, integration, end-user — and a mapped
-    test may live in any of them. Beyond the two fixed keys, any `test.<name>:` entry counts, so
-    declaring one more source set is a profile line and never a change to the gate.
-    """
-    extra = sorted(key for key in profile if key.startswith("test."))
-    return extra + list(TEST_COMMAND_KEYS)
-
-
-def command_for(profile, test_path):
-    """The (key, command) whose path or source-set token covers `test_path`, longest match first.
-
-    A command names where it runs: `dotnet test tests/Foo.HttpTests`, `./gradlew test-e2e`
-    (source set `src/test-e2e/java`). Both forms are matched against the file's path segments.
-    """
-    segments = [part for part in test_path.replace("\\", "/").split("/") if part]
-    joined = "/".join(segments)
-    best = None
-    for key in test_command_keys(profile):
-        command = profile.get(key)
-        if not command:
-            continue
-        for token in command.split():
-            token = token.strip("\"'").lstrip("./")
-            if not token or token.startswith("-"):
-                continue
-            # A project or solution file names a directory, not a file to match: `dotnet test
-            # tests/Foo/Foo.csproj` runs every test under tests/Foo.
-            if os.path.splitext(token)[1] in (".csproj", ".fsproj", ".vbproj", ".sln", ".slnx",
-                                              ".slnf", "pom.xml"):
-                token = os.path.dirname(token) or token
-            if "/" not in token and "." in token and not token.startswith("test"):
-                continue                      # a version, a flag's value, a class name
-            covers = token in segments or ("/" in token and token in joined)
-            if covers and (best is None or len(token) > best[2]):
-                best = (key, command, len(token))
-    if best:
-        return best[0], best[1]
-    # No guessing beyond this point. Whether a command without a path runs the whole project
-    # (`dotnet test` on a solution) or exactly one source set (`./gradlew test`) is knowledge about
-    # that build tool, and a gate that guesses it either refuses valid projects or silently runs the
-    # wrong task and calls a criterion covered that nothing executes. So the project declares it:
-    #
-    #     covers.test: **                  this command runs every test in the project
-    #     covers.test: tests/, src/it/     it runs the tests under these paths
-    #
-    # The installer writes it where it can tell; a human corrects it where it cannot.
-    for key in test_command_keys(profile):
-        scope = profile.get(f"covers.{key}")
-        if not scope or not profile.get(key):
-            continue
-        for prefix in (part.strip() for part in scope.split(",")):
-            if prefix == "**" or (prefix and joined.startswith(prefix.rstrip("/").lstrip("./"))):
-                return key, profile[key]
-    return None, None
-
-
-def discriminates(command, flag, fmt, cwd, cache):
-    """(control_code, control_output) for this command, run once and remembered.
-
-    Only used where a project has opted out of report evidence: comparing a real run against a run
-    with a selector that cannot exist is weaker — a runner that prints the selector back in its
-    "no tests found" line answers differently without having run anything.
-    """
-    if command not in cache:
-        pattern = fill(fmt, SENTINEL[0], SENTINEL[1], SENTINEL[2])
-        code, output = run(f'{command} {flag} "{pattern}"'.strip(), cwd)
-        cache[command] = (code, normalise(output, cwd))
-    return cache[command]
-
-
-def joined_filter(profile, flag, patterns):
-    """The filter argument that selects every pattern in one run.
-
-    The flag repeated per pattern is what most runners take (`--tests a --tests b`, pytest's node ids
-    without a flag). A runner that takes one expression joins the patterns inside it instead, with the
-    separator the profile names (`filterJoin: "|"` for `dotnet test --filter`, `","` for Maven's
-    `-Dtest`). One pattern is the single-selector invocation either way.
-    """
-    separator = str(profile.get("filterJoin", "") or "")
-    if separator and len(patterns) > 1:
-        return f'{flag} "{separator.join(patterns)}"'.strip()
-    return " ".join(f'{flag} "{pattern}"'.strip() for pattern in patterns)
-
-
 def check_test_state(result, profile, cwd, mapping, expected, located=None, runs=None, story=None, guard=False,
                      whole_for=(), red_proof=True):
-    """expected 'red': every mapped test must fail. 'green': all must pass. A `guard` — a journey over
-    delivered stories — is green without ever having been red: its steps exist before it is written.
-
-    One process per test command, not per selector: every selector a command covers goes into one
-    invocation, and each selector's verdict is read from that run's reports by name. A command in
-    `whole_for` (the policy's `required:` commands at the build and tidy gates) runs whole instead, and
-    the run is returned — `{command: (key, code, output, ran)}` — so the suite check reads it rather than
-    running the same command again. `testEvidence: exit-code` keeps one process per selector: it has no
-    report to read a name from. `red_proof=False` leaves the red proof to a caller that checked it before
-    any process started — it is a digest comparison, not a run."""
-    fallback = profile.get("e2eTest") or profile.get("test")
-    flag = profile.get("filterFlag", "")
-    fmt = profile.get("filterFormat", "{class}.{method}")
+    """expected 'red': every mapped test must fail. 'green': all must pass (`TestVerdicts`) — the tests run first
+    (`run_tests`), their outcomes judged against the red ledger. A break proof the judgement asks for is run here;
+    a test it proves counts as red, one it does not keeps its earlier proof. Returns the commands run whole —
+    `{command: (key, code, output, ran)}` — so the suite check reads them rather than running them again.
+    `red_proof=False` leaves the red proof to a caller that checked it before any process started."""
     located = located or {}
-    whole_for = set(whole_for or ())
-    whole_runs = {}
-    if not fallback:
-        result.skip(
-            f"tests-{expected}",
-            "no `e2eTest:` or `test:` command in the stack profile",
-        )
-        return whole_runs
-    if not mapping:
-        return whole_runs
-    ledger = red_ledger_path(runs, story)
-    have_ledger = bool(ledger) and os.path.isfile(ledger)
-    was_red = read_red_ledger(runs, story)
-    red_digests = read_red_digests(runs, story)
-    now_red = set()
-    kept = {}                                 # entries an earlier run made that this run leaves as they are
-    # An expectation that changes on a human's decision: the test was recorded red before the code
-    # existed, the decision changed what it expects, and the code now meets it. Only that combination
-    # lets a green test through the red check — without the decision it is the refusal below.
-    changed_on = answered_decisions(cwd, story, "test") if expected == "red" else []
-    if expected == "red":
-        # A story that runs again for a human's correction keeps the criteria it had already met:
-        # their tests were red once, for this very story, and are green now for that reason.
-        with contextlib.suppress(GateError):
-            changed_on += [rid for rid, _f, state, answer, _b in acceptance_records(cwd, story)
-                           if state in ("answered", "applied") and not accepted(answer)]
-    # A story planned again — its text changed, a story conflict was answered — keeps the criteria its
-    # earlier pass already built: their tests were seen red for this story, and a build made them green.
-    built_before = bool(runs and story) and os.path.isfile(os.path.join(runs, story, STAGE_FILES["build"]))
-    by_report = profile.get("testEvidence", "").strip() != "exit-code"
-
-    # 1. Every selector resolves to the command that covers it — or to a configuration fail — before
-    #    anything runs. Grouped by command, one process then carries every selector it covers.
-    groups = {}
-    for key, selectors in sorted(mapping.items()):
-        for selector in selectors:
-            cls, method = SELECTOR.match(selector).groups()
-            test_path = located.get(selector)
-            if "{file}" in fmt and not test_path:
-                # The filter names the file, and no file was found for this selector — running the
-                # placeholder literally would select nothing, and that exits 0 on some runners.
-                result.fail(
-                    f"tests-{expected}",
-                    f"{selector}: `filterFormat` selects by `{{file}}`, but no source file was "
-                    f"located for it — nothing to run for {key!r}.",
-                )
-                continue
-            pattern = fill(fmt, cls, method, test_path)
-            command_key, command = command_for(profile, test_path) if test_path else (None, None)
-            if not command and test_path:
-                # Running it with some other command proves nothing in either direction: a runner
-                # that matched no test exits 0 on one stack (looks green) and non-zero on another
-                # (looks red). Both are artefacts, so this is a configuration error, not a verdict.
-                result.fail(
-                    f"tests-{expected}",
-                    f"{selector} lives in {test_path}, which no declared test command covers. "
-                    f"Declare that source set in the stack profile (`test.<name>: <command>`), or "
-                    f"state the scope of a command that already runs it (`covers.<key>: <paths>` "
-                    f"or `covers.<key>: **`); "
-                    f"a run with any other command would match no test, and that exits 0 on one "
-                    f"runner and non-zero on another — neither is evidence about {key!r}.",
-                )
-                continue
-            if not command:
-                command_key, command = "e2eTest" if profile.get("e2eTest") else "test", fallback
-            groups.setdefault(command, []).append((key, selector, cls, method, test_path, command_key, pattern))
-
-    def observed_run(invocation):
-        """(code, output, {(class, method): outcome}, reused) of one invocation, from the reports it
-        wrote — or from the runner's record of the same invocation on this tree."""
-        return recorded_run(invocation, cwd, profile, with_reports=True)
-
-    def verdict(key, selector, command_key, passed, output, evidence):
-        """The selector's verdict against what the ledger and the stage expect — unchanged by how it ran."""
-        if not passed:
-            now_red.add(selector)
-        if expected == "green" and passed and guard:
-            result.ok("tests-green", f"{selector} passes — a journey guards what is delivered ({key})")
-            return
-        if expected == "green" and passed and not have_ledger:
-            # No test stage ran in this checkout — the run artefacts may simply not be
-            # committed. Say that the evidence is missing instead of inventing either verdict.
-            result.skip(
-                "tests-green",
-                f"{selector} is green, but no `{os.path.basename(ledger)}` from a test stage "
-                f"is present here, so nothing proves it ever failed ({key!r}).",
-            )
-            return
-        if expected == "green" and passed and selector not in was_red:
-            # Never seen red: a runner that matched nothing exits 0 exactly like a passing
-            # test, so "green" alone is no evidence that this test ran at all.
-            result.fail(
-                "tests-green",
-                f"{selector} passes now but was never recorded red by the test stage "
-                f"({key!r}) — a test that never failed proves nothing, and a run that "
-                f"matched no test passes too. Run `--stage test` before the build stage.",
-            )
-            return
-        if expected == "red" and passed and selector in was_red and changed_on:
-            now_red.add(selector)
-            result.ok("tests-red", f"{selector} is green now and was recorded red before; its "
-                                   f"expectation changed on decision {', '.join(changed_on)} ({key})")
-            return
-        if expected == "red" and passed and selector in was_red and built_before:
-            recorded = red_digests.get(selector)
-            test_file = located.get(selector)
-            if recorded and test_file and os.path.isfile(os.path.join(cwd, test_file)) \
-                    and file_digest(os.path.join(cwd, test_file)) != recorded:
-                # Changed after its build met it — the judge sent it back as asserting too little. It is
-                # green and can never be seen red again: one change to the code that turns it red shows
-                # that the new assertion bites.
-                probe = Result()
-                check_break(probe, profile, cwd, runs, story, selector, key, located)
-                result.entries.extend(probe.entries)
-                if not probe.failed:
-                    now_red.add(selector)
-                else:
-                    # The earlier proof stands for the version it was taken against; losing it would make
-                    # the next run treat this test as one never seen red, which no break can repair.
-                    kept[selector] = recorded
-                return
-            now_red.add(selector)
-            result.ok("tests-red", f"{selector} is green now and was recorded red in an earlier pass of this "
-                                   f"story, whose build met it ({key})")
-            return
-        if expected == "red" and passed:
-            result.fail(
-                "tests-red",
-                f"{selector} passes before the build stage — a test that is green "
-                f"before the code exists proves nothing about {key!r}. Either the test "
-                f"asserts nothing new (the test stage fixes it), or {key!r} describes "
-                f"behaviour the system already has — then the criterion does not belong in "
-                f"the story, and that is the story author's call, not a stage's.",
-            )
-        elif expected == "green" and not passed:
-            result.fail(
-                "tests-green",
-                f"{selector} fails, so criterion {key!r} is not met:\n{tail(output)}",
-            )
-        else:
-            result.ok(
-                f"tests-{expected}",
-                f"{selector} is {'green' if passed else 'red'} ({key}, via `{command_key}:`"
-                f"{', ' + evidence if evidence else ''})",
-            )
-
-    # 2. One process per command. Where the policy runs the command whole at this gate anyway, the whole
-    #    run is the evidence for its selectors too; elsewhere every selector goes into one filtered run.
-    control = {}                              # one control run per command, not per selector
-    for command, items in groups.items():
-        command_key = items[0][5]
-        patterns = list(dict.fromkeys(item[6] for item in items))
-        if not by_report:
-            # `testEvidence: exit-code`: the exit code is all there is, and it belongs to one selector.
-            for key, selector, cls, method, test_path, command_key, pattern in items:
-                invocation = f'{command} {flag} "{pattern}"'.strip()
-                code, output = run(invocation, cwd)
-                control_code, control_output = discriminates(command, flag, fmt, cwd, control)
-                if code == control_code and normalise(output, cwd) == control_output:
-                    result.fail(
-                        f"tests-{expected}",
-                        f"{selector}: `{invocation}` answers a selector that cannot exist the same "
-                        f"way (exit {code}), so it never ran this test — no evidence about {key!r}:"
-                        f"\n{tail(output)}",
-                    )
-                    continue
-                result.skip(
-                    f"tests-{expected}",
-                    f"{selector}: `testEvidence: exit-code` — the verdict rests on the exit code, "
-                    f"not on a report of what ran. A runner that exits like a failing test without "
-                    f"running one is indistinguishable here.",
-                )
-                verdict(key, selector, command_key, code == 0, output, "")
-                if expected == "red" and code != 0 and red_on_timeout(output):
-                    timeout_note(result, expected, selector)
+    if (profile.get("e2eTest") or profile.get("test")) and not mapping:
+        return {}
+    test_run, whole_runs = run_tests(profile, cwd, mapping or {}, located, whole_for)
+    ledger = red_ledger(cwd, runs, story, expected == "red", located)
+    judged = TestVerdicts.judge(Expectation(expected), Presence.PRESENT if guard else Presence.ABSENT, test_run, ledger)
+    now_red, kept = {s.value for s in judged.now_red}, {}
+    for item in judged.items:
+        if not isinstance(item, BreakProof):
+            take(result, (item,))
             continue
-        whole = command_key in whole_for
-        invocation = command if whole else f"{command} {joined_filter(profile, flag, patterns)}".strip()
-        code, output, ran, reused = observed_run(invocation)
-        if whole:
-            whole_runs[command] = (command_key, code, output, ran)
-        shared = whole or len(patterns) > 1
-        timed_out = []
-        for key, selector, cls, method, test_path, command_key, pattern in items:
-            display = display_name_of(test_path, method)
-            outcome, how = outcome_for(ran, cls, method, display)
-            item_output = output
-            if outcome is None and shared:
-                # Not in the shared run's report. Before that fails the selector it runs alone, once: a
-                # runner that honours one filter and drops the second, or a whole run that skipped a
-                # source set, must not fail a test that a run of its own would show.
-                alone = f'{command} {flag} "{pattern}"'.strip()
-                code_alone, item_output, ran_alone, reused = observed_run(alone)
-                outcome, how = outcome_for(ran_alone, cls, method, display)
-                if outcome is not None:
-                    result.note(f"tests-{expected}",
-                                f"{selector}: absent from the report of `{invocation}`, run alone (`{alone}`) — "
-                                f"a runner that drops a joined filter costs one process per selector here")
-            if outcome is None:
-                detail = (f" — {how}" if how else
-                          f" ({len(ran)} case(s) in the report(s) written by this run)")
-                result.fail(
-                    f"tests-{expected}",
-                    f"{selector}: no test report from this run shows it ran{detail}. Let the "
-                    f"runner write one (JUnit XML is the default on the JVM; .NET needs "
-                    f"`--logger trx`), point `testReport:` at it, give the test a name the "
-                    f"report carries, or accept the weaker check with "
-                    f"`testEvidence: exit-code`:\n{tail(item_output)}",
-                )
-                continue
-            if outcome == "skipped":
-                result.fail(
-                    f"tests-{expected}",
-                    f"{selector} was skipped rather than run, so it says nothing about "
-                    f"{key!r}.",
-                )
-                continue
-            # The report decides, not the exit code: a build can fail for reasons beside this
-            # test, and a runner can exit 0 with a failure recorded.
-            passed = outcome == "passed"
-            verdict(key, selector, command_key, passed, item_output, f"report {how}{reused}")
-            if expected == "red" and not passed and red_on_timeout(item_output):
-                timed_out.append(selector)
-        if timed_out and shared:
-            # One output for the run: which of its red tests hit the timeout is not readable from it.
-            result.note(f"tests-{expected}", f"`{invocation}`: red on a timeout, not on an assertion, somewhere "
-                                             f"among {', '.join(timed_out)} — an action waited for something that "
-                                             f"is not there; the first step that can be missing should be an "
-                                             f"expectation (`expect(locator).toBeVisible()` before the click or "
-                                             f"fill), so the failure names it.")
+        probe = Result()
+        check_break(probe, profile, cwd, runs, story, item.selector.value, item.key.value, located)
+        result.entries.extend(probe.entries)
+        if not probe.failed:
+            now_red.add(item.selector.value)
         else:
-            for selector in timed_out:
-                timeout_note(result, expected, selector)
+            # The earlier proof stands for the version it was taken against; losing it would make the next run
+            # treat this test as one never seen red, which no break can repair.
+            kept[item.selector.value] = read_red_digests(runs, story).get(item.selector.value)
+    if test_run.command is Presence.ABSENT:
+        return whole_runs
     if expected == "red":
         write_red_ledger(runs, story, now_red, located, cwd, kept)
-    elif have_ledger and red_proof:
+    elif ledger.present is Presence.PRESENT and red_proof:
         check_red_proof(result, cwd, runs, located, story)
     return whole_runs
-
-
-def timeout_note(result, expected, selector):
-    result.note(f"tests-{expected}", f"{selector} is red on a timeout, not on an assertion — an action "
-                                     f"waited for something that is not there. Red is red, but it says "
-                                     f"nothing about what is missing: the first step that can be missing "
-                                     f"should be an expectation (`expect(locator).toBeVisible()` before "
-                                     f"the click or fill), so the failure names it.")
-
-
-#: What a browser runner prints when an action, not an expectation, ran out of time.
-TIMEOUT_RED = re.compile(r"TimeoutError|Timeout \d+ms exceeded|TimeoutException")
-
-
-ASSERTION_RED = re.compile(r"expect\(|AssertionError|AssertionFailedError|Expected\b|assert", re.IGNORECASE)
-
-
-def red_on_timeout(output):
-    """A red that came from an action's timeout with no expectation in sight."""
-    return bool(TIMEOUT_RED.search(output or "")) and not ASSERTION_RED.search(output or "")
 
 
 def check_red_proof(result, cwd, runs, located, story_id):
@@ -1510,10 +1025,6 @@ def reprove_red(result, profile, cwd, runs, story_id, mapping, located):
                 journal_append(runs, story_id, "red-reproved", selector, "by=tidy")
 
 
-def read_red_ledger(runs, story):
-    return set(read_red_digests(runs, story))
-
-
 def write_red_ledger(runs, story, selectors, located=None, cwd=".", kept=None):
     """The red record: every selector seen red now, bound to its test file's digest — and, in `kept`, the
     entries an earlier run made that this run could neither confirm nor replace (a strengthened test whose
@@ -1534,11 +1045,6 @@ def write_red_ledger(runs, story, selectors, located=None, cwd=".", kept=None):
         lines.append(f"{selector}\t{file_digest(full)}" if full and os.path.isfile(full) else selector)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + ("\n" if lines else ""))
-
-
-def tail(output, limit=1200):
-    text = output.strip()
-    return text[-limit:] if len(text) > limit else text
 
 
 def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None, story=None):
@@ -1562,9 +1068,6 @@ def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None, s
 # profile declares the commands; its `required:` line declares which of them must hold. Without
 # that line the check reports what it ran and what it skipped, and fails only on a red command.
 CHANGE_CHECKS = ("compile", "test", "architecture", "format")
-
-
-TOOL_FOLDERS = ("/.claude/", "/.codex/", "/.opencode/")
 
 
 def staged_snapshot(result, cwd, env):
@@ -2289,12 +1792,11 @@ def _rounds(run):
 
 @check("suites")
 def _suites(run):
-    global SUITES_RECORD
     if not run.args.record_suites:
         return
     key = os.environ.get("FACTORY_SUITES_KEY", "")
     if key:
-        SUITES_RECORD = open_suites_record(run.cwd, run.runs, run.story_id, key)
+        commands.SUITES_RECORD = open_suites_record(run.cwd, run.runs, run.story_id, key)
     else:
         run.result.note("suites", "--record-suites without FACTORY_SUITES_KEY in the environment — nothing is "
                                   "recorded or reused")

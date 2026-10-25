@@ -659,3 +659,85 @@ class MainTests(Value):
     waived: typing.Tuple[typing.Tuple[Place, typing.Tuple[RecordId, ...]], ...]
     lost: Detail
     target: Detail
+
+
+class Expectation(enum.Enum):
+    """What a gate expects of a story's mapped tests: red before the code exists, green after."""
+
+    RED = "red"
+    GREEN = "green"
+
+
+class RunState(enum.Enum):
+    """What one run said of a mapped test — or why no run could say anything."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    #: no report of the run shows it ran
+    NOT_REPORTED = "not reported"
+    #: the filter selects by file, and no file was located for the test
+    NO_FILE = "no file"
+    #: its file lies where no declared test command runs
+    UNCOVERED = "uncovered"
+    #: by exit code alone: the run answered like one of a test that cannot exist
+    NOT_DISCRIMINATED = "not discriminated"
+
+
+class Evidence(enum.Enum):
+    """What a verdict rests on: the run's reports, or its exit code alone."""
+
+    REPORT = "report"
+    EXIT_CODE = "exit code"
+
+
+@dataclasses.dataclass(frozen=True)
+class TestOutcome(Value):
+    """One mapped test as its run left it: the command that ran it, the state, how the report showed it, the
+    invocation (and, where it ran alone after a shared run missed it, that invocation), the exit code, the end of
+    the output, how many cases the report held, and whether a red came from a timeout."""
+
+    key: ScenarioKey
+    selector: Selector
+    place: typing.Optional[Place]
+    command: typing.Optional[CommandKey]
+    state: RunState
+    evidence: Evidence
+    how: Detail
+    invocation: Detail
+    alone: typing.Optional[Detail]
+    code: Count
+    output: Detail
+    cases: Count
+    timeout: Presence
+
+
+@dataclasses.dataclass(frozen=True)
+class RunEnd(Value):
+    """The end of one invocation's outcomes — shared where it carried several tests."""
+
+    invocation: Detail
+    shared: Presence
+
+
+@dataclasses.dataclass(frozen=True)
+class TestRun(Value):
+    """A gate's run of the mapped tests: whether the profile names a test command at all, and what each
+    invocation said, in order."""
+
+    command: Presence
+    items: typing.Tuple[typing.Union[TestOutcome, RunEnd], ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class RedLedger(Value):
+    """The red ledger as a run reads it: whether there is one (and its name), the tests it names, the decisions and
+    corrections that changed an expectation, whether an earlier pass's build met the tests, and the tests whose file
+    changed since they were seen red."""
+
+    present: Presence
+    name: Detail
+    was_red: typing.FrozenSet[Selector]
+    changed_on: typing.Tuple[RecordId, ...]
+    built_before: Presence
+    moved: typing.FrozenSet[Selector]
