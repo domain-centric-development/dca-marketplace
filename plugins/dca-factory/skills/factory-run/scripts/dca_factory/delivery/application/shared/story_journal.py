@@ -7,6 +7,7 @@ import typing
 
 from ....building_blocks import Store
 from ...domain.model.story import StoryId
+from .story_claims import ClaimHeld
 from ...domain.model.usage import Usage
 
 
@@ -36,4 +37,12 @@ class StoryJournal(Store, typing.Protocol):
 
     def delivered_over_claim(self, story: StoryId, who: str) -> None:
         """A note that the story was delivered by hand over another factory's claim, by force."""
+        ...
+
+    def owned_confirmed(self, story: StoryId, parts: typing.Sequence[str]) -> None:
+        """The person confirmed what a stage changed of theirs."""
+        ...
+
+    def claimed_elsewhere(self, story: StoryId, held: ClaimHeld) -> None:
+        """A note that another factory holds the story."""
         ...

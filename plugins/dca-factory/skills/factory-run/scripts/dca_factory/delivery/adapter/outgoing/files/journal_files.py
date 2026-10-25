@@ -12,6 +12,7 @@ import typing
 from .story_layout import find_story, story_digest, story_id_of
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, JOURNAL, place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
+from ....application.shared.story_claims import ClaimHeld
 from ....application.shared.story_journal import Window
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.story import StoryId
@@ -173,3 +174,11 @@ class StoryJournalFiles:
     def delivered_over_claim(self, story: StoryId, who: str) -> None:
         with contextlib.suppress(OSError):
             journal_append(self._runs, story.value, "note", "deliver-by-hand", f"over-claim={who}", "forced=1")
+
+    def owned_confirmed(self, story: StoryId, parts: typing.Sequence[str]) -> None:
+        journal_append(self._runs, story.value, "owned-confirmed", ",".join(parts))
+
+    def claimed_elsewhere(self, story: StoryId, held: ClaimHeld) -> None:
+        with contextlib.suppress(OSError):
+            journal_append(self._runs, story.value, "note", "claimed-elsewhere", f"by={held.who}",
+                           f"since={held.since}")

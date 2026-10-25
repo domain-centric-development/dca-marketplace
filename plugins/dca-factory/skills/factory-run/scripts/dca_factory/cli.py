@@ -52,7 +52,6 @@ import shlex
 import sys
 import textwrap
 import time
-from datetime import datetime, timezone
 from .contract import (
     ALL_KINDS, CONTRACT, FORM_CHECKS, GateError, layout_hint, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE, open_findings
@@ -61,14 +60,13 @@ from .sharedkernel.adapter.outgoing.profile.profile_files import (
     resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git
 from .delivery.adapter.outgoing.files.story_layout import (
-    delivered_on, EPIC_FILE, epic_folder, find_story, is_delivered, story_files,
+    delivered_on, find_story, is_delivered, story_files,
     story_id_of, story_kind)
-from .delivery.application.shared.front import CREATED_KEY
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .delivery.adapter.outgoing.tools.streams import follow_lines, tokens_of, usage_from
-from .state import schedule, start
+from .state import schedule_data, start_of
 from .delivery.adapter.outgoing.claims.remote_claims import (
-    cached_claims, claim_config_here, claim_story, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
+    claim_config_here, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
     remote_main)
 from .delivery.adapter.outgoing.claims.checkout_claim import (
     claim, claim_path, listener_line, mark_listening, read_claim, release, session_owner)
@@ -77,10 +75,10 @@ from .delivery.adapter.outgoing.files.windows import freeze_all, mark_stage, mar
 from .delivery.adapter.outgoing.files.usage_files import journal_usage
 from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.files.run_marks import (
-    back_in, OWNED_CHANGED, run_stories, story_title)
+    back_in, run_stories)
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.adapter.outgoing.files.owned_files import record_owned, write_story_fields
-from .delivery.adapter.outgoing.files.journal_files import journal_append, journal_events, journal_writer
+from .delivery.adapter.outgoing.files.journal_files import journal_events, journal_writer
 from .spec.api import (
     lint_context,
     derived, read_delta, renamed_rules, story_entries)
@@ -89,7 +87,6 @@ from .gate import (
 from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_invocation, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
     follow_newest, story_facts)
-from .delivery.adapter.outgoing.files.epic_files import epic_files
 from .delivery.application.status import actions
 from .delivery.application.status.actions import offered
 from .delivery.application.status.show_status import ShowStatusQuery
@@ -112,6 +109,10 @@ from .building_blocks import UseCaseException
 from .delivery.adapter.outgoing.claims.story_claims import claim_target
 from .delivery.adapter.outgoing.files.story_runs import CLAIM_FILE  # noqa: F401 — where `--prove` keeps the claim
 from .delivery.application.shared.story_repository import StoryNotFound
+from .delivery.application.backlog.backfill_created import BackfillCreatedCommand
+from .delivery.application.delivery.claim_story import ClaimStoryCommand
+from .delivery.application.delivery.confirm_owned import ConfirmOwnedCommand, NothingToConfirm
+from .delivery.application.shared.story_claims import Claim
 from .delivery.application.delivery.deliver_by_hand import ChangesWhatHolds, ClaimedElsewhere, DeliverByHandCommand
 from .delivery.application.delivery.prove_delivery import ProveDeliveryCommand
 from .delivery.application.delivery.reopen_story import CheckoutHeld, NewWish, NoCorrection, NotCited, ReopenStoryCommand
@@ -130,6 +131,7 @@ from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, 
 from .delivery.adapter.incoming.cli.status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
 from .delivery.adapter.incoming.cli.story_view import render_story_md, render_story_text, stage_caption, stage_cells
 from .delivery.adapter.incoming.cli.epic_view import render_epic_md, render_epic_text
+from .delivery.adapter.incoming.cli.schedule_view import schedule_lines, start_lines
 from .delivery.adapter.incoming.cli.help_view import render_help_md, render_help_text
 
 
@@ -264,20 +266,15 @@ def facts_model(cwd, runs, story_id):
                 priced=facts["priced"] > 0)
 
 
-def owned_confirm(runs, story_id):
-    """The person's word that the story and its answers are as they want them after a stage changed them: the mark
-    goes, what changed is journaled, and the story runs on from what its files say."""
-    folder = evidence_dir(runs, story_id)
-    marked = os.path.join(folder, OWNED_CHANGED)
-    if not os.path.isfile(marked):
+def owned_confirm(runs, story_id, cwd="."):
+    """The person's word that the story and its answers are as they want them after a stage changed them
+    (`ConfirmOwnedUseCase`): the mark goes, what changed is journaled, and the story runs on from its files."""
+    result = wiring.confirm_owned(cwd, runs).execute(ConfirmOwnedCommand(StoryId(story_id)))
+    if isinstance(result, NothingToConfirm):
         print(f"owned: nothing to confirm for {story_id} — no stage changed its story or an answer")
-        return 0
-    parts = [line.split(":", 1)[1].strip() for line in read_text(marked).splitlines() if line.startswith("changed:")]
-    os.remove(marked)
-    journal_append(runs, story_id, "owned-confirmed", ",".join(parts))
-    print(f"owned: {story_id} — {', '.join(parts)} confirmed as the person's; the story runs on")
+    else:
+        print(f"owned: {story_id} — {', '.join(result.parts)} confirmed as the person's; the story runs on")
     return 0
-
 
 def refusal_counts(runs, story_id):
     """{who: {"form": n, "substance": n, "checks": {check: n}}} of a story's gate refusals, from its journal: the
@@ -401,22 +398,40 @@ def foreign_claim_lines(claims):
     return lines
 
 
+def story_spent(runs, story_id):
+    """What a story cost so far, from the runner's journal — kept per story on disk, so a restart, a second session
+    or a new run never resets it. An in-session run writes none."""
+    if not os.path.isfile(os.path.join(evidence_dir(runs, story_id), "journal.tsv")):
+        return ""
+    used = journal_usage(runs, story_id)
+    count = sum(e["invocations"] for e in used.values())
+    tokens = sum(tokens_of(e) for e in used.values())
+    return (f" · {count} stage invocation(s)" + (f", {tokens:,} tokens" if tokens else "")) if count else ""
+
+
+def schedule(cwd, epics, runs, slots=None, busy=(), skip=()):
+    """Print every story's state and the next one to run; return 0. The runner and the tests read these lines
+    (`schedule_view.py`)."""
+    data = schedule_data(cwd, epics, runs, slots, busy, skip)
+    for line in schedule_lines(data, epics, {story: story_spent(runs, story) for story in data["order"]}):
+        print(line)
+    return 0
+
+
+def start(cwd, epics, runs, story_id, slots=None):
+    """Where the story starts, printed as `state:`, `start:` (a stage, or `none`) and `detail:`. Exit 2 for an
+    unknown story."""
+    found = start_of(cwd, epics, runs, story_id, slots)
+    if found is None:
+        print(f"factory: no story {story_id} under {epics}/", file=sys.stderr)
+        return 2
+    for line in start_lines(found):
+        print(line)
+    return 0
+
+
 def status_brief(cwd, epics, runs, session_start=False):
     """Two lines: what is ready, what waits, who works, what it cost — for a session's start."""
-    import contextlib
-    import io
-    buffer = io.StringIO()
-    with contextlib.redirect_stdout(buffer):
-        schedule(cwd, epics, runs)
-    rows = [l for l in buffer.getvalue().splitlines() if l and not l.startswith(("schedule:", "wait:", "layout:"))]
-    nxt = next((l[6:] for l in rows if l.startswith("next: ")), "none")
-    states = {}
-    for line in rows:
-        if line.startswith("next: "):
-            continue
-        parts = line.split()
-        if len(parts) >= 2:
-            states.setdefault(parts[1], []).append(parts[0])
     held = read_claim(claim_path(cwd))
     view = status_model(cwd, epics, runs)
     words = {}
@@ -452,7 +467,7 @@ def status_brief(cwd, epics, runs, session_start=False):
         print(f"factory: {layout_hint(cwd, profile)}")
     elif undescribed:
         print(f"factory: no project description ({', '.join(location(profile, k) for k in undescribed)}) — /factory-setup")
-    elif not states:
+    elif not view["rows"]:
         print("factory: the backlog is empty — /factory-backlog writes the first epic and story")
     if session_start and os.environ.get("FACTORY_WORKER"):
         # A stage the runner started: the hook runs in its session too, and the claim it names is the
@@ -547,51 +562,17 @@ def factory_help(cwd, epics, runs, fmt="text", colour="auto"):
     return 0
 
 
-def utc_text(moment):
-    """A time as the backlog writes it: UTC, to the second, `Z`."""
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def backfill_created(cwd, epics):
-    """WP-146: `created:` into every story and every epic that has none — once, idempotent, never over a value there
-    (a line `created:` of any content is the person's). The time is the commit that first added the file, followed
-    through its renames — a file a layout change moved keeps its first day; a file git does not hold yet takes its own
-    modification time. Prints what it wrote."""
-    files = story_files(epics) + [os.path.join(epics, e["folder"], EPIC_FILE) for e in epic_files(epics)]
-    missing = []
-    for path in files:
-        try:
-            front = read_front_matter(path)[0]
-        except GateError:
-            continue                              # a file the gate cannot read is named by the gate, not filled here
-        if CREATED_KEY not in front:
-            missing.append(path)
-    if not missing:
+    """WP-146: `created:` into every story and every epic that has none (`BackfillCreatedUseCase`). Prints what it
+    wrote."""
+    done = wiring.backfill_created(cwd, epics).execute(BackfillCreatedCommand())
+    if not done.stories and not done.epics:
         print("backfill: every story and epic has its created: — nothing written")
         return 0
-    tracked = git(cwd, "rev-parse", "--is-inside-work-tree")[0] == 0
-    written, from_file = {"story": 0, "epic": 0}, 0
-    for path in missing:
-        rel = os.path.normpath(os.path.relpath(path, cwd))
-        stamp = None
-        if tracked and git(cwd, "ls-files", "--error-unmatch", "--", rel)[0] == 0:
-            # through every rename: a file a layout change moved keeps the day it was first written, not the move's
-            code, out = git(cwd, "log", "--follow", "--diff-filter=A", "--format=%aI", "--", rel)
-            lines = out.strip().splitlines() if code == 0 else []
-            stamp = lines[-1].strip() if lines else None              # the log is newest first: the earliest add
-        moment = None
-        if stamp:
-            with contextlib.suppress(ValueError):
-                moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-        if moment is None:
-            moment, from_file = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc), from_file + 1
-        write_story_fields(path, **{CREATED_KEY: utc_text(moment)})
-        written["epic" if os.path.basename(path) == EPIC_FILE else "story"] += 1
-    print(f"backfill: created: written into {written['story']} stor{'y' if written['story'] == 1 else 'ies'} and "
-          f"{written['epic']} epic{'' if written['epic'] == 1 else 's'}, from the commit that added each"
-          + (f" — {from_file} not in git yet, from the file's own time" if from_file else ""))
+    print(f"backfill: created: written into {done.stories} stor{'y' if done.stories == 1 else 'ies'} and "
+          f"{done.epics} epic{'' if done.epics == 1 else 's'}, from the commit that added each"
+          + (f" — {done.from_file} not in git yet, from the file's own time" if done.from_file else ""))
     return 0
-
 
 def story_command(run):
     """A story command's use case run; a story not found is the gate's error, as the readers raise it."""
@@ -668,24 +649,17 @@ def deliver_by_hand(cwd, runs, epics, story_id, who, force=False):
     return 0
 
 
-def claim_command(cwd, runs, epics, story_id):
-    """`--claim-story`: claim one story on the remote (WP-93). 0 claimed or own, 3 another factory has it, 4 needs a
-    person; 0 and nothing pushed where the profile names no `claim_remote:`."""
-    config = claim_config_here(cwd)
-    if not config:
-        return 0
-    path = find_story(epics, story_id)
-    front, body = read_front_matter(path)
-    epic = str(front.get("epic") or os.path.basename(epic_folder(path))).strip()
-    title = story_title(front, body) or story_id
-    code = claim_story(cwd, runs, config, claim_target(cwd), story_id, epic, title)
-    if code == 3:
-        with contextlib.suppress(OSError):
-            held = cached_claims(runs).get(story_id, {})
-            journal_append(runs, story_id, "note", "claimed-elsewhere", f"by={held.get('who', '?')}",
-                           f"since={held.get('since', '?')}")
-    return code
+#: A claim's exit codes, as the runner reads them.
+CLAIM_EXIT = {Claim.OWN: 0, Claim.NO_REMOTE: 0, Claim.ELSEWHERE: 3, Claim.NEEDS_PERSON: 4}
 
+
+def claim_command(cwd, runs, epics, story_id):
+    """`--claim-story`: claim one story on the remote (WP-93, `ClaimStoryUseCase`). 0 claimed or own, 3 another
+    factory has it, 4 needs a person; 0 and nothing pushed where the profile names no `claim_remote:`."""
+    outcome = wiring.claim_story(cwd, epics, runs).execute(ClaimStoryCommand(StoryId(story_id)))
+    for line in outcome.said:
+        print(line)
+    return CLAIM_EXIT[outcome.claim]
 
 def undeliver_branch(cwd, runs, epics, story_id):
     """WP-93 F: a published branch whose merge request lost the race goes back to before its delivery — the spec's
@@ -1539,7 +1513,7 @@ def main(argv):
             record_owned(args.runs, args.story)
         return (owned_end(args.runs, args.story, args.stage_end, str(code)) or code) if args.stage_end else code
     if args.owned_confirm:
-        return owned_confirm(args.runs, args.owned_confirm)
+        return owned_confirm(args.runs, args.owned_confirm, cwd)
     if args.refusals:
         return refusals_report(args.runs, args.story, args.format)
     if args.journal_line:

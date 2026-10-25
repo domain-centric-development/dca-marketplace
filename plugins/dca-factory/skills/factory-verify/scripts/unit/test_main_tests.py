@@ -6,7 +6,8 @@ import subprocess
 import tempfile
 import unittest
 
-from support import state, write
+from support import write
+from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from dca_factory import gate
 
 
@@ -52,7 +53,7 @@ class MainTests(unittest.TestCase):
         write(os.path.join(self.root, TEST), text)
 
     def test_the_record_holds_the_tests_the_main_line_changed_with_both_versions(self):
-        with open(os.path.join(state.evidence_dir(self.runs, "STORY-1"), gate.MAIN_TESTS), encoding="utf-8") as handle:
+        with open(os.path.join(evidence_dir(self.runs, "STORY-1"), gate.MAIN_TESTS), encoding="utf-8") as handle:
             rows = [line.split("\t") for line in handle.read().splitlines()]
         self.assertEqual([row[2] for row in rows], [TEST])          # a production file the main line changed is no test
         self.assertNotEqual(rows[0][0], rows[0][1])
@@ -146,7 +147,7 @@ class ResignedHelpers(unittest.TestCase):
         git(self.root, "checkout", "-q", "story/STORY-1")
         gate.record_main_tests(self.root, self.runs, "STORY-1", "main")    # as the merge would stop
         git(self.root, "merge", "--no-edit", "-q", "main", check=False)
-        write(os.path.join(state.evidence_dir(self.runs, "STORY-1"), "target"), "main\n")
+        write(os.path.join(evidence_dir(self.runs, "STORY-1"), "target"), "main\n")
 
     def tearDown(self):
         self.scratch.cleanup()

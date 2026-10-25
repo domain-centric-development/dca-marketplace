@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import typing
 
 from ...domain.model.story import StoryId
@@ -17,9 +18,35 @@ class ClaimHeld:
     since: str
 
 
+class Claim(enum.Enum):
+    """How a claim went."""
+
+    #: claimed now, or this factory's already
+    OWN = "own"
+    #: another factory has it
+    ELSEWHERE = "elsewhere"
+    #: a person has to look — an id collision, or the remote refused for another reason than the race
+    NEEDS_PERSON = "needs person"
+    #: the profile names no claim remote: nothing claimed, nothing to claim
+    NO_REMOTE = "no remote"
+
+
+@dataclasses.dataclass(frozen=True)
+class ClaimOutcome:
+    """How the claim went, the other factory's claim where it has the story, and what the claim said on its way."""
+
+    claim: Claim
+    held: typing.Optional[ClaimHeld]
+    said: typing.Tuple[str, ...]
+
+
 class StoryClaims(typing.Protocol):
     """The remote's story claims, where the profile names a claim remote."""
 
     def held_elsewhere(self, story: StoryId) -> typing.Optional[ClaimHeld]:
         """Another factory's claim on the story, fresh from the remote — None where none or no claim remote."""
+        ...
+
+    def claim(self, story: StoryId) -> ClaimOutcome:
+        """The story claimed on the remote — a claim commit on its main line, its trailers saying who and which."""
         ...

@@ -52,7 +52,7 @@ def schedule_backlog(backlog: BacklogFacts, now: datetime.datetime, slots: typin
         standing = schedule.standings[entry.story]
         story: Model = dict(state=standing.state.value, start=standing.start.value if standing.start else None,
                             detail=standing.detail.value, deps=list(row.depends_on), path=row.path, epic=row.epic,
-                            front=row.front, body=row.body, title=row.title)
+                            front=row.front, body=row.body, title=row.title, worktree=row.worktree)
         if row.kind is not None:
             story.update(kind=row.kind, holds=Holding.CHECKOUT in entry.holds)
         stories[row.key] = story

@@ -5,12 +5,14 @@ from __future__ import annotations
 from ..delivery.adapter.incoming.requests.settle import Settlement
 from ..delivery.adapter.outgoing.claims.story_claims import RemoteStoryClaims
 from ..delivery.adapter.outgoing.files.acceptance_files import AcceptanceFiles
+from ..delivery.adapter.outgoing.files.created_files import CreatedFiles
 from ..delivery.adapter.outgoing.files.description_files import DescriptionFiles
 from ..delivery.adapter.outgoing.files.detail_files import DetailFactFiles
 from ..delivery.adapter.outgoing.files.decision_record_files import DecisionInboxFiles, DecisionRecordFiles
 from ..delivery.adapter.outgoing.discovery.reports import DiscoveryReportFiles
 from ..delivery.adapter.outgoing.files.epic_files import EpicFiles
 from ..delivery.adapter.outgoing.files.journal_files import StoryJournalFiles
+from ..delivery.adapter.outgoing.files.owned_files import OwnedChangeFiles
 from ..delivery.adapter.outgoing.files.project_files import ProjectFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
 from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
@@ -18,6 +20,7 @@ from ..delivery.adapter.outgoing.files.story_files import StoryFiles
 from ..delivery.adapter.outgoing.files.story_runs import StoryRunFiles
 from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.pipeline.stage_table import ContractStages
+from ..delivery.application.backlog.backfill_created import BackfillCreatedUseCase
 from ..delivery.application.backlog.release_stories import ReleaseStoriesUseCase
 from ..delivery.application.cost.book_request_cost import BookRequestCostUseCase
 from ..delivery.application.decisions.accept_delivery import AcceptDeliveryUseCase
@@ -31,6 +34,8 @@ from ..delivery.application.requests.take_back_request import TakeBackRequestUse
 from ..delivery.application.requests.write_request import WriteRequestUseCase
 from ..delivery.application.shared.request_check import RequestCheck
 from ..delivery.application.status.show_epic import ShowEpicUseCase
+from ..delivery.application.delivery.claim_story import ClaimStoryUseCase
+from ..delivery.application.delivery.confirm_owned import ConfirmOwnedUseCase
 from ..delivery.application.delivery.deliver_by_hand import DeliverByHandUseCase
 from ..delivery.application.delivery.prove_delivery import ProveDeliveryUseCase
 from ..delivery.application.delivery.reopen_story import ReopenStoryUseCase
@@ -110,3 +115,15 @@ def prove_delivery(cwd: str, epics: str, runs: str) -> ProveDeliveryUseCase:
 def deliver_by_hand(cwd: str, epics: str, runs: str) -> DeliverByHandUseCase:
     return DeliverByHandUseCase(StoryFiles(cwd, epics), RemoteStoryClaims(cwd, runs), StorySpecFiles(epics),
                                 StoryJournalFiles(cwd, runs))
+
+
+def confirm_owned(cwd: str, runs: str) -> ConfirmOwnedUseCase:
+    return ConfirmOwnedUseCase(OwnedChangeFiles(runs), StoryJournalFiles(cwd, runs))
+
+
+def claim_story(cwd: str, epics: str, runs: str) -> ClaimStoryUseCase:
+    return ClaimStoryUseCase(RemoteStoryClaims(cwd, runs, epics), StoryJournalFiles(cwd, runs))
+
+
+def backfill_created(cwd: str, epics: str) -> BackfillCreatedUseCase:
+    return BackfillCreatedUseCase(CreatedFiles(cwd, epics))

@@ -17,6 +17,7 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
 from .decision_record_files import answer_section, decisions_store
 from .journal_files import journal_append, journal_events
 from .run_marks import OWNED_CHANGED, pass_marks, STORY_DIGEST, write_mark, written_at
+from ....domain.model.story import StoryId
 from .story_layout import (
     DECISIONS_DIR, file_digest, find_story, STATE_KEYS, story_digest, STORY_FILE, story_id_of)
 
@@ -222,3 +223,22 @@ def run_owned(path: str, runs: str) -> bool:
     return path.startswith((runs.rstrip("/") + "/", evidence_rel() + "/")) \
         or (path.startswith(epics) and f"/{DECISIONS_DIR}/" in path[len(epics):]) \
         or (in_worktree() and worktree_owned(path))
+
+
+class OwnedChangeFiles:
+    """The mark `.owned-changed` in a story's evidence, under the run folder <runs>."""
+
+    def __init__(self, runs: str) -> None:
+        self._runs = runs
+
+    def _mark(self, story: StoryId) -> str:
+        return os.path.join(evidence_dir(self._runs, story.value), OWNED_CHANGED)
+
+    def changed(self, story: StoryId) -> typing.Sequence[str]:
+        marked = self._mark(story)
+        if not os.path.isfile(marked):
+            return ()
+        return [line.split(":", 1)[1].strip() for line in read_text(marked).splitlines() if line.startswith("changed:")]
+
+    def clear(self, story: StoryId) -> None:
+        os.remove(self._mark(story))

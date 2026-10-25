@@ -18,7 +18,8 @@ delivered epic.
 
 **Type:** Feature
 
-**Related terms:** `Epic`, `Story`, `Draft`, `Release`, `Journey` — use cases `release_stories`
+**Related terms:** `Epic`, `Story`, `Draft`, `Release`, `Journey` — use cases `release_stories`,
+`backfill_created`
 
 ### Decisions (decisions)
 
@@ -37,7 +38,7 @@ corrected.
 **Type:** Feature
 
 **Related terms:** `Stage`, `Gate`, `Evidence`, `Journal`, `Round`, `Delivery` — use cases `reopen_story`,
-`prove_delivery`, `deliver_by_hand`
+`prove_delivery`, `deliver_by_hand`, `confirm_owned`, `claim_story`
 
 ### Description (description)
 

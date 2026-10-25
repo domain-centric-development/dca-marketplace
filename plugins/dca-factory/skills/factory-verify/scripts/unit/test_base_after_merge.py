@@ -6,7 +6,8 @@ import subprocess
 import tempfile
 import unittest
 
-from support import state, write
+from support import write
+from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from dca_factory import gate
 from dca_factory.delivery.adapter.outgoing.files import snapshots
 
@@ -18,7 +19,7 @@ def git(cwd, *args):
 
 
 def baseline(runs, story):
-    path = os.path.join(state.evidence_dir(runs, story), gate.TESTS_BASELINE)
+    path = os.path.join(evidence_dir(runs, story), gate.TESTS_BASELINE)
     with open(path, encoding="utf-8") as handle:
         return dict(reversed(line.split("  ", 1)) for line in handle.read().splitlines() if "  " in line)
 
@@ -51,7 +52,7 @@ class BaseAfterMerge(unittest.TestCase):
     def test_the_tests_baseline_moves_onto_the_main_line_and_keeps_the_storys_own_change(self):
         story = "S-1"
         old = git(self.root, "rev-parse", "HEAD^{tree}")
-        os.makedirs(state.evidence_dir(self.runs, story))
+        os.makedirs(evidence_dir(self.runs, story))
         write(os.path.join(self.root, "Untracked_test.py"), "def test_a(): pass\n")
         gate.record_tests_baseline(self.root, self.runs, story)
         before = baseline(self.runs, story)
