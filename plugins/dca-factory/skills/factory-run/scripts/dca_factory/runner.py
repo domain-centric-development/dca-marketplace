@@ -32,7 +32,7 @@ from .reports import (
     stream_limit, tokens_of, usage_lines)
 from .state import (
     CLAIM_TRAILERS, claim_config_here, fetch_remote,
-    back_in, book_request_usage, claim, freeze_all, freeze_stream, gate_passed_on_record, record_story, git_tree, has_worktree, journal_path, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of, step_open,
+    back_in, claim, freeze_all, freeze_stream, gate_passed_on_record, record_story, git_tree, has_worktree, journal_path, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of, step_open,
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, uncommitted_story, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
 from .spec import (
@@ -45,11 +45,18 @@ from .gate import (
     MAIN_TESTS, read_invariant_rows, rebase_tests_baseline, record_main_tests, scenario_clauses, TESTS_BASELINE)
 from .tools import (
     isolation_args, TOOL, tool_command, TOOLS, tools_shell)
-from .requests import (
-    find_request, KIND, list_requests, mark_questioned, out_path, prune_outputs, read_request, request_records,
-    REQUEST_JOURNAL, requests_dir, RequestError, project_record_path, settle, stamp_utc, stories_of, target_text,
-    update_request, validate, written_keys, checked_request, default_by)
-from .requests import journal as request_journal
+from .building_blocks import UseCaseException
+from .delivery.adapter.incoming.runner.usage import book_request_usage
+from .delivery.adapter.outgoing.files.decision_record_files import project_record_path, request_records
+from .delivery.adapter.outgoing.files.journal_files import mark_questioned
+from .delivery.adapter.outgoing.files.request_files import (
+    default_by, find_request, list_requests, out_path, prune_outputs, read_request, REQUEST_JOURNAL, requests_dir,
+    stamp_utc, update_request)
+from .delivery.adapter.outgoing.files.request_files import journal as request_journal
+from .delivery.application.requests.check_request import CheckRequestCommand
+from .delivery.application.requests.list_requests import target_text
+from .delivery.application.shared.requests import KIND, RequestRefused, stories_of, written_keys
+from .infrastructure import delivery as wiring
 
 
 FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
@@ -3354,7 +3361,7 @@ class Run:
         self.profile()
         try:
             request = find_request(request_id)
-        except RequestError as error:
+        except RequestRefused as error:
             err(f"factory: {error}")
             return 1
         if request["state"] != "queued":
@@ -3372,8 +3379,8 @@ class Run:
         if not request.get("answered"):
             fields = {k: request[k] for k in written_keys(kind) if request.get(k)}
             try:
-                validate(self.home, kind.name, fields, request.get("words", ""))
-            except (RequestError, GateError) as error:
+                wiring.check_request(self.home).execute(CheckRequestCommand(kind.name, fields, request.get("words", "")))
+            except (UseCaseException, GateError) as error:
                 update_request(request, state="failed", error=f"no longer holds — {error}")
                 request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", str(error))
                 err(f"factory: request {request['id']} no longer holds — {error}")
@@ -3408,7 +3415,7 @@ class Run:
             self.allowed_override = None
             self.request_in_flight = ""
         measured = self.record_usage(None, unit, unit_tool, raw, int(time.time() - started), request["id"])
-        book_request_usage(place("runs"), request["id"], unit_tool, measured)
+        book_request_usage(wiring.book_request_cost(self.home, place("runs")), request["id"], unit_tool, measured)
         prune_outputs()
         if code != 0:
             why = "ran past its time limit" if code == TIMED_OUT else f"ended with exit {code}"
@@ -3453,8 +3460,8 @@ class Run:
         a skill must work it. A request settled on a press (`settle_command`) has no file: nothing to keep or remove."""
         before = self.dirty_files()
         try:
-            wrote = settle(self.home, place("runs"), request, utc())
-        except (RequestError, GateError) as error:
+            wrote = wiring.settlement(self.home, place("runs")).settle(request, utc())
+        except (UseCaseException, GateError) as error:
             if request.get("path"):
                 update_request(request, state="failed", error=f"no longer holds — {error}")
             request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", str(error))
@@ -4007,7 +4014,8 @@ def settle_command(cwd, kind_name, fields, words, by):
     Exit 0 settled (and committed), 3 where a skill must work it (nothing written), 2 refused, 1 failed. The settle
     and its commit hold the checkout's commit lock, as the factory's own requests do, whether a factory is up or not."""
     set_places(read_profile(resolve_profile(os.environ.get("FACTORY_PROFILE") or None, cwd)))
-    fields, words = checked_request(cwd, kind_name, fields, words)
+    checked = wiring.check_request(cwd).execute(CheckRequestCommand(kind_name, fields, words, against_waiting=True))
+    fields, words = checked.fields, checked.words
     run = Run(run_options([]), os.path.realpath(cwd), place("runs"), worker=os.environ.get("FACTORY_RUNNER_WORKER"))
     request = dict(fields, id=f"{utc('%Y%m%dT%H%M%S')}-{kind_name}", kind=kind_name, words=words,
                    by=" ".join((by or default_by(cwd)).split()), path=None)

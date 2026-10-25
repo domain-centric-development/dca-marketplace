@@ -1049,29 +1049,6 @@ def mark_window(cwd, runs, story_id, name, edge, session_log=None):
     return 0
 
 
-def book_request_usage(runs, request_id, tool, fields):
-    """A request's usage — one process, measured and priced by the runner — booked on the stories it worked on: one
-    `usage <window> request=<id>` line on each window the request's process opened (`window-start request=<id>`),
-    an even share each. A request that opened no window (a description, a discovery) keeps it in the request
-    journal alone. Returns the windows it was booked on."""
-    windows = []
-    for path in sorted(glob.glob(journal_path(runs, "*"))):
-        story = os.path.basename(os.path.dirname(path))
-        windows += [(story, e["name"]) for e in read_events(path)
-                    if e["kind"] == "window-start" and e["fields"].get("request") == request_id]
-    measured = dict(f.split("=", 1) for f in fields.split("\t") if "=" in f)
-    if not windows or "input" not in measured:
-        return windows
-    share = len(windows)
-    cells = [f"tool={tool}", f"request={request_id}", f"model={measured.get('model', 'unknown')}"]
-    cells += [f"{k}={int(measured.get(k, 0) or 0) // share}" for k in USAGE_FIELDS]
-    if measured.get("cost"):
-        cells.append(f"cost={float(measured['cost']) / share:.4f}")
-    for story, window in windows:
-        journal_append(runs, story, "usage", window, *cells)
-    return windows
-
-
 def mark_stage(cwd, runs, story_id, stage, edge, session_log=None):
     """`--stage-start`/`--stage-end` for a stage run inside a session: the same journal the runner writes."""
     journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")

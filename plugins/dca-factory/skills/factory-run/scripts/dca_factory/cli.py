@@ -82,10 +82,18 @@ from .gate import (
     criteria_of, DESCRIPTION_CHANGES, scenarios_of, spec_target, story_signals, story_spec, description_part, discovery_items, perspectives_of, story_ids)
 from .tools import (
     isolation_args, TOOL, TOOLS, tool_invocation, unprobed_flags)
-from .requests import (
-    drop_request, Duplicate, KIND, KINDS, list_requests, mark_pending, out_path, request_of, RequestError, retry_request,
-    write_request)
-from .requests import counts as request_counts, view as requests_view
+from .delivery.adapter.incoming.requests.commands import request_of
+from .delivery.adapter.outgoing.files.request_files import out_path
+from .delivery.adapter.outgoing.files.story_files import names_story
+from .delivery.application.requests.list_requests import ListRequestsQuery
+from .delivery.application.requests.pending import mark_pending
+from .delivery.application.requests.pending_requests import PendingRequestsQuery
+from .delivery.application.requests.retry_request import RetryRequestCommand
+from .delivery.application.requests.take_back_request import TakeBackRequestCommand
+from .delivery.application.requests.write_request import WriteRequestCommand
+from .delivery.application.shared.requests import DuplicateRequest, KIND, KINDS, RequestRefused
+from .building_blocks import UseCaseException
+from .infrastructure import delivery as wiring
 from . import service
 from .runner import (
     contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
@@ -143,7 +151,7 @@ def discovery_model(cwd, epics):
                                                     skill=f"/dca-describe {target}: {fields.get('change', '')}",
                                                     label="apply")))
                    for target, fields in discovery_items(text, DESCRIPTION_CHANGES)]
-        mark_pending([a for item in proposals + changes for a in item["actions"]])
+        mark_pending([a for item in proposals + changes for a in item["actions"]], pending_requests(cwd))
         topics.append(dict(topic=name, report=report, title=title.group(1).strip() if title else name,
                            proposals=proposals, description_changes=changes))
     return dict(project=os.path.basename(os.path.abspath(cwd)), store=folder.replace(os.sep, "/") + "/", topics=topics)
@@ -199,7 +207,7 @@ def record_sections(body):
 def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     """The inbox: every record, what waits for a person first — open, drafts, answered, applied — read
     from the files alone; the same view as the status, in text, Markdown or JSON."""
-    records, pending = [], [r for r in list_requests() if r["state"] in ("queued", "running", "waiting")]
+    records, pending = [], pending_requests(cwd)
     for name, front, body, state, error, path in decision_files(cwd):
         if error:
             records.append(dict(rank=-1, id=name, state="unreadable", kind="question", story="?", stage="?",
@@ -1025,7 +1033,7 @@ def make_action(text="", skill="", shell="", look="", label="", primary=False):
     terminal cannot do it (writing a story needs an agent) —, and `request` from a page. `label` is the
     word on its button and `primary` marks the one to press: a view draws them, it never chooses them."""
     action = dict(text=text, skill=skill, shell=shell, look=look, label=label, primary=primary)
-    request = request_of(skill)                     # the same press from a page: the request it writes (WP-91)
+    request = request_of(skill, names_story)        # the same press from a page: the request it writes (WP-91)
     if request:
         action["request"] = request
     return action
@@ -1198,7 +1206,7 @@ def status_model(cwd, epics, runs, live=False):
         row.update(figures(row))
     guards = {hint["epic"]: hint for hint in journeys}
     # a story whose release is asked for already is no draft the epic's button still has to release
-    pending = [r for r in list_requests() if r["state"] in ("queued", "running", "waiting")]
+    pending = pending_requests(cwd)
     asked = {r.get("story") for r in pending if r["kind"] == "release" and r.get("story")}
     for epic in epics:
         drafts = sum(1 for r in epic["rows"] if stories[r["story"]]["state"] == "unreleased")
@@ -1245,7 +1253,7 @@ def status_model(cwd, epics, runs, live=False):
             text = data["reason"] + "."
         next_line = dict(text=text, action=action)
     extra = []
-    requests = request_counts()                       # what a person asked the factory to do (WP-91)
+    requests = request_counts(cwd)                    # what a person asked the factory to do (WP-91)
     if any(requests.values()):
         extra.append("requests: " + ", ".join(f"{n} {state}" for state, n in requests.items() if n)
                      + " — `factory.sh requests`")
@@ -2098,7 +2106,8 @@ def story_model(cwd, epics, runs, story_id, live=False):
     # a delivered story is corrected in the person's words: the correction goes back into it
     actions = row["actions"] + (mark_pending(offered(make_action(text="What should be different?",
                                                                  skill=f"/factory-decisions {story_id}: answer correction:",
-                                                                 label="correct"))) if row["done"] else [])
+                                                                 label="correct")), pending_requests(cwd))
+                                if row["done"] else [])
     return dict(row=row, story=story_id, title=data.get("title", ""), epic=data.get("epic", ""),
                 path=shown(data["path"]) if data.get("path") else "", kind=story_kind(front),
                 created=created_of(front), intent=front_text(front.get("intent")),
@@ -3207,11 +3216,12 @@ def request_command(argv):
     if args.settle:
         return settle_press(kind.name, fields, words, args.by or "", args.format)
     try:
-        request_id, path = write_request(os.getcwd(), kind.name, fields, words, args.by or "")
-    except Duplicate as same:
+        written = wiring.write_request(os.getcwd()).execute(WriteRequestCommand(kind.name, fields, words, args.by or ""))
+        request_id, path = written.id, written.path
+    except DuplicateRequest as same:
         print(f"factory: {same}")
         return 0
-    except (RequestError, GateError) as error:
+    except (UseCaseException, GateError) as error:
         print(f"factory: request refused — {error}", file=sys.stderr)
         return 2
     if args.format == "json":
@@ -3227,10 +3237,10 @@ def settle_press(kind_name, fields, words, by, fmt):
         # the runner's own lines go to stderr where the caller reads one JSON object from stdout
         with contextlib.redirect_stdout(sys.stderr) if fmt == "json" else contextlib.nullcontext():
             code, request_id, commit = settle_command(os.getcwd(), kind_name, fields, words, by)
-    except Duplicate as same:
+    except DuplicateRequest as same:
         print(json.dumps(dict(id=same.existing, settled=False, queued=True)) if fmt == "json" else f"factory: {same}")
         return 0
-    except (RequestError, GateError) as error:
+    except (UseCaseException, GateError) as error:
         print(f"factory: request refused — {error}", file=sys.stderr)
         return 2
     if fmt == "json":
@@ -3251,17 +3261,46 @@ def requests_command(argv):
     placed()
     try:
         if args.drop:
-            drop_request(args.drop)
+            wiring.take_back_request(os.getcwd()).execute(TakeBackRequestCommand(args.drop))
             print(f"factory: request {args.drop} dropped")
             return 0
         if args.retry:
-            retry_request(args.retry)
+            wiring.retry_request(os.getcwd()).execute(RetryRequestCommand(args.retry))
             print(f"factory: request {args.retry} queued again")
             return 0
-    except (RequestError, OSError) as error:
+    except (RequestRefused, OSError) as error:
         print(f"factory: {error}", file=sys.stderr)
         return 2
-    return requests_view(args.format)
+    return requests_view(os.getcwd(), args.format)
+
+
+def pending_requests(cwd):
+    """The requests not done — what a view's press may be pending on."""
+    return wiring.pending_requests(cwd).execute(PendingRequestsQuery()).requests
+
+
+def request_counts(cwd):
+    """The requests by state."""
+    return wiring.list_requests(cwd).execute(ListRequestsQuery())["counts"]
+
+
+def requests_view(cwd, fmt="text"):
+    """`factory.sh requests`: every request with its state, oldest first."""
+    model = wiring.list_requests(cwd).execute(ListRequestsQuery())
+    if fmt == "json":
+        print(json.dumps(model, indent=2, ensure_ascii=False))
+        return 0
+    rows = model["requests"]
+    if not rows:
+        print(f"requests: none — `factory.sh request <kind> …` writes one ({model['store']})")
+        return 0
+    for row in rows:
+        extra = row["error"] or (f"asks: {row['record']}" if row["record"] else "") or \
+            (f"{row['worker']} since {row['started']}" if row["state"] == "running" else "")
+        print(f"{row['id']}  {row['state']:<8} {row['kind']:<9} {row['target']}  ({row['by']})"
+              + (f" — {extra}" if extra else ""))
+    print("requests: " + ", ".join(f"{n} {s}" for s, n in model["counts"].items() if n))
+    return 0
 
 
 def up_command(argv):

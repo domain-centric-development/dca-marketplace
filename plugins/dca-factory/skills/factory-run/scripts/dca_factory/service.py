@@ -35,8 +35,13 @@ from .contract import GateError, place
 from .gate import posix_shell
 from .state import claim_path, dead_runner, read_claim, running_stages, stale_after
 from .reports import parse_time
-from .requests import (
-    default_by, drop_request, Duplicate, stamp_utc, factory_dir, ID_WORD, KINDS, RequestError, retry_request, write_request)
+from .building_blocks import UseCaseException
+from .delivery.adapter.outgoing.files.request_files import default_by, factory_dir, stamp_utc
+from .delivery.application.requests.retry_request import RetryRequestCommand
+from .delivery.application.requests.take_back_request import TakeBackRequestCommand
+from .delivery.application.requests.write_request import WriteRequestCommand
+from .delivery.application.shared.requests import DuplicateRequest, ID_WORD, KINDS, RequestRefused
+from .infrastructure import delivery as wiring
 from .page import FAVICON, PAGE, SCRIPT_HASH
 
 
@@ -712,19 +717,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             fields = {k: body[k] for k in REQUEST_FIELDS if body.get(k)}
             try:
                 with in_project(project):
-                    request_id, path = write_request(project, str(body.get("kind", "")), fields,
-                                                     str(body.get("words") or ""), by)
-            except Duplicate as same:
+                    written = wiring.write_request(project).execute(
+                        WriteRequestCommand(str(body.get("kind", "")), fields, str(body.get("words") or ""), by))
+            except DuplicateRequest as same:
                 return self.json(200, dict(id=same.existing, duplicate=True, message=str(same)))
-            except (RequestError, GateError) as error:
+            except (UseCaseException, GateError) as error:
                 return self.refuse(400, str(error))
-            return self.json(201, dict(id=request_id, path=os.path.relpath(path, project).replace(os.sep, "/")))
+            return self.json(201, dict(id=written.id, path=os.path.relpath(written.path, project).replace(os.sep, "/")))
         if url.path in ("/api/requests/drop", "/api/requests/retry"):
             request_id = str(body.get("id", ""))
             try:
                 with in_project(project):
-                    (drop_request if url.path.endswith("drop") else retry_request)(request_id)
-            except (RequestError, OSError) as error:
+                    if url.path.endswith("drop"):
+                        wiring.take_back_request(project).execute(TakeBackRequestCommand(request_id))
+                    else:
+                        wiring.retry_request(project).execute(RetryRequestCommand(request_id))
+            except (RequestRefused, OSError) as error:
                 return self.refuse(400, str(error))
             return self.json(200, dict(id=request_id))
         if url.path == "/api/up":

@@ -92,6 +92,7 @@ from .contract import (
     record_path, records_of, resolve_profile, resume_stage, runs_top, SELECTOR, set_places, SHARED_WINDOWS, shown,
     STAGE, STAGE_CHECKS, STAGE_FILES, STAGE_ORDER, STAGES, stamp_applied, story_digest, story_files, story_folder,
     story_id_of, story_kind, TECH_HEADINGS, TESTED_KINDS, unknown_profile_keys, VERSION)
+from .delivery.domain.model.correction import REASON_CODES
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .reports import (
@@ -1116,10 +1117,6 @@ def check_break(result, profile, cwd, runs, story_id, selector, key, located, co
         result.fail("break-proof", f"{selector} ({key}): its break could not be checked — {said}")
 
 
-#: Why a person corrected a story at its acceptance (WP-148 C): `correction: <code>: <their words>` — the skill
-#: proposes a code from the words, the person confirms it.
-REASON_CODES = ("structural", "behavioural", "domain-concept", "domain-boundary", "domain-invariant", "domain-term",
-                "assumption")
 CORRECTION_CODE = re.compile(r"^\s*correction:\s*([a-z-]+)\s*:", re.I)
 
 

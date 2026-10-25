@@ -10,7 +10,34 @@ import unittest
 
 from support import contract, project, write
 
-from dca_factory import cli, gate, requests, service, state
+from dca_factory import cli, gate, service, state
+from dca_factory.delivery.adapter.incoming.requests.commands import request_of
+from dca_factory.delivery.adapter.incoming.runner.usage import book_request_usage
+from dca_factory.delivery.adapter.outgoing.files import request_files
+from dca_factory.delivery.adapter.outgoing.files.decision_record_files import project_record_path, request_records
+from dca_factory.delivery.adapter.outgoing.files.journal_files import mark_questioned
+from dca_factory.delivery.adapter.outgoing.files.story_files import names_story
+from dca_factory.delivery.application.requests.check_request import CheckRequestCommand
+from dca_factory.delivery.application.requests.pending import mark_pending, pending_id
+from dca_factory.delivery.application.requests.retry_request import RetryRequestCommand
+from dca_factory.delivery.application.requests.take_back_request import TakeBackRequestCommand
+from dca_factory.delivery.application.requests.write_request import WriteRequestCommand
+from dca_factory.delivery.application.shared.requests import DuplicateRequest, operations_of, RequestRefused, STATES
+from dca_factory.infrastructure import delivery as wiring
+
+
+def validate(cwd, kind, fields, words):
+    checked = wiring.check_request(cwd).execute(CheckRequestCommand(kind, fields, words))
+    return checked.fields, checked.words
+
+
+def write_request(cwd, kind, fields, words, by):
+    written = wiring.write_request(cwd).execute(WriteRequestCommand(kind, fields, words, by))
+    return written.id, written.path
+
+
+def settle(cwd, runs, request, at):
+    return wiring.settlement(cwd, runs).settle(request, at)
 
 
 RECORD = """---
@@ -64,20 +91,20 @@ class Actions(unittest.TestCase):
             p.story("US-1")
             for skill, (kind, fields, words, still) in cases.items():
                 with self.subTest(skill=skill):
-                    self.assertEqual(requests.request_of(skill),
+                    self.assertEqual(request_of(skill, names_story),
                                      dict(kind=kind, fields=fields, words=words, open=still))
 
     def test_a_correction_asks_for_words_and_offers_the_reason_codes(self):
         for skill in ("/factory-decisions US-3 US-3-02: answer correction:", "/factory-decisions US-3: answer correction:",
                       "/factory-decisions US-3: answer correction"):
             with self.subTest(skill=skill):
-                self.assertEqual(requests.request_of(skill),
+                self.assertEqual(request_of(skill, names_story),
                                  dict(kind="correct", fields={"story": "US-3"}, words="", open="words",
                                       choices=list(gate.REASON_CODES)))
 
     def test_what_no_request_does_has_none(self):
         for skill in ("/factory-setup", "/factory-update", "/factory-verify US-1", "", None):
-            self.assertIsNone(requests.request_of(skill))
+            self.assertIsNone(request_of(skill, names_story))
 
 
 class Written(unittest.TestCase):
@@ -94,92 +121,92 @@ class Written(unittest.TestCase):
                        ("run", {"story": "../x"}, ""), ("answer", {"record": "US-1-01"}, "b"), ("nope", {}, ""))
             for kind, fields, words in refused:
                 with self.subTest(kind=kind, fields=fields):
-                    with self.assertRaises(requests.RequestError):
-                        requests.validate(p.root, kind, fields, words)
+                    with self.assertRaises(RequestRefused):
+                        validate(p.root, kind, fields, words)
 
     def test_a_release_naming_an_epic_releases_the_epic(self):
         with project() as p:
             p.story("US-1", status="draft")
-            fields, _words = requests.validate(p.root, "release", {"story": "sample"}, "")
+            fields, _words = validate(p.root, "release", {"story": "sample"}, "")
             self.assertEqual(fields, {"epic": "sample"})
 
     def test_an_answer_takes_an_option_named_in_words_and_refuses_one_the_record_lacks(self):
         with project() as p:
             p.story("US-1")
             write(os.path.join(p.epics, "sample", "US-1", "decisions", "01.md"), record("US-1", "US-1-01"))
-            fields, words = requests.validate(p.root, "answer", {"record": "US-1-01"}, "B")
+            fields, words = validate(p.root, "answer", {"record": "US-1-01"}, "B")
             self.assertEqual((fields["option"], fields["story"], words), ("b", "US-1", ""))
-            with self.assertRaises(requests.RequestError):
-                requests.validate(p.root, "answer", {"record": "US-1-01"}, "c")
-            fields, words = requests.validate(p.root, "answer", {"record": "US-1-01"}, "neither, a third way")
+            with self.assertRaises(RequestRefused):
+                validate(p.root, "answer", {"record": "US-1-01"}, "c")
+            fields, words = validate(p.root, "answer", {"record": "US-1-01"}, "neither, a third way")
             self.assertEqual(words, "neither, a third way")
-            fields, words = requests.validate(p.root, "answer", {"record": "US-1-01"}, "no")
+            fields, words = validate(p.root, "answer", {"record": "US-1-01"}, "no")
             self.assertEqual((fields.get("option"), words), (None, "no"))
-            requests.write_request(p.root, "answer", {"record": "US-1-01"}, "b", "a")
-            with self.assertRaises(requests.RequestError):        # one record takes one answer
-                requests.write_request(p.root, "answer", {"record": "US-1-01"}, "a", "a")
+            write_request(p.root, "answer", {"record": "US-1-01"}, "b", "a")
+            with self.assertRaises(RequestRefused):        # one record takes one answer
+                write_request(p.root, "answer", {"record": "US-1-01"}, "a", "a")
 
     def test_requests_are_worked_in_the_order_they_were_written_whatever_their_kind(self):
         with project() as p:
             p.story("US-1", status="draft")
-            first, _ = requests.write_request(p.root, "wish", {}, "zz first", "a")
-            second, _ = requests.write_request(p.root, "release", {"story": "US-1"}, "", "a")
-            third, _ = requests.write_request(p.root, "stop", {}, "", "a")
-            self.assertEqual([r["id"] for r in requests.list_requests()], [first, second, third])
+            first, _ = write_request(p.root, "wish", {}, "zz first", "a")
+            second, _ = write_request(p.root, "release", {"story": "US-1"}, "", "a")
+            third, _ = write_request(p.root, "stop", {}, "", "a")
+            self.assertEqual([r["id"] for r in request_files.list_requests()], [first, second, third])
 
     def test_the_same_request_twice_is_one(self):
         with project() as p:
             p.story("US-1", status="draft")
-            first, _ = requests.write_request(p.root, "release", {"story": "US-1"}, "", "a")
-            with self.assertRaises(requests.Duplicate) as caught:
-                requests.write_request(p.root, "release", {"story": "US-1"}, "", "b")
+            first, _ = write_request(p.root, "release", {"story": "US-1"}, "", "a")
+            with self.assertRaises(DuplicateRequest) as caught:
+                write_request(p.root, "release", {"story": "US-1"}, "", "b")
             self.assertEqual(caught.exception.existing, first)
 
     def test_a_state_change_keeps_the_words_and_a_broken_file_reads_as_failed(self):
         with project() as p:
-            rid, path = requests.write_request(p.root, "wish", {}, "line one\nline two", "a")
-            request = requests.find_request(rid)
-            requests.update_request(request, state="running", worker="runner:h:1")
-            again = requests.find_request(rid)
+            rid, path = write_request(p.root, "wish", {}, "line one\nline two", "a")
+            request = request_files.find_request(rid)
+            request_files.update_request(request, state="running", worker="runner:h:1")
+            again = request_files.find_request(rid)
             self.assertEqual((again["state"], again["worker"], again["words"]),
                              ("running", "runner:h:1", "line one\nline two"))
             write(path, "no front matter")
-            self.assertEqual(requests.find_request(rid)["state"], "failed")
+            self.assertEqual(request_files.find_request(rid)["state"], "failed")
 
     def test_a_running_request_is_not_dropped_and_only_a_failed_one_retried(self):
         with project() as p:
-            rid, _ = requests.write_request(p.root, "wish", {}, "x", "a")
-            with self.assertRaises(requests.RequestError):
-                requests.retry_request(rid)
-            requests.update_request(requests.find_request(rid), state="running")
-            with self.assertRaises(requests.RequestError):
-                requests.drop_request(rid)
+            rid, _ = write_request(p.root, "wish", {}, "x", "a")
+            with self.assertRaises(RequestRefused):
+                wiring.retry_request(p.root).execute(RetryRequestCommand(rid))
+            request_files.update_request(request_files.find_request(rid), state="running")
+            with self.assertRaises(RequestRefused):
+                wiring.take_back_request(p.root).execute(TakeBackRequestCommand(rid))
 
     def test_one_queued_answer_holds_every_answer_to_its_record(self):
         pending = [dict(id="R1", kind="answer", record="US-1-01", story="US-1", words="", option="b")]
         for request in (dict(kind="answer", fields={"record": "US-1-01"}, words="a", open=""),
                         dict(kind="answer", fields={"record": "US-1-01"}, words="", open="words")):
             with self.subTest(request=request):
-                self.assertEqual(requests.pending_id(request, pending), "R1")
-        self.assertEqual(requests.pending_id(dict(kind="answer", fields={"record": "US-1-02"}, words="a", open=""),
+                self.assertEqual(pending_id(request, pending), "R1")
+        self.assertEqual(pending_id(dict(kind="answer", fields={"record": "US-1-02"}, words="a", open=""),
                                              pending), "")
 
     def test_the_chosen_answer_says_queued_and_the_other_choices_wait_on_it(self):
         pending = [dict(id="R1", kind="answer", record="US-1-01", story="US-1", words="", option="b")]
         offer = lambda words, open_: dict(request=dict(kind="answer", fields={"record": "US-1-01"}, words=words, open=open_))
-        actions = requests.mark_pending([offer("a", ""), offer("b", ""), offer("", "words"), dict(label="no request")],
+        actions = mark_pending([offer("a", ""), offer("b", ""), offer("", "words"), dict(label="no request")],
                                         pending)
         self.assertEqual([(a.get("queued"), a.get("waits_on")) for a in actions],
                          [("", "R1"), ("R1", ""), ("", "R1"), (None, None)])
         running = [dict(pending[0], state="waiting")]
-        self.assertEqual([a["queued_text"] for a in requests.mark_pending([offer("b", ""), offer("a", "")], running)],
+        self.assertEqual([a["queued_text"] for a in mark_pending([offer("b", ""), offer("a", "")], running)],
                          ["asks you", ""])
         worded = [dict(pending[0], option="", words="neither")]
-        self.assertEqual([a["queued"] for a in requests.mark_pending([offer("a", ""), offer("", "words")], worded)],
+        self.assertEqual([a["queued"] for a in mark_pending([offer("a", ""), offer("", "words")], worded)],
                          ["", "R1"])
 
     def test_what_a_person_can_do_with_a_request_follows_its_state(self):
-        self.assertEqual({state: requests.operations_of(state) for state in requests.STATES},
+        self.assertEqual({state: operations_of(state) for state in STATES},
                          {"queued": ["drop"], "running": ["follow"], "waiting": ["drop"], "failed": ["retry", "drop"]})
 
 
@@ -199,12 +226,12 @@ class ProjectRecords(unittest.TestCase):
             found = {name: (state, error is None) for name, _f, _b, state, error, _p in contract.decision_files(p.root)}
             self.assertEqual(found, {"US-1-01": ("open", True), "20261024T100000Z-wish": ("open", True),
                                      "misplaced": ("unreadable", False)})
-            self.assertEqual([rid for _p, rid, _s in requests.request_records(p.root, "R-1")],
+            self.assertEqual([rid for _p, rid, _s in request_records(p.root, "R-1")],
                              ["20261024T100000Z-wish"])
 
     def test_a_project_record_is_where_a_request_without_a_story_asks(self):
         with project():
-            path = requests.project_record_path("R-1", "A new Epic?")
+            path = project_record_path("R-1", "A new Epic?")
             self.assertTrue(path.replace(os.sep, "/").startswith("product/decisions/"), path)
             self.assertTrue(path.endswith("-a-new-epic.md"), path)
 
@@ -216,12 +243,12 @@ class Outputs(unittest.TestCase):
 
     def test_an_output_is_pruned_once_its_request_is_gone_and_old(self):
         with project():
-            rid, _ = requests.write_request(os.getcwd(), "wish", {}, "x", "a")
-            live, gone = requests.out_path(rid), requests.out_path("20200101T000000000Z-wish")
+            rid, _ = write_request(os.getcwd(), "wish", {}, "x", "a")
+            live, gone = request_files.out_path(rid), request_files.out_path("20200101T000000000Z-wish")
             for path in (live, gone):
                 write(path, "out")
                 os.utime(path, (time.time() - 30 * 86400,) * 2)
-            requests.prune_outputs(days=7)
+            request_files.prune_outputs(days=7)
             self.assertEqual((os.path.isfile(live), os.path.isfile(gone)), (True, False))
 
 
@@ -262,8 +289,8 @@ class Settled(unittest.TestCase):
             p.story("US-1")
             path = write(os.path.join(p.epics, "sample", "US-1", "decisions", "accept-1.md"),
                          ACCEPTANCE.format(rid="US-1-accept-1", story="US-1"))
-            self.assertEqual(requests.settle(p.root, p.runs, self.request("accept", story="US-1"), "2026-10-25T08:00:00Z"),
-                             [path])
+            self.assertEqual(settle(p.root, p.runs, self.request("accept", story="US-1"), "2026-10-25T08:00:00Z"),
+                             ["US-1-accept-1"])
             self.assertEqual(contract.decision_state(contract.read_text(path))[1],
                              {"answer": "accepted", "by": "Ann", "at": "2026-10-25T08:00:00Z"})
 
@@ -274,11 +301,11 @@ class Settled(unittest.TestCase):
                           record("US-1", "US-1-01", stage="backlog", extra="request: R-1\n"))
             staged = write(os.path.join(p.epics, "sample", "US-1", "decisions", "02.md"), record("US-1", "US-1-02"))
             at = "2026-10-25T08:00:00Z"
-            self.assertEqual(requests.settle(p.root, p.runs, self.request("answer", record="US-1-01", option="b"), at),
-                             [asked])
+            self.assertEqual(settle(p.root, p.runs, self.request("answer", record="US-1-01", option="b"), at),
+                             ["US-1-01"])
             self.assertEqual(contract.decision_state(contract.read_text(asked))[1]["answer"], "b")
-            self.assertIsNone(requests.settle(p.root, p.runs, self.request("answer", record="US-1-02", option="a"), at))
-            self.assertIsNone(requests.settle(p.root, p.runs, dict(self.request("answer", record="US-1-01", option="a"),
+            self.assertIsNone(settle(p.root, p.runs, self.request("answer", record="US-1-02", option="a"), at))
+            self.assertIsNone(settle(p.root, p.runs, dict(self.request("answer", record="US-1-01", option="a"),
                                                                    words="neither"), at))
             self.assertEqual(contract.decision_state(contract.read_text(staged))[0], "open")
 
@@ -286,12 +313,12 @@ class Settled(unittest.TestCase):
         with project() as p:
             path = p.story("US-1", status="draft")
             changed = p.story("US-2", status="draft")
-            requests.mark_questioned(p.root, p.runs, [os.path.relpath(path, p.root), os.path.relpath(changed, p.root)], "R-1")
+            mark_questioned(p.root, p.runs, [os.path.relpath(path, p.root), os.path.relpath(changed, p.root)], "R-1")
             with open(changed, "a", encoding="utf-8") as handle:
                 handle.write("\nOne more criterion.\n")
             at = "2026-10-25T08:00:00Z"
-            self.assertIsNone(requests.settle(p.root, p.runs, self.request("release", story="US-2"), at))
-            self.assertEqual(requests.settle(p.root, p.runs, self.request("release", story="US-1"), at), [path])
+            self.assertIsNone(settle(p.root, p.runs, self.request("release", story="US-2"), at))
+            self.assertEqual(settle(p.root, p.runs, self.request("release", story="US-1"), at), ["US-1"])
             front, body = contract.read_front_matter(path)
             self.assertEqual(front["status"], "approved")
             self.assertIn("- answered: the story is released for building (request R-9, Ann, 2026-10-25T08:00:00Z).", body)
@@ -299,9 +326,9 @@ class Settled(unittest.TestCase):
     def test_a_draft_an_open_record_holds_is_the_skills_to_release(self):
         with project() as p:
             path = p.story("US-1", status="draft")
-            requests.mark_questioned(p.root, p.runs, [os.path.relpath(path, p.root)], "R-1")
+            mark_questioned(p.root, p.runs, [os.path.relpath(path, p.root)], "R-1")
             write(os.path.join(p.epics, "sample", "US-1", "decisions", "01.md"), record("US-1", "US-1-01", stage="backlog"))
-            self.assertIsNone(requests.settle(p.root, p.runs, self.request("release", story="US-1"), "2026-10-25T08:00:00Z"))
+            self.assertIsNone(settle(p.root, p.runs, self.request("release", story="US-1"), "2026-10-25T08:00:00Z"))
             self.assertEqual(contract.read_front_matter(path)[0]["status"], "draft")
 
 
@@ -321,13 +348,14 @@ class RequestUsage(unittest.TestCase):
             finally:
                 del os.environ["FACTORY_REQUEST"]
             state.mark_window(here, runs, "S-3", "decisions", "start")
-            booked = state.book_request_usage(runs, "R1", "claude", "model=m\tinput=10\tcache_read=100\t"
+            cost = wiring.book_request_cost(here, runs)
+            booked = book_request_usage(cost, "R1", "claude", "model=m\tinput=10\tcache_read=100\t"
                                                                     "cache_write=20\toutput=40\tcost=1.0\tseconds=9")
             self.assertEqual(booked, [("S-1", "backlog"), ("S-2", "backlog")])
             usage = [e["fields"] for e in state.journal_events(runs, "S-1") if e["kind"] == "usage"]
             self.assertEqual([(u["request"], u["input"], u["output"], u["cost"]) for u in usage],
                              [("R1", "5", "20", "0.5000")])
-            self.assertEqual(state.book_request_usage(runs, "R2", "claude", "unknown"), [])
+            self.assertEqual(book_request_usage(cost, "R2", "claude", "unknown"), [])
 
 
 class Ended(unittest.TestCase):
