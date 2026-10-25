@@ -1,18 +1,25 @@
 """The factory's pipeline as one package — `story-gate.py` and `factory-cli.py` beside it are its entry points.
 
-    contract   what a project file says: places, front matter, profile, stories, decisions, the stage table
+Built the way it teaches (WP-152; the map and the glossaries in the plugin's `docs/`):
+
+    building_blocks   the markers of DCA's tactical patterns and ports, outside every context
+    delivery/         the bounded context delivery: backlog, decisions, delivery, description, cost — in layers
+    spec/             the bounded context spec: what holds, merged from a story's delta; `spec/api` its open host
+    sharedkernel/     what the contexts read alike: a project's markdown
+    web/              the host across the contexts: the page and its server
+    infrastructure/   the composition root: each use case with its adapters
+
+and the modules not yet moved into a context, each importing from the ones above it here, never from one below:
+
+    contract   what a project file says: places, the profile, stories and epics, the stage table
     reports    what a run left to read: test reports, a command's outcome, tree snapshots, a tool's usage
     state      where a story stands: the journal, the owned files, the story state, the schedule, the claim
-    spec       what holds: the living spec per context, the story's criteria as entries, the delta, the merge
     gate       what decides: the checks, their registry, the stamps a passed stage writes
     tools      an agent tool as a record, probed once against its binary
-    requests   what a person asks the factory to do: one file per request, checked when written, listed in order
     runner     what the runner asks between stages: its tables, a story's worktree, the skeletons, a request worked
-    page       the page `serve` shows: one HTML file, its script inline
-    service    the factory as a process of its own: up, down, the worker, and the page's server
     cli        what a person, a stage or factory.sh asks about the pipeline: status, help, usage, the readers
 
-Each module imports from the ones above it in this list, never from one below. stdlib only.
+stdlib only.
 """
 
 import sys

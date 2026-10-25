@@ -600,8 +600,10 @@ what must be true before the next one starts.
 ## The gate
 
 `skills/factory-run/scripts/story-gate.py` — the entry point of a dependency-free Python package
-(`dca_factory/`: contract, reports, state, gate, tools, runner, cli), copied into the project as
-`.agents/factory/` so every tool and every CI run execute the same check. It
+(`dca_factory/`), copied into the project as `.agents/factory/` so every tool and every CI run execute the same
+check. The package is built the way it teaches (`docs/context-map.md`): the building blocks, the bounded contexts
+`delivery` and `spec` in DCA layers, a shared kernel, the web host and the composition root — and the modules not
+yet moved into a context (contract, reports, state, gate, tools, runner, cli). It
 *decides*: the readers, the backlog, the checks per stage, the decision records, `--change`, `--parity`
 and the file contract. Everything that *shows or coordinates* — status, help, usage and cost, the
 session logs, the checkout claim, the schedule, `--resolve` — is `factory-cli.py` beside it, the

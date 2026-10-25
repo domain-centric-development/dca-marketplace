@@ -25,7 +25,8 @@ it is translated one to one into an epic — intent, goal, metric, domain contac
 then on the epic is delivery's. Which proposals became epics, discovery asks delivery, not its files.
 
 **delivery → spec — Customer/Supplier, at the delta.** Delivery hands over a story's criteria and the plan's delta
-(added, changed, removed, moved, renamed); spec merges them into what holds. Spec knows no story, no epic and no way
+(added, changed, removed, moved, renamed); spec merges them into what holds. Spec publishes it as an open host service,
+`spec/api/`: a criterion as an entry, the delta as the plan writes it, problems as sentences. Spec knows no story, no epic and no way
 of delivery: two implementations of the same backlog end in the same spec. Delivery asks spec in spec's terms
 whether a journey is there and proven; "delivered, unguarded" is delivery's state.
 
@@ -39,7 +40,6 @@ new discovery: a future crossing, shown so it is not forgotten.
 | `building_blocks.py` | the markers of `dca-building-blocks`, in Python — a dependency of every context, depending on none |
 | `sharedkernel/` | what several contexts read alike: a project's markdown (front matter, sections, the text) |
 | `web/` | the host that shows every context at once — the page and its server; it calls read models and use cases only |
-| `spec/api/` | spec's open host service: what delivery calls, in the published language — a criterion as an entry, a delta as the plan reads |
 | `infrastructure/` | the composition root: wires each port to its adapter |
 
 The modules not yet moved into a context (`contract`, `reports`, `state`, `gate`, `tools`, `runner`, `cli`) sit at
