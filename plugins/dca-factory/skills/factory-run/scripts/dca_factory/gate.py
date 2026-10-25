@@ -104,7 +104,7 @@ from .state import (
     current_stage_files, flaky_tests, git_tree, is_acceptance, journal_append, journal_events, journal_signal,
     INVARIANT_BREAKS, last_ended, latest_signal, plan_left_open, record_judge_signal, listed_files, MODEL_PROCESSES,
     NOT_OBSERVED, observe_writes, OWNED_CHANGED, owned_changes, owned_end, PRODUCT_HEADINGS, record_base,
-    record_changes, record_owned, run_owned, snapshot_reason, stage_open, STORY_DIGEST, tree_changes, verdict_in,
+    record_changes, record_owned, run_owned, snapshot_reason, stage_open, step_open, STORY_DIGEST, tree_changes, verdict_in,
     answer_sentence, window_open, write_answered, write_mark, write_story_fields)
 
 
@@ -3237,19 +3237,44 @@ def pipeline_owned():
     return lambda path: path.replace("\\", "/").startswith(prefixes)
 
 
+def backlog_places():
+    """The backlog and the description — what a person writes and nothing the project's checks read: the epics with
+    their stories, decisions and findings, the project's findings and decision records, the discovery and the
+    description's files. Never the spec, never `docs/` (a project's tests may read what it holds). (folders, files)"""
+    rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).strip("/")
+    folders = {rel("epics"), findings_rel(), project_decisions_rel(), rel("discovery")}
+    return (tuple(sorted(f.strip("/") + "/" for f in folders if f and f.strip("/") not in ("", "."))),
+            {rel("product"), rel("tech"), rel("domain")})
+
+
+def people_places():
+    """What a request may write and the factory commits: the backlog and the description (`backlog_places`), and
+    beside them the folder the epics lie in with everything in it, `docs/` and the agents' instructions a
+    description writes a line into. Never the spec: what holds is merged by the gate that delivers.
+    (folders, files, never)"""
+    rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).strip("/")
+    folders, files = backlog_places()
+    more = {os.path.dirname(rel("epics")) or rel("epics"), "docs"}
+    return (tuple(sorted(set(folders) | {f.strip("/") + "/" for f in more if f.strip("/") not in ("", ".")})),
+            files | {"AGENTS.md", "CLAUDE.md"}, (rel("spec") + "/",))
+
+
+def in_places(path, places):
+    """Whether a path lies in (folders, files[, never])."""
+    path = path.replace("\\", "/")
+    folders, files, never = (tuple(places) + ((),))[:3]
+    return (path in files or path.startswith(folders)) and not (never and path.startswith(never))
+
+
 def backlog_paths(cwd, env):
-    """The staged paths when every one of them is backlog or the pipeline's own protocol — the epics with their
-    stories, decisions and findings, the project's findings and decision records, `.dca-factory/` — else None. A commit that stages
-    nothing is None: it is checked as any other."""
+    """The staged paths when every one of them is the backlog or the description (`backlog_places`) or the pipeline's
+    own protocol, else None. A commit that stages nothing is None: it is checked as any other."""
     code, names = git(cwd, "diff", "--cached", "--name-only", "--no-renames", env=env)
     paths = [p for p in names.splitlines() if p] if code == 0 else []
     if not paths:
         return None
-    epics = (PLACES_REL.get("epics") or DEFAULTS["epics"]).strip("/")
-    prefixes = tuple(folder.strip("/") + "/" for folder in (epics, findings_rel(), project_decisions_rel()) if folder)
-    owned = pipeline_owned()
-    backlog = lambda path: path.replace("\\", "/").startswith(prefixes) or owned(path)
-    return paths if all(backlog(p) for p in paths) else None
+    owned, places = pipeline_owned(), backlog_places()
+    return paths if all(in_places(p, places) or owned(p) for p in paths) else None
 
 
 def red(result, check, message, must, strict):
@@ -3994,10 +4019,16 @@ def change_check(result, cwd, profile, staged, only):
                               "runs and fails when red, what is not is named")
     env = dict(os.environ)
     tree = None
+    paths = backlog_paths(cwd, env) if staged and not split_list(only) else None
     if staged:
-        tree = staged_snapshot(result, cwd, env)
-        if tree is None:
-            return
+        if paths and not split_list(profile.get("checks.backlog")):
+            # nothing runs over the working tree: what else is changed there cannot reach a check of this commit
+            result.note("snapshot", "the backlog alone, and `checks.backlog` names no check — what else the working "
+                                    "tree holds is not this commit's")
+        else:
+            tree = staged_snapshot(result, cwd, env)
+            if tree is None:
+                return
         # The profile's commands must not inherit a temporary index (`git commit -a`): a test that
         # runs git in a repository of its own would read this commit's index as its own.
         os.environ.pop("GIT_INDEX_FILE", None)
@@ -4011,7 +4042,6 @@ def change_check(result, cwd, profile, staged, only):
     # runs what `checks.backlog` names (a project whose tests read the backlog names them), by each check's or
     # test command's own key, and nothing more. An explicit `--checks` scope is the person's and wins.
     test_scope = None
-    paths = backlog_paths(cwd, env) if staged and not split_list(only) else None
     if paths:
         named = split_list(profile.get("checks.backlog"))
         unknown = sorted(n for n in named if n not in CHANGE_CHECKS and n not in test_keys)
@@ -4063,7 +4093,7 @@ def change_check(result, cwd, profile, staged, only):
             result.ok(check, f"`{command}` succeeded")
         else:
             red(result, check, f"`{command}` failed:\n{tail(output)}", must, bool(required))
-    if staged:
+    if tree:
         _, after = git(cwd, "write-tree", env=env)
         if after != tree:
             result.fail("snapshot", f"the index changed while the checks ran ({tree[:12]} → "
@@ -4288,6 +4318,7 @@ class Result:
         self.entries = []
         self.written = []          # the files a delivery wrote into the project — what integrate commits on main
         self.flaky = []            # the tests outside the story red in a whole run and green alone (WP-113)
+        self.closed = False        # a delivery journaled its passing verdict before its commit (close_record)
 
     def ok(self, check, message):
         self.entries.append(("pass", check, message))
@@ -4777,7 +4808,8 @@ def _integrate_passed(run):
     if config:
         publish_story(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs, config)
     else:
-        integrate_into_home(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs)
+        integrate_into_home(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs,
+                            close=lambda: close_record(run))
 
 
 def main(argv):
@@ -4983,7 +5015,7 @@ def check_integrated(result, cwd, runs, story_id):
         result.fail("moved", f"{target} moved on since the story was merged with it — the integrate step merges again")
 
 
-def integrate_into_home(result, cwd, story_path, story_id, front, runs):
+def integrate_into_home(result, cwd, story_path, story_id, front, runs, close=None):
     """Every check holds on the integrated tree: the main checkout takes the story's commit — a fast-forward of
     its branch, nothing else — and the story is delivered. A main checkout on another branch, or with changes
     of its own in a file the commit touches, does not take it: refused (`checkout`), the person decides."""
@@ -5011,23 +5043,33 @@ def integrate_into_home(result, cwd, story_path, story_id, front, runs):
     result.ok("integrated", f"{target} took the story's commit {head[:12]}")
     deliver(result, story_path, story_id, front, runs)
     if not result.failed:
-        commit_delivery(result, home, story_id, front)
+        commit_delivery(result, home, story_id, front, close)
 
 
-def commit_delivery(result, home, story_id, front):
+def story_journals(home):
+    """The story journals a commit takes along — every one git does not ignore (WP-150: the journal is the record,
+    committed): what a delivery and a request wrote into them goes with what they wrote."""
+    found = []
+    for journal in sorted(glob.glob(os.path.join(home, evidence_rel(), "*", JOURNAL))):
+        rel = os.path.relpath(journal, home).replace("\\", "/")
+        if git(home, "check-ignore", "-q", "--", rel)[0] != 0:
+            found.append(rel)
+    return found
+
+
+def commit_delivery(result, home, story_id, front, close=None):
     """What the delivery wrote on the main line — the story's folder (its state, decisions, findings) and the spec
     it merged — committed there beside the story's commit, so the next story's worktree starts from it. Only those
-    paths: what else the main checkout holds, staged or not, stays as it is."""
+    paths: what else the main checkout holds, staged or not, stays as it is. `close` writes the delivery's own last
+    events first: the commit carries the story's whole record, and nothing of the delivery is written after it."""
+    if close:
+        close()
     paths = []
     for path in dict.fromkeys(result.written):
         rel = os.path.relpath(os.path.abspath(path), home).replace("\\", "/")
         if not rel.startswith("../") and (os.path.exists(os.path.join(home, rel)) or git(home, "ls-files", "--", rel)[1]):
             paths.append(rel)
-    # the story journals ride along — every one git does not ignore (WP-150: the journal is the record, committed)
-    for journal in sorted(glob.glob(os.path.join(home, evidence_rel(), "*", JOURNAL))):
-        rel = os.path.relpath(journal, home).replace("\\", "/")
-        if git(home, "check-ignore", "-q", "--", rel)[0] != 0:
-            paths.append(rel)
+    paths += story_journals(home)
     if not paths:
         return
     git(home, "add", "-A", "--", *paths)
@@ -5352,18 +5394,35 @@ def deliver(result, story_path, story_id, front, runs):
                                 f"person reads first; Decide shows the reviewer's `Defect` in its place")
 
 
-def journal_gate(result, args, story_id, story_path, code):
-    """Every gate run over a story is an event: `gate <stage> exit=<code> fail=<checks> by=<who>` — the runner's
-    (`by=runner`, the one that signs suites), a stage's own under a runner (`by=<stage>`), a session's (`by=session`).
-    The plan gate's refusal carries the backlog's digest, so a repair is seen without a clock."""
-    if not story_id:
-        return code
+def close_record(run):
+    """A delivery's last events, journaled before its commit: the gate's passing verdict and the end of the runner's
+    integrate step it runs in, where that step is open. The commit then holds the story's record whole — a delivered
+    story leaves no journal line behind in the checkout. A commit that fails after it is journaled as the refusal."""
+    journal_append(run.runs, run.story_id, "gate", run.args.stage, *gate_fields(run.result, run.args, 0))
+    run.result.closed = True
+    if step_open(run.runs, run.story_id, "integrate"):
+        journal_append(run.runs, run.story_id, "step-end", "integrate", "exit=0")
+
+
+def gate_fields(result, args, code):
+    """A gate run's event fields: `exit=<code> fail=<checks> by=<who>` — the runner's (`by=runner`, the one that
+    signs suites), a stage's own under a runner (`by=<stage>`), a session's (`by=session`)."""
     failed = sorted({check for state, check, _ in result.entries if state == "fail"})
     by = "runner" if args.record_suites else (os.environ.get("FACTORY_STAGE") or "stage") \
         if os.environ.get("FACTORY_WORKER") else "session"
     fields = [f"exit={code}"] + ([f"fail={','.join(failed)}"] if failed else []) + [f"by={by}"]
     if result.flaky:
         fields.append(f"flaky={','.join(dict.fromkeys(result.flaky))}")
+    return fields
+
+
+def journal_gate(result, args, story_id, story_path, code):
+    """Every gate run over a story is an event (`gate_fields`); a delivery journaled its passing verdict before its
+    commit (`close_record`). The plan gate's refusal carries the backlog's digest, so a repair is seen without a
+    clock."""
+    if not story_id or code == 0 and result.closed:
+        return code
+    fields = gate_fields(result, args, code)
     if args.stage == "plan" and code == 1 and story_path:
         fields.append(f"backlog={backlog_digest(story_path)}")
     with contextlib.suppress(OSError):

@@ -308,13 +308,13 @@ export function waitingCount(status: { waiting: unknown[]; claims?: { kind: stri
 }
 
 // The press a waiting row offers: its own skill where it names one, the story added where the factory names the skill
-// alone (`/factory-decisions`), labelled by what it does; none where the factory says what to do in words only — a
-// story waiting for its merge, a claim to release in a terminal.
-export function waitPress(story: string, action: { text: string; skill: string }): { label: string; command: string } | null {
+// alone (`/factory-decisions`), labelled as the factory labels it (dca-factory 0.93.0), else by what it does; none where
+// the factory says what to do in words only — a story waiting for its merge, a claim to release in a terminal.
+export function waitPress(story: string, action: { text: string; skill: string; label?: string }): { label: string; command: string } | null {
   if (!action.skill) return null
   const command = action.skill.trim().includes(' ') ? action.skill.trim() : `${action.skill.trim()} ${story}`
   const verb = command.split(' ')[0] ?? ''
-  const label = { '/factory-decisions': 'answer', '/factory-status': 'look', '/factory-run': 'run', '/factory-backlog': 'release' }[verb] ?? 'open'
+  const label = action.label || ({ '/factory-decisions': 'answer', '/factory-status': 'look', '/factory-run': 'run', '/factory-backlog': 'release' }[verb] ?? 'open')
   return { label, command }
 }
 

@@ -1019,9 +1019,10 @@ def mark_window(cwd, runs, story_id, name, edge, session_log=None):
     if session_log:
         kind = log_kind(session_log)
     freeze_all(runs)
+    request = os.environ.get("FACTORY_REQUEST", "")
     with journal_writer(runs, story_id) as handle:
         if edge == "start":
-            handle.write(f"{stamp}\twindow-start\t{name}\ttool={kind}\n")
+            handle.write(f"{stamp}\twindow-start\t{name}\ttool={kind}" + (f"\trequest={request}" if request else "") + "\n")
             print(f"window: {name} of {story_id} started ({kind})")
             return 0
         started = None
@@ -1032,7 +1033,10 @@ def mark_window(cwd, runs, story_id, name, edge, session_log=None):
         source = f"log={session_log}" if session_log else \
             f"session={kind.split('-')[0]}:{session_id}" if session_id and kind != "in-session" else ""
         handle.write(f"{stamp}\twindow-end\t{name}\n")
-        if not session_usage_allowed(cwd) or not started or not source:
+        if request:
+            # the request's process measures it, priced: the runner books its share here once the process ended
+            print(f"window: {name} of {story_id} ended — its usage is request {request}'s")
+        elif not session_usage_allowed(cwd) or not started or not source:
             handle.write(f"{stamp}\tusage\t{name}\ttool={kind}\tunknown\n")
             print(f"window: {name} of {story_id} ended — its usage is unknown")
         else:
@@ -1040,6 +1044,29 @@ def mark_window(cwd, runs, story_id, name, edge, session_log=None):
             handle.write(f"{stamp}\tusage\t{name}\ttool={kind}\twindow={begun}/{stamp}\t{source}\n")
             print(f"window: {name} of {story_id} ended — its usage is read from the session log")
     return 0
+
+
+def book_request_usage(runs, request_id, tool, fields):
+    """A request's usage — one process, measured and priced by the runner — booked on the stories it worked on: one
+    `usage <window> request=<id>` line on each window the request's process opened (`window-start request=<id>`),
+    an even share each. A request that opened no window (a description, a discovery) keeps it in the request
+    journal alone. Returns the windows it was booked on."""
+    windows = []
+    for path in sorted(glob.glob(journal_path(runs, "*"))):
+        story = os.path.basename(os.path.dirname(path))
+        windows += [(story, e["name"]) for e in read_events(path)
+                    if e["kind"] == "window-start" and e["fields"].get("request") == request_id]
+    measured = dict(f.split("=", 1) for f in fields.split("\t") if "=" in f)
+    if not windows or "input" not in measured:
+        return windows
+    share = len(windows)
+    cells = [f"tool={tool}", f"request={request_id}", f"model={measured.get('model', 'unknown')}"]
+    cells += [f"{k}={int(measured.get(k, 0) or 0) // share}" for k in USAGE_FIELDS]
+    if measured.get("cost"):
+        cells.append(f"cost={float(measured['cost']) / share:.4f}")
+    for story, window in windows:
+        journal_append(runs, story, "usage", window, *cells)
+    return windows
 
 
 def mark_stage(cwd, runs, story_id, stage, edge, session_log=None):
@@ -2030,6 +2057,14 @@ def free_id(cwd, epics, config, target, prefix):
     numbers = [int(m.group(1)) for m in (re.match(rf"^{re.escape(prefix)}-(\d+)$", u) for u in used) if m]
     width = max((len(m.group(1)) for m in (re.match(rf"^{re.escape(prefix)}-(\d+)$", u) for u in used) if m), default=2)
     return f"{prefix}-{str(max(numbers, default=0) + 1).zfill(width)}"
+
+
+def step_open(runs, story_id, name):
+    """True while the journal's last mark for the runner's step <name> (integrate, merge, format) is its start. A
+    delivery ends the integrate step with its own record, before its commit; the runner ends a step nothing ended."""
+    marks = [e["kind"] for e in journal_events(runs, story_id)
+             if e["kind"] in ("step-start", "step-end") and e["name"] == name]
+    return bool(marks) and marks[-1] == "step-start"
 
 
 def running_stages(runs):

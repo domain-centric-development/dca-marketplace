@@ -13,6 +13,7 @@
 The page and the API read through `factory-cli.py`, a process per call, so they show exactly what `factory.sh` shows.
 """
 
+import base64
 import contextlib
 import hmac
 import http.server
@@ -31,11 +32,12 @@ import urllib.parse
 import zlib
 
 from .contract import GateError, place
+from .gate import posix_shell
 from .state import claim_path, dead_runner, read_claim, running_stages, stale_after
 from .reports import parse_time
 from .requests import (
     default_by, drop_request, Duplicate, stamp_utc, factory_dir, ID_WORD, KINDS, RequestError, retry_request, write_request)
-from .page import PAGE, SCRIPT_HASH
+from .page import FAVICON, PAGE, SCRIPT_HASH
 
 
 FACTORY_FILE = "factory.json"       # the factory `up` started: pid, start, log, who
@@ -133,6 +135,36 @@ def worker(cwd):
                 stopping=os.path.isfile(stop_file()))
 
 
+def worker_text(info):
+    """The worker in a few words, as a view's header shows it."""
+    if not info:
+        return "down"
+    if not info["alive"]:
+        return f"{info['how']} — no sign of life"
+    if info["stopping"]:
+        return "stopping after its stage"
+    return {"up": "up", "runner": "up — a runner from a terminal", "session": "up — a session's run"}[info["how"]]
+
+
+def ended(cwd):
+    """The factory `up` started that is gone without a `down` — {at, why, log}: its start and the last thing its log
+    says since then (a refusal, a crash); None while it runs, after a `down` or a stop request (the stop file stays),
+    or where nobody started one."""
+    started = read_json(own_file(FACTORY_FILE)) or {}
+    if not started.get("pid") or alive(started["pid"]) or os.path.isfile(stop_file()) or (worker(cwd) or {}).get("alive"):
+        return None
+    lines = [line.rstrip() for line in log_tail(started.get("log") or own_file(LOG_FILE), 200)]
+    heads = [i for i, line in enumerate(lines) if line.startswith("== ")]
+    said = []                                       # its messages since its start, a continued line joined to its own
+    for line in lines[heads[-1] + 1 if heads else 0:]:
+        text = line.split(":", 1)[1].strip() if line.startswith("factory:") else line.strip()
+        if line.startswith("factory:   ") and said:
+            said[-1] += " " + text
+        elif text:
+            said.append(text)
+    return dict(at=started.get("started", ""), why=said[-1] if said else "no word in its log", log=started.get("log", ""))
+
+
 def worker_line(info):
     if not info:
         return "factory: down — nobody holds the checkout (`factory.sh up` starts it)"
@@ -190,26 +222,32 @@ def up(cwd, run_args=(), serve_too=False, port=None, by="", wait=20.0):
     with open(log_path, "a", encoding="utf-8") as log:
         log.write(f"\n== {stamp_utc()} up by {by}: factory.sh run --watch --stay {' '.join(run_args)}\n")
         log.flush()
-        process = detached([os.environ.get("FACTORY_BASH") or "bash", runner_path(), "run", "--watch", "--stay",
-                            *run_args], cwd, log,
-                           session_free_env())
-    write_json(own_file(FACTORY_FILE), dict(pid=process.pid, started=stamp_utc(), log=log_path.replace(os.sep, "/"), by=by,
-                                            args=list(run_args)))
+        # the bash the gate runs profile commands with: on Windows Git Bash, never System32's WSL launcher
+        process = detached([posix_shell() or os.environ.get("FACTORY_BASH") or "bash", runner_path(), "run", "--watch",
+                            "--stay", *run_args], cwd, log, session_free_env())
+    started = stamp_utc()
+    record = dict(pid=process.pid, started=started, log=log_path.replace(os.sep, "/"), by=by, args=list(run_args))
+    write_json(own_file(FACTORY_FILE), record)
     deadline = time.time() + wait
     while time.time() < deadline:
+        held = read_claim(claim_path(cwd)) or {}
+        runner = owner_pid(held.get("owner"))
+        # the runner's claim: its pid is the one started here — or, where bash's `exec` starts a process of its own
+        # (Git Bash), a runner of this host that claimed the checkout since this start
+        if runner and (runner == process.pid or str(held.get("since", "")) >= started):
+            if runner != process.pid:
+                write_json(own_file(FACTORY_FILE), dict(record, pid=runner))
+            say(f"up — pid {runner}, its log {log_path}; `factory.sh down` ends it after its running stage")
+            return serve(cwd, port, background=True) if serve_too else 0
         code = process.poll()
-        if code is not None:
+        if code:                                   # 0: a shell that handed over to its runner, which claims next
             say(f"the factory ended at once (exit {code}) — its log, {log_path}:")
             for line in log_tail(log_path):
                 print("  " + line.rstrip())
             if (read_json(own_file(FACTORY_FILE)) or {}).get("pid") == process.pid:   # never another `up`'s record
                 with contextlib.suppress(OSError):
                     os.remove(own_file(FACTORY_FILE))
-            return code or 1
-        held = read_claim(claim_path(cwd)) or {}
-        if owner_pid(held.get("owner")) == process.pid:
-            say(f"up — pid {process.pid}, its log {log_path}; `factory.sh down` ends it after its running stage")
-            return serve(cwd, port, background=True) if serve_too else 0
+            return code
         time.sleep(0.25)
     say(f"started (pid {process.pid}) but it holds no claim yet — its log: {log_path}")
     return serve(cwd, port, background=True) if serve_too else 0
@@ -503,7 +541,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if kind.startswith("text/html"):
             self.send_header("Content-Security-Policy",
                              f"default-src 'none'; script-src '{SCRIPT_HASH}'; style-src 'unsafe-inline'; "
-                             "connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; "
+                             "font-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; "
+                             "form-action 'none'; "
                              "frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(data)
@@ -527,8 +566,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         url = urllib.parse.urlsplit(self.path)
         query = urllib.parse.parse_qs(url.query)
-        if url.path == "/favicon.ico":
-            return self.answer(204, b"", "image/x-icon")
+        # what the page is drawn with — the same for everyone, no project's data in it: no token
+        if url.path in ("/favicon.ico", "/favicon.svg"):
+            return self.answer(200, FAVICON, "image/svg+xml")
+        if url.path.startswith("/fonts/"):
+            return self.font(url.path[len("/fonts/"):])
         if not self.guarded(query):
             return None
         if url.path == "/":
@@ -543,6 +585,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if url.path == "/api/follow":
             return self.follow(query)
         return self.refuse(404, "no such view")
+
+    def font(self, name):
+        from .fonts import FONTS                      # read once a page asks: the views never need them
+        if name not in FONTS:
+            return self.refuse(404, "no such font")
+        data = base64.b64decode(FONTS[name])
+        self.send_response(200)
+        self.send_header("Content-Type", "font/woff2")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "max-age=86400")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(data)
+        return None
 
     def view(self, name, query):
         if name not in VIEWS:

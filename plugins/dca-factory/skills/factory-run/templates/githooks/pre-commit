@@ -19,8 +19,10 @@ RUNNER=".agents/factory/factory.sh"
 # Which checks run before a commit. Keep it to what a developer will wait for: a hook that takes
 # minutes gets bypassed with --no-verify, and then it guards nothing. On a slow stack, narrow it
 # (FACTORY_PRECOMMIT_CHECKS="compile architecture"); a required check left out is reported as not
-# run in this scope, never as passed, and CI has to run it. A commit of the backlog alone (stories,
-# decisions, findings, `.dca-factory/`) runs only what the profile's `checks.backlog:` names.
+# run in this scope, never as passed, and CI has to run it. A commit of the backlog alone (what a person
+# writes and no check reads: the stories, decisions, findings, the description, the discovery,
+# `.dca-factory/`) runs only what the profile's `checks.backlog:` names — and where that names nothing,
+# what else the working tree holds is no part of the check.
 CHECKS="${FACTORY_PRECOMMIT_CHECKS:-}"
 
 if [ ! -f "$RUNNER" ] || [ ! -f .agents/factory/story-gate.py ]; then

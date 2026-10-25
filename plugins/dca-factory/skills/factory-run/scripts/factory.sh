@@ -444,6 +444,8 @@ check_gate_freshness() {
   installed_contract=$(sed -n 's/^contract:[[:space:]]*//p' "$STAMP" | head -1)
   source_version=$(gate_field "$source" VERSION) || return 0
   source_contract=$(gate_field "$source" CONTRACT)
+  # a pipeline older than the installed one (an old plugin cache) is nothing to update to
+  [ "$(printf '%s\n%s\n' "$installed_version" "$source_version" | sort -V | tail -1)" = "$source_version" ] || return 0
   if [ "$installed_contract" != "$source_contract" ]; then
     echo "factory: this project was installed against file contract $installed_contract and the" >&2
     echo "factory:   pipeline here implements $source_contract — run 'factory.sh update' and check" >&2

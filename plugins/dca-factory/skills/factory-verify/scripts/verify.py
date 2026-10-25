@@ -3021,6 +3021,15 @@ exit 0
               f"installed against file contract {contract}" in output and f"implements {int(contract) + 1}" in output
               and "stack profile" in output,      # the message wraps, so match per line, not across
               [l for l in output.splitlines() if "contract" in l])
+        # an older pipeline beside it (an old plugin cache) is nothing to update to: no word about it
+        with open(os.path.join(plugin, PACKAGE, "contract.py"), "w", encoding="utf-8") as handle:
+            handle.write(re.sub(r"^CONTRACT = \d+", "CONTRACT = 1", body, count=1, flags=re.M)
+                         .replace('VERSION = "', 'VERSION = "0.0.1-', 1))
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude",
+                                  "--dry-run", env=env)
+        check("install: a pipeline older than the installed one asks for no update",
+              "installed against file contract" not in output and "brings the project up to date" not in output,
+              [l for l in output.splitlines() if "contract" in l or "pipeline" in l])
 
     # 2. the artefact name the runner waits for is the file contract's, not the stage's name
     for root in throwaway():
@@ -8621,8 +8630,12 @@ def run_groups(args):
                              "the others say how to release them",
                              len(topics) == 1 and proposals.get("monthly-report", {}).get("epic") == "monthly-report"
                              and all(p["metric"] for p in proposals.values())
-                             and topics[0]["description_changes"] == [{"target": "overview.md — For whom",
-                                                                       "change": "team leads of small teams too [S1]", "why": ""}]
+                             and [{k: v for k, v in c.items() if k != "actions"} for c in topics[0]["description_changes"]]
+                             == [{"target": "overview.md — For whom", "change": "team leads of small teams too [S1]", "why": ""}]
+                             and [a["request"]["kind"] for a in topics[0]["description_changes"][0]["actions"]] == ["describe"]
+                             and not proposals["monthly-report"]["actions"]
+                             and all([a["request"]["kind"] for a in p["actions"]] == ["epic-from"]
+                                     for p in proposals.values() if not p["epic"])
                              and "epic monthly-report" in text and "/dca-describe" in text,
                              listed.stdout[-500:]))
     for root in throwaway():
@@ -9501,6 +9514,20 @@ def verify_worktrees(runner, verbose=False):
               and "STORY-1  running" in listing and "takes it up" not in listing + text,
               f"exit {code}; running {status.get('running')}; {text[-400:]!r}; {listing[-300:]!r}")
 
+    # #170: the delivery commit holds the story's whole record — no journal line of the delivery is left behind
+    for root in throwaway():
+        log, env = fixture(root, [])
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", env=env)
+        journal = ".dca-factory/evidence/STORY-1/journal.tsv"
+        committed = git_out(root, "show", f"HEAD:{journal}")
+        dirty = git_out(root, "status", "--porcelain", "--untracked-files=no", "--", ".dca-factory/evidence")
+        check("integrate: the delivery commit holds the story's whole record — the gate's verdict and the end of the "
+              "integrate step journaled before it, nothing of the delivery left in the checkout after it",
+              code == 0 and story_delivered(root, "STORY-1") and not dirty.strip()
+              and "\tgate\tintegrate\texit=0" in committed and "\tstep-end\tintegrate\texit=0" in committed
+              and committed.count("\tstep-end\tintegrate\t") == 1,
+              f"exit {code}; dirty {dirty!r}; tail {committed.splitlines()[-3:]}")
+
     # one slot: a story that waits with code in its worktree does not stop the next; answered, it resumes there,
     # meets the other story's change in a file both touched, and the integrate step makes both hold
     for root in throwaway():
@@ -10087,16 +10114,22 @@ case "$FACTORY_STAGE" in
     if [ -n "${FIXTURE_REQ_ANSWERS:-}" ] && [ ! -f "$FIXTURE_REQ_ANSWERS.done" ]; then
       printf '\n## Answer\nanswer: b\nby: Ann\nat: 2026-10-24T11:00:00Z\n' >> "$FIXTURE_REQ_ANSWERS"; : > "$FIXTURE_REQ_ANSWERS.done"
     fi
+    if [ -n "${FIXTURE_REQ_WRITE_FAIL:-}" ]; then mkdir -p product; printf 'half\\n' > product/half.md; exit 3; fi
+    [ -n "${FIXTURE_REQ_WRITE_FAIL+x}" ] && { mkdir -p product; printf 'whole\\n' > product/half.md; }
     rid=$(printf '%s' "$FACTORY_PROMPT" | sed -n 's/.*This is request \\([^ ]*\\) of the factory.*/\\1/p' | head -1)
     if [ -n "${FIXTURE_REQ_ASK:-}" ] && ! printf '%s' "$FACTORY_PROMPT" | grep -q 'ran before and asked'; then
       mkdir -p product/decisions
       printf -- '---\\nid: %s-q\\nrequest: %s\\nstage: request\\nasked: 2026-10-24T10:00:00Z\\n---\\n\\n# Which epic?\\n\\n## Question\\nq\\n\\n## Options\\n- a: sample\\n- b: a new one\\n\\n## Recommendation\\na\\n' "$rid" "$rid" > "product/decisions/$rid-q.md"
     else
-      printf '%s %s\\n' "$FACTORY_STAGE" "$rid" >> product/notes.md
+      notes="${FIXTURE_REQ_NOTES:-product/notes.md}"; mkdir -p "$(dirname "$notes")"
+      printf '%s %s\\n' "$FACTORY_STAGE" "$rid" >> "$notes"
       [ -n "${FIXTURE_REQ_SPEC:-}" ] && { mkdir -p product/spec/sample; printf 'x\\n' > product/spec/sample/scenarios.md; }
     fi
     exit 0 ;;
 esac
+if [ "$FACTORY_STAGE" = plan ] && [ "$FACTORY_STORY" = "${FIXTURE_REQ_STOP_DURING:-}" ]; then
+  ( cd "$FACTORY_HOME" && "$FIXTURE_PY" "$FIXTURE_CLI" --request stop ) >/dev/null
+fi
 if [ "$FACTORY_STAGE" = plan ] && [ "$FACTORY_STORY" = "${FIXTURE_REQ_DURING:-}" ]; then
   ( cd "$FACTORY_HOME" && "$FIXTURE_PY" "$FIXTURE_CLI" --request wish "written while $FACTORY_STORY runs" \\
       && "$FIXTURE_PY" "$FIXTURE_CLI" --request release "$FACTORY_STORY" ) >/dev/null
@@ -10119,7 +10152,7 @@ def verify_requests(runner, verbose=False):
 
     cli = os.path.join(os.path.dirname(runner), "factory-cli.py")
 
-    def fixture(root, stories=(), status="approved", **env):
+    def fixture(root, stories=(), status="approved", hook=False, **env):
         backlog_project(root, *stories, extra_sources=(
             ("fixture/tests.md", TESTS), ("fixture/decision.md", DECISION), (".gitignore", "build/\n.dca-factory/\n")))
         if status != "approved":
@@ -10128,8 +10161,13 @@ def verify_requests(runner, verbose=False):
             with open(os.path.join(root, name), "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(text)
         copy_scripts(runner, root)
+        if hook:                                    # the pipeline's own commit hook, as the install sets it up
+            shutil.copy(runner, os.path.join(root, ".agents", "factory", "factory.sh"))
+            shutil.copytree(os.path.join(os.path.dirname(runner), "..", "templates", "githooks"),
+                            os.path.join(root, ".githooks"))
         for command in (["init", "-q", "-b", "main"], ["add", "-A"],
-                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+                        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]) \
+                + ((["config", "core.hooksPath", ".githooks"],) if hook else ()):
             subprocess.run(["git", *command], cwd=root, capture_output=True)
         log = os.path.join(root, ".git", "stand-in.log")
         base = {"FACTORY_TOOL_CMD": f"sh '{shell_path(os.path.join(root, 'requests-stand-in.sh'))}'",
@@ -10227,6 +10265,120 @@ def verify_requests(runner, verbose=False):
               "chore(backlog)" not in git_log(root) and not staged
               and os.path.isfile(os.path.join(root, "product", "notes.md"))
               and "could not be committed" in out and "unstaged" in out, f"{staged} {out.strip()[-300:]}")
+        failed = requests_json(root, env)["requests"]
+        os.remove(hook)                              # the person fixed what the hook refused
+        prompts = lines(log).count("REQ request:wish")
+        run_runner(runner, root, "requests", "--retry", failed[0]["id"] if failed else "-", env=env)
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        check("requests: a request whose commit was refused is failed with the reason, and its retry commits what it "
+              "wrote — the skill is not run again",
+              len(failed) == 1 and failed[0]["state"] == "failed" and "could not be committed" in failed[0]["error"]
+              and "chore(backlog): wish refused by the hook" in git_log(root) and not requests_of(root)
+              and lines(log).count("REQ request:wish") == prompts, f"{failed} {git_log(root)} {lines(log)}")
+
+    # what the checks may read is no backlog: a commit of `docs/` runs the full check, as any other
+    for root in throwaway():
+        log, env = fixture(root, status="draft", hook=True)
+        write_file(root, "docs/context-map.md", "# the map\n")
+        write_file(root, "product/epics/sample/STORY-1/decisions/02.md", DECISION)
+        outs = []
+        for path in ("product/epics/sample/STORY-1/decisions/02.md", "docs/context-map.md"):
+            subprocess.run(["git", "add", path], cwd=root, capture_output=True)
+            done = subprocess.run([sys.executable, os.path.join(root, ".agents", "factory", "story-gate.py"), "--change",
+                                   "--staged"], cwd=root, capture_output=True, text=True, encoding="utf-8")
+            outs.append(done.stdout + done.stderr)
+        check("requests: a commit of the backlog alone is scoped to `checks.backlog`; one that stages `docs/` too is "
+              "checked in full",
+              "the backlog alone" in outs[0] and "only the backlog" in outs[0]
+              and "only the backlog" not in outs[1] and "compile" in outs[1], [o[-300:] for o in outs])
+
+    # every press a view offers is the factory's: its label, whether it is the one to press, and the request it writes
+    for root in throwaway():
+        log, env = fixture(root, (("STORY-2", ""),), status="draft")
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md", DECISION)
+        code, out = run_runner(runner, root, "status", "--format", "json", env=env)
+        try:
+            model = json.loads(out[out.index("{"):])
+        except ValueError:
+            model = {}
+        rows = {r["story"]: r for r in model.get("rows", [])}
+        pressed = lambda actions: [(a["label"], a["request"]["kind"], a["primary"]) for a in actions or []]
+        epic = next((e for e in model.get("epics", []) if e["epic"] == "sample"), {})
+        code, out = run_runner(runner, root, "decisions", "--format", "json", env=env)
+        try:
+            records = json.loads(out[out.index("{"):])["records"]
+        except (ValueError, KeyError):
+            records = []
+        check("requests: the views' actions come from the factory — a draft's release, a ready story's run, an epic's "
+              "next stories and drafts, the places to start in words, and an open record's options",
+              pressed(rows.get("STORY-2", {}).get("actions")) == [("run now", "run", False)]
+              and ("suggest stories", "stories", False) in pressed(epic.get("actions"))
+              and {k: a["request"]["open"] for k, a in model.get("entries", {}).items()}
+              == {"wish": "words", "describe": "words", "discover": "words"}
+              and records and [a["label"] for a in records[0]["actions"]][-1] == "answer"
+              and all(a["request"]["kind"] == "answer" for a in records[0]["actions"])
+              and rows.get("STORY-2", {}).get("tokens_text") is not None,
+              f"{pressed(rows.get('STORY-2', {}).get('actions'))} {pressed(epic.get('actions'))} "
+              f"{[pressed(r.get('actions')) for r in records]}")
+        run_runner(runner, root, "request", "release", "STORY-1", env=env)
+        run_runner(runner, root, "request", "answer", "STORY-1-01", "b", env=env)
+        code, out = run_runner(runner, root, "status", "--format", "json", env=env)
+        row = next((r for r in json.loads(out[out.index("{"):])["rows"] if r["story"] == "STORY-1"), {}) if "{" in out else {}
+        later = next((e for e in json.loads(out[out.index("{"):])["epics"] if e["epic"] == "sample"), {}) if "{" in out else {}
+        code, out = run_runner(runner, root, "decisions", "--format", "json", env=env)
+        answers = json.loads(out[out.index("{"):])["records"][0]["actions"] if "{" in out else []
+        check("requests: an action whose request is written already says so (`queued`) — a view offers it no second time; "
+              "of a record's choices only the one taken, the others wait on it",
+              [bool(a.get("queued")) for a in row.get("actions", [])] == [True]
+              and [(a["label"], bool(a.get("queued")), bool(a.get("waits_on"))) for a in answers]
+              == [("a", False, True), ("b", True, False), ("answer", False, True)], f"{row.get('actions')} {answers}")
+        check("requests: an epic offers to release only the drafts whose release is not asked for yet — none left, no "
+              "button; before, it offered its one draft",
+              ("release 1 draft", "release", False) in pressed(epic.get("actions"))
+              and not any(a["request"]["kind"] == "release" for a in later.get("actions", [])) and later.get("drafts") == 1,
+              f"{pressed(epic.get('actions'))} → {pressed(later.get('actions'))}")
+
+    # the pipeline's own hook: a person's unrelated change in the checkout refuses no request's commit
+    for root in throwaway():
+        log, env = fixture(root, status="draft", hook=True, FIXTURE_REQ_NOTES="product/discovery/notes.md")
+        with open(os.path.join(root, "fixture", "tests.md"), "a", encoding="utf-8") as handle:
+            handle.write("a person's change, not staged\n")
+        run_runner(runner, root, "request", "wish", "beside a hand edit", env=env)
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        check("requests: through the pipeline's hook, a request's commit is not refused over a person's unrelated change "
+              "— the backlog alone runs `checks.backlog`, which reads nothing else",
+              "chore(backlog): wish beside a hand edit" in git_log(root) and not requests_of(root)
+              and " M fixture/tests.md" in subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                                           capture_output=True, text=True).stdout,
+              f"{git_log(root)} {out.strip()[-400:]}")
+
+    # a request that failed after writing: its files are its own, and its retry commits them
+    for root in throwaway():
+        log, env = fixture(root, status="draft", FIXTURE_REQ_WRITE_FAIL="1")
+        run_runner(runner, root, "request", "wish", "written then failed", env=env)
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        failed = requests_json(root, env)["requests"]
+        text = open(os.path.join(root, ".dca-factory", "requests", requests_of(root)[0]), encoding="utf-8").read() \
+            if requests_of(root) else ""
+        env2 = dict(env, FIXTURE_REQ_WRITE_FAIL="")
+        run_runner(runner, root, "requests", "--retry", failed[0]["id"] if failed else "-", env=env2)
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env2)
+        committed = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"], cwd=root, capture_output=True,
+                                   text=True).stdout.split()
+        check("requests: a request that fails after writing keeps what it wrote as its own (`wrote:`) — its retry "
+              "commits it, never leaves it as a person's",
+              len(failed) == 1 and failed[0]["state"] == "failed" and "wrote: product/half.md" in text
+              and "product/half.md" in committed and not requests_of(root), f"{failed} {text} {committed}")
+
+    # a stop written while a story runs ends the run before that story's next stage
+    for root in throwaway():
+        log, env = fixture(root, FIXTURE_REQ_STOP_DURING="STORY-1")
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        steps = [l.split()[1] for l in lines(log) if not l.startswith("REQ")]
+        check("requests: a stop written while a story runs ends the run before the story's next stage — the story "
+              "stays where its files say",
+              code == 0 and steps == ["plan"] and not requests_of(root) and "stops the factory" in out,
+              f"exit {code}; {steps}; {out.strip()[-300:]}")
 
     # written while a story runs: worked between its stages — one about that story only after it
     for root in throwaway():
@@ -10286,6 +10438,30 @@ def verify_requests(runner, verbose=False):
               "by its first run, does not fail it",
               len(asked) == 1 and lines(log).count("REQ request:answer") == 2 and not requests_of(root),
               f"{asked} {lines(log)} {requests_json(root, env)['requests']}")
+        left = subprocess.run(["git", "status", "--porcelain", "--", "product/epics/sample/STORY-1/decisions/01.md"],
+                              cwd=root, capture_output=True, text=True).stdout
+        check("requests: a story's decision record a request answered is committed with it, never left behind",
+              not left and "answer: b" in subprocess.run(["git", "show", "HEAD:product/epics/sample/STORY-1/decisions/01.md"],
+                                                         cwd=root, capture_output=True, text=True).stdout, left)
+
+    # what the factory settles itself: an option for a request's own question is written and committed, no tool
+    for root in throwaway():
+        log, env = fixture(root, status="draft")
+        write_file(root, "product/epics/sample/STORY-1/decisions/01.md",
+                   DECISION.replace("stage: plan\n", "stage: backlog\nrequest: 20261024T100000000Z-wish\n"))
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "record"], cwd=root,
+                       capture_output=True)
+        run_runner(runner, root, "request", "answer", "STORY-1-01", "b", "--by", "Ann", env=env)
+        run_runner(runner, root, "run", "--tool", "stand-in", env=env)
+        committed = subprocess.run(["git", "show", "HEAD:product/epics/sample/STORY-1/decisions/01.md"], cwd=root,
+                                   capture_output=True, text=True).stdout
+        journal = os.path.join(root, ".dca-factory", "requests", "journal.tsv")
+        ended = open(journal, encoding="utf-8").read() if os.path.isfile(journal) else ""
+        check("requests: an option for a request's own question is settled by the factory — written, committed, the "
+              "request gone — and no tool runs for it",
+              "REQ request:answer" not in lines(log) and not requests_of(root) and "answer: b" in committed
+              and "by: Ann" in committed and "by=factory" in ended, f"{lines(log)} {requests_of(root)} {ended[-300:]!r}")
 
     # a tool that fails: failed, not taken again; retry and drop
     for root in throwaway():
@@ -10448,10 +10624,24 @@ def verify_requests(runner, verbose=False):
                 digest = "sha256-" + base64.b64encode(hashlib.sha256(script.group(1).encode("utf-8")).digest()).decode() \
                     if script else ""
                 check("serve: the page is one HTML file whose policy allows its own script alone, by its hash, and no "
-                      "style or connection from elsewhere",
-                      code == 200 and script and "<script src" not in page and "<link" not in page
-                      and "default-src 'none'" in policy and "connect-src 'self'" in policy
+                      "style, font or connection from elsewhere",
+                      code == 200 and script and "<script src" not in page
+                      and not re.search(r"""(?:src|href|url)\s*[=(]\s*["']?(?:https?:)?//""", page)
+                      and "default-src 'none'" in policy and "connect-src 'self'" in policy and "font-src 'self'" in policy
                       and f"script-src '{digest}'" in policy and "unsafe-inline'; style" not in policy, f"{code} {policy}")
+                # what the page is drawn with comes from the page's own server, without the token: no project's data in it
+                faces = re.findall(r"url\((/fonts/[a-z0-9.-]+)\)", page)
+                drawn = []
+                for path in faces + ["/favicon.svg"]:
+                    try:
+                        with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=10) as response:
+                            drawn.append((path, response.status, response.headers.get("Content-Type", ""),
+                                          len(response.read())))
+                    except urllib.error.HTTPError as error:
+                        drawn.append((path, error.code, "", 0))
+                check("serve: the page's faces and its icon are its own server's, served without the token",
+                      len(faces) == 3 and all(status == 200 and size > 200 for _p, status, _t, size in drawn)
+                      and all(kind == "font/woff2" for p, _s, kind, _n in drawn if p.startswith("/fonts/")), drawn)
             finally:
                 for served in servers:
                     if served.get("pid"):

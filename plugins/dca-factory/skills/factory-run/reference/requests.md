@@ -15,8 +15,15 @@ instead of a person in a chat.
 | tools | the session's | every tool the factory runs stages with |
 
 Both write the same files: a request runs the skill a session would run, with the arguments a session would give
-it. The order, the marks and which request a press writes are the factory's — every view's `action` carries its
-`request` beside its `skill` — so a page decides nothing.
+it. The order, the marks, the figures and every action are the factory's: a story, an epic, a proposal, a
+description change and an open record each carry their `actions` — the word on the button (`label`), whether it is
+the one to press (`primary`), the `skill` a session runs and the `request` a page writes, with `open` naming what the
+person still gives (`words`, or `record`: an answer under Decide) and `choices` where they pick one (a correction's
+reason code), and `queued` — the id of a request that does it already, so a view offers it no second time. Where
+a record takes one answer and another of its choices is pending, the others carry `waits_on` instead, and a view
+leaves them out; `queued_text` says where the request is — `queued`, `running`, `asks you`. An open record carries its `sections` too — the question and its evidence, or what an acceptance
+asks to look at — so a person decides on the page without opening the file. A page and the cockpit draw them;
+neither composes a command of its own.
 
 ## The lifecycle
 
@@ -31,7 +38,9 @@ it. The order, the marks and which request a press writes are the factory's — 
   its work so far stays, and the stage runs again later. `--no-wait` returns at once.
 - `factory.sh serve [--port <n>]` serves the page. `up --serve` starts it with the factory, and `down` ends both.
 - `status --live` names the worker — `worker: {owner, since, beat, how, alive, stopping}`, `how` one of `up`,
-  `runner`, `session` — and every status counts the requests.
+  `runner`, `session` — and every status counts the requests. A factory `up` started that is gone without a `down`
+  or a stop request is `ended: {at, why, log, text}` — `why` the last thing its log says since its start (a refused
+  install, a crash) — so a view says why nothing runs, not only its log.
 
 ## The request file — `.dca-factory/requests/<stamp>-<kind>.md`
 
@@ -71,6 +80,8 @@ archived is history, not inventory
   | `run` | a story, `from:` a stage | the runner: the story starts next |
   | `stop` | — | the runner: nothing more starts |
 
+- **One record takes one answer**: while an answer, an acceptance or a correction of a record is queued, another
+  one is refused with the id to take back first.
 - **Checked when written, and again when worked.** `factory.sh request` and the page refuse what names nothing
   that exists, a record that is answered already, an option the record lacks, a kind without its words — with the
   reason, writing nothing. The same request queued twice is one. What held when it was written but no longer holds
@@ -80,28 +91,48 @@ archived is history, not inventory
   `factory.sh requests --retry <id>` queues it, `--drop <id>` removes it. A request a factory left `running` when
   it ended is queued again at the next start.
 - **The journal** — `.dca-factory/requests/journal.tsv`: one line per start and end (`request-start`,
-  `request-end` with its exit, its state and its commit) and the `usage` of each process. The tool's raw output is
+  `request-end` with its exit, its state and its commit) and the `usage` of each process (`request=<id>`). Where the
+  process worked on a story — a `backlog` or `decisions` window it opened carries `request=<id>` — the runner books
+  that priced usage on the story's journal too, an even share per window, so a story's figures hold what its
+  requests cost; a session's own window stays measured from its log, unpriced. The tool's raw output is
   `.dca-factory/requests/out/<id>.out` (`factory.sh follow --request <id>`), pruned a week after its request ended.
 
 ## When the factory works a request
 
 - **Before the next story**, every request in order; then `run` requests, whose story starts next; then the
   schedule. A `stop` request ends the factory there.
-- **Between the stages of a running story** — before its next unit (the builder, the reviews, the verifier) —
-  every request not about that story. One about it waits until its run ended.
-- **In a parallel run** a request takes the next free slot before any story; one about a running story waits.
+- **Between the stages of a running story** — before its next unit (the builder, the reviews, the verifier) — a
+  `stop` ends the run there, as `down` does, the story resumable; then every request not about that story. One about
+  it waits until its run ended.
+- **In a parallel run** a request takes the next free slot before any story — one at a time, since requests work in
+  the main checkout; one about a running story waits.
+- **What the factory settles itself**, at once and without a tool — where the person's press is the whole decision
+  and the files say everything it implies: an `accept` (the story's open acceptance takes `answer: accepted`); an
+  `answer` naming an option, to a request's own question (`request:` in the record) — the request that asked runs
+  again and applies it; a `release` of drafts whose question pass ran on them as they stand (`questioned` in each
+  one's journal with its digest, left by the wish or the next-stories request that wrote it) and that no open record
+  holds — `status: approved` and an `answered:` line, as the skill writes them. Everything else — words, a stage's
+  question (it may change a test or the designed map), a draft changed since its pass — goes to the skill. The
+  journal says `tool=factory` and `by=factory`.
 - Each request is one process (`factory-cli.py --work-request <id>`) in the main checkout, under the runner's
   claim, with the tool `tool.request.<kind>`, `tool.request` or `tool:` names, `model.<tool>.request` and
   `effort.<tool>.request` as for a stage. Its shell is a stage's, with `factory-cli.py` narrowed to the flags the
   dialog skills read and record with, plus `factory.sh` backlog, status, decisions, discover, spec-delta and help —
   no flag and no verb that starts a run, a request, the factory or its page.
 - **What it wrote is committed on its own** — `chore(backlog): <kind> <target>`, `Request:` and `By:` in the
-  body — the paths it changed that were clean before and belong to the backlog or the description (the folder the
-  epics lie in and everything in it, the description's files, the discovery, `docs/`, `AGENTS.md`), never the spec —
-  what holds is merged by the gate that delivers. A path a person had changed before stays uncommitted and is named;
-  so is anything else, code and the spec above all. The commit goes through the commit hook like a person's backlog
-  commit, so it runs what the profile's `checks.backlog:` names; refused, what the request wrote stays in the
-  checkout, unstaged, and the request says why.
+  body — the paths it changed that were clean before and that a person writes and no code is (the folder the epics
+  lie in and everything in it, the description's files, the discovery, `docs/`, `AGENTS.md`, `CLAUDE.md`), never the
+  spec — what holds is merged by the gate that delivers — and with them the story journals, as the delivery's commit
+  takes them: what it did to a story is in that story's record. A path a person had changed before stays uncommitted and is
+  named; so is anything else, code and the spec above all. The commit goes through the commit hook like a person's:
+  one of the backlog and the description alone (the epics with their stories, decisions and findings, the project's
+  records, the discovery, the description's files) runs what the profile's `checks.backlog:` names — and where that
+  names nothing, nothing runs over the working tree, so a person's unrelated change there refuses no such commit;
+  one that touches `docs/` or the agents' instructions, which a project's tests may read, is checked in full. Refused,
+  what the request wrote stays in the checkout, unstaged, and the request is `failed` with the hook's reason and
+  `worked:` — its retry commits what it wrote, without running the skill again.
+- **A request that fails or is interrupted after writing** keeps what it wrote as its own (`wrote:` in its file): a
+  retry commits those paths with what it writes, never leaves them as a person's.
 
 ## Run headless — what a skill does for a request
 
@@ -135,12 +166,17 @@ ends as done with nothing committed, and the person reads why.
 
 One HTML file with its script inline, shipped in the package, served by Python's `http.server`: the cockpit's tabs
 (0 Describe, 1–5 Discover, Backlog, Run, Decide, Delivered), drawn from the factory's JSON views, a running stage's
-or request's output as server-sent events. Every press writes a request (or calls `up` / `down`).
+or request's output as server-sent events. Every press writes a request (or calls `up` / `down`, takes a request
+back, queues a failed one again — as its `operations` say). It wears the project's look — the mark, its colours, the
+website's three faces (Space Grotesk, Newsreader, JetBrains Mono, shipped in the package under the SIL Open Font
+License and served by the page itself, so no address leaves the machine) — in a light and a dark theme: the
+system's, or the one the person picks.
 
 - **Bound to 127.0.0.1 alone.** Each checkout takes a port of its own — one derived from the checkout's path
   between 8700 and 8899, so a bookmark holds, and the next free one where another factory's page has it;
   `--port` names one. `.dca-factory/serve.json` records the pid, the port and the URL.
-- **One script, by its hash**: the page's policy allows its own inline script alone (`script-src 'sha256-…'`).
+- **One script, by its hash**: the page's policy allows its own inline script alone (`script-src 'sha256-…'`), and
+  fonts from its own server. The faces and the icon are served without the token: they carry no project's data.
 - **A token per start**, in the URL (`http://127.0.0.1:<port>/?t=<token>`) and on every call; the `Host` header
   must name this server (no DNS rebinding); a write must carry this page's `Origin`, be JSON and at most 64 KiB; a
   refused write closes its connection.

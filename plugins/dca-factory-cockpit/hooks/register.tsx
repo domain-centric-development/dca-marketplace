@@ -10,6 +10,8 @@ import { appendLines, clock, createLatch, day, exitWord, factoryNote, gateBy, gl
 // matching command into this session or starts the runner — both are the person's act. How things look lives in
 // components.tsx; this file reads, acts and arranges.
 const PANE = 'factory-cockpit'
+// an epic's press keeps the key its kind of request had: the views' tests and the person's muscle memory find it
+const EPIC_PRESS: Record<string, string> = { stories: 'stories', release: 'release-all', journey: 'guard-epic' }
 const STATUS_MS = 20_000
 const LIVE_MS = 5_000
 
@@ -640,7 +642,7 @@ function factoryItems($: EngineInterface, ui: Awaited<ReturnType<typeof kit>>['u
     ...status.waiting.map((wait, index) => {
       const press = waitPress(wait.story, wait.action)
       return ui.item(`${prefix}-wait-${wait.story}`, MARK_GLYPH[wait.mark] ?? '?', MARK_COLOR[wait.mark] ?? C.wait, `${wait.story} — ${press ? wait.what : `${wait.what} — ${wait.action.text}`}`, [
-        press && ui.button(`${prefix}-answer-${wait.story}`, press.label, () => send($, press.command), { isPrimary: true, byClaude: true, hotkey: isLive && index === 0 ? 'a' : undefined }),
+        press && ui.offer(`${prefix}-answer-${wait.story}`, wait.action, () => send($, press.command), { isPrimary: true, byClaude: true, hotkey: isLive && index === 0 ? 'a' : undefined }, press.label),
         ui.link(`${prefix}-story-${wait.story}`, 'open', () => void showPane($, () => openStory($, wait.story))),
       ])
     }),
@@ -760,36 +762,44 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   })
   // An unguarded epic's own act, beside its hint — the epic's name opens the epic, this writes its journey.
   const guardCell = (hint: FactoryStatus['journeys'][number]): Cell =>
-    ui.press(`guard-${hint.epic}`, 'add guard', () => send($, hint.action.skill || `/factory-backlog journey ${hint.epic}`), { byClaude: true })
-  // An open record's answers as choices: one button per option, the recommended one first in weight, and a field for
-  // the person's own words; an acceptance is accepted or corrected. The options are the factory's reading of the
-  // record, never the view's own. Each press hands the answer to /factory-decisions, which writes it into the
-  // record — the view writes nothing.
+    ui.offerCell(`guard-${hint.epic}`, hint.action, () => send($, hint.action.skill), { byClaude: true }, hint.action.label || 'add guard')
+  // An open record's answers as the factory offers them (`actions`): one press per option, the recommended one first in
+  // weight, and a field for the person's own words; an acceptance is accepted or corrected. Each press hands its
+  // command to /factory-decisions, which writes the answer into the record — the view composes none and writes nothing.
   const choices = (record: DecisionRecord): RenderElement[] => {
-    const answer = (words: string) => send($, `/factory-decisions ${record.story} ${record.id}: answer ${words}`)
+    const actions = (record.actions ?? []).filter(action => !action.waits_on)
+    const typed = actions.filter(action => action.request?.open === 'words')
+    const pressed = actions.filter(action => action.request?.open !== 'words')
+    // where the person picks one of the factory's choices (a correction's reason code), the field says which come first
+    const own = typed.map(action => {
+      const choices = action.request?.choices ?? []
+      const placeholder = choices.length > 0 ? `${action.text} — <${choices.join('|')}>: your words` : action.text
+      const key = `${record.kind === 'acceptance' ? 'correct' : 'own'}-${record.id}`
+      return action.queued ? ui.offer(key, action, () => {}) : ask(key, action.label ?? '', placeholder, action.skill)
+    }).filter((field): field is RenderElement => Boolean(field))
     if (record.kind === 'acceptance') {
       return [
         ui.section('Your answer'),
-        ui.actions([ui.button(`accept-${record.id}`, 'accept', () => answer('accepted'), { isPrimary: true, byClaude: true })]),
-        ask(`correct-${record.id}`, 'correction', 'what should be different', `/factory-decisions ${record.story} ${record.id}: answer correction:`),
+        ui.actions(pressed.map(action => ui.offer(`accept-${record.id}`, action, () => send($, action.skill), { isPrimary: action.primary, byClaude: true }))),
+        ...own,
       ]
     }
-    const options = record.options ?? []
-    const recommended = record.recommended ?? null
+    const recommended = pressed.find(action => action.primary)?.label
     return [
       ui.section('Your answer', recommended ? `the stage recommends ${recommended}` : 'choose an option or answer in your words'),
-      ...(options.length > 0
+      ...(pressed.length > 0
         ? [
             ui.table(
               [COL.act, { name: 'option', width: 40, isWide: true }],
-              options.map(option => [
-                ui.press(`option-${record.id}-${option.key}`, option.key === recommended ? `${option.key} · recommended` : option.key, () => answer(option.key), { isPrimary: option.key === recommended, byClaude: true }),
-                { text: option.text, color: C.muted },
+              pressed.map(action => [
+                ui.offerCell(`option-${record.id}-${action.label}`, action, () => send($, action.skill), { isPrimary: action.primary, byClaude: true },
+                  action.primary ? `${action.label} · recommended` : action.label ?? ''),
+                { text: action.text, color: C.muted },
               ]),
             ),
           ]
         : []),
-      ask(`own-${record.id}`, 'own answer', 'your words — or an option with a reason: b, because …', `/factory-decisions ${record.story} ${record.id}: answer`),
+      ...own,
     ]
   }
   // What the spec will say: per criterion the change, where it stands before and after, the new line or the reason.
@@ -1158,7 +1168,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           ui.button('back', '← back', () => void update($, detail, () => null), { hotkey: 'b' }),
           row && !row.done && !isRunning() && ui.button('run', '▶ Run (worker)', () => void runWorker($, `run ${open.id}`, ['run', '--story', open.id]), { hotkey: 'r', isPrimary: true }),
           row && !row.done && ui.button('session', 'run in this session', () => send($, `/factory-run ${open.id}`), { hotkey: 'e', byClaude: true }),
-          press && ui.button('answer', press.label, () => send($, press.command), { hotkey: 'a', isPrimary: true, byClaude: true }),
+          press && waitAt && ui.offer('answer', waitAt.action, () => send($, press.command), { hotkey: 'a', isPrimary: true, byClaude: true }, press.label),
           row?.done && ui.button('verify', 'verify', () => send($, `/factory-verify ${open.id}`), { hotkey: 'v', byClaude: true }),
           view?.path ? ui.button('open-story', 'open story.md', () => void openFile($, `${now.root}/${view.path}`, `${open.id} / story.md`, { ...open, pane }), { hotkey: 'o' }) : null,
         ]),
@@ -1237,7 +1247,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           { text: proposal.goal, color: C.muted },
           proposal.epic
             ? ui.open(`epic-of-${proposal.id}`, `epic ${proposal.epic}`, () => void showDetail($, { kind: 'epic', epic: proposal.epic, back: open }))
-            : ui.press(`release-${topic.topic}-${proposal.id}`, 'make epic', () => send($, `/factory-backlog epic ${proposal.id} --from ${topic.report}`), { isPrimary: true, byClaude: true }),
+            : (proposal.actions ?? []).map(action => ui.offerCell(`release-${topic.topic}-${proposal.id}`, action, () => send($, action.skill), { isPrimary: action.primary, byClaude: true }))[0] ?? { text: '' },
         ]),
         'No proposed work in the report yet.',
       )}
@@ -1247,7 +1257,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           topic.description_changes.map((change, index) => [
             { text: change.target, color: C.wait },
             { text: change.change, color: C.muted },
-            ui.press(`describe-${topic.topic}-${index}`, 'apply', () => send($, `/dca-describe ${change.target}: ${change.change}`), { byClaude: true }),
+            (change.actions ?? []).map(action => ui.offerCell(`describe-${topic.topic}-${index}`, action, () => send($, action.skill), { byClaude: true }))[0] ?? { text: '' },
           ]),
         )}
     </Box>
@@ -1257,7 +1267,6 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   // epic view where the pipeline has one; the status's fields else.
   const epicBody = (epic: Epic, view: EpicView | null) => {
     const cells = epicCells(epic)
-    const drafts = cells.draftRows
     const path = view?.path || epic.path
     const stories = [
       ui.section('Stories', 'newest first'),
@@ -1273,14 +1282,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             meta: cells.meta,
           },
           [
-            ui.button(`stories-${epic.epic}`, 'suggest stories', () => send($, `/factory-backlog stories ${epic.epic}`), { isPrimary: epic.total === 0, byClaude: true }),
-            drafts.length > 0 &&
-              ui.button(
-                `release-all-${epic.epic}`,
-                `release ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`,
-                () => send($, `/factory-backlog release ${drafts.map(row => row.story).join(' ')}`),
-                { byClaude: true },
-              ),
+            // the epic's own presses, as the factory offers them: its next stories, its drafts released, its journey
+            ...(epic.actions ?? []).map(action =>
+              ui.offer(`${EPIC_PRESS[action.request?.kind ?? ''] ?? action.request?.kind}-${epic.epic}`, action, () => send($, action.skill), { isPrimary: action.primary, byClaude: true })),
             Boolean(path) && ui.button(`open-epic-${epic.epic}`, 'open epic.md', () => void openFile($, `${now.root}/${path}`, `${epic.epic} / epic.md`, open), { hotkey: 'o' }),
           ],
           [
@@ -1452,7 +1456,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                     ui.mark(wait.mark),
                     { text: wait.story, bold: true },
                     { text: press ? wait.what : `${wait.what} — ${wait.action.text}`, color: C.muted },
-                    press ? ui.press(`answer-${wait.story}`, press.label, () => send($, press.command), { isPrimary: true, byClaude: true }) : {},
+                    press ? ui.offerCell(`answer-${wait.story}`, wait.action, () => send($, press.command), { isPrimary: true, byClaude: true }, press.label) : {},
                   ]
                 }),
               ),
@@ -1497,7 +1501,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
                   },
                   // the file's name and line; the path stands in the findings file the story's name opens
                   { text: finding.where.split('/').pop() ?? finding.where, color: C.muted },
-                  ui.press(`finding-story-${index}`, 'to backlog', () => send($, finding.action.skill), { byClaude: true }),
+                  ui.offerCell(`finding-story-${index}`, finding.action, () => send($, finding.action.skill), { byClaude: true }, 'to backlog'),
                 ]),
               ),
             ]

@@ -25,18 +25,18 @@ from .contract import (
     delivered_by, delivered_on, GateError, git, git_identity, is_delivered, legacy_story_digest, MAPPING_ROW, NOTHING, place, PROFILE_FILE, read_front_matter, read_profile, read_text,
     record_path, resolve_profile, SELECTOR, set_places, SHARED_WINDOWS, shown, STAGE, STAGE_FILES, STAGE_ORDER, STAGES,
     STORY_BRANCH, story_digest, STORY_FILE, story_files, story_folder, story_id_of, story_kind, worktree_places, decisions_store,
-    needs_human_ids, OWNED_DIGEST, WINDOW_DIGEST, PLACES_REL, stamp_applied)
+    needs_human_ids, OWNED_DIGEST, WINDOW_DIGEST, stamp_applied)
 from .reports import (
     stream_limit, tokens_of, usage_lines)
 from .state import (
     CLAIM_TRAILERS, claim_config_here, fetch_remote,
-    back_in, claim, freeze_all, freeze_stream, gate_passed_on_record, record_story, git_tree, has_worktree, journal_path, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of,
+    back_in, book_request_usage, claim, freeze_all, freeze_stream, gate_passed_on_record, record_story, git_tree, has_worktree, journal_path, journal_usage, journal_writer, listed_files, run_owned, run_stories, snapshot_reason, start_of, step_open,
     STAGE_WORD, STAGES_MADE, STORY_DIGEST, story_title, tree_changes, uncommitted_story, verdict_in, worktree_of, worktrees_dir,
     write_mark, write_story_fields)
 from .spec import (
     context_folder, derived, merge, place_name, read_delta, read_spec, render_spec, story_entries)
 from .gate import (
-    merge_target, run as run_command,
+    in_places, merge_target, people_places, run as run_command, story_journals, tail,
     read_mapping, spec_target, stale_red_proof, story_spec,
     BUILT_IN_PERSPECTIVES, CLAUSES_MARKER, CONFLICT_MARKER, contract_of, criteria_of, HANDOVER_BUDGET,
     integration_target, INVARIANTS_MARKER, lost_text, main_tests_lost, perspectives_of, plan_invariants, plan_proposals, read_clause_rows,
@@ -44,8 +44,9 @@ from .gate import (
 from .tools import (
     isolation_args, TOOL, tool_command, TOOLS, tools_shell)
 from .requests import (
-    find_request, KIND, list_requests, out_path, prune_outputs, read_request, request_records, REQUEST_JOURNAL,
-    requests_dir, RequestError, project_record_path, stories_of, target_text, update_request, validate, written_keys)
+    find_request, KIND, list_requests, mark_questioned, out_path, prune_outputs, read_request, request_records,
+    REQUEST_JOURNAL, requests_dir, RequestError, project_record_path, settle, stamp_utc, stories_of, target_text,
+    update_request, validate, written_keys)
 from .requests import journal as request_journal
 
 
@@ -1430,6 +1431,7 @@ class Run:
         self.options = options
         self.add_dirs, self.read_dirs = [], []
         self.tool_in_flight = ""
+        self.request_in_flight = ""         # the request whose process runs: a window it opens is its to measure
         self.pipeline_sha = os.environ.get("FACTORY_RUNNER_PIPELINE_SHA", "")
         self.claimed = False
         self.lock_held = False
@@ -1498,14 +1500,16 @@ class Run:
     @contextlib.contextmanager
     def step(self, story, name):
         """A step the runner works itself — integrate, merge, format — journaled as running (`step-start`/
-        `step-end`), so the status shows it with its clock; no stage's reader counts it as a stage run."""
+        `step-end`), so the status shows it with its clock; no stage's reader counts it as a stage run. A delivery
+        ends its integrate step itself, before its commit; the runner ends a step the journal still shows open."""
         self.journal_line(story, f"{utc()}\tstep-start\t{name}\tby=runner")
         code = None
         try:
             yield
             code = 0
         finally:
-            self.journal_line(story, f"{utc()}\tstep-end\t{name}\texit={'0' if code == 0 else 'stopped'}")
+            if step_open(place("runs"), story, name):
+                self.journal_line(story, f"{utc()}\tstep-end\t{name}\texit={'0' if code == 0 else 'stopped'}")
 
     def gate_installed(self):
         return os.path.isfile(self.gate_path)
@@ -1860,7 +1864,8 @@ class Run:
             self.invocations += 1
         flags, _note = self.model_choice(tool, stage)
         command = os.environ.get("FACTORY_TOOL_CMD")
-        env = dict(os.environ, FACTORY_WORKER=self.worker, FACTORY_STAGE=stage or "", FACTORY_STORY=story or "")
+        env = dict(os.environ, FACTORY_WORKER=self.worker, FACTORY_STAGE=stage or "", FACTORY_STORY=story or "",
+                   FACTORY_REQUEST=self.request_in_flight)
         if command:
             env.update(FACTORY_PROMPT=prompt, FACTORY_RUNS=self.runs, FACTORY_MODEL=self.model_key(tool, stage))
             code = self.tool_process(["sh", "-c", command], env, raw, stdin=None, stage=stage)
@@ -1902,8 +1907,9 @@ class Run:
     def exit_field(self, code):
         return "0" if code == 0 else "timeout" if code == TIMED_OUT else "nonzero"
 
-    def record_usage(self, story, stage, tool, raw, seconds=None):
-        """One `usage` line in the story's journal per invocation, and the stage's final message on screen."""
+    def record_usage(self, story, stage, tool, raw, seconds=None, request=""):
+        """One `usage` line in the story's journal per invocation — a request's in the request journal, with its id —
+        and the stage's final message on screen. Returns the measured fields."""
         fmt = self.usage_format(tool)
         model = self.model_flag(tool, stage)
         try:
@@ -1915,11 +1921,13 @@ class Run:
             fields += f"\tseconds={seconds}"
         if fmt != "none" and len(lines) > 1:
             print("\n".join(lines[1:]))
-        self.journal_line(story, f"{utc()}\tusage\t{stage}\ttool={tool}\t{fields}")
+        self.journal_line(story, f"{utc()}\tusage\t{stage}\ttool={tool}" + (f"\trequest={request}" if request else "")
+                          + f"\t{fields}")
         # what only the stream says — a shared window's parts, the denied calls — goes into the journal now (WP-150)
         if story and os.path.isfile(raw):
             with contextlib.suppress(OSError, GateError, ValueError):
                 freeze_stream(journal_path(place("runs"), story), raw)
+        return fields
 
     # --- what the files say --------------------------------------------------------------------------------
     def verdict_of(self, story):
@@ -3116,9 +3124,13 @@ class Run:
             "factory goes on.")
 
     def between_stages(self, story, tool):
-        """Before a stage of a story the runner runs alone: the requests that are not about it."""
+        """Before a stage of a story the runner runs alone: a `stop` — the run ends here, as after a TERM, the story
+        resumable —, then the requests that are not about it."""
         if self.options.child:
             return
+        if self.take_stop_request():
+            self.pending = 0
+            self.checkpoint()
         self.work_requests(tool, busy=(story,))
         self.profile()
 
@@ -3221,9 +3233,11 @@ class Run:
             f"In short: the request is {by}'s confirmation of what it names — write it as theirs (`by: {by}`), as the "
             f"skill would on their confirmation. Where the skill would ask the person and the files do not settle it, do "
             f"not guess and do not ask here: write the question as one decision record with `request: {request['id']}` "
-            f"in its front matter — beside the story it concerns, else as {topic_file} — and end. The factory shows it "
+            f"in its front matter and its file name without `.md` as its `id:` — beside the story it concerns, else as "
+            f"{topic_file} — and end. The factory shows it "
             f"and runs this request again once it is answered. Start no stage and no `factory.sh run`, commit nothing: "
             f"the factory commits what this request wrote.",
+            f"Now is {stamp_utc()} (UTC) — the time a field such as `created:` takes.",
         ]
         if kind.name == "wish":
             lines.append("A wish becomes a backlog item kept as a draft (`status: draft`): the person releases it.")
@@ -3250,21 +3264,18 @@ class Run:
         heads += [f"Bash({self.py} .agents/factory/factory-cli.py {flag}:*)" for flag in REQUEST_CLI_FLAGS]
         heads += [f"Bash(bash .agents/factory/factory.sh {verb}:*)"
                   for verb in ("backlog", "status", "decisions", "discover", "spec-delta", "help")]
+        heads.append("Bash(date:*)")                # the backlog skill dates what it writes
         return ",".join(heads)
 
     def people_paths(self):
-        """What a request may write and the factory commits: the project description and the backlog — the folder the
-        epics lie in with everything beside them, the description's files, the discovery, `docs/` — and the agents'
-        instructions a description writes a line into. Never the spec: what holds is merged by the gate that
-        delivers, not by a person's request. (folders, files, excluded folders)"""
+        """What a request may write and the factory commits — what a person writes and no code is
+        (`people_places`, the same the commit hook takes as the backlog alone): (folders, files, never)."""
         self.profile()
-        rel = lambda key: (PLACES_REL.get(key) or DEFAULTS[key]).strip("/")
-        folders = {os.path.dirname(rel("epics")) or rel("epics"), rel("epics"), rel("discovery"), "docs"}
-        files = {rel("product"), rel("tech"), rel("domain"), "AGENTS.md", "CLAUDE.md"}
-        return tuple(sorted(f + "/" for f in folders if f and f != ".")), files, (rel("spec") + "/",)
+        return people_places()
 
     def dirty_files(self):
-        """{path: digest} of everything git sees changed or new in the main checkout, outside the factory's folder."""
+        """{path: digest} of everything git sees changed or new in the main checkout, outside the factory's folder.
+        A story's decision records count: a request's question and a person's answer are written there."""
         # not through `git()`, which strips the answer: the first entry's leading blank is its status column
         done = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all", "--no-renames"],
                               cwd=self.home, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -3275,7 +3286,7 @@ class Run:
             if len(entry) < 4:
                 continue
             path = entry[3:]
-            if run_owned(path, self.runs_rel) or path.startswith(".dca-factory/"):
+            if path.startswith((self.runs_rel.rstrip("/") + "/", evidence_rel() + "/", ".dca-factory/")):
                 continue
             full = os.path.join(self.home, path)
             try:
@@ -3285,15 +3296,26 @@ class Run:
                 found[path] = "deleted"
         return found
 
-    def commit_request(self, request, before):
-        """What the request wrote, committed on its own: the paths it changed that were clean before and that are the
-        backlog or the description. A path a person had changed before, or code, stays as it is and is named."""
+    def request_wrote(self, request, before):
+        """What a request wrote so far — the people's paths it changed that were clean before, and what an earlier
+        attempt of it wrote —, kept in its file when it fails or is interrupted: an attempt after it commits them as
+        its own, never as a person's."""
+        places = self.people_paths()
         after = self.dirty_files()
-        changed = sorted(p for p, digest in after.items() if before.get(p) != digest)
-        folders, files, never = self.people_paths()
-        mine = [p for p in changed if p not in before and (p in files or p.startswith(folders))
-                and not p.startswith(never)]
-        theirs = [p for p in changed if p in before]
+        new = {p for p, digest in after.items() if before.get(p) != digest and p not in before}
+        own = set(str(request.get("wrote") or "").split())
+        return " ".join(sorted(p for p in (new | own) & set(after) if in_places(p, places)))
+
+    def commit_request(self, request, before):
+        """What the request wrote, committed on its own: the paths it changed that were clean before — or that an
+        earlier attempt of it wrote (`wrote:`) — and that are the backlog or the description. A path a person had
+        changed before, or code, stays as it is and is named."""
+        after = self.dirty_files()
+        own = set(str(request.get("wrote") or "").split())
+        changed = sorted(p for p, digest in after.items() if before.get(p) != digest or p in own)
+        places = self.people_paths()
+        mine = [p for p in changed if (p not in before or p in own) and in_places(p, places)]
+        theirs = [p for p in changed if p in before and p not in own]
         stray = [p for p in changed if p not in before and p not in mine]
         if theirs:
             print(f"factory: request {request['id']} changed what was changed by hand before — left uncommitted: "
@@ -3302,8 +3324,10 @@ class Run:
             err(f"factory: request {request['id']} changed what is neither backlog nor description (code, the spec) — "
                 f"left uncommitted: "
                 f"{', '.join(stray[:8])}")
+        self.commit_refusal = ""
         if not mine:
             return ""
+        mine += story_journals(self.home)       # what it did to a story is in that story's record too
         self.take_lock()
         try:
             git(self.home, "add", "--", *mine)
@@ -3316,8 +3340,8 @@ class Run:
         finally:
             self.drop_lock()
         if done[0] != 0:
-            err(f"factory: what request {request['id']} wrote could not be committed — {done[1]}; it stays in the "
-                "checkout, unstaged")
+            self.commit_refusal = f"what it wrote could not be committed — {tail(done[1], 1500)}"
+            err(f"factory: request {request['id']}: {self.commit_refusal}; it stays in the checkout, unstaged")
             return ""
         return git(self.home, "rev-parse", "--short", "HEAD")[1].strip()
 
@@ -3337,6 +3361,8 @@ class Run:
         if not kind.skill:
             update_request(request, state="failed", error=f"a {kind.name} request is the runner's, no skill works it")
             return 1
+        if request.get("worked"):
+            return self.commit_worked(request, kind)
         # what held when it was written may not hold now — an answer given by hand, a story released meanwhile. A
         # request resumed after its own question is past that: what its first run did (an answer written, an
         # acceptance taken) is why its record no longer reads open, so it is not checked again.
@@ -3349,6 +3375,10 @@ class Run:
                 request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", str(error))
                 err(f"factory: request {request['id']} no longer holds — {error}")
                 return 1
+        if not request.get("answered"):
+            settled = self.settle_request(request, kind)
+            if settled is not None:
+                return settled
         unit = f"request:{kind.name}"
         unit_tool = self.tool_for(unit, tool)
         if not os.environ.get("FACTORY_TOOL_CMD") and unit_tool not in TOOL:
@@ -3364,19 +3394,22 @@ class Run:
         before = self.dirty_files()
         self.allowed_override = self.request_allowed()
         started = time.time()
+        self.request_in_flight = request["id"]
         try:
             code = self.invoke(unit_tool, self.request_prompt(request, unit_tool), raw, unit, None)
         except (Stopped, KeyboardInterrupt):
-            update_request(request, state="queued", worker=None, started=None)
+            update_request(request, state="queued", worker=None, started=None, wrote=self.request_wrote(request, before))
             request_journal("request-end", kind.name, request["id"], "exit=stopped", "state=queued")
             raise
         finally:
             self.allowed_override = None
-        self.record_usage(None, unit, unit_tool, raw, int(time.time() - started))
+            self.request_in_flight = ""
+        measured = self.record_usage(None, unit, unit_tool, raw, int(time.time() - started), request["id"])
+        book_request_usage(place("runs"), request["id"], unit_tool, measured)
         prune_outputs()
         if code != 0:
             why = "ran past its time limit" if code == TIMED_OUT else f"ended with exit {code}"
-            update_request(request, state="failed", worker=None,
+            update_request(request, state="failed", worker=None, wrote=self.request_wrote(request, before),
                            error=f"the tool {why} — its output: {shown(raw)}")
             request_journal("request-end", kind.name, request["id"], f"exit={code}", "state=failed")
             err(f"factory: request {request['id']} — the tool {why}; it stays as failed (`factory.sh requests`).")
@@ -3385,7 +3418,8 @@ class Run:
                  if state in ("open", "draft")]
         if asked:
             commit = self.commit_request(request, before)
-            update_request(request, state="waiting", worker=None, record_file=shown(asked[0][0]))
+            update_request(request, state="waiting", worker=None, record_file=shown(asked[0][0]),
+                           wrote=self.request_wrote(request, before) if self.commit_refusal else None)
             request_journal("request-end", kind.name, request["id"], "exit=0", "state=waiting",
                             f"record={asked[0][1]}", f"commit={commit or '-'}")
             print(f"factory: request {request['id']} asks a person — {shown(asked[0][0])}; it runs again once answered.")
@@ -3393,13 +3427,67 @@ class Run:
         for path, _rid, state in request_records(self.home, request["id"]):
             if state == "answered":
                 stamp_applied(path, "request")
+        if kind.name in ("wish", "stories"):
+            mark_questioned(self.home, place("runs"), self.request_wrote(request, before).split(), request["id"])
         # gone before its commit: a crash between the two leaves what it wrote uncommitted — never a request that
         # would run its skill a second time
         with contextlib.suppress(OSError):
             os.remove(request["path"])
         commit = self.commit_request(request, before)
+        if self.commit_refusal:
+            # its skill did its part; what it wrote waits in the checkout for a person, as the failed request says —
+            # and its retry commits it, never running the skill again (`worked:`)
+            update_request(request, restore=True, state="failed", worker=None, error=self.commit_refusal,
+                           wrote=self.request_wrote(request, before), worked=utc())
+            request_journal("request-end", kind.name, request["id"], "exit=0", "state=failed", "commit=refused")
+            return 1
         request_journal("request-end", kind.name, request["id"], "exit=0", "state=done", f"commit={commit or '-'}")
         print(f"factory: request {request['id']} done" + (f" — committed {commit}" if commit else " — nothing to commit"))
+        return 0
+
+    def settle_request(self, request, kind):
+        """A request the factory settles itself (`settle`): written and committed at once, no tool started. None where
+        a skill must work it."""
+        before = self.dirty_files()
+        try:
+            wrote = settle(self.home, place("runs"), request, utc())
+        except (RequestError, GateError) as error:
+            update_request(request, state="failed", error=f"no longer holds — {error}")
+            request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", str(error))
+            return 1
+        if wrote is None:
+            return None
+        request_journal("request-start", kind.name, request["id"], target_text(request),
+                        f"by={request.get('by', '')}", "tool=factory", "attempt=1")
+        with contextlib.suppress(OSError):
+            os.remove(request["path"])
+        commit = self.commit_request(request, before)
+        if self.commit_refusal:
+            update_request(request, restore=True, state="failed", worker=None, error=self.commit_refusal,
+                           wrote=self.request_wrote(request, before), worked=utc())
+            request_journal("request-end", kind.name, request["id"], "exit=0", "state=failed", "commit=refused")
+            return 1
+        request_journal("request-end", kind.name, request["id"], "exit=0", "state=done", "by=factory",
+                        f"commit={commit or '-'}")
+        print(f"factory: request {request['id']} settled by the factory, no tool" +
+              (f" — committed {commit}" if commit else ""))
+        return 0
+
+    def commit_worked(self, request, kind):
+        """A request whose skill did its part and whose commit was refused, queued again: what it wrote is committed —
+        the skill is not run again, and what it wrote is not checked as a new request (an answer it wrote reads as
+        answered by now). Refused again, it stays failed with the reason."""
+        commit = self.commit_request(request, self.dirty_files())
+        if self.commit_refusal or not commit:
+            why = self.commit_refusal or "nothing it wrote is left in the checkout to commit"
+            update_request(request, state="failed", worker=None, error=why)
+            request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", "commit=refused")
+            err(f"factory: request {request['id']}: {why}")
+            return 1
+        with contextlib.suppress(OSError):
+            os.remove(request["path"])
+        request_journal("request-end", kind.name, request["id"], "exit=0", "state=done", f"commit={commit}")
+        print(f"factory: request {request['id']} done — committed {commit}")
         return 0
 
     # --- the backlog -------------------------------------------------------------------------------------------
@@ -3578,9 +3666,10 @@ class Run:
                     failed = failed or code
             launched = False
             if stopping is None:
-                # a person's requests take the next free slots, before any story; one about a running story waits
+                # a person's request takes the next free slot, before any story; one about a running story waits.
+                # One at a time: requests work in the main checkout, and two at once would commit each other's files
                 busy = set(children) | {s for _p, r, _t in asked.values() for s in stories_of(r)}
-                while len(children) + len(asked) < slots:
+                while len(children) + len(asked) < slots and not asked:
                     request = self.next_request(busy)
                     if request is None or request["id"] in asked:
                         break

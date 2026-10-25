@@ -26,8 +26,8 @@ import typing
 from .contract import (
     decision_files, decision_options, find_story, GateError, is_delivered, location,
     place, project_decisions_dir, read_front_matter, read_profile, read_text, resolve_profile, shown, split_front,
-    STAGES, story_files, story_folder, story_id_of, git)
-from .state import acceptance_records, is_acceptance
+    STAGES, story_digest, story_files, story_folder, story_id_of, git)
+from .state import acceptance_records, is_acceptance, journal_append, journal_events, write_story_fields
 from .gate import discovery_items, REASON_CODES
 
 
@@ -80,7 +80,8 @@ ID_WORD = re.compile(r"^[A-Za-z0-9][\w.#-]*$")
 
 #: The keys a request's front matter may carry, in the order they are written.
 FRONT_KEYS = ("kind", "story", "epic", "record", "topic", "proposal", "report", "option", "from", "by", "asked",
-              "state", "worker", "started", "attempts", "record_file", "error", "answered")
+              "state", "worker", "started", "attempts", "record_file", "error", "answered", "wrote",
+              "worked")
 
 
 class RequestError(Exception):
@@ -229,7 +230,8 @@ def validate(cwd, kind_name, fields, words):
         named = next((o["key"] for o in options if o["key"].lower() == words.lower()), None)
         if not fields.get("option") and named:
             fields["option"], words = named, ""            # the words name one of the record's options: that option
-        if not fields.get("option") and re.fullmatch(r"[A-Za-z0-9]{1,2}", words or "-"):
+        # one letter or digit is a key typed: a wrong one is refused, never written as an answer in words ("no" is one)
+        if not fields.get("option") and re.fullmatch(r"[A-Za-z0-9]", words or "-"):
             raise RequestError(f"{fields['record']} has no option {words!r}"
                                + (f" — its options: {', '.join(o['key'] for o in options)}" if options else
                                   " — it lists none; answer in words"))
@@ -314,9 +316,17 @@ def request_of(skill):
             return dict(kind="epic-from", fields=dict(topic=topic, proposal=match.group(1)), words="", open="")
         return dict(kind="wish", fields={}, words=rest, open="" if rest else "words")
     if head == "/factory-decisions":
-        match = re.match(r"^(?:(\S+) )?(\S+): answer (.+)$", rest)
+        # `<story> <record>: answer <words>`, `<record>: answer` (the words still to give), and at an acceptance
+        # `answer accepted` or `answer correction` — which name the story, its record the factory finds itself
+        match = re.match(r"^(?:(\S+) )?(\S+): answer(?: (.+))?$", rest)
         if match:
-            return dict(kind="answer", fields=dict(record=match.group(2)), words=match.group(3), open="")
+            story, record, given = match.group(1) or match.group(2), match.group(2), match.group(3) or ""
+            if given == "accepted":
+                return dict(kind="accept", fields=dict(story=story), words="", open="")
+            if given in ("correction", "correction:"):
+                return dict(kind="correct", fields=dict(story=story), words="", open="words",
+                            choices=list(REASON_CODES))
+            return dict(kind="answer", fields=dict(record=record), words=given, open="" if given else "words")
         story = rest.split()[0] if rest else ""
         return dict(kind="answer", fields=dict(story=story) if story else {}, words="", open="record")
     if head == "/dca-describe":
@@ -350,6 +360,67 @@ def write_atomic(path, text):
     os.replace(temporary, path)
 
 
+def pending_id(request, pending):
+    """The id of a request in <pending> (queued, running or waiting) that already does what <request> — an action's,
+    as `request_of` reads it — would ask for: the same kind, about the same story, epic, record or proposal. '' where
+    none does, and for one that still takes the person's words."""
+    deciding = ("answer", "accept", "correct")
+    fields = request.get("fields", {})
+    if request.get("kind") in deciding:
+        # one record takes one answer: once any is queued, every answer to that record — the person's words
+        # included — waits on it
+        for other in pending:
+            if other.get("kind") in deciding and (
+                    (fields.get("record") and other.get("record") == fields["record"])
+                    or (request["kind"] != "answer" and fields.get("story") and other.get("story") == fields["story"]
+                        and other.get("kind") != "answer")):
+                return other["id"]
+        return ""
+    if request.get("open"):
+        return ""
+    ids = ("story", "epic", "record", "topic", "proposal")
+    wanted = {str(v) for k, v in fields.items() if k in ids}
+    for other in pending:
+        named = {str(other.get(k) or "") for k in ids}
+        # an option named in words is written as the option (`validate`)
+        given = request.get("words", "")
+        if other.get("kind") == request.get("kind") and wanted <= named \
+                and given in ("", other["words"], str(other.get("option") or "")):
+            return other["id"]
+    return ""
+
+
+def chosen(request, other):
+    """Whether the pending request <other> is the very choice <request> offers: the same kind and, for an answer,
+    the same option — or the person's words, where the action takes words and <other> named no option."""
+    if other.get("kind") != request.get("kind"):
+        return False
+    if request["kind"] != "answer":
+        return True
+    if request.get("open") == "words":
+        return not other.get("option")
+    return request.get("words", "") in (str(other.get("option") or ""), other.get("words", ""))
+
+
+def mark_pending(actions, pending=None):
+    """Every action whose request is written already says so instead of being offered twice: `queued` names that
+    request. Where a record takes one answer and another choice of it is pending, the action says what it waits on
+    (`waits_on`) — a view draws the chosen one and leaves the others out; `queued_text` says where the request is."""
+    if pending is None:
+        pending = [r for r in list_requests() if r["state"] in ("queued", "running", "waiting")]
+    for action in actions:
+        if not action.get("request"):
+            continue
+        found = pending_id(action["request"], pending)
+        other = next((r for r in pending if r["id"] == found), None)
+        mine = bool(other) and chosen(action["request"], other)
+        action["queued"], action["waits_on"] = (found, "") if mine else ("", found)
+        # where it is: waiting to be taken, being worked, or asking the person back
+        state = other.get("state", "queued") if mine else ""
+        action["queued_text"] = {"waiting": "asks you"}.get(state, state)
+    return actions
+
+
 def same_request(one, other):
     keys = ("kind", "story", "epic", "record", "topic", "proposal", "option", "from")
     return all(str(one.get(k) or "") == str(other.get(k) or "") for k in keys) and one["words"] == other["words"]
@@ -361,8 +432,15 @@ def write_request(cwd, kind_name, fields=None, words="", by=""):
     folder = requests_dir()
     wanted = dict(fields, kind=kind_name, words=words)
     for existing in list_requests():
-        if existing["state"] in ("queued", "running", "waiting") and same_request(existing, wanted):
+        if existing["state"] not in ("queued", "running", "waiting"):
+            continue
+        if same_request(existing, wanted):
             raise Duplicate(existing["id"])
+        # one record takes one answer: a second, different one would only find it answered
+        if kind_name in ("answer", "accept", "correct") and existing.get("kind") in ("answer", "accept", "correct") \
+                and wanted.get("record") and existing.get("record") == wanted.get("record"):
+            raise RequestError(f"{wanted['record']} has an answer queued already ({existing['id']}) — take that back "
+                               "first (`factory.sh requests --drop`) to answer otherwise")
     # to the millisecond, and later than every request there: the files sort in the order they were written,
     # whatever their kind — two in one millisecond included
     millis = int(time.time() * 1000)
@@ -422,11 +500,12 @@ def find_request(request_id):
     return read_request(path)
 
 
-def update_request(request, **fields):
-    """Set — or with None remove — front keys of a request, its words kept."""
+def update_request(request, restore=False, **fields):
+    """Set — or with None remove — front keys of a request, its words kept. `restore` writes it back where the
+    factory took it away itself (a done request whose commit was refused); else one dropped meanwhile stays gone."""
     path = request["path"]
     try:
-        if split_front(read_text(path)) is None:
+        if not restore and split_front(read_text(path)) is None:
             return
     except (GateError, OSError, UnicodeDecodeError):
         return                                       # dropped meanwhile: nothing left to update
@@ -443,7 +522,7 @@ def update_request(request, **fields):
 def drop_request(request_id):
     """A person's request taken back — one that runs now is the factory's until it ends."""
     request = find_request(request_id)
-    if request["state"] == "running":
+    if "drop" not in operations_of(request["state"]):
         raise RequestError(f"{request_id} runs now — it can be dropped once it ended")
     os.remove(request["path"])
     return request
@@ -452,7 +531,7 @@ def drop_request(request_id):
 def retry_request(request_id):
     """A failed request queued again, as it was written."""
     request = find_request(request_id)
-    if request["state"] != "failed":
+    if "retry" not in operations_of(request["state"]):
         raise RequestError(f"{request_id} is {request['state']} — only a failed request is retried")
     if request.get("kind") not in KIND:
         raise RequestError(f"{request_id} cannot be read as a request — drop it")
@@ -501,6 +580,100 @@ def counts():
     return found
 
 
+# --- what the factory settles itself --------------------------------------------------------------------------------------
+#: The mark a request that wrote drafts leaves in each one's journal: its question pass ran on the story as it stands.
+QUESTIONED = "questioned"
+
+
+def mark_questioned(cwd, runs, paths, request_id):
+    """After a request whose skill wrote drafts and asked what they left open (a wish, the next stories): each draft
+    it wrote carries `questioned digest=<story digest>` in its journal — the pass a release would run again."""
+    for path in paths:
+        full = os.path.join(cwd, path)
+        if os.path.basename(path) != "story.md" or not os.path.isfile(full):
+            continue
+        with contextlib.suppress(GateError):
+            if str(read_front_matter(full)[0].get("status", "")).strip() == "draft":
+                journal_append(runs, story_id_of(full), QUESTIONED, "backlog", f"digest={story_digest(full)}",
+                               f"request={request_id}")
+
+
+def questioned(runs, story_id, story_path):
+    """Whether the story's question pass ran on the story as it stands: its last `questioned` mark names its digest."""
+    marks = [e for e in journal_events(runs, story_id) if e["kind"] == QUESTIONED]
+    return bool(marks) and marks[-1]["fields"].get("digest") == story_digest(story_path)
+
+
+def open_records(cwd, story_id):
+    return [path for _n, front, _b, state, error, path in decision_files(cwd)
+            if not error and str(front.get("story", "")).strip() == story_id and state in ("open", "draft")]
+
+
+def add_assumption(path, line):
+    """One line at the end of the story's `## Assumptions` — the section added where the story has none."""
+    lines = read_text(path).splitlines()
+    head = next((i for i, l in enumerate(lines) if l.strip().lower().startswith("## assumptions")), None)
+    if head is None:
+        lines += ["", "## Assumptions", "", line]
+    else:
+        end = next((i for i in range(head + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+        while end > head + 1 and not lines[end - 1].strip():
+            end -= 1
+        lines.insert(end, line)
+    write_atomic(path, "\n".join(lines) + "\n")
+
+
+def answer_record(path, answer, by, at):
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(f"\n## Answer\nanswer: {answer}\nby: {by}\nat: {at}\n")
+
+
+def settle(cwd, runs, request, at):
+    """A request the factory settles itself, without a tool: where the person's press is the whole decision and the
+    files say everything it implies. The paths it wrote, or None where a skill must work it.
+
+    - `accept`: the story's open acceptance takes `answer: accepted` — a yes, nothing to weigh;
+    - `answer` naming an option, to a request's own question (`request:` in the record): the option is written, and
+      the request that asked runs again and applies it. A stage's question goes through the decisions skill, which
+      weighs what an answer changes (a test, the designed map);
+    - `release`: a draft whose question pass ran on it as it stands (`questioned`) and that no open record holds is
+      approved, its release an answered assumption — of an epic, only where every draft is such a one."""
+    by = request.get("by", "")
+    if request["kind"] == "accept":
+        path, front = story_of(cwd, request["story"])
+        rid = open_acceptance(cwd, request["story"], path)
+        if not rid:
+            return None
+        record = record_of(cwd, rid)[0]
+        answer_record(record, "accepted", by, at)
+        return [record]
+    if request["kind"] == "answer":
+        if not request.get("option") or request.get("words"):
+            return None
+        record, front, body, state = record_of(cwd, request["record"])
+        keys = [o["key"] for o in decision_options(body)]
+        if not str(front.get("request", "")).strip() or state != "open" or request["option"] not in keys:
+            return None
+        answer_record(record, request["option"], by, at)
+        return [record]
+    if request["kind"] == "release":
+        epics = os.path.join(cwd, place("epics"))
+        if request.get("epic"):
+            folder = epic_dir(epics, request["epic"])
+            drafts = [p for p in story_files(epics) if folder and os.path.dirname(os.path.dirname(p)) == folder
+                      and str(read_front_matter(p)[0].get("status", "")).strip() == "draft"]
+        else:
+            drafts = [story_of(cwd, story)[0] for story in request.get("story", "").split()]
+        if not drafts or not all(questioned(runs, story_id_of(p), p) and not open_records(cwd, story_id_of(p))
+                                 for p in drafts):
+            return None
+        for path in drafts:
+            write_story_fields(path, status="approved")
+            add_assumption(path, f"- answered: the story is released for building (request {request['id']}, {by}, {at}).")
+        return drafts
+    return None
+
+
 # --- the journal ---------------------------------------------------------------------------------------------------------
 def journal(*fields):
     """One line of the factory's request journal — `<at>\\t<event>\\t…` — beside the requests."""
@@ -533,6 +706,17 @@ def prune_outputs(days=7, now=None):
 
 
 # --- the view ------------------------------------------------------------------------------------------------------------
+#: The word on a request's button for each operation.
+OPERATION_LABELS = {"follow": "follow", "retry": "retry", "drop": "take back"}
+
+
+def operations_of(state):
+    """What a person can do with a request in this state: follow one that runs, queue a failed one again, take back
+    one that does not run — `factory.sh requests --retry/--drop`, or the page's buttons."""
+    return (["follow"] if state == "running" else []) + (["retry"] if state == "failed" else []) \
+        + (["drop"] if state != "running" else [])
+
+
 def view(fmt="text"):
     """`factory.sh requests`: every request with its state, oldest first."""
     rows = []
@@ -542,8 +726,11 @@ def view(fmt="text"):
                          worker=request.get("worker", ""), started=request.get("started", ""),
                          record=request.get("record_file", ""), error=request.get("error", ""),
                          words=request.get("words", ""), option=request.get("option", ""),
-                         story=request.get("story", ""), epic=request.get("epic", ""), path=shown(request["path"])))
-    model = dict(requests=rows, counts={s: sum(r["state"] == s for r in rows) for s in STATES},
+                         story=request.get("story", ""), epic=request.get("epic", ""), path=shown(request["path"]),
+                         operations=[dict(name=o, label=OPERATION_LABELS[o]) for o in operations_of(request["state"])]))
+    counted = {s: sum(r["state"] == s for r in rows) for s in STATES}
+    model = dict(requests=rows, counts=counted,
+                 counts_text=", ".join(f"{n} {'asking' if s == 'waiting' else s}" for s, n in counted.items() if n),
                  kinds=[dict(kind=k.name, keys=list(k.keys), words=k.words, option=k.option, about=k.about)
                         for k in KINDS],
                  store=shown(requests_dir()) + "/")

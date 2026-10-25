@@ -1,5 +1,12 @@
 import { expect, test } from 'claude-code/testing'
 
+
+// an action as the factory writes it into its JSON (dca-factory 0.93.0)
+const act = (label: string, skill: string, kind: string, more: { text?: string; primary?: boolean; open?: '' | 'words' } = {}) => ({
+  text: more.text ?? '', skill, shell: '', label, primary: more.primary ?? false,
+  request: { kind, fields: {}, words: '', open: more.open ?? '' },
+})
+
 const ROOT = '/p'
 const ROW = {
   story: 'add-book', title: 'Add a book', epic: 'books', mark: 'none', state: 'ready', stage: 'plan', passes: 1,
@@ -22,7 +29,8 @@ const STATUS = {
   running: [],
   epics: [
     { epic: 'books', rows: [ROW], delivered: 0, total: 1, tokens: 1_500_000, seconds: 120, title: 'Keep track of books', goal: 'one list', metric: 'BookAdded', discovery: '' },
-    { epic: 'reminders', rows: [], delivered: 0, total: 0, tokens: 0, seconds: 0, title: 'Remind the reader', goal: '', metric: 'ReminderSent', discovery: 'product/discovery/forgetting/discovery.md' },
+    { epic: 'reminders', rows: [], delivered: 0, total: 0, tokens: 0, seconds: 0, title: 'Remind the reader', goal: '', metric: 'ReminderSent', discovery: 'product/discovery/forgetting/discovery.md',
+      actions: [act('suggest stories', '/factory-backlog stories reminders', 'stories', { primary: true })] },
   ],
   description: [
     { part: 'product', path: 'product/overview.md', present: true, missing: ['How it works'], empty: [], sections: ['What and for whom', 'For whom'], required: [] },
@@ -43,16 +51,23 @@ const DISCOVERY = {
     topic: 'forgetting', report: 'product/discovery/forgetting/discovery.md', title: 'Readers forget what they meant to read',
     proposals: [
       { id: 'reminders', intent: 'remind', goal: 'fewer forgotten books', metric: 'ReminderSent', domain_contact: 'open', epic: 'reminders' },
-      { id: 'reading-goals', intent: 'goals', goal: 'a yearly goal', metric: 'GoalSet', domain_contact: 'open', epic: '' },
+      { id: 'reading-goals', intent: 'goals', goal: 'a yearly goal', metric: 'GoalSet', domain_contact: 'open', epic: '',
+        actions: [act('make epic', '/factory-backlog epic reading-goals --from product/discovery/forgetting/discovery.md', 'epic-from', { primary: true })] },
     ],
-    description_changes: [{ target: 'overview.md — For whom', change: 'also readers on paper', why: '' }],
+    description_changes: [{ target: 'overview.md — For whom', change: 'also readers on paper', why: '',
+      actions: [act('apply', '/dca-describe overview.md — For whom: also readers on paper', 'describe')] }],
   }],
 }
 const DECISIONS = {
   records: [
     { id: 'add-book-01', state: 'open', kind: 'question', story: 'add-book', stage: 'plan', asked: '2026-09-23T17:27:00Z', text: 'Which list?', path: 'product/epics/books/add-book/decisions/01.md',
-      options: [{ key: 'a', text: 'the reading list' }, { key: 'b', text: 'the shelf, read or not' }], recommended: 'b' },
-    { id: 'add-book-accept-1', state: 'open', kind: 'acceptance', story: 'add-book', stage: 'document', asked: '2026-09-23T18:00:00Z', text: 'Accept add-book?', path: 'product/epics/books/add-book/decisions/accept-1.md' },
+      options: [{ key: 'a', text: 'the reading list' }, { key: 'b', text: 'the shelf, read or not' }], recommended: 'b',
+      actions: [act('a', '/factory-decisions add-book add-book-01: answer a', 'answer', { text: 'the reading list' }),
+                act('b', '/factory-decisions add-book add-book-01: answer b', 'answer', { text: 'the shelf, read or not', primary: true }),
+                act('answer', '/factory-decisions add-book add-book-01: answer', 'answer', { open: 'words' })] },
+    { id: 'add-book-accept-1', state: 'open', kind: 'acceptance', story: 'add-book', stage: 'document', asked: '2026-09-23T18:00:00Z', text: 'Accept add-book?', path: 'product/epics/books/add-book/decisions/accept-1.md',
+      actions: [act('accept', '/factory-decisions add-book add-book-accept-1: answer accepted', 'accept', { primary: true }),
+                act('correct', '/factory-decisions add-book add-book-accept-1: answer correction:', 'correct', { open: 'words' })] },
   ],
 }
 const SPEC_DELTA = {
@@ -295,6 +310,30 @@ test('a factory that is up elsewhere replaces the run buttons with what it is', 
   expect(await pane.find({ text: /The factory is up \(factory.sh up\)/ })).toBeDefined()
   expect(await pane.find({ text: /requests: 2 queued/ })).toBeDefined()
   expect(await pane.find({ text: /Run the backlog/ })).toBeUndefined()
+})
+
+// WP-91: an action whose request is written already (from the page) says so instead of offering a second press
+test('a press the page queued already reads as queued, not as a second button', async ($, on) => {
+  const [first] = STATUS.findings
+  const queued = { ...STATUS, findings: [{ ...first, action: { ...first?.action, label: 'to the backlog', queued: '20261025T080000000Z-wish' } }] }
+  on('session.root', async () => ({ value: ROOT }))
+  on('fs.exists', async () => ({ value: true }))
+  on('fs.list', async () => ({ value: [] }))
+  on('fs.read', async () => ({ deny: 'missing' }))
+  on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
+    const out = e.argv.includes('decisions') ? DECISIONS : e.argv.includes('--list') ? { topics: [] } : queued
+    return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('clock.now', async () => ({ value: Date.parse('2026-09-23T17:30:00Z') }))
+  on('clock.every', async () => ({ value: { cancel: () => {} } }) as never)
+  on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+  on('ui.status', async () => ({ value: undefined }) as never)
+  on('command.list', async () => ({ value: [] }) as never)
+
+  await $.command.run({ command: 'factory-cockpit', args: '' } as never)
+  const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface: 'terminal', component: 'Pane', requestId: 'factory-cockpit', props: { title: 'Factory', isFocused: true } as never })
+  await pane.press({ key: 'tab-decide' })
+  expect(await pane.find({ text: /to backlog — queued/ })).toBeDefined()
 })
 
 // WP-146: a story opens with its own words and its criteria as scenarios, an epic with what it is for, its text and its

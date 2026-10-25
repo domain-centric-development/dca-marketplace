@@ -1,6 +1,6 @@
 import type { BoxProps, ButtonProps, CodeProps, ElementConstructor, InputProps, MarkdownProps, RenderElement, SvgProps, TextProps } from 'claude-code'
 
-import type { Scenario, Section, StageRun } from '../types'
+import type { Action, Scenario, Section, StageRun } from '../types'
 import { displayWidth, duration, filledCells, fit, rounds, short, tokens, wrapWords } from './parse'
 
 // The cockpit's building blocks. Every view is drawn from these, so a change to a table, a link, a chip or the
@@ -107,20 +107,19 @@ export function mark(kind: string): Cell {
 export const outcomeCell = (metric?: string): { text: string; color: string } => ({ text: metric || '—', color: C.info })
 
 // An epic as its tables show it — the same cells in the backlog, in the delivered view and in its own card.
-export type EpicLike = { epic: string; title?: string; metric?: string; delivered: number; total: number; tokens: number; rows: { story: string; state: string }[] }
+export type EpicLike = { epic: string; title?: string; metric?: string; delivered: number; total: number; tokens: number; drafts?: number; rows: { story: string; state: string }[] }
 export type JourneyHint = { epic: string; text: string }
 
 export function epicCells(epic: EpicLike, journey?: JourneyHint) {
   const isDone = epic.total > 0 && epic.delivered === epic.total
-  const draftRows = epic.rows.filter(row => /draft/.test(row.state))
+  const drafts = epic.drafts ?? 0              // the factory counts them (dca-factory 0.93.0)
   return {
     isDone,
-    draftRows,
     kind: isDone ? 'done' : epic.total === 0 ? 'empty' : 'none',
     mark: mark(isDone ? 'done' : epic.total === 0 ? 'empty' : 'none'),
     title: { text: epic.title || epic.epic, bold: true } as Cell,
     count: { text: `${epic.delivered} of ${epic.total}`, color: C.muted } as Cell,
-    drafts: { text: draftRows.length > 0 ? String(draftRows.length) : '—', color: draftRows.length > 0 ? C.wait : C.muted } as Cell,
+    drafts: { text: drafts > 0 ? String(drafts) : '—', color: drafts > 0 ? C.wait : C.muted } as Cell,
     outcome: outcomeCell(epic.metric),
     journey: journey ? ({ text: `${MARK_GLYPH.journey} ${journey.text}`, color: MARK_COLOR.journey } as Cell) : ({ text: '—', color: C.muted } as Cell),
     meta: `${epic.delivered} of ${epic.total} delivered${epic.tokens > 0 ? ` · ${tokens(epic.tokens)} tokens` : ''}`,
@@ -346,6 +345,18 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
     <Button key={key} label={pressLabel(label, options)} hotkey={options.hotkey} variant={options.isPrimary ? 'primary' : 'secondary'} onPress={onPress} />
   )
 
+  const pressCell = (key: string, label: string, onPress: () => void, options: ButtonOptions = {}): Cell => ({
+    node: button(key, label, onPress, options),
+    width: displayWidth(pressLabel(label, options)) + BUTTON_FRAME,
+  })
+
+  // What the factory offers, drawn alike everywhere: its button; where the request for it is written already
+  // (`queued`), that it is on its way; nothing where another choice of the same record is pending (`waits_on`).
+  const offer = (key: string, action: Action, onPress: () => void, options: ButtonOptions = {}, label = action.label ?? '') =>
+    action.waits_on ? false : action.queued ? <Text key={key} color={C.muted}>{`${label} — ${action.queued_text || 'queued'}`}</Text> : button(key, label, onPress, options)
+  const offerCell = (key: string, action: Action, onPress: () => void, options: ButtonOptions = {}, label = action.label ?? ''): Cell =>
+    action.waits_on ? { text: '' } : action.queued ? { text: `${label} — ${action.queued_text || 'queued'}`, color: C.muted } : pressCell(key, label, onPress, options)
+
   const link = (key: string, label: string, onPress: () => void) => (
     <Box key={`link-${key}`} gap={0} hover={{ backgroundColor: C.line }}>
       <Button key={key} label={label} plain onPress={onPress} />
@@ -545,10 +556,11 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
 
     // A button or a link in a table: the cell carries its width — the label, the ✦ of a press by Claude, the frame or
     // the chevron — so its column fits it and never wraps a bracket onto the next line.
-    press: (key: string, label: string, onPress: () => void, options: ButtonOptions = {}): Cell => ({
-      node: button(key, label, onPress, options),
-      width: displayWidth(pressLabel(label, options)) + BUTTON_FRAME,
-    }),
+    press: pressCell,
+
+    // A factory action outside a table, and in one (`offer`, `offerCell`).
+    offer,
+    offerCell,
     open: (key: string, label: string, onPress: () => void): Cell => ({ node: link(key, label, onPress), width: displayWidth(label) + LINK_CHEVRON }),
 
     // A framed box for text that is not a table: a file, the worker's output.

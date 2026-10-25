@@ -29,12 +29,12 @@ test('the worker ends in a word: the exit code, or the stop from the cockpit', (
 })
 
 test('an epic draws the same cells in every table: mark, count, drafts, outcome, journey', () => {
-  const open = epicCells({ epic: 'books', title: 'Keep track of books', metric: 'BookAdded', delivered: 1, total: 3, tokens: 2_500, rows: [{ story: 'a', state: 'draft' }, { story: 'b', state: 'delivered' }, { story: 'c', state: 'ready' }] })
+  // the drafts as the factory counts them
+  const open = epicCells({ epic: 'books', title: 'Keep track of books', metric: 'BookAdded', delivered: 1, total: 3, tokens: 2_500, drafts: 1, rows: [{ story: 'a', state: 'draft' }, { story: 'b', state: 'delivered' }, { story: 'c', state: 'ready' }] })
   expect(open.kind).toBe('none')
   expect(open.mark.text).toBe('·')
   expect(open.count.text).toBe('1 of 3')
   expect(open.drafts.text).toBe('1')
-  expect(open.draftRows.map(row => row.story)).toEqual(['a'])
   expect(open.outcome.text).toBe('BookAdded')
   // one look for an outcome wherever it shows: a table cell, a card's field, a proposal
   expect(open.outcome).toEqual(outcomeCell('BookAdded'))

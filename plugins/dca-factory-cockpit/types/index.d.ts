@@ -1,5 +1,20 @@
 
-export type Action = { text: string; skill: string; shell: string }
+// What to do, every way: `skill` in a session, `shell` in a terminal; since dca-factory 0.93.0 also the word on its button
+// (`label`), whether it is the one to press (`primary`) and the request a page writes for it
+export type Action = {
+  text: string
+  skill: string
+  shell: string
+  label?: string
+  primary?: boolean
+  request?: { kind: string; fields: Record<string, string>; words: string; open: '' | 'words' | 'record'; choices?: string[] }
+  // the id of a request that does it already — queued, running or waiting; '' where none does
+  queued?: string
+  // another choice of the same record is pending (that request's id): a view leaves this one out
+  waits_on?: string
+  // where that request is, in a word: queued, running, asks you
+  queued_text?: string
+}
 
 // One story's signals as its gates recorded them in the journal (dca-factory 0.89.0): a fact no gate recorded is null —
 // "not recorded", never 0; `rules` is null for a story built before the rule check (0.88.0) — "not measured".
@@ -51,6 +66,8 @@ export type Row = {
   // when the story was written, `created:` in its front matter (dca-factory 0.87.0; '' without one)
   created?: string
   signals?: Signals
+  // what a person can do with the story — release, answer, run now (dca-factory 0.93.0; absent from an older pipeline)
+  actions?: Action[]
 }
 
 export type FactoryStatus = {
@@ -74,6 +91,10 @@ export type FactoryStatus = {
     created?: string
     path?: string
     signals?: SignalTotals
+    // the epic's next stories, its drafts released, its journey, and how many drafts it holds (dca-factory 0.93.0;
+    // absent from an older pipeline)
+    actions?: Action[]
+    drafts?: number
   }[]
   description?: DescriptionPart[]
   // what comes next in the schedule's order, and how many cannot yet (dca-factory 0.87.0)
@@ -126,6 +147,9 @@ export type DecisionRecord = {
   // (`decisions --format json`, dca-factory 0.82.1); absent from an older pipeline, which then offers no choices
   options?: { key: string; text: string }[]
   recommended?: string | null
+  // an open record's answers — one per option, the person's words; at an acceptance, accept and correct
+  // (dca-factory 0.93.0; absent from an older pipeline, which then offers no choices)
+  actions?: Action[]
 }
 
 // One part of the project description as `status` reports it.
@@ -144,8 +168,9 @@ export type Topic = {
   topic: string
   report: string
   title: string
-  proposals: { id: string; intent: string; goal: string; metric: string; domain_contact: string; epic: string }[]
-  description_changes: { target: string; change: string; why: string }[]
+  // each with what a person can do with it — make the epic, apply the change (dca-factory 0.93.0)
+  proposals: { id: string; intent: string; goal: string; metric: string; domain_contact: string; epic: string; actions?: Action[] }[]
+  description_changes: { target: string; change: string; why: string; actions?: Action[] }[]
 }
 
 export type JournalEvent = { at: string; kind: string; stage: string; fields: Record<string, string> }
