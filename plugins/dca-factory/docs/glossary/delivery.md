@@ -236,7 +236,11 @@ deterministic check that lets the next stage start; a round is one more pass aft
 ### Check · Finding (Finding) · Stage evidence (StageEvidence)
 
 **Definition:** A gate is a set of checks, each a domain service over the story as the gate reads it (`StageStory`)
-— `StoryChecks`, `ProfileChecks`, `BacklogChecks`. A check returns findings: passed, failed, skipped (unproven),
+— `StoryChecks`, `ProfileChecks`, `BacklogChecks`, `DecisionChecks`, `TestChecks`, `DesignChecks`, `KeptChecks`,
+`SpecChecks`, `DeliveryChecks`, `IntegrationChecks`, `TestVerdicts`, `SuiteChecks`, `BreakChecks`, `ChangeChecks`,
+`AcceptanceRules`. The use case `check_stage` registers them against the stage table and runs them, those that start
+no process first; what they run or write goes through output ports (`StageTests`, `StageRuns`, `StageMarks`,
+`DecisionStamps`, `StageDelivery`). A check returns findings: passed, failed, skipped (unproven),
 noted, or waiting for a person — and what it says, for a refusal the stage's next instruction. What a check alone
 needs and only reads — the profile, the run folder, the epic, the context map — it asks the domain gateway
 `StageEvidence`.
