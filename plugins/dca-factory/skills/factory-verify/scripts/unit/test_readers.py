@@ -5,7 +5,7 @@ import os
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
-from dca_factory import cli
+from dca_factory.delivery.adapter.incoming.cli import cli_command as cli
 from dca_factory.delivery.adapter.outgoing.tools import streams
 from dca_factory.delivery.adapter.outgoing.tools import agents
 from dca_factory.delivery.adapter.outgoing.build import commands

@@ -4,8 +4,7 @@ what is up with a story, with the view its detail opens with."""
 
 import unittest
 
-import support  # noqa: F401 — puts the package on the path
-from dca_factory import cli
+import support  # puts the package on the path; its SCRIPTS locate the templates
 from dca_factory.delivery.adapter.incoming.cli import terminal
 from dca_factory.delivery.adapter.outgoing.files import detail_files as detail
 from dca_factory.delivery.application.status import show_epic, show_story
@@ -130,7 +129,7 @@ class HeadSaysIt(unittest.TestCase):
 
     def test_the_template_says_the_outcome_sentence_the_factory_leaves_out(self):
         import os
-        template = os.path.join(os.path.dirname(cli.__file__), "..", "..", "templates", "backlog", "epic.md.tmpl")
+        template = os.path.join(support.SCRIPTS, "..", "templates", "backlog", "epic.md.tmpl")
         with open(template, encoding="utf-8") as handle:
             text = handle.read()
         sentence = show_epic.OUTCOME_BOILERPLATE.format(metric="{{OUTCOME_EVENT_THAT_MEASURES_IT}}")

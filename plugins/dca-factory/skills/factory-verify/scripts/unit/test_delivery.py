@@ -7,7 +7,7 @@ import os
 import unittest
 
 from support import project, write
-from dca_factory import cli
+from dca_factory.delivery.adapter.incoming.cli import cli_command as cli
 from dca_factory.delivery.adapter.outgoing.files.story_runs import CLAIM_FILE
 from dca_factory.delivery.adapter.outgoing.files import migrations
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records

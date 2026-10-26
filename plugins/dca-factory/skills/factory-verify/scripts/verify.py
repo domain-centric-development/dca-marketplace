@@ -158,11 +158,13 @@ def cli_in(root):
 
 
 PACKAGE = "dca_factory"
-MODULES = ("contract", "runner", "cli")
+MODULES = ("contract", "runner")
 #: The gate's command line, an incoming adapter: what decides, with the version stamp; the runner and the cli show and
 #: start.
 GATE_MODULE = "delivery/adapter/incoming/gate/gate_command"
 GATE_SIDE = ("contract", GATE_MODULE)
+#: The cli's command line, an incoming adapter: what shows and coordinates.
+CLI_MODULE = "delivery/adapter/incoming/cli/cli_command"
 #: What is built in layers (WP-152): the building blocks, the shared kernel, the contexts, the web host, the root.
 LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "web", "infrastructure")
 
@@ -4359,9 +4361,9 @@ def verify_setup(runner, verbose=False):
                                 encoding="utf-8", errors="replace")
         check("gate: a flag that moved to the cli is handed over, so an older caller still gets its answer",
               handed.returncode == 0 and handed.stdout.startswith("factory:"), handed.stdout.strip()[:200])
-    modules = package_text(runner, MODULES + (GATE_MODULE,))
+    modules = package_text(runner, MODULES + (GATE_MODULE, CLI_MODULE))
     gate_text = "\n".join(modules[m] for m in GATE_SIDE)
-    cli_text = "\n".join(modules[m] for m in MODULES if m not in GATE_SIDE)
+    cli_text = "\n".join(modules[m] for m in MODULES + (CLI_MODULE,) if m not in GATE_SIDE)
     runner_text = open(runner, encoding="utf-8").read()
     observe_text = open(os.path.join(os.path.dirname(runner), "..", "..", "factory-verify", "scripts", "observe.py"),
                         encoding="utf-8").read()
@@ -4430,7 +4432,7 @@ def verify_setup(runner, verbose=False):
     # every flag the README shows on a command line is one its program accepts
     argparse_flags = lambda text: {flag for call in re.findall(r"add_argument\(([^)]*)", text)
                                    for flag in re.findall(r'"(--[\w-]+)"', call)}
-    accepted = {"gate": argparse_flags(modules[GATE_MODULE]), "cli": argparse_flags(modules["cli"]),
+    accepted = {"gate": argparse_flags(modules[GATE_MODULE]), "cli": argparse_flags(modules[CLI_MODULE]),
                 "verify": argparse_flags(open(__file__, encoding="utf-8").read()),
                 "sh": {flag for labels in re.findall(r"^\s*((?:--[\w-]+\|?)+)\)", runner_text, re.M)
                        for flag in labels.split("|")}}
@@ -4828,7 +4830,7 @@ def stage_lists(modules, runner_text):
     it — and any stage name the gate's `main` decides on. A stage is a row: a list beside the table drifts from it."""
     import ast
     found = []
-    for label, text in ((f"{name}.py", modules[name]) for name in MODULES + (GATE_MODULE,)):
+    for label, text in ((f"{name}.py", modules[name]) for name in MODULES + (GATE_MODULE, CLI_MODULE)):
         tree = ast.parse(text)
         skip = set()
         for node in ast.walk(tree):

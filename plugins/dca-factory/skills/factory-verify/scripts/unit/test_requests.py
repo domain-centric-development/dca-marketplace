@@ -10,7 +10,7 @@ import unittest
 
 from support import project, write
 
-from dca_factory import cli
+from dca_factory.delivery.adapter.incoming.cli import cli_command as cli
 from dca_factory.delivery.domain.model.correction import REASON_CODES
 from dca_factory.delivery.adapter.outgoing.process import factory_process as service
 from dca_factory.delivery.application.status.actions import request_of

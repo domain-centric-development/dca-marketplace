@@ -51,87 +51,93 @@ import shlex
 import sys
 import textwrap
 import time
-from .contract import CONTRACT, VERSION
-from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from .sharedkernel.adapter.outgoing.profile.profile_files import (
+import typing
+from .....contract import CONTRACT, VERSION
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
-from .infrastructure.schedule import schedule_data, start_of
-from .infrastructure.profile import ask_profile
-from .delivery.application.profile.ask_profile import AskProfileQuery, Question
-from .delivery.application.status.show_status import ShowStatusQuery
-from .delivery.application.status.show_story import ShowStoryQuery, UnknownStory
-from .delivery.application.status.show_epic import ShowEpicQuery, UnknownEpic
-from .delivery.application.status.show_help import ShowHelpQuery
-from .delivery.application.status.texts import stamp_text
-from .delivery.application.decisions.list_decisions import ListDecisionsQuery
-from .delivery.application.requests.list_requests import ListRequestsQuery
-from .delivery.application.requests.pending_requests import PendingRequestsQuery
-from .delivery.application.requests.retry_request import RetryRequestCommand
-from .delivery.application.requests.take_back_request import TakeBackRequestCommand
-from .delivery.application.requests.write_request import WriteRequestCommand
-from .delivery.application.shared.requests import DuplicateRequest, KIND, KINDS, RequestRefused
-from .building_blocks import UseCaseException
-from .delivery.application.shared.story_repository import StoryNotFound
-from .delivery.application.backlog.backfill_created import BackfillCreatedCommand
-from .delivery.application.delivery.claim_story import ClaimStoryCommand
-from .delivery.application.delivery.confirm_owned import ConfirmOwnedCommand, NothingToConfirm
-from .delivery.application.shared.story_claims import Claim
-from .delivery.application.delivery.deliver_by_hand import ChangesWhatHolds, ClaimedElsewhere, DeliverByHandCommand
-from .delivery.application.delivery.prove_delivery import ProveDeliveryCommand
-from .delivery.application.delivery.reopen_story import CheckoutHeld, NewWish, NoCorrection, NotCited, ReopenStoryCommand
-from .delivery.domain.model.moment import Moment
-from .delivery.domain.model.person import Person
-from .delivery.domain.model.story import AlreadyDelivered, NotDelivered, NothingToDeliver, NothingToProve, StoryId
-from .infrastructure import delivery as wiring
-from .delivery.application.run.resolve_run_argument import ResolveRunArgumentQuery
-from .delivery.application.status.show_refusals import ShowRefusalsQuery
-from .delivery.application.status.show_journal_story import ShowJournalStoryQuery
-from .delivery.application.cost.show_spent import ShowSpentQuery
-from .delivery.application.status.list_findings import ListFindingsQuery
-from .delivery.application.delivery.show_story_kind import ShowStoryKindQuery
-from .delivery.application.delivery.show_stage_table import ShowStageTableQuery
-from .delivery.application.delivery.release_story_claim import ReleaseStoryClaimCommand
-from .delivery.application.delivery.refresh_claims import RefreshClaimsCommand
-from .delivery.application.delivery.next_free_story_id import NextFreeStoryIdQuery
-from .delivery.application.upkeep.migrate_layout import MigrateLayoutCommand
-from .delivery.application.lifecycle.start_factory import StartFactoryCommand
-from .delivery.application.lifecycle.stop_factory import StopFactoryCommand
-from .delivery.application.lifecycle.start_page import StartPageCommand
-from .delivery.application.lifecycle.show_running_page import ShowRunningPageQuery
-from .delivery.application.lifecycle.show_worker import ShowWorkerQuery
-from .delivery.application.status.show_discovery import ShowDiscoveryQuery
-from .delivery.application.upkeep.let_journals_into_git import LetJournalsIntoGitCommand
-from .delivery.application.delivery.probe_tool import Probed, ProbeToolQuery
-from .delivery.application.cost.read_tool_usage import ReadToolUsageQuery
-from .delivery.application.delivery.show_hand_over_contract import ShowHandOverContractQuery
-from .delivery.application.delivery.write_skeleton import Skeleton, WriteSkeletonCommand
-from .delivery.application.session.open_work_window import OpenWorkWindowCommand
-from .delivery.application.session.close_work_window import CloseWorkWindowCommand
-from .delivery.application.session.start_session_stage import StartSessionStageCommand
-from .delivery.application.session.end_session_stage import EndSessionStageCommand
-from .delivery.application.session.append_journal import AppendJournalCommand
-from .delivery.application.checkout.take_checkout import TakeCheckoutCommand
-from .delivery.application.checkout.give_checkout_back import GiveCheckoutBackCommand
-from .delivery.application.checkout.mark_listening import MarkListeningCommand
-from .delivery.application.status.follow_output import FollowOutputQuery
-from .delivery.application.status.show_stage_outputs import ShowStageOutputsQuery
-from .delivery.domain.model.run_argument import ArgumentMeaning
-from .delivery.domain.model.stage import Pipeline, PIPELINE, StoryKind, Window
-from .delivery.adapter.incoming.cli import spec_delta_view as spec_delta_text
-from .delivery.application.delivery.check_spec import CheckSpecQuery
-from .delivery.application.delivery.show_spec_delta import ShowSpecDeltaQuery
-from .delivery.application.delivery.take_back_delivery import TakeBackDeliveryCommand
-from .web import service as web
-from .delivery.adapter.incoming.runner.run_command import request_main, run_main, settle_command
-from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
-from .delivery.adapter.incoming.cli.status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
-from .delivery.adapter.incoming.cli.story_view import render_story_md, render_story_text, stage_caption, stage_cells
-from .delivery.adapter.incoming.cli.epic_view import render_epic_md, render_epic_text
-from .delivery.adapter.incoming.cli.schedule_view import schedule_lines, start_lines
-from .delivery.adapter.incoming.cli.help_view import render_help_md, render_help_text
+from .....infrastructure.schedule import schedule_data, start_of
+from .....infrastructure.profile import ask_profile
+from ....application.profile.ask_profile import AskProfileQuery, Question
+from ....application.status.show_status import ShowStatusQuery
+from ....application.status.show_story import ShowStoryQuery, UnknownStory
+from ....application.status.show_epic import ShowEpicQuery, UnknownEpic
+from ....application.status.show_help import ShowHelpQuery
+from ....application.status.texts import stamp_text
+from ....application.decisions.list_decisions import ListDecisionsQuery
+from ....application.requests.list_requests import ListRequestsQuery
+from ....application.requests.pending_requests import PendingRequestsQuery
+from ....application.requests.retry_request import RetryRequestCommand
+from ....application.requests.take_back_request import TakeBackRequestCommand
+from ....application.requests.write_request import WriteRequestCommand
+from ....application.shared.requests import DuplicateRequest, KIND, KINDS, RequestRefused
+from .....building_blocks import UseCaseException
+from ....application.shared.story_repository import StoryNotFound
+from ....application.backlog.backfill_created import BackfillCreatedCommand
+from ....application.delivery.claim_story import ClaimStoryCommand
+from ....application.delivery.confirm_owned import ConfirmOwnedCommand, NothingToConfirm
+from ....application.shared.story_claims import Claim
+from ....application.delivery.deliver_by_hand import ChangesWhatHolds, ClaimedElsewhere, DeliverByHandCommand
+from ....application.delivery.prove_delivery import ProveDeliveryCommand
+from ....application.delivery.reopen_story import CheckoutHeld, NewWish, NoCorrection, NotCited, ReopenStoryCommand
+from ....domain.model.moment import Moment
+from ....domain.model.person import Person
+from ....domain.model.story import AlreadyDelivered, NotDelivered, NothingToDeliver, NothingToProve, StoryId
+from .....infrastructure import delivery as wiring
+from ....application.run.resolve_run_argument import ResolveRunArgumentQuery
+from ....application.status.show_refusals import ShowRefusalsQuery
+from ....application.status.show_journal_story import ShowJournalStoryQuery
+from ....application.cost.show_spent import ShowSpentQuery
+from ....application.shared.usage_ledger import Spent
+from ....application.status.list_findings import ListFindingsQuery
+from ....application.delivery.show_story_kind import ShowStoryKindQuery
+from ....application.delivery.show_stage_table import ShowStageTableQuery
+from ....application.delivery.release_story_claim import ReleaseStoryClaimCommand
+from ....application.delivery.refresh_claims import RefreshClaimsCommand
+from ....application.delivery.next_free_story_id import NextFreeStoryIdQuery
+from ....application.upkeep.migrate_layout import MigrateLayoutCommand
+from ....application.lifecycle.start_factory import StartFactoryCommand
+from ....application.lifecycle.stop_factory import StopFactoryCommand
+from ....application.lifecycle.start_page import StartPageCommand
+from ....application.lifecycle.show_running_page import ShowRunningPageQuery
+from ....application.lifecycle.show_worker import ShowWorkerQuery
+from ....application.status.show_discovery import ShowDiscoveryQuery
+from ....application.upkeep.let_journals_into_git import LetJournalsIntoGitCommand
+from ....application.delivery.probe_tool import Probed, ProbeToolQuery
+from ....application.cost.read_tool_usage import ReadToolUsageQuery
+from ....application.delivery.show_hand_over_contract import ShowHandOverContractQuery
+from ....application.delivery.write_skeleton import Skeleton, WriteSkeletonCommand
+from ....application.session.open_work_window import OpenWorkWindowCommand
+from ....application.session.close_work_window import CloseWorkWindowCommand
+from ....application.session.start_session_stage import StartSessionStageCommand
+from ....application.session.end_session_stage import EndSessionStageCommand
+from ....application.session.append_journal import AppendJournalCommand
+from ....application.checkout.take_checkout import TakeCheckoutCommand
+from ....application.checkout.give_checkout_back import GiveCheckoutBackCommand
+from ....application.checkout.mark_listening import MarkListeningCommand
+from ....application.status.follow_output import FollowOutputQuery
+from ....application.status.show_stage_outputs import ShowStageOutputsQuery
+from ....domain.model.run_argument import ArgumentMeaning
+from ....domain.model.stage import Pipeline, PIPELINE, StoryKind, Window
+from . import spec_delta_view as spec_delta_text
+from ....application.delivery.check_spec import CheckSpecQuery
+from ....application.delivery.show_spec_delta import ShowSpecDeltaQuery
+from ....application.delivery.take_back_delivery import TakeBackDeliveryCommand
+from .....web import service as web
+from ..runner.run_command import request_main, run_main, settle_command
+from .terminal import (
+    MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width)
+from .status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
+from .story_view import render_story_md, render_story_text, stage_caption, stage_cells
+from .epic_view import render_epic_md, render_epic_text
+from .schedule_view import schedule_lines, start_lines
+from .help_view import render_help_md, render_help_text
+
+Model = typing.Dict[str, typing.Any]
+RESULT = typing.TypeVar("RESULT")
 
 
-def resolve(epics, argument):
+def resolve(epics: str, argument: str) -> int:
     """What `/factory-run <argument>` means — decided here, not by a model: one word naming a story is that
     story; one word naming none is an unknown id, never a new story (a typo stays a typo); more than one
     word is a wish, for the backlog skill to turn into a story; nothing is the backlog."""
@@ -149,12 +155,12 @@ def resolve(epics, argument):
     return 0
 
 
-def discovery_model(cwd, epics):
+def discovery_model(cwd: str, epics: str) -> Model:
     """Every discovery topic with its proposals and changes and what a person can do with each (`ShowDiscoveryUseCase`)."""
     return wiring.show_discovery(cwd).execute(ShowDiscoveryQuery(os.path.basename(os.path.abspath(cwd))))
 
 
-def discovery_list(cwd, epics, fmt="text", colour="auto"):
+def discovery_list(cwd: str, epics: str, fmt: str = "text", colour: str = "auto") -> int:
     model = discovery_model(cwd, epics)
     if fmt == "json":
         print(json.dumps(model, indent=2, ensure_ascii=False))
@@ -176,7 +182,7 @@ def discovery_list(cwd, epics, fmt="text", colour="auto"):
     return 0
 
 
-def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
+def list_decisions(cwd: str, story_id: typing.Optional[str] = None, fmt: str = "text", colour: str = "auto") -> int:
     """The inbox: every record, what waits for a person first — open, drafts, answered, applied — read
     from the files alone; the same view as the status, in text, Markdown or JSON."""
     model = wiring.list_decisions(cwd).execute(ListDecisionsQuery(story_id))
@@ -202,7 +208,7 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
             # the question beside the record would make the table too wide to read: a list below it
             out += table_md(headers[:-1], [c[:-1] for c in cells(MARKS_MD)], first_bold=True)
             out += ["", "**Questions and answers**", ""] + [f"- **{r['id']}** — {r['text']}" for r in records]
-        out += ["", f"**Next:** answer {first['id']} — {how_md(how)}" if how else "**Next:** Nothing waits for you."]
+        out += ["", f"**Next:** answer {first['id']} — {how_md(how)}" if how and first else "**Next:** Nothing waits for you."]
         print("\n".join(out))
         return 0
     use = use_colour(colour)
@@ -224,7 +230,7 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     else:
         out.append(f"    No decision record beside any story ({model['store']}).")
     out += ["", "─" * 72]
-    if how:
+    if how and first:
         out += [f"  {bold('Next', use)}   answer {first['id']}."] + how_lines(how, use, "         ")
     else:
         out.append(f"  {bold('Next', use)}   Nothing waits for you.")
@@ -232,7 +238,7 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     return 0
 
 
-def owned_confirm(runs, story_id, cwd="."):
+def owned_confirm(runs: str, story_id: str, cwd: str = ".") -> int:
     """The person's word that the story and its answers are as they want them after a stage changed them
     (`ConfirmOwnedUseCase`): the mark goes, what changed is journaled, and the story runs on from its files."""
     result = wiring.confirm_owned(cwd, runs).execute(ConfirmOwnedCommand(StoryId(story_id)))
@@ -242,7 +248,7 @@ def owned_confirm(runs, story_id, cwd="."):
         print(f"owned: {story_id} — {', '.join(result.parts)} confirmed as the person's; the story runs on")
     return 0
 
-def refusals_report(runs, story_filter=None, fmt="text"):
+def refusals_report(runs: str, story_filter: typing.Optional[str] = None, fmt: str = "text") -> int:
     """`--refusals`: every story's refusals, form against substance — what a bench counts (`ShowRefusalsUseCase`)."""
     model = wiring.show_refusals(runs).execute(ShowRefusalsQuery(story_filter))
     if fmt == "json":
@@ -263,7 +269,8 @@ def refusals_report(runs, story_filter=None, fmt="text"):
     return 0
 
 
-def usage_report(runs, story_filter=None, total_only=False, cwd=".", epics=None, fmt="text"):
+def usage_report(runs: str, story_filter: typing.Optional[str] = None, total_only: bool = False, cwd: str = ".",
+                 epics: typing.Optional[str] = None, fmt: str = "text") -> int:
     """Tokens by class, as the status shows them: one story's stages, or every story by epic."""
     epics = epics or place("epics")
     if total_only:
@@ -296,12 +303,12 @@ def usage_report(runs, story_filter=None, total_only=False, cwd=".", epics=None,
     return 0
 
 
-def status_model(cwd, epics, runs, live=False):
+def status_model(cwd: str, epics: str, runs: str, live: bool = False) -> Model:
     """Where the factory stands — the status read model, over the project's files."""
     return wiring.show_status(cwd, epics, runs).execute(ShowStatusQuery(live))
 
 
-def foreign_claim_lines(claims):
+def foreign_claim_lines(claims: typing.Sequence[Model]) -> typing.List[str]:
     """The foreign claims as the session's start says them: one line each kind, like the findings."""
     held = [f"{c['story']} ({c['who']} on {c['host']}, {c['age']}{' — stale?' if c['stale'] else ''})"
             for c in claims if c["kind"] == "held"]
@@ -320,14 +327,15 @@ def foreign_claim_lines(claims):
     return lines
 
 
-def spent_text(spent):
+def spent_text(spent: typing.Optional[Spent]) -> str:
     """What a story cost so far, as the schedule's line shows it; nothing for a story without a journal."""
     if not spent or not spent.invocations:
         return ""
     return f" · {spent.invocations} stage invocation(s)" + (f", {spent.tokens:,} tokens" if spent.tokens else "")
 
 
-def schedule(cwd, epics, runs, slots=None, busy=(), skip=()):
+def schedule(cwd: str, epics: str, runs: str, slots: typing.Optional[int] = None,
+             busy: typing.Sequence[str] = (), skip: typing.Sequence[str] = ()) -> int:
     """Print every story's state and the next one to run; return 0. The runner and the tests read these lines
     (`schedule_view.py`)."""
     data = schedule_data(cwd, epics, runs, slots, busy, skip)
@@ -337,7 +345,7 @@ def schedule(cwd, epics, runs, slots=None, busy=(), skip=()):
     return 0
 
 
-def start(cwd, epics, runs, story_id, slots=None):
+def start(cwd: str, epics: str, runs: str, story_id: str, slots: typing.Optional[int] = None) -> int:
     """Where the story starts, printed as `state:`, `start:` (a stage, or `none`) and `detail:`. Exit 2 for an
     unknown story."""
     found = start_of(cwd, epics, runs, story_id, slots)
@@ -349,10 +357,10 @@ def start(cwd, epics, runs, story_id, slots=None):
     return 0
 
 
-def status_brief(cwd, epics, runs, session_start=False):
+def status_brief(cwd: str, epics: str, runs: str, session_start: bool = False) -> int:
     """Two lines: what is ready, what waits, who works, what it cost — for a session's start."""
     view = status_model(cwd, epics, runs)
-    words = {}
+    words: typing.Dict[str, typing.List[str]] = {}
     for row in view["rows"]:
         words.setdefault(row["state"], []).append(row["story"])
     summary = " · ".join(f"{len(v)} {k}" for k, v in sorted(words.items())) or "no stories yet"
@@ -415,26 +423,26 @@ def status_brief(cwd, epics, runs, session_start=False):
     return 0
 
 
-def story_model(cwd, epics, runs, story_id, live=False):
+def story_model(cwd: str, epics: str, runs: str, story_id: str, live: bool = False) -> Model:
     try:
         return wiring.show_story(cwd, epics, runs).execute(ShowStoryQuery(story_id, live))
     except UnknownStory:
         raise GateError(f"no story {story_id} under {epics}/") from None
 
 
-def epic_model(cwd, epics, runs, epic_id, live=False):
+def epic_model(cwd: str, epics: str, runs: str, epic_id: str, live: bool = False) -> Model:
     try:
         return wiring.show_epic(cwd, epics, runs).execute(ShowEpicQuery(epic_id, live))
     except UnknownEpic as unknown:
         raise GateError(f"no epic {epic_id} under {epics}/ — the epics: {', '.join(unknown.known) or 'none'}") from None
 
 
-def help_model(cwd, epics, runs):
+def help_model(cwd: str, epics: str, runs: str) -> Model:
     return wiring.show_help(cwd, epics, runs).execute(ShowHelpQuery())
 
 
-def status(cwd, epics, runs, story_filter=None, fmt="text", colour="auto", live=False, part="all", every=False,
-           epic_filter=None):
+def status(cwd: str, epics: str, runs: str, story_filter: typing.Optional[str] = None, fmt: str = "text", colour: str = "auto",
+           live: bool = False, part: str = "all", every: bool = False, epic_filter: typing.Optional[str] = None) -> int:
     """The person's view. Short by default (WP-146): what runs, what waits for them, the next stories in the schedule's
     order and one line of totals; `every` (`--all`) the whole table — every story by epic with times and tokens — and
     `--part backlog` the backlog alone; one story's or one epic's details. The JSON is the whole model whatever the
@@ -463,7 +471,7 @@ def status(cwd, epics, runs, story_filter=None, fmt="text", colour="auto", live=
     return 0
 
 
-def factory_help(cwd, epics, runs, fmt="text", colour="auto"):
+def factory_help(cwd: str, epics: str, runs: str, fmt: str = "text", colour: str = "auto") -> int:
     """The factory explained in one fixed view: the flow with where this project stands in it, every
     command in its agent and its shell form, the marks, the files. The text is the same everywhere;
     only the marks in the flow and the Next line come from the project's files."""
@@ -479,7 +487,7 @@ def factory_help(cwd, epics, runs, fmt="text", colour="auto"):
     return 0
 
 
-def backfill_created(cwd, epics):
+def backfill_created(cwd: str, epics: str) -> int:
     """WP-146: `created:` into every story and every epic that has none (`BackfillCreatedUseCase`). Prints what it
     wrote."""
     done = wiring.backfill_created(cwd, epics).execute(BackfillCreatedCommand())
@@ -491,7 +499,7 @@ def backfill_created(cwd, epics):
           + (f" — {done.from_file} not in git yet, from the file's own time" if done.from_file else ""))
     return 0
 
-def story_command(run):
+def story_command(run: typing.Callable[[], RESULT]) -> RESULT:
     """A story command's use case run; a story not found is the gate's error, as the readers raise it."""
     try:
         return run()
@@ -499,7 +507,7 @@ def story_command(run):
         raise GateError(str(error)) from None
 
 
-def reopen(cwd, runs, epics, story_id):
+def reopen(cwd: str, runs: str, epics: str, story_id: str) -> int:
     """Take a delivered story back for a correction a human gave on looking at it (`ReopenStoryUseCase`)."""
     try:
         result = story_command(lambda: wiring.reopen_story(cwd, epics, runs).execute(
@@ -529,7 +537,7 @@ def reopen(cwd, runs, epics, story_id):
     return 1
 
 
-def deliver_by_hand(cwd, runs, epics, story_id, who, force=False):
+def deliver_by_hand(cwd: str, runs: str, epics: str, story_id: str, who: typing.Optional[str], force: bool = False) -> int:
     """A story a person built: `status: delivered`, `delivered:` (UTC), `delivered_by: hand:<who>`
     (`DeliverByHandUseCase`). Works where the factory never ran; `--prove` checks it later."""
     who = " ".join(str(who or "").split())
@@ -570,7 +578,7 @@ def deliver_by_hand(cwd, runs, epics, story_id, who, force=False):
 CLAIM_EXIT = {Claim.OWN: 0, Claim.NO_REMOTE: 0, Claim.ELSEWHERE: 3, Claim.NEEDS_PERSON: 4}
 
 
-def claim_command(cwd, runs, epics, story_id):
+def claim_command(cwd: str, runs: str, epics: str, story_id: str) -> int:
     """`--claim-story`: claim one story on the remote (WP-93, `ClaimStoryUseCase`). 0 claimed or own, 3 another
     factory has it, 4 needs a person; 0 and nothing pushed where the profile names no `claim_remote:`."""
     outcome = wiring.claim_story(cwd, epics, runs).execute(ClaimStoryCommand(StoryId(story_id)))
@@ -578,7 +586,7 @@ def claim_command(cwd, runs, epics, story_id):
         print(line)
     return CLAIM_EXIT[outcome.claim]
 
-def undeliver_branch(cwd, runs, epics, story_id):
+def undeliver_branch(cwd: str, runs: str, epics: str, story_id: str) -> int:
     """WP-93 F: a published branch whose merge request lost the race goes back to before its delivery
     (`TakeBackDeliveryUseCase`), so the integrate step merges the remote main line and the delivering function merges
     again under the new rules."""
@@ -591,7 +599,7 @@ def undeliver_branch(cwd, runs, epics, story_id):
     return 0
 
 
-def spec_check(cwd, runs, epics):
+def spec_check(cwd: str, runs: str, epics: str) -> int:
     """Story and spec agree (WP-98, `CheckSpecUseCase`): one line per disagreement; exit 1 when there is one."""
     checked = wiring.check_spec(runs, epics).execute(CheckSpecQuery())
     for line in checked.problems:
@@ -603,7 +611,7 @@ def spec_check(cwd, runs, epics):
     return 1 if checked.problems else 0
 
 
-def prove(cwd, runs, epics, story_id):
+def prove(cwd: str, runs: str, epics: str, story_id: str) -> int:
     """A claimed delivery checked through the adopt path (`ProveDeliveryUseCase`): the story becomes
     `status: adopted`, its claim kept as one line of the evidence; the adopt gate then proves it and delivers it."""
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -634,7 +642,7 @@ SHELL_WORD = re.compile(r"[a-z][a-z0-9_-]*")
 FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
 
 
-def stages_shell(table):
+def stages_shell(table: Model) -> int:
     """The stage table (`ShowStageTableUseCase`) as the runner reads it once at its start, one bash assignment per
     line, then the tool table and the places asked for, quoted. Every name is checked to be a plain word."""
     names = [row["name"] for row in table["rows"]] + list(table["windows"]) + sorted({k for k, _s in table["kinds"]})
@@ -658,13 +666,14 @@ def stages_shell(table):
     return 0
 
 
-def answer(profile_path, question, **fields):
+def answer(profile_path: typing.Optional[str], question: Question, **fields: str) -> int:
     """The profile's answer to one question, a line per item (`AskProfileUseCase`)."""
     print("\n".join(ask_profile(profile_path).execute(AskProfileQuery(question, **fields))))
     return 0
 
 
-def follow(runs, story, once, fmt, width, process=None, every=False, request=None):
+def follow(runs: str, story: typing.Optional[str], once: bool, fmt: str, width: int, process: typing.Optional[str] = None, every: bool = False,
+           request: typing.Optional[str] = None) -> int:
     """What the stage in flight does: every process of a story (`every`), the newest output's last lines (`once`), or
     the newest output as it is written until interrupted."""
     if every and not story:
@@ -708,12 +717,12 @@ def follow(runs, story, once, fmt, width, process=None, every=False, request=Non
 
 
 # --- the factory as a process of its own, and what a person asks of it (WP-91) -----------------------------------------
-def placed(profile_arg=None):
+def placed(profile_arg: typing.Optional[str] = None) -> None:
     """The places as the profile names them, for a command that reads no other option."""
     set_places(read_profile(resolve_profile(profile_arg, os.getcwd())))
 
 
-def request_command(argv):
+def request_command(argv: typing.Sequence[str]) -> int:
     """`factory.sh request <kind> [<target>…] [<words>…] [--story|--epic|--record|--topic|--proposal <id>]
     [--option <key>] [--from <stage>] [--by <who>] [--settle]` — `-` as the words reads them from stdin. `--settle`
     settles it at once where the factory can, writing no request (exit 3 where a skill must work it)."""
@@ -769,7 +778,7 @@ def request_command(argv):
     return 0
 
 
-def settle_press(kind_name, fields, words, by, fmt):
+def settle_press(kind_name: str, fields: typing.Mapping[str, typing.Any], words: str, by: str, fmt: str) -> int:
     """`request … --settle`: settled now, or exit 3 — the caller then runs the action's skill, as before."""
     try:
         # the runner's own lines go to stderr where the caller reads one JSON object from stdout
@@ -790,7 +799,7 @@ def settle_press(kind_name, fields, words, by, fmt):
     return code
 
 
-def requests_command(argv):
+def requests_command(argv: typing.Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="factory.sh requests", description="the requests and their state")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     parser.add_argument("--drop", metavar="ID", help="take a request back (not while it runs)")
@@ -812,17 +821,17 @@ def requests_command(argv):
     return requests_view(os.getcwd(), args.format)
 
 
-def pending_requests(cwd):
+def pending_requests(cwd: str) -> typing.List[Model]:
     """The requests not done — what a view's press may be pending on."""
     return wiring.pending_requests(cwd).execute(PendingRequestsQuery()).requests
 
 
-def request_counts(cwd):
+def request_counts(cwd: str) -> Model:
     """The requests by state."""
     return wiring.list_requests(cwd).execute(ListRequestsQuery())["counts"]
 
 
-def requests_view(cwd, fmt="text"):
+def requests_view(cwd: str, fmt: str = "text") -> int:
     """`factory.sh requests`: every request with its state, oldest first."""
     model = wiring.list_requests(cwd).execute(ListRequestsQuery())
     if fmt == "json":
@@ -841,7 +850,7 @@ def requests_view(cwd, fmt="text"):
     return 0
 
 
-def up_command(argv):
+def up_command(argv: typing.Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="factory.sh up", description="start the factory in the background")
     parser.add_argument("--serve", action="store_true", help="the page too")
     parser.add_argument("--port", type=int)
@@ -858,7 +867,7 @@ def up_command(argv):
     return wiring.start_factory().execute(StartFactoryCommand(tuple(run_args), args.serve, args.port, args.by or ""))
 
 
-def down_command(argv):
+def down_command(argv: typing.Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="factory.sh down", description="end the factory after its running stage")
     parser.add_argument("--now", action="store_true", help="interrupt the running stage too")
     parser.add_argument("--no-wait", action="store_true", help="say stop and return at once")
@@ -868,7 +877,7 @@ def down_command(argv):
     return wiring.stop_factory().execute(StopFactoryCommand(args.now, not args.no_wait, args.by or ""))
 
 
-def serve_command(argv):
+def serve_command(argv: typing.Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="factory.sh serve", description="the factory's page, on this machine alone")
     parser.add_argument("--port", type=int)
     parser.add_argument("--open", action="store_true", help="open it in the browser")
@@ -890,7 +899,7 @@ def serve_command(argv):
     return web.serve_here(os.getcwd(), args.port, args.open)
 
 
-def worker_command(argv):
+def worker_command(argv: typing.Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="factory-cli.py --worker")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     args = parser.parse_args(argv)
@@ -904,7 +913,7 @@ LIFECYCLE = {"--request": request_command, "--requests": requests_command, "--wo
              "--up": up_command, "--down": down_command, "--serve": serve_command, "--worker": worker_command}
 
 
-def main(argv):
+def main(argv: typing.Sequence[str]) -> int:
     if argv[:1] == ["--run"]:                    # `factory.sh run` once its checks passed: the runner itself
         return run_main(argv[1:])
     lifecycle = LIFECYCLE.get(argv[0]) if argv else None

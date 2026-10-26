@@ -12,7 +12,7 @@ import unittest
 from unittest import mock
 
 from support import evidence, gate_story, schedule, verdict, write
-from dca_factory import cli
+from dca_factory.delivery.adapter.incoming.cli import cli_command as cli
 from dca_factory.delivery.domain.service.spec_checks import SpecChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout

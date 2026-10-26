@@ -7,7 +7,7 @@ import os
 import unittest
 
 from support import project, write
-from dca_factory import cli
+from dca_factory.delivery.adapter.incoming.cli import cli_command as cli
 from dca_factory.delivery.adapter.outgoing.files import migrations
 from dca_factory.spec import api as spec
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
