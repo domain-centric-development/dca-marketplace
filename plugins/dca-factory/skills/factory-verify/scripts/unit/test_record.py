@@ -7,7 +7,7 @@ import shutil
 import time
 import unittest
 
-from support import project, state
+from support import project
 from dca_factory.delivery.adapter.outgoing.files import detail_files as detail
 from dca_factory.delivery.application.status import show_story
 from dca_factory.delivery.domain.model import usage

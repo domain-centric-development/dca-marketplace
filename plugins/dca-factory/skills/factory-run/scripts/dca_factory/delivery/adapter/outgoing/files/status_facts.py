@@ -19,7 +19,6 @@ from .decision_record_files import decision_files, records_of
 from .delivery_files import perspectives_of
 from ..tools.streams import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
-from .....state import schedule_data
 from ..claims.remote_claims import cached_claims
 from ..claims.checkout_claim import claim_path, listener_line, read_claim
 from .usage_files import resolve_window
@@ -269,10 +268,11 @@ def follow_newest(runs: str, story: typing.Optional[str] = None,
 
 
 class StatusFactFiles:
-    """The status's facts, read from the project <cwd> with its epics and run folder as the profile places them."""
+    """The status's facts, read from the project <cwd> with its epics and run folder as the profile places them;
+    the schedule is the schedule's read model, which the composition root hands in."""
 
-    def __init__(self, cwd: str, epics: str, runs: str) -> None:
-        self._cwd, self._epics, self._runs = cwd, epics, runs
+    def __init__(self, cwd: str, epics: str, runs: str, schedule: typing.Callable[[], Facts]) -> None:
+        self._cwd, self._epics, self._runs, self._schedule = cwd, epics, runs, schedule
 
     def now(self) -> datetime.datetime:
         return datetime.datetime.now(datetime.timezone.utc)
@@ -284,7 +284,7 @@ class StatusFactFiles:
         return read_profile(resolve_profile(None, self._cwd))
 
     def schedule(self) -> Facts:
-        return schedule_data(self._cwd, self._epics, self._runs)
+        return self._schedule()
 
     def story_facts(self, story_id: str, front: typing.Optional[Facts]) -> Facts:
         return story_facts(self._cwd, self._runs, story_id, front)

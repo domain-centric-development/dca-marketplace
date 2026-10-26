@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from support import evidence, gate_story, state, verdict, write
+from support import evidence, gate_story, schedule, verdict, write
 from dca_factory import cli
 from dca_factory.delivery.domain.service.spec_checks import SpecChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
@@ -116,9 +116,9 @@ class Claim(unittest.TestCase):
             self.assertEqual(code, 3, said)
             self.assertIn("claimed by ana@example.com", said)
             front = markdown.read_front_matter(layout.find_story(epics_b, "S-01"))[0]
-            self.assertEqual(state.story_state(b, runs_b, "S-01", front)[0], "claimed")
+            self.assertEqual(schedule.story_state(b, runs_b, "S-01", front)[0], "claimed")
             other = markdown.read_front_matter(layout.find_story(epics_b, "S-02"))[0]
-            self.assertEqual(state.story_state(b, runs_b, "S-02", other)[0], "ready")
+            self.assertEqual(schedule.story_state(b, runs_b, "S-02", other)[0], "ready")
 
     def test_the_race_between_fetch_and_push_is_lost_by_the_second_push(self):
         with remote() as r:
@@ -224,7 +224,7 @@ class Published(unittest.TestCase):
             self.assertIn("Test: a.ThingTest#shows", sh(a, "show", "origin/story/S-01:product/spec/widgets/scenarios.md"))
             self.assertIn("Factory-Claim: ana@example.com", sh(a, "log", "-1", "--format=%B", "origin/story/S-01"))
             self.assertEqual(sh(a, "rev-parse", "main"), sh(a, "rev-parse", "origin/main"))   # main not moved
-            self.assertEqual(state.story_state(a, runs, "S-01", front)[0], "published")
+            self.assertEqual(schedule.story_state(a, runs, "S-01", front)[0], "published")
             # the code host squashes it under its own message
             host = r.clone("host", "host@example.com")
             sh(host, "merge", "--quiet", "--squash", "origin/story/S-01")
@@ -232,7 +232,7 @@ class Published(unittest.TestCase):
             sh(host, "push", "--quiet", "origin", "HEAD:main")
             quiet(remote_claims.refresh_claims, a, runs, CONFIG, "main")
             self.assertEqual(sh(r.root, "--git-dir", r.bare, "branch", "--list", "story/*"), "")
-            self.assertNotEqual(state.story_state(a, runs, "S-01", front)[0], "published")
+            self.assertNotEqual(schedule.story_state(a, runs, "S-01", front)[0], "published")
 
 
     def publish(self, r, clone, story):

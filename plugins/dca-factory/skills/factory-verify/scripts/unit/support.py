@@ -15,7 +15,7 @@ if SCRIPTS not in sys.path:
     sys.path.insert(0, SCRIPTS)
 os.environ.pop("FACTORY_HOME", None)                        # a case runs in no story's worktree
 
-from dca_factory import state  # noqa: E402,F401
+from dca_factory.infrastructure import schedule  # noqa: E402,F401
 from dca_factory.delivery.adapter.outgoing.pipeline.stage_rows import STAGE_FILES  # noqa: E402
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
@@ -99,7 +99,7 @@ class Project:
     def state_of(self, story_id):
         path = layout.find_story(self.epics, story_id)
         front, _body = markdown.read_front_matter(path)
-        return state.story_state(self.root, self.runs, story_id, front, path)
+        return schedule.story_state(self.root, self.runs, story_id, front, path)
 
 
 @contextlib.contextmanager

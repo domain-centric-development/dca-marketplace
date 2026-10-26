@@ -16,6 +16,7 @@ from ..delivery.adapter.outgoing.files.owned_files import OwnedChangeFiles
 from ..delivery.adapter.outgoing.files.project_files import ProjectFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
 from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
+from .schedule import schedule_data
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles
 from ..delivery.adapter.outgoing.files.story_runs import StoryRunFiles
 from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
@@ -89,8 +90,12 @@ def book_request_cost(cwd: str, runs: str) -> BookRequestCostUseCase:
     return BookRequestCostUseCase(StoryJournalFiles(cwd, runs))
 
 
+def status_facts(cwd: str, epics: str, runs: str) -> StatusFactFiles:
+    return StatusFactFiles(cwd, epics, runs, lambda: schedule_data(cwd, epics, runs))
+
+
 def show_status(cwd: str, epics: str, runs: str) -> ShowStatusUseCase:
-    return ShowStatusUseCase(StatusFactFiles(cwd, epics, runs), RequestFiles(cwd), DescriptionFiles.of_project(cwd))
+    return ShowStatusUseCase(status_facts(cwd, epics, runs), RequestFiles(cwd), DescriptionFiles.of_project(cwd))
 
 
 def list_decisions(cwd: str) -> ListDecisionsUseCase:
@@ -98,7 +103,7 @@ def list_decisions(cwd: str) -> ListDecisionsUseCase:
 
 
 def show_story(cwd: str, epics: str, runs: str) -> ShowStoryUseCase:
-    return ShowStoryUseCase(show_status(cwd, epics, runs), StatusFactFiles(cwd, epics, runs), DetailFactFiles(epics, runs),
+    return ShowStoryUseCase(show_status(cwd, epics, runs), status_facts(cwd, epics, runs), DetailFactFiles(epics, runs),
                             pending_requests(cwd))
 
 
@@ -107,7 +112,7 @@ def show_epic(cwd: str, epics: str, runs: str) -> ShowEpicUseCase:
 
 
 def show_help(cwd: str, epics: str, runs: str) -> ShowHelpUseCase:
-    return ShowHelpUseCase(show_status(cwd, epics, runs), ProjectFiles(cwd, epics, runs), StatusFactFiles(cwd, epics, runs))
+    return ShowHelpUseCase(show_status(cwd, epics, runs), ProjectFiles(cwd, epics, runs), status_facts(cwd, epics, runs))
 
 
 def reopen_story(cwd: str, epics: str, runs: str) -> ReopenStoryUseCase:

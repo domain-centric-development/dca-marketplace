@@ -5,7 +5,7 @@ import os
 import unittest
 
 from support import project, write
-from dca_factory import gate, state
+from dca_factory import gate
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout

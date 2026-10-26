@@ -44,5 +44,5 @@ new discovery: a future crossing, shown so it is not forgotten.
 
 `contract.py` at the package's top is the version stamp alone — `CONTRACT` and `VERSION`, read by
 name by `factory.sh` and by an installed copy of any other release. The modules not yet moved into a
-context (`state`, `gate`, `runner`, `cli`) sit beside it until their move; `factory-verify` holds the
-layers of everything moved (`architecture.py`) and `mypy --strict` its types (`mypy.ini`).
+context (`gate`, `runner`, `cli`) sit beside it until their move; `factory-verify` holds the layers of
+everything moved (`architecture.py`) and `mypy --strict` its types (`mypy.ini`).

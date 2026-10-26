@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import unittest
 
-from support import evidence, gate_story, state, verdict, write
+from support import evidence, gate_story, verdict, write
 from dca_factory import contract
 from dca_factory.delivery.domain.service.kept_checks import KeptChecks
 from dca_factory.delivery.adapter.outgoing.git import repository

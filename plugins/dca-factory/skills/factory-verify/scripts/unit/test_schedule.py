@@ -3,13 +3,13 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from support import project, state
+from support import project, schedule
 from dca_factory.delivery.adapter.outgoing.files import run_marks
 from dca_factory.delivery.adapter.outgoing.files import usage_files
 
 
-def schedule(p, **kwargs):
-    return state.schedule_data(p.root, p.epics, p.runs, **kwargs)
+def scheduled(p, **kwargs):
+    return schedule.schedule_data(p.root, p.epics, p.runs, **kwargs)
 
 
 class Order(unittest.TestCase):
@@ -18,7 +18,7 @@ class Order(unittest.TestCase):
         with project() as p:
             p.story("A-1", deps=("B-1",))
             p.story("B-1")
-            data = schedule(p)
+            data = scheduled(p)
             self.assertEqual(data["order"], ["B-1", "A-1"])
             self.assertEqual(data["next"], "B-1")
             self.assertEqual(data["stories"]["A-1"]["state"], "blocked")
@@ -28,7 +28,7 @@ class Order(unittest.TestCase):
         with project() as p:
             p.story("A-1", deps=("B-1",))
             p.story("B-1", status="delivered")
-            data = schedule(p)
+            data = scheduled(p)
             self.assertEqual((data["next"], data["stories"]["A-1"]["state"]), ("A-1", "ready"))
             self.assertEqual(data["counts"], {"ready": 1, "delivered": 1})
 
@@ -37,7 +37,7 @@ class Order(unittest.TestCase):
             p.story("A-1", deps=("NOPE",))
             p.story("C-1", deps=("C-2",))
             p.story("C-2", deps=("C-1",))
-            data = schedule(p)
+            data = scheduled(p)
             self.assertEqual(data["stories"]["A-1"]["detail"], "depends on unknown NOPE")
             self.assertEqual(data["stories"]["C-1"]["detail"], "on a dependency cycle: C-1, C-2")
             self.assertEqual(data["order"][-2:], ["C-1", "C-2"])
@@ -51,7 +51,7 @@ class Order(unittest.TestCase):
             p.story("A-1", epic="alpha")
             p.story("Z-1", epic="beta", status="delivered")
             p.story("Z-2", epic="beta", status="delivered")
-            self.assertEqual(schedule(p)["order"], ["Z-1", "Z-2", "A-1"])
+            self.assertEqual(scheduled(p)["order"], ["Z-1", "Z-2", "A-1"])
 
 
 class EpicDependencies(unittest.TestCase):
@@ -63,7 +63,7 @@ class EpicDependencies(unittest.TestCase):
             p.story("A-1", epic="alpha")
             p.story("B-1", epic="beta", status="delivered")
             p.story("B-2", epic="beta")
-            data = schedule(p)
+            data = scheduled(p)
             self.assertEqual(data["stories"]["A-1"]["detail"], "its epic alpha depends on epic beta (1 of 2 delivered)")
             self.assertEqual(data["next"], "B-2")
 
@@ -72,7 +72,7 @@ class EpicDependencies(unittest.TestCase):
             p.epic("alpha", deps=("beta",))
             p.epic("beta")
             p.story("A-1", epic="alpha")
-            self.assertEqual(schedule(p)["stories"]["A-1"]["detail"],
+            self.assertEqual(scheduled(p)["stories"]["A-1"]["detail"],
                              "its epic alpha depends on epic beta, which has no story yet")
 
     def test_a_superseded_story_does_not_count_for_its_epic(self):
@@ -82,7 +82,7 @@ class EpicDependencies(unittest.TestCase):
             p.story("A-1", epic="alpha")
             p.story("B-1", epic="beta", status="delivered")
             p.story("B-2", epic="beta", status="superseded")
-            self.assertEqual(schedule(p)["stories"]["A-1"]["state"], "ready")
+            self.assertEqual(scheduled(p)["stories"]["A-1"]["state"], "ready")
 
 
 class Checkout(unittest.TestCase):
@@ -91,7 +91,7 @@ class Checkout(unittest.TestCase):
         with project() as p:
             p.story("S-1", epic="one")
             p.story("S-1", epic="two")
-            data = schedule(p)
+            data = scheduled(p)
             self.assertEqual(sorted(s["state"] for s in data["stories"].values()), ["stopped", "stopped"])
             self.assertTrue(all("is not unique" in s["detail"] for s in data["stories"].values()))
 
@@ -101,7 +101,7 @@ class Checkout(unittest.TestCase):
             p.story("B-1")
             p.write_and_journal("B-1", "plan")
             p.write_and_journal("B-1", "test")
-            data = schedule(p)
+            data = scheduled(p)
             self.assertTrue(data["stories"]["B-1"]["holds"])
             self.assertEqual(data["next"], "B-1")
 
@@ -112,7 +112,7 @@ class Checkout(unittest.TestCase):
             p.write_and_journal("B-1", "plan")
             p.write_and_journal("B-1", "test")
             p.evidence("B-1", ".rounds", "3")
-            data = schedule(p)
+            data = scheduled(p)
             self.assertIsNone(data["next"])
             self.assertIn("B-1 holds unfinished code in the checkout (stopped)", data["reason"])
 
@@ -120,9 +120,9 @@ class Checkout(unittest.TestCase):
         with project() as p:
             for story_id in ("A-1", "A-2", "A-3"):
                 p.story(story_id)
-            data = schedule(p, slots=2)
+            data = scheduled(p, slots=2)
             self.assertEqual((data["next"], data["also"]), ("A-1", ["A-2"]))
-            data = schedule(p, slots=2, busy=("A-1",))
+            data = scheduled(p, slots=2, busy=("A-1",))
             self.assertEqual((data["next"], data["also"]), ("A-2", []))
             self.assertEqual(data["stories"]["A-1"]["state"], "running")
 
@@ -141,7 +141,7 @@ class RunnerSteps(unittest.TestCase):
             p.story("A-1")
             self.journal(p, "A-1", ("stage-start", "document"), ("stage-end", "document"), ("step-start", "integrate"))
             self.assertEqual([(s, st) for s, st, _t in run_marks.running_stages(p.runs)], [("A-1", "integrate")])
-            self.assertEqual(schedule(p)["stories"]["A-1"]["state"], "running")
+            self.assertEqual(scheduled(p)["stories"]["A-1"]["state"], "running")
             self.journal(p, "A-1", ("step-start", "integrate"), ("stage-start", "integrate"))
             self.assertEqual([st for _s, st, _t in run_marks.running_stages(p.runs)], ["integrate"])
             self.journal(p, "A-1", ("step-start", "integrate"), ("step-start", "format"), ("step-end", "format"))
@@ -169,11 +169,11 @@ class WaitingForTheLimit(unittest.TestCase):
             p.evidence("A-1", "journal.tsv", f"{at(timedelta(hours=-5))}\tstage-start\tbuilder\ttool=claude\n"
                                              f"{at(timedelta(hours=-4))}\tlimit\tbuilder\ttool=claude\t"
                                              f"until={at(timedelta(hours=1))}\n")
-            self.assertEqual(schedule(p)["stories"]["A-1"]["state"], "running")
+            self.assertEqual(scheduled(p)["stories"]["A-1"]["state"], "running")
             p.evidence("A-1", "journal.tsv", f"{at(timedelta(hours=-9))}\tstage-start\tbuilder\ttool=claude\n"
                                              f"{at(timedelta(hours=-8))}\tlimit\tbuilder\ttool=claude\t"
                                              f"until={at(timedelta(hours=-7))}\n")
-            self.assertNotEqual(schedule(p)["stories"]["A-1"]["state"], "running")
+            self.assertNotEqual(scheduled(p)["stories"]["A-1"]["state"], "running")
 
 
 if __name__ == "__main__":
