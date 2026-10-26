@@ -71,6 +71,47 @@ class Readers(unittest.TestCase):
             self.assertEqual(run.used_tokens("S-2"), 0)
 
 
+class RoundTool(unittest.TestCase):
+    """A round the build stage sends back (`back: test`) keeps the run's tool: every later stage resolves its own from
+    the profile, none inherits the build stage's `tool.build`."""
+
+    def setUp(self):
+        for name in ("FACTORY_TOOL_EXPLICIT", "FACTORY_TOOL_CMD"):
+            os.environ.pop(name, None)
+
+    def test_a_round_from_a_separate_build_stage_keeps_the_runs_tool(self):
+        with project() as p:
+            write(os.path.join(p.root, profiles.PROFILE_FILE), "tool.build: codex\n")
+            p.story("S-1")
+            options = types.SimpleNamespace(max_stages=0, story_budget=0, builder="separate", verifier="separate",
+                                            parallel=0)
+            run = runner.Run(options, p.root, ".dca-factory/runs", worker="unit:host:1")
+            used, sent = [], []
+
+            def run_one(story, tool, stage, dry=False):
+                used.append((stage, tool, run.tool_in_flight))
+                return 0
+
+            def back_to(story, stage=None):
+                if stage == "build" and not sent:
+                    sent.append(stage)
+                    return "test"
+                return "" if stage else "build"
+            run.run_one, run.back_to = run_one, back_to
+            run.gate = lambda stage, story, gate_path=None: 0
+            run.between_stages = lambda story, tool: None
+            run.verdict_of = lambda story: "pass"
+            run.asks_human = lambda path: False
+            run.run_reviews = lambda *args, **kwargs: 0
+            run.bump_rounds = lambda story: 1
+            self.assertEqual(run.run_stages("S-1", "claude", "plan"), 0)
+            self.assertEqual([stage for stage, _t, _u in used],
+                             ["plan", "test", "build", "test", "build", "tidy", "judge", "document"])
+            self.assertEqual({tool for _s, tool, _u in used}, {"claude"})
+            self.assertEqual([unit for stage, _t, unit in used if stage != "build"], ["claude"] * 6)
+            self.assertEqual([unit for stage, _t, unit in used if stage == "build"], ["codex", "codex"])
+
+
 class ToolAndEffortPerUnit(unittest.TestCase):
     """WP-95 items 7 and 8: the tool and the effort a unit runs with, from the profile; `--tool` overrides."""
 
