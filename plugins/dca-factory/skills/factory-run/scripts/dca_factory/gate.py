@@ -64,48 +64,35 @@ A command the profile does not declare is skipped and named, never failed.
 
 import argparse
 import contextlib
-import glob
 import json
 import os
 import re
 import subprocess
 import sys
-import time
 from .contract import (
     CONTRACT, CRITERION, GateError, layout_hint, STAGE, STAGES, VERSION)
-from .delivery.adapter.outgoing.files.findings_files import (
-    append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
-    PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
 from .delivery.adapter.outgoing.files.story_layout import (
-    duplicate_ids, find_story, is_delivered, story_digest,
-    story_files, story_folder, story_id_of, story_kind)
+    duplicate_ids, find_story, is_delivered, story_files, story_folder, story_id_of, story_kind)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    evidence_dir, evidence_rel, factory_home, FLAKY_FINDINGS, in_worktree,
-    JOURNAL, location, place, PROFILE_FILE, read_profile,
+    location, place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
-from .delivery.adapter.outgoing.git.repository import git, git_identity
+from .delivery.adapter.outgoing.git.repository import git
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    answered_decisions, decisions_store, record_path)
+    answered_decisions)
 from .delivery.domain.model.correction import REASON_CODES
 from .delivery.application.description.check_description import CheckDescriptionCommand
 from .discovery.api import check_report
 from .infrastructure.description import check_description
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
-from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
-from .spec.api import (
-    derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
-from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED
-from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
+from .delivery.adapter.outgoing.files.signals import latest_signal
 from .delivery.adapter.outgoing.files.snapshots import (
-    git_tree, record_base, record_changes)
+    record_base, record_changes)
 from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.files.run_marks import (
-    backlog_digest, last_ended, step_open,
-    STORY_DIGEST, write_mark)
+    backlog_digest, last_ended, step_open)
 from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned
-from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
-from .delivery.adapter.outgoing.files.decision_record_files import (
-    ACCEPTANCE_KIND, acceptance_mode, acceptance_records, acceptance_state)
+from .delivery.adapter.outgoing.files.journal_files import journal_append, journal_events
 from .delivery.application.shared.front import is_acceptance
 from .delivery.domain.model.verdict import FindingState
 from .delivery.domain.service.backlog_checks import BacklogChecks
@@ -123,14 +110,10 @@ from .delivery.domain.service.integration_checks import IntegrationChecks
 from .delivery.application.delivery.stage_checks import table_tests  # registers the checks over the evidence alone
 from .delivery.application.delivery.process_checks import judge_suite  # registers the checks that run processes
 from .delivery.adapter.outgoing.build.stage_runs import StageRunFiles
+from .delivery.adapter.outgoing.files.stage_delivery_files import StageDeliveryFiles
+from .delivery.application.delivery import pass_actions  # noqa: F401 — registers what a passing gate does
 from .delivery.application.delivery.check_stage import (
-    on_pass, run_checks, run_passed, StageRun, Verdict)
-from .delivery.domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
-from .delivery.domain.model.story_state import Acceptance, AcceptanceVerdict
-from .delivery.domain.model.decision_record import RecordId
-from .delivery.domain.model.moment import Moment
-from .delivery.domain.model.story import StoryId
-from .delivery.adapter.outgoing.files.story_files import StoryFiles
+    run_checks, run_passed, StageRun, Verdict)
 from .delivery.domain.service.change_checks import CHANGE_CHECKS, ChangeChecks
 from .delivery.domain.model.stage_story import CommandRun
 from .delivery.adapter.outgoing.git.change import parity_facts, snapshot
@@ -141,18 +124,13 @@ from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # 
 from .delivery.adapter.outgoing.files.test_files import locate_tests, StageTestFiles
 from .delivery.adapter.outgoing.files.stage_marks_files import StageMarkFiles
 from .delivery.adapter.outgoing.files.stage_evidence_files import MainLineEvidence
-from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, split_list
+from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, happy_paths, split_list
 from .delivery.adapter.outgoing.files.test_files import read_mapping
 from .delivery.adapter.outgoing.files.design_files import STEP
-from .delivery.adapter.outgoing.files.kept_files import RED_TREE, read_red_digests, red_tree, unproven_tests
-from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
-from .delivery.adapter.outgoing.spec.story_spec_files import moved_tests, story_spec
-from .delivery.adapter.outgoing.git.integration import integration_target
-from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, command_for, run, tail, test_command_keys
-from .delivery.adapter.outgoing.build.suite_runs import test_files
+from .delivery.adapter.outgoing.files.kept_files import read_red_digests, red_tree, unproven_tests
+from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, run, tail, test_command_keys
 from .delivery.adapter.outgoing.git.change import backlog_paths
 from .delivery.adapter.outgoing.files.test_files import scenario_titles
-from .sharedkernel.adapter.outgoing.profile.profile_files import places_in
 
 
 def story_ids(epics):
@@ -283,27 +261,6 @@ def contract_of(profile):
     return int(declared) if declared.isdigit() else CONTRACT
 
 
-def close_findings(result, front):
-    """At a task's delivery: the rows it names under `closes:` set to `done` in their findings.md."""
-    closed = []
-    for row_id in closes_of(front):
-        path, row = closed_rows(row_id)
-        if not path or row[6] != "open":
-            continue
-        lines = read_text(path).splitlines()
-        for index, line in enumerate(lines):
-            cells = findings_cells(line)
-            if cells and cells[0] == row[0]:
-                cells[-1] = "done"
-                lines[index] = "| " + " | ".join(cells) + " |"
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write("\n".join(lines) + "\n")
-        result.written.append(path)
-        closed.append(row_id)
-    if closed:
-        result.ok("findings", f"closed {', '.join(closed)} — set to done in their findings.md")
-
-
 def scenarios_of(body):
     """The criteria as a person reads them (WP-146), in the story's order: [{key, title, rule, happy, steps, text}] —
     `steps` the scenario's `[{word, text}]` (Given / When / Then / And / But), `text` the line form's criterion, `rule`
@@ -415,6 +372,8 @@ def gate_run(**fields):
     run.stamps = DecisionStampFiles(run.runs)
     run.describe = check_description(run.cwd, run.profile)
     run.runs_port = StageRunFiles(run.cwd, run.runs, run.profile)
+    run.delivery = StageDeliveryFiles(run.cwd, run.runs, run.profile)
+    run.close = lambda: close_record(run)
     run.story = stage_story(run.story_id, run.story_path, run.front, run.body, run.criteria)
     run.contract = ProfileChecks.contract_number(run.evidence)
     # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
@@ -541,17 +500,6 @@ def stale_red_proof(cwd, runs, story, start=None):
     return moved
 
 
-def record_red_tree(result, cwd, runs, story_id):
-    """At the test gate's pass: the tree as it is, when every mapped test was red in this run. A pass that let a test
-    through green — a back round after the build, a decision — has production code past the red state: the tree an
-    earlier pass recorded stays, since tidy's tests are laid over it anyway."""
-    if any(c == "tests-red" and st == "pass" and " is green now" in m for st, c, m in result.entries):
-        return
-    tree = git_tree(cwd)
-    if tree:
-        write_mark(runs, story_id, RED_TREE, tree)
-
-
 def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None, story=None):
     """Every question this story raised is recorded, and every answer it got has been applied (`DecisionChecks`): an
     answer applied is stamped in its record and becomes an `answered:` line of the story before it is said."""
@@ -584,20 +532,6 @@ def run_test_command(result, cwd, profile, key, command, required, strict=False,
     """A test command passes only when its reports show it executed tests and none failed. With `owner` (a story's
     whole suite) a red test outside the story runs again alone once."""
     judge_suite(result, suite_run(cwd, profile, key, command, owner), required, strict)
-
-
-def record_tests_baseline(cwd, runs, story_id):
-    """Write the baseline once per story; a later plan gate must not launder a change into it."""
-    path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
-    if os.path.isfile(path) or git(cwd, "rev-parse", "--git-dir")[0]:
-        return
-    files = test_files(cwd)
-    blobs = []
-    for rel in files:
-        code, blob = git(cwd, "hash-object", "-w", "--", rel)
-        if code == 0:
-            blobs.append(f"{blob}  {rel}")
-    write_mark(runs, story_id, TESTS_BASELINE, "\n".join(blobs))
 
 
 def check_main_tests(result, cwd, runs, story_id):
@@ -695,51 +629,6 @@ def parity(result, config_path):
     take(result, ChangeChecks.parity(parity_facts(config_path)))
 
 
-def acceptance_applies(cwd, runs, story_id, profile):
-    """Whether this story waits for a human before it is delivered (`AcceptanceRules.asks`)."""
-    mode = AcceptanceMode(acceptance_mode(profile))
-    browser = str(profile.get("browser", "none")).strip().lower() not in ("", "none")
-    end_user = False
-    if mode is AcceptanceMode.PAGES and browser:
-        with contextlib.suppress(GateError):
-            located = locate_tests(cwd, read_mapping(runs, story_id)[1])[0]
-            end_user = any((command_for(profile, path) or ("", ""))[0] == "e2eTest" for path in located.values())
-    return AcceptanceRules.asks(mode, Presence.PRESENT if browser else Presence.ABSENT,
-                                Presence.PRESENT if end_user else Presence.ABSENT) is Presence.PRESENT
-
-
-def ask_acceptance(cwd, runs, story_id, story_path, profile, criteria):
-    """Write the next acceptance record beside the story and return its id. The criteria it lists are the
-    ones accepted: a reopen after an acceptance compares the story against them."""
-    records = acceptance_records(cwd, story_id, story_path)
-    number = len(records) + 1
-    rid = f"{story_id}-accept-{number}"
-    try:
-        _path, mapping = read_mapping(runs, story_id)
-    except GateError:
-        mapping = {}
-    run = str(profile.get("run", "")).strip()
-    lines = [f"- {key}: {text}" + (f" — `{', '.join(mapping[key])}`" if mapping.get(key) else "")
-             for key, text in criteria]
-    store = decisions_store(story_path)
-    os.makedirs(store, exist_ok=True)
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    with open(os.path.join(store, f"accept-{number}.md"), "w", encoding="utf-8") as handle:
-        handle.write(
-            f"---\nid: {rid}\nstory: {story_id}\nstage: document\nkind: {ACCEPTANCE_KIND}\n"
-            f"asked: {stamp}\ndigest: {story_digest(story_path)}\n---\n\n"
-            f"# Accept {story_id}?\n\n## Question\n"
-            f"Every gate passed. Look at what the story delivers before it counts as delivered:\n\n"
-            + "\n".join(lines) + "\n\n"
-            + (f"Start the application with `{run}`.\n\n" if run else
-               "Start the application the way the project runs it (the profile names no `run:`).\n\n")
-            + "## Options\n"
-              "- accepted: the story is delivered.\n"
-              "- a correction: what should be different, written into the story (criteria and an "
-              "`answered:` line naming this record); the story runs again from plan.\n")
-    return rid
-
-
 class Result(Verdict):
     """A gate run's verdict, as the gate reports it."""
 
@@ -808,108 +697,6 @@ def hand_over_to_cli(argv):
         return 2
     completed = subprocess.run([sys.executable, cli, *argv])
     return completed.returncode
-
-
-@on_pass("plan")
-def _plan_passed(run):
-    if is_delivered(run.front):
-        # Delivered is delivered: a plan gate run over a delivered story (a check, a re-verification) leaves the
-        # story and the marks the delivery rests on as they are.
-        run.result.note("story", f"{run.story_id} is delivered — checked, its marks are left as they are")
-    else:
-        write_mark(run.runs, run.story_id, STORY_DIGEST, story_digest(run.story_path))
-        record_tests_baseline(run.cwd, run.runs, run.story_id)
-        plan = os.path.join(run.runs, run.story_id, "plan.md")
-        journal_signal(run.runs, run.story_id, "plan", open=len(plan_left_open(read_text(plan))) if os.path.isfile(plan) else 0)
-
-
-def record_flaky_findings(result, story_path, story_id, front, runs):
-    """WP-113: a test noted flaky in this story and in another one is a finding — a row of the project's own findings
-    (`<product>/findings/flaky.md`, WP-146: the flake belongs to no one story), open, for a task (`kind: task`,
-    `closes: flaky#<n>`) that fixes the flake instead of running it again for ever. One open row per test across the
-    backlog."""
-    mine = set(flaky_tests(runs, story_id)) | set(result.flaky)
-    root = evidence_dir(runs)
-    if not mine or not os.path.isdir(root):
-        return
-    others = {}
-    for other in sorted(os.listdir(root)):
-        if other != story_id and os.path.isdir(os.path.join(root, other)):
-            for test in flaky_tests(runs, other):
-                others.setdefault(Detail(test), []).append(StoryId(other))
-    open_rows = set()
-    with contextlib.suppress(GateError, OSError):
-        open_rows = {where for _s, where, _sev, _d, perspective, _f, _p in open_findings(place("epics"))
-                     if perspective == "flaky"}
-    added = [("flaky", f.test.value, "minor", f.defect.value, f.fix.value, f.plain.value)
-             for f in AcceptanceRules.flaky(StoryId(story_id), frozenset(Detail(t) for t in mine),
-                                            {t: tuple(s) for t, s in others.items()},
-                                            frozenset(Detail(w) for w in open_rows))]
-    if added:
-        path = project_findings_path(FLAKY_FINDINGS)
-        append_finding_rows(path, project_findings_head(FLAKY_FINDINGS), added)
-        result.written.append(path)
-        result.ok("findings", f"{len(added)} flaky test(s) noted in two stories kept as a finding in "
-                              f"{shown(path)}: {', '.join(r[1] for r in added)}")
-
-
-@on_pass("test")
-def _test_passed(run):
-    if run.kind == "story" and not is_delivered(run.front):
-        record_red_tree(run.result, run.cwd, run.runs, run.story_id)
-
-
-@on_pass("document")
-def _document_passed(run):
-    result, story_id, story_path = run.result, run.story_id, run.story_path
-    if is_delivered(run.front):
-        # Delivered is delivered: a document gate run over a delivered story checks it and leaves the story's
-        # `delivered:` date as it is.
-        result.note("story", f"{story_id} is delivered — checked, its marks are left as they are")
-        return
-    try:
-        if run.kind != "task" and acceptance_applies(run.cwd, run.runs, story_id, run.profile):
-            verdict, rid = acceptance_state(run.cwd, story_id, story_path)
-            step = AcceptanceRules.at_delivery(Acceptance(AcceptanceVerdict(verdict), RecordId(rid) if rid else None))
-            take(result, step.findings)
-            if step.ask is Presence.PRESENT:
-                asked = ask_acceptance(run.cwd, run.runs, story_id, story_path, run.profile, run.criteria)
-                take(result, AcceptanceRules.asked(Detail(asked), Detail(shown(record_path(story_id, asked, story_path)))))
-            if step.goes_on is Presence.ABSENT:
-                return
-    except GateError as error:
-        result.fail("acceptance", str(error))
-        return
-    if result.failed:
-        return
-    if in_worktree():
-        # In its worktree a story is delivered when its code is on the main line: the integrate step merges it,
-        # holds it to the gate once more, and the integrate gate writes the delivery.
-        result.ok("integrate", f"every check passed — {story_id} is delivered once its worktree is integrated "
-                               f"into the main checkout (the runner's integrate step)")
-        return
-    deliver(result, story_path, story_id, run.front, run.runs)
-
-
-@on_pass("adopt")
-def _adopt_passed(run):
-    if is_delivered(run.front):
-        return
-    if in_worktree():
-        run.result.ok("integrate", f"every check passed — {run.story_id} is adopted once its tests are integrated "
-                                   f"into the main checkout (the runner's integrate step)")
-        return
-    deliver(run.result, run.story_path, run.story_id, run.front, run.runs)
-
-
-@on_pass("integrate")
-def _integrate_passed(run):
-    config = claim_config_here(factory_home() or run.cwd)
-    if config:
-        publish_story(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs, config)
-    else:
-        integrate_into_home(run.result, run.cwd, run.story_path, run.story_id, run.front, run.runs,
-                            close=lambda: close_record(run))
 
 
 def main(argv):
@@ -1063,76 +850,6 @@ def main(argv):
     return journal_gate(result, args, story_id, story_path, result.report(story_id, args.stage, args.json, args.brief))
 
 
-def integrate_into_home(result, cwd, story_path, story_id, front, runs, close=None):
-    """Every check holds on the integrated tree: the main checkout takes the story's commit — a fast-forward of
-    its branch, nothing else — and the story is delivered. A main checkout on another branch, or with changes
-    of its own in a file the commit touches, does not take it: refused (`checkout`), the person decides."""
-    home, target = factory_home(), integration_target(runs, story_id)
-    on = git(home, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip()
-    if on != target:
-        result.fail("checkout", f"the main checkout is on {on or 'a detached HEAD'}, the story integrates into "
-                                f"{target} — switch back, then `factory.sh run --story {story_id} --from integrate`")
-        return
-    head = git(cwd, "rev-parse", "HEAD")[1].strip()
-    done = subprocess.run(["git", "merge", "--ff-only", "--quiet", head], cwd=home, capture_output=True, text=True,
-                          encoding="utf-8", errors="replace")
-    if done.returncode != 0 and git(home, "merge-base", "--is-ancestor", "HEAD", head)[0] != 0:
-        # The main line moved between the merge and here — a person's commit, another story integrated: the
-        # integrate step merges it again and holds the story to the gate once more, as for a target moved earlier.
-        result.fail("moved", f"{target} moved on while the story was held to the gate — the integrate step merges "
-                             f"again")
-        return
-    if done.returncode != 0:
-        result.fail("checkout", f"the main checkout could not take the story's commit: "
-                                f"{(done.stderr or done.stdout).strip().splitlines()[0] if (done.stderr or done.stdout).strip() else 'git refused'}"
-                                f" — commit or stash what is in the way there, then "
-                                f"`factory.sh run --story {story_id} --from integrate`")
-        return
-    result.ok("integrated", f"{target} took the story's commit {head[:12]}")
-    deliver(result, story_path, story_id, front, runs)
-    if not result.failed:
-        commit_delivery(result, home, story_id, front, close)
-
-
-def story_journals(home):
-    """The story journals a commit takes along — every one git does not ignore (WP-150: the journal is the record,
-    committed): what a delivery and a request wrote into them goes with what they wrote."""
-    found = []
-    for journal in sorted(glob.glob(os.path.join(home, evidence_rel(), "*", JOURNAL))):
-        rel = os.path.relpath(journal, home).replace("\\", "/")
-        if git(home, "check-ignore", "-q", "--", rel)[0] != 0:
-            found.append(rel)
-    return found
-
-
-def commit_delivery(result, home, story_id, front, close=None):
-    """What the delivery wrote on the main line — the story's folder (its state, decisions, findings) and the spec
-    it merged — committed there beside the story's commit, so the next story's worktree starts from it. Only those
-    paths: what else the main checkout holds, staged or not, stays as it is. `close` writes the delivery's own last
-    events first: the commit carries the story's whole record, and nothing of the delivery is written after it."""
-    if close:
-        close()
-    paths = []
-    for path in dict.fromkeys(result.written):
-        rel = os.path.relpath(os.path.abspath(path), home).replace("\\", "/")
-        if not rel.startswith("../") and (os.path.exists(os.path.join(home, rel)) or git(home, "ls-files", "--", rel)[1]):
-            paths.append(rel)
-    paths += story_journals(home)
-    if not paths:
-        return
-    git(home, "add", "-A", "--", *paths)
-    if git(home, "diff", "--cached", "--quiet", "HEAD", "--", *paths)[0] == 0:
-        return
-    scope = re.sub(r"[^a-z0-9]+", "-", str(front.get("context", "")).lower()).strip("-") or "story"
-    done = git(home, *git_identity(home), "commit", "--no-verify", "--quiet", "-m",
-               f"chore({scope}): deliver {story_id}\n\nStory: {story_id}\n", "--", *paths)
-    if done[0] != 0:
-        result.fail("committed", f"the delivery's files could not be committed on the main line: {done[1][:300]} — "
-                                 f"commit {', '.join(paths)} by hand")
-        return
-    result.ok("committed", f"the delivery's files committed on the main line: {', '.join(paths)}")
-
-
 def check_spec_delta(result, cwd, runs, story_id, story_path, front, body):
     """The plan's spec delta against the story and the spec (`SpecChecks.delta`)."""
     story = stage_story(story_id, story_path, front, body, ())
@@ -1143,137 +860,6 @@ def check_spec_tests(result, cwd, runs, story_id, front, mapping):
     """Every test the story's spec names is still there (`SpecChecks.tests`)."""
     take(result, SpecChecks.tests(stage_story(story_id, "", front, "", ()), table_tests(mapping),
                                   StageEvidenceFiles(cwd, runs, place("epics"), {})))
-
-
-def merge_spec(result, story_path, story_id, front, runs):
-    """The delivering gate's merge (WP-98, WP-105): the story's delta into its context's spec, by key, with the test
-    lines from tests.md — the story's criteria into its feature's file, a moved one out of the file it stood in, a
-    removed one gone wherever it stood; a feature file left without a criterion goes. Deterministic, nothing a stage
-    writes. The story is history from here on."""
-    _front, body = read_front_matter(story_path)
-    target, spec, _features, feature = story_spec(front)
-    if not target:
-        return
-    plan = os.path.join(runs, story_id, "plan.md")
-    delta = read_delta(read_text(plan)) if os.path.isfile(plan) else read_delta("")
-    try:
-        mapping = read_mapping(runs, story_id)[1]
-    except GateError:
-        mapping = {}
-    tests = dict(mapping)
-    for key, selectors in moved_tests(runs, story_id).items():
-        tests.setdefault(key, selectors)        # a criterion of the story keeps the test its mapping names
-    story = story_entries(body)
-    context = str(front.get("context", "")).strip()
-    journey = story_kind(front) == "journey"
-    merged = {"": merge(spec, story, delta, tests)} if journey else merge_context(spec, story, delta, tests, feature)
-    for entries in merged.values():
-        for item in entries:
-            if item["key"] in tests and item["key"] not in {s["key"] for s in story}:
-                item["tests"] = tests[item["key"]]
-    if not journey:
-        # The spec as it will stand, checked before a line is written: a delivery never leaves it malformed.
-        texts = {name: render_spec(read_spec(scenarios_path(context, name))[0], entries,
-                                   f"{context} — {name}" if name else context)
-                 for name, entries in merged.items() if entries or not name}
-        problems = lint_context(context, texts)
-        if problems:
-            result.fail("spec", f"the spec after this story would not hold its shape: {'; '.join(problems[:6])}"
-                                + (" …" if len(problems) > 6 else "") + " — nothing written")
-            return False
-    written = []
-    for name, entries in sorted(merged.items()):
-        path = target if journey else scenarios_path(context, name)
-        if not entries and name:
-            if os.path.isfile(path):
-                os.remove(path)
-                with contextlib.suppress(OSError):
-                    os.rmdir(os.path.dirname(path))
-                written.append(f"{shown(path)} (gone — no criterion left)")
-                result.written.append(path)
-            continue
-        if not entries and not os.path.isfile(path):
-            continue
-        preamble = read_spec(path)[0]
-        title = "Journeys" if journey else f"{context} — {name}" if name else context or "Spec"
-        text = render_spec(preamble, entries, title)
-        if not os.path.isfile(path) or read_text(path) != text:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as handle:
-                handle.write(text)
-            written.append(shown(path))
-            result.written.append(path)
-    found = derived(story, spec)
-    result.ok("spec", f"{', '.join(written) or shown(target)}: {sum(v == 'adds' for v in found.values())} added, "
-                      f"{sum(v == 'changes' for v in found.values())} changed, {len(delta['removes'])} removed"
-                      + (f", {len(delta['moves'])} moved" if delta["moves"] else "")
-                      + (f", {len(delta['renames'])} rule(s) renamed" if delta["renames"] else ""))
-
-
-def publish_story(result, cwd, story_path, story_id, front, runs, config):
-    """WP-93 D: the factory never moves `main`. The delivering function writes into the story's worktree — the story's
-    three state lines and the merge into the spec —, the squashed commit takes them, and the story branch is pushed
-    with a lease on what this factory pushed last: only its own claim can be overwritten. A person merges it; the
-    remote main line then says delivered for every factory."""
-    home = factory_home() or cwd
-    rel_story = os.path.relpath(story_path, home)
-    local_story = os.path.join(cwd, rel_story)
-    spec_rel = os.path.relpath(place("spec") if os.path.isabs(place("spec")) else os.path.join(home, place("spec")), home)
-    with places_in(cwd):
-        before = read_front_matter(local_story)[0]
-        mark = os.path.join(evidence_dir(runs, story_id), "published-status")
-        with open(mark, "w", encoding="utf-8") as handle:
-            handle.write(str(before.get("status", "")).strip() + "\n")
-        deliver(result, local_story, story_id, before, runs)
-    git(cwd, "add", "-A", "--", spec_rel, os.path.dirname(rel_story))
-    if git(cwd, *(["-c", "user.name=dca-factory", "-c", "user.email=dca-factory@localhost"]
-                  if not git(cwd, "config", "user.email")[1].strip() else []),
-           "commit", "--amend", "--no-edit", "--no-verify", "--quiet")[0] != 0:
-        result.fail("published", f"the delivery could not be added to {story_id}'s commit")
-        return
-    remote, prefix = config["remote"], config["prefix"]
-    ref = f"refs/heads/{prefix}{story_id}"
-    known = git(cwd, "rev-parse", "--verify", "--quiet", f"refs/remotes/{remote}/{prefix}{story_id}")
-    lease = f"--force-with-lease={ref}:{known[1].strip()}" if known[0] == 0 else f"--force-with-lease={ref}:"
-    code, out = git(cwd, "push", "--porcelain", lease, remote, f"HEAD:{ref}")
-    if code != 0:
-        result.fail("published", f"{remote} refused {prefix}{story_id}: {' '.join(out.split())[:300]} — another "
-                                 f"factory's commit is there, or a branch rule; needs-human")
-        return
-    head = git(cwd, "rev-parse", "HEAD")[1].strip()
-    with open(os.path.join(evidence_dir(runs, story_id), PUBLISHED), "w", encoding="utf-8") as handle:
-        handle.write(head + "\n")
-    result.ok("published", f"{prefix}{story_id} on {remote} carries the story as one commit {head[:12]} — delivered on "
-                           f"its branch; `main` is not moved: a person merges it (merge request or push)")
-
-
-def deliver(result, story_path, story_id, front, runs):
-    """The one write a delivering gate makes into a story — the document gate, the adopt gate and, in a story's
-    worktree, the integrate gate all call it. One end state: built or adopted, the story reads `status:
-    delivered`, `delivered:` and `delivered_by: gate`; an adopted story is no longer `adopted` (that was its
-    input: "the code exists, check it"). The judge's confirmed defects that did not block are kept beside it."""
-    if story_kind(front) == "task":
-        close_findings(result, front)
-    elif merge_spec(result, story_path, story_id, front, runs) is False:
-        return
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    story = StoryFiles.read(story_path)
-    story.deliver_by_gate(Moment(stamp))
-    StoryFiles.write(story_path, story)
-    result.written.append(story_folder(story_path))
-    result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
-                           f"`delivered_by: gate`")
-    added, open_now = record_findings(story_path, story_id, front, runs)
-    if added or open_now:
-        result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "
-                              f"{open_now} open there")
-    record_flaky_findings(result, story_path, story_id, front, runs)
-    judge = os.path.join(runs, story_id, "judge.md")
-    unworded = [r[1] for r in confirmed_defects(read_text(judge)) if not r[5]] if os.path.isfile(judge) else []
-    if unworded:
-        result.note("findings", f"{len(unworded)} confirmed defect(s) in judge.md without `{PLAIN_COLUMN}` "
-                                f"({', '.join(unworded[:3])}{' …' if len(unworded) > 3 else ''}) — the one sentence a "
-                                f"person reads first; Decide shows the reviewer's `Defect` in its place")
 
 
 def close_record(run):

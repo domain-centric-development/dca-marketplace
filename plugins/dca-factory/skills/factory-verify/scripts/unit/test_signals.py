@@ -44,7 +44,7 @@ class Signals(unittest.TestCase):
         records = [record("question", "applied", "b"), record("question", "open"),
                    record("acceptance", "answered", "accepted")]
         self.assertIsNone(gate.story_signals(self.runs, "S-1", records, BODY)["plan_open"])
-        journal_signals.journal_signal(self.runs, "S-1", "plan", open=len(gate.plan_left_open(PLAN)))
+        journal_signals.journal_signal(self.runs, "S-1", "plan", open=len(journal_signals.plan_left_open(PLAN)))
         signals = gate.story_signals(self.runs, "S-1", records, BODY)
         self.assertEqual((signals["asked"], signals["answered"]), (2, 1))
         self.assertEqual((signals["assumptions_open"], signals["assumptions_answered"], signals["plan_open"]), (1, 2, 1))

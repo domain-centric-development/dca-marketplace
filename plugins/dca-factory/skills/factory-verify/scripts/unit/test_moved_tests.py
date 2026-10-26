@@ -9,6 +9,7 @@ from dca_factory import gate
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 from dca_factory.delivery.adapter.outgoing.files import test_files
+from dca_factory.delivery.adapter.outgoing.files import delivery_writes
 
 STORY = """---
 id: S-1
@@ -81,7 +82,7 @@ class MovedTests(unittest.TestCase):
     def test_the_storys_criterion_keeps_its_mapped_test_at_delivery(self):
         with project() as p:
             path, front, _body = self.setup(p, "com.example.WidgetPageTest#showsTheName")
-            gate.merge_spec(gate.Result(), path, "S-1", front, p.runs)
+            delivery_writes.merge_spec(gate.Result(), path, "S-1", front, p.runs)
             with open(os.path.join(p.root, "product", "spec", "widgets", "scenarios.md"), encoding="utf-8") as handle:
                 text = handle.read()
             self.assertIn("Test: com.example.WidgetPortTest#showsTheNameInBold", text)

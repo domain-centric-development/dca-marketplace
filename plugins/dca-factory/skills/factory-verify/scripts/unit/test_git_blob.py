@@ -9,6 +9,7 @@ import unittest
 from support import state, write
 from dca_factory import contract, gate
 from dca_factory.delivery.adapter.outgoing.git import repository
+from dca_factory.delivery.adapter.outgoing.files import delivery_writes
 
 TEST = "src/test/java/com/example/ShopTest.java"
 INDENTED = "    package com.example;\nclass ShopTest {\n  @Test void opens() { assertTrue(shop.open()); }\n}\n"
@@ -37,7 +38,7 @@ class GitBlob(unittest.TestCase):
         self.assertNotEqual(repository.git_blob(self.root, "HEAD:nothing.txt")[0], 0)
 
     def test_a_test_whose_first_line_is_indented_and_unchanged_is_kept(self):
-        gate.record_tests_baseline(self.root, self.runs, "STORY-1")
+        delivery_writes.record_tests_baseline(self.root, self.runs, "STORY-1")
         result = gate.Result()
         gate.check_existing_tests(result, self.root, self.runs, "STORY-1")
         self.assertEqual([(verdict, check) for verdict, check, _m in result.entries], [("pass", "tests-kept")])

@@ -12,6 +12,7 @@ from dca_factory import gate
 from dca_factory.delivery.adapter.outgoing.files import snapshots
 from dca_factory.delivery.adapter.outgoing.files import kept_files as gate_kept
 from dca_factory.delivery.adapter.outgoing.git import integration
+from dca_factory.delivery.adapter.outgoing.files import delivery_writes
 
 
 def git(cwd, *args):
@@ -56,7 +57,7 @@ class BaseAfterMerge(unittest.TestCase):
         old = git(self.root, "rev-parse", "HEAD^{tree}")
         os.makedirs(evidence_dir(self.runs, story))
         write(os.path.join(self.root, "Untracked_test.py"), "def test_a(): pass\n")
-        gate.record_tests_baseline(self.root, self.runs, story)
+        delivery_writes.record_tests_baseline(self.root, self.runs, story)
         before = baseline(self.runs, story)
         self.assertIn("Untracked_test.py", before)
         # the main line changes one test, removes one, adds one

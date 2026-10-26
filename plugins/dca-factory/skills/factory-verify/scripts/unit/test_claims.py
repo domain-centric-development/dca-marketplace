@@ -19,6 +19,7 @@ from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as m
 from dca_factory.delivery.adapter.outgoing.git import worktrees
 from dca_factory.delivery.adapter.outgoing.files import snapshots
 from dca_factory.delivery.adapter.outgoing.claims import remote_claims
+from dca_factory.delivery.adapter.outgoing.files import delivery_writes
 
 PROFILE = "claim_remote: origin\n"
 EPIC = "---\nintent: x\ngoal: y\nmetric: ThingShown\ndomain_contact: z\n---\n# sample\n"
@@ -213,7 +214,7 @@ class Published(unittest.TestCase):
             front = markdown.read_front_matter(layout.find_story(epics, "S-01"))[0]
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: a}):
                 os.chdir(wt)
-                gate.publish_story(result, wt, layout.find_story(epics, "S-01"), "S-01", front, runs, CONFIG)
+                delivery_writes.publish_story(result, wt, layout.find_story(epics, "S-01"), "S-01", front, runs, CONFIG)
                 os.chdir(a)
             self.assertFalse([e for e in result.entries if e[0] == "fail"], result.entries)
             published = sh(a, "show", "origin/story/S-01:product/epics/sample/S-01/story.md")
@@ -249,7 +250,7 @@ class Published(unittest.TestCase):
         front = markdown.read_front_matter(layout.find_story(epics, story))[0]
         with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: clone}):
             os.chdir(wt)
-            gate.publish_story(result, wt, layout.find_story(epics, story), story, front, runs, CONFIG)
+            delivery_writes.publish_story(result, wt, layout.find_story(epics, story), story, front, runs, CONFIG)
             os.chdir(clone)
         self.assertFalse([e for e in result.entries if e[0] == "fail"], result.entries)
         return runs, epics, wt
