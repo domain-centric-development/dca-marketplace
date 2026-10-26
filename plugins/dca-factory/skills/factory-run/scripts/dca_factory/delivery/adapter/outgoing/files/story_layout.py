@@ -13,6 +13,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import (
     MarkdownError as GateError, read_front_matter, read_text, split_front)
 from .....sharedkernel.adapter.outgoing.profile.profile_files import shown
 from ....application.shared.front import CREATED_KEY
+from ....domain.model.story import KindWord, StoryStatus
 
 #: The epic is `<epics>/<epic>/epic.md` beside its story folders — one shape for both, a folder and its file.
 EPIC_FILE = "epic.md"
@@ -175,12 +176,9 @@ def story_kind(front: typing.Mapping[str, typing.Any]) -> str:
     judge and document, green at its test gate —, `task` — a change no actor sees, run as plan, build, tidy, judge
     and document on the existing suite — or `adopt`: a story with `status: adopted` describes behaviour the project
     already has; plan, test and judge map it to green tests, the adopt gate delivers it."""
-    named = str(front.get("kind", "")).strip().lower()
-    if named in ("journey", "task"):
-        return named
-    if str(front.get("status", "")).strip().lower() == "adopted":
-        return "adopt"
-    return "story"
+    status = str(front.get("status", "")).strip().lower()
+    known = next((s for s in StoryStatus if s.value == status), StoryStatus.OTHER)
+    return KindWord(str(front.get("kind") or "")).kind(known).value
 
 
 def depends_on(front: typing.Mapping[str, typing.Any]) -> typing.List[str]:

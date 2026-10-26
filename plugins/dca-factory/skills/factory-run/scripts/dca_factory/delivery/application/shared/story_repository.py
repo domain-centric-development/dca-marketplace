@@ -25,6 +25,10 @@ class StoryRepository(Repository[Story, StoryId], typing.Protocol):
         """Every story of the epic, in the order of its folders."""
         ...
 
+    def path_of(self, story_id: StoryId) -> str:
+        """Where the story's file is; StoryNotFound with the reason where no single story has the id."""
+        ...
+
     def ids(self) -> typing.Sequence[StoryId]:
         """Every story's id under the epics, in the order of their files."""
         ...

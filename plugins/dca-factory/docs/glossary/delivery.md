@@ -234,6 +234,16 @@ reviews, layout) — a round spent with the work right —, else `substance`.
 
 **Type:** Value Object
 
+### Kind word (KindWord)
+
+**Definition:** A story's `kind:` as written, and what the story is by it: `journey` — a guard over an epic's
+delivered stories —, `task` — a change no actor sees —, an adoption where the story's status is `adopted` —
+behaviour the project already has —, else a story. The kind decides the stages it runs.
+
+**Type:** Value Object
+
+**Operations:** kind (`kind`)
+
 ---
 
 ## Concepts

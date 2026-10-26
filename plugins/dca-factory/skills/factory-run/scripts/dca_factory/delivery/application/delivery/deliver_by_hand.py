@@ -26,10 +26,11 @@ class DeliverByHandCommand:
 
 @dataclasses.dataclass(frozen=True)
 class DeliveredByHand:
-    """Delivered, claimed; the new criteria taken into the spec unproven."""
+    """Delivered, claimed; the new criteria taken into the spec unproven; where the story's file is."""
 
     delivery: Delivery
     unproven: SpecChange
+    where: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -77,4 +78,4 @@ class DeliverByHandUseCase:
         if changing.keys:
             return ChangesWhatHolds(changing)
         self._stories.save(story)
-        return DeliveredByHand(delivery, self._spec.take_unproven(story.id))
+        return DeliveredByHand(delivery, self._spec.take_unproven(story.id), self._stories.path_of(story.id))

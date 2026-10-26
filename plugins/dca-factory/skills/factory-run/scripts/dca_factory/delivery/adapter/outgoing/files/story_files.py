@@ -15,7 +15,8 @@ from .owned_files import write_story_fields
 from ....application.shared.requests import ID_WORD
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.epic import EpicId
-from ....domain.model.story import Assumption, DeliveredBy, DeliveredOn, Delivery, Story, StoryId, StoryStatus
+from ....domain.model.story import (
+    Assumption, DeliveredBy, DeliveredOn, Delivery, KindWord, Story, StoryId, StoryStatus)
 from .epic_files import epic_dir
 from .request_files import write_atomic
 
@@ -116,4 +117,4 @@ class StoryFiles:
         on, by = delivered_on(front), delivered_by(front)
         delivery = Delivery(DeliveredOn(on), DeliveredBy(by)) if on or by else None
         return Story(StoryId(story_id_of(path, front)), EpicId(os.path.basename(epic_folder(path))),
-                     status_of(front.get("status")), assumptions, delivery)
+                     status_of(front.get("status")), assumptions, delivery, KindWord(str(front.get("kind") or "")))

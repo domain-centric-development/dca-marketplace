@@ -54,9 +54,6 @@ from .contract import CONTRACT, VERSION
 from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_rel, location, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
-from .delivery.adapter.outgoing.files.story_layout import find_story, story_kind
-from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
-from .delivery.adapter.outgoing.tools.streams import usage_from
 from .infrastructure.schedule import schedule_data, start_of
 from .infrastructure.profile import ask_profile
 from .delivery.application.profile.ask_profile import AskProfileQuery, Question
@@ -64,7 +61,6 @@ from .delivery.adapter.outgoing.claims.remote_claims import (
     claim_config_here, free_id, refresh_claims, release_claim)
 from .delivery.adapter.outgoing.files.story_record import ignore_journals_in
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
-from .delivery.adapter.outgoing.tools.agents import TOOL, unprobed_flags
 from .delivery.application.status import actions
 from .delivery.application.status.actions import offered
 from .delivery.application.status.show_status import ShowStatusQuery
@@ -101,6 +97,11 @@ from .delivery.application.status.show_refusals import ShowRefusalsQuery
 from .delivery.application.status.show_journal_story import ShowJournalStoryQuery
 from .delivery.application.cost.show_spent import ShowSpentQuery
 from .delivery.application.status.list_findings import ListFindingsQuery
+from .delivery.application.delivery.show_story_kind import ShowStoryKindQuery
+from .delivery.application.delivery.probe_tool import Probed, ProbeToolQuery
+from .delivery.application.cost.read_tool_usage import ReadToolUsageQuery
+from .delivery.application.delivery.show_hand_over_contract import ShowHandOverContractQuery
+from .delivery.application.delivery.write_skeleton import Skeleton, WriteSkeletonCommand
 from .delivery.application.session.open_work_window import OpenWorkWindowCommand
 from .delivery.application.session.close_work_window import CloseWorkWindowCommand
 from .delivery.application.session.start_session_stage import StartSessionStageCommand
@@ -119,7 +120,6 @@ from .delivery.application.delivery.show_spec_delta import ShowSpecDeltaQuery
 from .delivery.application.delivery.take_back_delivery import TakeBackDeliveryCommand
 from .delivery.adapter.outgoing.process import factory_process
 from .web import service as web
-from .delivery.adapter.outgoing.files.skeletons import contract_text, document_skeleton, files_skeleton, plan_skeleton
 from .delivery.adapter.outgoing.git.worktree_steps import (
     integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
 from .delivery.adapter.outgoing.files.migrations import migrate_layout
@@ -584,7 +584,7 @@ def deliver_by_hand(cwd, runs, epics, story_id, who, force=False):
     if result.unproven.keys:
         print(f"deliver-by-hand: {len(result.unproven.keys)} criterion(s) into {shown(result.unproven.where)}, without "
               f"a test line — unproven until `--prove`")
-    print(f"deliver-by-hand: {shown(find_story(epics, story_id))} carries `status: delivered`, `delivered: {stamp}`, "
+    print(f"deliver-by-hand: {shown(result.where)} carries `status: delivered`, `delivered: {stamp}`, "
           f"`delivered_by: hand:{who}` — delivered, claimed. Commit it with the trailer `Story: {story_id}`; "
           f"`factory-cli.py --prove {story_id}` turns the claim into proof.")
     return 0
@@ -1016,7 +1016,7 @@ def main(argv):
     parser.add_argument("--window", choices=tuple(SHARED_WINDOWS), help="with --stages: the stages that shared process carries")
     parser.add_argument("--shell", action="store_true", help="with --stages: the stage and the tool table as bash "
                                                                 "assignments")
-    parser.add_argument("--tool-probe", metavar="TOOL", choices=tuple(TOOL),
+    parser.add_argument("--tool-probe", metavar="TOOL",
                         help="the flags of the tool's record its binary's help does not name: one a stage needs "
                              "(exit 1), an isolation flag only (named, exit 0), none (exit 0), no binary (exit 3)")
     parser.add_argument("--place", metavar="KEY",
@@ -1068,16 +1068,18 @@ def main(argv):
     args.epics, args.runs = place("epics"), place("runs")
     # the runner's questions first: they read one file and print one answer
     if args.tool_probe:
-        tool = TOOL[args.tool_probe]
-        probed = unprobed_flags(tool)
-        if probed is None:
-            print(f"{tool.name}: no binary `{tool.help[0]}` on the PATH — not probed")
+        name = args.tool_probe
+        probe = wiring.probe_tool().execute(ProbeToolQuery(name))
+        if probe.outcome is Probed.UNKNOWN:
+            parser.error(f"--tool-probe takes one of {', '.join(probe.known)}, not {name!r}")
+        if probe.outcome is Probed.NOT_INSTALLED or not probe.found:
+            print(f"{name}: no binary `{probe.binary}` on the PATH — not probed")
             return 3
-        required, isolation = probed
-        print(f"{tool.name}: " + (f"the help does not name {', '.join(required)} — a stage started with it fails"
-                                   if required else "every flag a stage needs is in the help"))
+        required, isolation = probe.found.required, probe.found.isolation
+        print(f"{name}: " + (f"the help does not name {', '.join(required)} — a stage started with it fails"
+                             if required else "every flag a stage needs is in the help"))
         if isolation:
-            print(f"{tool.name}: no {', '.join(isolation)} in this binary — its stages run with the tool's own setup")
+            print(f"{name}: no {', '.join(isolation)} in this binary — its stages run with the tool's own setup")
         return 1 if required else 0
     if args.stages:
         if args.shell:
@@ -1087,18 +1089,20 @@ def main(argv):
         print(" ".join(stage_names(args.window, args.every)))
         return 0
     if args.contract:
-        text = contract_text(args.contract, args.runs)
+        text = wiring.show_hand_over_contract(cwd, args.runs).execute(ShowHandOverContractQuery(args.contract))
         if text is None:
             print(f"factory-cli: --contract takes one of {', '.join(STAGE_ORDER)}, review or glossary, not {args.contract!r}", file=sys.stderr)
             return 2
         print(text)
         return 0
     if args.files_skeleton:
-        return files_skeleton(args.runs, args.files_skeleton[0], args.files_skeleton[1], cwd)
+        return wiring.write_skeleton(cwd, args.runs).execute(
+            WriteSkeletonCommand(Skeleton.FILES, args.files_skeleton[0], args.files_skeleton[1]))
     if args.plan_skeleton:
-        return plan_skeleton(args.runs, args.plan_skeleton, cwd)
+        return wiring.write_skeleton(cwd, args.runs).execute(WriteSkeletonCommand(Skeleton.PLAN, args.plan_skeleton))
     if args.document_skeleton:
-        return document_skeleton(args.runs, args.document_skeleton, cwd)
+        return wiring.write_skeleton(cwd, args.runs).execute(
+            WriteSkeletonCommand(Skeleton.DOCUMENT, args.document_skeleton))
     if args.migrate_layout:
         return migrate_layout(cwd)
     if args.place:
@@ -1140,7 +1144,7 @@ def main(argv):
     if args.kind:
         if not args.story:
             parser.error("--kind needs --story")
-        print(story_kind(read_front_matter(find_story(args.epics, args.story))[0]))
+        print(wiring.show_story_kind(cwd).execute(ShowStoryKindQuery(StoryId(args.story))).value)
         return 0
     if args.resolve is not None:
         return resolve(args.epics, args.resolve)
@@ -1243,7 +1247,9 @@ def main(argv):
     if args.journal_line:
         return wiring.append_journal(cwd, args.runs).execute(AppendJournalCommand(args.journal_line, sys.stdin.read()))
     if args.usage_from:
-        return usage_from(args.usage_from[0], args.usage_from[1], args.usage_model)
+        print("\n".join(wiring.read_tool_usage().execute(
+            ReadToolUsageQuery(args.usage_from[0], args.usage_from[1], args.usage_model))))
+        return 0
     if args.usage:
         return usage_report(args.runs, args.story, args.total, cwd, args.epics, args.format)
     parser.error("nothing asked — --status, --schedule, --usage, --list-decisions, … (a stage's gate is story-gate.py's)")

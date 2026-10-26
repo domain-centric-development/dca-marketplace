@@ -9,6 +9,7 @@ from ....building_blocks import AggregateRoot, DomainException, Id, Value
 from .epic import EpicId
 from .moment import Moment
 from .person import Person
+from .stage import StoryKind
 
 
 class StoryId(Id):
@@ -28,6 +29,22 @@ class StoryStatus(enum.Enum):
     ADOPTED = "adopted"
     #: no `status:`, or one this release does not know — read as written, never released by the factory
     OTHER = ""
+
+
+class KindWord(Value):
+    """A story's `kind:` as written — `journey`, `task`, or nothing."""
+
+    value: str
+
+    def kind(self, status: StoryStatus) -> StoryKind:
+        """What the story is: a `journey` — a guard over an epic's delivered stories —, a `task` — a change no actor
+        sees —, an adoption where its status is `adopted` — behaviour the project already has —, else a story."""
+        named = self.value.strip().lower()
+        if named == StoryKind.JOURNEY.value:
+            return StoryKind.JOURNEY
+        if named == StoryKind.TASK.value:
+            return StoryKind.TASK
+        return StoryKind.ADOPT if status is StoryStatus.ADOPTED else StoryKind.STORY
 
 
 class Assumption(Value):
@@ -120,8 +137,10 @@ class Story(AggregateRoot[StoryId]):
     prove a claimed delivery, or — built by a person — delivered by hand."""
 
     def __init__(self, story_id: StoryId, epic: EpicId, status: StoryStatus,
-                 assumptions: typing.Sequence[Assumption] = (), delivery: typing.Optional[Delivery] = None) -> None:
+                 assumptions: typing.Sequence[Assumption] = (), delivery: typing.Optional[Delivery] = None,
+                 named_kind: KindWord = KindWord("")) -> None:
         super().__init__()
+        self._named_kind = named_kind
         self._id = story_id
         self._epic = epic
         self._status = status
@@ -143,6 +162,10 @@ class Story(AggregateRoot[StoryId]):
     @property
     def delivery(self) -> typing.Optional[Delivery]:
         return self._delivery
+
+    @property
+    def kind(self) -> StoryKind:
+        return self._named_kind.kind(self._status)
 
     @property
     def assumptions(self) -> typing.Tuple[Assumption, ...]:

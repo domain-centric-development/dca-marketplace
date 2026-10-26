@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
+from ..delivery.adapter.outgoing.tools.tool_binary_files import ToolBinaryFiles
 from ..delivery.adapter.outgoing.claims.checkout_files import CheckoutFiles
+from ..delivery.adapter.outgoing.files.hand_over_skeleton_files import HandOverSkeletonFiles
 from ..delivery.adapter.outgoing.files.session_mark_files import SessionMarkFiles
 from ..delivery.adapter.outgoing.claims.story_claims import RemoteStoryClaims
 from ..delivery.adapter.outgoing.files.stage_output_files import StageOutputFiles
@@ -28,6 +30,11 @@ from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
 from ..delivery.adapter.outgoing.spec.spec_delta_files import SpecDeltaFiles
 from ..delivery.adapter.outgoing.git.published_branches import PublishedBranchFiles
+from ..delivery.application.cost.read_tool_usage import ReadToolUsageUseCase
+from ..delivery.application.delivery.probe_tool import ProbeToolUseCase
+from ..delivery.application.delivery.show_hand_over_contract import ShowHandOverContractUseCase
+from ..delivery.application.delivery.write_skeleton import WriteSkeletonUseCase
+from ..delivery.application.delivery.show_story_kind import ShowStoryKindUseCase
 from ..delivery.application.session.open_work_window import OpenWorkWindowUseCase
 from ..delivery.application.session.close_work_window import CloseWorkWindowUseCase
 from ..delivery.application.session.start_session_stage import StartSessionStageUseCase
@@ -237,3 +244,23 @@ def give_checkout_back(cwd: str, runs: str) -> GiveCheckoutBackUseCase:
 
 def mark_listening(cwd: str, runs: str) -> MarkListeningUseCase:
     return MarkListeningUseCase(CheckoutFiles(cwd, runs))
+
+
+def show_story_kind(cwd: str) -> ShowStoryKindUseCase:
+    return ShowStoryKindUseCase(StoryFiles(cwd))
+
+
+def write_skeleton(cwd: str, runs: str) -> WriteSkeletonUseCase:
+    return WriteSkeletonUseCase(HandOverSkeletonFiles(cwd, runs))
+
+
+def show_hand_over_contract(cwd: str, runs: str) -> ShowHandOverContractUseCase:
+    return ShowHandOverContractUseCase(HandOverSkeletonFiles(cwd, runs))
+
+
+def probe_tool() -> ProbeToolUseCase:
+    return ProbeToolUseCase(ToolBinaryFiles())
+
+
+def read_tool_usage() -> ReadToolUsageUseCase:
+    return ReadToolUsageUseCase(ToolBinaryFiles())
