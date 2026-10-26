@@ -35,9 +35,10 @@ BACKTICKED = re.compile(r"`([^`\n]{2,120})`")
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _PACKAGE_DIR = _HERE if os.path.isdir(os.path.join(_HERE, "dca_factory")) else \
     os.path.join(_HERE, "..", "..", "factory-run", "scripts")
-# No bytecode beside the package: a `__pycache__` in the project is an untracked file the commit check would
-# refuse, and a cache is nothing a project should carry.
-sys.dont_write_bytecode = True
+# Bytecode in the user's cache, never beside the package: a `__pycache__` in the project is an untracked file the
+# commit check would refuse, and a cache is nothing a project should carry — but compiling the package's modules on
+# every start would cost each call a tenth of a second.
+sys.pycache_prefix = sys.pycache_prefix or os.path.join(os.path.expanduser("~"), ".cache", "dca-factory")
 sys.path.insert(0, _PACKAGE_DIR)
 from dca_factory import contract as _contract  # noqa: E402
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as _profile  # noqa: E402

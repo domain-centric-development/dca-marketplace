@@ -4391,8 +4391,10 @@ def verify_setup(runner, verbose=False):
     check("package: no import cycle among the package's modules", not cycles, cycles[:4])
     entries = {name: open(os.path.join(os.path.dirname(runner), name), encoding="utf-8").read()
                for name in ("story-gate.py", "factory-cli.py")}
-    check("package: story-gate.py and factory-cli.py are entry points — no bytecode, the package's main, nothing more",
-          all(len(text.splitlines()) <= 12 and "sys.dont_write_bytecode = True" in text and "import main" in text
+    check("package: story-gate.py and factory-cli.py are entry points — bytecode in the user's cache, never in the "
+          "project, the package's main, nothing more",
+          all(len(text.splitlines()) <= 12 and "sys.pycache_prefix = sys.pycache_prefix or" in text
+              and "dont_write_bytecode" not in text and "import main" in text
               for text in entries.values()), {k: len(v.splitlines()) for k, v in entries.items()})
     check("stages: no list of stage names outside the gate's table — the gate, the cli and the runner read STAGES",
           not stage_lists(modules, runner_text), stage_lists(modules, runner_text))
@@ -10304,7 +10306,7 @@ def verify_requests(runner, verbose=False):
         check("requests: the request's prompt names the skill with the session's arguments, the person, the headless "
               "rules and where a question goes",
               "Apply the factory-backlog skill with the arguments: show the newest first" in prompts
-              and "written by Ann" in prompts and "factory-run/reference/requests.md" in prompts
+              and "written by Ann" in prompts and os.path.join("factory-run", "reference", "requests.md") in prompts
               and "request: " in prompts and "product/decisions/" in prompts, prompts[:400])
 
     # a request never commits the spec
@@ -10643,17 +10645,21 @@ def verify_requests(runner, verbose=False):
         for first_root, second_root in throwaway(2):
             _log, env = fixture(first_root)
             fixture(second_root)
-            servers = []
+            servers, said = [], []
             try:
                 for root in (first_root, second_root):
                     code, out = run_runner(runner, root, "serve", "--background", env=env)
+                    said.append(f"exit {code}: {out.strip()[-300:]}")
                     servers.append(json.load(open(os.path.join(root, ".dca-factory", "serve.json"), encoding="utf-8"))
                                    if os.path.isfile(os.path.join(root, ".dca-factory", "serve.json")) else {})
                 served = servers[0]
                 port, token = served.get("port"), served.get("url", "").split("t=")[-1]
+                both = all(server.get("port") for server in servers)
                 check("serve: two checkouts get two ports, each bound to 127.0.0.1 alone",
-                      len(servers) == 2 and servers[0].get("port") and servers[0].get("port") != servers[1].get("port")
-                      and served.get("url", "").startswith(f"http://127.0.0.1:{port}/?t="), str(servers))
+                      both and servers[0].get("port") != servers[1].get("port")
+                      and served.get("url", "").startswith(f"http://127.0.0.1:{port}/?t="), f"{servers} {said}")
+                if not both:
+                    continue                                # no page to ask — the cases below would only crash
                 import urllib.request
                 import urllib.error
 
@@ -10807,7 +10813,8 @@ def verify_unit(verbose):
         problems = [text for _case, text in result.failures + result.errors]
         problems += ["passes, though marked as a known defect — the defect is gone, drop the mark"
                      for _case in result.unexpectedSuccesses]
-        detail = "; ".join(p.strip().splitlines()[-1] for p in problems)
+        # the last lines of each: an assertion's message, and a diff's lines with the marker under them
+        detail = "; ".join(" ⏎ ".join(p.strip().splitlines()[-4:]) for p in problems)
         note_result(name, not problems, detail)
         if problems:
             failed.append(name)

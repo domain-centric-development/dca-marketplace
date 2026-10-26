@@ -354,8 +354,8 @@ def start_page(cwd: str, port: typing.Optional[int] = None) -> int:
     argv = [sys.executable, cli_path(), "--serve", "--by-up"] + (["--port", str(port)] if port else [])
     process = detached(argv, cwd, log, session_free_env())
     log.close()
-    deadline = time.time() + 10
-    while time.time() < deadline:
+    deadline = time.time() + 30                       # a loaded machine imports the package slowly; a page that
+    while time.time() < deadline:                     # answers ends the wait at once
         served = running_page(cwd)
         if served and served.get("pid") == process.pid:
             say(f"the page: {served['url']}")
