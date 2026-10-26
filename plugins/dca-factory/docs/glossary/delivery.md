@@ -240,10 +240,12 @@ deterministic check that lets the next stage start; a round is one more pass aft
 `SpecChecks`, `DeliveryChecks`, `IntegrationChecks`, `TestVerdicts`, `SuiteChecks`, `BreakChecks`, `ChangeChecks`,
 `AcceptanceRules`. The use case `check_stage` registers them against the stage table and runs them, those that start
 no process first; what they run or write goes through output ports (`StageTests`, `StageRuns`, `StageMarks`,
-`DecisionStamps`, `StageDelivery`). A check returns findings: passed, failed, skipped (unproven),
+`DecisionStamps`, `StageDelivery`). Outside a stage the same checks run as use cases of their own: `check_backlog`
+over every story not yet done (`BacklogEntries`), `check_change` over a commit or the working tree (`ChangeIndex`,
+`StageRuns`) and `check_parity` over the reports of every implementation (`ParityReports`). A check returns findings: passed, failed, skipped (unproven),
 noted, or waiting for a person — and what it says, for a refusal the stage's next instruction. What a check alone
 needs and only reads — the profile, the run folder, the epic, the context map — it asks the domain gateway
-`StageEvidence`.
+`StageEvidence`; a story naming no epic there is gets a fact, so the `epic` check refuses it and the others run.
 
 **Type:** Concept
 

@@ -19,9 +19,13 @@ from .design_files import ASSERTION_STATEMENT
 import shutil
 import subprocess
 import tempfile
-from .....contract import GateError
 from .owned_files import run_owned
 from .delivery_files import TEST_DIR, TEST_FILE
+from .....contract import GateError, STAGES
+from .decision_record_files import answered_decisions
+from .run_marks import last_ended
+from .test_files import read_mapping
+from .test_files import locate_tests
 
 
 #: A cited path usually carries where in the file it was read: `README.md:149`, `Book.cs:28-31`,
@@ -319,3 +323,23 @@ def write_red_ledger(runs: typing.Optional[str], story: typing.Optional[str], se
         lines.append(f"{selector}\t{file_digest(full)}" if full and os.path.isfile(full) else selector)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + ("\n" if lines else ""))
+
+
+def stale_red_proof(cwd: str, runs: str, story: str, start: typing.Optional[str] = None) -> typing.List[str]:
+    """The tests whose red proof the build and tidy gates would refuse (`red-proof`), read without running anything:
+    each mapped test whose file changed after the test stage saw it fail — by a merge of the main line into the story,
+    most often — and no answered decision of stage `test` changed what it expects. Empty without a red record."""
+    digests = read_red_digests(runs, story)
+    if not digests or all(d is None for d in digests.values()):
+        return []
+    try:
+        _path, mapping = read_mapping(runs, story)
+    except GateError:
+        return []
+    moved = unproven_tests(cwd, locate_tests(cwd, mapping)[0] if mapping else {}, digests)
+    if not moved or answered_decisions(cwd, story, "test"):
+        return []
+    if start == "tidy" and red_tree(runs, story) and last_ended(runs, story, tuple(s.name for s in STAGES if s.lists and not s.red)) == "tidy":
+        # A tidy that runs again moved the tests itself: its gate re-proves them on the red tree (WP-151 A).
+        return []
+    return moved

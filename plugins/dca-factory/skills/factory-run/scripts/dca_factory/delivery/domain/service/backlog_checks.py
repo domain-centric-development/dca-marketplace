@@ -8,9 +8,11 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.schedule import ContextName
 from ..model.stage import StoryKind
-from ..model.stage_story import ContractNumber, StageStory
+from ..model.stage_story import ContractNumber, Place, StageStory
+from ..model.story_state import StatusWord
 from ..model.verdict import CheckName, Findings, Said
 
+APPROVED = CheckName("approved")
 CONTEXT_MAP = CheckName("context-map")
 EPIC = CheckName("epic")
 OUTCOME = CheckName("outcome")
@@ -33,6 +35,17 @@ class BacklogChecks(DomainService):
     """The checks over the backlog around a story."""
 
     @staticmethod
+    def release(place: Place, status: StatusWord) -> Findings:
+        """A draft is a story still being written: named, not refused. A status nobody knows is refused."""
+        if status.value == "draft":
+            return (APPROVED.note(Said(f"{place.value}: a draft — released with `status: approved` once it is "
+                                       f"written")),)
+        if status.value and status.value not in ("approved", "adopted"):
+            return (APPROVED.fail(Said(f"{place.value}: status {status.value!r} is none of draft, approved, adopted, "
+                                       f"superseded")),)
+        return ()
+
+    @staticmethod
     def context_map(story: StageStory, evidence: StageEvidence) -> Findings:
         """A story names the context it changes; that context must be on the map. A project without a map is not
         blocked — it has nothing to contradict yet."""
@@ -51,6 +64,8 @@ class BacklogChecks(DomainService):
     @staticmethod
     def epic(story: StageStory, evidence: StageEvidence) -> Findings:
         epic = evidence.epic(story)
+        if epic.unreadable is not None:
+            return (EPIC.fail(Said(epic.unreadable.value)),)
         where, name = epic.place.value, epic.name.value
         found = []
         if epic.missing:
@@ -75,6 +90,8 @@ class BacklogChecks(DomainService):
         if story.kind is not StoryKind.STORY or contract.value < OUTCOME_CONTRACT.value or not story.publishes:
             return ()
         epic = evidence.epic(story)
+        if epic.unreadable is not None:
+            return ()                                   # `epic` refuses the story already
         metric, name = epic.metric.value, epic.name.value
         events = [e.value for e in story.publishes]
         foreign = [e for e in events if not re.search(rf"(?<!\w){re.escape(e)}(?!\w)", metric)]

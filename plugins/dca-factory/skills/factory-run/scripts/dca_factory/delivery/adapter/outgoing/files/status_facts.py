@@ -8,6 +8,7 @@ import datetime
 import glob
 import json
 import os
+import re
 import typing
 
 from .....contract import SHARED_WINDOWS, STAGE_ORDER
@@ -15,7 +16,6 @@ from .findings_files import finding_records
 from .story_layout import delivered_on, find_story, story_kind
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, read_profile, resolve_profile, shown
 from .decision_record_files import decision_files, records_of
-from .....gate import story_signals
 from .delivery_files import perspectives_of
 from ..tools.streams import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
@@ -30,6 +30,11 @@ from ....domain.model.usage import USAGE_FIELDS
 from ..process.factory_process import ended, worker
 from .epic_files import epic_files
 from .story_files import names_story
+from ....domain.model.correction import REASON_CODES
+from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
+from .signals import latest_signal
+from .journal_files import journal_events
+from ....application.shared.front import is_acceptance
 
 GateError = MarkdownError
 
@@ -377,3 +382,52 @@ def foreign_claim_facts(epics: str, runs: str) -> typing.List[Facts]:
                      own_title=story_title(front, body) or story)
         found.append(entry)
     return found
+
+
+CORRECTION_CODE = re.compile(r"^\s*correction:\s*([a-z-]+)\s*:", re.I)
+
+
+def correction_code(answer: typing.Any) -> typing.Optional[str]:
+    """The reason code of an acceptance correction's answer, `uncoded` for one that names none (or none known), None
+    for an answer that is no correction."""
+    text = str(answer or "").strip()
+    if not text.lower().startswith("correction:"):
+        return None
+    match = CORRECTION_CODE.match(text)
+    return match.group(1).lower() if match and match.group(1).lower() in REASON_CODES else "uncoded"
+
+
+def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any], body: str) -> Facts:
+    """WP-148 B/C: the raw facts of one story the bench aggregates — questions the stages asked and how many a person
+    answered, the story's assumptions open and answered, what the plan left open, each named rule's verdict at the
+    test gate, the judge's confirmed findings by perspective and domain code, the acceptance corrections by reason
+    code. Counted, never rated. What a gate decided is read from the journal alone (WP-150): a fact no gate recorded
+    is None — "not recorded", never 0."""
+    questions = [(front, state) for _p, front, _b, state, _a in records if not is_acceptance(front)]
+    lines = [l.strip()[1:].strip().lower() for l in section_of(body, "assumptions") or [] if l.strip().startswith(("-", "*"))]
+    events = journal_events(runs, story_id)
+    plan = latest_signal(events, "plan")
+    rules_group = latest_signal(events, "rules", "rule")
+    rules: typing.Dict[str, int] = {}
+    for _sel, fields in rules_group[1] if rules_group else []:
+        verdict = fields.get("verdict", "unchecked")
+        rules[verdict] = rules.get(verdict, 0) + len([n for n in fields.get("rules", "").split(",") if n])
+    judge = latest_signal(events, "judge", "finding")
+    findings: typing.Dict[str, int] = {}
+    domain: typing.Dict[str, int] = {}
+    for perspective, fields in judge[1] if judge else []:
+        findings[perspective] = findings.get(perspective, 0) + 1
+        if fields.get("code"):
+            domain[fields["code"]] = domain.get(fields["code"], 0) + 1
+    corrections: typing.Dict[str, int] = {}
+    for _p, front, _b, state, answer in records:
+        code = correction_code(answer.get("answer")) if is_acceptance(front) and state in ("answered", "applied") else None
+        if code:
+            corrections[code] = corrections.get(code, 0) + 1
+    return dict(asked=len(questions), answered=sum(1 for _f, st in questions if st in ("answered", "applied")),
+                assumptions_open=sum(1 for l in lines if l.startswith("open:")),
+                assumptions_answered=sum(1 for l in lines if l.startswith("answered:")),
+                plan_open=int(plan[0].get("open", 0)) if plan else None,
+                rules=rules if rules_group else None,
+                findings=findings if judge else None, domain=domain if judge else None,
+                corrections=corrections)

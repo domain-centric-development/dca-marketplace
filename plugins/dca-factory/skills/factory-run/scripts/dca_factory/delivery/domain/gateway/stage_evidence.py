@@ -52,7 +52,7 @@ class StageEvidence(DomainGateway, typing.Protocol):
         ...
 
     def epic(self, story: StageStory) -> EpicFacts:
-        """The story's epic; the gate's error where the story names none or the epic has no file."""
+        """The story's epic, or why there is none: the story names none, or the epic has no file."""
         ...
 
     def finding_row(self, row: RowId) -> typing.Optional[RowState]:

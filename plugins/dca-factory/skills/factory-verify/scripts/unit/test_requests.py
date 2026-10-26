@@ -10,7 +10,8 @@ import unittest
 
 from support import contract, project, write
 
-from dca_factory import cli, gate, state
+from dca_factory import cli, state
+from dca_factory.delivery.domain.model.correction import REASON_CODES
 from dca_factory.delivery.adapter.outgoing.process import factory_process as service
 from dca_factory.delivery.application.status.actions import request_of
 from dca_factory.delivery.adapter.incoming.runner.usage import book_request_usage
@@ -106,7 +107,7 @@ class Actions(unittest.TestCase):
             with self.subTest(skill=skill):
                 self.assertEqual(request_of(skill, names_story),
                                  dict(kind="correct", fields={"story": "US-3"}, words="", open="words",
-                                      choices=list(gate.REASON_CODES)))
+                                      choices=list(REASON_CODES)))
 
     def test_what_no_request_does_has_none(self):
         for skill in ("/factory-setup", "/factory-update", "/factory-verify US-1", "", None):

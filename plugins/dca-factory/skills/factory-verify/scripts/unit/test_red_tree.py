@@ -40,22 +40,22 @@ class RedTree(unittest.TestCase):
     def test_a_tidy_that_runs_again_keeps_its_moved_test(self):
         with project() as p:
             self.setup(p, ended=("build", "tidy"))
-            self.assertEqual(gate.stale_red_proof(p.root, p.runs, "S-1", "tidy"), [])
+            self.assertEqual(kept_files.stale_red_proof(p.root, p.runs, "S-1", "tidy"), [])
 
     def test_a_tidy_after_the_build_goes_to_the_test_stage(self):
         with project() as p:
             self.setup(p, ended=("build",))
-            self.assertEqual(len(gate.stale_red_proof(p.root, p.runs, "S-1", "tidy")), 1)
+            self.assertEqual(len(kept_files.stale_red_proof(p.root, p.runs, "S-1", "tidy")), 1)
 
     def test_without_a_red_tree_the_tidy_goes_to_the_test_stage(self):
         with project() as p:
             self.setup(p, red_tree=False, ended=("build", "tidy"))
-            self.assertEqual(len(gate.stale_red_proof(p.root, p.runs, "S-1", "tidy")), 1)
+            self.assertEqual(len(kept_files.stale_red_proof(p.root, p.runs, "S-1", "tidy")), 1)
 
     def test_the_build_goes_to_the_test_stage(self):
         with project() as p:
             self.setup(p, ended=("build", "tidy"))
-            self.assertEqual(len(gate.stale_red_proof(p.root, p.runs, "S-1", "build")), 1)
+            self.assertEqual(len(kept_files.stale_red_proof(p.root, p.runs, "S-1", "build")), 1)
 
     def test_a_test_path_is_a_test_file_or_below_a_test_folder(self):
         for path, expected in (("src/test/java/a/Page.java", True), ("Shop.Tests/Support/Page.cs", True),

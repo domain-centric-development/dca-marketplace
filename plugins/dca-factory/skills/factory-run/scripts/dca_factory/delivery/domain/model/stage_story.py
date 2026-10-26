@@ -187,7 +187,7 @@ class Metric(Value):
 @dataclasses.dataclass(frozen=True)
 class EpicFacts(Value):
     """A story's epic: its file and name, the mandatory fields it lacks, the discovery report it names and lacks, why
-    its dependencies do not hold, and its metric."""
+    its dependencies do not hold, and its metric — or why the story names no epic there is."""
 
     place: Place
     name: EpicId
@@ -195,6 +195,7 @@ class EpicFacts(Value):
     discovery_missing: typing.Optional[ProfileText]
     dependency_problem: typing.Optional[Detail]
     metric: Metric
+    unreadable: typing.Optional[Detail] = None
 
 
 @dataclasses.dataclass(frozen=True)

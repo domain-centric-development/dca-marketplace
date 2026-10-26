@@ -10,7 +10,7 @@ import re
 import typing
 
 from .....contract import SHARED_WINDOWS
-from .....gate import criteria_of, scenarios_of
+from .criteria_files import criteria_of, scenarios_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of, sections_of
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir

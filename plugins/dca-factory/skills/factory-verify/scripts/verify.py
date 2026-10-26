@@ -4515,6 +4515,21 @@ def verify_places(args):
                              f"check {checked.returncode}: {checked.stdout.strip()[-200:]} | plan {planned.returncode} | "
                              f"{listing.strip()[-300:]}"))
 
+    # an epic the story names and nobody wrote is the `epic` check's refusal: the other checks still run
+    for root in throwaway():
+        backlog_project(root, extra_sources=(
+            ("product/epics/nowhere/STORY-2/story.md", story("STORY-2").replace("epic: sample", "epic: nowhere")),))
+        checked = gate_run(root, "--check-backlog")
+        planned = gate_run(root, "--story", "STORY-2", "--stage", "plan")
+        expectations.append(("epics: a story naming an epic without epic.md is refused by the `epic` check of the backlog "
+                             "check and the plan gate, and the other checks still run",
+                             checked.returncode == 1 and "gate:fail STORY-2 epic" in checked.stdout
+                             and "has no epic.md" in checked.stdout
+                             and planned.returncode == 1 and "gate:fail epic" in planned.stdout
+                             and "gate:fail gate" not in planned.stdout and "gate:pass story" in planned.stdout,
+                             f"check {checked.returncode}: {checked.stdout.strip()[-300:]} | plan {planned.returncode}: "
+                             f"{planned.stdout.strip()[-400:]}"))
+
     # the run folder is protocol: deleted after two deliveries, nothing about state changes
     for root in throwaway():
         backlog_project(root, ("STORY-2", ["STORY-1"]), ("STORY-3", ["STORY-2"]),
@@ -7886,12 +7901,18 @@ def run_groups(args):
     probe = (PACKAGE_PROBE + "import json\ng = pkg\n"
              "root, contract = sys.argv[2], sys.argv[3]\n"
              "body = open(root + '/story.md', encoding='utf-8').read()\n"
-             "r = g.Result()\n"
              "test = 'src/test/java/com/example/WidgetPageTest.java'\n"
-             "g.check_clauses(r, {'contract': contract}, root, root + '/runs', 'S-1', {}, body,\n"
-             "                {'shows-widget': ['com.example.WidgetPageTest#shows'], 'refuses-get': ['com.example.WidgetPageTest#refuses']},\n"
-             "                {'com.example.WidgetPageTest#shows': root + '/' + test, 'com.example.WidgetPageTest#refuses': root + '/' + test})\n"
-             "print(json.dumps({'entries': r.entries, 'clauses': g.scenario_clauses(body)}))\n")
+             "from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles, stage_story\n"
+             "from dca_factory.delivery.domain.model.stage_story import MappedTest, Place, ScenarioKey, Selector\n"
+             "from dca_factory.delivery.domain.service.design_checks import DesignChecks\n"
+             "from dca_factory.delivery.domain.service.profile_checks import ProfileChecks\n"
+             "ev = StageEvidenceFiles(root, root + '/runs', g.place('epics'), {'contract': contract})\n"
+             "tests = tuple(MappedTest(ScenarioKey(key), Selector(selector), Place(root + '/' + test), None, None)\n"
+             "              for key, selector in (('shows-widget', 'com.example.WidgetPageTest#shows'),\n"
+             "                                    ('refuses-get', 'com.example.WidgetPageTest#refuses')))\n"
+             "found = DesignChecks.clauses(stage_story('S-1', '', {}, body, ()), ProfileChecks.contract_number(ev), tests, ev)\n"
+             "entries = [(f.state.value, f.check.value, f.said.value) for f in found]\n"
+             "print(json.dumps({'entries': entries, 'clauses': g.scenario_clauses(body)}))\n")
     clause_story = ("## Acceptance criteria\n\n#### shows-widget (happy path)\n- Given a widget\n- When the page opens\n"
                     "- Then the page shows its name\n- And the name is bold\n\n#### refuses-get\n- Given a widget\n"
                     "- When a GET reaches the action\n- Then the answer is 405\n- And the widget stays unchanged\n\n## Notes\n")

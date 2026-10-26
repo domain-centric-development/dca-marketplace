@@ -11,8 +11,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-from support import contract, state, write
-from dca_factory import cli, gate, runner
+from support import contract, evidence, gate_story, state, verdict, write
+from dca_factory import cli, runner
+from dca_factory.delivery.domain.service.spec_checks import SpecChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
@@ -210,7 +211,7 @@ class Published(unittest.TestCase):
             write(os.path.join(runs, "S-01", "tests.md"),
                   "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n| shows-s-01 | a.ThingTest#shows |\n")
             self.assertEqual(quiet(runner.integrate_prepare, a, runs, epics, "S-01")[0], 0)
-            result = gate.Result()
+            result = verdict()
             front = markdown.read_front_matter(layout.find_story(epics, "S-01"))[0]
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: a}):
                 os.chdir(wt)
@@ -246,7 +247,7 @@ class Published(unittest.TestCase):
         write(os.path.join(runs, story, "tests.md"), "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n"
                                                     f"| shows-{story.lower()} | a.ThingTest#{story.replace('-', '')} |\n")
         quiet(runner.integrate_prepare, clone, runs, epics, story)
-        result = gate.Result()
+        result = verdict()
         front = markdown.read_front_matter(layout.find_story(epics, story))[0]
         with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: clone}):
             os.chdir(wt)
@@ -310,10 +311,10 @@ class Published(unittest.TestCase):
             quiet(runner.integrate_prepare, b, runs_b, epics_b, "S-02")
             story_path = layout.find_story(epics_b, "S-02")
             front, body = markdown.read_front_matter(story_path)
-            result = gate.Result()
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: b}):
                 with profiles.places_in(wt):
-                    gate.check_spec_delta(result, wt, runs_b, "S-02", story_path, front, body)
+                    result = verdict(SpecChecks.delta(gate_story("S-02", story_path, front, body),
+                                                      evidence(wt, runs_b)))
             self.assertTrue(any(e[0] == "fail" and e[1] == "spec-delta" for e in result.entries), result.entries)
 
 

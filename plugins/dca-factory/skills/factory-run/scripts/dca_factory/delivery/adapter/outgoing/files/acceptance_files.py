@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typing
 
-from .....gate import criteria_of
+from .criteria_files import criteria_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from ....application.shared.front import accepted
 from ....domain.model.decision_record import RecordId

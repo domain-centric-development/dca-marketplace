@@ -7,10 +7,11 @@ from support import contract, project, write
 from dca_factory import gate
 from dca_factory.delivery.adapter.outgoing.files import stage_evidence_files
 from dca_factory.delivery.adapter.outgoing.files import test_files
+from dca_factory.delivery.adapter.outgoing.files import criteria_files
 
 
 def criteria(section):
-    return gate.criteria_of("story.md", "# Story\n\n## Acceptance criteria\n" + section + "\n## Notes\n- not a criterion\n")
+    return criteria_files.criteria_of("story.md", "# Story\n\n## Acceptance criteria\n" + section + "\n## Notes\n- not a criterion\n")
 
 
 class LineForm(unittest.TestCase):
@@ -25,7 +26,7 @@ class LineForm(unittest.TestCase):
 
     def test_no_criteria_at_all_is_refused(self):
         with self.assertRaisesRegex(contract.GateError, "no acceptance criteria"):
-            gate.criteria_of("story.md", "# Story\n\nNothing here.\n")
+            criteria_files.criteria_of("story.md", "# Story\n\nNothing here.\n")
 
     def test_a_key_twice_is_refused(self):
         with self.assertRaisesRegex(contract.GateError, "appears twice"):
@@ -48,7 +49,7 @@ class ScenarioForm(unittest.TestCase):
     def test_the_view_of_a_scenario_keeps_a_wrapped_step_whole(self):
         body = ("# Story\n\n## Acceptance criteria\n#### sends-it\n- Given a form\n- When it is sent with Country\n"
                 "  \"Germany\"\n- Then it is refused\n")
-        self.assertEqual(gate.scenarios_of(body)[0]["steps"][1]["text"], 'it is sent with Country "Germany"')
+        self.assertEqual(criteria_files.scenarios_of(body)[0]["steps"][1]["text"], 'it is sent with Country "Germany"')
 
     def test_a_line_criterion_wrapped_onto_an_indented_line_keeps_its_continuation(self):
         self.assertEqual(criteria("- shows-it: the thing shows\n  in bright colours\n"),

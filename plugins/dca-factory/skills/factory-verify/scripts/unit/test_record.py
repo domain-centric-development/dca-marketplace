@@ -18,6 +18,7 @@ from dca_factory.delivery.adapter.outgoing.files import usage_files
 from dca_factory.delivery.adapter.outgoing.files import windows
 from dca_factory.delivery.adapter.outgoing.files import story_record
 from dca_factory.delivery.adapter.outgoing.files import stream_records
+from dca_factory.delivery.adapter.outgoing.files import status_facts
 
 STREAMS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "streams")
 SECOND = "2026-10-10T10:00:00Z"
@@ -106,7 +107,7 @@ class Record(unittest.TestCase):
             events = journals.journal_events(p.runs, "S-1")
             self.assertEqual([e["kind"] for e in events].count("record"), 1)
             from dca_factory import gate
-            signals = gate.story_signals(p.runs, "S-1", [], "")
+            signals = status_facts.story_signals(p.runs, "S-1", [], "")
             self.assertEqual((signals["plan_open"], signals["rules"], signals["domain"]),
                              (1, {"killed": 1}, {"domain-concept": 1}))
             self.assertTrue(any(e["kind"] == "part" for e in events))
@@ -125,7 +126,7 @@ class Record(unittest.TestCase):
             journals.journal_append(p.runs, "S-1", "gate", "plan", "exit=0", "by=runner")
             self.assertEqual(story_record.record_story(p.runs, "S-1"), {"unknown": "plan,streams"})
             from dca_factory import gate
-            self.assertIsNone(gate.story_signals(p.runs, "S-1", [], "")["plan_open"])
+            self.assertIsNone(status_facts.story_signals(p.runs, "S-1", [], "")["plan_open"])
 
 
 class Prune(unittest.TestCase):
@@ -224,7 +225,7 @@ class OneWayToRead(unittest.TestCase):
     def test_the_readers_hold_no_stream_or_hand_over_parser(self):
         import inspect
         from dca_factory import gate
-        for reader in (gate.story_signals, detail.window_parts):
+        for reader in (status_facts.story_signals, detail.window_parts):
             text = inspect.getsource(reader)
             for parser in ("stream_parts", "stream_denials", "plan.md", "judge.md", "INVARIANT_BREAKS", "read_text"):
                 self.assertNotIn(parser, text, f"{reader.__name__} reads {parser}")

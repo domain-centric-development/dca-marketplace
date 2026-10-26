@@ -20,6 +20,8 @@ from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
+from dca_factory.delivery.application.delivery.check_stage import Verdict
+from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles, stage_story
 
 
 STORY = """---
@@ -109,3 +111,20 @@ def project():
             yield Project(os.path.realpath(root))
         finally:
             os.chdir(here)
+
+
+def verdict(findings=()):
+    """A gate run's verdict holding a domain check's findings, as the gate reports them."""
+    result = Verdict()
+    result.take(findings)
+    return result
+
+
+def evidence(root, runs):
+    """The evidence of the project <root> with its run folder <runs>, as a gate run reads it."""
+    return StageEvidenceFiles(root, runs, profiles.place("epics"), {})
+
+
+def gate_story(story_id, path="", front=None, body=""):
+    """The story under a gate, read off its front matter and its body (no criteria)."""
+    return stage_story(story_id, path, front or {}, body, ())

@@ -4,8 +4,9 @@ carries keeps the test its mapping names when the story is delivered."""
 import os
 import unittest
 
-from support import contract, project, write
-from dca_factory import gate
+from support import contract, evidence, gate_story, project, verdict, write
+from dca_factory.delivery.application.delivery.stage_checks import table_tests
+from dca_factory.delivery.domain.service.spec_checks import SpecChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 from dca_factory.delivery.adapter.outgoing.files import test_files
@@ -73,16 +74,16 @@ class MovedTests(unittest.TestCase):
     def test_a_row_naming_the_test_it_replaced_is_refused(self):
         with project() as p:
             _path, front, body = self.setup(p, "com.example.WidgetPageTest#showsTheName")
-            result = gate.Result()
             mapping = test_files.read_mapping(p.runs, "S-1")[1]
-            gate.check_spec_tests(result, p.root, p.runs, "S-1", front, mapping)
+            result = verdict(SpecChecks.tests(gate_story("S-1", front=front), table_tests(mapping),
+                                              evidence(p.root, p.runs)))
             failed = [message for state, check, message in result.entries if state == "fail" and check == "spec-tests"]
             self.assertTrue(failed and "Moved tests" in failed[0] and "WidgetPageTest" in failed[0], result.entries)
 
     def test_the_storys_criterion_keeps_its_mapped_test_at_delivery(self):
         with project() as p:
             path, front, _body = self.setup(p, "com.example.WidgetPageTest#showsTheName")
-            delivery_writes.merge_spec(gate.Result(), path, "S-1", front, p.runs)
+            delivery_writes.merge_spec(verdict(), path, "S-1", front, p.runs)
             with open(os.path.join(p.root, "product", "spec", "widgets", "scenarios.md"), encoding="utf-8") as handle:
                 text = handle.read()
             self.assertIn("Test: com.example.WidgetPortTest#showsTheNameInBold", text)

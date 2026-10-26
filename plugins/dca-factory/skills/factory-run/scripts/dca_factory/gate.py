@@ -66,329 +66,48 @@ import argparse
 import contextlib
 import json
 import os
-import re
 import subprocess
 import sys
 from .contract import (
-    CONTRACT, CRITERION, GateError, layout_hint, STAGE, STAGES, VERSION)
+    CONTRACT, GateError, layout_hint, STAGE, STAGES, VERSION)
 from .delivery.adapter.outgoing.files.story_layout import (
-    duplicate_ids, find_story, is_delivered, story_files, story_folder, story_id_of, story_kind)
+    find_story, story_folder)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     location, place, PROFILE_FILE, read_profile,
-    resolve_profile, set_places, shown)
-from .delivery.adapter.outgoing.git.repository import git
-from .delivery.adapter.outgoing.files.decision_record_files import (
-    answered_decisions)
-from .delivery.domain.model.correction import REASON_CODES
+    resolve_profile, set_places)
 from .delivery.application.description.check_description import CheckDescriptionCommand
 from .discovery.api import check_report
 from .infrastructure.description import check_description
-from .sharedkernel.adapter.outgoing.markdown.sections import section_of
+from .infrastructure.gate import check_backlog as backlog_use_case, check_change, check_parity, stage_run
+from .delivery.application.delivery.check_change import CheckChangeCommand
+from .delivery.application.delivery.check_parity import CheckParityCommand
+from .delivery.application.backlog.check_backlog import CheckBacklogCommand
+from .delivery.domain.model.story import StoryId
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
-from .delivery.adapter.outgoing.files.signals import latest_signal
 from .delivery.adapter.outgoing.files.snapshots import (
     record_base, record_changes)
 from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.files.run_marks import (
-    backlog_digest, last_ended, step_open)
+    backlog_digest, step_open)
 from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned
-from .delivery.adapter.outgoing.files.journal_files import journal_append, journal_events
-from .delivery.application.shared.front import is_acceptance
+from .delivery.adapter.outgoing.files.journal_files import journal_append
 from .delivery.domain.model.verdict import FindingState
-from .delivery.domain.service.backlog_checks import BacklogChecks
 from .delivery.domain.service.profile_checks import ProfileChecks
-from .delivery.domain.service.story_checks import StoryChecks
-from .delivery.domain.service.decision_checks import Applying, DecisionChecks
-from .delivery.domain.model.stage import StageName
-from .delivery.domain.model.stage_story import (
-    CommandKey, Count, MappedTest, Place, Presence, ScenarioKey, Selector)
-from .delivery.domain.model.story_state import Detail
-from .delivery.domain.service.design_checks import DesignChecks
-from .delivery.domain.service.kept_checks import KeptChecks
-from .delivery.domain.service.spec_checks import SpecChecks
-from .delivery.domain.service.integration_checks import IntegrationChecks
-from .delivery.application.delivery.stage_checks import table_tests  # registers the checks over the evidence alone
-from .delivery.application.delivery.process_checks import judge_suite  # registers the checks that run processes
-from .delivery.adapter.outgoing.build.stage_runs import StageRunFiles
-from .delivery.adapter.outgoing.files.stage_delivery_files import StageDeliveryFiles
-from .delivery.application.delivery import pass_actions  # noqa: F401 — registers what a passing gate does
 from .delivery.application.delivery.check_stage import (
-    run_checks, run_passed, StageRun, Verdict)
-from .delivery.domain.service.change_checks import CHANGE_CHECKS, ChangeChecks
-from .delivery.domain.model.stage_story import CommandRun
-from .delivery.adapter.outgoing.git.change import parity_facts, snapshot
-from .delivery.domain.service.suite_checks import red as red_finding
-from .delivery.domain.model.verdict import CheckName, Said
-from .delivery.adapter.outgoing.build.suite_runs import suite_run
-from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
-from .delivery.adapter.outgoing.files.test_files import locate_tests, StageTestFiles
-from .delivery.adapter.outgoing.files.stage_marks_files import StageMarkFiles
-from .delivery.adapter.outgoing.files.stage_evidence_files import MainLineEvidence
-from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, happy_paths, split_list
-from .delivery.adapter.outgoing.files.test_files import read_mapping
-from .delivery.adapter.outgoing.files.design_files import STEP
-from .delivery.adapter.outgoing.files.kept_files import read_red_digests, red_tree, unproven_tests
-from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, run, tail, test_command_keys
-from .delivery.adapter.outgoing.git.change import backlog_paths
-from .delivery.adapter.outgoing.files.test_files import scenario_titles
-
-
-def story_ids(epics):
-    """Every story id under the epics, in the order of the files — front matter first, else the file name."""
-    return [story_id_of(path) for path in story_files(epics)]
-
-
-SCENARIO_KEY = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-
-
-def criteria_of(story_path, body, front=None):
-    """Acceptance criteria as (key, text) pairs, read from the `## Acceptance criteria` section — none for a task
-    (`front` given), which has no criterion.
-
-    Two forms, mixable. The line form: one `- <key>: <text>` line per criterion. The scenario form:
-    `#### <key>` followed by `- Given / When / Then / And / But` steps, optionally grouped under
-    `### Rule: <text>` headings — Gherkin's own shape. The key is a name, never a number, and is
-    what the test stage binds. The shape is checked here, deterministically: a rule without a
-    scenario, a scenario without exactly one trigger or without an outcome, a step outside a
-    scenario, an unknown step and a repeated key are refused. Whether a scenario covers its rule
-    is not a question a script can answer; the backlog skill asks it."""
-    collecting, found, keys = False, [], set()
-    rule, rule_scenarios, scenario = None, 0, None
-
-    def refuse(message):
-        raise GateError(f"{story_path}: {message}")
-
-    def close_scenario():
-        nonlocal scenario
-        if scenario is None:
-            return
-        key, steps = scenario
-        triggers, outcome, phase = 0, False, None
-        for word, _ in steps:
-            if word in ("Given", "When", "Then"):
-                phase = word
-            if word == "When" or (word in ("And", "But") and phase == "When"):
-                triggers += 1
-            if word == "Then":
-                outcome = True
-        if not steps:
-            refuse(f"scenario `{key}` has no steps — write `- Given / When / Then` lines under it")
-        if triggers != 1:
-            refuse(f"scenario `{key}` has {triggers} triggers — exactly one `When` (an `And` after it is "
-                   f"a second trigger); two triggers are two scenarios")
-        if not outcome:
-            refuse(f"scenario `{key}` has no `Then` — a scenario states what is observed")
-        found.append((key, "; ".join(f"{word} {text}".strip() for word, text in steps)))
-        scenario = None
-
-    def close_rule():
-        if rule is not None and rule_scenarios == 0:
-            refuse(f"rule `{rule}` has no scenario — every rule gets at least one `#### <key>` scenario")
-
-    def add_key(key):
-        if key in keys:
-            refuse(f"acceptance criterion key `{key}` appears twice — a key names one behaviour")
-        keys.add(key)
-
-    for line in body.splitlines():
-        stripped = line.strip()
-        if stripped.lower().startswith("## acceptance criteria"):
-            collecting = True
-            continue
-        if collecting and line.startswith("## "):
-            break
-        if not collecting or not stripped:
-            continue
-        if line.startswith("### "):
-            close_scenario()
-            close_rule()
-            heading = line[4:].strip()
-            if not heading.lower().startswith("rule:"):
-                refuse(f"`### {heading}` — a third-level heading under the criteria is a `### Rule: <text>`")
-            rule, rule_scenarios = heading[5:].strip(), 0
-            continue
-        if line.startswith("#### "):
-            close_scenario()
-            key = re.sub(r"\s*\(happy path\)$", "", line[5:].strip())
-            if not SCENARIO_KEY.match(key):
-                refuse(f"scenario heading `#### {key}` is not a key — lowercase and hyphenated, naming the behaviour")
-            add_key(key)
-            scenario = (key, [])
-            if rule is not None:
-                rule_scenarios += 1
-            continue
-        if line[:1].isspace() and not stripped.startswith(("-", "#")):
-            # a Markdown continuation line: the step or line criterion above it goes on
-            if scenario is not None and scenario[1]:
-                word, text = scenario[1][-1]
-                scenario[1][-1] = (word, f"{text} {stripped}")
-                continue
-            if scenario is None and found:
-                key, text = found[-1]
-                found[-1] = (key, f"{text} {stripped}")
-                continue
-        step = STEP.match(stripped)
-        if step:
-            if scenario is None:
-                refuse(f"step {stripped!r} stands outside a scenario — put it under a `#### <key>` heading")
-            scenario[1].append((step.group(1), step.group(2).strip()))
-            continue
-        if scenario is not None and stripped.startswith("-"):
-            refuse(f"scenario `{scenario[0]}`: {stripped!r} is not a step — steps begin with Given, When, "
-                   f"Then, And or But")
-        match = CRITERION.match(stripped)
-        if match:
-            close_scenario()
-            add_key(match.group(1))
-            found.append((match.group(1), match.group(2).strip()))
-        elif stripped.startswith("-"):
-            refuse(f"acceptance criterion {stripped!r} has no key — write `- <key>: <criterion>` with a "
-                   f"lowercase, hyphenated key that names the behaviour, or a `#### <key>` scenario")
-    close_scenario()
-    close_rule()
-    if not found and story_kind(front or {}) == "task":
-        return []
-    if not found:
-        raise GateError(
-            f"{story_path}: no acceptance criteria — add a `## Acceptance criteria` "
-            f"section with one `- <key>: <criterion>` line or one `#### <key>` scenario per criterion"
-        )
-    return found
-
-
-def contract_of(profile):
-    declared = str(profile.get("contract", "")).strip()
-    return int(declared) if declared.isdigit() else CONTRACT
-
-
-def scenarios_of(body):
-    """The criteria as a person reads them (WP-146), in the story's order: [{key, title, rule, happy, steps, text}] —
-    `steps` the scenario's `[{word, text}]` (Given / When / Then / And / But), `text` the line form's criterion, `rule`
-    the `### Rule:` it stands under, `happy` its happy-path mark. A reader for the views: it refuses nothing —
-    `criteria_of` is the check."""
-    section = body.split("## Acceptance criteria", 1)[-1].split("\n## ", 1)[0] if "## Acceptance criteria" in body else ""
-    titles, happy = scenario_titles(body), set(happy_paths(body))
-    found, rule, current = [], "", None
-    for line in section.splitlines():
-        stripped = line.strip()
-        if line.startswith("### "):
-            heading = line[4:].strip()
-            rule, current = (heading[5:].strip() if heading.lower().startswith("rule:") else heading), None
-            continue
-        heading = re.match(r"^####\s+([a-z0-9][a-z0-9-]*)", stripped)
-        criterion = CRITERION.match(stripped)
-        step = STEP.match(stripped)
-        if heading:
-            key = heading.group(1)
-            current = dict(key=key, title=titles.get(key, key), rule=rule, happy=key in happy, steps=[], text="")
-            found.append(current)
-        elif step and current is not None:
-            current["steps"].append(dict(word=step.group(1), text=step.group(2).strip()))
-        elif stripped and line[:1].isspace() and found and (found[-1]["steps"] or found[-1]["text"]):
-            # a Markdown continuation line: the step or line criterion above it goes on
-            last = found[-1]["steps"][-1] if found[-1]["steps"] else found[-1]
-            last["text"] = f"{last['text']} {stripped}"
-        elif criterion:
-            key = criterion.group(1)
-            found.append(dict(key=key, title=titles.get(key, key), rule=rule, happy=key in happy, steps=[],
-                              text=criterion.group(2).strip()))
-            current = None
-    return found
-
-
-def check_clauses(result, profile, cwd, runs, story_id, front, body, mapping, located):
-    """Every expectation of every scenario names the line that asserts it (`DesignChecks.clauses`) — over a story
-    read from its body alone."""
-    story = stage_story(story_id, "", front, body, ())
-    evidence = StageEvidenceFiles(cwd, runs, place("epics"), profile)
-    tests = tuple(MappedTest(ScenarioKey(key), Selector(selector),
-                             Place((located or {})[selector]) if (located or {}).get(selector) else None, None, None)
-                  for key, selectors in (mapping or {}).items() for selector in selectors)
-    take(result, DesignChecks.clauses(story, ProfileChecks.contract_number(evidence), tests, evidence))
-
-
-CORRECTION_CODE = re.compile(r"^\s*correction:\s*([a-z-]+)\s*:", re.I)
-
-
-def correction_code(answer):
-    """The reason code of an acceptance correction's answer, `uncoded` for one that names none (or none known), None
-    for an answer that is no correction."""
-    text = str(answer or "").strip()
-    if not text.lower().startswith("correction:"):
-        return None
-    match = CORRECTION_CODE.match(text)
-    return match.group(1).lower() if match and match.group(1).lower() in REASON_CODES else "uncoded"
-
-
-def story_signals(runs, story_id, records, body):
-    """WP-148 B/C: the raw facts of one story the bench aggregates — questions the stages asked and how many a person
-    answered, the story's assumptions open and answered, what the plan left open, each named rule's verdict at the
-    test gate, the judge's confirmed findings by perspective and domain code, the acceptance corrections by reason
-    code. Counted, never rated. What a gate decided is read from the journal alone (WP-150): a fact no gate recorded
-    is None — "not recorded", never 0."""
-    questions = [(front, state) for _p, front, _b, state, _a in records if not is_acceptance(front)]
-    lines = [l.strip()[1:].strip().lower() for l in section_of(body, "assumptions") or [] if l.strip().startswith(("-", "*"))]
-    events = journal_events(runs, story_id)
-    plan = latest_signal(events, "plan")
-    rules_group = latest_signal(events, "rules", "rule")
-    rules = {}
-    for _sel, fields in rules_group[1] if rules_group else []:
-        verdict = fields.get("verdict", "unchecked")
-        rules[verdict] = rules.get(verdict, 0) + len([n for n in fields.get("rules", "").split(",") if n])
-    judge = latest_signal(events, "judge", "finding")
-    findings, domain = {}, {}
-    for perspective, fields in judge[1] if judge else []:
-        findings[perspective] = findings.get(perspective, 0) + 1
-        if fields.get("code"):
-            domain[fields["code"]] = domain.get(fields["code"], 0) + 1
-    corrections = {}
-    for _p, front, _b, state, answer in records:
-        code = correction_code(answer.get("answer")) if is_acceptance(front) and state in ("answered", "applied") else None
-        if code:
-            corrections[code] = corrections.get(code, 0) + 1
-    return dict(asked=len(questions), answered=sum(1 for _f, st in questions if st in ("answered", "applied")),
-                assumptions_open=sum(1 for l in lines if l.startswith("open:")),
-                assumptions_answered=sum(1 for l in lines if l.startswith("answered:")),
-                plan_open=int(plan[0].get("open", 0)) if plan else None,
-                rules=rules if rules_group else None,
-                findings=findings if judge else None, domain=domain if judge else None,
-                corrections=corrections)
-
-
-def take(result, findings):
-    """A domain check's findings into the result, as the gate reports them."""
-    result.take(findings)
-
-
-def gate_run(**fields):
-    """What one gate run over a story knows: the fields `main` read, and the story, its evidence and its contract
-    from them."""
-    run = StageRun(**fields)
-    run.kind = story_kind(run.front)
-    run.evidence = StageEvidenceFiles(run.cwd, run.runs, run.args.epics, run.profile)
-    run.tests = StageTestFiles(run.cwd, run.runs, run.profile)
-    run.main_line = MainLineEvidence(run.cwd, run.runs, run.args.epics, run.profile)
-    run.marks = StageMarkFiles(run.cwd, run.runs, run.kind)
-    run.stamps = DecisionStampFiles(run.runs)
-    run.describe = check_description(run.cwd, run.profile)
-    run.runs_port = StageRunFiles(run.cwd, run.runs, run.profile)
-    run.delivery = StageDeliveryFiles(run.cwd, run.runs, run.profile)
-    run.close = lambda: close_record(run)
-    run.story = stage_story(run.story_id, run.story_path, run.front, run.body, run.criteria)
-    run.contract = ProfileChecks.contract_number(run.evidence)
-    # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
-    run.expected = "red" if run.stage.red and run.kind == "story" else "green"
-    return run
+    run_checks, run_passed, Verdict)
+from .delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles
+from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS
+from .delivery.adapter.outgoing.files.criteria_files import criteria_of
 
 
 def check_contract(result, profile):
     """The profile's contract and its unknown keys (`ProfileChecks.contract`)."""
-    take(result, ProfileChecks.contract(StageEvidenceFiles(".", "", "", profile)))
+    result.take(ProfileChecks.contract(StageEvidenceFiles(".", "", "", profile)))
 
 
 def check_models(result, profile):
     """The profile's model keys, each bound to a tool (`ProfileChecks.models`)."""
-    take(result, ProfileChecks.models(StageEvidenceFiles(".", "", "", profile)))
+    result.take(ProfileChecks.models(StageEvidenceFiles(".", "", "", profile)))
 
 
 #: Where the method keeps the project's conventions; `verify_command:` there is the architecture command the
@@ -404,229 +123,25 @@ def check_project(result, cwd, profile):
 
 
 def check_backlog(cwd, epics, profile, only=None):
-    """The plan gate's backlog checks over every story that is not done, or over `only`: front
-    matter, the epic's completeness, the criteria, the status and the context on the map. Nothing of
-    its own — the same functions the plan gate calls, so a story that passes here passes there on
-    these points. A draft is a story still being written, named and not refused. It writes nothing:
-    the plan gate's marks (the story digest, the tests baseline) belong to the run that plans the
-    story, and a baseline taken while the story is still being written would be the wrong one."""
-    checked, refused = 0, []
+    """The plan gate's backlog checks over every story that is not done, or over `only` (`CheckBacklogUseCase`),
+    said one line per finding that did not pass."""
     if layout_hint(cwd, profile):
         print(f"gate:note layout — {layout_hint(cwd, profile)}")
-    twice = duplicate_ids(epics)
-    for sid, paths in sorted(twice.items()):
-        print(f"gate:fail {sid} story — id {sid!r} is not unique: {' and '.join(shown(p) for p in paths)}; "
-              f"an id names one story in the whole project, give one of them another")
-        refused.append(sid)
-    for path in story_files(epics):
-        name = os.path.basename(story_folder(path))
-        result, label = Result(), name
-        try:
-            front, body = read_front_matter(path)
-            label = str(front.get("id") or label).strip()
-            if only and only not in (label, name):
-                continue
-            if label.lower() in twice:
-                continue                            # refused above, once for both
-            status = str(front.get("status", "")).strip().lower()
-            if status == "superseded" or is_delivered(front):
-                continue
-            if status == "draft":
-                result.note("approved", f"{path}: a draft — released with `status: approved` once it is written")
-            elif status and status not in ("approved", "adopted"):
-                result.fail("approved", f"{path}: status {status!r} is none of draft, approved, adopted, superseded")
-            story = stage_story(label, path, front, body, criteria_of(path, body, front))
-            evidence = StageEvidenceFiles(cwd, "", epics, profile)
-            contract = ProfileChecks.contract_number(evidence)
-            take(result, StoryChecks.context(story))
-            if story.context.value:
-                take(result, BacklogChecks.context_map(story, evidence))
-            take(result, BacklogChecks.epic(story, evidence))
-            take(result, BacklogChecks.outcome(story, contract, evidence))
-            take(result, StoryChecks.happy_path(story, contract, evidence))
-        except GateError as error:
-            result.fail("story", str(error))
-        checked += 1
-        for state, check, message in result.entries:
-            if state != "pass":
-                print(f"gate:{state} {label} {check} — {message}")
-        if result.failed:
-            refused.append(label)
-    if not checked and not refused:
+    checked = backlog_use_case(cwd, epics, profile).execute(CheckBacklogCommand(StoryId(only) if only else None))
+    for verdict in checked.verdicts:
+        for finding in verdict.findings:
+            if finding.state is not FindingState.PASS:
+                print(f"gate:{finding.state.value} {verdict.label.value} {finding.check.value} — {finding.said.value}")
+    refused = [label.value for label in checked.refused]
+    if not checked.checked and not refused:
         if only:
             print(f"backlog: no story {only} to check under {epics}/ (not there, delivered or superseded)")
             return 1
         print(f"backlog: no story to check under {epics}/")
         return 0
-    print(f"backlog: {checked} story(ies) checked" + (f", refused: {', '.join(refused)}" if refused
-                                                     else " — every one holds for the plan gate"))
+    print(f"backlog: {checked.checked} story(ies) checked" + (f", refused: {', '.join(refused)}" if refused
+                                                             else " — every one holds for the plan gate"))
     return 1 if refused else 0
-
-
-def check_exists(result, cwd, mapping):
-    """Each mapped test is there (`TestChecks.exist`): {selector: file} for the ones found."""
-    if not mapping:
-        return None
-    located, looked = locate_tests(cwd, mapping)
-    take(result, TestChecks.exist(looked))
-    return located
-
-
-def check_red_proof(result, cwd, runs, located, story_id):
-    """Every test is the version the test stage saw fail (`KeptChecks.red_proof`) — after a whole run of the tests."""
-    tests = tuple(MappedTest(ScenarioKey(""), Selector(selector), Place(path), None, None)
-                  for selector, path in (located or {}).items() if path)
-    take(result, KeptChecks.red_proof(stage_story(story_id, "", {}, "", ()), StageName(""), tests,
-                                      StageEvidenceFiles(cwd, runs, place("epics"), {})))
-
-
-def stale_red_proof(cwd, runs, story, start=None):
-    """The tests whose red proof the build and tidy gates would refuse (`red-proof`), read without running anything:
-    each mapped test whose file changed after the test stage saw it fail — by a merge of the main line into the story,
-    most often — and no answered decision of stage `test` changed what it expects. Empty without a red record."""
-    digests = read_red_digests(runs, story)
-    if not digests or all(d is None for d in digests.values()):
-        return []
-    try:
-        _path, mapping = read_mapping(runs, story)
-    except GateError:
-        return []
-    moved = unproven_tests(cwd, check_exists(Result(), cwd, mapping) or {}, digests)
-    if not moved or answered_decisions(cwd, story, "test"):
-        return []
-    if start == "tidy" and red_tree(runs, story) and last_ended(runs, story, tuple(s.name for s in STAGES if s.lists and not s.red)) == "tidy":
-        # A tidy that runs again moved the tests itself: its gate re-proves them on the red tree (WP-151 A).
-        return []
-    return moved
-
-
-def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None, story=None):
-    """Every question this story raised is recorded, and every answer it got has been applied (`DecisionChecks`): an
-    answer applied is stamped in its record and becomes an `answered:` line of the story before it is said."""
-    try:
-        if story is None:
-            path = story_path or find_story(place("epics"), story_id)
-            front, body = read_front_matter(path)
-            story = stage_story(story_id, path, front, body, ())
-        checked = DecisionChecks.check(story, StageName(gating or ""), StageEvidenceFiles(cwd, runs, place("epics"), {}))
-    except GateError as error:
-        result.fail("decisions", str(error))
-        return
-    stamps = DecisionStampFiles(runs)
-    for item in checked.items:
-        take(result, (DecisionChecks.applied(item, stamps.apply(story, item)),) if isinstance(item, Applying) else (item,))
-
-
-# The same checks outside a story: a direct edit, a commit and CI get one verdict for one tree. The
-# profile declares the commands; its `required:` line declares which of them must hold. Without
-# that line the check reports what it ran and what it skipped, and fails only on a red command.
-
-
-def red(result, check, message, must, strict):
-    """A red check fails the verdict — unless a policy is declared and this check is not in it (`suite_checks.red`)."""
-    take(result, (red_finding(CheckName(check), Said(message), Presence.PRESENT if must else Presence.ABSENT,
-                              Presence.PRESENT if strict else Presence.ABSENT),))
-
-
-def run_test_command(result, cwd, profile, key, command, required, strict=False, owner=None):
-    """A test command passes only when its reports show it executed tests and none failed. With `owner` (a story's
-    whole suite) a red test outside the story runs again alone once."""
-    judge_suite(result, suite_run(cwd, profile, key, command, owner), required, strict)
-
-
-def check_main_tests(result, cwd, runs, story_id):
-    """The merge's resolution kept the main line's side of every test it met (`IntegrationChecks.main_tests`)."""
-    take(result, IntegrationChecks.main_tests(stage_story(story_id, "", {}, "", ()),
-                                              StageEvidenceFiles(cwd, runs, place("epics"), {})))
-
-
-def check_existing_tests(result, cwd, runs, story_id, story_body=""):
-    """The tests that existed before the story still expect what they did (`KeptChecks.tests_kept`)."""
-    story = stage_story(story_id, "", {}, story_body, ())
-    take(result, KeptChecks.tests_kept(story, StageEvidenceFiles(cwd, runs, place("epics"), {})))
-
-
-def change_check(result, cwd, profile, staged, only):
-    """The profile's checks outside a story (`ChangeChecks`): a direct edit, a commit (`staged`: the index, refused
-    where the working tree differs) and CI get one verdict for one tree."""
-    required = set(split_list(profile.get("required")))
-    strict = Presence.PRESENT if required else Presence.ABSENT
-    take(result, ChangeChecks.policy(frozenset(CommandKey(r) for r in required)))
-    env = dict(os.environ)
-    tree = None
-    paths = backlog_paths(cwd, env) if staged and not split_list(only) else None
-    if staged:
-        if paths and not split_list(profile.get("checks.backlog")):
-            take(result, (ChangeChecks.backlog_alone(),))
-        else:
-            index = snapshot(cwd, env)
-            found = ChangeChecks.snapshot(index)
-            take(result, (found,))
-            if found.state is not FindingState.PASS:
-                return
-            tree = index.tree.value
-        # The profile's commands must not inherit a temporary index (`git commit -a`): a test that
-        # runs git in a repository of its own would read this commit's index as its own.
-        os.environ.pop("GIT_INDEX_FILE", None)
-    else:
-        code, head = git(cwd, "rev-parse", "--short", "HEAD", env=env)
-        take(result, (ChangeChecks.working_tree(Detail(head) if code == 0 else None),))
-    scope = split_list(only) or list(CHANGE_CHECKS)
-    test_keys = [k for k in test_command_keys(profile)] + sorted(
-        r for r in required if (r == "e2eTest" or r.startswith("test.")) and r not in test_command_keys(profile))
-    # A commit of the backlog alone — stories, decisions, findings, the pipeline's protocol — changes no code: it
-    # runs what `checks.backlog` names (a project whose tests read the backlog names them), by each check's or
-    # test command's own key, and nothing more. An explicit `--checks` scope is the person's and wins.
-    test_scope = None
-    if paths:
-        named = split_list(profile.get("checks.backlog"))
-        take(result, ChangeChecks.backlog_scope(tuple(CommandKey(n) for n in named),
-                                                tuple(CommandKey(k) for k in test_keys), Count(len(paths))))
-        test_scope = {n for n in named if n in test_keys}
-        scope = [n for n in named if n in CHANGE_CHECKS and n != "test"] + (["test"] if test_scope else [])
-    for check in CHANGE_CHECKS:
-        if check == "test":
-            required_tests = [k for k in test_keys if k in required]
-            if check not in scope:
-                take(result, (ChangeChecks.out_of_scope(CheckName(check),
-                                                        tuple(CommandKey(k) for k in required_tests)),))
-                continue
-            commands = {}
-            for key in test_keys:
-                if test_scope is not None and key not in test_scope:
-                    take(result, (ChangeChecks.test_out_of_scope(CommandKey(key), Presence.PRESENT if key in required else Presence.ABSENT),))
-                    continue
-                if profile.get(key):
-                    commands.setdefault(profile[key], []).append(key)
-                elif key in required:
-                    take(result, (ChangeChecks.missing_test(CommandKey(key)),))
-            if not commands and not required_tests:
-                take(result, (ChangeChecks.no_test(),))
-            for command, keys in commands.items():
-                run_test_command(result, cwd, profile, "/".join(keys), command,
-                                 any(k in required for k in keys), bool(required))
-            continue
-        must = Presence.PRESENT if check in required else Presence.ABSENT
-        if check not in scope:
-            take(result, (ChangeChecks.test_out_of_scope(CommandKey(check), must),))
-            continue
-        command = profile.get(check)
-        if not command:
-            take(result, (ChangeChecks.missing(CheckName(check), CommandKey(check), must),))
-            continue
-        code, output = run(command, cwd)
-        take(result, (ChangeChecks.command(CheckName(check), CommandRun(Detail(command), Count(code),
-                                                                       Detail(tail(output)), Detail("")),
-                                           must, strict),))
-    if tree:
-        _, after = git(cwd, "write-tree", env=env)
-        if after != tree:
-            take(result, (ChangeChecks.index_changed(Detail(tree), Detail(after)),))
-
-
-def parity(result, config_path):
-    """Every implementation's reports against one scenario contract (`ChangeChecks.parity`)."""
-    take(result, ChangeChecks.parity(parity_facts(config_path)))
 
 
 class Result(Verdict):
@@ -815,9 +330,11 @@ def main(argv):
                 if layout_hint(cwd, profile):
                     result.fail("layout", layout_hint(cwd, profile))
                 check_contract(result, profile)
-                change_check(result, cwd, profile, args.staged, args.checks)
+                changed = check_change(cwd, profile).execute(CheckChangeCommand(args.staged, args.checks))
+                result.entries += changed.entries
+                result.flaky += changed.flaky
             else:
-                parity(result, args.parity)
+                result.take(check_parity().execute(CheckParityCommand(args.parity)))
         except GateError as error:
             result.fail("gate", str(error))
         return result.report(label, label, args.json)
@@ -837,7 +354,7 @@ def main(argv):
         story_id = str(front.get("id") or os.path.basename(story_folder(story_path)))
         observe_writes(args.runs, story_id)
         criteria = criteria_of(story_path, body, front)
-        run = gate_run(result=result, args=args, cwd=cwd, runs=args.runs, stage=STAGE[args.stage], story_id=story_id,
+        run = stage_run(lambda run: close_record(run), result=result, args=args, cwd=cwd, runs=args.runs, stage=STAGE[args.stage], story_id=story_id,
                       story_path=story_path, front=front, body=body, criteria=criteria,
                       profile=read_profile(resolve_profile(args.profile, cwd)))
         run_checks(run)
@@ -848,18 +365,6 @@ def main(argv):
     if not result.failed:
         run_passed(run)
     return journal_gate(result, args, story_id, story_path, result.report(story_id, args.stage, args.json, args.brief))
-
-
-def check_spec_delta(result, cwd, runs, story_id, story_path, front, body):
-    """The plan's spec delta against the story and the spec (`SpecChecks.delta`)."""
-    story = stage_story(story_id, story_path, front, body, ())
-    take(result, SpecChecks.delta(story, StageEvidenceFiles(cwd, runs, place("epics"), {})))
-
-
-def check_spec_tests(result, cwd, runs, story_id, front, mapping):
-    """Every test the story's spec names is still there (`SpecChecks.tests`)."""
-    take(result, SpecChecks.tests(stage_story(story_id, "", front, "", ()), table_tests(mapping),
-                                  StageEvidenceFiles(cwd, runs, place("epics"), {})))
 
 
 def close_record(run):

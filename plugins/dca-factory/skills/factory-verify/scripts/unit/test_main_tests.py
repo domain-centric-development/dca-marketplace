@@ -6,9 +6,9 @@ import subprocess
 import tempfile
 import unittest
 
-from support import write
+from support import evidence, gate_story, verdict, write
 from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
-from dca_factory import gate
+from dca_factory.delivery.domain.service.integration_checks import IntegrationChecks
 from dca_factory.delivery.adapter.outgoing.git import integration
 
 
@@ -64,8 +64,7 @@ class MainTests(unittest.TestCase):
         lost = integration.main_tests_lost(self.root, self.runs, "STORY-1")
         self.assertEqual([rel for rel, _ in lost], [TEST])
         self.assertTrue(any("sideShop" in line for line in lost[0][1]))
-        result = gate.Result()
-        gate.check_main_tests(result, self.root, self.runs, "STORY-1")
+        result = verdict(IntegrationChecks.main_tests(gate_story("STORY-1"), evidence(self.root, self.runs)))
         self.assertIn("main-tests", {check for kind, check, _ in result.entries if kind == "fail"})
 
     def test_both_cases_kept_hold_and_the_story_may_still_change_what_the_base_had(self):
@@ -74,8 +73,7 @@ class MainTests(unittest.TestCase):
         # a line the main line kept from the base is the story's to change — tests-kept judges that, not this check
         self.resolve(MAIN.replace("assertTrue(shop.open())", "assertTrue(shop.isOpen())"))
         self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [])
-        result = gate.Result()
-        gate.check_main_tests(result, self.root, self.runs, "STORY-1")
+        result = verdict(IntegrationChecks.main_tests(gate_story("STORY-1"), evidence(self.root, self.runs)))
         self.assertIn("main-tests", {check for kind, check, _ in result.entries if kind == "pass"})
 
     def test_a_test_file_the_resolution_removed_is_lost_whole(self):
@@ -110,8 +108,7 @@ class MainTests(unittest.TestCase):
         self.assertEqual([rel for rel, _ in integration.main_tests_lost(self.root, self.runs, "STORY-1")], [TEST])
         self.answer("integrate")
         self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [])
-        result = gate.Result()
-        gate.check_main_tests(result, self.root, self.runs, "STORY-1")
+        result = verdict(IntegrationChecks.main_tests(gate_story("STORY-1"), evidence(self.root, self.runs)))
         kinds = {kind for kind, check, _ in result.entries if check == "main-tests"}
         self.assertNotIn("fail", kinds)
         self.assertTrue(any("STORY-1-01" in message for _k, check, message in result.entries if check == "main-tests"))
@@ -160,8 +157,7 @@ class ResignedHelpers(unittest.TestCase):
         self.resolve(R_STORY.replace("\n}\n", "\n  @Test void sideShop() {\n    assertTrue(side.open(9));\n  }\n}\n"))
         self.assertEqual(integration.main_tests_lost(self.root, self.runs, "STORY-1"), [])
         self.assertEqual(integration.main_tests_adapted(self.root, self.runs, "STORY-1"), [(TEST, ["assertTrue(side.open());"])])
-        result = gate.Result()
-        gate.check_main_tests(result, self.root, self.runs, "STORY-1")
+        result = verdict(IntegrationChecks.main_tests(gate_story("STORY-1"), evidence(self.root, self.runs)))
         self.assertIn("main-tests", {check for kind, check, _ in result.entries if kind == "pass"})
 
     def test_a_case_that_went_whole_is_still_lost(self):

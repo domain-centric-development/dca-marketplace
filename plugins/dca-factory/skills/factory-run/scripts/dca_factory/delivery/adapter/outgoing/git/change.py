@@ -123,3 +123,34 @@ def parity_facts(config_path: str) -> ParityFacts:
             tuple((Detail(title), Detail(outcome)) for title, outcome in names.items())))
     return ParityFacts(Place(config_path), Detail(config["scenarios"]), Detail(digest), scenarios,
                        tuple(implementations))
+
+
+class ChangeIndexFiles:
+    """The index and the working tree of the project <cwd>, as git holds them."""
+
+    def __init__(self, cwd: str) -> None:
+        self._cwd = cwd
+        self._env = dict(os.environ)
+
+    def backlog_paths(self) -> typing.Optional[typing.List[str]]:
+        return backlog_paths(self._cwd, self._env)
+
+    def snapshot(self) -> Snapshot:
+        return snapshot(self._cwd, self._env)
+
+    def head(self) -> typing.Optional[str]:
+        code, head = git(self._cwd, "rev-parse", "--short", "HEAD", env=self._env)
+        return head if code == 0 else None
+
+    def tree(self) -> str:
+        return git(self._cwd, "write-tree", env=self._env)[1]
+
+    def detach(self) -> None:
+        os.environ.pop("GIT_INDEX_FILE", None)
+
+
+class ParityReportFiles:
+    """The parity configs, each read with the reports it names."""
+
+    def facts(self, config: str) -> ParityFacts:
+        return parity_facts(config)

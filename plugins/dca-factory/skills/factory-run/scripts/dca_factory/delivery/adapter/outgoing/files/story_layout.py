@@ -194,3 +194,8 @@ def depends_on(front: typing.Mapping[str, typing.Any]) -> typing.List[str]:
 def file_digest(path: str) -> str:
     with open(path, "rb") as handle:
         return hashlib.sha256(handle.read()).hexdigest()
+
+
+def story_ids(epics: str) -> typing.List[str]:
+    """Every story id under the epics, in the order of the files — front matter first, else the file name."""
+    return [story_id_of(path) for path in story_files(epics)]

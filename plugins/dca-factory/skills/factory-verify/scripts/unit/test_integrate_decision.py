@@ -4,8 +4,12 @@ for it and the integrate gate stamps it applied — it never holds the story in 
 import os
 import unittest
 
-from support import project, write
-from dca_factory import contract, gate
+from support import evidence, gate_story, project, verdict, write
+from dca_factory import contract
+from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles
+from dca_factory.delivery.domain.model.stage import StageName
+from dca_factory.delivery.domain.service.decision_checks import Applying, DecisionChecks
+from dca_factory.sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 RECORD = """---
@@ -32,8 +36,12 @@ at: 2026-10-21T18:30:00Z
 class IntegrateDecision(unittest.TestCase):
 
     def checks(self, p, story, gating):
-        result = gate.Result()
-        gate.check_decisions(result, p.runs, "S-1", p.root, gating, story)
+        front, body = read_front_matter(story)
+        checked = gate_story("S-1", story, front, body)
+        result, stamps = verdict(), DecisionStampFiles(p.runs)
+        for item in DecisionChecks.check(checked, StageName(gating), evidence(p.root, p.runs)).items:
+            result.take((DecisionChecks.applied(item, stamps.apply(checked, item)),) if isinstance(item, Applying)
+                        else (item,))
         return {(kind, check) for kind, check, _ in result.entries}, result
 
     def test_the_gates_before_wait_and_the_integrate_gate_stamps_it(self):

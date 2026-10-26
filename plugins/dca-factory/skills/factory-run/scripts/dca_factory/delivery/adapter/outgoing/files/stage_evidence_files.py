@@ -183,6 +183,12 @@ def depends_on_of(front: Front) -> typing.List[str]:
     return [str(n) for n in needs] if isinstance(needs, list) else []
 
 
+def contract_of(profile: typing.Mapping[str, typing.Any]) -> int:
+    """The contract the profile declares, else the gate's own."""
+    declared = str(profile.get("contract", "")).strip()
+    return int(declared) if declared.isdigit() else CONTRACT
+
+
 def stage_story(story_id: str, story_path: str, front: Front, body: str,
                 criteria: typing.Sequence[typing.Tuple[str, str]]) -> StageStory:
     """The story under a gate, read off its front matter and its criteria."""
@@ -274,7 +280,10 @@ class StageEvidenceFiles:
         return None
 
     def epic(self, story: StageStory) -> EpicFacts:
-        epic_path, epic_name = epic_of(story.place.value, read_front_matter(story.place.value)[0], self._epics)
+        try:
+            epic_path, epic_name = epic_of(story.place.value, read_front_matter(story.place.value)[0], self._epics)
+        except GateError as error:
+            return EpicFacts(story.place, EpicId(""), (), None, None, Metric(""), Detail(str(error)))
         front = read_front_matter(epic_path)[0]
         # A key with no value parses as an empty list, and `str([])` is "[]" — non-empty, so the field would count as
         # filled. A mandatory field is a sentence, so only a non-empty string counts.
