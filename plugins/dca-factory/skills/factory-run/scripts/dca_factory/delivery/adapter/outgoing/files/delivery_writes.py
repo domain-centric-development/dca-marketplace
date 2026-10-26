@@ -38,7 +38,7 @@ from .run_marks import write_mark
 from .snapshots import git_tree
 from .stage_evidence_files import closed_rows, closes_of
 from .story_files import StoryFiles
-from .story_layout import story_digest, story_folder, story_kind
+from .story_layout import journeys_hold, story_digest, story_folder, story_kind
 from .test_files import locate_tests, read_mapping
 
 Front = typing.Mapping[str, typing.Any]
@@ -258,7 +258,7 @@ def merge_spec(result: typing.Any, story_path: str, story_id: str, front: Front,
         tests.setdefault(key, selectors)        # a criterion of the story keeps the test its mapping names
     story = story_entries(body)
     context = str(front.get("context", "")).strip()
-    journey = story_kind(front) == "journey"
+    journey = journeys_hold(front)
     merged = {"": merge(spec, story, delta, tests)} if journey else merge_context(spec, story, delta, tests, feature)
     for entries in merged.values():
         for item in entries:

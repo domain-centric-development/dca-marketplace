@@ -13,7 +13,7 @@ import shlex
 import sys
 import typing
 
-from ....application.profile.profile_rules import command_heads, first_word, model_for
+from ....application.profile.profile_rules import command_heads, effort_for, first_word, model_for, tool_for
 from .agents import isolation_args, TOOL
 
 Profile = typing.Mapping[str, typing.Any]
@@ -89,34 +89,19 @@ class ToolChoice:
         match = re.search(r".*(?:^| )(?:-m|--model)[ =]([^ ]*)", self.tool_args(tool))
         return match.group(1) if match else ""
 
-    @staticmethod
-    def unit_keys(unit: typing.Optional[str]) -> typing.List[str]:
-        """The profile keys a unit is named by, most specific first: `review:ddd` → review.ddd, review."""
-        unit = (unit or "").replace(":", ".")
-        head = unit.split(".")[0]
-        return [unit] + ([head] if head != unit else [])
-
     def tool_for(self, unit: str, given: str) -> str:
         """The tool one unit runs with: `--tool` when the person named one for this run (FACTORY_TOOL_EXPLICIT), else
         the profile's `tool.<unit>` (a review `tool.review.<perspective>`, then `tool.review`), else `tool:`, else
         the run's tool."""
         if os.environ.get("FACTORY_TOOL_EXPLICIT") or os.environ.get("FACTORY_TOOL_CMD"):
             return given
-        profile = self._profile()
-        for key in self.unit_keys(unit):
-            named = first_word(profile.get(f"tool.{key}", ""))
-            if named:
-                return named
-        return first_word(profile.get("tool", "")) or given
+        return tool_for(self._profile(), unit) or given
 
     def effort_choice(self, tool: str, unit: typing.Optional[str]) -> typing.Tuple[str, str]:
         """(level, note) — the reasoning effort of one unit: the profile's `effort.<tool>.<unit>`, else
         `effort.<tool>`; a `--effort`/`model_reasoning_effort` in FACTORY_<TOOL>_ARGS wins, and a tool that takes no
         effort gets a note, never a silent drop."""
-        profile = self._profile()
-        level = next((first_word(profile.get(f"effort.{tool}.{key}", "")) for key in self.unit_keys(unit)
-                      if first_word(profile.get(f"effort.{tool}.{key}", ""))), "") \
-            or first_word(profile.get(f"effort.{tool}", ""))
+        level = effort_for(self._profile(), tool, unit)
         if not level:
             return "", ""
         if re.search(r"(--effort|model_reasoning_effort)", self.tool_args(tool)):

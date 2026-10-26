@@ -29,8 +29,7 @@ from .decision_record_files import record_path
 from .owned_files import write_story_fields
 from .run_marks import gate_passed_on_record, STORY_DIGEST, write_mark
 from .story_layout import (
-    DECISIONS_DIR, delivered_by, delivered_on, find_story, flat_stories, is_delivered, legacy_story_digest,
-    story_digest, STORY_FILE, story_files, story_id_of, story_kind)
+    journeys_hold, DECISIONS_DIR, delivered_by, delivered_on, find_story, flat_stories, is_delivered, legacy_story_digest, story_digest, STORY_FILE, story_files, story_id_of)
 from .story_record import record_story
 from .story_runs import PASS_MARKS
 from .test_files import read_mapping
@@ -168,7 +167,7 @@ def migrate_spec(cwd: str, epics: str, runs: str, say: Say) -> None:
             continue
         if is_delivered(front) and spec_target(front):
             delivered.append((delivered_on(front), story_id_of(story_path), story_path, front, body))
-    place_of = lambda front: ("journeys" if story_kind(front) == "journey"
+    place_of = lambda front: ("journeys" if journeys_hold(front)
                               else str(front.get("context", "")).strip().lower())
     removed: typing.Dict[typing.Tuple[str, str], typing.List[str]] = {}
     for when, story_id, _path, front, _body in delivered:
@@ -193,7 +192,7 @@ def migrate_spec(cwd: str, epics: str, runs: str, say: Say) -> None:
         except GateError:
             tests = {}
         delta = read_delta("")       # what the story's plan changed or removed holds already, or a later story undid it
-        title = "Journeys" if story_kind(front) == "journey" else str(front.get("context", "")).strip()
+        title = "Journeys" if journeys_hold(front) else str(front.get("context", "")).strip()
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, "w", encoding="utf-8") as handle:
             handle.write(render_spec(preamble, merge(spec, story, delta, tests), title))

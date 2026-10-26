@@ -50,6 +50,23 @@ class SkillName(Value):
     value: str
 
 
+#: The profile's key for the tool every unit runs with unless a `tool.<unit>` names another.
+TOOL_KEY = ProfileKey("tool")
+
+
+class Unit(Value):
+    """What a tool process runs: a stage (`build`), a shared window (`builder`), a review (`review:ddd`)."""
+
+    value: str
+
+    def keys(self, family: ProfileKey) -> typing.Tuple[ProfileKey, ...]:
+        """The profile's keys for it under <family>, most specific first: `tool` and `review:ddd` →
+        `tool.review.ddd`, `tool.review`."""
+        unit = self.value.replace(":", ".")
+        head = unit.split(".")[0]
+        return tuple(ProfileKey(f"{family.value}.{name}") for name in (unit,) + ((head,) if head != unit else ()))
+
+
 class Perspective(Value):
     """One way the judge looks at a story, and the skill it looks with."""
 
@@ -65,6 +82,20 @@ class StackProfile(Value):
     def get(self, key: ProfileKey) -> ProfileValue:
         """The value under a key; empty where the profile names none."""
         return next((value for k, value in self.entries if k == key), ProfileValue(""))
+
+    def first_of(self, keys: typing.Iterable[ProfileKey]) -> ProfileValue:
+        """The first word under the first of <keys> the profile fills; empty where it fills none."""
+        return next((found for found in (self.get(key).head() for key in keys) if found.value), ProfileValue(""))
+
+    def tool_for(self, unit: Unit) -> ToolName:
+        """`tool.<unit>` (a review `tool.review.<perspective>`, then `tool.review`), else `tool`; empty where the
+        profile names none and the run's tool stands."""
+        return ToolName(self.first_of(unit.keys(TOOL_KEY) + (TOOL_KEY,)).value)
+
+    def effort_for(self, tool: ToolName, unit: Unit) -> ProfileValue:
+        """`effort.<tool>.<unit>`, most specific first, else `effort.<tool>`; empty where the profile names none."""
+        family = ProfileKey(f"effort.{tool.value}")
+        return self.first_of(unit.keys(family) + (family,))
 
     def model_for(self, tool: ToolName, stage: StageName) -> ModelName:
         """`model.<tool>.<stage>`, else `model.<tool>`, else none: the key names the tool, so a colleague's run with

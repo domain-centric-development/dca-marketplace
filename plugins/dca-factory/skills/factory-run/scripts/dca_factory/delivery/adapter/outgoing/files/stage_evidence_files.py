@@ -49,7 +49,7 @@ from .decision_record_files import NOTHING
 from .kept_files import bare_path, row_cells
 from .run_marks import current_stage_files, STORY_DIGEST, verdict_in
 from .snapshots import NOT_OBSERVED
-from .story_layout import story_digest
+from .story_layout import journeys_hold, story_digest
 from ..claims.remote_claims import claim_config_here
 from ..git.integration import (
     CONFLICT_MARKER, integration_target, lost_text, MAIN_TESTS, main_tests_adapted, main_tests_lost, main_tests_waiver,
@@ -570,7 +570,7 @@ class StageEvidenceFiles:
         delta = read_delta(read_text(plan_path))
         problems = delta_problems(entries, spec, delta) \
             + rule_problems(section_of(body, "changed expectations") or [], entries, spec, delta)
-        if story_kind(front) != "journey":
+        if not journeys_hold(front):
             problems += placement_problems(entries, spec, delta, feature, features)
         found = derived(entries, spec)
         return SpecDelta(Place(shown(plan_path)), Place(shown(target)), tuple(Detail(p) for p in problems),

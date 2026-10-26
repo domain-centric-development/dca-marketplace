@@ -14,6 +14,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import (
 from .....sharedkernel.adapter.outgoing.profile.profile_files import shown
 from ....application.shared.front import CREATED_KEY
 from ....domain.model.story import KindWord, StoryStatus
+from ....domain.model.stage import SpecHome, StoryKind
 
 #: The epic is `<epics>/<epic>/epic.md` beside its story folders — one shape for both, a folder and its file.
 EPIC_FILE = "epic.md"
@@ -179,6 +180,11 @@ def story_kind(front: typing.Mapping[str, typing.Any]) -> str:
     status = str(front.get("status", "")).strip().lower()
     known = next((s for s in StoryStatus if s.value == status), StoryStatus.OTHER)
     return KindWord(str(front.get("kind") or "")).kind(known).value
+
+
+def journeys_hold(front: typing.Mapping[str, typing.Any]) -> bool:
+    """Whether the story's criteria hold among the project's journeys rather than in its context (`SpecHome`)."""
+    return SpecHome.of(StoryKind(story_kind(front))) is SpecHome.JOURNEYS
 
 
 def depends_on(front: typing.Mapping[str, typing.Any]) -> typing.List[str]:

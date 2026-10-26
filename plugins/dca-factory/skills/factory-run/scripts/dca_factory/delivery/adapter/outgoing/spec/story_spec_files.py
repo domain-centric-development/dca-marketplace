@@ -17,7 +17,7 @@ from ....application.shared.story_spec import SpecChange
 from ....domain.model.story import StoryId
 from ..files.decision_record_files import records_of
 from ..files.kept_files import human_line
-from ..files.story_layout import find_story, story_kind
+from ..files.story_layout import journeys_hold, find_story
 from ....domain.model.decision_record import ANSWERED_WORDS
 
 Front = typing.Mapping[str, typing.Any]
@@ -50,7 +50,7 @@ class StorySpecFiles:
         target, spec, front = read["target"], read["spec"], read["front"]
         added = [item for item in read["story"] if item["key"] not in {s["key"] for s in spec}]
         if added:
-            own = [item for item in spec if item["feature"] == read["feature"]] if story_kind(front) != "journey" \
+            own = [item for item in spec if item["feature"] == read["feature"]] if not journeys_hold(front) \
                 else spec
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with open(target, "w", encoding="utf-8") as handle:
@@ -62,7 +62,7 @@ class StorySpecFiles:
 def spec_target(front: Front) -> typing.Optional[str]:
     """The spec file a story changes: its feature's `scenarios.md` under its context — the context's own for a story
     without `feature:` —, or `journeys.md` for a journey item; None for a story that names no context."""
-    if story_kind(front) == "journey":
+    if journeys_hold(front):
         return journeys_path()
     return scenarios_path(front["context"], front.get("feature")) if str(front.get("context", "")).strip() else None
 
@@ -74,7 +74,7 @@ def story_spec(front: Front) -> typing.Tuple[typing.Optional[str], Entries, typi
     target = spec_target(front)
     if not target:
         return None, [], set(), ""
-    if story_kind(front) == "journey":
+    if journeys_hold(front):
         return target, [dict(item, feature="") for item in read_spec(target)[1]], set(), ""
     context = front["context"]
     return (target, read_context(context), {name for name, _p in context_files(context) if name},

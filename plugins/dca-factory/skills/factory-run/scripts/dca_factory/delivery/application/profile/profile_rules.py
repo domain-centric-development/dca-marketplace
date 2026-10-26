@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import typing
 
-from ...domain.model.stack_profile import BUILT_IN_PERSPECTIVES, ProfileKey, ProfileValue, StackProfile, ToolName
+from ...domain.model.stack_profile import (
+    BUILT_IN_PERSPECTIVES, ProfileKey, ProfileValue, StackProfile, ToolName, Unit)
 from ...domain.model.stage import StageName
 
 __all__ = ["BUILT_IN_PERSPECTIVES", "carrier_lines", "carriers", "command_heads", "first_word", "model_for",
-           "perspectives_of", "stack_profile"]
+           "perspectives_of", "stack_profile", "tool_for", "effort_for"]
 
 Profile = typing.Mapping[str, typing.Any]
 
@@ -30,6 +31,14 @@ def command_heads(profile: Profile) -> typing.List[str]:
 
 def model_for(profile: Profile, tool: str, stage: str) -> str:
     return stack_profile(profile).model_for(ToolName(tool), StageName(stage)).value
+
+
+def tool_for(profile: Profile, unit: str) -> str:
+    return stack_profile(profile).tool_for(Unit(unit)).value
+
+
+def effort_for(profile: Profile, tool: str, unit: typing.Optional[str]) -> str:
+    return stack_profile(profile).effort_for(ToolName(tool), Unit(unit or "")).value
 
 
 def perspectives_of(profile: Profile) -> typing.List[typing.Tuple[str, str]]:

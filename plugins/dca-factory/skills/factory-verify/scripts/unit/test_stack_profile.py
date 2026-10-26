@@ -5,7 +5,7 @@ import unittest
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.application.profile.ask_profile import AskProfileQuery, AskProfileUseCase, Question
 from dca_factory.delivery.application.profile.profile_rules import stack_profile
-from dca_factory.delivery.domain.model.stack_profile import Perspective, SkillName, ToolName
+from dca_factory.delivery.domain.model.stack_profile import Perspective, ProfileValue, SkillName, ToolName, Unit
 from dca_factory.delivery.domain.model.stage import StageName
 
 PROFILE = {
@@ -26,6 +26,17 @@ class StackProfileTest(unittest.TestCase):
 
     def setUp(self):
         self.profile = stack_profile(PROFILE)
+
+    def test_a_unit_takes_its_own_tool_and_effort_then_its_heads_then_the_profiles(self):
+        profile = stack_profile({"tool": "claude", "tool.review": "codex x", "tool.review.ddd": "opencode",
+                                 "effort.codex": "low", "effort.codex.review": "high"})
+        self.assertEqual(profile.tool_for(Unit("review:ddd")), ToolName("opencode"))
+        self.assertEqual(profile.tool_for(Unit("review:clean-code")), ToolName("codex"))
+        self.assertEqual(profile.tool_for(Unit("build")), ToolName("claude"))
+        self.assertEqual(stack_profile({}).tool_for(Unit("build")), ToolName(""))
+        self.assertEqual(profile.effort_for(ToolName("codex"), Unit("review:ddd")), ProfileValue("high"))
+        self.assertEqual(profile.effort_for(ToolName("codex"), Unit("build")), ProfileValue("low"))
+        self.assertEqual(profile.effort_for(ToolName("claude"), Unit("build")), ProfileValue(""))
 
     def test_a_tool_takes_its_stage_model_else_its_own_and_never_another_tools(self):
         self.assertEqual("haiku", self.profile.model_for(ToolName("claude"), StageName("tidy")).value)

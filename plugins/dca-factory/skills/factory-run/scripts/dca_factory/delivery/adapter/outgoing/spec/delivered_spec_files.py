@@ -10,7 +10,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place, shown
 from .....spec.api import lint_context, read_delta, story_entries
 from ....application.shared.delivered_specs import DeliveredCriteria
-from ..files.story_layout import delivered_on, is_delivered, story_files, story_id_of, story_kind
+from ..files.story_layout import journeys_hold, delivered_on, is_delivered, story_files, story_id_of
 from .story_spec_files import spec_target, story_spec
 
 Front = typing.Mapping[str, typing.Any]
@@ -18,7 +18,7 @@ Front = typing.Mapping[str, typing.Any]
 
 def spec_place(front: Front) -> str:
     """What a key is unique in: the story's context (every feature of it), or the journeys."""
-    return "journeys" if story_kind(front) == "journey" else str(front.get("context", "")).strip().lower()
+    return "journeys" if journeys_hold(front) else str(front.get("context", "")).strip().lower()
 
 
 class DeliveredSpecFiles:

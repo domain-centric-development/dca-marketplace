@@ -55,6 +55,18 @@ class StoryKind(enum.Enum):
     TASK = "task"
 
 
+class SpecHome(enum.Enum):
+    """Where a story's criteria hold once it is delivered: a journey's among the project's journeys, with no feature;
+    every other kind's in its context, under its feature or the context's own."""
+
+    JOURNEYS = "journeys"
+    CONTEXT = "context"
+
+    @classmethod
+    def of(cls, kind: StoryKind) -> SpecHome:
+        return cls.JOURNEYS if kind is StoryKind.JOURNEY else cls.CONTEXT
+
+
 class Window(enum.Enum):
     """The shared process that may carry several stages under one name."""
 

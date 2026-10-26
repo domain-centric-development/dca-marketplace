@@ -24,7 +24,7 @@ from .design_files import plan_invariants, read_clause_rows, read_invariant_rows
 from .decision_record_files import NOTHING
 from .snapshots import git_tree, listed_files, snapshot_reason, tree_changes
 from .stage_evidence_files import contract_of
-from .story_layout import find_story, story_kind
+from .story_layout import journeys_hold, find_story, story_kind
 from ..spec.story_spec_files import story_spec
 
 
@@ -406,7 +406,7 @@ def plan_skeleton(runs: str, story_id: str, cwd: str = ".") -> int:
     delta = "\n".join(f"- {verb} {key}" for key, verb in found.items())
     # Where the story's criteria go (WP-105): a feature the context does not have yet is born, a criterion that stands
     # under another feature moves — both follow from the story and the spec, so the skeleton writes them.
-    if target_spec and story_kind(front) != "journey":
+    if target_spec and not journeys_hold(front):
         delta = "\n".join([line for line in (delta,) if line] + placement_lines(story, held, feature, features))
     os.makedirs(folder, exist_ok=True)
     with open(target, "w", encoding="utf-8") as handle:
