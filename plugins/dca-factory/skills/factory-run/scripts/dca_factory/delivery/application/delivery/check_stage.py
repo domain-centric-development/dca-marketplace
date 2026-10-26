@@ -83,6 +83,13 @@ class Check(typing.NamedTuple):
 #: tests. What did not run is named, so the report says what is still unproven.
 CHECKS: typing.List[Check] = []
 
+#: The order the checks run in, whichever module registers them: the story and the profile first, then what the
+#: stage left, the tests last.
+ORDER = ("story", "contract", "status", "epic", "outcome", "rounds", "suites", "decisions", "plan", "document",
+         "pipeline", "owned", "adopt", "integrate", "tests-mapped", "files-listed", "test-design", "spec-delta",
+         "spec-tests", "tests-committed", "tests-real", "plan-files", "size", "red-proof", "tests", "invariant-breaks",
+         "red-reproof", "commands")
+
 #: What a passing gate does, per stage — the writes a verdict makes.
 PASSED: typing.Dict[str, typing.List[CheckRun]] = {}
 
@@ -105,8 +112,12 @@ def check(name: str, stages: typing.Union[None, typing.Tuple[str, ...], typing.C
             raise ValueError(f"check {name}: no gated stage {', '.join(unknown)}")
         chosen = tuple(stages)
 
+    if name not in ORDER:
+        raise ValueError(f"check {name}: not in the checks' order")
+
     def register(function: CheckRun) -> CheckRun:
         CHECKS.append(Check(name, function, chosen, needs_process, unrun or (lambda run: [name]), kinds))
+        CHECKS.sort(key=lambda c: ORDER.index(c.name))
         return function
     return register
 

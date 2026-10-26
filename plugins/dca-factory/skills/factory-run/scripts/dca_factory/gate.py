@@ -119,7 +119,7 @@ from .delivery.domain.service.story_checks import StoryChecks
 from .delivery.domain.service.decision_checks import Applying, DecisionChecks
 from .delivery.domain.model.stage import StageName
 from .delivery.domain.model.stage_story import (
-    CommandKey, Count, HandOverName, MappedTest, Place, Presence, ScenarioKey, Selector, TestTable, TitleCheck, TitleFound)
+    CommandKey, Count, MappedTest, Place, Presence, ScenarioKey, Selector, TestTable, TitleCheck, TitleFound)
 from .delivery.domain.model.story_state import Detail
 from .delivery.domain.service.design_checks import DesignChecks
 from .delivery.domain.service.kept_checks import KeptChecks
@@ -129,6 +129,7 @@ from .delivery.domain.service.integration_checks import IntegrationChecks
 from .delivery.domain.service.test_verdicts import BreakProof, TestVerdicts
 from .delivery.domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult
 from .delivery.domain.model.verdict import Finding
+from .delivery.application.delivery.stage_checks import table_tests  # registers the checks over the evidence alone
 from .delivery.application.delivery.check_stage import (
     check, on_pass, run_checks, run_passed, StageRun, Verdict)
 from .delivery.domain.model.stage import StoryKind, TESTED_KINDS as TESTED, Trait
@@ -1218,36 +1219,6 @@ def hand_over_to_cli(argv):
 COMPILES = CheckName("compiles")
 
 
-@check("story")
-def _story(run):
-    take(run.result, StoryChecks.context(run.story))
-
-
-@check("contract")
-def _contract(run):
-    take(run.result, ProfileChecks.contract(run.evidence))
-
-
-@check("status")
-def _status(run):
-    take(run.result, StoryChecks.status(run.story))
-
-
-@check("epic")
-def _epic(run):
-    take(run.result, BacklogChecks.epic(run.story, run.evidence))
-
-
-@check("outcome", stages=("plan",), kinds=TESTED)
-def _outcome_named(run):
-    take(run.result, BacklogChecks.outcome(run.story, run.contract, run.evidence))
-
-
-@check("rounds")
-def _rounds(run):
-    take(run.result, StoryChecks.rounds(run.story, run.evidence))
-
-
 @check("suites")
 def _suites(run):
     if not run.args.record_suites:
@@ -1285,16 +1256,6 @@ def _document(run):
     take(run.result, DeliveryChecks.documented(run.story, run.evidence))
     take(run.result, DeliveryChecks.proposals_landed(run.story, run.evidence))
     take(run.result, DeliveryChecks.reviews(run.story, run.evidence))
-
-
-@check("pipeline", stages=lambda s: s.name.value != "plan")
-def _pipeline(run):
-    take(run.result, DeliveryChecks.pipeline_untouched(run.story, run.evidence))
-
-
-@check("owned")
-def _owned(run):
-    take(run.result, StoryChecks.owned(run.story, run.evidence))
 
 
 @check("adopt", stages=("adopt",))
@@ -1340,36 +1301,10 @@ def _test_design(run):
     take(run.result, TestChecks.titles(run.story, run.contract, tests, run.evidence))
 
 
-@check("spec-delta", stages=("test",))
-def _spec_delta(run):
-    check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
-
-
-@check("spec-tests", stages=("document", "adopt", "integrate"), kinds=TESTED)
-def _spec_tests(run):
-    check_spec_tests(run.result, run.cwd, run.runs, run.story_id, run.front, run.mapping)
-
-
-@check("tests-committed", stages=("integrate",), kinds=TESTED)
-def _tests_committed(run):
-    check_tests_committed(run.result, run.cwd, run.front, run.mapping, run.runs)
-
-
 @check("tests-real", stages=("test", "adopt"))
 def _tests_real(run):
     if contract_of(run.profile) >= 21:
         take(run.result, DesignChecks.tests_real(run.story, mapped_tests(run), run.evidence))
-
-
-@check("plan-files", stages=("build",))
-def _plan_files(run):
-    if contract_of(run.profile) >= 22:
-        take(run.result, DesignChecks.plan_files(run.story, run.evidence))
-
-
-@check("size", stages=lambda s: bool(s.sizes))
-def _size(run):
-    take(run.result, TestChecks.size(run.story, tuple(HandOverName(name) for name in run.stage.sizes), run.evidence))
 
 
 @check("red-proof", stages=lambda s: Trait.LISTS in s.traits, kinds=TESTED)
@@ -1759,12 +1694,6 @@ def check_tests_committed(result, cwd, front, mapping, runs=""):
     """The story's commit holds every test file its mapping and its spec name (`SpecChecks.committed`)."""
     take(result, SpecChecks.committed(stage_story("", "", front, "", ()), table_tests(mapping),
                                       StageEvidenceFiles(cwd, runs, place("epics"), {})))
-
-
-def table_tests(mapping):
-    """The tests table's rows, unlocated."""
-    return tuple(MappedTest(ScenarioKey(key), Selector(selector), None, None, None)
-                 for key, selectors in (mapping or {}).items() for selector in selectors)
 
 
 def merge_spec(result, story_path, story_id, front, runs):
