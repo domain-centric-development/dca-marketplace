@@ -81,6 +81,15 @@ class Delta(unittest.TestCase):
         self.assertEqual(spec.derived(story, self.held), {"a": "holds", "b": "changes", "c": "adds"})
         self.assertEqual(spec.touches(story, self.held, spec.read_delta("")), ["b"])
 
+    def test_the_skeletons_placement_is_the_one_the_check_holds(self):
+        held = [dict(self.held[0], feature="listing"), dict(self.held[1], feature=None)]
+        story = [spec.entry("a", "R", "line", ["- a: one"]), spec.entry("c", "R", "line", ["- c: three"])]
+        lines = spec.placement_lines(story, held, "detail", {"listing"})
+        self.assertEqual(lines, ["- adds feature detail", "- moves a: listing → detail"])
+        delta = spec.read_delta("## Spec delta\n" + "\n".join(lines) + "\n")
+        self.assertEqual(spec.placement_problems(story, held, delta, "detail", {"listing"}), [])
+        self.assertEqual(spec.placement_lines([], held, "detail", {"listing"}), [])
+
     def test_a_delta_that_disagrees_is_named(self):
         story = [spec.entry("a", "S", "line", ["- a: one"])]
         delta = spec.read_delta('## Spec delta\n- adds a\n- removes zzz\n- rule "Q" → "S"\n')

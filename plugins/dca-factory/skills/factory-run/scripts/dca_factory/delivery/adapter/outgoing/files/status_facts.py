@@ -35,6 +35,7 @@ from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .signals import latest_signal
 from .journal_files import journal_events
 from ....application.shared.front import is_acceptance
+from ....domain.model.decision_record import ANSWERED_WORDS
 
 GateError = MarkdownError
 
@@ -445,10 +446,10 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
             domain[fields["code"]] = domain.get(fields["code"], 0) + 1
     corrections: typing.Dict[str, int] = {}
     for _p, front, _b, state, answer in records:
-        code = correction_code(answer.get("answer")) if is_acceptance(front) and state in ("answered", "applied") else None
+        code = correction_code(answer.get("answer")) if is_acceptance(front) and state in ANSWERED_WORDS else None
         if code:
             corrections[code] = corrections.get(code, 0) + 1
-    return dict(asked=len(questions), answered=sum(1 for _f, st in questions if st in ("answered", "applied")),
+    return dict(asked=len(questions), answered=sum(1 for _f, st in questions if st in ANSWERED_WORDS),
                 assumptions_open=sum(1 for l in lines if l.startswith("open:")),
                 assumptions_answered=sum(1 for l in lines if l.startswith("answered:")),
                 plan_open=int(plan[0].get("open", 0)) if plan else None,

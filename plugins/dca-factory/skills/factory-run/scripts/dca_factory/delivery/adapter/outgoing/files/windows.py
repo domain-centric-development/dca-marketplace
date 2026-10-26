@@ -20,6 +20,7 @@ from .usage_files import resolve_window, window_logs
 from ..claims.checkout_claim import claim, session_owner
 from .story_record import prune_raw
 from .stream_records import freeze_streams
+from ....application.profile.profile_rules import model_for
 
 
 def mark_window(cwd: str, runs: str, story_id: str, name: str, edge: str,
@@ -85,7 +86,7 @@ def mark_stage(cwd: str, runs: str, story_id: str, stage: str, edge: str,
             # session log later, and the status shows a request that did not reach the stage.
             profile = read_profile(resolve_profile(None, cwd))
             tool = kind.split("-")[0]
-            requested = str(profile.get(f"model.{tool}.{stage}") or profile.get(f"model.{tool}") or "").strip()
+            requested = model_for(profile, tool, stage)
             extra = f"\tmodel_requested={requested}" if requested else ""
             handle.write(f"{stamp}\tstage-start\t{stage}\ttool={kind}{extra}\n")
             if requested:

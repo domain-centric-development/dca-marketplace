@@ -17,6 +17,7 @@ from ..shared.status_facts import StatusFacts
 from .actions import make_action, offered
 from .show_status import ShowStatusInputPort, ShowStatusQuery
 from .texts import figures, parse_time, stamp_text, took_text
+from ...domain.model.decision_record import ANSWERED_WORDS
 
 Model = typing.Dict[str, typing.Any]
 
@@ -62,7 +63,7 @@ class ShowStoryUseCase:
         front, body = data.get("front") or {}, data.get("body") or ""
         text = self._detail.story_text(data.get("path") or "", body, front)
         accepted_by = next((str(f["id"]).strip() for _p, f, _b, st, a in reversed(records)
-                            if is_acceptance(f) and st in ("answered", "applied") and accepted(a)), None)
+                            if is_acceptance(f) and st in ANSWERED_WORDS and accepted(a)), None)
         passes = []
         for i, p in enumerate(told["passes"]):
             before = told["passes"][i - 1]["end"] if i else None
@@ -91,7 +92,7 @@ class ShowStoryUseCase:
         decisions = []
         for _p, record, said, state, answer in records:
             question = (said.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()
-            given = str(answer.get("answer", "")).strip() if state in ("answered", "applied") else ""
+            given = str(answer.get("answer", "")).strip() if state in ANSWERED_WORDS else ""
             line = (f"{given}" if is_acceptance(record) and given else
                     f"{given} — {question}" if given else f"open — {question}")
             decisions.append(dict(id=str(record["id"]).strip(), state=state,
@@ -138,7 +139,7 @@ def pass_label(index: int, pass_: Model, records: typing.List[typing.Tuple[typin
     if index == 0:
         return "first delivery"
     corrections = [str(f["id"]).strip() for _p, f, _b, st, a in records
-                   if is_acceptance(f) and st in ("answered", "applied") and not accepted(a)
+                   if is_acceptance(f) and st in ANSWERED_WORDS and not accepted(a)
                    and parse_time(str(a.get("at", ""))) and parse_time(str(a.get("at", ""))) <= pass_["start"]]
     return "correction" if corrections else "again from plan"
 

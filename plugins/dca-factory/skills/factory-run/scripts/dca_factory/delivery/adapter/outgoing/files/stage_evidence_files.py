@@ -71,6 +71,7 @@ from .design_files import (
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_clauses)
 from .run_marks import OWNED_CHANGED
 from .story_layout import delivered_on, EPIC_FILE, epic_folder, find_story, story_kind
+from ....domain.model.decision_record import ANSWERED_WORDS, WAITING_WORDS
 
 Front = typing.Mapping[str, typing.Any]
 
@@ -314,7 +315,7 @@ class StageEvidenceFiles:
             return DecisionsFacts(Place(""), (), (), Detail(str(error)))
         records = []
         for path, front, body, state, answer in read:
-            asked = state in ("open", "draft")
+            asked = state in WAITING_WORDS
             stage = str(front.get("stage", "")).strip() if asked else resume_stage(front, answer)
             records.append(DecisionFacts(
                 RecordId(str(front["id"]).strip()), RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION,
@@ -535,7 +536,7 @@ class StageEvidenceFiles:
     def answered_records(self, story: StoryId) -> typing.FrozenSet[RecordId]:
         try:
             return frozenset(RecordId(str(front["id"]).strip()) for _p, front, _b, state, _a in records_of(story.value)
-                             if state in ("answered", "applied"))
+                             if state in ANSWERED_WORDS)
         except GateError:
             return frozenset()
 

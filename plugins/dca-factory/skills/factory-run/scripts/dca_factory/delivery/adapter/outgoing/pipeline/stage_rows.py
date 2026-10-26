@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....domain.model.stage import (
-    PIPELINE, Stage as PipelineStage, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait)
+    PIPELINE, Pipeline, Stage as PipelineStage, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait)
 from ....domain.model.verdict import FORM_CHECKS as DOMAIN_FORM_CHECKS
 
 
@@ -88,8 +88,8 @@ POST_GATED = tuple(s.name for s in STAGES if s.post_gated)
 
 
 def stage_order(kind: str = "story") -> typing.Tuple[str, ...]:
-    """The run order of a story of this kind."""
-    return tuple(s.name for s in STAGES if s.in_order and kind in s.kinds)
+    """The run order of a story of this kind, as the domain's pipeline orders it."""
+    return tuple(name.value for name in Pipeline.order(StoryKind(kind)))
 
 
 # Several stories are a loop over one story run, and the loop needs to know what comes next without

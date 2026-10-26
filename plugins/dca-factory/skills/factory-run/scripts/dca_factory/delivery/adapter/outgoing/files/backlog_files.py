@@ -14,13 +14,12 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     factory_home, PROFILE_FILE, read_profile, resolve_profile, shown)
 from ....application.shared.backlog_facts import BacklogStory, OpenStage
 from ....application.status.texts import parse_time
-from ....domain.model.epic import EpicId
 from ....domain.model.schedule import EpicGraph
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, Standing, StateName
 from ..git.repository import git
 from ..git.worktrees import has_worktree, uncommitted_story
-from .epic_files import epic_graph, epic_order
+from .epic_files import epic_graph, graph_of
 from .owned_files import run_owned
 from .run_marks import running_stages, stale_after, story_title
 from .snapshots import DELETED, tree_snapshot
@@ -72,10 +71,7 @@ class BacklogFiles:
         return found
 
     def epics(self) -> EpicGraph:
-        graph = epic_graph(self.folder)
-        ranked, cycle = epic_order(graph)
-        return EpicGraph({EpicId(e): tuple(EpicId(n) for n in needs) for e, needs in graph.items()},
-                         tuple(EpicId(e) for e in ranked), frozenset(EpicId(e) for e in cycle))
+        return graph_of(epic_graph(self.folder))
 
     def open_stages(self) -> typing.Sequence[OpenStage]:
         return [OpenStage(story, stage, started) for story, stage, started in running_stages(self.runs)]

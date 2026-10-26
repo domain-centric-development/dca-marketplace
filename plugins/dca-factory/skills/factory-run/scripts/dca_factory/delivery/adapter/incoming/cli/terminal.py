@@ -9,6 +9,7 @@ import sys
 import textwrap
 import typing
 from datetime import datetime, timezone
+from ....domain.model.decision_record import WAITING_WORDS
 
 
 MARKS_TEXT = {"look": "!", "question": "?", "stopped": "✗", "running": "▶", "done": "✓", "none": "·", "next": "→"}
@@ -166,7 +167,7 @@ def section(text: str, colour: bool) -> typing.List[str]:
 def decision_mark(decision: typing.Mapping[str, typing.Any]) -> str:
     """Open or a draft needs you; answered waits for the stage that applies it; applied is done — and
     an answered acceptance is done too: it was applied by the gate or by the re-plan."""
-    if decision["state"] in ("open", "draft"):
+    if decision["state"] in WAITING_WORDS:
         return "question"
     if decision["state"] == "applied" or decision["kind"] == "acceptance":
         return "done"

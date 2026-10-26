@@ -10,6 +10,7 @@ from ..shared.request_records import RequestRecords
 from ..shared.requests import KIND, Request, RequestRefused, RequestStore, stories_of
 from ..shared.run_lines import RunLines
 from ..shared.story_starts import StoryStarts
+from ...domain.model.decision_record import ANSWERED_WORDS
 
 #: The exits of a request's process that end it with no word of its own: a hang-up, an interrupt, a TERM.
 STOPPED_EXITS = (129, 130, 143)
@@ -55,7 +56,7 @@ class RequestQueue:
                 self._store.update(request, state="queued", record_file=None)
                 self._lines.out(f"factory: request {request['id']} waited on a record that is gone — it runs again")
                 continue
-            if all(state in ("answered", "applied") for _p, _id, state in records):
+            if all(state in ANSWERED_WORDS for _p, _id, state in records):
                 self._store.update(request, state="queued", record_file=None,
                                    answered=" ".join(rid for _p, rid, _s in records))
                 self._lines.out(f"factory: request {request['id']} — its question is answered; it runs again")

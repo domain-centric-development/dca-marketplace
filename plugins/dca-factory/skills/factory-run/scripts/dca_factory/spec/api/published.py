@@ -181,6 +181,15 @@ def placement_problems(story: Entries, held: Entries, delta: DeltaEntry, feature
         {FeatureName(name) for name in features})]
 
 
+def placement_lines(story: Entries, held: Entries, feature: typing.Any, features: typing.Iterable[str]) -> typing.List[str]:
+    """The delta's lines for where the story's criteria go (WP-105): the feature born, then each criterion that moves —
+    as the plan writes them and `placement_problems` holds them."""
+    placed = LivingSpec.placement(criteria(story), criteria(held), FeatureName(feature_name(feature)),
+                                  {FeatureName(name) for name in features})
+    return [f"- adds feature {name.value}" for name in sorted(placed.features, key=lambda f: f.value)] + \
+        [f"- moves {key.value}: {move.source.value} → {move.destination.value}" for key, move in placed.moves.items()]
+
+
 def touches(story: Entries, spec: Entries, delta: DeltaEntry) -> typing.List[str]:
     """The keys whose behaviour the story changes or takes away — what a person's sentence has to back."""
     return [key.value for key in LivingSpec.touches(criteria(story), criteria(spec), model_delta(delta))]

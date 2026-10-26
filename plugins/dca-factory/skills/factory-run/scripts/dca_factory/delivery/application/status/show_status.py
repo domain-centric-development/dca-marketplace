@@ -17,6 +17,7 @@ from ..shared.description_store import DescriptionStore
 from ..shared.status_facts import StatusFacts
 from .actions import Action, entry_actions, make_action, offered, RUNNER
 from .texts import claim_age, figures, newest_first, parse_time, signal_totals, stamp_text, took_text, worker_text
+from ...domain.model.decision_record import WAITING_WORDS
 
 Model = typing.Dict[str, typing.Any]
 
@@ -79,7 +80,7 @@ class ShowStatusUseCase:
             story_id = str(front.get("story", "")).strip() if not error else ""
             if story_id in stories:
                 continue                                  # its story's row already says so
-            if error or state in ("open", "draft"):
+            if error or state in WAITING_WORDS:
                 waiting.append(dict(mark="question", story=story_id or name, what="an open question",
                                     record=facts.shown(path), draft=False,
                                     action=self._action(skill="/factory-decisions",
@@ -236,7 +237,7 @@ class ShowStatusUseCase:
         """(mark, state words, action) for one story — the words a person uses."""
         state, detail = story["state"], story.get("detail", "")
         records = self._facts.story_records(story_id, story.get("path"))
-        open_records = [(path, front) for path, front, _body, st, _a in records if st in ("open", "draft")]
+        open_records = [(path, front) for path, front, _body, st, _a in records if st in WAITING_WORDS]
         shown = self._facts.shown
         record = shown(open_records[0][0]) if open_records else ""
         by_hand = f"write the answer into {record} under `## Answer`" if record else ""
@@ -283,7 +284,7 @@ class ShowStatusUseCase:
     def _open_record(self, story_id: str, story: Model) -> str:
         """The open record a waiting story waits on, as a path a person reads — '' where none is open."""
         records = self._facts.story_records(story_id, story.get("path"))
-        opened = [(path, front) for path, front, _b, st, _a in records if st in ("open", "draft")]
+        opened = [(path, front) for path, front, _b, st, _a in records if st in WAITING_WORDS]
         chosen = next((p for p, f in opened if is_acceptance(f)), opened[0][0] if opened else "")
         return self._facts.shown(chosen) if chosen else ""
 

@@ -11,6 +11,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownErr
 from ....application.shared.front import created_of, front_text
 from .story_layout import depends_on, EPIC_FILE
 from ....domain.model.epic import EpicId
+from ....domain.model.schedule import EpicGraph
 
 Facts = typing.Dict[str, typing.Any]
 GateError = MarkdownError
@@ -77,32 +78,19 @@ def epic_graph(epics: str) -> typing.Dict[str, typing.List[str]]:
 
 
 def epic_order(graph: typing.Mapping[str, typing.List[str]]) -> typing.Tuple[typing.List[str], typing.Set[str]]:
-    """The epics in dependency order, ties by id; the ones on a cycle last, in id order. An epic named as a
-    dependency that does not exist is no node and does not hold anything up here — the check names it."""
-    order, placed, remaining = [], set(), sorted(graph)
-    while remaining:
-        free = [e for e in remaining if all(d in placed or d not in graph for d in graph[e])]
-        if not free:
-            break
-        order.append(free[0])
-        placed.add(free[0])
-        remaining.remove(free[0])
-    return order + remaining, set(remaining)
+    """The epics in dependency order and those on a cycle, as the domain's graph orders them."""
+    ranked = graph_of(graph)
+    return [e.value for e in ranked.ranked], {e.value for e in ranked.cycle}
+
+
+def graph_of(graph: typing.Mapping[str, typing.List[str]]) -> EpicGraph:
+    return EpicGraph.of({EpicId(e): tuple(EpicId(n) for n in needs) for e, needs in graph.items()})
 
 
 def epic_dependency_problem(epics: str, epic: str) -> typing.Optional[str]:
     """Why an epic's `depends_on:` cannot hold — an unknown epic, itself, a cycle — or None."""
-    graph = epic_graph(epics)
-    deps = graph.get(epic, [])
-    unknown = [d for d in deps if d not in graph]
-    if unknown:
-        return f"epic {epic!r} depends on {', '.join(repr(d) for d in unknown)}, which is no epic under {epics}/"
-    if epic in deps:
-        return f"epic {epic!r} depends on itself"
-    _order, cycle = epic_order(graph)
-    if epic in cycle:
-        return f"epic {epic!r} is on a dependency cycle between epics: {', '.join(sorted(cycle))}"
-    return None
+    problem = graph_of(epic_graph(epics)).problem_of(EpicId(epic))
+    return problem.value if problem else None
 
 
 class EpicFiles:

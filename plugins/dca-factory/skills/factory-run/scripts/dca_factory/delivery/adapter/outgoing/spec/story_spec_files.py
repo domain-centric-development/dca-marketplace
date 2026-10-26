@@ -18,6 +18,7 @@ from ....domain.model.story import StoryId
 from ..files.decision_record_files import records_of
 from ..files.kept_files import human_line
 from ..files.story_layout import find_story, story_kind
+from ....domain.model.decision_record import ANSWERED_WORDS
 
 Front = typing.Mapping[str, typing.Any]
 Entries = typing.List[typing.Dict[str, typing.Any]]
@@ -88,7 +89,7 @@ def spec_backing(cwd: str, story_id: str, body: str, story_path: typing.Optional
         return "the story's `## Changed expectations`"
     try:
         answered = [str(f["id"]).strip() for _p, f, _b, state, a in records_of(story_id, story_path)
-                    if state in ("answered", "applied") and not (is_acceptance(f) and accepted(a))]
+                    if state in ANSWERED_WORDS and not (is_acceptance(f) and accepted(a))]
     except GateError:
         answered = []
     return f"decision {', '.join(answered)}" if answered else ""

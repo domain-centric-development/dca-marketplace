@@ -19,6 +19,8 @@ from ....application.shared.front import accepted, is_acceptance
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.decision_record import Asker, DecisionRecord, DecisionState, OptionKey, RecordId, RecordKind
 from ....domain.model.story import StoryId
+from ....domain.model.decision_record import ANSWERED_WORDS, WAITING_WORDS
+from ....domain.service.acceptance_rules import AcceptanceMode
 
 GateError = MarkdownError
 
@@ -99,13 +101,13 @@ class DecisionRecordFiles:
         except GateError as error:
             raise StoryNotFound(f"no story {story.value} under {place('epics')}/ — {error}") from None
         found = [rid for rid, _front, state, _a, _b in acceptance_records(self._cwd, story.value, path)
-                 if state in ("open", "draft")]
+                 if state in WAITING_WORDS]
         return self.get(RecordId(found[-1])) if found else None
 
     def open_records_of(self, story: StoryId) -> typing.Sequence[DecisionRecord]:
         return [self.record(name, front, body, state) for name, front, body, state, error, _path
                 in decision_files(self._cwd)
-                if not error and str(front.get("story", "")).strip() == story.value and state in ("open", "draft")]
+                if not error and str(front.get("story", "")).strip() == story.value and state in WAITING_WORDS]
 
     @staticmethod
     def record(name: str, front: Front, body: str, state: str) -> DecisionRecord:
@@ -273,7 +275,7 @@ def answered_decisions(cwd: str, story_id: str, stage: str) -> typing.List[str]:
     except GateError:
         return []
     return [str(front["id"]).strip() for _p, front, _b, state, answer in records
-            if state in ("answered", "applied") and applying_stage(front, answer) == stage]
+            if state in ANSWERED_WORDS and applying_stage(front, answer) == stage]
 
 
 def nothing_line(line: str) -> bool:
@@ -379,7 +381,7 @@ def answer_sentence(body: str, answer: typing.Mapping[str, typing.Any]) -> str:
 ACCEPTANCE_KIND = "acceptance"
 
 
-ACCEPTANCE_MODES = ("none", "pages", "all")
+ACCEPTANCE_MODES = tuple(mode.value for mode in AcceptanceMode)
 
 
 def acceptance_mode(profile: typing.Mapping[str, typing.Any]) -> str:
@@ -410,7 +412,7 @@ def acceptance_state(cwd: str, story_id: str,
     if not records:
         return "ask", None
     rid, front, state, answer, _body = records[-1]
-    if state in ("open", "draft"):
+    if state in WAITING_WORDS:
         return "open", rid
     if str(front.get("digest", "")).strip() != story_digest(story_path or ""):
         return "ask", rid

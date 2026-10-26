@@ -60,6 +60,36 @@ class EpicGraph(Value):
     ranked: typing.Tuple[EpicId, ...]
     cycle: typing.FrozenSet[EpicId]
 
+    @classmethod
+    def of(cls, needs: typing.Mapping[EpicId, typing.Tuple[EpicId, ...]]) -> EpicGraph:
+        """The epics in dependency order, ties by id; the ones on a cycle last, in id order. An epic named as a
+        dependency that does not exist is no node and holds nothing up — `problem_of` names it."""
+        order: typing.List[EpicId] = []
+        placed: typing.Set[EpicId] = set()
+        remaining = sorted(needs, key=lambda epic: epic.value)
+        while remaining:
+            free = [e for e in remaining if all(d in placed or d not in needs for d in needs[e])]
+            if not free:
+                break
+            order.append(free[0])
+            placed.add(free[0])
+            remaining.remove(free[0])
+        return cls(dict(needs), tuple(order + remaining), frozenset(remaining))
+
+    def problem_of(self, epic: EpicId) -> typing.Optional[Detail]:
+        """Why an epic's `depends_on:` cannot hold — an unknown epic, itself, a cycle — or None."""
+        deps = self.needs.get(epic, ())
+        unknown = [d for d in deps if d not in self.needs]
+        if unknown:
+            return Detail(f"epic {epic.value!r} depends on {', '.join(repr(d.value) for d in unknown)}, "
+                          f"which is no epic")
+        if epic in deps:
+            return Detail(f"epic {epic.value!r} depends on itself")
+        if epic in self.cycle:
+            return Detail(f"epic {epic.value!r} is on a dependency cycle between epics: "
+                          f"{', '.join(sorted(e.value for e in self.cycle))}")
+        return None
+
 
 class Slots(Value):
     """How many stories a runner runs at once, each in its worktree."""

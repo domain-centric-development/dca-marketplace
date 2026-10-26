@@ -132,6 +132,7 @@ from .story_view import render_story_md, render_story_text, stage_caption, stage
 from .epic_view import render_epic_md, render_epic_text
 from .schedule_view import schedule_lines, start_lines
 from .help_view import render_help_md, render_help_text
+from ....domain.model.decision_record import WAITING_WORDS
 
 Model = typing.Dict[str, typing.Any]
 RESULT = typing.TypeVar("RESULT")
@@ -187,8 +188,8 @@ def list_decisions(cwd: str, story_id: typing.Optional[str] = None, fmt: str = "
     from the files alone; the same view as the status, in text, Markdown or JSON."""
     model = wiring.list_decisions(cwd).execute(ListDecisionsQuery(story_id))
     records = model["records"]
-    waiting = [r for r in records if r["state"] in ("open", "draft", "unreadable")]
-    mark = lambda r: "look" if r["kind"] == "acceptance" and r["state"] in ("open", "draft") else \
+    waiting = [r for r in records if r["state"] in WAITING_WORDS | {"unreadable"}]
+    mark = lambda r: "look" if r["kind"] == "acceptance" and r["state"] in WAITING_WORDS else \
         "stopped" if r["state"] == "unreadable" else decision_mark(r)
     headers = ["record", "state", "story / stage", "asked (UTC)", "question → answer"]
     cells = lambda marks: [[f"{marks[mark(r)]} {r['id']}", r["state"], f"{r['story']} / {r['stage']}",

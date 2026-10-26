@@ -13,6 +13,7 @@ from ..shared.request_settlement import RequestSettlement
 from ..shared.request_skill import RequestSkill
 from ..shared.requests import Kind, KIND, Request, RequestRefused, RequestStore, written_keys
 from .list_requests import target_text
+from ...domain.model.decision_record import WAITING_WORDS
 
 #: (stream, line): what the factory says on its way — `out` for the person, `err` for a refusal or a failure
 Said = typing.List[typing.Tuple[str, str]]
@@ -109,7 +110,7 @@ class WorkRequestUseCase:
             self._store.journal("request-end", kind.name, request["id"], f"exit={ran.code}", "state=failed")
             return RequestWorked(1, [("err", f"factory: request {request['id']} — the tool {why}; it stays as failed "
                                              f"(`factory.sh requests`).")])
-        asked = [(where, rid) for where, rid, state in self._records.asked(request["id"]) if state in ("open", "draft")]
+        asked = [(where, rid) for where, rid, state in self._records.asked(request["id"]) if state in WAITING_WORDS]
         if asked:
             commit, refusal = self._commit(request, before, said)
             self._store.update(request, state="waiting", worker=None, record_file=asked[0][0],

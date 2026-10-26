@@ -14,7 +14,7 @@ import typing
 
 from ....building_blocks import DomainService
 from .criterion import Criterion, CriterionKey, FeatureName, Line, RuleText, Selector
-from .delta import Delta, Problem, Verdict
+from .delta import Delta, Move, Problem, Verdict
 
 Criteria = typing.Sequence[Criterion]
 
@@ -96,6 +96,17 @@ class LivingSpec(DomainService):
         return list(dict.fromkeys(problems))
 
     @staticmethod
+    def placement(story: Criteria, held: Criteria, feature: FeatureName,
+                  features: typing.AbstractSet[FeatureName]) -> Delta:
+        """Where the story's criteria go (WP-105), as the delta says it: a criterion the context holds under another
+        feature moves to the story's, and the story's feature is born where the context does not have it yet."""
+        where = {item.key: item.feature for item in held}
+        moves = {item.key: Move(where[item.key].place(), feature.place()) for item in story
+                 if item.key in where and where[item.key] != feature}
+        born = frozenset((feature,)) if feature.value and story and feature not in features else frozenset()
+        return Delta(moves=moves, features=born)
+
+    @staticmethod
     def placement_problems(story: Criteria, held: Criteria, delta: Delta, feature: FeatureName,
                            features: typing.AbstractSet[FeatureName]) -> typing.List[Problem]:
         """What is wrong with where the story's criteria go (WP-105): a criterion the context holds under another
@@ -105,12 +116,12 @@ class LivingSpec(DomainService):
         problems, keys = [], {item.key for item in story}
         where = {item.key: item.feature for item in held}
         target = feature
-        for item in story:
-            was = where.get(item.key)
-            if was is not None and was != target and item.key not in delta.moves:
+        placed = LivingSpec.placement(story, held, feature, features)
+        for key, move in placed.moves.items():
+            if key not in delta.moves:
                 problems.append(Problem(
-                    f"`{item.key.value}` stands under {was.place().value} and the story puts it under "
-                    f"{target.place().value} — `moves {item.key.value}: {was.place().value} → {target.place().value}`"))
+                    f"`{key.value}` stands under {move.source.value} and the story puts it under "
+                    f"{move.destination.value} — `moves {key.value}: {move.source.value} → {move.destination.value}`"))
         for key, move in sorted(delta.moves.items(), key=lambda pair: pair[0].value):
             if key not in where:
                 problems.append(Problem(f"`moves {key.value}` — the spec has no `{key.value}`"))
@@ -120,7 +131,7 @@ class LivingSpec(DomainService):
                 problems.append(Problem(
                     f"`moves {key.value}: {move.source.value} → {move.destination.value}` — it stands under "
                     f"{where[key].place().value}, and the story's feature is {target.place().value}"))
-        if target.value and story and target not in features and target not in delta.features:
+        if target in placed.features and target not in delta.features:
             problems.append(Problem(f"feature `{target.value}` is new to the context — `adds feature {target.value}`"))
         for name in sorted(delta.features, key=lambda f: f.value):
             if name in features:

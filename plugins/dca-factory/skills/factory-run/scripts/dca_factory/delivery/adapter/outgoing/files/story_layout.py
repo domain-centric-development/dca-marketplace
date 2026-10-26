@@ -117,7 +117,7 @@ def is_delivered(front: typing.Mapping[str, typing.Any]) -> bool:
     """Delivered is one state, written into the story: `status: delivered` — by the gate that delivered it, or by
     a person who delivered it by hand (`delivered_by: hand:<who>`). Built or adopted makes no difference once
     delivered (one end state)."""
-    return str(front.get("status", "")).strip().lower() == "delivered"
+    return str(front.get("status", "")).strip().lower() == StoryStatus.DELIVERED.value
 
 
 def delivered_on(front: typing.Mapping[str, typing.Any]) -> str:

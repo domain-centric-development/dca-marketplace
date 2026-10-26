@@ -9,8 +9,8 @@ import typing
 from datetime import datetime, timezone
 from .hand_over_patterns import CRITERION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from ..pipeline.stage_rows import POST_GATED, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
-from .story_layout import delivered_by, EPIC_FILE, epic_folder
+from ..pipeline.stage_rows import POST_GATED, SHARED_WINDOWS, STAGE_FILES
+from .story_layout import EPIC_FILE, epic_folder
 from ....domain.model.stage import StoryKind
 from ....domain.model.story_state import HandOverText
 from ....domain.service.story_route import StoryRoute
@@ -21,6 +21,7 @@ from .journal_files import journal_events
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....application.status.texts import parse_time
+from ....domain.model.decision_record import ANSWERED_WORDS
 
 
 OWNED_CHANGED = ".owned-changed"
@@ -114,16 +115,10 @@ def gate_passed_on_record(cwd: str, runs: str, story_id: str, story_path: typing
         records = acceptance_records(cwd, story_id, story_path)
     except GateError:
         records = []
-    if records and records[-1][2] in ("answered", "applied") and accepted(records[-1][3]):
+    if records and records[-1][2] in ANSWERED_WORDS and accepted(records[-1][3]):
         return f"{records[-1][0]} accepted"
     return ""
 
-
-def delivery_claim(front: typing.Mapping[str, typing.Any]) -> str:
-    """How a delivered story's delivery reads: "" where the gate delivered it, `claimed by hand:<who>` where a person
-    did. Read from the story alone — deleting `.dca-factory/` changes nothing; the proof that holds is the spec's."""
-    by = delivered_by(front)
-    return f"claimed by {by}" if by.startswith("hand") else ""
 
 
 ACCEPTED_TESTS = re.compile(r"\s+—\s+`[^`]*`$")

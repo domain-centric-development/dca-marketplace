@@ -41,6 +41,15 @@ class DecisionState(enum.Enum):
     APPLIED = "applied"
 
 
+#: A record waits for a person while it has no answer or an incomplete one.
+WAITING = frozenset((DecisionState.OPEN, DecisionState.DRAFT))
+#: A record carries the person's answer once answered, and still after a stage applied it.
+ANSWERED_STATES = frozenset((DecisionState.ANSWERED, DecisionState.APPLIED))
+#: The same as the words a record's state is read and shown with.
+WAITING_WORDS = frozenset(state.value for state in WAITING)
+ANSWERED_WORDS = frozenset(state.value for state in ANSWERED_STATES)
+
+
 class Asker(enum.Enum):
     """Who asked: a stage of a story's run, or the skill a person's request ran (`request:` in the record)."""
 
@@ -133,7 +142,7 @@ class DecisionRecord(AggregateRoot[RecordId]):
 
     def answer(self, answer: Answer) -> None:
         """The person's answer, once: a record answered or applied takes no second one."""
-        if self._state in (DecisionState.ANSWERED, DecisionState.APPLIED):
+        if self._state in ANSWERED_STATES:
             raise AlreadyAnswered(self._id, self._state)
         self._answer = answer
         self._state = DecisionState.ANSWERED

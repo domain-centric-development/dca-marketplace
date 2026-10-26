@@ -21,6 +21,7 @@ from ..files.kept_files import read_red_digests, red_ledger_path
 from ..files.story_layout import file_digest
 from .commands import command_for, discriminates, joined_filter, recorded_run, red_on_timeout, run, tail
 from .test_reports import display_name_of, fill, normalise, outcome_for
+from ....domain.model.decision_record import ANSWERED_WORDS
 
 Located = typing.Mapping[str, str]
 #: {command: (key, code, output, ran)} of a command run whole
@@ -154,7 +155,7 @@ def red_ledger(cwd: str, runs: typing.Optional[str], story: typing.Optional[str]
         changed_on = answered_decisions(cwd, story or "", "test")
         with contextlib.suppress(GateError):
             changed_on += [rid for rid, _f, state, answer, _b in acceptance_records(cwd, story or "")
-                           if state in ("answered", "applied") and not accepted(answer)]
+                           if state in ANSWERED_WORDS and not accepted(answer)]
     built = bool(runs and story) and os.path.isfile(os.path.join(runs or "", story or "", STAGE_FILES["build"]))
     moved = frozenset(Selector(selector) for selector, recorded in digests.items()
                       if recorded and located.get(selector) and os.path.isfile(os.path.join(cwd, located[selector]))

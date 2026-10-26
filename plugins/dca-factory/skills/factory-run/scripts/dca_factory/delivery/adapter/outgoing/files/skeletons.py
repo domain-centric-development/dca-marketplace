@@ -14,7 +14,7 @@ from .hand_over_patterns import MAPPING_ROW, SELECTOR
 from ..pipeline.stage_rows import STAGE, STAGE_FILES, STAGE_ORDER
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, place, read_profile, resolve_profile
-from .....spec.api import derived, place_name, story_entries
+from .....spec.api import derived, placement_lines, story_entries
 from ....domain.service.design_checks import CLAUSES_MARKER, INVARIANTS_MARKER
 from ....domain.service.test_checks import HANDOVER_BUDGET
 from .criteria_files import criteria_of
@@ -407,11 +407,7 @@ def plan_skeleton(runs: str, story_id: str, cwd: str = ".") -> int:
     # Where the story's criteria go (WP-105): a feature the context does not have yet is born, a criterion that stands
     # under another feature moves — both follow from the story and the spec, so the skeleton writes them.
     if target_spec and story_kind(front) != "journey":
-        where = {item["key"]: item["feature"] for item in held}
-        moves = [f"- moves {item['key']}: {place_name(where[item['key']])} → {place_name(feature)}"
-                 for item in story if item["key"] in where and where[item["key"]] != feature]
-        born = [f"- adds feature {feature}"] if feature and feature not in features else []
-        delta = "\n".join([line for line in (delta,) if line] + born + moves)
+        delta = "\n".join([line for line in (delta,) if line] + placement_lines(story, held, feature, features))
     os.makedirs(folder, exist_ok=True)
     with open(target, "w", encoding="utf-8") as handle:
         handle.write(PLAN_SKELETON.format(story=story_id, rows=rows, delta=delta))

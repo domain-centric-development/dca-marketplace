@@ -6,7 +6,7 @@ import re
 import typing
 
 from ...domain.model.correction import REASON_CODES
-from ...domain.model.decision_record import DecisionState, RecordId, RecordKind
+from ...domain.model.decision_record import RecordId, RecordKind
 from ...domain.model.epic import EpicId
 from ...domain.model.story import StoryId, StoryStatus
 from .decision_record_repository import DecisionRecordRepository, RecordNotFound
@@ -15,6 +15,7 @@ from .epic_catalog import EpicCatalog
 from .requests import DuplicateRequest, ID_WORD, KIND, PENDING, Request, RequestRefused, written_keys
 from .stage_table import StageTable
 from .story_repository import StoryNotFound, StoryRepository
+from ...domain.model.decision_record import ANSWERED_STATES
 
 Fields = typing.Dict[str, str]
 
@@ -112,7 +113,7 @@ class RequestCheck:
         record = self.record(fields["record"])
         if record.kind is RecordKind.ACCEPTANCE:
             raise RequestRefused(f"{fields['record']} asks for an acceptance — accept or correct the story instead")
-        if record.state in (DecisionState.ANSWERED, DecisionState.APPLIED):
+        if record.state in ANSWERED_STATES:
             raise RequestRefused(f"{fields['record']} is {record.state.value} already — an answer is never "
                                  "overwritten; a change of mind is a new question")
         keys = [option.value for option in record.options]

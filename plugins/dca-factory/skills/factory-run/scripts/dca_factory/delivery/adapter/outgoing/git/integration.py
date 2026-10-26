@@ -18,6 +18,7 @@ from ..claims.remote_claims import claim_config_here, remote_main
 from ..files.run_marks import write_mark
 from ..files.kept_files import meaningful_lines, TESTS_BASELINE
 from ..files.delivery_files import SKIP_DIRS, TEST_FILE
+from ....domain.model.decision_record import ANSWERED_WORDS
 
 
 def tree_tests(cwd: str, tree: typing.Optional[str]) -> typing.Optional[typing.Dict[str, str]]:
@@ -110,7 +111,7 @@ def main_tests_waiver(cwd: str, story_id: str, rel: str) -> typing.List[str]:
     except (GateError, OSError):
         return []
     return [str(front.get("id", "")).strip() for _p, front, body, state, _a in records
-            if state in ("answered", "applied") and str(front.get("stage", "")).strip() == "integrate"
+            if state in ANSWERED_WORDS and str(front.get("stage", "")).strip() == "integrate"
             and (rel in body or re.search(rf"(?<![\w./-]){re.escape(os.path.basename(rel))}(?![\w.-])", body))]
 
 

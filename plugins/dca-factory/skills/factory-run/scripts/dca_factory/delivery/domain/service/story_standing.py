@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import DomainService
-from ..model.decision_record import DecisionState, RecordId, RecordKind
+from ..model.decision_record import ANSWERED_STATES, DecisionState, RecordId, RecordKind, WAITING
 from ..model.stage import HandOver, Pipeline, StageName, StoryKind
 from .story_route import StoryRoute
 from ..model.story_state import (
@@ -60,7 +60,7 @@ class StoryStanding(DomainService):
         texts = run.hand_overs
         if run.unreadable:
             return Standing(StateName.STOPPED, None, run.unreadable)
-        waiting = [r.id.value for r in run.records if r.state in (DecisionState.OPEN, DecisionState.DRAFT)]
+        waiting = [r.id.value for r in run.records if r.state in WAITING]
         if waiting:
             return Standing(StateName.WAITING, None, Detail("decision " + ", ".join(waiting)))
         answered: typing.Dict[typing.Optional[StageName], RecordId] = {}
@@ -70,7 +70,7 @@ class StoryStanding(DomainService):
                 resolved[record.id] = record.resumes
                 continue                             # answered through the document gate, not a stage
             facts = texts.get(record.resumes) if record.resumes else None
-            if record.state in (DecisionState.ANSWERED, DecisionState.APPLIED):
+            if record.state in ANSWERED_STATES:
                 resolved[record.id] = record.resumes
             # The record's `stage:` applies the answer — usually the stage that asked, for a judge's
             # story conflict the stage the answer lands in. Until that stage's file cites the id, it is next.
