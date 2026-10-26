@@ -98,7 +98,7 @@ class RunStoryUseCase:
                 continue
             # The reviews come before the judge: one process per perspective, at once.
             if Around.REVIEWS in step.around:
-                code = self._stages.reviews(story, kind, dry)
+                code = self._stages.reviews(story, dry)
                 if code != 0:
                     return code
             # The verifier runs where the judge would; resumed at the document stage alone it runs in its own context.

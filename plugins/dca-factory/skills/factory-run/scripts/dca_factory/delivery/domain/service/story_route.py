@@ -63,6 +63,9 @@ class Refusal(enum.Enum):
 #: Why a kind runs no stage of the builder: what a person reads beside the skipped stage.
 SKIP_REASONS = {StoryKind.JOURNEY: "a journey builds nothing", StoryKind.ADOPT: "an adopted story is not built",
                 StoryKind.TASK: "a task has no criterion to test — the existing suite is its evidence"}
+#: The kinds that change the code, so the review perspectives have a change to read before the judge; an adoption
+#: changes nothing.
+REVIEWED_KINDS = frozenset((StoryKind.STORY, StoryKind.JOURNEY, StoryKind.TASK))
 
 ENVIRONMENT = "gate:fail environment"
 FAILED, CLOSING = "gate:fail ", "gate:fail story "
@@ -97,7 +100,7 @@ class StoryRoute(DomainService):
                 steps.append(RouteStep(stage.name, Move.CARRIED if built else Move.BUILDER, frozenset(around)))
                 built = True
                 continue
-            if stage.name == JUDGE:
+            if stage.name == JUDGE and kind in REVIEWED_KINDS:
                 around.add(Around.REVIEWS)
             if Window.VERIFIER in shared and stage.window is Window.VERIFIER:
                 steps.append(RouteStep(stage.name, Move.VERIFIER, frozenset(around)))

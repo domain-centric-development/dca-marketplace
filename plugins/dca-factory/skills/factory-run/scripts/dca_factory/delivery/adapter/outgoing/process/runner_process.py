@@ -660,11 +660,9 @@ class Run:
             return refused
         return self.window(story, tool, "builder", stages, prompt)
 
-    def run_reviews(self, story, tool, dry, kind="story"):
+    def run_reviews(self, story, tool, dry):
         """One tool process per perspective, started at once, each writing reviews/<perspective>.md; the judge then
-        converges from the files. An adoption reviews no change and gets none."""
-        if kind == "adopt":
-            return 0
+        converges from the files."""
         self.profile()
         rows = [(name, carrier) for name, carrier in perspectives_of(read_profile(resolve_profile(None, os.getcwd())))
                 if name]

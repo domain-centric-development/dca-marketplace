@@ -32,6 +32,15 @@ class Route(unittest.TestCase):
                           ("judge", Move.VERIFIER)])
         self.assertEqual([Around.PAUSE in s.around for s in steps], [True, False, False, True])
 
+    def test_an_adoption_changes_nothing_so_its_judge_gets_no_reviews(self):
+        for shared in (frozenset(), frozenset((Window.VERIFIER,))):
+            judge = [s for s in StoryRoute.steps(StoryKind.ADOPT, StageName("plan"), shared) if s.stage.value == "judge"]
+            self.assertEqual(len(judge), 1)
+            self.assertNotIn(Around.REVIEWS, judge[0].around)
+        for kind in (StoryKind.STORY, StoryKind.JOURNEY, StoryKind.TASK):
+            judge = [s for s in StoryRoute.steps(kind, StageName("plan"), frozenset()) if s.stage.value == "judge"]
+            self.assertIn(Around.REVIEWS, judge[0].around)
+
     def test_a_kind_skips_what_it_does_not_run_and_says_why(self):
         steps = StoryRoute.steps(StoryKind.TASK, StageName("plan"), frozenset())
         skipped = [s for s in steps if s.move is Move.SKIP]
@@ -156,7 +165,7 @@ class Stages:
     def dry(self, story, stage):
         self.ran.append(f"dry {stage}")
 
-    def reviews(self, story, kind, dry):
+    def reviews(self, story, dry):
         return 0
 
     def sent_back(self, story):

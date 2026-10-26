@@ -74,7 +74,7 @@ class StoryStages(typing.Protocol):
         """The shared builder carrying <stages> in one process: 0 when it ran, else the run's exit."""
         ...
 
-    def reviews(self, story: str, kind: StoryKind, dry: bool) -> int:
+    def reviews(self, story: str, dry: bool) -> int:
         """One process per review perspective, at once: 0, or the run's exit when they may not be dispatched."""
         ...
 

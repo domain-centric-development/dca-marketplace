@@ -216,8 +216,8 @@ class RunnerStages:
     def builder(self, story, stages, start, dry):
         return self._run.builder_window(story, self._tool, stages, start, dry)
 
-    def reviews(self, story, kind, dry):
-        return self._run.run_reviews(story, self._tool, dry, kind.value)
+    def reviews(self, story, dry):
+        return self._run.run_reviews(story, self._tool, dry)
 
     def verifier(self, story, stages, dry):
         return self._run.verifier_window(story, self._tool, stages, dry)
