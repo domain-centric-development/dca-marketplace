@@ -109,6 +109,13 @@ class PassOrder(unittest.TestCase):
             full_pass(p, "S-1")
             self.assertEqual(p.state_of("S-1"), ("in-progress", "build", "the judge requested changes"))
 
+    def test_a_judge_sending_a_test_back_resumes_the_story_at_the_test_stage(self):
+        with project() as p:
+            p.story("S-1")
+            full_pass(p, "S-1")
+            p.write_and_journal("S-1", "judge", "# judge\nverdict: changes-requested\nback: test\n", at=SECOND)
+            self.assertEqual(p.state_of("S-1"), ("in-progress", "test", "the judge requested changes"))
+
     def test_a_build_window_rewriting_identical_content_is_marked_same_and_moves_on(self):
         with project() as p:
             path = p.story("S-1")

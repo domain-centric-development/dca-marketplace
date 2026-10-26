@@ -7,6 +7,7 @@ import typing
 from ....building_blocks import DomainService
 from ..model.decision_record import DecisionState, RecordId, RecordKind
 from ..model.stage import HandOver, Pipeline, StageName, StoryKind
+from .story_route import StoryRoute
 from ..model.story_state import (
     AcceptanceVerdict, Detail, Mark, MAX_ROUNDS, RunFacts, StateName, Standing, StoryFront, VerdictWord)
 
@@ -165,8 +166,8 @@ class StoryStanding(DomainService):
         if not texts:
             return Standing(StateName.READY, PLAN, Detail(""))
         if verdict.value == "changes-requested":
-            return Standing(StateName.IN_PROGRESS, TEST if front.kind == StoryKind.JOURNEY or adopt else BUILD,
-                         Detail("the judge requested changes"))
+            return Standing(StateName.IN_PROGRESS, StoryRoute.judged_back(front.kind, texts[JUDGE].text),
+                            Detail("the judge requested changes"))
         missing = next(stage for stage in Pipeline.order(front.kind) if stage not in texts)
         return Standing(StateName.IN_PROGRESS, missing, Detail(f"{file_of(missing).value} not written yet"))
 

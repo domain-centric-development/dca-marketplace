@@ -11,6 +11,9 @@ from .hand_over_patterns import CRITERION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..pipeline.stage_rows import POST_GATED, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
 from .story_layout import delivered_by, EPIC_FILE, epic_folder
+from ....domain.model.stage import StoryKind
+from ....domain.model.story_state import HandOverText
+from ....domain.service.story_route import StoryRoute
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from .decision_record_files import acceptance_records
 from ....application.shared.front import accepted
@@ -72,13 +75,8 @@ def verdict_in(text: str) -> str:
 
 
 def back_in(text: str) -> str:
-    """Where a `changes-requested` verdict sends the story: `test` when the judge wrote `back: test` — a
-    confirmed defect is in a test (it asserts less than its criterion), which only the test stage may
-    change — else `build`."""
-    for line in text.splitlines():
-        if line.strip().lower().startswith("back:"):
-            return "test" if line.split(":", 1)[1].strip().strip("`\"' ").lower() == "test" else "build"
-    return "build"
+    """Where a `changes-requested` verdict in <text> sends a story: the domain's rule (`StoryRoute.judged_back`)."""
+    return StoryRoute.judged_back(StoryKind.STORY, HandOverText(text)).value
 
 
 #: What the plan gate leaves for the schedule: the digest of the story it let through, so a story edited

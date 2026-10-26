@@ -6,7 +6,7 @@ import unittest
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind, Window
-from dca_factory.delivery.domain.model.story_state import GateReport, Rounds, VerdictWord
+from dca_factory.delivery.domain.model.story_state import GateReport, HandOverText, Rounds, VerdictWord
 from dca_factory.delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
 from dca_factory.delivery.domain.service.story_route import Around, Judged, Move, Refusal, StoryRoute
 
@@ -42,6 +42,14 @@ class Route(unittest.TestCase):
         self.assertEqual(StoryRoute.window(StoryKind.TASK, Window.BUILDER), names("plan", "build", "tidy"))
         self.assertEqual(StoryRoute.window(StoryKind.STORY, Window.BUILDER, StageName("build")), names("build", "tidy"))
         self.assertEqual(StoryRoute.window(StoryKind.ADOPT, Window.VERIFIER), names("judge"))
+
+    def test_the_judges_back_test_sends_the_story_to_the_test_stage_anything_else_to_the_build(self):
+        back = lambda kind, text: StoryRoute.judged_back(kind, HandOverText(text)).value
+        self.assertEqual("test", back(StoryKind.STORY, "verdict: changes-requested\nback: `test`\n"))
+        self.assertEqual("build", back(StoryKind.STORY, "verdict: changes-requested\n"))
+        self.assertEqual("build", back(StoryKind.STORY, "verdict: changes-requested\nBack: build\n"))
+        self.assertEqual("test", back(StoryKind.JOURNEY, "verdict: changes-requested\n"))
+        self.assertEqual("test", back(StoryKind.ADOPT, "verdict: changes-requested\n"))
 
     def test_a_round_goes_back_to_the_last_builder_stage_the_kind_runs(self):
         self.assertEqual(StoryRoute.back_for(StoryKind.STORY, StageName("build")), StageName("build"))

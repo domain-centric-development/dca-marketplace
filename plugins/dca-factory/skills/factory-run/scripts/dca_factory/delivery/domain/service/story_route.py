@@ -8,7 +8,7 @@ import typing
 
 from ....building_blocks import DomainService, Value
 from ..model.stage import PIPELINE, Stage, StageName, StoryKind, Trait, Window
-from ..model.story_state import Detail, GateReport, MAX_ROUNDS, Rounds, VerdictWord
+from ..model.story_state import Detail, GateReport, HandOverText, MAX_ROUNDS, Rounds, VerdictWord
 
 JUDGE, TEST = StageName("judge"), StageName("test")
 
@@ -147,6 +147,17 @@ class StoryRoute(DomainService):
             if stage == resumes:
                 return stage
         return refused
+
+    @staticmethod
+    def judged_back(kind: StoryKind, judge: HandOverText) -> StageName:
+        """Where the judge's `changes-requested` sends the story: `back: test` — a confirmed defect is in a test, which
+        only the test stage may change — to the test stage, anything else to the build; for a kind without that
+        stage, the builder stage before it (`back_for`)."""
+        for line in judge.value.splitlines():
+            if line.strip().lower().startswith("back:"):
+                named = line.split(":", 1)[1].strip().strip("`\"' ").lower()
+                return StoryRoute.back_for(kind, StageName("test") if named == "test" else StageName("build"))
+        return StoryRoute.back_for(kind, StageName("build"))
 
     @staticmethod
     def back_for(kind: StoryKind, stage: StageName) -> StageName:
