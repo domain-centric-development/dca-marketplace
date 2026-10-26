@@ -56,18 +56,15 @@ from .contract import (
     ALL_KINDS, CONTRACT, FORM_CHECKS, GateError, layout_hint, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE, open_findings
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    DEFAULTS, evidence_dir, evidence_rel, factory_home, location, place, PROFILE_FILE, read_profile,
+    DEFAULTS, evidence_dir, evidence_rel, location, place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
-from .delivery.adapter.outgoing.git.repository import git
 from .delivery.adapter.outgoing.files.story_layout import (
-    delivered_on, find_story, is_delivered, story_files,
-    story_id_of, story_kind)
+    find_story, is_delivered, story_id_of, story_kind)
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .delivery.adapter.outgoing.tools.streams import follow_lines, tokens_of, usage_from
 from .state import schedule_data, start_of
 from .delivery.adapter.outgoing.claims.remote_claims import (
-    claim_config_here, fetch_remote, free_id, PUBLISHED, refresh_claims, release_claim,
-    remote_main)
+    claim_config_here, free_id, refresh_claims, release_claim)
 from .delivery.adapter.outgoing.claims.checkout_claim import (
     claim, claim_path, listener_line, mark_listening, read_claim, release, session_owner)
 from .delivery.adapter.outgoing.files.story_record import ignore_journals_in
@@ -77,14 +74,10 @@ from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.files.run_marks import (
     back_in, run_stories)
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
-from .delivery.adapter.outgoing.files.owned_files import record_owned, write_story_fields
+from .delivery.adapter.outgoing.files.owned_files import record_owned
 from .delivery.adapter.outgoing.files.journal_files import journal_events, journal_writer
-from .spec.api import (
-    lint_context,
-    derived, read_delta, renamed_rules, story_entries)
 from .delivery.adapter.outgoing.files.story_layout import story_ids
 from .delivery.adapter.outgoing.files.delivery_files import perspectives_of
-from .delivery.adapter.outgoing.spec.story_spec_files import spec_target, story_spec
 from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_invocation, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
     follow_newest, story_facts)
@@ -121,6 +114,10 @@ from .delivery.domain.model.moment import Moment
 from .delivery.domain.model.person import Person
 from .delivery.domain.model.story import AlreadyDelivered, NotDelivered, NothingToDeliver, NothingToProve, StoryId
 from .infrastructure import delivery as wiring
+from .delivery.adapter.incoming.cli import spec_delta_view as spec_delta_text
+from .delivery.application.delivery.check_spec import CheckSpecQuery
+from .delivery.application.delivery.show_spec_delta import ShowSpecDeltaQuery
+from .delivery.application.delivery.take_back_delivery import TakeBackDeliveryCommand
 from .delivery.adapter.outgoing.process import factory_process
 from .web import service as web
 from .delivery.adapter.outgoing.files.skeletons import contract_text, document_skeleton, files_skeleton, plan_skeleton
@@ -667,142 +664,28 @@ def claim_command(cwd, runs, epics, story_id):
     return CLAIM_EXIT[outcome.claim]
 
 def undeliver_branch(cwd, runs, epics, story_id):
-    """WP-93 F: a published branch whose merge request lost the race goes back to before its delivery — the spec's
-    scenarios and journeys as the remote main line has them, the story's state lines out and its status as before —
-    so the integrate step merges the remote main line and the delivering function merges again under the new rules.
-    The spec is never resolved by text."""
-    config = claim_config_here(cwd)
-    if not config or not has_worktree(story_id, cwd):
+    """WP-93 F: a published branch whose merge request lost the race goes back to before its delivery
+    (`TakeBackDeliveryUseCase`), so the integrate step merges the remote main line and the delivering function merges
+    again under the new rules."""
+    taken = wiring.take_back_delivery(cwd, runs, epics).execute(TakeBackDeliveryCommand(story_id))
+    if taken is None:
         print(f"integrate: {story_id} has no published branch in this checkout")
         return 1
-    path = worktree_of(story_id, cwd)
-    fetch_remote(cwd, config["remote"])
-    main = remote_main(config["remote"], claim_target(cwd))
-    spec_rel = os.path.relpath(place("spec") if os.path.isabs(place("spec")) else os.path.join(cwd, place("spec")), cwd)
-    changed = [p for p in git(path, "diff", "--name-only", f"{main}...HEAD", "--", spec_rel)[1].splitlines()
-               if p.endswith(("scenarios.md", "journeys.md"))]
-    for rel in changed:
-        if git(path, "cat-file", "-e", f"{main}:{rel}")[0] == 0:
-            git(path, "checkout", main, "--", rel)
-        else:
-            git(path, "rm", "--quiet", "--", rel)
-    story_rel = os.path.relpath(find_story(epics, story_id), factory_home() or cwd)
-    local_story = os.path.join(path, story_rel)
-    before = os.path.join(evidence_dir(runs, story_id), "published-status")
-    status = read_text(before).strip() if os.path.isfile(before) else "approved"
-    write_story_fields(local_story, status=status or "approved", delivered=None, delivered_by=None)
-    git(path, "add", "-A", "--", *(changed + [story_rel]))
-    git(path, *(["-c", "user.name=dca-factory", "-c", "user.email=dca-factory@localhost"]
-                if not git(path, "config", "user.email")[1].strip() else []),
-        "commit", "--no-verify", "--quiet", "-m", f"wip({story_id}): before it is delivered again")
-    with contextlib.suppress(OSError):
-        os.remove(os.path.join(evidence_dir(runs, story_id), PUBLISHED))
-    print(f"integrate: {story_id}'s delivery taken back on its branch ({len(changed)} spec file(s) as {main} has them) "
-          f"— the integrate step merges {main} and delivers it again")
+    print(f"integrate: {story_id}'s delivery taken back on its branch ({len(taken.spec_files)} spec file(s) as "
+          f"{taken.main} has them) — the integrate step merges {taken.main} and delivers it again")
     return 0
-
-
-def spec_delta_view(runs, epics, story_id):
-    """What holds before and after the story (WP-105): per key of the delta, its verb, the feature it stands under
-    before and after, the criterion's lines before and after — what a person accepting the story looks at, read from
-    the story, its plan and the spec, never parsed by a skill. `adds feature` names a feature the story brings."""
-    story_path = find_story(epics, story_id)
-    front, body = read_front_matter(story_path)
-    target, held, _features, feature = story_spec(front)
-    if not target:
-        return dict(story=story_id, context="", feature="", features=[], renames=[], rows=[])
-    plan = os.path.join(runs, story_id, "plan.md")
-    delta = read_delta(read_text(plan)) if os.path.isfile(plan) else read_delta("")
-    story = story_entries(body)
-    before = {item["key"]: item for item in held}
-    rows = []
-    for key, verb in derived(story, held).items():
-        after = next(item for item in story if item["key"] == key)
-        old = before.get(key)
-        rows.append(dict(key=key, verb="moves" if key in delta["moves"] and verb == "holds" else verb,
-                         before_feature=old["feature"] if old else None, after_feature=feature,
-                         before=old["lines"] if old else [], after=after["lines"], reason=""))
-    for key, reason in sorted(delta["removes"].items()):
-        old = before.get(key)
-        rows.append(dict(key=key, verb="removes", before_feature=old["feature"] if old else None, after_feature=None,
-                         before=old["lines"] if old else [], after=[], reason=reason))
-    renames = [dict(old=old, new=new, follow=renamed_rules(story, held, delta).get(old, []))
-               for old, new in delta["renames"]]
-    return dict(story=story_id, context=str(front.get("context", "")).strip(), feature=feature,
-                features=sorted(delta["features"]), renames=renames, rows=rows)
-
-
-def print_spec_delta(view, fmt):
-    if fmt == "json":
-        print(json.dumps(view, indent=2))
-        return 0
-    where = lambda f: f if f else "the context" if f == "" else "—"
-    print(f"spec delta of {view['story']} — {view['context'] or 'no context'}"
-          + (f", feature {view['feature']}" if view["feature"] else ""))
-    for name in view["features"]:
-        print(f"  new feature: {name}")
-    for rename in view.get("renames", []):
-        print(f'  rule "{rename["old"]}" → "{rename["new"]}"'
-              + (f" — {', '.join(rename['follow'])} follow it" if rename["follow"] else ""))
-    for row in view["rows"]:
-        if row["verb"] == "holds":
-            continue
-        head = f"  {row['verb']} {row['key']}"
-        if row["verb"] == "moves" or (row["before_feature"] is not None and row["after_feature"] is not None
-                                       and row["before_feature"] != row["after_feature"]):
-            head += f" ({where(row['before_feature'])} → {where(row['after_feature'])})"
-        print(head + (f" — {row['reason']}" if row["reason"] else ""))
-        for line in row["before"]:
-            print(f"    - {line}")
-        for line in row["after"]:
-            print(f"    + {line}")
-    held = sum(1 for row in view["rows"] if row["verb"] == "holds")
-    if held:
-        print(f"  {held} criterion(s) hold as they are")
-    return 0
-
-
-def spec_place(front):
-    """What a key is unique in: the story's context (every feature of it), or the journeys."""
-    return "journeys" if story_kind(front) == "journey" else str(front.get("context", "")).strip().lower()
 
 
 def spec_check(cwd, runs, epics):
-    """Story and spec agree (WP-98), in one direction: every criterion of a delivered story that is still there stands
-    in its spec — unless a later delivered story's plan removed it. Whether a scenario came from a story is not asked:
-    a delivered story may be gone. Prints one line per disagreement; exit 1 when there is one."""
-    delivered = []
-    for story_path in story_files(epics):
-        try:
-            front, body = read_front_matter(story_path)
-        except GateError:
-            continue
-        if is_delivered(front) and spec_target(front):
-            delivered.append((delivered_on(front), story_id_of(story_path), front, body))
-    removed, problems = {}, []
-    for when, story_id, front, _body in delivered:
-        plan = os.path.join(runs, story_id, "plan.md")
-        if os.path.isfile(plan):
-            for key in read_delta(read_text(plan))["removes"]:
-                removed.setdefault((spec_place(front), key), []).append(when)
-    for when, story_id, front, body in sorted(delivered):
-        target, spec, _features, _feature = story_spec(front)
-        held = {item["key"] for item in spec}
-        for item in story_entries(body):
-            later = [w for w in removed.get((spec_place(front), item["key"]), []) if w >= when]
-            if item["key"] not in held and not later:
-                problems.append(f"{story_id}: `{item['key']}` is delivered and not in {shown(target)}")
-    # the shape of every context's spec (WP-105): what a delivery checks before it writes, over what stands now
-    spec_root = place("spec")
-    for name in sorted(os.listdir(spec_root)) if os.path.isdir(spec_root) else []:
-        if os.path.isdir(os.path.join(spec_root, name)):
-            problems += lint_context(name)
-    for line in problems:
+    """Story and spec agree (WP-98, `CheckSpecUseCase`): one line per disagreement; exit 1 when there is one."""
+    checked = wiring.check_spec(runs, epics).execute(CheckSpecQuery())
+    for line in checked.problems:
         print(f"spec: {line}")
-    if not problems:
-        print(f"spec: every criterion of the {len(delivered)} delivered stor{'y' if len(delivered) == 1 else 'ies'} "
-              f"stands in its spec, and every spec file holds its shape")
-    return 1 if problems else 0
+    if not checked.problems:
+        count = checked.delivered
+        print(f"spec: every criterion of the {count} delivered stor{'y' if count == 1 else 'ies'} stands in its "
+              "spec, and every spec file holds its shape")
+    return 1 if checked.problems else 0
 
 
 def prove(cwd, runs, epics, story_id):
@@ -1461,7 +1344,9 @@ def main(argv):
     if args.spec_check:
         return spec_check(cwd, args.runs, args.epics)
     if args.spec_delta:
-        return print_spec_delta(spec_delta_view(args.runs, args.epics, args.spec_delta), args.format)
+        view = wiring.show_spec_delta(args.runs, args.epics).execute(ShowSpecDeltaQuery(args.spec_delta))
+        print(spec_delta_text.render(view, args.format))
+        return 0
     if args.claim_story:
         return claim_command(cwd, args.runs, args.epics, args.claim_story)
     if args.claims_refresh:

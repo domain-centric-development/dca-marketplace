@@ -19,6 +19,12 @@ from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles
 from ..delivery.adapter.outgoing.files.story_runs import StoryRunFiles
 from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
+from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
+from ..delivery.adapter.outgoing.spec.spec_delta_files import SpecDeltaFiles
+from ..delivery.adapter.outgoing.git.published_branches import PublishedBranchFiles
+from ..delivery.application.delivery.check_spec import CheckSpecUseCase
+from ..delivery.application.delivery.show_spec_delta import ShowSpecDeltaUseCase
+from ..delivery.application.delivery.take_back_delivery import TakeBackDeliveryUseCase
 from ..delivery.adapter.outgoing.pipeline.stage_table import ContractStages
 from ..delivery.application.backlog.backfill_created import BackfillCreatedUseCase
 from ..delivery.application.backlog.release_stories import ReleaseStoriesUseCase
@@ -127,3 +133,15 @@ def claim_story(cwd: str, epics: str, runs: str) -> ClaimStoryUseCase:
 
 def backfill_created(cwd: str, epics: str) -> BackfillCreatedUseCase:
     return BackfillCreatedUseCase(CreatedFiles(cwd, epics))
+
+
+def check_spec(runs: str, epics: str) -> CheckSpecUseCase:
+    return CheckSpecUseCase(DeliveredSpecFiles(runs, epics))
+
+
+def show_spec_delta(runs: str, epics: str) -> ShowSpecDeltaUseCase:
+    return ShowSpecDeltaUseCase(SpecDeltaFiles(runs, epics))
+
+
+def take_back_delivery(cwd: str, runs: str, epics: str) -> TakeBackDeliveryUseCase:
+    return TakeBackDeliveryUseCase(PublishedBranchFiles(cwd, runs, epics))
