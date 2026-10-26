@@ -59,14 +59,15 @@ from .delivery.adapter.outgoing.files.request_files import out_path, prune_outpu
 from .delivery.adapter.outgoing.files.decision_record_files import project_record_path
 from .delivery.application.shared.request_skill import SkillRun
 from .infrastructure import requests as request_wiring
+from .delivery.adapter.outgoing.process.console_lines import ConsoleLines
+from .delivery.application.backlog.run_backlog import RunBacklogCommand, RunBacklogUseCase
+from .delivery.application.shared.backlog_schedule import ScheduleRead
 from .delivery.adapter.outgoing.files.decision_record_files import request_records
 from .delivery.adapter.outgoing.files.request_files import (
-    default_by, list_requests, read_request, REQUEST_JOURNAL, requests_dir,
-    update_request)
-from .delivery.adapter.outgoing.files.request_files import journal as request_journal
+    default_by, REQUEST_JOURNAL, requests_dir)
 from .delivery.application.requests.check_request import CheckRequestCommand
 from .delivery.application.requests.list_requests import target_text
-from .delivery.application.shared.requests import KIND, stories_of
+from .delivery.application.shared.requests import KIND
 from .infrastructure import delivery as wiring
 
 
@@ -282,7 +283,6 @@ class Run:
         self.parallel = options.parallel
         self.keep_going = getattr(options, "keep_going", False)
         self.stay = getattr(options, "stay", False)
-        self.skipped = {}                     # --keep-going: story → the exit it stopped with
         self.red_stale = {}                   # story → its tests whose red proof a merge left stale
         self.options = options
         self.add_dirs, self.read_dirs = [], []
@@ -1569,57 +1569,9 @@ class Run:
     # A request is worked in a process of its own, `factory-cli.py --work-request <id>`, in the main checkout and under
     # this runner's claim: before the next story, between the stages of a running one (never one about that story), and
     # in a slot of its own in a parallel run. `run` and `stop` are the runner's own: a story to run next, the end.
-    def requeue_orphans(self):
-        """A request a factory left `running` when it ended — crashed, killed — is queued again at the next start:
-        this runner holds the claim now, so nobody else works it."""
-        self.profile()
-        for request in list_requests():
-            if request["state"] == "running" and request.get("worker") != self.worker:
-                update_request(request, state="queued", worker=None, started=None)
-                print(f"factory: request {request['id']} was left running by {request.get('worker') or 'a factory'} "
-                      f"— queued again")
-
-    def wake_waiting(self):
-        """A waiting request whose records are all answered is queued again, with the answers to read."""
-        self.profile()
-        for request in list_requests():
-            if request["state"] != "waiting":
-                continue
-            records = request_records(self.home, request["id"])
-            if not records:                     # its record was removed by hand: it runs again and asks again
-                update_request(request, state="queued", record_file=None)
-                print(f"factory: request {request['id']} waited on a record that is gone — it runs again")
-                continue
-            if all(state in ("answered", "applied") for _p, _id, state in records):
-                update_request(request, state="queued", record_file=None,
-                               answered=" ".join(rid for _p, rid, _s in records))
-                print(f"factory: request {request['id']} — its question is answered; it runs again")
-
-    def next_request(self, busy=(), kinds=None):
-        """The oldest queued request this runner may work now: of the kinds given (else every kind a skill works), and
-        about no story in <busy>."""
-        self.wake_waiting()
-        for request in list_requests():
-            if request["state"] != "queued" or request.get("kind") not in KIND:
-                continue
-            kind = KIND[request["kind"]]
-            if (kinds is not None and kind.name not in kinds) or (kinds is None and not kind.skill):
-                continue
-            if stories_of(request) & set(busy):
-                continue
-            return request
-        return None
-
-    def take_stop_request(self):
-        """A `stop` request ends this factory after the running stage: taken, journaled, gone. True when there was one."""
-        request = self.next_request(kinds=("stop",))
-        if not request:
-            return False
-        with contextlib.suppress(OSError):
-            os.remove(request["path"])
-        request_journal("request", "stop", request["id"], "-", f"by={request.get('by', '')}", "exit=0")
-        print(f"factory: request {request['id']} — {request.get('by') or 'a person'} stops the factory; nothing more starts.")
-        return True
+    def queue(self):
+        """The requests as this runner works them (`RequestQueue`), read where the profile puts them."""
+        return request_wiring.request_queue(self.home, self.worker, self.profile)
 
     def request_argv(self, request, tool):
         argv = [sys.executable, self.cli_path, "--work-request", request["id"], "--tool", tool]
@@ -1639,80 +1591,24 @@ class Run:
         worked = set()
         while True:
             self.checkpoint()
-            request = self.next_request(busy)
+            request = self.queue().next(busy)
             if request is None or request["id"] in worked:
                 return
             worked.add(request["id"])
             print(f"══ request {request['id']}  ({request['kind']} {target_text(request)}, by {request.get('by', '?')})")
             code, _ = self.run(self.request_argv(request, tool), cwd=self.home, env=self.request_env())
-            self.request_ended(request, code)
-
-    def request_ended(self, request, code):
-        """After a request's process: one that ended without saying how — killed, a crash before its first line — is
-        failed, so it is never taken again on its own."""
-        if code in (0, 3):
-            return
-        if os.path.isfile(request["path"]):
-            now = read_request(request["path"])
-            if now["state"] in ("queued", "running") and (code in SIGNAL_EXITS.values() or code < 0):
-                update_request(now, state="queued", worker=None, started=None)      # stopped, not failed: again next time
-                err(f"factory: request {request['id']} was stopped — queued again for the next start.")
-                return
-            if now["state"] in ("queued", "running"):
-                update_request(now, state="failed", worker=None,
-                               error=f"its process ended with exit {code} before it said how")
-        err(f"factory: request {request['id']} ended with exit {code} — `factory.sh requests` says why; the "
-            "factory goes on.")
+            self.queue().ended(request, code)
 
     def between_stages(self, story, tool):
         """Before a stage of a story the runner runs alone: a `stop` — the run ends here, as after a TERM, the story
         resumable —, then the requests that are not about it."""
         if self.options.child:
             return
-        if self.take_stop_request():
+        if self.queue().take_stop():
             self.pending = 0
             self.checkpoint()
         self.work_requests(tool, busy=(story,))
         self.profile()
-
-    def run_request_start(self, request):
-        """(start stage or None, why not) — where a `run` request's story begins: the stage it names, else where its
-        files say, as `run --story` decides it."""
-        story, start = request["story"], request.get("from", "")
-        if start:
-            return start, ""
-        self.profile()
-        found = start_of(self.home, place("epics"), place("runs"), story, 1)
-        if found is None:
-            return None, f"no story {story}"
-        state, start, detail = found
-        if not start:
-            return None, f"{story} is {state}" + (f" — {detail}" if detail else "")
-        return start, ""
-
-    def take_run_request(self, busy=()):
-        """The oldest `run` request whose story is not running: (request, start) — its story starts next — or a failed
-        request said and set aside. None when there is none."""
-        while True:
-            request = self.next_request(busy, kinds=("run",))
-            if not request:
-                return None
-            start, why = self.run_request_start(request)
-            if start:
-                if request.get("from"):
-                    self.reset_rounds(request["story"], start)
-                    self.gates.fresh_window(request["story"])
-                with contextlib.suppress(OSError):
-                    os.remove(request["path"])
-                request_journal("request", "run", request["id"], request["story"], f"by={request.get('by', '')}",
-                                f"from={start}")
-                print(f"factory: request {request['id']} — {request.get('by') or 'a person'} runs {request['story']} "
-                      f"from {start} now")
-                return request, start
-            update_request(request, state="failed", error=f"nothing runs: {why}")
-            request_journal("request", "run", request["id"], request["story"], f"by={request.get('by', '')}",
-                            "exit=1", why)
-            err(f"factory: request {request['id']} — {why}; nothing runs.")
 
     def wait_or_wake(self, interval):
         """The watch's pause, cut short by a request: a person's press runs within seconds, not after the interval."""
@@ -1722,7 +1618,7 @@ class Run:
             if os.path.isfile(self.stop_file):
                 return
             with contextlib.suppress(OSError):
-                if any(r["state"] == "queued" for r in list_requests()):
+                if self.queue().any_queued():
                     return
 
     # --- one request, in its own process ----------------------------------------------------------------------
@@ -1754,228 +1650,17 @@ class Run:
             return None
         return int(given)
 
-    def skip(self, story, code):
-        """--keep-going: a story that stopped is set aside for the rest of this run — the schedule skips it and what
-        depends on it — unless the stop concerns the whole run: the checkout taken over (5), the run's --max-stages
-        (4 with the cap reached), a configuration nothing could run with (2). True when the run goes on."""
-        if not self.keep_going or code in (2, 5) or (code == 4 and self.max_stages and self.invocations >= self.max_stages):
-            return False
-        self.skipped[story] = code
-        err(f"factory: story {story} stopped (exit {code}) — --keep-going skips it and what depends on it; the "
-            f"backlog run goes on.")
-        return True
-
-    def skip_args(self):
-        return ("--skip", ",".join(self.skipped)) if self.skipped else ()
-
-    def skipped_summary(self):
-        """The run's exit once nothing more can start: 0, or the first stop's code where --keep-going skipped one."""
-        if not self.skipped:
-            return 0
-        err("factory: stopped in this run and skipped: "
-            + ", ".join(f"{story} (exit {code})" for story, code in self.skipped.items())
-            + " — `factory.sh status` says why.")
-        return next(iter(self.skipped.values()))
-
-    def nothing_more(self, out, watch):
-        print(out)
-        print("factory: nothing more can run" + (", and nothing waits on an answer that would change that" if watch else "")
-              + ".")
-
-    def waiting_note(self, out, previous, interval):
-        """Waiting is reading files, never asking an agent: an unchanged schedule is said once."""
-        if out != previous:
-            print(out)
-            what = "an answer" if "\nwait: yes" in "\n" + out else "a released story or a request"
-            print(f"factory: waiting for {what} — the schedule is read again every {interval}s; {self.stop_file} "
-                  "ends the watch.")
-        return out
-
     def run_backlog(self, tool, watch, interval, dry):
-        """Story after story, in the order the schedule names, read off the files every time. A failure ends it."""
+        """Story after story, in the order the schedule names, read off the files every time (`RunBacklogUseCase`)."""
         if not self.gate_installed():
             err(f"factory: no gate at {self.gate_rel} — run 'factory.sh setup'")
             return 2
         slots = self.parallel_slots()
         if slots is None:
             return 2
-        # a superseded story's worktree has nothing to integrate; it goes before the first story starts
-        if not dry:
-            self.take_lock()
-            try:
-                self.run([sys.executable, self.cli_path, "--worktree-prune"])
-            finally:
-                self.drop_lock()
-        if not dry:
-            self.requeue_orphans()
-        if slots > 1 and not dry:
-            return self.run_parallel(tool, watch, interval, slots)
-        previous, last = "", ""
-        while True:
-            # waiting is working too: the claim is renewed on every look
-            if not dry and not self.renew():
-                err("factory: another worker took over this checkout — the backlog run ends here.")
-                return 5
-            if os.path.isfile(self.stop_file):
-                print(f"factory: {self.stop_file} exists — the backlog run stops here. Remove it to run again.")
-                return 0
-            # a person's requests go before the next story: a stop, what a skill works, a story to run now
-            if not dry:
-                if self.take_stop_request():
-                    return 0
-                self.work_requests(tool)
-                asked = self.take_run_request()
-                if asked:
-                    request, start = asked
-                    print(f"══ story {request['story']} from {start}  (request {request['id']})")
-                    code = self.run_story(request["story"], tool, start, False)
-                    request_journal("request-end", "run", request["id"], f"exit={code}")
-                    if code in (0, 3) or self.skip(request["story"], code):
-                        last = ""
-                        continue
-                    err(f"factory: story {request['story']} stopped (exit {code}) — the backlog run ends here.")
-                    return code
-            if claim_config_here(self.home) and not dry:
-                _c, claimed = self.cli("--claims-refresh", quiet=False)
-                if claimed and claimed != getattr(self, "last_claims", ""):
-                    print(claimed)
-                self.last_claims = claimed
-            code, out = self.cli("--schedule", "--slots", "1", *self.skip_args(), merge=True)
-            if code != 0:
-                err(out)
-                err("factory: the schedule could not be read.")
-                return 1
-            following = next((line[len("next: "):] for line in out.split("\n") if line.startswith("next: ")), "")
-            if following and not following.startswith("none"):
-                story, start = following.split(" ", 1)[0], following.split(" ", 1)[-1]
-                if following == last:
-                    print(out)
-                    err(f"factory: {story} ran from {start} and the schedule names it there again — no progress, stopping.")
-                    if self.skip(story, 1):
-                        last = ""
-                        continue
-                    return 1
-                print(f"══ story {story} from {start}")
-                if dry:
-                    print(out)
-                    print(f"   would run: factory.sh run --story {story} --from {start}")
-                    return 0
-                code = self.run_story(story, tool, start, False)
-                if code == 0:
-                    last = following
-                    continue
-                if code == 3:                       # waits for a decision; the schedule skips it now
-                    last = ""
-                    continue
-                if self.skip(story, code):
-                    last = ""
-                    continue
-                err(f"factory: story {story} stopped (exit {code}) — the backlog run ends here.")
-                return code
-            if not watch or not (self.stay or any(line.startswith("wait: yes") for line in out.split("\n"))):
-                self.nothing_more(out, watch)
-                return self.skipped_summary()
-            previous = self.waiting_note(out, previous, interval)
-            last = ""
-            self.wait_or_wake(interval)
-
-    def run_parallel(self, tool, watch, interval, slots):
-        """Several stories at once, each in its worktree, each a runner process of its own whose lines carry its id.
-        A failure starts nothing more and lets the running ones finish; so does the stop file and a TERM."""
-        children, seen, failed, stopping, previous, out = {}, set(), 0, None, "", ""
-        asked, ran_for = {}, {}             # a request's process by its id; a `run` request by the story it runs
-        while True:
-            if stopping is None and self.pending is not None:
-                stopping, failed = self.pending, failed or self.pending
-                self.pending = None
-                err("factory: stopped by a signal — no further story starts; the running ones finish.")
-            if stopping is None and not self.renew():
-                err("factory: another worker took over this checkout — no further story starts.")
-                stopping, failed = 5, 5
-            if stopping is None and os.path.isfile(self.stop_file):
-                print(f"factory: {self.stop_file} exists — no further story starts; the running ones finish.")
-                stopping = "stop"
-            if stopping is None and self.take_stop_request():
-                stopping = "stop"
-            for request_id, (process, request, pump) in list(asked.items()):
-                if process.poll() is None:
-                    continue
-                pump.join()
-                del asked[request_id]
-                self.request_ended(request, process.returncode)
-            for story, (process, start, pump) in list(children.items()):
-                if process.poll() is None:
-                    continue
-                pump.join()
-                del children[story]
-                code = process.returncode
-                if story in ran_for:
-                    request_journal("request-end", "run", ran_for.pop(story), f"exit={code}")
-                if code == 0:
-                    seen.add(f"{story}@{start}")
-                elif code != 3 and self.skip(story, code):
-                    pass
-                elif code != 3:
-                    err(f"factory: story {story} stopped (exit {code}) — no further story starts; the running ones finish.")
-                    stopping = stopping if stopping is not None else code
-                    failed = failed or code
-            launched = False
-            if stopping is None:
-                # a person's request takes the next free slot, before any story; one about a running story waits.
-                # One at a time: requests work in the main checkout, and two at once would commit each other's files
-                busy = set(children) | {s for _p, r, _t in asked.values() for s in stories_of(r)}
-                while len(children) + len(asked) < slots and not asked:
-                    request = self.next_request(busy)
-                    if request is None or request["id"] in asked:
-                        break
-                    asked[request["id"]] = self.start_request_child(request, tool)
-                    busy |= stories_of(request)
-                    launched = True
-                while len(children) + len(asked) < slots:
-                    taken = self.take_run_request(busy)
-                    if not taken:
-                        break
-                    request, start = taken
-                    print(f"══ story {request['story']} from {start}  (request {request['id']}, slots: {slots})")
-                    os.makedirs(f"{self.home}/{self.evidence_rel()}/{request['story']}", exist_ok=True)
-                    children[request["story"]] = self.start_child(request["story"], tool, start)
-                    ran_for[request["story"]] = request["id"]
-                    busy.add(request["story"])
-                    launched = True
-                loose = sum(1 for _p, r, _t in asked.values() if not stories_of(r))
-                code, out = self.cli("--schedule", "--slots", str(max(0, slots - loose)), "--busy", ",".join(sorted(busy)),
-                                     *self.skip_args(), merge=True)
-                if code != 0:
-                    err(out)
-                    err("factory: the schedule could not be read.")
-                    stopping, failed = 1, 1
-                else:
-                    for following in [line[len("next: "):] for line in out.split("\n") if line.startswith("next: ")]:
-                        if following.startswith("none") or len(children) + len(asked) >= slots:
-                            continue
-                        story, start = following.split(" ", 1)[0], following.split(" ", 1)[-1]
-                        if f"{story}@{start}" in seen:
-                            err(f"factory: {story} ran from {start} and the schedule names it there again — no "
-                                "progress, not started again.")
-                            if self.skip(story, 1):
-                                continue
-                            failed = failed or 1
-                            stopping = stopping if stopping is not None else 1
-                            continue
-                        print(f"══ story {story} from {start}  (slots: {slots})")
-                        os.makedirs(f"{self.home}/{self.evidence_rel()}/{story}", exist_ok=True)
-                        children[story] = self.start_child(story, tool, start)
-                        launched = True
-            if not children and not asked and not launched:
-                if stopping is not None:
-                    return failed if isinstance(stopping, int) or failed else 0
-                if not watch or not (self.stay or any(line.startswith("wait: yes") for line in out.split("\n"))):
-                    self.nothing_more(out, watch)
-                    return failed or self.skipped_summary()
-                previous = self.waiting_note(out, previous, interval)
-                self.wait_or_wake(interval)
-                continue
-            time.sleep(2)
+        backlog = RunnerBacklog(self, tool)
+        use_case = RunBacklogUseCase(backlog, backlog, backlog, self.queue(), ConsoleLines())
+        return use_case.execute(RunBacklogCommand(slots, watch, interval, dry, self.keep_going, self.stay))
 
     def start_request_child(self, request, tool):
         """A request's process beside the stories of a parallel run, its lines named with the request's id."""
@@ -1991,7 +1676,7 @@ class Run:
                 sys.stdout.flush()
         thread = threading.Thread(target=pump, daemon=True)
         thread.start()
-        return process, request, thread
+        return ChildProcess(process, thread)
 
     def start_child(self, story, tool, start):
         """One story's run as a runner process of its own — the same worker on the claim, the run's pipeline hash —
@@ -2011,7 +1696,89 @@ class Run:
                 sys.stdout.flush()
         thread = threading.Thread(target=pump, daemon=True)
         thread.start()
-        return process, start, thread
+        return ChildProcess(process, thread)
+
+
+class ChildProcess:
+    """A story's or a request's process beside a parallel run, its lines pumped to the runner's."""
+
+    def __init__(self, process, pump):
+        self.process = process
+        self.pump = pump
+
+    def ended(self):
+        if self.process.poll() is None:
+            return None
+        self.pump.join()
+        return self.process.returncode
+
+
+class RunnerBacklog:
+    """The backlog run's ports on the runner (`BacklogSchedule`, `BacklogCheckout`, `BacklogWorker`): the schedule
+    the cli prints, the checkout under the claim, the stories and requests as processes."""
+
+    def __init__(self, run, tool):
+        self._run = run
+        self._tool = tool
+
+    def read(self, slots, busy, skip):
+        args = ["--schedule", "--slots", str(slots), "--busy", ",".join(busy)]
+        args += ["--skip", ",".join(skip)] if skip else []
+        code, out = self._run.cli(*args, merge=True)
+        if code != 0:
+            return ScheduleRead(False, out)
+        lines = out.split("\n")
+        named = [line[len("next: "):] for line in lines if line.startswith("next: ")]
+        following = tuple((text.split(" ", 1)[0], text.split(" ", 1)[-1]) for text in named if not text.startswith("none"))
+        return ScheduleRead(True, out, following, any(line.startswith("wait: yes") for line in lines))
+
+    def prune(self):
+        with self._run.locked():
+            self._run.run([sys.executable, self._run.cli_path, "--worktree-prune"])
+
+    def renew(self):
+        return self._run.renew()
+
+    def stop_asked(self):
+        return self._run.stop_file if os.path.isfile(self._run.stop_file) else None
+
+    def stop_place(self):
+        return self._run.stop_file
+
+    def claims(self):
+        if not claim_config_here(self._run.home):
+            return ""
+        return self._run.cli("--claims-refresh", quiet=False)[1]
+
+    def signalled(self):
+        code, self._run.pending = self._run.pending, None
+        return code
+
+    def wait(self, interval):
+        self._run.wait_or_wake(interval)
+
+    def pause(self):
+        time.sleep(2)
+
+    def run(self, story, start):
+        return self._run.run_story(story, self._tool, start, False)
+
+    def fresh(self, story, start):
+        self._run.reset_rounds(story, start)
+        self._run.gates.fresh_window(story)
+
+    def start(self, story, start):
+        os.makedirs(f"{self._run.home}/{self._run.evidence_rel()}/{story}", exist_ok=True)
+        return self._run.start_child(story, self._tool, start)
+
+    def work(self, busy):
+        self._run.work_requests(self._tool, busy)
+
+    def start_request(self, request):
+        return self._run.start_request_child(request, self._tool)
+
+    def capped(self):
+        return bool(self._run.max_stages and self._run.invocations >= self._run.max_stages)
 
 
 TOOL_SKILL_DIRS = tuple(tool.skills for tool in TOOLS)
