@@ -20,8 +20,8 @@ import typing
 
 
 class Tool(typing.NamedTuple):
-    """One agent tool the runner can start a stage with. Everything the runner knows about a tool is here; bash
-    asks for an invocation (`--tool-invocation`) and runs it."""
+    """One agent tool the runner can start a stage with. Everything the runner knows about a tool is here; the
+    runner builds an invocation from it (`tool_invocation`) and runs it."""
     name: str
     command: typing.Tuple[str, ...]  #: the binary and its fixed arguments; the prompt goes last
     help: typing.Tuple[str, ...]  #: how its flags are probed: the help of the subcommand the command runs

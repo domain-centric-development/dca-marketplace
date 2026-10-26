@@ -75,11 +75,10 @@ from .infrastructure import delivery as wiring
 FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
 
 
-def stage_names(kind=None, window=None, every=False):
-    """The table's stage names in its order: the run order (every row with `every`), narrowed to the stages a story
-    of `kind` runs and to those `window` carries."""
-    return [s.name for s in STAGES if (every or s.in_order) and (kind is None or kind in s.kinds)
-            and (window is None or s.window == window)]
+def stage_names(window=None, every=False):
+    """The table's stage names in its order: the run order (every row with `every`), narrowed to those `window`
+    carries."""
+    return [s.name for s in STAGES if (every or s.in_order) and (window is None or s.window == window)]
 
 
 def stages_shell(places=()):

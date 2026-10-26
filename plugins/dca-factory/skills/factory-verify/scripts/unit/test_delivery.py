@@ -8,6 +8,7 @@ import unittest
 
 from support import project, write
 from dca_factory import cli
+from dca_factory.delivery.adapter.outgoing.files.story_runs import CLAIM_FILE
 from dca_factory.delivery.adapter.outgoing.files import migrations
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
@@ -76,7 +77,7 @@ class Prove(unittest.TestCase):
             self.assertEqual(front["status"], "adopted")
             self.assertNotIn("delivered", front)
             self.assertNotIn("delivered_by", front)
-            claim = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), cli.CLAIM_FILE))
+            claim = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), CLAIM_FILE))
             self.assertIn("delivered_by=hand:ana", claim)
             self.assertEqual(layout.story_kind(front), "adopt")
 

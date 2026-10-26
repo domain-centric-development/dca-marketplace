@@ -48,11 +48,10 @@ import glob
 import json
 import os
 import re
-import shlex
 import sys
 import textwrap
 import time
-from .delivery.adapter.outgoing.pipeline.stage_rows import ALL_KINDS, FORM_CHECKS, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
+from .delivery.adapter.outgoing.pipeline.stage_rows import FORM_CHECKS, SHARED_WINDOWS, STAGE_ORDER
 from .contract import CONTRACT, VERSION
 from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .delivery.adapter.outgoing.files.migrations import layout_hint
@@ -60,9 +59,8 @@ from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE, open_
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_dir, evidence_rel, location, place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
-from .delivery.adapter.outgoing.files.story_layout import (
-    find_story, is_delivered, story_id_of, story_kind)
-from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
+from .delivery.adapter.outgoing.files.story_layout import find_story, story_id_of, story_kind
+from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from .delivery.adapter.outgoing.tools.streams import follow_lines, tokens_of, usage_from
 from .infrastructure.schedule import schedule_data, start_of
 from .delivery.adapter.outgoing.claims.remote_claims import (
@@ -73,14 +71,13 @@ from .delivery.adapter.outgoing.files.story_record import ignore_journals_in
 from .delivery.adapter.outgoing.files.windows import freeze_all, mark_stage, mark_window
 from .delivery.adapter.outgoing.files.usage_files import journal_usage
 from .delivery.adapter.outgoing.files.owned_files import owned_end
-from .delivery.adapter.outgoing.files.run_marks import (
-    back_in, run_stories)
+from .delivery.adapter.outgoing.files.run_marks import run_stories
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.adapter.outgoing.files.owned_files import record_owned
 from .delivery.adapter.outgoing.files.journal_files import journal_events, journal_writer
 from .delivery.adapter.outgoing.files.story_layout import story_ids
 from .delivery.adapter.outgoing.files.delivery_files import perspectives_of
-from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_invocation, TOOLS, unprobed_flags
+from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
     follow_newest, story_facts)
 from .delivery.application.status import actions
@@ -103,7 +100,6 @@ from .delivery.application.requests.write_request import WriteRequestCommand
 from .delivery.application.shared.requests import DuplicateRequest, KIND, KINDS, RequestRefused
 from .building_blocks import UseCaseException
 from .delivery.adapter.outgoing.claims.story_claims import claim_target
-from .delivery.adapter.outgoing.files.story_runs import CLAIM_FILE  # noqa: F401 — where `--prove` keeps the claim
 from .delivery.application.shared.story_repository import StoryNotFound
 from .delivery.application.backlog.backfill_created import BackfillCreatedCommand
 from .delivery.application.delivery.claim_story import ClaimStoryCommand
@@ -127,9 +123,7 @@ from .delivery.adapter.outgoing.git.worktree_steps import (
     integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
 from .delivery.adapter.outgoing.files.migrations import migrate_layout
 from .delivery.adapter.outgoing.tools.tool_choice import command_heads, first_word, model_for
-from .runner import (
-    needs_human_lines, open_decision_files,
-    stage_names, stages_shell, verdict_of_story)
+from .runner import stage_names, stages_shell
 from .delivery.adapter.incoming.runner.run_command import request_main, run_main, settle_command
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
 from .delivery.adapter.incoming.cli.status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
@@ -1114,43 +1108,18 @@ def main(argv):
     parser.add_argument("--carrier-lines", action="store_true", help="those keys with their values, `key value` per line")
     parser.add_argument("--model", nargs=2, metavar=("TOOL", "STAGE"),
                         help="the profile's model for that tool and stage (model.<tool>.<stage>, else model.<tool>)")
-    parser.add_argument("--verdict", metavar="STORY", help="the judge's verdict of that story, or nothing")
-    parser.add_argument("--back-to", metavar="STORY",
-                        help="where a changes-requested verdict sends the story: test (the judge's `back: test`) or build; "
-                             "with --stage build: `test` when build.md sends the story back, else nothing")
-    parser.add_argument("--stage", choices=("build",), help="with --back-to: read that stage's file instead of judge.md")
-    parser.add_argument("--needs-human", metavar="FILE",
-                        help="the decision ids a stage file's needs-human section names; exit 1 when it asks nobody")
-    parser.add_argument("--open-decisions", metavar="STORY",
-                        help="the decision records that name the story and carry no answer, one path per line")
     parser.add_argument("--stages", action="store_true",
-                        help="the gate's stage table: the run order, space-separated (--for-kind, --window, --all "
+                        help="the gate's stage table: the run order, space-separated (--window, --all "
                              "narrow or widen it); with --shell the bash lines the runner reads once at its start "
                              "(and `PLACE_<KEY>=` for --place), and exit")
-    parser.add_argument("--for-kind", choices=ALL_KINDS, help="with --stages: the stages a story of that kind runs")
     parser.add_argument("--window", choices=tuple(SHARED_WINDOWS), help="with --stages: the stages that shared process carries")
     parser.add_argument("--shell", action="store_true", help="with --stages: the stage and the tool table as bash "
                                                                 "assignments")
-    parser.add_argument("--tool-invocation", metavar="TOOL", choices=tuple(TOOL),
-                        help="the command line that starts one stage with that tool, as shell words with the prompt "
-                             "left as \"$prompt\", and exit")
-    parser.add_argument("--tool-model", default="", help="with --tool-invocation: the model the stage runs on")
-    parser.add_argument("--writable", action="append", default=[], metavar="DIR",
-                        help="with --tool-invocation: a linked folder the stage writes into")
-    parser.add_argument("--readable", action="append", default=[], metavar="DIR",
-                        help="with --tool-invocation: a linked folder the stage only reads")
-    parser.add_argument("--protect", action="append", default=[], metavar="DIR",
-                        help="with --tool-invocation: a folder no stage writes (the pipeline, the evidence, the skills)")
-    parser.add_argument("--allow", default="", help="with --tool-invocation: the shell allow-list, Bash(<head>:*),…")
-    parser.add_argument("--tool-flags", metavar="TOOL", choices=tuple(TOOL),
-                        help="the isolation flags that tool gets, as probed, and exit")
     parser.add_argument("--tool-probe", metavar="TOOL", choices=tuple(TOOL),
                         help="the flags of the tool's record its binary's help does not name: one a stage needs "
                              "(exit 1), an isolation flag only (named, exit 0), none (exit 0), no binary (exit 3)")
     parser.add_argument("--place", metavar="KEY",
                         help="where the factory reads KEY (product, tech, domain, epics, runs), from the profile or its default")
-    parser.add_argument("--delivered", metavar="STORY",
-                        help="exit 0 when the story carries the gate's delivered mark, 1 when it does not")
     parser.add_argument("--contract", metavar="STAGE",
                         help=f"the exact shape the gate holds that stage's file to ({', '.join(STAGE_ORDER)}), or "
                              "review or glossary, from the gate's own constants, and exit")
@@ -1197,13 +1166,6 @@ def main(argv):
     set_places(read_profile(profile_path), epics=args.epics, runs=args.runs)
     args.epics, args.runs = place("epics"), place("runs")
     # the runner's questions first: they read one file and print one answer
-    if args.tool_invocation:
-        print(tool_invocation(TOOL[args.tool_invocation], args.tool_model, args.writable, args.readable, args.protect,
-                              args.allow))
-        return 0
-    if args.tool_flags:
-        print(" ".join(shlex.quote(w) for w in isolation_args(TOOL[args.tool_flags])))
-        return 0
     if args.tool_probe:
         tool = TOOL[args.tool_probe]
         probed = unprobed_flags(tool)
@@ -1221,7 +1183,7 @@ def main(argv):
             if args.place and args.place not in DEFAULTS:
                 parser.error(f"--place takes one of {', '.join(DEFAULTS)}")
             return stages_shell((args.place,) if args.place else ())
-        print(" ".join(stage_names(args.for_kind, args.window, args.every)))
+        print(" ".join(stage_names(args.window, args.every)))
         return 0
     if args.contract:
         text = contract_text(args.contract, args.runs)
@@ -1243,12 +1205,6 @@ def main(argv):
             parser.error(f"--place takes one of {', '.join(DEFAULTS)}")
         print(place(args.place))
         return 0
-    if args.delivered:
-        try:
-            return 0 if is_delivered(read_front_matter(find_story(args.epics, args.delivered))[0]) else 1
-        except GateError as error:
-            print(f"factory: {error}", file=sys.stderr)
-            return 2
     if args.get is not None:
         print(read_profile(profile_path).get(args.get, ""))
         return 0
@@ -1277,27 +1233,6 @@ def main(argv):
         return 0
     if args.model:
         print(model_for(read_profile(profile_path), *args.model))
-        return 0
-    if args.verdict:
-        print(verdict_of_story(args.runs, args.verdict))
-        return 0
-    if args.back_to:
-        if args.stage:
-            # the build stage found a defect in a test's own code, not in what it asserts: only `test` sends it back
-            path = os.path.join(args.runs, args.back_to, STAGE_FILES[args.stage])
-            print("test" if os.path.isfile(path) and back_in(read_text(path)) == "test" else "")
-            return 0
-        path = os.path.join(args.runs, args.back_to, "judge.md")
-        print(back_in(read_text(path)) if os.path.isfile(path) else "build")
-        return 0
-    if args.needs_human:
-        lines = needs_human_lines(args.needs_human, args.story)
-        if lines is None:
-            return 1
-        print("\n".join(lines))
-        return 0
-    if args.open_decisions:
-        print("\n".join(open_decision_files(cwd, args.open_decisions)))
         return 0
     if args.follow:
         return follow(args.runs, args.story, args.once, args.format, args.lines, args.process, args.every,

@@ -692,7 +692,7 @@ rather than leaving a reader to find it in a failing run.
 
 **Agent tools.** Claude Code, Codex and OpenCode each have a record in `dca_factory/delivery/adapter/outgoing/tools/agents.py` — the command, how its
 flags are probed, the isolation, the usage format, the skill folder, the model flag, how linked and protected
-folders are named — and the runner starts a stage with what `factory-cli.py --tool-invocation <tool>` returns. Every
+folders are named — and the runner starts a stage with the command line the tool's record builds (`tool_invocation`). Every
 flag is checked against the binary's help once per binary, before the first stage (`factory-cli.py --tool-probe
 <tool>`): a flag a stage needs that the binary lacks stops the run, an isolation flag it lacks is left out and named.
 Any other tool plugs in through `FACTORY_TOOL_CMD`. Run the stage skills in-session and no adapter is needed at

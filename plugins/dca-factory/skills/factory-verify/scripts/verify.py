@@ -3096,11 +3096,15 @@ exit 0
     # a stage reads the pipeline, the evidence and the skills and never writes them: Claude Code gets them as
     # folders to read under a deny rule for every editing tool, in the checkout and in a worktree; Codex, which reads
     # everywhere, gets the writable folders alone
-    # the invocation is the tool record's: the cli builds it, the runner evals it
-    def invocation(tool, *extra, env=None):
-        return subprocess.run([sys.executable, cli_of(runner), "--tool-invocation", tool, *extra], capture_output=True,
-                              text=True, encoding="utf-8", errors="replace",
-                              env={**os.environ, "FACTORY_ISOLATION": "off", **(env or {})}).stdout.strip()
+    # the invocation is the tool record's: the runner builds it and evals it
+    def invocation(tool, *extra, env=None, base=None):
+        given = {"--writable": [], "--readable": [], "--protect": [], "--allow": [""], "--tool-model": [""]}
+        for flag, value in zip(extra[::2], extra[1::2]):
+            given[flag] = given[flag] + [value] if flag in ("--writable", "--readable", "--protect") else [value]
+        call = (f"print(pkg.tool_invocation(pkg.TOOL[{tool!r}], {given['--tool-model'][-1]!r}, {given['--writable']!r}, "
+                f"{given['--readable']!r}, {given['--protect']!r}, {given['--allow'][-1]!r}))")
+        environment = base if base is not None else {**os.environ, "FACTORY_ISOLATION": "off"}
+        return package_probe(runner, call, env={**environment, **(env or {})})
     linked = ("--writable", "/home/p/product/epics", "--readable", "/home/p/.agents/factory",
               "--protect", "/home/p/.agents/factory", "--protect", "/home/p/.dca-factory/evidence")
     claude_line, codex_line = invocation("claude", *linked), invocation("codex", *linked)
@@ -3149,9 +3153,7 @@ exit 0
     # OpenCode runs a server of its own (attached to the background service, it would take that process's
     # configuration) and reads an empty configuration folder of the pipeline's (it has no flag that keeps the
     # person's setup out); a folder the person names wins, and FACTORY_ISOLATION=off drops it
-    plain = subprocess.run([sys.executable, cli_of(runner), "--tool-invocation", "opencode"], capture_output=True,
-                           text=True, encoding="utf-8", errors="replace",
-                           env={k: v for k, v in os.environ.items() if k != "OPENCODE_CONFIG_DIR"}).stdout
+    plain = invocation("opencode", base={k: v for k, v in os.environ.items() if k != "OPENCODE_CONFIG_DIR"})
     own = invocation("opencode", env={"FACTORY_ISOLATION": "on", "OPENCODE_CONFIG_DIR": "/mine"})
     check("tools: OpenCode runs --standalone with an empty configuration folder of the pipeline's — the person's "
           "named folder wins, and isolation off drops it",
@@ -4318,13 +4320,14 @@ def verify_setup(runner, verbose=False):
         write_file(root, "product/epics/sample/STORY-1/decisions/01.md", "---\nid: STORY-1-01\nstory: STORY-1\nstage: build\n---\n\n# Q?\n")
         write_file(root, "product/epics/sample/STORY-1/decisions/02.md",
                    "---\nid: STORY-1-02\nstory: STORY-1\nstage: plan\n---\n\n# Q?\n\n## Answer\nanswer: yes\nby: x\nat: y\n")
-        asks = cli(root, "--needs-human", ".dca-factory/runs/STORY-1/build.md", "--story", "STORY-1")
-        check("cli: --verdict, --needs-human and --open-decisions read the stage files and the records as the gate does",
-              cli(root, "--verdict", "STORY-1")[1] == "changes-requested" and cli(root, "--verdict", "STORY-9")[1] == ""
-              and asks == (0, "STORY-1-01\tbuild\tproduct/epics/sample/STORY-1/decisions/01.md")
-              and cli(root, "--needs-human", ".dca-factory/runs/STORY-1/tidy.md")[0] == 1
-              and cli(root, "--open-decisions", "STORY-1")[1].split("\n") == ["product/epics/sample/STORY-1/decisions/01.md"],
-              f"{asks}; {cli(root, '--open-decisions', 'STORY-1')}")
+        read = package_probe(runner, "import json, os\nrun = pkg.Run(pkg.run_options([]), os.getcwd(), '.dca-factory/runs')\n"
+                             "print(json.dumps([run.verdict_of('STORY-1'), run.verdict_of('STORY-9'), "
+                             "pkg.needs_human_lines('.dca-factory/runs/STORY-1/build.md', 'STORY-1'), "
+                             "pkg.needs_human_lines('.dca-factory/runs/STORY-1/tidy.md'), run.open_decisions('STORY-1')]))",
+                             cwd=root)
+        check("runner: reads the verdict, a stage's needs-human and the open records as the gate does",
+              json.loads(read or "[]") == ["changes-requested", "", ["STORY-1-01\tbuild\tproduct/epics/sample/STORY-1/decisions/01.md"],
+                                           None, "product/epics/sample/STORY-1/decisions/01.md"], read)
         # the project's own runner copy runs with the cli and the package beside its gate: two entry points of one
         # package, so one release by construction
         code, output = run_runner(project_runner(root), root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
@@ -4412,8 +4415,7 @@ def verify_setup(runner, verbose=False):
           not parsed, parsed[:3])
     # the runner reads in its own process: a cli process per question costs a Python start each, ~0.1 s, some
     # twenty times a stage; what is left as a process changes state — the release, a skeleton, a worktree, the schedule
-    reader_verbs = ("--get", "--model", "--verdict", "--needs-human", "--back-to", "--open-decisions", "--delivered",
-                    "--kind", "--start", "--command-heads", "--tool-flags", "--perspectives", "--place", "--usage",
+    reader_verbs = ("--get", "--model", "--kind", "--start", "--command-heads", "--perspectives", "--place", "--usage",
                     "--usage-from", "--journal-line", "--claim")
     spawned = sorted({verb for verb in reader_verbs
                       if re.search(rf'self\.cli\([^)]*"{re.escape(verb)}"', modules["runner"])
@@ -4447,6 +4449,12 @@ def verify_setup(runner, verbose=False):
 
 # --- WP-75: one owner per place — the story carries its state, the run folder is protocol ---------------
 OLD_PROFILE = ".agents/factory/factory.profile.yaml"
+
+
+def package_probe(beside, code, cwd=None, env=None):
+    """<code> run in a fresh interpreter over the package beside <beside>, its names in `pkg`; what it printed."""
+    return subprocess.run([sys.executable, "-c", PACKAGE_PROBE + code, beside], cwd=cwd, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env=env).stdout.strip()
 
 
 def gate_module(path):
@@ -6992,16 +7000,16 @@ def run_groups(args):
                              [l for l in output.splitlines() if "break-proof" in l][:3]))
     for root in throwaway():
         build_project(root)
+        back_of = lambda *stage: package_probe(args.gate, "import os\nrun = pkg.Run(pkg.run_options([]), os.getcwd(), "
+                                                          f"'.dca-factory/runs')\nprint(run.back_to('STORY-1', *{stage!r}))",
+                                               cwd=root)
         def back_to(text):
             write_file(root, ".dca-factory/runs/STORY-1/judge.md", text)
-            return subprocess.run([sys.executable, cli_of(args.gate), "--back-to", "STORY-1"], cwd=root,
-                                  capture_output=True, text=True, encoding="utf-8").stdout.strip()
+            return back_of()
         write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Criteria\n\n## Back to the test stage\nback: test\n")
-        from_build = subprocess.run([sys.executable, cli_of(args.gate), "--back-to", "STORY-1", "--stage", "build"],
-                                    cwd=root, capture_output=True, text=True, encoding="utf-8").stdout.strip()
+        from_build = back_of("build")
         write_file(root, ".dca-factory/runs/STORY-1/build.md", "## Criteria\n")
-        none_from_build = subprocess.run([sys.executable, cli_of(args.gate), "--back-to", "STORY-1", "--stage", "build"],
-                                         cwd=root, capture_output=True, text=True, encoding="utf-8").stdout.strip()
+        none_from_build = back_of("build")
         expectations.append(("back-to: `--stage build` reads build.md — `test` when it says so, else nothing to go back to",
                              from_build == "test" and none_from_build == "", (from_build, none_from_build)))
         answers = (back_to("## Verdict\nverdict: changes-requested\nback: test\n"),
