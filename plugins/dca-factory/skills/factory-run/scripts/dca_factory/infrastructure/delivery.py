@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
+from ..delivery.adapter.outgoing.claims.checkout_files import CheckoutFiles
+from ..delivery.adapter.outgoing.files.session_mark_files import SessionMarkFiles
 from ..delivery.adapter.outgoing.claims.story_claims import RemoteStoryClaims
 from ..delivery.adapter.outgoing.files.stage_output_files import StageOutputFiles
 from ..delivery.adapter.outgoing.files.usage_ledger_files import UsageLedgerFiles
@@ -26,6 +28,14 @@ from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
 from ..delivery.adapter.outgoing.spec.spec_delta_files import SpecDeltaFiles
 from ..delivery.adapter.outgoing.git.published_branches import PublishedBranchFiles
+from ..delivery.application.session.open_work_window import OpenWorkWindowUseCase
+from ..delivery.application.session.close_work_window import CloseWorkWindowUseCase
+from ..delivery.application.session.start_session_stage import StartSessionStageUseCase
+from ..delivery.application.session.end_session_stage import EndSessionStageUseCase
+from ..delivery.application.session.append_journal import AppendJournalUseCase
+from ..delivery.application.checkout.take_checkout import TakeCheckoutUseCase
+from ..delivery.application.checkout.give_checkout_back import GiveCheckoutBackUseCase
+from ..delivery.application.checkout.mark_listening import MarkListeningUseCase
 from ..delivery.application.status.list_findings import ListFindingsUseCase
 from ..delivery.application.status.follow_output import FollowOutputUseCase
 from ..delivery.application.status.show_stage_outputs import ShowStageOutputsUseCase
@@ -188,3 +198,42 @@ def follow_output(runs: str) -> FollowOutputUseCase:
 
 def list_findings(cwd: str, epics: str, runs: str) -> ListFindingsUseCase:
     return ListFindingsUseCase(status_facts(cwd, epics, runs))
+
+
+def open_work_window(cwd: str, runs: str) -> OpenWorkWindowUseCase:
+    return OpenWorkWindowUseCase(SessionMarkFiles(cwd, runs))
+
+
+
+def close_work_window(cwd: str, runs: str) -> CloseWorkWindowUseCase:
+    return CloseWorkWindowUseCase(SessionMarkFiles(cwd, runs))
+
+
+
+def start_session_stage(cwd: str, runs: str) -> StartSessionStageUseCase:
+    return StartSessionStageUseCase(SessionMarkFiles(cwd, runs))
+
+
+
+def end_session_stage(cwd: str, runs: str) -> EndSessionStageUseCase:
+    return EndSessionStageUseCase(SessionMarkFiles(cwd, runs))
+
+
+
+def append_journal(cwd: str, runs: str) -> AppendJournalUseCase:
+    return AppendJournalUseCase(SessionMarkFiles(cwd, runs))
+
+
+
+def take_checkout(cwd: str, runs: str) -> TakeCheckoutUseCase:
+    return TakeCheckoutUseCase(CheckoutFiles(cwd, runs))
+
+
+
+def give_checkout_back(cwd: str, runs: str) -> GiveCheckoutBackUseCase:
+    return GiveCheckoutBackUseCase(CheckoutFiles(cwd, runs))
+
+
+
+def mark_listening(cwd: str, runs: str) -> MarkListeningUseCase:
+    return MarkListeningUseCase(CheckoutFiles(cwd, runs))

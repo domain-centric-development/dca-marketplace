@@ -62,13 +62,8 @@ from .infrastructure.profile import ask_profile
 from .delivery.application.profile.ask_profile import AskProfileQuery, Question
 from .delivery.adapter.outgoing.claims.remote_claims import (
     claim_config_here, free_id, refresh_claims, release_claim)
-from .delivery.adapter.outgoing.claims.checkout_claim import claim, mark_listening, release, session_owner
 from .delivery.adapter.outgoing.files.story_record import ignore_journals_in
-from .delivery.adapter.outgoing.files.windows import freeze_all, mark_stage, mark_window
-from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
-from .delivery.adapter.outgoing.files.owned_files import record_owned
-from .delivery.adapter.outgoing.files.journal_files import journal_writer
 from .delivery.adapter.outgoing.tools.agents import TOOL, unprobed_flags
 from .delivery.application.status import actions
 from .delivery.application.status.actions import offered
@@ -106,6 +101,14 @@ from .delivery.application.status.show_refusals import ShowRefusalsQuery
 from .delivery.application.status.show_journal_story import ShowJournalStoryQuery
 from .delivery.application.cost.show_spent import ShowSpentQuery
 from .delivery.application.status.list_findings import ListFindingsQuery
+from .delivery.application.session.open_work_window import OpenWorkWindowCommand
+from .delivery.application.session.close_work_window import CloseWorkWindowCommand
+from .delivery.application.session.start_session_stage import StartSessionStageCommand
+from .delivery.application.session.end_session_stage import EndSessionStageCommand
+from .delivery.application.session.append_journal import AppendJournalCommand
+from .delivery.application.checkout.take_checkout import TakeCheckoutCommand
+from .delivery.application.checkout.give_checkout_back import GiveCheckoutBackCommand
+from .delivery.application.checkout.mark_listening import MarkListeningCommand
 from .delivery.application.status.follow_output import FollowOutputQuery
 from .delivery.application.status.show_stage_outputs import ShowStageOutputsQuery
 from .delivery.domain.model.run_argument import ArgumentMeaning
@@ -1193,14 +1196,12 @@ def main(argv):
         return 0
     if args.undeliver_branch:
         return undeliver_branch(cwd, args.runs, args.epics, args.undeliver_branch)
-    if args.listening or args.claim or args.release is not None:
-        freeze_all(args.runs)
     if args.listening:
-        return mark_listening(cwd)
+        return wiring.mark_listening(cwd, args.runs).execute(MarkListeningCommand())
     if args.claim:
-        return claim(cwd, args.claim)
+        return wiring.take_checkout(cwd, args.runs).execute(TakeCheckoutCommand(args.claim))
     if args.release is not None:
-        return release(cwd, args.release or session_owner())
+        return wiring.give_checkout_back(cwd, args.runs).execute(GiveCheckoutBackCommand(args.release or None))
     if args.backfill_created:
         return backfill_created(cwd, args.epics)
     if args.ignore_journals:
@@ -1222,23 +1223,25 @@ def main(argv):
     if args.window_start or args.window_end:
         if not args.story:
             parser.error("--window-start/--window-end need --story")
-        return mark_window(cwd, args.runs, args.story, args.window_start or args.window_end,
-                           "start" if args.window_start else "end", args.session_log)
+        if args.window_start:
+            return wiring.open_work_window(cwd, args.runs).execute(
+                OpenWorkWindowCommand(args.story, args.window_start, args.session_log))
+        return wiring.close_work_window(cwd, args.runs).execute(
+            CloseWorkWindowCommand(args.story, args.window_end, args.session_log))
     if args.stage_start or args.stage_end:
         if not args.story:
             parser.error("--stage-start/--stage-end need --story")
-        code = mark_stage(cwd, args.runs, args.story, args.stage_start or args.stage_end,
-                          "start" if args.stage_start else "end", args.session_log)
-        if args.stage_start and code == 0:
-            record_owned(args.runs, args.story)
-        return (owned_end(args.runs, args.story, args.stage_end, str(code)) or code) if args.stage_end else code
+        if args.stage_start:
+            return wiring.start_session_stage(cwd, args.runs).execute(
+                StartSessionStageCommand(args.story, args.stage_start, args.session_log))
+        return wiring.end_session_stage(cwd, args.runs).execute(
+            EndSessionStageCommand(args.story, args.stage_end, args.session_log))
     if args.owned_confirm:
         return owned_confirm(args.runs, args.owned_confirm, cwd)
     if args.refusals:
         return refusals_report(args.runs, args.story, args.format)
     if args.journal_line:
-        journal_writer(args.runs, args.journal_line).write(sys.stdin.read())
-        return 0
+        return wiring.append_journal(cwd, args.runs).execute(AppendJournalCommand(args.journal_line, sys.stdin.read()))
     if args.usage_from:
         return usage_from(args.usage_from[0], args.usage_from[1], args.usage_model)
     if args.usage:
