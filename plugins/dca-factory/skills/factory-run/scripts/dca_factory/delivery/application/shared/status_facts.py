@@ -98,7 +98,15 @@ class StatusFacts(OutputPort, typing.Protocol):
         """`listening: …` — the session that looked at the backlog last — or None."""
         ...
 
+    def dangling_skill_links(self) -> typing.List[str]:
+        """The entries of the tools' skill folders that link to nothing, as paths from the project root."""
+        ...
+
     def duplicate_pipeline_note(self) -> typing.Optional[str]:
+        ...
+
+    def findings_name(self) -> str:
+        """The file a story keeps its open findings in, beside its story file."""
         ...
 
     def finding_records(self) -> typing.List[Facts]:

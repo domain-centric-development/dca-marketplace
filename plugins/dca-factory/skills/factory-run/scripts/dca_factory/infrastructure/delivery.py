@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
 from ..delivery.adapter.outgoing.claims.story_claims import RemoteStoryClaims
+from ..delivery.adapter.outgoing.files.stage_output_files import StageOutputFiles
+from ..delivery.adapter.outgoing.files.usage_ledger_files import UsageLedgerFiles
 from ..delivery.adapter.outgoing.files.refusal_files import GateRefusalFiles
 from ..delivery.adapter.outgoing.files.acceptance_files import AcceptanceFiles
 from ..delivery.adapter.outgoing.files.created_files import CreatedFiles
@@ -24,6 +26,11 @@ from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
 from ..delivery.adapter.outgoing.spec.spec_delta_files import SpecDeltaFiles
 from ..delivery.adapter.outgoing.git.published_branches import PublishedBranchFiles
+from ..delivery.application.status.list_findings import ListFindingsUseCase
+from ..delivery.application.status.follow_output import FollowOutputUseCase
+from ..delivery.application.status.show_stage_outputs import ShowStageOutputsUseCase
+from ..delivery.application.cost.show_spent import ShowSpentUseCase
+from ..delivery.application.status.show_journal_story import ShowJournalStoryUseCase
 from ..delivery.application.status.show_refusals import ShowRefusalsUseCase
 from ..delivery.application.run.resolve_run_argument import ResolveRunArgumentUseCase
 from ..delivery.application.delivery.check_spec import CheckSpecUseCase
@@ -161,3 +168,23 @@ def resolve_run_argument(cwd: str) -> ResolveRunArgumentUseCase:
 
 def show_refusals(runs: str) -> ShowRefusalsUseCase:
     return ShowRefusalsUseCase(GateRefusalFiles(runs))
+
+
+def show_spent(runs: str) -> ShowSpentUseCase:
+    return ShowSpentUseCase(UsageLedgerFiles(runs))
+
+
+def show_journal_story(cwd: str, epics: str, runs: str) -> ShowJournalStoryUseCase:
+    return ShowJournalStoryUseCase(status_facts(cwd, epics, runs))
+
+
+def show_stage_outputs(runs: str) -> ShowStageOutputsUseCase:
+    return ShowStageOutputsUseCase(StageOutputFiles(runs))
+
+
+def follow_output(runs: str) -> FollowOutputUseCase:
+    return FollowOutputUseCase(StageOutputFiles(runs))
+
+
+def list_findings(cwd: str, epics: str, runs: str) -> ListFindingsUseCase:
+    return ListFindingsUseCase(status_facts(cwd, epics, runs))

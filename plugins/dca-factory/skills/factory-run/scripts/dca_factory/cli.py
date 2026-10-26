@@ -44,7 +44,6 @@ Options as the gate's: --epics, --runs, --profile (else FACTORY_PROFILE, else th
 
 import argparse
 import contextlib
-import glob
 import json
 import os
 import sys
@@ -53,32 +52,24 @@ import time
 from .delivery.adapter.outgoing.pipeline.stage_rows import SHARED_WINDOWS, STAGE_ORDER
 from .contract import CONTRACT, VERSION
 from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from .delivery.adapter.outgoing.files.migrations import layout_hint
-from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE, open_findings
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    DEFAULTS, evidence_dir, evidence_rel, location, place, PROFILE_FILE, read_profile,
-    resolve_profile, set_places, shown)
+    DEFAULTS, evidence_rel, location, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.files.story_layout import find_story, story_kind
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
-from .delivery.adapter.outgoing.tools.streams import follow_lines, tokens_of, usage_from
+from .delivery.adapter.outgoing.tools.streams import usage_from
 from .infrastructure.schedule import schedule_data, start_of
 from .infrastructure.profile import ask_profile
 from .delivery.application.profile.ask_profile import AskProfileQuery, Question
 from .delivery.adapter.outgoing.claims.remote_claims import (
     claim_config_here, free_id, refresh_claims, release_claim)
-from .delivery.adapter.outgoing.claims.checkout_claim import (
-    claim, claim_path, listener_line, mark_listening, read_claim, release, session_owner)
+from .delivery.adapter.outgoing.claims.checkout_claim import claim, mark_listening, release, session_owner
 from .delivery.adapter.outgoing.files.story_record import ignore_journals_in
 from .delivery.adapter.outgoing.files.windows import freeze_all, mark_stage, mark_window
-from .delivery.adapter.outgoing.files.usage_files import journal_usage
 from .delivery.adapter.outgoing.files.owned_files import owned_end
-from .delivery.adapter.outgoing.files.run_marks import run_stories
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.adapter.outgoing.files.owned_files import record_owned
 from .delivery.adapter.outgoing.files.journal_files import journal_writer
-from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS, unprobed_flags
-from .delivery.adapter.outgoing.files.status_facts import (
-    follow_newest, story_facts)
+from .delivery.adapter.outgoing.tools.agents import TOOL, unprobed_flags
 from .delivery.application.status import actions
 from .delivery.application.status.actions import offered
 from .delivery.application.status.show_status import ShowStatusQuery
@@ -87,7 +78,6 @@ from .delivery.application.status.show_epic import ShowEpicQuery, UnknownEpic
 from .delivery.application.status.show_help import ShowHelpQuery
 from .delivery.application.status.texts import stamp_text
 from .discovery.api import list_reports
-from .delivery.adapter.outgoing.files.request_files import out_path
 from .delivery.adapter.outgoing.files.story_files import names_story
 from .delivery.application.decisions.list_decisions import ListDecisionsQuery
 from .delivery.application.requests.list_requests import ListRequestsQuery
@@ -113,7 +103,13 @@ from .delivery.domain.model.story import AlreadyDelivered, NotDelivered, Nothing
 from .infrastructure import delivery as wiring
 from .delivery.application.run.resolve_run_argument import ResolveRunArgumentQuery
 from .delivery.application.status.show_refusals import ShowRefusalsQuery
+from .delivery.application.status.show_journal_story import ShowJournalStoryQuery
+from .delivery.application.cost.show_spent import ShowSpentQuery
+from .delivery.application.status.list_findings import ListFindingsQuery
+from .delivery.application.status.follow_output import FollowOutputQuery
+from .delivery.application.status.show_stage_outputs import ShowStageOutputsQuery
 from .delivery.domain.model.run_argument import ArgumentMeaning
+from .delivery.domain.model.stage import PIPELINE
 from .delivery.adapter.incoming.cli import spec_delta_view as spec_delta_text
 from .delivery.application.delivery.check_spec import CheckSpecQuery
 from .delivery.application.delivery.show_spec_delta import ShowSpecDeltaQuery
@@ -251,14 +247,6 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
     return 0
 
 
-def facts_model(cwd, runs, story_id):
-    """A story's stage figures from its journal alone — for a journal whose story is not in the backlog."""
-    facts = story_facts(cwd, runs, story_id)
-    return dict(stages=facts["stages"], models=sorted({m for e in facts["stages"].values() for m in e["models"]}),
-                not_applied=sorted({r for e in facts["stages"].values() if e["not_applied"] for r in e["requested"]}),
-                priced=facts["priced"] > 0)
-
-
 def owned_confirm(runs, story_id, cwd="."):
     """The person's word that the story and its answers are as they want them after a stage changed them
     (`ConfirmOwnedUseCase`): the mark goes, what changed is journaled, and the story runs on from its files."""
@@ -293,18 +281,16 @@ def refusals_report(runs, story_filter=None, fmt="text"):
 def usage_report(runs, story_filter=None, total_only=False, cwd=".", epics=None, fmt="text"):
     """Tokens by class, as the status shows them: one story's stages, or every story by epic."""
     epics = epics or place("epics")
-    stories = run_stories(runs)
-    if story_filter:
-        stories = [s for s in stories if s == story_filter]
     if total_only:
-        print(sum(tokens_of(e) for s in stories for e in journal_usage(runs, s).values()))
+        spent = wiring.show_spent(runs).execute(ShowSpentQuery((story_filter,) if story_filter else None))
+        print(spent.tokens)
         return 0
     colour = use_colour("auto")
     if story_filter:
         try:
             model = story_model(cwd, epics, runs, story_filter)
         except GateError:
-            model = facts_model(cwd, runs, story_filter)
+            model = wiring.show_journal_story(cwd, epics, runs).execute(ShowJournalStoryQuery(story_filter))
         if fmt == "json":
             print(json.dumps(json_ready(model["stages"]), indent=2, ensure_ascii=False))
             return 0
@@ -323,23 +309,6 @@ def usage_report(runs, story_filter=None, total_only=False, cwd=".", epics=None,
     caption = "Tokens" + ("" if model["priced"] or not model["measured"] else " — no price in a session log")
     print("\n".join(section(caption, colour) + table_text(headers, rows, right, total=True, colour=colour) + [""]))
     return 0
-
-
-def dangling_skill_links(cwd):
-    """The entries of the tools' skill directories that are links to nothing, as relative paths."""
-    found = []
-    for folder in [tool.skills for tool in TOOLS]:
-        path = os.path.join(cwd, folder)
-        if os.path.islink(path) and not os.path.exists(path):
-            found.append(folder)
-            continue
-        if not os.path.isdir(path):
-            continue
-        for name in sorted(os.listdir(path)):
-            entry = os.path.join(path, name)
-            if os.path.islink(entry) and not os.path.exists(entry):
-                found.append(f"{folder}/{name}")
-    return found
 
 
 def make_action(text="", skill="", shell="", look="", label="", primary=False):
@@ -372,22 +341,19 @@ def foreign_claim_lines(claims):
     return lines
 
 
-def story_spent(runs, story_id):
-    """What a story cost so far, from the runner's journal — kept per story on disk, so a restart, a second session
-    or a new run never resets it. An in-session run writes none."""
-    if not os.path.isfile(os.path.join(evidence_dir(runs, story_id), "journal.tsv")):
+def spent_text(spent):
+    """What a story cost so far, as the schedule's line shows it; nothing for a story without a journal."""
+    if not spent or not spent.invocations:
         return ""
-    used = journal_usage(runs, story_id)
-    count = sum(e["invocations"] for e in used.values())
-    tokens = sum(tokens_of(e) for e in used.values())
-    return (f" · {count} stage invocation(s)" + (f", {tokens:,} tokens" if tokens else "")) if count else ""
+    return f" · {spent.invocations} stage invocation(s)" + (f", {spent.tokens:,} tokens" if spent.tokens else "")
 
 
 def schedule(cwd, epics, runs, slots=None, busy=(), skip=()):
     """Print every story's state and the next one to run; return 0. The runner and the tests read these lines
     (`schedule_view.py`)."""
     data = schedule_data(cwd, epics, runs, slots, busy, skip)
-    for line in schedule_lines(data, epics, {story: story_spent(runs, story) for story in data["order"]}):
+    spent = wiring.show_spent(runs).execute(ShowSpentQuery(tuple(data["order"]))).by_story
+    for line in schedule_lines(data, epics, {story: spent_text(spent[story]) for story in data["order"]}):
         print(line)
     return 0
 
@@ -406,7 +372,6 @@ def start(cwd, epics, runs, story_id, slots=None):
 
 def status_brief(cwd, epics, runs, session_start=False):
     """Two lines: what is ready, what waits, who works, what it cost — for a session's start."""
-    held = read_claim(claim_path(cwd))
     view = status_model(cwd, epics, runs)
     words = {}
     for row in view["rows"]:
@@ -415,32 +380,31 @@ def status_brief(cwd, epics, runs, session_start=False):
     print(f"factory: {summary}" + (f" · {view['tokens']:,} tokens so far" if view["measured"] else ""))
     waiting = "; ".join(f"{MARKS_TEXT[w['mark']]} {w['story']} {w['what']}" for w in view["waiting"])
     print("factory: " + (f"waiting for you: {waiting} · " if waiting else "nothing waits for you · ")
-          + (f"worker {held.get('owner')} holds the checkout · " if held else "no worker running · ")
+          + (f"worker {view['holder']} holds the checkout · " if view["holder"] else "no worker running · ")
           + f"next: {view['next']['text']}")
-    listening = listener_line(cwd)
-    if listening:
-        print(f"factory: {listening}")
+    if view["listening"]:
+        print(f"factory: {view['listening']}")
     for line in foreign_claim_lines(view["claims"]):
         print(f"factory: {line}")
-    findings = open_findings(epics)
+    findings = view["findings"]
     if findings:
-        stories = sorted({f[0] for f in findings})
+        stories = sorted({f["story"] for f in findings})
         print(f"factory: {len(findings)} open finding(s) in {len(stories)} file(s) "
-              f"(<story>/{FINDINGS_FILE} in the story's folder, product/findings/ for the project's own) — "
+              f"(<story>/{view['findings_name']} in the story's folder, product/findings/ for the project's own) — "
               f"`factory-cli.py --findings` lists them")
     # A skill link that points nowhere — its plugin version pruned from the cache, a checkout moved: the
     # skills are then missing for a session and a runner stage alike, and only the update relinks them.
-    dangling = dangling_skill_links(cwd)
+    dangling = view["dangling"]
     if dangling:
         more = f" and {len(dangling) - 1} more" if len(dangling) > 1 else ""
         print(f"factory: skill link {dangling[0]} points nowhere{more} — /factory-update relinks them (or copies, with --copy)")
     # The part of the factory that is missing, where the files show it: the description, the backlog.
-    profile = read_profile(resolve_profile(None, cwd))
-    undescribed = [key for key in ("product", "tech") if not os.path.isfile(os.path.join(cwd, location(profile, key)))]
-    if layout_hint(cwd, profile):
-        print(f"factory: {layout_hint(cwd, profile)}")
+    undescribed = [part["path"] for part in view["description"] if part["part"] in ("product", "tech")
+                   and not part["present"]]
+    if view["hint"]:
+        print(f"factory: {view['hint']}")
     elif undescribed:
-        print(f"factory: no project description ({', '.join(location(profile, k) for k in undescribed)}) — /factory-setup")
+        print(f"factory: no project description ({', '.join(undescribed)}) — /factory-setup")
     elif not view["rows"]:
         print("factory: the backlog is empty — /factory-backlog writes the first epic and story")
     if session_start and os.environ.get("FACTORY_WORKER"):
@@ -449,7 +413,7 @@ def status_brief(cwd, epics, runs, session_start=False):
         # A shared builder or verifier is named by what it carries out: told it is "stage builder", a model read
         # that as the build stage alone and refused the plan, test and tidy its prompt asked for.
         stage = os.environ.get("FACTORY_STAGE") or "?"
-        covered = SHARED_WINDOWS.get(stage)
+        covered = [s.name.value for s in PIPELINE if s.window and s.window.value == stage]
         what = (f"the shared {stage} of story {os.environ.get('FACTORY_STORY') or '?'} — it carries out the stages "
                 f"{', '.join(covered)} one after another, all of them in this session" if covered else
                 f"stage {stage} of story {os.environ.get('FACTORY_STORY') or '?'}")
@@ -692,80 +656,44 @@ def answer(profile_path, question, **fields):
     return 0
 
 
-def follow_outputs(runs, story, process=None):
-    """[(stage, path)] of one story's stage outputs in the order they began, or of one process (`builder`,
-    `review-ddd`, `plan`, …) alone."""
-    pattern = os.path.join(evidence_dir(runs, story), f"{process}.*.out" if process else "*.out")
-    outs = [p for p in glob.glob(pattern) if os.path.isfile(p)]
-    return [(os.path.basename(p).split(".")[0], p) for p in sorted(outs, key=lambda p: (os.path.getmtime(p), p))]
-
-
 def follow(runs, story, once, fmt, width, process=None, every=False, request=None):
-    if request:
-        # a request's process (WP-91): its one output beside the requests, read as a stage's
-        path = out_path(request)
-        newest = lambda: ("request", request, path) if os.path.isfile(path) else None
-    else:
-        newest = lambda: follow_newest(runs, story, process)
-    if every:
-        if not story:
-            print("factory: follow --all names a story (--story <id>)", file=sys.stderr)
-            return 2
-        shown = []
-        for stage, path in follow_outputs(runs, story, process):
-            lines, ended = follow_lines(open(path, encoding="utf-8", errors="replace").read())
-            shown.append(dict(stage=stage, file=os.path.relpath(path), running=not ended, lines=lines))
+    """What the stage in flight does: every process of a story (`every`), the newest output's last lines (`once`), or
+    the newest output as it is written until interrupted."""
+    if every and not story:
+        print("factory: follow --all names a story (--story <id>)", file=sys.stderr)
+        return 2
+    if every or once:
+        shown = wiring.show_stage_outputs(runs).execute(ShowStageOutputsQuery(
+            story, process, request, every=every, lines=width))
         if fmt == "json":
-            print(json.dumps({"story": story, "processes": shown}, ensure_ascii=False))
-        else:
-            if not shown:
-                print(f"factory: no stage output yet for {story}")
-            for entry in shown:
-                print(f"══ {story} · {entry['stage']}{'' if not entry['running'] else ' (running)'}")
-                for line in entry["lines"]:
-                    print(line)
+            if every:
+                print(json.dumps({"story": story, "processes": [
+                    dict(stage=e["stage"], file=e["file"], running=e["running"], lines=e["lines"]) for e in shown]},
+                    ensure_ascii=False))
+            else:
+                print(json.dumps(shown[0] if shown else {"story": story or "", "stage": "", "file": "",
+                                                         "running": False, "lines": []}, ensure_ascii=False))
+            return 0
+        if not shown:
+            print("factory: no stage output yet" + (f" for {story}" if story else ""))
+        for entry in shown:
+            print(f"══ {entry['story'] if not every else story} · {entry['stage']}"
+                  + (" (running)" if entry["running"] else ""))
+            for line in entry["lines"]:
+                print(line)
+            if every:
                 print()
         return 0
-    found = newest()
-    if once:
-        if not found:
-            if fmt == "json":
-                print(json.dumps({"story": story or "", "stage": "", "file": "", "running": False, "lines": []}))
-            else:
-                print("factory: no stage output yet" + (f" for {story}" if story else ""))
-            return 0
-        name, stage, path = found
-        lines, ended = follow_lines(open(path, encoding="utf-8", errors="replace").read())
-        lines = lines[-width:] if width > 0 else lines
-        if fmt == "json":
-            print(json.dumps({"story": name, "stage": stage, "file": os.path.relpath(path),
-                              "running": not ended, "lines": lines}, ensure_ascii=False))
-        else:
-            print(f"══ {name} · {stage}{'' if ended else ' (running)'}")
-            for line in lines:
-                print(line)
-        return 0
+    following = wiring.follow_output(runs)
     current, offset, pending = None, 0, ""
     try:
         while True:
-            found = newest()
-            if found and found[2] != current:
-                name, stage, current = found
-                offset, pending = 0, ""
-                print(f"══ {name} · {stage}", flush=True)
-            if current:
-                try:
-                    with open(current, encoding="utf-8", errors="replace") as handle:
-                        handle.seek(offset)
-                        chunk = handle.read()
-                        offset = handle.tell()
-                except OSError:
-                    chunk = ""
-                if chunk:
-                    pending += chunk
-                    complete, _, pending = pending.rpartition("\n")
-                    for line in follow_lines(complete)[0]:
-                        print(line, flush=True)
+            followed = following.execute(FollowOutputQuery(story, process, request, current, offset, pending))
+            if followed.started and followed.current:
+                print(f"══ {followed.current.name} · {followed.current.stage}", flush=True)
+            for line in followed.lines:
+                print(line, flush=True)
+            current, offset, pending = followed.current, followed.offset, followed.pending
             time.sleep(1)
     except KeyboardInterrupt:
         return 0
@@ -1180,13 +1108,15 @@ def main(argv):
     if args.command_heads:
         return answer(profile_path, Question.COMMAND_HEADS)
     if args.findings:
-        rows = open_findings(args.epics)
+        found = wiring.list_findings(cwd, args.epics, args.runs).execute(ListFindingsQuery())
+        rows = found["rows"]
         if not rows:
             print("factory: no open finding — the judges confirmed nothing that did not block, or every row is closed")
             return 0
-        for story, where, severity, defect, _perspective, _fix, plain in rows:
-            print(f"{story}\t{severity}\t{where}\t" + (f"{plain} — {defect}" if plain else defect))
-        print(f"factory: {len(rows)} open finding(s); set Status to done or wont-fix in the story's {FINDINGS_FILE} "
+        for row in rows:
+            print(f"{row['story']}\t{row['severity']}\t{row['where']}\t"
+                  + (f"{row['plain']} — {row['defect']}" if row["plain"] else row["defect"]))
+        print(f"factory: {len(rows)} open finding(s); set Status to done or wont-fix in the story's {found['name']} "
               f"or the project's file under product/findings/")
         return 0
     if args.perspectives:

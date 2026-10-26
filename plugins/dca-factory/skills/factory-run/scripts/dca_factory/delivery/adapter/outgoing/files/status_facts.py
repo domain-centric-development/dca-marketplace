@@ -12,11 +12,12 @@ import re
 import typing
 
 from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE_ORDER
-from .findings_files import finding_records
+from .findings_files import finding_records, FINDINGS_FILE
 from .story_layout import delivered_on, find_story, story_kind
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, read_profile, resolve_profile, shown
 from .decision_record_files import decision_files, records_of
 from ....application.profile.profile_rules import perspectives_of
+from ..tools.agents import TOOLS
 from ..tools.streams import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from ..claims.remote_claims import cached_claims
@@ -267,6 +268,23 @@ def follow_newest(runs: str, story: typing.Optional[str] = None,
             os.path.basename(path).split(".")[0], path)
 
 
+def dangling_skill_links(cwd: str) -> typing.List[str]:
+    """The entries of the tools' skill directories that are links to nothing, as relative paths."""
+    found: typing.List[str] = []
+    for folder in [tool.skills for tool in TOOLS]:
+        path = os.path.join(cwd, folder)
+        if os.path.islink(path) and not os.path.exists(path):
+            found.append(folder)
+            continue
+        if not os.path.isdir(path):
+            continue
+        for name in sorted(os.listdir(path)):
+            entry = os.path.join(path, name)
+            if os.path.islink(entry) and not os.path.exists(entry):
+                found.append(f"{folder}/{name}")
+    return found
+
+
 class StatusFactFiles:
     """The status's facts, read from the project <cwd> with its epics and run folder as the profile places them;
     the schedule is the schedule's read model, which the composition root hands in."""
@@ -345,8 +363,14 @@ class StatusFactFiles:
     def listener(self) -> typing.Optional[str]:
         return listener_line(self._cwd)
 
+    def dangling_skill_links(self) -> typing.List[str]:
+        return dangling_skill_links(self._cwd)
+
     def duplicate_pipeline_note(self) -> typing.Optional[str]:
         return duplicate_pipeline_note(self._cwd)
+
+    def findings_name(self) -> str:
+        return FINDINGS_FILE
 
     def finding_records(self) -> typing.List[Facts]:
         return finding_records(self._epics)

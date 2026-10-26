@@ -214,6 +214,8 @@ class ShowStatusUseCase:
                       priced=any(r["priced"] for r in rows))
         return dict(project=facts.project_name(), waiting=waiting, running=running, epics=epics,
                     worker=worker, ended=gone, requests=requests, findings=findings, claims=self._foreign_claims(),
+                    holder=(facts.claim() or {}).get("owner"), listening=facts.listener(),
+                    dangling=facts.dangling_skill_links(), findings_name=facts.findings_name(),
                     perspectives=perspectives, description=description, queue=queue, delivered_order=delivered_order,
                     rows=rows, next=next_line, journeys=journeys,
                     priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
