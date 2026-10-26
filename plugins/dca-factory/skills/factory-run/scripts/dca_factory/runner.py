@@ -45,10 +45,10 @@ from .delivery.adapter.outgoing.files.kept_files import stale_red_proof
 from .delivery.adapter.outgoing.build.commands import run as run_command
 from .delivery.adapter.outgoing.git.integration import (
     integration_target, lost_text, main_tests_lost)
-from .delivery.adapter.outgoing.files.delivery_files import perspectives_of
+from .delivery.application.profile.profile_rules import first_word, perspectives_of
 from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS, tools_shell
 from .delivery.adapter.outgoing.process.gate_process import file_sha, GateProcess, hashing
-from .delivery.adapter.outgoing.tools.tool_choice import first_word, ToolChoice
+from .delivery.adapter.outgoing.tools.tool_choice import ToolChoice
 from .delivery.adapter.outgoing.tools.tool_processes import (
     err, exit_field, flush, Stopped, TIMED_OUT, ToolProcesses, utc)
 from .delivery.adapter.incoming.runner.usage import book_request_usage

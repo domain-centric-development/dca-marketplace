@@ -16,7 +16,7 @@ from .findings_files import finding_records
 from .story_layout import delivered_on, find_story, story_kind
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, read_profile, resolve_profile, shown
 from .decision_record_files import decision_files, records_of
-from .delivery_files import perspectives_of
+from ....application.profile.profile_rules import perspectives_of
 from ..tools.streams import follow_lines, READERS, session_reader, session_usage_allowed, stream_parts, WINDOWS
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from ..claims.remote_claims import cached_claims

@@ -16,6 +16,7 @@ from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, factory_home, HOME_VARIABLE, in_worktree, places_in, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
+from ....application.profile.profile_rules import perspectives_of
 from ....application.shared.front import is_acceptance
 from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
 from ....domain.model.epic import EpicId
@@ -41,7 +42,7 @@ from .findings_files import findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, write_answered
 import glob
 from .delivery_files import (
-    glossary_files, IMPORT_LINE, PATHLIKE, perspectives_of, PIPELINE_DIR, plan_proposals, production_files,
+    glossary_files, IMPORT_LINE, PATHLIKE, PIPELINE_DIR, plan_proposals, production_files,
     proposal_words, REVIEW_RANKS)
 from .decision_record_files import NOTHING
 from .kept_files import bare_path, row_cells

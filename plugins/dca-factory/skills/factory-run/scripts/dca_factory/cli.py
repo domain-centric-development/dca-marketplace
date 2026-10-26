@@ -47,7 +47,6 @@ import contextlib
 import glob
 import json
 import os
-import re
 import sys
 import textwrap
 import time
@@ -63,6 +62,8 @@ from .delivery.adapter.outgoing.files.story_layout import find_story, story_id_o
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from .delivery.adapter.outgoing.tools.streams import follow_lines, tokens_of, usage_from
 from .infrastructure.schedule import schedule_data, start_of
+from .infrastructure.profile import ask_profile
+from .delivery.application.profile.ask_profile import AskProfileQuery, Question
 from .delivery.adapter.outgoing.claims.remote_claims import (
     claim_config_here, free_id, refresh_claims, release_claim)
 from .delivery.adapter.outgoing.claims.checkout_claim import (
@@ -76,7 +77,6 @@ from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.adapter.outgoing.files.owned_files import record_owned
 from .delivery.adapter.outgoing.files.journal_files import journal_events, journal_writer
 from .delivery.adapter.outgoing.files.story_layout import story_ids
-from .delivery.adapter.outgoing.files.delivery_files import perspectives_of
 from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
     follow_newest, story_facts)
@@ -122,7 +122,6 @@ from .delivery.adapter.outgoing.files.skeletons import contract_text, document_s
 from .delivery.adapter.outgoing.git.worktree_steps import (
     integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
 from .delivery.adapter.outgoing.files.migrations import migrate_layout
-from .delivery.adapter.outgoing.tools.tool_choice import command_heads, first_word, model_for
 from .runner import stage_names, stages_shell
 from .delivery.adapter.incoming.runner.run_command import request_main, run_main, settle_command
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
@@ -710,16 +709,10 @@ def prove(cwd, runs, epics, story_id):
 
 # --- the carriers the profile names ------------------------------------------------------
 
-CARRIER_KEY = re.compile(r"^(carrier\.[a-z]+|review\.[a-z-]+|knowledge)$")
-
-
-def carrier_lines(profile):
-    return [(key, first_word(value)) for key, value in profile.items() if CARRIER_KEY.match(key) and first_word(value)]
-
-
-def carriers(profile):
-    """The skill names, without a `plugin:` prefix, sorted and unique."""
-    return sorted({value.rsplit(":", 1)[-1] for _, value in carrier_lines(profile)})
+def answer(profile_path, question, **fields):
+    """The profile's answer to one question, a line per item (`AskProfileUseCase`)."""
+    print("\n".join(ask_profile(profile_path).execute(AskProfileQuery(question, **fields))))
+    return 0
 
 
 def follow_outputs(runs, story, process=None):
@@ -1206,11 +1199,9 @@ def main(argv):
         print(place(args.place))
         return 0
     if args.get is not None:
-        print(read_profile(profile_path).get(args.get, ""))
-        return 0
+        return answer(profile_path, Question.VALUE, key=args.get)
     if args.command_heads:
-        print("\n".join(command_heads(read_profile(profile_path))))
-        return 0
+        return answer(profile_path, Question.COMMAND_HEADS)
     if args.findings:
         rows = open_findings(args.epics)
         if not rows:
@@ -1222,18 +1213,13 @@ def main(argv):
               f"or the project's file under product/findings/")
         return 0
     if args.perspectives:
-        for name, carrier in perspectives_of(read_profile(resolve_profile(None, cwd))):
-            print(f"{name}\t{carrier}")
-        return 0
+        return answer(resolve_profile(None, cwd), Question.PERSPECTIVES)
     if args.carriers:
-        print("\n".join(carriers(read_profile(profile_path))))
-        return 0
+        return answer(profile_path, Question.CARRIERS)
     if args.carrier_lines:
-        print("\n".join(f"{key} {value}" for key, value in carrier_lines(read_profile(profile_path))))
-        return 0
+        return answer(profile_path, Question.CARRIER_LINES)
     if args.model:
-        print(model_for(read_profile(profile_path), *args.model))
-        return 0
+        return answer(profile_path, Question.MODEL, tool=args.model[0], stage=args.model[1])
     if args.follow:
         return follow(args.runs, args.story, args.once, args.format, args.lines, args.process, args.every,
                       args.request)

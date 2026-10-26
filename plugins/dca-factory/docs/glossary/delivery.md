@@ -189,6 +189,32 @@ and its cost where it was priced. A request's usage is booked in even shares on 
 
 **Operations:** share (`share`)
 
+### Stack profile (StackProfile)
+
+**Definition:** The project's stack profile as delivery reads it, its pairs in the profile's order: the model a tool
+runs a stage on (`model.<tool>.<stage>`, else `model.<tool>`, never another tool's), the heads of the commands a stage
+may run, the skills it names as carriers, the judge's perspectives. The file is the project's; what its keys mean for
+a run is decided here.
+
+**Type:** Value Object
+
+**Operations:** model for (`model_for`), command heads (`command_heads`), carriers (`carriers`), perspectives
+(`perspectives`)
+
+### Perspective (Perspective)
+
+**Definition:** One way the judge looks at a story — the three built-ins `ddd`, `hexagonal`, `clean-code` and any the
+profile's `reviews:` adds — with the skill it looks with (`review.<name>:`, else `review-<name>`).
+
+**Type:** Value Object
+
+### Tool name (ToolName) · Skill name (SkillName) · Profile key (ProfileKey) · Profile value (ProfileValue)
+
+**Definition:** An agent tool by its record's name; a skill by its folder's name without its plugin; a key of the
+profile and what the profile says under it, as written.
+
+**Type:** Value Object
+
 ---
 
 ## Concepts

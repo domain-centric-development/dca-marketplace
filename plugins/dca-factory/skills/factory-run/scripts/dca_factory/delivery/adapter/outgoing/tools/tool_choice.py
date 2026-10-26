@@ -13,6 +13,7 @@ import shlex
 import sys
 import typing
 
+from ....application.profile.profile_rules import command_heads, first_word, model_for
 from .agents import isolation_args, TOOL
 
 Profile = typing.Mapping[str, typing.Any]
@@ -31,34 +32,10 @@ STAGE_SHELL_HEADS = ("cd", "ls", "cat", "head", "tail", "wc", "sort", "grep", "d
 #: `stageTimeout:`. A number with `s`, `m` or `h`; a bare number is seconds.
 TIMEOUT_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600}
 
-#: The profile's command keys whose first word a stage may run.
-COMMAND_KEYS = ("compile", "test", "e2eTest", "architecture", "format", "formatFix")
-
-
 def seconds_of(text: typing.Any) -> typing.Optional[int]:
     """`90`, `90s`, `30m`, `2h` → seconds; None for anything else."""
     match = re.fullmatch(r"\s*(\d+)\s*([smh]?)\s*", str(text or ""))
     return int(match.group(1)) * TIMEOUT_UNITS[match.group(2)] if match else None
-
-
-def first_word(value: typing.Any) -> str:
-    parts = str(value or "").split()
-    return parts[0] if parts else ""
-
-
-def command_heads(profile: Profile) -> typing.List[str]:
-    """The first word of every command the profile declares, once each, in the profile's order."""
-    heads: typing.List[str] = []
-    for key, value in profile.items():
-        if key in COMMAND_KEYS or key.startswith("test."):
-            head = first_word(value)
-            if head and not head.startswith("{{") and head not in heads:
-                heads.append(head)
-    return heads
-
-
-def model_for(profile: Profile, tool: str, stage: str) -> str:
-    return first_word(profile.get(f"model.{tool}.{stage}") or profile.get(f"model.{tool}") or "")
 
 
 class ToolChoice:

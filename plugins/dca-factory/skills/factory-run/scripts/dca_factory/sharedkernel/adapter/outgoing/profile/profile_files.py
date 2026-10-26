@@ -330,3 +330,13 @@ def places_in(cwd: str) -> typing.Iterator[None]:
     finally:
         PLACES.clear()
         PLACES.update(saved)
+
+
+class ProfileFiles:
+    """The stack profile at <path> (None: no profile), read anew on every question: a person may edit it meanwhile."""
+
+    def __init__(self, path: typing.Optional[str]) -> None:
+        self._path = path
+
+    def profile(self) -> typing.Mapping[str, str]:
+        return read_profile(self._path)

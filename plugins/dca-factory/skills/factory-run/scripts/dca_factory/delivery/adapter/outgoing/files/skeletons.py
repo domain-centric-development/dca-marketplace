@@ -18,7 +18,8 @@ from .....spec.api import derived, place_name, story_entries
 from ....domain.service.design_checks import CLAUSES_MARKER, INVARIANTS_MARKER
 from ....domain.service.test_checks import HANDOVER_BUDGET
 from .criteria_files import criteria_of
-from .delivery_files import BUILT_IN_PERSPECTIVES, plan_proposals
+from ....application.profile.profile_rules import BUILT_IN_PERSPECTIVES
+from .delivery_files import plan_proposals
 from .design_files import plan_invariants, read_clause_rows, read_invariant_rows, scenario_clauses
 from .decision_record_files import NOTHING
 from .snapshots import git_tree, listed_files, snapshot_reason, tree_changes

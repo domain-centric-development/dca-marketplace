@@ -80,26 +80,8 @@ def production_files(cwd: str) -> typing.List[str]:
     return found
 
 
-#: The judge's built-in perspectives — part of the method, never switched off; `reviews:` in the profile adds more.
-BUILT_IN_PERSPECTIVES = ("ddd", "hexagonal", "clean-code")
-
-
 #: A review report carries its findings under these ranks (the review skills' own format).
 REVIEW_RANKS = ("must-fix", "should-fix", "nit")
-
-
-def perspectives_of(profile: typing.Mapping[str, typing.Any]) -> typing.List[typing.Tuple[str, str]]:
-    """`(name, carrier)` per perspective: the three built-ins and the profile's `reviews:`, each with the skill
-    `review.<name>:` names — the plugin prefix dropped — or `review-<name>` where the profile names none."""
-    names = list(BUILT_IN_PERSPECTIVES)
-    for extra in re.split(r"[,\s]+", str(profile.get("reviews", "")).strip()):
-        if extra and extra not in names:
-            names.append(extra)
-    out: typing.List[typing.Tuple[str, str]] = []
-    for name in names:
-        carrier = str(profile.get(f"review.{name}", "")).split()
-        out.append((name, (carrier[0].rsplit(":", 1)[-1] if carrier else f"review-{name}")))
-    return out
 
 
 #: A markdown table row, split into its cells. The first cell names the thing, the **last**
