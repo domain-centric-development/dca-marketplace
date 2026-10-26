@@ -10163,15 +10163,18 @@ def verify_worktrees(runner, verbose=False):
     # #162: a story that left the main line while its worktree ran is named at the integrate step, not tested there
     for root in throwaway():
         log, env = fixture(root, [])
-        cli = cli_of(os.path.join(root, ".agents", "factory", "story-gate.py"))
-        made = subprocess.run([sys.executable, cli, "--worktree-prepare", "STORY-1"], cwd=root, capture_output=True,
-                              text=True, encoding="utf-8")
+        gate = os.path.join(root, ".agents", "factory", "story-gate.py")
+        # the runner's own steps, called in a process of their own as the runner calls them in its own
+        step = lambda call: subprocess.run(
+            [sys.executable, "-c", PACKAGE_PROBE + "import os, sys\n"
+             "pkg.set_places(pkg.read_profile(pkg.resolve_profile(None, os.getcwd())))\n"
+             f"sys.exit({call})", gate], cwd=root, capture_output=True, text=True, encoding="utf-8")
+        made = step('pkg.worktree_prepare(os.getcwd(), pkg.place("runs"), "STORY-1")')
         subprocess.run(["git", "rm", "-q", "--cached", "product/epics/sample/STORY-1/story.md"], cwd=root,
                        capture_output=True)
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "drop"], cwd=root,
                        capture_output=True)
-        done = subprocess.run([sys.executable, cli, "--integrate-prepare", "STORY-1"], cwd=root, capture_output=True,
-                              text=True, encoding="utf-8")
+        done = step('pkg.integrate_prepare(os.getcwd(), pkg.place("runs"), pkg.place("epics"), "STORY-1")')
         check("integrate: a story the main line does not hold stops the integrate step with the reason and the way on",
               made.returncode == 0 and done.returncode == 1 and "STORY-1/story.md is not committed on main" in done.stderr
               and "--from integrate" in done.stderr, f"{made.returncode}; exit {done.returncode}; {done.stderr[-300:]}")

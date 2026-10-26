@@ -58,7 +58,6 @@ from .sharedkernel.adapter.outgoing.profile.profile_files import (
 from .infrastructure.schedule import schedule_data, start_of
 from .infrastructure.profile import ask_profile
 from .delivery.application.profile.ask_profile import AskProfileQuery, Question
-from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.application.status.show_status import ShowStatusQuery
 from .delivery.application.status.show_story import ShowStoryQuery, UnknownStory
 from .delivery.application.status.show_epic import ShowEpicQuery, UnknownEpic
@@ -123,8 +122,6 @@ from .delivery.application.delivery.check_spec import CheckSpecQuery
 from .delivery.application.delivery.show_spec_delta import ShowSpecDeltaQuery
 from .delivery.application.delivery.take_back_delivery import TakeBackDeliveryCommand
 from .web import service as web
-from .delivery.adapter.outgoing.git.worktree_steps import (
-    integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
 from .delivery.adapter.incoming.runner.run_command import request_main, run_main, settle_command
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
 from .delivery.adapter.incoming.cli.status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
@@ -1052,17 +1049,6 @@ def main(argv):
     parser.add_argument("--skip", default="", metavar="IDS",
                         help="with --schedule: the stories that stopped in this run (`run --keep-going`), "
                              "comma-separated — stopped, and what depends on them blocked")
-    parser.add_argument("--worktree-prepare", metavar="STORY",
-                        help="make, update and link the story's worktree; print its path (or `none — <why>`)")
-    parser.add_argument("--worktree-remove", metavar="STORY", help="remove the story's worktree and its branch")
-    parser.add_argument("--worktree-prune", action="store_true",
-                        help="remove the worktrees of superseded stories and of ids no story has any more")
-    parser.add_argument("--worktree-link", metavar="STORY",
-                        help="link the main checkout's places into the story's worktree again (an agent works in it)")
-    parser.add_argument("--integrate-prepare", metavar="STORY",
-                        help="commit the story's code, merge the main line in, squash; exit 3 with `conflict:` lines")
-    parser.add_argument("--integrate-finish", metavar="STORY",
-                        help="after the conflicts were resolved: commit the merge and squash; exit 1 while a marker is left")
     parser.add_argument("--migrate-layout", action="store_true",
                         help="move an older layout to one owner per place — what `factory.sh update` runs once — and exit")
     parser.add_argument("--epics", help="where the epics and stories are (default: the profile's `epics:`, else product/epics)")
@@ -1166,22 +1152,6 @@ def main(argv):
         return schedule(cwd, args.epics, args.runs, args.slots,
                         tuple(s.strip() for s in args.busy.split(",") if s.strip()),
                         tuple(s.strip() for s in args.skip.split(",") if s.strip()))
-    if args.worktree_prepare:
-        return worktree_prepare(cwd, args.runs, args.worktree_prepare)
-    if args.worktree_remove:
-        return worktree_remove(cwd, args.worktree_remove)
-    if args.worktree_prune:
-        return worktree_prune(cwd, args.epics)
-    if args.worktree_link:
-        if not has_worktree(args.worktree_link, cwd):
-            print(f"factory: {args.worktree_link} has no worktree", file=sys.stderr)
-            return 1
-        link_places(worktree_of(args.worktree_link, cwd), cwd, args.runs)
-        return 0
-    if args.integrate_prepare:
-        return integrate_prepare(cwd, args.runs, args.epics, args.integrate_prepare)
-    if args.integrate_finish:
-        return integrate_finish(cwd, args.runs, args.epics, args.integrate_finish)
     if args.start:
         if not args.story:
             parser.error("--start needs --story")

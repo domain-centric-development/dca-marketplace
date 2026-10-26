@@ -11,6 +11,7 @@ the gate's processes are adapters of their own.
 import contextlib
 import glob
 import hashlib
+import io
 import os
 import re
 import secrets
@@ -20,6 +21,9 @@ import subprocess
 import sys
 import threading
 import time
+from .delivery.adapter.outgoing.git.worktree_steps import (
+    integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
+from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.adapter.outgoing.pipeline.stage_rows import SHARED_WINDOWS, STAGE, STAGE_FILES, STAGE_ORDER
 from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
@@ -37,7 +41,6 @@ from .delivery.adapter.outgoing.claims.checkout_claim import claim
 from .delivery.adapter.outgoing.files.windows import freeze_all
 from .delivery.adapter.outgoing.files.usage_files import journal_usage
 from .delivery.adapter.outgoing.files.run_marks import back_in, run_stories, step_open, verdict_in
-from .delivery.adapter.outgoing.git.worktrees import has_worktree
 from .delivery.adapter.outgoing.files.journal_files import journal_writer
 from .delivery.adapter.outgoing.files.kept_files import stale_red_proof
 from .delivery.adapter.outgoing.build.commands import run as run_command
@@ -985,14 +988,36 @@ class Run:
         return 0
 
     # --- a story in its worktree (WP-92) -------------------------------------------------------------------------
-    def in_home(self, *args, merge=True):
-        """A cli call made in the main checkout, as a person's would be there: (exit code, its lines)."""
-        return self.cli(*args, merge=merge, quiet=False, cwd=os.environ.get("FACTORY_HOME") or self.home,
-                        env=self.home_env())
+    def as_home(self, step, *args, capture="merged"):
+        """A worktree step done in this process as in the main checkout — its directory, no FACTORY_HOME, the places
+        its profile sets — and everything restored after it: (exit code, what it said). `capture` keeps what it
+        says: `merged` both streams, `out` its standard output (the rest goes on to the terminal), `none` nothing."""
+        home = os.environ.get("FACTORY_HOME") or self.home
+        saved_cwd, saved_home = os.getcwd(), os.environ.pop("FACTORY_HOME", None)
+        said = io.StringIO()
+        flush()
+        try:
+            os.chdir(home)
+            set_places(read_profile(resolve_profile(os.environ.get("FACTORY_PROFILE") or None, home)))
+            out = contextlib.redirect_stdout(said) if capture in ("merged", "out") else contextlib.nullcontext()
+            errors = contextlib.redirect_stderr(said) if capture == "merged" else contextlib.nullcontext()
+            with out, errors:
+                code = step(home, *args)
+        finally:
+            os.chdir(saved_cwd)
+            if saved_home is not None:
+                os.environ["FACTORY_HOME"] = saved_home
+            self.profile()
+        return code or 0, said.getvalue().rstrip("\n")
 
     def link_worktree(self, story):
-        self.run([sys.executable, self.cli_path, "--worktree-link", story], cwd=os.environ.get("FACTORY_HOME") or self.home,
-                 env=self.home_env())
+        def link(home, story):
+            if not has_worktree(story, home):
+                print(f"factory: {story} has no worktree", file=sys.stderr)
+                return 1
+            link_places(worktree_of(story, home), home, place("runs"))
+            return 0
+        self.as_home(link, story, capture="none")
 
     def integration(self, tool):
         """The story's integration into the main line (`IntegrateStoryUseCase`), from the worktree it runs in."""
@@ -1031,7 +1056,7 @@ class Run:
             if fixed != 0:
                 err(f"factory: the profile's formatFix exited {fixed} — the gate's format check decides: "
                     f"{said.strip()[-300:]}")
-        code, out = self.in_home("--integrate-finish", story)
+        code, out = self.as_home(lambda home, story: integrate_finish(home, place("runs"), place("epics"), story), story)
         print(out)
         if code != 0:
             err(f"factory: the conflicts of {story} are not resolved — needs-human: the worktree {self.pwd} holds the "
@@ -1060,7 +1085,8 @@ class Run:
         with self.step(story, "merge") if resumed else contextlib.nullcontext():
             self.take_lock()
             try:
-                _, out = self.cli("--worktree-prepare", story, quiet=False)
+                _, out = self.as_home(lambda home, story: worktree_prepare(home, place("runs"), story), story,
+                                      capture="out")
             finally:
                 self.drop_lock()
         wt = out.split("\n")[-1] if out else ""
@@ -1099,7 +1125,7 @@ class Run:
         if code == 0 and self.delivered(story):
             self.take_lock()
             try:
-                self.run([sys.executable, self.cli_path, "--worktree-remove", story])
+                self.as_home(worktree_remove, story, capture="none")
             finally:
                 self.drop_lock()
         return code
@@ -1388,7 +1414,8 @@ class RunnerIntegration:
             return work()
 
     def prepare(self, story):
-        return self._run.in_home("--integrate-prepare", story)
+        return self._run.as_home(
+            lambda home, story: integrate_prepare(home, place("runs"), place("epics"), story), story)
 
     def session(self, story, conflicts, lost):
         return self._run.integrate_stage(story, self._tool, conflicts, list(lost) or None)
@@ -1463,7 +1490,7 @@ class RunnerBacklog:
 
     def prune(self):
         with self._run.locked():
-            self._run.run([sys.executable, self._run.cli_path, "--worktree-prune"])
+            self._run.as_home(lambda home: worktree_prune(home, place("epics")), capture="none")
 
     def renew(self):
         return self._run.renew()
