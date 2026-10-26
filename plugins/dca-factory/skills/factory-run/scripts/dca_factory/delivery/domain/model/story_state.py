@@ -34,6 +34,11 @@ class StateName(enum.Enum):
     SUPERSEDED = "superseded"
 
 
+#: A story at its end: delivered, or replaced by another — it holds nothing and waits for nothing.
+ENDED = frozenset((StateName.DELIVERED, StateName.SUPERSEDED))
+ENDED_WORDS = frozenset(state.value for state in ENDED)
+
+
 class Detail(Value):
     """Why a story stands where it stands, for a person — "" where nothing needs saying."""
 

@@ -18,6 +18,7 @@ from ..shared.status_facts import StatusFacts
 from .actions import Action, entry_actions, make_action, offered, RUNNER
 from .texts import claim_age, figures, newest_first, parse_time, signal_totals, stamp_text, took_text, worker_text
 from ...domain.model.decision_record import WAITING_WORDS
+from ...domain.model.story_state import ENDED_WORDS
 
 Model = typing.Dict[str, typing.Any]
 
@@ -91,7 +92,7 @@ class ShowStatusUseCase:
         held = facts.claim() if live else None
         windows = facts.shared_windows()
         for story_id, stage, started in running_stages:
-            if story_id in stories and stories[story_id]["state"] in ("delivered", "superseded"):
+            if story_id in stories and stories[story_id]["state"] in ENDED_WORDS:
                 continue
             interrupted = story_id in stories and stories[story_id]["state"] != "running"
             entry: Model = dict(story=story_id, stage=stage, since=parse_time(started), interrupted=interrupted,
@@ -296,14 +297,14 @@ class ShowStatusUseCase:
             return dict(text=f"{nxt} can start from {stories[nxt]['start'] or 'plan'} — run it.",
                         action=self._action(skill=f"/factory-run {nxt}", shell=f"{RUNNER} run --story {nxt}",
                                             label="run it", primary=True))
-        if empty and all(r["state"] in ("delivered", "superseded") for r in rows):
+        if empty and all(r["state"] in ENDED_WORDS for r in rows):
             return dict(text=f"The epic {empty[0]} has no story yet — cut its stories.",
                         action=self._action(skill=f"/factory-backlog stories {empty[0]}", shell="",
                                             label="suggest stories", primary=True))
         if not rows:
             return dict(text="The backlog is empty — write the first story.",
                         action=self._action(skill="/factory-backlog", shell="", label="write a wish", primary=True))
-        if all(r["state"] in ("delivered", "superseded") for r in rows):
+        if all(r["state"] in ENDED_WORDS for r in rows):
             return dict(text="Every story is delivered — write the next one.",
                         action=self._action(skill="/factory-backlog", shell="", label="write a wish", primary=True))
         holder = next((r for r in rows if r["mark"] in ("look", "question", "stopped")), None)

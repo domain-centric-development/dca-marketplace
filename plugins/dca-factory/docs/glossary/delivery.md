@@ -234,6 +234,18 @@ reviews, layout) — a round spent with the work right —, else `substance`.
 
 **Type:** Value Object
 
+### Claim · Worker (Worker) · Meeting (Meeting) · Fate (Fate)
+
+**Definition:** Several factories on one backlog (WP-93) claim a story by its branch on a shared remote. A worker is a
+factory that claims — a person on a host. Where a claim exists already, the meeting is `own` (this factory's), a
+`collision` (the same id claimed for another epic or title — a person gives one another id) or `others` (another
+factory runs it). After a fetch a claim's fate is to hold, to be `released` (its story is delivered on the remote main
+line) or to be an `orphan` (the main line has no such story, and no published mark or story branch says it is on its
+way). Only a worker's own claim is released without force; a delivered story's id never comes free again — the next
+id follows the highest in use, as wide as it (`IdPrefix`). The rules: the domain service `ClaimRules`.
+
+**Type:** Value Object
+
 ### Kind word (KindWord)
 
 **Definition:** A story's `kind:` as written, and what the story is by it: `journey` — a guard over an epic's

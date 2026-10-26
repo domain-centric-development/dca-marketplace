@@ -25,6 +25,7 @@ from .integration import (
     CONFLICT_MARKER, integration_target, merge_target, rebase_tests_baseline, record_main_tests)
 from .repository import git, git_identity
 from .worktrees import has_worktree, uncommitted_story, worktree_of, worktrees_dir
+from ....domain.model.story import StoryStatus
 
 
 def link_folder(source: str, link: str) -> typing.Optional[str]:
@@ -245,7 +246,7 @@ def worktree_prune(cwd: str, epics: str) -> int:
             str(front.get("status", "")).strip().lower()
     folder = os.path.join(cwd, worktrees_dir())
     for story_id in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
-        if statuses.get(story_id, "superseded") == "superseded":
+        if statuses.get(story_id, StoryStatus.SUPERSEDED.value) == StoryStatus.SUPERSEDED.value:
             why = "superseded" if story_id in statuses else "no story of that id"
             print(f"worktree: {story_id} — {why}; its worktree goes, nothing of it is integrated")
             worktree_remove(cwd, story_id)

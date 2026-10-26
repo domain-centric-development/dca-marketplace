@@ -18,6 +18,7 @@ from .run_marks import gate_passed_on_record, STORY_DIGEST
 from .snapshots import STAGES_MADE
 from .story_facts_files import StoryFactsFiles
 from .story_layout import find_story, story_files, story_id_of
+from ....domain.model.story_state import ENDED
 
 #: What the gate and the runner keep in a story's evidence folder that a new pass starts without: the red ledger, the
 #: story's digest, the tests baseline, the round count, the base tree and the red tree. The journal and the snapshots carry on.
@@ -67,7 +68,7 @@ class StoryRunFiles:
             if story_id == exclude.value or not os.path.isfile(os.path.join(self._runs, story_id, STAGE_FILES["test"])):
                 continue
             standing = stand_story(StoryFactsFiles(self._cwd, self._runs, story_id, front, path))
-            if standing.state.value not in ("delivered", "superseded"):
+            if standing.state not in ENDED:
                 holders.append(StoryId(story_id))
         return sorted(holders, key=lambda s: s.value)
 

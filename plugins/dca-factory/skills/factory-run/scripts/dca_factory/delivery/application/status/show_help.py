@@ -10,6 +10,7 @@ from ..shared.project_facts import ProjectFacts
 from ..shared.status_facts import StatusFacts
 from .actions import make_action, RUNNER
 from .show_status import ShowStatusInputPort, ShowStatusQuery
+from ...domain.model.story_state import ENDED_WORDS
 
 Model = typing.Dict[str, typing.Any]
 
@@ -92,7 +93,7 @@ class ShowHelpUseCase:
         has_build = project.has_build()
         marks = {m["mark"] for m in status_view["waiting"]}
         rows = status_view["rows"]
-        delivered = bool(rows) and all(r["state"] in ("delivered", "superseded") for r in rows)
+        delivered = bool(rows) and all(r["state"] in ENDED_WORDS for r in rows)
         has_stories = bool(rows) and not delivered
         waiting_mark = "look" if "look" in marks else ("question" if "question" in marks else "")
         started = described and has_build

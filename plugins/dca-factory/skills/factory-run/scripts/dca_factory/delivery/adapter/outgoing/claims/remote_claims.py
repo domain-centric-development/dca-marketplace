@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import os
-import re
 import typing
 from datetime import datetime, timezone
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
@@ -13,6 +12,11 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_di
 from ..git.repository import git, git_blob
 from ..files.journal_files import journal_append
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text, split_front
+from ....domain.model.claim import ClaimedFor, ClaimTitle, Fate, IdPrefix, Meeting, Worker
+from ....domain.model.epic import EpicId
+from ....domain.model.stage_story import Presence
+from ....domain.model.story import StoryId, StoryStatus
+from ....domain.service.claim_rules import ClaimRules
 
 
 CLAIMS_FILE = "claims.tsv"
@@ -146,15 +150,17 @@ def refresh_claims(cwd: str, runs: str, config: typing.Mapping[str, str], target
     epics_rel = os.path.relpath(place("epics"), factory_home() or cwd).replace(os.sep, "/")
     for story, c in list(claims.items()):
         front = story_on_ref(cwd, main, epics_rel, story)
-        if front is not None and str(front.get("status", "")).lower() == "delivered":
+        published = os.path.isfile(os.path.join(evidence_dir(runs, story), PUBLISHED))
+        branch = git(cwd, "rev-parse", "--verify", "--quiet", f"refs/heads/{STORY_BRANCH}{story}")[0] == 0
+        fate = ClaimRules.fate(status_of(front), present(published), present(branch))
+        if fate is Fate.RELEASED:
             if git(cwd, "push", "--quiet", remote, "--delete", f"{prefix}{story}")[0] == 0:
                 say(f"claims: {story} is delivered on {remote}/{target} — its claim released")
             del claims[story]
             mark = os.path.join(evidence_dir(runs, story), PUBLISHED)
             if os.path.isfile(mark):
                 os.remove(mark)
-        elif front is None and not os.path.isfile(os.path.join(evidence_dir(runs, story), PUBLISHED)) \
-                and not git(cwd, "rev-parse", "--verify", "--quiet", f"refs/heads/{STORY_BRANCH}{story}")[0] == 0:
+        elif fate is Fate.ORPHAN:
             c["orphan"] = True
     write_claims(runs, claims, identity(cwd))
     for story, c in sorted(claims.items()):
@@ -177,11 +183,14 @@ def claim_story(cwd: str, runs: str, config: typing.Mapping[str, str], target: s
     local = f"refs/heads/{STORY_BRANCH}{story_id}"
     if story_id in claims:
         c = claims[story_id]
-        if (c["who"], c["host"]) == me:
+        meeting = ClaimRules.meets(worker(c["who"], c["host"]), worker(*me),
+                                   ClaimedFor(EpicId(c["epic"]), ClaimTitle(c["title"])),
+                                   ClaimedFor(EpicId(epic), ClaimTitle(title)))
+        if meeting is Meeting.OWN:
             say(f"claim: {story_id} is this factory's since {c['since']}")
             write_claims(runs, claims, me)
             return 0
-        if (c["epic"] and c["epic"] != epic) or (c["title"] and c["title"] != title):
+        if meeting is Meeting.COLLISION:
             say(f"claim: id collision — {remote} has {prefix}{story_id} claimed by {c['who']} for "
                 f"\"{c['title']}\" ({c['epic']}), this story is \"{title}\" ({epic}). needs-human: give this story another id")
             write_claims(runs, claims, me)
@@ -241,7 +250,7 @@ def release_claim(cwd: str, runs: str, config: typing.Mapping[str, str], story_i
         say(f"release: {remote} has no claim on {story_id}")
         return 0
     c = claims[story_id]
-    if (c["who"], c["host"]) != identity(cwd) and not force:
+    if ClaimRules.releases(worker(c["who"], c["host"]), worker(*identity(cwd)), present(force)) is Presence.ABSENT:
         say(f"release: {story_id} is claimed by {c['who']} ({c['host']}) since {c['since']} — not this factory's; "
             f"`--force` takes it away")
         return 1
@@ -274,6 +283,20 @@ def free_id(cwd: str, epics: str, config: typing.Optional[typing.Mapping[str, st
         _c, log = git(cwd, "log", "--format=%B", main)
         used |= {line.split(":", 1)[1].strip() for line in log.splitlines() if line.startswith("Story:")}
         used |= set(read_remote_claims(cwd, remote, config["prefix"]))
-    numbers = [int(m.group(1)) for m in (re.match(rf"^{re.escape(prefix)}-(\d+)$", u) for u in used) if m]
-    width = max((len(m.group(1)) for m in (re.match(rf"^{re.escape(prefix)}-(\d+)$", u) for u in used) if m), default=2)
-    return f"{prefix}-{str(max(numbers, default=0) + 1).zfill(width)}"
+    return ClaimRules.next_id(IdPrefix(prefix), {StoryId(u) for u in used}).value
+
+
+def worker(who: str, host: str) -> Worker:
+    return Worker(f"{who} ({host})")
+
+
+def present(fact: bool) -> Presence:
+    return Presence.PRESENT if fact else Presence.ABSENT
+
+
+def status_of(front: typing.Optional[typing.Mapping[str, typing.Any]]) -> typing.Optional[StoryStatus]:
+    """The story's status on a ref, None where the ref has no such story."""
+    if front is None:
+        return None
+    word = str(front.get("status", "")).strip().lower()
+    return next((status for status in StoryStatus if status.value == word), StoryStatus.OTHER)

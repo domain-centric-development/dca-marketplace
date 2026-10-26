@@ -15,6 +15,7 @@ from ...domain.service.scheduling import Scheduling
 from ..shared.backlog_facts import BacklogFacts
 from ..status.texts import parse_time
 from .stand_story import stand_story
+from ...domain.model.story_state import ENDED
 
 Model = typing.Dict[str, typing.Any]
 
@@ -34,7 +35,7 @@ def schedule_backlog(backlog: BacklogFacts, now: datetime.datetime, slots: typin
         holds = set()
         if row.worktree:
             holds.add(Holding.WORKTREE)
-        elif row.standing is None and standing.state.value not in ("delivered", "superseded") and row.tests_written:
+        elif row.standing is None and standing.state not in ENDED and row.tests_written:
             holds.add(Holding.CHECKOUT)
         open_stage = running.get(row.key)
         since = parse_time(open_stage.since) if open_stage else None
