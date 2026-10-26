@@ -6,7 +6,7 @@ import types
 import unittest
 
 from support import project, write
-from dca_factory import runner
+from dca_factory.delivery.adapter.outgoing.process import runner_process as runner
 from dca_factory.infrastructure.runner import RunnerCases
 from dca_factory.delivery.adapter.outgoing.tools import agents
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal

@@ -18,7 +18,9 @@ from ..delivery.application.delivery.run_story import RunStoryCommand, RunStoryU
 from ..delivery.application.requests.request_queue import RequestQueue
 from ..delivery.application.requests.work_request import WorkRequestCommand, WorkRequestUseCase
 from ..delivery.domain.model.stage import Window
-from ..runner import Run, RunnerBacklog, RunnerIntegration, RunnerRequestSkill, RunnerStages
+from ..delivery.adapter.outgoing.process.runner_ports import (
+    RunnerBacklog, RunnerIntegration, RunnerRequestSkill, RunnerStages)
+from ..delivery.adapter.outgoing.process.runner_process import Run
 from ..sharedkernel.adapter.outgoing.profile.profile_files import (
     place,
     read_profile,

@@ -158,13 +158,15 @@ def cli_in(root):
 
 
 PACKAGE = "dca_factory"
-MODULES = ("contract", "runner")
+MODULES = ("contract",)
 #: The gate's command line, an incoming adapter: what decides, with the version stamp; the runner and the cli show and
 #: start.
 GATE_MODULE = "delivery/adapter/incoming/gate/gate_command"
 GATE_SIDE = ("contract", GATE_MODULE)
 #: The cli's command line, an incoming adapter: what shows and coordinates.
 CLI_MODULE = "delivery/adapter/incoming/cli/cli_command"
+#: The runner's process and the ports of a run's use cases on it, outgoing adapters: what starts the stages.
+RUNNER_MODULES = ("delivery/adapter/outgoing/process/runner_process", "delivery/adapter/outgoing/process/runner_ports")
 #: What is built in layers (WP-152): the building blocks, the shared kernel, the contexts, the web host, the root.
 LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "web", "infrastructure")
 
@@ -4361,9 +4363,9 @@ def verify_setup(runner, verbose=False):
                                 encoding="utf-8", errors="replace")
         check("gate: a flag that moved to the cli is handed over, so an older caller still gets its answer",
               handed.returncode == 0 and handed.stdout.startswith("factory:"), handed.stdout.strip()[:200])
-    modules = package_text(runner, MODULES + (GATE_MODULE, CLI_MODULE))
+    modules = package_text(runner, MODULES + (GATE_MODULE, CLI_MODULE) + RUNNER_MODULES)
     gate_text = "\n".join(modules[m] for m in GATE_SIDE)
-    cli_text = "\n".join(modules[m] for m in MODULES + (CLI_MODULE,) if m not in GATE_SIDE)
+    cli_text = "\n".join(modules[m] for m in MODULES + (CLI_MODULE,) + RUNNER_MODULES if m not in GATE_SIDE)
     runner_text = open(runner, encoding="utf-8").read()
     observe_text = open(os.path.join(os.path.dirname(runner), "..", "..", "factory-verify", "scripts", "observe.py"),
                         encoding="utf-8").read()
@@ -4419,9 +4421,10 @@ def verify_setup(runner, verbose=False):
     # twenty times a stage; what is left as a process changes state — the release, a skeleton, a worktree, the schedule
     reader_verbs = ("--get", "--model", "--kind", "--start", "--command-heads", "--perspectives", "--place", "--usage",
                     "--usage-from", "--journal-line", "--claim")
+    run_text = "\n".join(modules[m] for m in RUNNER_MODULES)
     spawned = sorted({verb for verb in reader_verbs
-                      if re.search(rf'self\.cli\([^)]*"{re.escape(verb)}"', modules["runner"])
-                      or re.search(rf'self\.cli_path,[^\]]*"{re.escape(verb)}"', modules["runner"])})
+                      if re.search(rf'self\.cli\([^)]*"{re.escape(verb)}"', run_text)
+                      or re.search(rf'self\.cli_path,[^\]]*"{re.escape(verb)}"', run_text)})
     check("runner: reads the profile, the stage files, the records and the journal in its own process — no cli for a question",
           not spawned, spawned)
     duplicated = [n for n in ("CRITERION", "MAPPING_ROW", "SELECTOR") if re.search(rf"^{n} = re\.compile", observe_text, re.M)]
@@ -4830,7 +4833,7 @@ def stage_lists(modules, runner_text):
     it — and any stage name the gate's `main` decides on. A stage is a row: a list beside the table drifts from it."""
     import ast
     found = []
-    for label, text in ((f"{name}.py", modules[name]) for name in MODULES + (GATE_MODULE, CLI_MODULE)):
+    for label, text in ((f"{name}.py", modules[name]) for name in MODULES + (GATE_MODULE, CLI_MODULE) + RUNNER_MODULES):
         tree = ast.parse(text)
         skip = set()
         for node in ast.walk(tree):

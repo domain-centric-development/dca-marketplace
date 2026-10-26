@@ -1,13 +1,12 @@
-"""The runner: the run of `factory.sh run` and of the requests it works — its stage arrays, and what the use cases
-of a run ask of the process around them.
+"""The runner's process: the run of `factory.sh run` and of the requests it works — its claim on the checkout, the
+places it stands in, its stage arrays, the tool's and the gate's processes it starts, its children beside a parallel
+run.
 
-The shell tables the runner reads once at its start; then the ports of the run's use cases on this process: a
-story's stages (`RunnerStages` for `RunStoryUseCase`), its integration (`RunnerIntegration` for
-`IntegrateStoryUseCase`), the backlog (`RunnerBacklog` for `RunBacklogUseCase`), a request's skill
-(`RunnerRequestSkill`). A story's worktree steps, the layout migrations, the stage files' skeletons, the tool's and
-the gate's processes are adapters of their own.
+The use cases a step starts it gets from the composition root (`RunCases`); the ports those use cases call on this
+process are `runner_ports`; what it reads from the project's files the gate's way is `files/run_readers`. A story's
+worktree steps, the layout migrations, the stage files' skeletons, the tool's and the gate's processes are adapters of
+their own.
 """
-
 import contextlib
 import glob
 import hashlib
@@ -22,192 +21,51 @@ import sys
 import threading
 import time
 import typing
-from .delivery.adapter.outgoing.git.worktree_steps import (
-    integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
-from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
-from .delivery.adapter.outgoing.pipeline.stage_rows import SHARED_WINDOWS, STAGE, STAGE_FILES, STAGE_ORDER
-from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    place, PROFILE_FILE, read_profile,
-    resolve_profile, set_places, shown)
-from .delivery.adapter.outgoing.files.decision_record_files import (
-    decisions_store, needs_human_ids, record_path)
-from .delivery.adapter.outgoing.files.story_layout import (
-    find_story, is_delivered, story_kind)
-from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
-from .delivery.adapter.outgoing.tools.streams import tokens_of
-from .infrastructure.schedule import start_of
-from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here
-from .delivery.adapter.outgoing.claims.checkout_claim import claim
-from .delivery.adapter.outgoing.files.windows import freeze_all
-from .delivery.adapter.outgoing.files.usage_files import journal_usage
-from .delivery.adapter.outgoing.files.run_marks import back_in, run_stories, step_open, verdict_in
-from .delivery.adapter.outgoing.files.journal_files import journal_writer
-from .delivery.adapter.outgoing.files.kept_files import stale_red_proof
-from .delivery.adapter.outgoing.build.commands import run as run_command
-from .delivery.adapter.outgoing.git.integration import (
-    integration_target, lost_text, main_tests_lost)
-from .delivery.application.profile.profile_rules import first_word, perspectives_of
-from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS
-from .delivery.adapter.outgoing.process.gate_process import file_sha, GateProcess, hashing
-from .delivery.adapter.outgoing.tools.tool_choice import ToolChoice
-from .delivery.adapter.outgoing.tools.tool_processes import (
-    err, exit_field, flush, Stopped, TIMED_OUT, ToolProcesses, utc)
-from .delivery.adapter.outgoing.files.request_files import out_path, prune_outputs, stamp_utc
-from .delivery.adapter.outgoing.files.decision_record_files import project_record_path
-from .delivery.application.shared.request_skill import SkillRun
-from .delivery.application.shared.backlog_schedule import ScheduleRead
-from .delivery.domain.model.stage import StageName, StoryKind, Window
-from .delivery.domain.model.story_state import GateReport, Rounds, VerdictWord
-from .delivery.adapter.outgoing.files.decision_record_files import request_records
-from .delivery.adapter.outgoing.files.request_files import (
-    default_by, REQUEST_JOURNAL, requests_dir)
-from .delivery.application.requests.list_requests import target_text
-from .delivery.application.shared.requests import KIND
-
+from .factory_process import scripts_dir
+from ..git.worktree_steps import integrate_finish, link_places, worktree_prepare, worktree_remove
+from ..git.worktrees import has_worktree, worktree_of
+from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE, STAGE_FILES, STAGE_ORDER
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from .....sharedkernel.adapter.outgoing.profile.profile_files import (
+    place, PROFILE_FILE, read_profile, resolve_profile, set_places)
+from ..files.story_layout import find_story, is_delivered, story_kind
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
+from ..tools.streams import tokens_of
+from .....infrastructure.schedule import start_of
+from ..claims.remote_claims import claim_config_here
+from ..claims.checkout_claim import claim
+from ..files.windows import freeze_all
+from ..files.usage_files import journal_usage
+from ..files.run_marks import back_in, run_stories, step_open
+from ..files.journal_files import journal_writer
+from ..files.kept_files import stale_red_proof
+from ..build.commands import run as run_command
+from ..git.integration import integration_target, lost_text
+from ....application.profile.profile_rules import first_word, perspectives_of
+from ..tools.agents import TOOL, TOOLS
+from .gate_process import file_sha, GateProcess, hashing
+from ..tools.tool_choice import ToolChoice
+from ..tools.tool_processes import err, exit_field, flush, Stopped, ToolProcesses, utc
+from ....domain.model.stage import Window
+from ..files.request_files import default_by, REQUEST_JOURNAL, requests_dir
+from ....application.requests.list_requests import target_text
+from ..files.run_readers import needs_human_lines, open_decision_files, verdict_of_story
 
 
 # --- the run: what `factory.sh run` starts once its checks before the first stage passed -------------------------
 # One process per stage, so every stage starts with a fresh context and reads only its story and its predecessor's
 # file. The runner composes and starts; every project file it reads it reads with the cli's readers, in its own
 # process, after `Run.profile` set the places from where it stands — the checkout or a story's worktree — exactly
-# as a cli started there would. What changes the checkout's state — the claim, a skeleton, a worktree — runs as
-# the cli, a process of its own (`Run.cli`); what it may not decide — whether a stage is done — is the gate's, a
-# process of its own as well.
+# as a cli started there would. The claim and a skeleton run as the cli, a process of its own (`Run.cli`); a story's
+# worktree steps run in this process from the checkout (`Run.as_home`); what it may not decide — whether a stage is
+# done — is the gate's, a process of its own.
 #
 # Its entry points — the arguments, the signals, the exit codes — are the incoming adapter
 # `delivery/adapter/incoming/runner/run_command.py`; the composition root `infrastructure/runner.py` builds the run.
 
-#: The cli flags a skill run for a request may call (WP-91): what the dialog skills read and record with — never one
-#: that starts a run, a request, the factory or its page (`--run`, `--work-request`, `--request`, `--up`, `--serve`).
-REQUEST_CLI_FLAGS = ("--contract", "--free-id", "--window-start", "--window-end", "--list-decisions", "--spec-delta",
-                     "--spec-check", "--findings", "--reopen", "--owned-confirm", "--status", "--discover-list",
-                     "--help-view", "--journal-line")
 STAGE_SHELL = ("cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git status, git diff, git log, git ls-files, "
                "git apply --check, and git rm (a file the plan removes)")
 
-
-def newer(path, than):
-    """`[ path -nt than ]`: path exists and is newer, or than does not exist."""
-    if not os.path.exists(path):
-        return False
-    return not os.path.exists(than) or os.path.getmtime(path) > os.path.getmtime(than)
-
-
-class RunnerRequestSkill:
-    """A request's skill as the runner starts it: the prompt that names the skill, the request's arguments, the rules
-    for a skill run for a request and where things are; the shell narrowed to what the dialog skills read and record
-    with; the tool's process, its usage journaled and booked to the request."""
-
-    def __init__(self, run):
-        self._run = run
-
-    def tool_for(self, unit, given):
-        return self._run.tools.tool_for(unit, given)
-
-    @staticmethod
-    def known(tool):
-        return bool(os.environ.get("FACTORY_TOOL_CMD")) or tool in TOOL
-
-    def run(self, request, kind, unit, tool):
-        run = self._run
-        run.tool_in_flight = tool
-        raw = out_path(request["id"])
-        os.makedirs(os.path.dirname(raw), exist_ok=True)
-        run.tools.allowed_override = self.request_allowed()
-        started = time.time()
-        run.request_in_flight = request["id"]
-        try:
-            code = run.invoke(tool, self.request_prompt(request, tool), raw, unit, None)
-        finally:
-            run.tools.allowed_override = None
-            run.request_in_flight = ""
-        measured = run.processes.record_usage(None, unit, tool, raw, int(time.time() - started), request["id"])
-        run.cases.book_request_cost(run, request["id"], tool, measured)
-        prune_outputs()
-        return SkillRun(code, code == TIMED_OUT, shown(raw))
-
-    def request_skill(self, kind):
-        """The skill a request's kind runs, as its prompt names it."""
-        if kind.skill == "description":
-            return ("the project's description skill — the skill whose description says it writes the project "
-                    "description, `dca-describe` in a DCA project —")
-        return f"the {kind.skill} skill"
-
-    @staticmethod
-    def request_arguments(request):
-        """The arguments a session would give the skill for this request — the same words the cockpit sends."""
-        kind, words, option = request["kind"], request.get("words", ""), request.get("option", "")
-        story, record = request.get("story", ""), request.get("record", "")
-        if kind in ("wish", "discover", "describe"):
-            return words
-        if kind == "release":
-            return f"release {request.get('story') or request.get('epic')}"
-        if kind in ("stories", "journey"):
-            return f"{kind} {request['epic']}"
-        if kind == "epic-from":
-            return f"epic {request['proposal']} --from {request['report']}"
-        if kind == "answer":
-            given = option or words
-            why = f" — rationale: {words}" if option and words else ""
-            return f"{story + ' ' if story else ''}{record}: answer {given}{why}"
-        if kind == "accept":
-            return f"{story} {record}: answer accepted"
-        if kind == "correct":
-            code = f"{option}: " if option else ""
-            return f"{story}{' ' + record if record else ''}: correction: {code}{words}"
-        return words
-
-    def request_prompt(self, request, tool):
-        kind = KIND[request["kind"]]
-        reference = next((f"{d}/factory-run/reference/requests.md" for d in self._run.skill_dirs(tool)
-                          if os.path.isfile(f"{d}/factory-run/reference/requests.md")), "")
-        if not reference:
-            own = os.path.abspath(os.path.join(self._run.scripts, "..", "reference", "requests.md"))
-            reference = own[len(self._run.pwd) + 1:] if own.startswith(self._run.pwd + "/") else own
-        by = request.get("by") or "a person"
-        topic_file = shown(project_record_path(request["id"], request["kind"]))
-        lines = [
-            f"Apply {self.request_skill(kind)} with the arguments: {self.request_arguments(request)}",
-            f"This is request {request['id']} of the factory, written by {by} at {request.get('asked', '?')}. You run "
-            f"headless: no person reads this session and nobody answers in it. The rules for a skill run for a request "
-            f"are in {reference} — read them first.",
-            f"In short: the request is {by}'s confirmation of what it names — write it as theirs (`by: {by}`), as the "
-            f"skill would on their confirmation. Where the skill would ask the person and the files do not settle it, do "
-            f"not guess and do not ask here: write the question as one decision record with `request: {request['id']}` "
-            f"in its front matter and its file name without `.md` as its `id:` — beside the story it concerns, else as "
-            f"{topic_file} — and end. The factory shows it "
-            f"and runs this request again once it is answered. Start no stage and no `factory.sh run`, commit nothing: "
-            f"the factory commits what this request wrote.",
-            f"Now is {stamp_utc()} (UTC) — the time a field such as `created:` takes.",
-        ]
-        if kind.name == "wish":
-            lines.append("A wish becomes a backlog item kept as a draft (`status: draft`): the person releases it.")
-        if kind.name == "correct" and not request.get("option"):
-            lines.append("The person named no reason code for the correction: where their words point to exactly one, "
-                         "write that one; else ask it as a record whose options are the codes.")
-        answered = request.get("answered", "")
-        if answered:
-            records = [shown(path) for path, rid, _s in request_records(self._run.home, request["id"])]
-            lines.append(f"This request ran before and asked; its question is answered now ({answered}: "
-                         f"{', '.join(records)}). Read the answer and go on from there — write nothing the answer and "
-                         f"the request do not settle.")
-        story = (request.get("story") or "").split()
-        lines.append(self._run.where_things_are(tool, story[0] if len(story) == 1 else None)
-                     + " For a request, also `bash .agents/factory/factory.sh` backlog, status, decisions, discover, "
-                     "spec-delta and help.")
-        return "\n\n".join(lines)
-
-    def request_allowed(self):
-        """A request's shell: a stage's, with the cli narrowed to the flags the dialog skills read and record with, and
-        the runner's reading verbs — no flag and no verb that starts a run, a request, the factory or its page."""
-        cli = f"Bash({self._run.py} .agents/factory/factory-cli.py:*)"
-        heads = [head for head in self._run.tools.allowed_commands().split(",") if head != cli]
-        heads += [f"Bash({self._run.py} .agents/factory/factory-cli.py {flag}:*)" for flag in REQUEST_CLI_FLAGS]
-        heads += [f"Bash(bash .agents/factory/factory.sh {verb}:*)"
-                  for verb in ("backlog", "status", "decisions", "discover", "spec-delta", "help")]
-        heads.append("Bash(date:*)")                # the backlog skill dates what it writes
-        return ",".join(heads)
 
 
 class RunCases(typing.Protocol):
@@ -243,7 +101,7 @@ class Run:
     def __init__(self, options, home, runs, worker=None, cases=None):
         self.cases = cases
         self.py = os.environ.get("FACTORY_RUNNER_PYTHON") or "python3"   # the name the prompts and the list carry
-        self.scripts = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.scripts = scripts_dir()
         self.cli_path = os.path.join(self.scripts, "factory-cli.py")
         self.gate_rel = ".agents/factory/story-gate.py"
         self.gate_path = self.gate_rel
@@ -1300,169 +1158,7 @@ class Run:
         return ChildProcess(process, thread)
 
 
-class RunnerStages:
-    """A story's stages on the runner (`StoryStages`): its files read with the package's readers, in the checkout or
-    the worktree it runs in, its gates and its processes as the runner starts them."""
-
-    def __init__(self, run, tool):
-        self._run = run
-        self._tool = tool
-
-    def open_decisions(self, story):
-        return self._run.open_decisions(story).split()
-
-    def kind(self, story):
-        return StoryKind(self._run.kind_of(story))
-
-    def red_stale(self, story, start):
-        return self._run.red_proof_stale(story, start.value)
-
-    def pause(self, story):
-        self._run.between_stages(story, self._tool)
-
-    def gate(self, stage, story):
-        return self._run.gate(stage, story)
-
-    def quiet_gate(self, stage, story):
-        return self._run.quiet_gate(stage, story)
-
-    def report(self, story, stage):
-        path = f"{self._run.runs}/{story}/.gate-{stage}.txt"
-        return GateReport(read_text(path) if os.path.isfile(path) else "")
-
-    def artefact(self, story, stage):
-        return self._run.artefact(story, stage)
-
-    def holds(self, story, stage):
-        return os.path.isfile(self._run.artefact(story, stage))
-
-    def refused_before(self, story, stage):
-        return os.path.isfile(f"{self._run.runs}/{story}/.gate-{stage}.txt")
-
-    def delivered(self, story):
-        return self._run.delivered(story)
-
-    def asks_human(self, story, stage):
-        return self._run.asks_human(self._run.artefact(story, stage))
-
-    def stopped_for_human(self, story, stage):
-        return self._run.stopped_for_human(self._run.artefact(story, stage), stage, story)
-
-    def stage(self, story, stage):
-        self._announce(stage)
-        return self._run.run_one(story, self._tool, stage)
-
-    def dry(self, story, stage):
-        tool = self._announce(stage)
-        self._run.processes.dry_lines(tool, self._run.prompt_for(stage, story), stage)
-
-    def _announce(self, stage):
-        tool = self._run.tools.tool_for(stage, self._tool)      # the run's tool stays: every stage resolves its own
-        print(f"── stage {stage}  (tool: {tool}, fresh context)")
-        self._run.tool_in_flight = tool
-        return tool
-
-    def builder(self, story, stages, start, dry):
-        return self._run.builder_window(story, self._tool, stages, start, dry)
-
-    def reviews(self, story, kind, dry):
-        return self._run.run_reviews(story, self._tool, dry, kind.value)
-
-    def verifier(self, story, stages, dry):
-        return self._run.verifier_window(story, self._tool, stages, dry)
-
-    def sent_back(self, story):
-        return self._run.back_to(story, "build") == "test"
-
-    def repaired(self, story):
-        return newer(f"{self._run.runs}/{story}/tidy.md", f"{self._run.runs}/{story}/build.md")
-
-    def red_proof(self, story):
-        ledger = self.red_ledger(story)
-        return os.path.isfile(ledger) and os.path.getsize(ledger) > 0
-
-    def red_ledger(self, story):
-        return f"{self._run.evidence(story)}/.tests-red"
-
-    def bump(self, story):
-        return Rounds(self._run.bump_rounds(story))
-
-    def resumes(self, story):
-        start = self._run.start_stage(story)
-        return StageName(start) if start and start != "none" else None
-
-    def verdict(self, story):
-        return VerdictWord(self._run.verdict_of(story) or "")
-
-    def back(self, story):
-        back = self._run.back_to(story)
-        return StageName(back) if back else None
-
-    def in_worktree(self):
-        return bool(os.environ.get("FACTORY_HOME"))
-
-    def integrate(self, story, dry):
-        return self._run.cases.integrate(self._run, self._tool, story, dry)
-
-
-class RunnerIntegration:
-    """A story's integration on the runner (`StoryIntegration`): from the story's worktree into the main checkout,
-    the cli's integrate steps run there, the integrate stage and the gate as the runner starts them."""
-
-    def __init__(self, run, tool):
-        self._run = run
-        self._tool = tool
-
-    def lock(self):
-        self._run.take_lock()
-
-    def unlock(self):
-        self._run.drop_lock()
-
-    def step(self, story, work):
-        with self._run.step(story, "integrate"):
-            return work()
-
-    def prepare(self, story):
-        return self._run.as_home(
-            lambda home, story: integrate_prepare(home, place("runs"), place("epics"), story), story)
-
-    def session(self, story, conflicts, lost):
-        return self._run.integrate_stage(story, self._tool, conflicts, list(lost) or None)
-
-    def lost(self, story):
-        return main_tests_lost(self._run.pwd, self._run.runs, story)
-
-    def lost_text(self, lost):
-        return lost_text(lost)
-
-    def gate(self, story):
-        home = os.environ.get("FACTORY_HOME") or self._run.home
-        return self._run.gate("integrate", story, gate_path=f"{home}/{self._run.gate_rel}")
-
-    def report(self, story):
-        path = self.report_place(story)
-        return GateReport(read_text(path) if os.path.isfile(path) else "")
-
-    def report_place(self, story):
-        return f"{self._run.runs}/{story}/.gate-integrate.txt"
-
-    def published(self):
-        return bool(claim_config_here(self._run.home))
-
-    def worktree(self):
-        return self._run.pwd
-
-    def relink(self, story):
-        self._run.take_lock()
-        try:
-            self._run.link_worktree(story)
-        finally:
-            self._run.drop_lock()
-        self._run.journal_line(story, f"{utc()}\toutdated\tdocument.md\tby=integrate")
-
-    def bump(self, story):
-        return Rounds(self._run.bump_rounds(story))
+TOOL_SKILL_DIRS = tuple(tool.skills for tool in TOOLS)
 
 
 class ChildProcess:
@@ -1477,129 +1173,6 @@ class ChildProcess:
             return None
         self.pump.join()
         return self.process.returncode
-
-
-class RunnerBacklog:
-    """The backlog run's ports on the runner (`BacklogSchedule`, `BacklogCheckout`, `BacklogWorker`): the schedule
-    the cli prints, the checkout under the claim, the stories and requests as processes."""
-
-    def __init__(self, run, tool):
-        self._run = run
-        self._tool = tool
-
-    def read(self, slots, busy, skip):
-        args = ["--schedule", "--slots", str(slots), "--busy", ",".join(busy)]
-        args += ["--skip", ",".join(skip)] if skip else []
-        code, out = self._run.cli(*args, merge=True)
-        if code != 0:
-            return ScheduleRead(False, out)
-        lines = out.split("\n")
-        named = [line[len("next: "):] for line in lines if line.startswith("next: ")]
-        following = tuple((text.split(" ", 1)[0], text.split(" ", 1)[-1]) for text in named if not text.startswith("none"))
-        return ScheduleRead(True, out, following, any(line.startswith("wait: yes") for line in lines))
-
-    def prune(self):
-        with self._run.locked():
-            self._run.as_home(lambda home: worktree_prune(home, place("epics")), capture="none")
-
-    def renew(self):
-        return self._run.renew()
-
-    def stop_asked(self):
-        return self._run.stop_file if os.path.isfile(self._run.stop_file) else None
-
-    def stop_place(self):
-        return self._run.stop_file
-
-    def claims(self):
-        if not claim_config_here(self._run.home):
-            return ""
-        return self._run.cli("--claims-refresh", quiet=False)[1]
-
-    def signalled(self):
-        code, self._run.pending = self._run.pending, None
-        return code
-
-    def wait(self, interval):
-        self._run.wait_or_wake(interval)
-
-    def pause(self):
-        time.sleep(2)
-
-    def run(self, story, start):
-        return self._run.run_story(story, self._tool, start, False)
-
-    def fresh(self, story, start):
-        self._run.reset_rounds(story, start)
-        self._run.gates.fresh_window(story)
-
-    def start(self, story, start):
-        os.makedirs(f"{self._run.home}/{self._run.evidence_rel()}/{story}", exist_ok=True)
-        return self._run.start_child(story, self._tool, start)
-
-    def work(self, busy):
-        self._run.work_requests(self._tool, busy)
-
-    def start_request(self, request):
-        return self._run.start_request_child(request, self._tool)
-
-    def capped(self):
-        return bool(self._run.max_stages and self._run.invocations >= self._run.max_stages)
-
-
-TOOL_SKILL_DIRS = tuple(tool.skills for tool in TOOLS)
-
-
-# --- what the runner reads from the project's files ----------------------------------------
-# One reader for the profile, a stage file and a decision record: the gate's. The runner calls these in its
-# own process; the cli prints the same answers for a person or a stage.
-
-def verdict_of_story(runs, story_id):
-    path = os.path.join(runs, story_id, "judge.md")
-    return verdict_in(read_text(path)) if os.path.isfile(path) else ""
-
-
-def needs_human_lines(path, story_id=None):
-    """`<id>\\t<stage>\\t<record path>` for every decision the file's needs-human section names; None when it
-    asks nobody. The record lives beside the story, so the story's id says where to look."""
-    ids = needs_human_ids(read_text(path)) if os.path.isfile(path) else None
-    if ids is None:
-        return None
-    lines = []
-    for decision_id in ids:
-        record, stage = "", ""
-        try:
-            record = record_path(story_id, decision_id) if story_id else ""
-        except GateError:
-            record = ""
-        if record and os.path.isfile(record):
-            try:
-                stage = str(read_front_matter(record)[0].get("stage", "") or "")
-            except GateError:
-                stage = ""
-        lines.append(f"{decision_id}\t{stage or '-'}\t{shown(record) if record else '-'}")
-    return lines
-
-
-def open_decision_files(cwd, story_id):
-    """The records beside the story that carry no `## Answer` yet — the cheap check a run makes
-    before a stage; the gate does the fine reading (a draft without a name is still open)."""
-    try:
-        store = decisions_store(find_story(place("epics"), story_id))
-    except GateError:
-        return []
-    if not os.path.isdir(store):
-        return []
-    found = []
-    for name in sorted(os.listdir(store)):
-        if not name.endswith(".md"):
-            continue
-        text = read_text(os.path.join(store, name))
-        if not re.search(r"^## Answer", text, re.M):
-            found.append(shown(os.path.join(store, name)))
-    return found
-
-
 
 
 # --- the run's start ---------------------------------------------------------------------------------------------
@@ -1622,7 +1195,3 @@ def package_modules(folder):
 def read_bytes(path):
     with open(path, "rb") as handle:
         return handle.read()
-
-
-def field_of(text, key):
-    return next((line[len(key) + 2:] for line in text.split("\n") if line.startswith(f"{key}: ")), "")
