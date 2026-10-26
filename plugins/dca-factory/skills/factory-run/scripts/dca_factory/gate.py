@@ -68,18 +68,16 @@ import glob
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from .contract import (
-    CONTRACT, CRITERION, GateError, layout_hint, SELECTOR, STAGE, STAGE_CHECKS, STAGES, VERSION)
+    CONTRACT, CRITERION, GateError, layout_hint, STAGE, STAGES, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import (
     append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
     PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
 from .delivery.adapter.outgoing.files.story_layout import (
-    duplicate_ids, file_digest, find_story, is_delivered, story_digest,
+    duplicate_ids, find_story, is_delivered, story_digest,
     story_files, story_folder, story_id_of, story_kind)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, evidence_rel, factory_home, FLAKY_FINDINGS, in_worktree,
@@ -97,14 +95,13 @@ from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matt
 from .spec.api import (
     derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
 from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED
-from .delivery.adapter.outgoing.files.story_record import INVARIANT_BREAKS
 from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open
 from .delivery.adapter.outgoing.files.snapshots import (
     git_tree, record_base, record_changes)
-from .delivery.adapter.outgoing.files.owned_files import owned_end, run_owned
+from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.files.run_marks import (
     backlog_digest, last_ended, step_open,
-    STORY_DIGEST, verdict_in, write_mark)
+    STORY_DIGEST, write_mark)
 from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned
 from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
 from .delivery.adapter.outgoing.files.decision_record_files import (
@@ -117,19 +114,17 @@ from .delivery.domain.service.story_checks import StoryChecks
 from .delivery.domain.service.decision_checks import Applying, DecisionChecks
 from .delivery.domain.model.stage import StageName
 from .delivery.domain.model.stage_story import (
-    CommandKey, Count, MappedTest, Place, Presence, ScenarioKey, Selector, TestTable)
+    CommandKey, Count, MappedTest, Place, Presence, ScenarioKey, Selector)
 from .delivery.domain.model.story_state import Detail
 from .delivery.domain.service.design_checks import DesignChecks
 from .delivery.domain.service.kept_checks import KeptChecks
 from .delivery.domain.service.spec_checks import SpecChecks
 from .delivery.domain.service.integration_checks import IntegrationChecks
-from .delivery.domain.service.test_verdicts import BreakProof, TestVerdicts
-from .delivery.domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult
-from .delivery.domain.model.verdict import Finding
 from .delivery.application.delivery.stage_checks import table_tests  # registers the checks over the evidence alone
+from .delivery.application.delivery.process_checks import judge_suite  # registers the checks that run processes
+from .delivery.adapter.outgoing.build.stage_runs import StageRunFiles
 from .delivery.application.delivery.check_stage import (
-    check, on_pass, run_checks, run_passed, StageRun, Verdict)
-from .delivery.domain.model.stage import StoryKind, Trait
+    on_pass, run_checks, run_passed, StageRun, Verdict)
 from .delivery.domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
 from .delivery.domain.model.story_state import Acceptance, AcceptanceVerdict
 from .delivery.domain.model.decision_record import RecordId
@@ -139,26 +134,22 @@ from .delivery.adapter.outgoing.files.story_files import StoryFiles
 from .delivery.domain.service.change_checks import CHANGE_CHECKS, ChangeChecks
 from .delivery.domain.model.stage_story import CommandRun
 from .delivery.adapter.outgoing.git.change import parity_facts, snapshot
-from .delivery.domain.service.suite_checks import red as red_finding, SuiteChecks
+from .delivery.domain.service.suite_checks import red as red_finding
 from .delivery.domain.model.verdict import CheckName, Said
-from .delivery.adapter.outgoing.build.suite_runs import command_run, suite_commands, suite_run
-from .delivery.domain.model.stage_story import Expectation
-from .delivery.adapter.outgoing.build.test_runs import red_ledger, run_tests
+from .delivery.adapter.outgoing.build.suite_runs import suite_run
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
 from .delivery.adapter.outgoing.files.test_files import locate_tests, StageTestFiles
 from .delivery.adapter.outgoing.files.stage_marks_files import StageMarkFiles
 from .delivery.adapter.outgoing.files.stage_evidence_files import MainLineEvidence
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, split_list
 from .delivery.adapter.outgoing.files.test_files import read_mapping
-from .delivery.adapter.outgoing.files.design_files import STEP, read_invariant_rows
-from .delivery.adapter.outgoing.files.kept_files import RED_TREE, read_red_digests, red_ledger_path, red_tree, tidy_moves, unproven_tests
+from .delivery.adapter.outgoing.files.design_files import STEP
+from .delivery.adapter.outgoing.files.kept_files import RED_TREE, read_red_digests, red_tree, unproven_tests
 from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
 from .delivery.adapter.outgoing.spec.story_spec_files import moved_tests, story_spec
-from .delivery.adapter.outgoing.files.delivery_files import TEST_DIR, TEST_FILE
 from .delivery.adapter.outgoing.git.integration import integration_target
 from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, command_for, run, tail, test_command_keys
-from .delivery.adapter.outgoing.build.suite_runs import SuiteOwner, test_files
-from .delivery.adapter.outgoing.build.breaks import apply_break, break_copy, break_patch, break_path, characterization_tests, qualify_selector
+from .delivery.adapter.outgoing.build.suite_runs import test_files
 from .delivery.adapter.outgoing.git.change import backlog_paths
 from .delivery.adapter.outgoing.files.test_files import scenario_titles
 from .sharedkernel.adapter.outgoing.profile.profile_files import places_in
@@ -292,24 +283,6 @@ def contract_of(profile):
     return int(declared) if declared.isdigit() else CONTRACT
 
 
-def check_task_suites(result, profile, cwd, owner=None):
-    """At a task's build and tidy gates: every test command the profile declares, run whole — nothing a test was
-    written for, so everything the stories before delivered has to hold."""
-    found = SuiteChecks.task(suite_commands(profile))
-    take(result, found)
-    if found:
-        return
-    seen = set()
-    for key in [key for key in test_command_keys(profile) if profile.get(key)]:
-        if profile[key] in seen:
-            continue
-        seen.add(profile[key])
-        before = len(result.entries)
-        run_test_command(result, cwd, profile, key, profile[key], True, True, owner=owner)
-        result.entries[before:] = [(state, "suite" if check != "flaky" else check, message)
-                                   for state, check, message in result.entries[before:]]
-
-
 def close_findings(result, front):
     """At a task's delivery: the rows it names under `closes:` set to `done` in their findings.md."""
     closed = []
@@ -377,92 +350,6 @@ def check_clauses(result, profile, cwd, runs, story_id, front, body, mapping, lo
     take(result, DesignChecks.clauses(story, ProfileChecks.contract_number(evidence), tests, evidence))
 
 
-def check_invariants(result, profile, cwd, runs, story_id, front, mapping):
-    """Every rule of a domain type the plan names has a unit test of its own (`DesignChecks.invariants`) — for the
-    adopt gate, which reads the story without a run of its own."""
-    story = stage_story(story_id, "", front, "", ())
-    evidence = StageEvidenceFiles(cwd, runs, place("epics"), profile)
-    tests = tuple(MappedTest(ScenarioKey(key), Selector(selector), None, None, None)
-                  for key, selectors in (mapping or {}).items() for selector in selectors)
-    take(result, DesignChecks.invariants(story, ProfileChecks.contract_number(evidence), tests, evidence))
-
-
-def check_adopt(result, profile, cwd, runs, story_id, front, criteria):
-    """The adopt gate: an adopted story is delivered when every scenario maps to a test that exists and
-    is green, a fresh judge passed it, and every test the adoption wrote itself turns red under its
-    break — a minimal change to the production code, applied to a scratch copy, never to the tree."""
-    refused = BreakChecks.adopted(stage_story(story_id, "", front, "", ()))
-    take(result, refused)
-    if refused:
-        return
-    mapping = check_mapping(result, runs, story_id, criteria)
-    located = check_exists(result, cwd, mapping)
-    check_compiles(result, profile, cwd)
-    check_invariants(result, profile, cwd, runs, story_id, front, mapping)
-    # every rule's unit test is green beside the scenarios' tests: an adoption proves what holds, the rules included
-    tests_path = os.path.join(runs, story_id, "tests.md")
-    rows = read_invariant_rows(read_text(tests_path)) if os.path.isfile(tests_path) else None
-    rules = {f"{element} rule {', '.join(map(str, numbers))}": [selector] for element, numbers, selector in rows or []
-             if selector and SELECTOR.match(selector) and selector not in {s for sels in mapping.values() for s in sels}}
-    if rules and contract_of(profile) >= 24:
-        located = dict(located or {}, **(check_exists(Result(), cwd, rules) or {}))
-        mapping = dict(mapping, **rules)
-    check_test_state(result, profile, cwd, mapping, "green", located, runs, story_id, guard=True)
-    judge = read_text(os.path.join(runs, story_id, "judge.md")) if os.path.isfile(os.path.join(runs, story_id, "judge.md")) else ""
-    take(result, (BreakChecks.adopt_judged(Detail(verdict_in(judge) or "")),))
-    everything = str(profile.get("adopt.breakProof", "")).strip().lower() == "all"
-    by_selector = {sel: key for key, sels in mapping.items() for sel in sels}
-    written = [qualify_selector(sel, by_selector, cwd) for sel in characterization_tests(runs, story_id)]
-    wanted = sorted(by_selector) if everything else written
-    extra = {sel for sel in wanted if sel not in located}
-    if extra:
-        located = dict(located, **check_exists(Result(), cwd, {"outside the table": sorted(extra)}))
-    if wanted:
-        with break_copy(cwd) as copied:
-            for selector in wanted:
-                check_break(result, profile, cwd, runs, story_id, selector,
-                            by_selector.get(selector, "outside the table"), located, copied)
-    if not wanted:
-        take(result, (BreakChecks.nothing_written(),))
-
-
-def break_verdict(probe):
-    """The outcome of a break's run, from the `tests-red` entries of its result (`BreakChecks.verdict`)."""
-    return BreakChecks.verdict(findings_of(probe, "tests-red"))
-
-
-def findings_of(probe, check, about=None):
-    """A result's entries of one check as findings — of one test, where `about` names it."""
-    return tuple(Finding(FindingState(state), CheckName(c), Said(m)) for state, c, m in probe.entries
-                 if c == check and (about is None or m.startswith(about + " ") or m.startswith(about + ":")))
-
-
-def run_break(profile, copy, scratch, patch, selector, key, located):
-    """One break on a scratch copy the caller made: applied, the one test run, taken back — so the next break on the
-    same copy builds on what this one compiled."""
-    code, said = apply_break(copy, scratch, patch)
-    if code != 0:
-        return BreakResult(BreakOutcome.UNAPPLIED, Detail(said[:200]))
-    try:
-        probe = Result()
-        check_test_state(probe, profile, copy, {key: [selector]}, "red",
-                         {selector: located.get(selector)} if located.get(selector) else {})
-        return break_verdict(probe)
-    finally:
-        apply_break(copy, scratch, patch, reverse=True)
-
-
-def check_break(result, profile, cwd, runs, story_id, selector, key, located, copied=None):
-    """A test green without ever being seen red, held to its break (`BreakChecks.proof`)."""
-    patch = break_patch(runs, story_id, selector)
-    outcome = None
-    if patch:
-        with (contextlib.nullcontext(copied) if copied else break_copy(cwd)) as (copy, scratch):
-            outcome = run_break(profile, copy, scratch, patch, selector, key, located)
-    take(result, (BreakChecks.proof(Selector(selector), Detail(key), outcome,
-                                    Place(os.path.relpath(break_path(runs, story_id, selector), cwd))),))
-
-
 CORRECTION_CODE = re.compile(r"^\s*correction:\s*([a-z-]+)\s*:", re.I)
 
 
@@ -511,49 +398,6 @@ def story_signals(runs, story_id, records, body):
                 corrections=corrections)
 
 
-def check_invariant_breaks(result, profile, cwd, runs, story_id, mapping):
-    """WP-148 A: every rule the plan names is shown to be guarded by its unit test. Its test seen red before the
-    build proves it as a criterion's red run does; one green already — the rule exists — needs its break, one change
-    to the production code that turns it red. All breaks of the gate run on one scratch copy, each running its one
-    test, so the second compiles on the first. A survived or missing break is refused."""
-    tests_path = os.path.join(runs, story_id, "tests.md")
-    rows = read_invariant_rows(read_text(tests_path)) if os.path.isfile(tests_path) else None
-    criterion = {sel for sels in (mapping or {}).values() for sel in sels}
-    rules = {}
-    for element, numbers, selector in rows or []:
-        if selector and SELECTOR.match(selector) and selector not in criterion:
-            rules.setdefault(selector, []).append((element, numbers))
-    if not rules:
-        return
-    keys = {sel: "; ".join(f"{e} rule {', '.join(map(str, n))}" for e, n in owners) for sel, owners in rules.items()}
-    located = check_exists(Result(), cwd, {keys[sel]: [sel] for sel in rules}) or {}
-    probe = Result()
-    check_test_state(probe, profile, cwd, {keys[sel]: [sel] for sel in sorted(rules)}, "red", located)
-    before = {sel: BreakChecks.verdict(findings_of(probe, "tests-red", sel)) for sel in rules}
-    proofs = {}
-    green = [sel for sel in sorted(rules) if before[sel].outcome is BreakOutcome.GREEN]
-    with (break_copy(cwd) if green else contextlib.nullcontext((None, None))) as copied:
-        for sel in sorted(rules):
-            under = None
-            if sel in green:
-                patch = break_patch(runs, story_id, sel)
-                under = run_break(profile, *copied, patch, sel, keys[sel], located) if patch else None
-            proofs[sel] = BreakChecks.rule_proof(before[sel], under)
-    verdicts = {sel: proof.value for sel, proof in proofs.items()}
-    write_mark(runs, story_id, INVARIANT_BREAKS, "\n".join(
-        f"{e}\t{','.join(map(str, n))}\t{sel}\t{verdicts[sel]}" for sel, owners in sorted(rules.items())
-        for e, n in owners))
-    journal_signal(runs, story_id, "rules", [("rule", sel, dict(element=e, rules=",".join(map(str, n)),
-                                                                verdict=verdicts[sel]))
-                                             for sel, owners in sorted(rules.items()) for e, n in owners],
-                   named=sum(len(n) for owners in rules.values() for _e, n in owners))
-    for sel in sorted(rules):
-        said = "; ".join(m for _st, _c, m in probe.entries if sel in m)
-        take(result, (BreakChecks.invariant(Selector(sel), Detail(keys[sel]), proofs[sel],
-                                            Place(os.path.relpath(break_path(runs, story_id, sel), cwd)),
-                                            Detail(said)),))
-
-
 def take(result, findings):
     """A domain check's findings into the result, as the gate reports them."""
     result.take(findings)
@@ -570,6 +414,7 @@ def gate_run(**fields):
     run.marks = StageMarkFiles(run.cwd, run.runs, run.kind)
     run.stamps = DecisionStampFiles(run.runs)
     run.describe = check_description(run.cwd, run.profile)
+    run.runs_port = StageRunFiles(run.cwd, run.runs, run.profile)
     run.story = stage_story(run.story_id, run.story_path, run.front, run.body, run.criteria)
     run.contract = ProfileChecks.contract_number(run.evidence)
     # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
@@ -659,19 +504,6 @@ def check_backlog(cwd, epics, profile, only=None):
     return 1 if refused else 0
 
 
-def check_mapping(result, runs, story_id, criteria):
-    """The tests table names a test for every criterion and no other (`TestChecks.mapped`); the mapping, or {}."""
-    try:
-        path, mapping = read_mapping(runs, story_id)
-    except GateError as error:
-        result.fail("tests-mapped", str(error))
-        return {}
-    table = TestTable(Place(path), tuple(ScenarioKey(key) for key in mapping),
-                      Count(sum(len(selectors) for selectors in mapping.values())))
-    take(result, TestChecks.mapped(tuple(ScenarioKey(key) for key, _text in criteria), table))
-    return mapping
-
-
 def check_exists(result, cwd, mapping):
     """Each mapped test is there (`TestChecks.exist`): {selector: file} for the ones found."""
     if not mapping:
@@ -679,58 +511,6 @@ def check_exists(result, cwd, mapping):
     located, looked = locate_tests(cwd, mapping)
     take(result, TestChecks.exist(looked))
     return located
-
-
-def check_compiles(result, profile, cwd):
-    """The profile's `compile:` command passes (`SuiteChecks.command`)."""
-    command = profile.get("compile")
-    take(result, (SuiteChecks.command(COMPILES, command_run(cwd, command)) if command
-                  else SuiteChecks.missing(COMPILES, CommandKey("compile")),))
-
-
-def check_stage_commands(result, profile, cwd, stage):
-    """The gate must not *know* its checks, it looks them up. Adding a capability is
-    then one line in the profile, not an edit to a stage."""
-    for key in STAGE_CHECKS.get(stage, ()):
-        command = profile.get(key)
-        take(result, (SuiteChecks.command(CheckName(key), command_run(cwd, command)) if command
-                      else SuiteChecks.missing(CheckName(key), CommandKey(key)),))
-
-
-def check_test_state(result, profile, cwd, mapping, expected, located=None, runs=None, story=None, guard=False,
-                     whole_for=(), red_proof=True):
-    """expected 'red': every mapped test must fail. 'green': all must pass (`TestVerdicts`) — the tests run first
-    (`run_tests`), their outcomes judged against the red ledger. A break proof the judgement asks for is run here;
-    a test it proves counts as red, one it does not keeps its earlier proof. Returns the commands run whole —
-    `{command: (key, code, output, ran)}` — so the suite check reads them rather than running them again.
-    `red_proof=False` leaves the red proof to a caller that checked it before any process started."""
-    located = located or {}
-    if (profile.get("e2eTest") or profile.get("test")) and not mapping:
-        return {}
-    test_run, whole_runs = run_tests(profile, cwd, mapping or {}, located, whole_for)
-    ledger = red_ledger(cwd, runs, story, expected == "red", located)
-    judged = TestVerdicts.judge(Expectation(expected), Presence.PRESENT if guard else Presence.ABSENT, test_run, ledger)
-    now_red, kept = {s.value for s in judged.now_red}, {}
-    for item in judged.items:
-        if not isinstance(item, BreakProof):
-            take(result, (item,))
-            continue
-        probe = Result()
-        check_break(probe, profile, cwd, runs, story, item.selector.value, item.key.value, located)
-        result.entries.extend(probe.entries)
-        if not probe.failed:
-            now_red.add(item.selector.value)
-        else:
-            # The earlier proof stands for the version it was taken against; losing it would make the next run
-            # treat this test as one never seen red, which no break can repair.
-            kept[item.selector.value] = read_red_digests(runs, story).get(item.selector.value)
-    if test_run.command is Presence.ABSENT:
-        return whole_runs
-    if expected == "red":
-        write_red_ledger(runs, story, now_red, located, cwd, kept)
-    elif ledger.present is Presence.PRESENT and red_proof:
-        check_red_proof(result, cwd, runs, located, story)
-    return whole_runs
 
 
 def check_red_proof(result, cwd, runs, located, story_id):
@@ -772,104 +552,6 @@ def record_red_tree(result, cwd, runs, story_id):
         write_mark(runs, story_id, RED_TREE, tree)
 
 
-def is_test_path(path):
-    """A test file by its name, or any file below a test folder — the support a test uses beside the tests."""
-    parts = path.replace("\\", "/").split("/")
-    return bool(TEST_FILE.search(parts[-1])) or any(TEST_DIR.search(part) for part in parts[:-1])
-
-
-@contextlib.contextmanager
-def red_tree_copy(cwd, runs, tree):
-    """A scratch copy of the red tree with every test file and test-support file of the working tree laid over it —
-    a test path the tree has and the working tree lost is removed. Removed afterwards; the tree is never touched."""
-    scratch = tempfile.mkdtemp(prefix="dca-reproof-")
-    try:
-        copy = os.path.join(scratch, "tree")
-        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
-        for args in (["read-tree", tree], ["checkout-index", "-a", "-f", f"--prefix={copy}/"]):
-            done = subprocess.run(["git"] + args, cwd=cwd, env=env, capture_output=True, text=True)
-            if done.returncode != 0:
-                raise GateError(f"the red tree {tree[:12]} cannot be read back: {(done.stderr or '').strip()[:200]}")
-        listed = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", tree], cwd=cwd, capture_output=True)
-        now = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=cwd,
-                             capture_output=True)
-        names = {n for out in (listed.stdout, now.stdout) for n in out.decode("utf-8", "replace").split("\0") if n}
-        for name in sorted(n for n in names if is_test_path(n) and not run_owned(n, runs)):
-            source, target = os.path.join(cwd, name), os.path.join(copy, name)
-            if os.path.isfile(source):
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                shutil.copy2(source, target)
-            elif os.path.lexists(target) and not os.path.lexists(source):
-                os.remove(target)
-        yield copy
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
-
-
-def reprove_red(result, profile, cwd, runs, story_id, mapping, located):
-    """WP-151 A, at the tidy gate: a test tidy moved — a copy lifted into the support, a page object called instead of
-    a raw locator — is run on the red tree with the working tree's tests laid over it. Red there (an assertion's red,
-    not a timeout), its new version carries the proof: the ledger takes its digest and the journal a `red-reproved`
-    line. Green there, or not compiling (tidy renamed production code the test calls), it is refused."""
-    if answered_decisions(cwd, story_id, "test"):
-        return
-    moved = tidy_moves(cwd, runs, story_id, located)
-    tree = red_tree(runs, story_id)
-    if not moved or not tree:
-        return
-    keys = {selector: key for key, selectors in (mapping or {}).items() for selector in selectors}
-    table = {}
-    for selector in moved:
-        table.setdefault(keys.get(selector, "moved by tidy"), []).append(selector)
-    with red_tree_copy(cwd, runs, tree) as copy:
-        built = Result()
-        check_compiles(built, profile, copy)
-        if built.failed:
-            take(result, (BreakChecks.reproof_uncompiled(
-                tuple(Selector(s) for s in moved),
-                Detail("\n".join(m for st, _c, m in built.entries if st == "fail")[-600:])),))
-            return
-        probe = Result()
-        check_test_state(probe, profile, copy, table, "red", {s: located[s] for s in moved})
-    proved = []
-    for selector in moved:
-        seen = tuple(f for f in findings_of(probe, "tests-red") if selector in f.said.value)
-        timed_out = Presence.PRESENT if any(f.state is FindingState.NOTE for f in seen) else Presence.ABSENT
-        found = BreakChecks.reproof(Selector(selector), BreakChecks.verdict(seen), timed_out)
-        take(result, (found,))
-        if found.state is FindingState.PASS:
-            proved.append(selector)
-    if proved:
-        digests = read_red_digests(runs, story_id)
-        write_red_ledger(runs, story_id, set(proved), located, cwd,
-                         kept={s: d for s, d in digests.items() if s not in proved})
-        for selector in proved:
-            with contextlib.suppress(OSError):
-                journal_append(runs, story_id, "red-reproved", selector, "by=tidy")
-
-
-def write_red_ledger(runs, story, selectors, located=None, cwd=".", kept=None):
-    """The red record: every selector seen red now, bound to its test file's digest — and, in `kept`, the
-    entries an earlier run made that this run could neither confirm nor replace (a strengthened test whose
-    break is still missing keeps its old proof, so the next run can prove the new version instead of
-    treating a test it once saw red as one it never did)."""
-    path = red_ledger_path(runs, story)
-    if not path:
-        return
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    lines = []
-    for selector in sorted(set(selectors) | set(kept or {})):
-        if selector not in selectors:
-            digest = (kept or {}).get(selector)
-            lines.append(f"{selector}\t{digest}" if digest else selector)
-            continue
-        test_file = (located or {}).get(selector)
-        full = os.path.join(cwd, test_file) if test_file else None
-        lines.append(f"{selector}\t{file_digest(full)}" if full and os.path.isfile(full) else selector)
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write("\n".join(lines) + ("\n" if lines else ""))
-
-
 def check_decisions(result, runs, story_id, cwd, gating=None, story_path=None, story=None):
     """Every question this story raised is recorded, and every answer it got has been applied (`DecisionChecks`): an
     answer applied is stamped in its record and becomes an `answered:` line of the story before it is said."""
@@ -904,14 +586,6 @@ def run_test_command(result, cwd, profile, key, command, required, strict=False,
     judge_suite(result, suite_run(cwd, profile, key, command, owner), required, strict)
 
 
-def judge_suite(result, suite, required, strict=False):
-    """A suite's run judged (`SuiteChecks.suite`); a test noted flaky is carried in the result."""
-    judged = SuiteChecks.suite(suite, Presence.PRESENT if required else Presence.ABSENT,
-                               Presence.PRESENT if strict else Presence.ABSENT)
-    take(result, judged.findings)
-    result.flaky += [test.value for test in judged.flaky]
-
-
 def record_tests_baseline(cwd, runs, story_id):
     """Write the baseline once per story; a later plan gate must not launder a change into it."""
     path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
@@ -936,33 +610,6 @@ def check_existing_tests(result, cwd, runs, story_id, story_body=""):
     """The tests that existed before the story still expect what they did (`KeptChecks.tests_kept`)."""
     story = stage_story(story_id, "", {}, story_body, ())
     take(result, KeptChecks.tests_kept(story, StageEvidenceFiles(cwd, runs, place("epics"), {})))
-
-
-def check_required_suites(result, profile, cwd, already=None, owner=None):
-    """At build and tidy: the test commands the policy requires, run whole (`SuiteChecks`).
-
-    The mapped tests say this story's behaviour holds; they say nothing about the behaviour the stories before it
-    delivered. Without a policy the stage gates stay as they were. A command the test-state check already ran whole
-    (`already`: `{command: (key, code, output, ran)}`) is judged from that run — one process per command per gate,
-    not two."""
-    already = already or {}
-    commands = suite_commands(profile)
-    take(result, SuiteChecks.required(commands))
-    required = {key.value for key in commands.required}
-    seen = set()
-    for key in [k for k in test_command_keys(profile) if k in required and profile.get(k)]:
-        if profile[key] in seen:
-            continue
-        seen.add(profile[key])
-        before = len(result.entries)
-        if profile[key] in already:
-            _key, code, output, ran = already[profile[key]]
-            judge_suite(result, suite_run(cwd, profile, key, profile[key], owner, (code, output, ran),
-                                          reused=" (the run the mapped tests were read from)"), True, True)
-        else:
-            run_test_command(result, cwd, profile, key, profile[key], True, True, owner=owner)
-        result.entries[before:] = [(state, "suite" if check != "flaky" else check, message)
-                                   for state, check, message in result.entries[before:]]
 
 
 def change_check(result, cwd, profile, staged, only):
@@ -1161,56 +808,6 @@ def hand_over_to_cli(argv):
         return 2
     completed = subprocess.run([sys.executable, cli, *argv])
     return completed.returncode
-
-
-#: The check a gate's compile command reports under.
-COMPILES = CheckName("compiles")
-
-
-@check("adopt", stages=("adopt",))
-def _adopt(run):
-    check_adopt(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.criteria)
-
-
-def whole_suites(run):
-    """At build and tidy the policy's required test commands run whole anyway: that run is the evidence for the mapped
-    tests as well, so those commands are not started a second time."""
-    if not run.stage.suite:
-        return ()
-    return tuple(k for k in test_command_keys(run.profile)
-                 if k in set(split_list(run.profile.get("required"))) and run.profile.get(k))
-
-
-@check("tests", stages=lambda s: Trait.TESTED in s.traits, needs_process=True,
-       unrun=lambda run: ["compiles", f"tests-{run.expected}"] + (["suite"] if run.stage.suite else []))
-def _tests(run):
-    check_compiles(run.result, run.profile, run.cwd)
-    owner = SuiteOwner(run.runs, run.story_id, run.mapping or {})
-    if run.kind == "task":
-        check_task_suites(run.result, run.profile, run.cwd, owner)
-        return
-    run.whole_runs = check_test_state(run.result, run.profile, run.cwd, run.mapping, run.expected, run.located,
-                                      run.runs, run.story_id, guard=run.kind in ("journey", "adopt"),
-                                      whole_for=whole_suites(run), red_proof=False)
-    if run.stage.suite:
-        check_required_suites(run.result, run.profile, run.cwd, run.whole_runs, owner)
-
-
-@check("invariant-breaks", stages=("test",), needs_process=True, kinds=frozenset((StoryKind.STORY,)))
-def _invariant_breaks(run):
-    if contract_of(run.profile) >= 25:
-        check_invariant_breaks(run.result, run.profile, run.cwd, run.runs, run.story_id, run.mapping)
-
-
-@check("red-reproof", stages=("tidy",), needs_process=True, kinds=frozenset((StoryKind.STORY,)))
-def _red_reproof(run):
-    reprove_red(run.result, run.profile, run.cwd, run.runs, run.story_id, run.mapping, run.located)
-
-
-@check("commands", stages=lambda s: bool(s.commands), needs_process=True,
-       unrun=lambda run: [key for key in run.stage.commands if run.profile.get(key)])
-def _commands(run):
-    check_stage_commands(run.result, run.profile, run.cwd, run.stage.name)
 
 
 @on_pass("plan")
@@ -1546,12 +1143,6 @@ def check_spec_tests(result, cwd, runs, story_id, front, mapping):
     """Every test the story's spec names is still there (`SpecChecks.tests`)."""
     take(result, SpecChecks.tests(stage_story(story_id, "", front, "", ()), table_tests(mapping),
                                   StageEvidenceFiles(cwd, runs, place("epics"), {})))
-
-
-def check_tests_committed(result, cwd, front, mapping, runs=""):
-    """The story's commit holds every test file its mapping and its spec name (`SpecChecks.committed`)."""
-    take(result, SpecChecks.committed(stage_story("", "", front, "", ()), table_tests(mapping),
-                                      StageEvidenceFiles(cwd, runs, place("epics"), {})))
 
 
 def merge_spec(result, story_path, story_id, front, runs):

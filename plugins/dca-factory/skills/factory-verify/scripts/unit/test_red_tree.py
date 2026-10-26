@@ -61,7 +61,7 @@ class RedTree(unittest.TestCase):
         for path, expected in (("src/test/java/a/Page.java", True), ("Shop.Tests/Support/Page.cs", True),
                                ("e2e/widget.spec.ts", True), ("src/main/java/a/Latest.java", False),
                                ("src/integrationTest/java/a/Support.java", True)):
-            self.assertEqual(gate.is_test_path(path), expected, path)
+            self.assertEqual(kept_files.is_test_path(path), expected, path)
 
 
 if __name__ == "__main__":

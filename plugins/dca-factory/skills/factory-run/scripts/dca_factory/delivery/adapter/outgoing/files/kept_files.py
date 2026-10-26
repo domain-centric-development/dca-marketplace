@@ -16,6 +16,12 @@ from .decision_record_files import NOTHING
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .design_files import ASSERTION_STATEMENT
+import shutil
+import subprocess
+import tempfile
+from .....contract import GateError
+from .owned_files import run_owned
+from .delivery_files import TEST_DIR, TEST_FILE
 
 
 #: A cited path usually carries where in the file it was read: `README.md:149`, `Book.cs:28-31`,
@@ -255,3 +261,61 @@ def committed_by_a_stage(cwd: str, runs: str, story_id: str, rel: str) -> bool:
 # before it expects, unless a human decided that. The plan gate runs before any stage of the story
 # touches a test, so it records the test files as git blobs; later gates compare against them.
 TESTS_BASELINE = ".tests-baseline"
+
+
+def is_test_path(path: str) -> bool:
+    """A test file by its name, or any file below a test folder — the support a test uses beside the tests."""
+    parts = path.replace("\\", "/").split("/")
+    return bool(TEST_FILE.search(parts[-1])) or any(TEST_DIR.search(part) for part in parts[:-1])
+
+
+@contextlib.contextmanager
+def red_tree_copy(cwd: str, runs: str, tree: str) -> typing.Iterator[str]:
+    """A scratch copy of the red tree with every test file and test-support file of the working tree laid over it —
+    a test path the tree has and the working tree lost is removed. Removed afterwards; the tree is never touched."""
+    scratch = tempfile.mkdtemp(prefix="dca-reproof-")
+    try:
+        copy = os.path.join(scratch, "tree")
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
+        for args in (["read-tree", tree], ["checkout-index", "-a", "-f", f"--prefix={copy}/"]):
+            done = subprocess.run(["git"] + args, cwd=cwd, env=env, capture_output=True, text=True)
+            if done.returncode != 0:
+                raise GateError(f"the red tree {tree[:12]} cannot be read back: {(done.stderr or '').strip()[:200]}")
+        listed = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", tree], cwd=cwd, capture_output=True)
+        now = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=cwd,
+                             capture_output=True)
+        names = {n for out in (listed.stdout, now.stdout) for n in out.decode("utf-8", "replace").split("\0") if n}
+        for name in sorted(n for n in names if is_test_path(n) and not run_owned(n, runs)):
+            source, target = os.path.join(cwd, name), os.path.join(copy, name)
+            if os.path.isfile(source):
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.copy2(source, target)
+            elif os.path.lexists(target) and not os.path.lexists(source):
+                os.remove(target)
+        yield copy
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def write_red_ledger(runs: typing.Optional[str], story: typing.Optional[str], selectors: typing.Collection[str],
+                     located: typing.Optional[typing.Mapping[str, typing.Optional[str]]] = None, cwd: str = ".",
+                     kept: typing.Optional[typing.Mapping[str, typing.Optional[str]]] = None) -> None:
+    """The red record: every selector seen red now, bound to its test file's digest — and, in `kept`, the
+    entries an earlier run made that this run could neither confirm nor replace (a strengthened test whose
+    break is still missing keeps its old proof, so the next run can prove the new version instead of
+    treating a test it once saw red as one it never did)."""
+    path = red_ledger_path(runs or "", story or "")
+    if not path:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    lines = []
+    for selector in sorted(set(selectors) | set(kept or {})):
+        if selector not in selectors:
+            digest = (kept or {}).get(selector)
+            lines.append(f"{selector}\t{digest}" if digest else selector)
+            continue
+        test_file = (located or {}).get(selector)
+        full = os.path.join(cwd, test_file) if test_file else None
+        lines.append(f"{selector}\t{file_digest(full)}" if full and os.path.isfile(full) else selector)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + ("\n" if lines else ""))

@@ -16,6 +16,7 @@ from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE
 from .sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError
 from .delivery.adapter.outgoing.files.story_layout import DECISIONS_DIR, flat_stories, STORY_FILE
 from .delivery.domain.model.story_state import MAX_ROUNDS  # noqa: F401 — read by the gate and the runner
+from .delivery.domain.model.stage_story import SELECTOR_FORM
 from .delivery.domain.model.stage import PIPELINE, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait
 
 
@@ -34,7 +35,7 @@ HAPPY_MARK = re.compile(r"^(?:####\s+|-\s+)([a-z0-9][a-z0-9-]*)\s*\(happy path\)
 MAPPING_ROW = re.compile(r"^\|\s*([a-z0-9][a-z0-9-]*)\s*\|\s*([^|]+?)\s*\|")
 
 
-SELECTOR = re.compile(r"^([\w.]+)#([\w]+)$")
+SELECTOR = SELECTOR_FORM
 
 
 #: Two different questions, so two different numbers.

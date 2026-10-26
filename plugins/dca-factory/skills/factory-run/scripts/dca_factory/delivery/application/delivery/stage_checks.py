@@ -129,21 +129,27 @@ def _size(run: Run) -> None:
     run.result.take(TestChecks.size(run.story, tuple(HandOverName(name) for name in run.stage.sizes), run.evidence))
 
 
-@check("tests-mapped", stages=tested, kinds=TESTED_KINDS)
-def _mapping(run: Run) -> None:
+def read_table(run: Run) -> typing.Tuple[typing.Dict[str, typing.List[str]], typing.Dict[str, str]]:
+    """The run's tests table and its tests located, the findings said: a row for every criterion and no other
+    (`tests-mapped`), each test there (`tests-exist`)."""
     path, mapping, unreadable = run.tests.table(run.story_id)
     if unreadable is not None:
         run.result.take((TESTS_MAPPED.fail(Said(unreadable)),))
-        run.mapping, run.located = {}, None
-        return
+        return {}, {}
     table = TestTable(Place(path), tuple(ScenarioKey(key) for key in mapping),
                       Count(sum(len(selectors) for selectors in mapping.values())))
     run.result.take(TestChecks.mapped(run.story.criteria, table))
-    run.mapping, run.located = mapping, None
-    if mapping:
-        located, looked = run.tests.locate(mapping)
-        run.result.take(TestChecks.exist(looked))
-        run.located = located
+    if not mapping:
+        return mapping, {}
+    located, looked = run.tests.locate(mapping)
+    run.result.take(TestChecks.exist(looked))
+    return mapping, located
+
+
+@check("tests-mapped", stages=tested, kinds=TESTED_KINDS)
+def _mapping(run: Run) -> None:
+    mapping, located = read_table(run)
+    run.mapping, run.located = mapping, (located if mapping else None)
 
 
 # Integrated, the story's diff carries the main line's changes beside its own: the file list, the tests that existed

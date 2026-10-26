@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import re
 import typing
 
 from ....building_blocks import Value
@@ -239,6 +240,10 @@ class DecisionsFacts(Value):
     records: typing.Tuple[DecisionFacts, ...]
     hand_overs: typing.Tuple[HandOverAsk, ...]
     unreadable: typing.Optional[Detail] = None
+
+
+#: The form of a test's name in the tests table: the fully qualified class, then the test method.
+SELECTOR_FORM = re.compile(r"^([\w.]+)#([\w]+)$")
 
 
 @dataclasses.dataclass(frozen=True)
