@@ -191,7 +191,7 @@ def package_text(beside, modules=MODULES):
 
 
 def dotted_modules(package):
-    """Every module of the package as its import name, the modules not yet moved into a context last — in their
+    """Every module of the package as its import name, the modules at the package's top last — in their
     order, so a name they import from a context is theirs in a namespace that merges them."""
     names = [m[:-3].replace("/", ".") for m in package_modules(package)]
     names = [n[: -len(".__init__")] for n in names if n.endswith(".__init__")] + \
@@ -4379,8 +4379,8 @@ def verify_setup(runner, verbose=False):
             owners.setdefault(symbol, []).append(name)
     shadowed = sorted(f"{symbol}: {', '.join(at)}" for symbol, at in owners.items() if len(at) > 1)
     check("package: no module defines a function, class or constant another module defines", not shadowed, shadowed)
-    # a module not yet moved into a context imports from the ones above it; what is in a context, the shared kernel
-    # and the building blocks, it imports from wherever it is — the layer check below holds those
+    # a module at the package's top imports from the ones above it; what is in a context, the shared kernel and the
+    # building blocks, it imports from wherever it is — the layer check below holds those
     upward = [f"{name} imports from {source}" for name in MODULES
               for source in re.findall(r"^from \.(\w+)\b[\w.]* import", modules[name], re.M)
               if source not in LAYERED and (source not in MODULES or MODULES.index(source) >= MODULES.index(name))]
@@ -4388,6 +4388,8 @@ def verify_setup(runner, verbose=False):
     check("package: every module imports by name from the modules above it — no star, no namespace merge, no cycle",
           not upward and not merged, upward + merged)
     package = package_dir(runner)
+    placed = architecture.place_findings(package)
+    check("package: every module has its place in the layers — at the top only the version stamp", not placed, placed[:8])
     layered = architecture.layer_findings(package)
     check("package: every import follows the layers — DCA-ONI-001/002, DCA-HEX-001/002/006, DCA-LAY-003, "
           "DCA-STR-002/003/004/006", not layered, layered[:8])

@@ -508,8 +508,9 @@ starts fresh and reads the skill, the story and its predecessor's file again.
 - A stage's time limit — `FACTORY_STAGE_TIMEOUT`, else the profile's `stageTimeout:` (`90`, `90s`, `30m`, `2h`;
   none by default) — stops a tool that runs past it, with every process it started, and the journal records
   `exit=timeout`. Ctrl-C stops the running stage's tool too and gives the checkout back (exit 130); a TERM or a
-  hang-up lets the running stage finish and starts nothing more (143, 129). The runner is `dca_factory/runner.py`;
-  `factory.sh run` checks the tool, the carriers and the contract and then hands over to it.
+  hang-up lets the running stage finish and starts nothing more (143, 129). The runner is the package's, its command
+  line `dca_factory/delivery/adapter/incoming/runner/run_command.py`; `factory.sh run` checks the tool, the carriers
+  and the contract and then hands over to it.
 - A stage whose tool runs into its usage limit is not a failure: the runner keeps that process's output beside the
   stage's (`<stage>.<time>-limit<n>.out`), journals `limit` with the time it waits until, and waits for the reset
   the tool named plus a minute — `FACTORY_LIMIT_WAIT` (default `30m`) where it named none —, renewing its claim;

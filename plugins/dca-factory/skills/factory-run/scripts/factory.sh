@@ -207,7 +207,7 @@ STAMP=".agents/factory/gate.installed"
 
 # The files the install puts into .agents/factory/, in the stamp's order. Their hash is the stamp's `sha256:` line:
 # what was installed, so a runner can tell the pipeline it is about to trust from one a stage, a hand or a merge
-# changed since. The runner (dca_factory/runner.py, the same digest) takes it at its start and compares before every
+# changed since. The package's runner (the same digest) takes it at its start and compares before every
 # gate it runs; a stage that rewrote the gate through a link is stopped at the next gate, whatever tool it ran in.
 # A name ending in `/` is the package: every module in it and in its subpackages, by its path below the folder in
 # the C locale's order, as Python sorts them — so a module added, moved or removed changes the hash too.
@@ -1750,7 +1750,7 @@ resolve_stages() {
   return 0
 }
 
-# The run itself is the package's runner (`dca_factory/runner.py`): the checks above passed, this process becomes
+# The run itself is the package's runner (`delivery/adapter/incoming/runner/run_command.py`): the checks above passed, this process becomes
 # it — the same process id, so the worker's name on the claim is the one the checks saw. It takes the claim, guards
 # the pipeline's hash, runs the story or the backlog and gives the claim and the lock back however it ends.
 run_python() {                              # run_python <runner flags…>

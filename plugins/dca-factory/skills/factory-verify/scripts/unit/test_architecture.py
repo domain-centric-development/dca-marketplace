@@ -32,6 +32,16 @@ class LayersTest(unittest.TestCase):
     def test_the_factory_holds_its_layers(self):
         self.assertEqual([], architecture.layer_findings(PACKAGE))
 
+    def test_the_factory_has_no_module_outside_its_layers(self):
+        self.assertEqual([], architecture.place_findings(PACKAGE))
+
+    def test_a_module_at_the_top_is_found_and_the_stamp_is_not(self):
+        with tempfile.TemporaryDirectory() as root:
+            plant(root, {"__init__.py": "", "building_blocks.py": "", "contract.py": "", "legacy.py": "",
+                         "delivery/__init__.py": "", "delivery/domain/__init__.py": "", "delivery/domain/m.py": ""})
+            self.assertEqual(["legacy.py:1 outside every layer — a module belongs to a context, the shared kernel, "
+                              "the web host or the root"], architecture.place_findings(root))
+
     def test_each_rule_finds_what_it_forbids(self):
         with tempfile.TemporaryDirectory() as root:
             plant(root, {

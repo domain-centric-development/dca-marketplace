@@ -47,7 +47,7 @@ dca-marketplace/
 │   ├── skills/dca-knowledge/catalog/      # GENERATED mirror of dca-knowledge-catalog/bundle — never hand-edit
 │   └── skills/{dca-modelling,dca-discipline,dca-audit}/
 ├── plugins/dca-factory/                   # delivery pipeline: backlog contract, stage skills, story gate
-│   ├── skills/factory-run/                # orchestrator + scripts/{dca_factory/ (the package, built in DCA layers — `docs/context-map.md`: building_blocks.py, the contexts delivery/ and spec/ with domain/application/adapter, sharedkernel/, web/, infrastructure/, contract.py as the version stamp, and the module not yet moved: runner), story-gate.py (decides) and factory-cli.py (shows, coordinates) as its entry points, factory.sh} + templates (profile, backlog, decision record, hook) + reference
+│   ├── skills/factory-run/                # orchestrator + scripts/{dca_factory/ (the package, built in DCA layers — `docs/context-map.md`: building_blocks.py, the contexts delivery/ and spec/ with domain/application/adapter, sharedkernel/, web/, infrastructure/, contract.py as the version stamp, the only module at its top), story-gate.py (decides) and factory-cli.py (shows, coordinates) as its entry points, factory.sh} + templates (profile, backlog, decision record, hook) + reference
 │   ├── skills/{stage-plan,stage-test,stage-build,stage-tidy,stage-judge,stage-document,stage-integrate}/
 │   ├── skills/{factory-setup,factory-backlog,factory-decisions,factory-status,factory-help,factory-update}/   # set the factory up; write the backlog; the decision inbox; where the pipeline stands; the factory explained; update a project
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
@@ -83,7 +83,7 @@ dca-marketplace/
   beside them (stdlib only, each module imports by name from the ones above it), and the runner reads every
   project file with the package's readers, in its own process, never with `sed`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
-  discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`, which checks and then hands the run to `dca_factory/runner.py`) is optional, the git
+  discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`, which checks and then hands the run to the package's runner, `delivery/adapter/incoming/runner/run_command.py`) is optional, the git
   pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile
   (`dca-factory.profile.yaml` at the project root) and `product/` — the description (product, tech, designed
   domain) and the epics with their stories, each story carrying its state and its decisions beside it —

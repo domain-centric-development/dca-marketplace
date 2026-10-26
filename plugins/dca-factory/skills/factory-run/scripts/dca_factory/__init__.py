@@ -9,13 +9,8 @@ Built the way it teaches (WP-152; the map and the glossaries in the plugin's `do
     web/              the host across the contexts: the page and its server
     infrastructure/   the composition root: each use case with its adapters
 
-and the modules not yet moved into a context, each importing from the ones above it here, never from one below:
-
-    contract   what a project file says: places, the profile, stories and epics, the stage table
-    state      where a story stands: the journal, the owned files, the story state, the schedule, the claim
-    gate       what decides: the checks, their registry, the stamps a passed stage writes
-    runner     what the runner asks between stages: its tables, a story's worktree, the skeletons, a request worked
-    cli        what a person, a stage or factory.sh asks about the pipeline: status, help, usage, the readers
+and beside them the version stamp `contract` (`CONTRACT`, `VERSION`), which `factory.sh` and an installed copy of any
+release read by its name. No other module sits at the top.
 
 stdlib only.
 """

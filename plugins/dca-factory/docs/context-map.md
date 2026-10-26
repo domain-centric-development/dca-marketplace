@@ -43,6 +43,5 @@ new discovery: a future crossing, shown so it is not forgotten.
 | `infrastructure/` | the composition root: wires each port to its adapter |
 
 `contract.py` at the package's top is the version stamp alone — `CONTRACT` and `VERSION`, read by
-name by `factory.sh` and by an installed copy of any other release. The modules not yet moved into a
-context (`runner`) sits beside it until its move; `factory-verify` holds the layers of
-everything moved (`architecture.py`) and `mypy --strict` its types (`mypy.ini`).
+name by `factory.sh` and by an installed copy of any other release; no other module sits at the top. `factory-verify`
+holds every module to its place and the layers (`architecture.py`), `mypy --strict` the types (`mypy.ini`).

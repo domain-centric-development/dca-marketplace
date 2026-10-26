@@ -2,9 +2,10 @@
 
 The package is built in DCA layers (WP-152): `building_blocks.py` outside every context, the bounded contexts
 `discovery/`, `delivery/` and `spec/` each with `domain/`, `application/` and `adapter/{incoming,outgoing}/`, the
-shared kernel `sharedkernel/`, the web host `web/` and the composition root `infrastructure/`. The modules not yet
-moved into a context sit at the top of the package; they are checked for cycles only.
+shared kernel `sharedkernel/`, the web host `web/` and the composition root `infrastructure/`. At the top of the
+package sits the version stamp `contract.py` alone, read by name by every installed release.
 
+    place_findings(package)   a module at the top of the package, outside every layer
     layer_findings(package)   an import against the direction of the layers, with the DCA rule id it breaks
     value_findings(package)   a bare primitive or time type in a domain field or a domain signature
     marker_findings(package)  a dataclass decorator on a value, an identifier or a domain event — their base makes them
@@ -18,6 +19,9 @@ import ast
 import os
 
 CONTEXTS = ("discovery", "delivery", "spec")
+#: The one module at the package's top besides the building blocks: the version stamp, which `factory.sh` and an
+#: installed copy of any release read by its name.
+STAMP = "contract"
 EXEMPT = ("web/fonts.py",)
 
 #: What a domain module may import from the standard library: types, data classes, enums, patterns — nothing that
@@ -56,7 +60,7 @@ def modules(package):
 
 def place_of(dotted):
     """(owner, layer) of a module: a context's or the shared kernel's `domain`, `application`, `incoming`,
-    `outgoing`; `blocks`, `web`, `root`; `top` for a module not yet moved into a context."""
+    `outgoing`; `blocks`, `web`, `root`; `top` for a module at the package's top."""
     parts = dotted.split(".") if dotted else []
     if not parts:
         return ("package", "top")
@@ -108,6 +112,14 @@ def imports_of(tree, dotted, is_package, known):
     return found
 
 
+def place_findings(package):
+    """Every module outside the layers: at the package's top, and neither the building blocks nor the version stamp.
+    DCA has no rule id for it — the libraries place every class by its package."""
+    return [f"{rel}:1 outside every layer — a module belongs to a context, the shared kernel, the web host or the root"
+            for rel, dotted in sorted(modules(package).items())
+            if dotted and place_of(dotted)[1] == "top" and dotted != STAMP]
+
+
 def parsed(package):
     """{dotted: (rel, tree)} for every module."""
     out = {}
@@ -121,8 +133,8 @@ def layer_findings(package):
     """Every import against the layers. Rules, by DCA's ids:
 
     - DCA-ONI-001  a domain imports no application;
-    - DCA-HEX-001  a domain imports no adapter (nor a module not yet moved, the web host or the root);
-    - DCA-HEX-002  an application imports no adapter (nor a module not yet moved, the web host or the root);
+    - DCA-HEX-001  a domain imports no adapter (nor a module at the top, the web host or the root);
+    - DCA-HEX-002  an application imports no adapter (nor a module at the top, the web host or the root);
     - DCA-HEX-006  an incoming adapter imports no outgoing adapter of its own context;
     - DCA-STR-002  the shared kernel imports no bounded context, nor a module that belongs to one;
     - DCA-STR-003  a context's application imports no other context's application;

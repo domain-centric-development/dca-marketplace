@@ -286,8 +286,10 @@ correction with a reason code.
 
 **Definition:** A step of a story's run — plan, test, build, tidy, judge, document — closed by its gate, the
 deterministic check that lets the next stage start; a round is one more pass after a refusal. The route — which
-stage runs in its own process and which a shared window carries, which a kind skips, the gates around each, where a
-refusal, the build stage or the judge sends the story back, when the rounds did not converge — is the domain service
+stage runs in its own process and which a shared window carries, which a kind skips, the gates around each, the
+reviews before the judge for every kind that changes the code (an adoption changes nothing and gets none), where a
+refusal, the build stage or the judge sends the story back (the judge's `back:` holds for a resumed story too), when
+the rounds did not converge — is the domain service
 `StoryRoute`; the use case `run_story` walks it through the port `StoryStages`, a round one more pass of its loop,
 and `integrate_story` brings the delivered story onto the main line through `StoryIntegration`.
 
