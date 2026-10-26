@@ -26,10 +26,10 @@ class Readers(unittest.TestCase):
         with project() as p:
             profile = write(os.path.join(p.root, profiles.PROFILE_FILE), "model.claude: sonnet\n")
             run = a_run(p)
-            self.assertEqual(run.model_key("claude", "build"), "sonnet")
+            self.assertEqual(run.tools.model_key("claude", "build"), "sonnet")
             write(profile, "model.claude: sonnet\nmodel.claude.build: opus\n")
-            self.assertEqual(run.model_key("claude", "build:2"), "opus")
-            self.assertEqual(run.model_key("codex", "build"), "")
+            self.assertEqual(run.tools.model_key("claude", "build:2"), "opus")
+            self.assertEqual(run.tools.model_key("codex", "build"), "")
 
     def test_in_a_worktree_the_places_are_the_main_checkouts_and_back_home_they_are_relative_again(self):
         with project() as p, tempfile.TemporaryDirectory() as tree:
@@ -85,25 +85,25 @@ class ToolAndEffortPerUnit(unittest.TestCase):
             write(os.path.join(p.root, profiles.PROFILE_FILE),
                   "tool: claude\ntool.verifier: codex\ntool.review: opencode\ntool.review.ddd: codex\n")
             run = a_run(p)
-            self.assertEqual(run.tool_for("builder", "claude"), "claude")
-            self.assertEqual(run.tool_for("verifier", "claude"), "codex")
-            self.assertEqual(run.tool_for("review:ddd", "claude"), "codex")
-            self.assertEqual(run.tool_for("review:hexagonal", "claude"), "opencode")
-            self.assertEqual(run.tools_of_run("claude"), ["claude", "codex", "opencode"])
+            self.assertEqual(run.tools.tool_for("builder", "claude"), "claude")
+            self.assertEqual(run.tools.tool_for("verifier", "claude"), "codex")
+            self.assertEqual(run.tools.tool_for("review:ddd", "claude"), "codex")
+            self.assertEqual(run.tools.tool_for("review:hexagonal", "claude"), "opencode")
+            self.assertEqual(run.tools.tools_of_run("claude"), ["claude", "codex", "opencode"])
             os.environ["FACTORY_TOOL_EXPLICIT"] = "1"
-            self.assertEqual(run.tool_for("verifier", "claude"), "claude")
+            self.assertEqual(run.tools.tool_for("verifier", "claude"), "claude")
 
     def test_the_effort_per_unit_is_passed_as_the_tool_takes_it_or_named_as_not_applied(self):
         with project() as p:
             write(os.path.join(p.root, profiles.PROFILE_FILE),
                   "effort.claude: medium\neffort.claude.tidy: low\neffort.opencode: high\n")
             run = a_run(p)
-            self.assertEqual(run.effort_choice("claude", "tidy"), ("low", ""))
-            self.assertEqual(run.effort_choice("claude", "build"), ("medium", ""))
-            self.assertEqual(run.effort_choice("codex", "build"), ("", ""))
-            self.assertIn("takes none", run.effort_choice("opencode", "build")[1])
+            self.assertEqual(run.tools.effort_choice("claude", "tidy"), ("low", ""))
+            self.assertEqual(run.tools.effort_choice("claude", "build"), ("medium", ""))
+            self.assertEqual(run.tools.effort_choice("codex", "build"), ("", ""))
+            self.assertIn("takes none", run.tools.effort_choice("opencode", "build")[1])
             os.environ["FACTORY_CLAUDE_ARGS"] = "--effort max"
-            self.assertIn("overridden", run.effort_choice("claude", "build")[1])
+            self.assertIn("overridden", run.tools.effort_choice("claude", "build")[1])
             _env, argv = agents.tool_command(agents.TOOL["claude"], effort="low")
             self.assertEqual(argv[argv.index("--effort") + 1], "low")
             _env, argv = agents.tool_command(agents.TOOL["codex"], effort="high")

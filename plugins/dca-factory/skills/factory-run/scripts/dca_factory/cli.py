@@ -127,8 +127,9 @@ from .delivery.adapter.outgoing.files.skeletons import contract_text, document_s
 from .delivery.adapter.outgoing.git.worktree_steps import (
     integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
 from .delivery.adapter.outgoing.files.migrations import migrate_layout
+from .delivery.adapter.outgoing.tools.tool_choice import command_heads, first_word, model_for
 from .runner import (
-    command_heads, first_word, model_for, needs_human_lines, open_decision_files, run_main,
+    needs_human_lines, open_decision_files, run_main,
     stage_names, stages_shell, verdict_of_story, request_main,
     settle_command)
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width

@@ -34,17 +34,16 @@ from .delivery.adapter.outgoing.files.decision_record_files import (
 from .delivery.adapter.outgoing.files.story_layout import (
     find_story, is_delivered, story_kind)
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
-from .delivery.adapter.outgoing.tools.streams import stream_limit, tokens_of, usage_lines
+from .delivery.adapter.outgoing.tools.streams import tokens_of
 from .state import start_of
 from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here
 from .delivery.adapter.outgoing.claims.checkout_claim import claim
 from .delivery.adapter.outgoing.files.windows import freeze_all
-from .delivery.adapter.outgoing.files.stream_records import freeze_stream
 from .delivery.adapter.outgoing.files.usage_files import journal_usage
 from .delivery.adapter.outgoing.files.run_marks import (
     back_in, run_stories, STAGE_WORD, step_open, verdict_in)
 from .delivery.adapter.outgoing.git.worktrees import has_worktree
-from .delivery.adapter.outgoing.files.journal_files import journal_path, journal_writer
+from .delivery.adapter.outgoing.files.journal_files import journal_writer
 from .delivery.adapter.outgoing.files.kept_files import stale_red_proof
 from .delivery.adapter.outgoing.files.delivery_writes import story_journals
 from .delivery.adapter.outgoing.git.change import in_places, people_places
@@ -52,7 +51,10 @@ from .delivery.adapter.outgoing.build.commands import run as run_command, tail
 from .delivery.adapter.outgoing.git.integration import (
     integration_target, lost_text, main_tests_lost)
 from .delivery.adapter.outgoing.files.delivery_files import perspectives_of
-from .delivery.adapter.outgoing.tools.agents import isolation_args, TOOL, tool_command, TOOLS, tools_shell
+from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS, tools_shell
+from .delivery.adapter.outgoing.tools.tool_choice import first_word, ToolChoice
+from .delivery.adapter.outgoing.tools.tool_processes import (
+    err, exit_field, flush, SIGNAL_EXITS, Stopped, TIMED_OUT, ToolProcesses, utc)
 from .building_blocks import UseCaseException
 from .delivery.adapter.incoming.runner.usage import book_request_usage
 from .delivery.adapter.outgoing.files.decision_record_files import project_record_path, request_records
@@ -118,15 +120,6 @@ def stages_shell(places=()):
 # or --story-budget, 5 another worker holds the checkout, 7 the pipeline or a person's file changed under it,
 # 124 a stage ran past its time limit is reported as a failure (1), 129/130/143 a hang-up, an interrupt, a TERM.
 
-#: The shell a stage may use without asking, beside the gate, the cli and the profile's commands: the ordinary
-#: reading and text tools, the git verbs that look without changing anything (`git apply --check` is how a stage
-#: tries a break patch), and `git rm` — how a stage removes a file its plan says `removed`; it takes tracked files
-#: only, which git still holds, and the pipeline's own files are watched by the run (WP-102). What writes or runs
-#: anything else stays out — `rm`, `sed -i`, `xargs`, `find -exec`, a redirect of `echo`/`printf`, `mkdir`: each
-#: allowed head is allowed with every argument (WP-94). Measured on the bench: without the reading tools a stage hit
-#: the allow-list about three times per story, each a wasted turn; without a delete the build left a planned removal.
-STAGE_SHELL_HEADS = ("cd", "ls", "cat", "head", "tail", "wc", "sort", "grep", "diff", "pwd",
-                     "git status", "git diff", "git log", "git ls-files", "git apply --check", "git rm")
 #: The cli flags a skill run for a request may call (WP-91): what the dialog skills read and record with — never one
 #: that starts a run, a request, the factory or its page (`--run`, `--work-request`, `--request`, `--up`, `--serve`).
 REQUEST_CLI_FLAGS = ("--contract", "--free-id", "--window-start", "--window-end", "--list-decisions", "--spec-delta",
@@ -138,39 +131,6 @@ STAGE_SHELL = ("cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git stat
 #: The first line of a snapshot written without a hash: the observer reads such a snapshot as absent, because a
 #: snapshot of empty digests compares equal to every other and would read as "this stage changed nothing".
 NO_HASHES = "# no-sha256-command: names only, no content hashes"
-
-#: Where a tool ran past this many seconds, it is stopped (0: no limit) — FACTORY_STAGE_TIMEOUT, else the profile's
-#: `stageTimeout:`. A number with `s`, `m` or `h`; a bare number is seconds.
-TIMEOUT_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600}
-TIMED_OUT = 124
-#: The usage limit (#161): the wait where the tool names no reset, the margin past the one it names, how often the
-#: wait looks at the stop file and renews the claim — seconds.
-LIMIT_FALLBACK, LIMIT_MARGIN, LIMIT_POLL = 1800, 60, 60
-SIGNAL_EXITS = {"SIGTERM": 143, "SIGHUP": 129, "SIGINT": 130}
-
-
-class Stopped(Exception):
-    """The run ends here with this exit code — the pipeline changed under it, a signal arrived."""
-
-    def __init__(self, code):
-        super().__init__(code)
-        self.code = code
-
-
-def utc(fmt="%Y-%m-%dT%H:%M:%SZ"):
-    return time.strftime(fmt, time.gmtime())
-
-
-def seconds_of(text):
-    """`90`, `90s`, `30m`, `2h` → seconds; None for anything else."""
-    match = re.fullmatch(r"\s*(\d+)\s*([smh]?)\s*", str(text or ""))
-    return int(match.group(1)) * TIMEOUT_UNITS[match.group(2)] if match else None
-
-
-def first_word(value):
-    parts = str(value or "").split()
-    return parts[0] if parts else ""
-
 
 def newer(path, than):
     """`[ path -nt than ]`: path exists and is newer, or than does not exist."""
@@ -208,7 +168,6 @@ class Run:
         self.parallel = options.parallel
         self.keep_going = getattr(options, "keep_going", False)
         self.stay = getattr(options, "stay", False)
-        self.allowed_override = None
         self.skipped = {}                     # --keep-going: story → the exit it stopped with
         self.red_stale = {}                   # story → its tests whose red proof a merge left stale
         self.options = options
@@ -221,7 +180,9 @@ class Run:
         self.lock_held = False
         self.sleeping = False
         self.pending = None
-        self.timeout = self.stage_timeout()
+        self.tools = ToolChoice(self.profile, self.py, self.gate_rel)
+        self.timeout = self.tools.stage_timeout(self.gate_installed())
+        self.processes = ToolProcesses(self, self.tools)
 
     # --- processes -----------------------------------------------------------------------------------------
     def wait(self, process, timeout=None):
@@ -469,249 +430,15 @@ class Run:
         self.checkpoint()
 
     # --- the tool ----------------------------------------------------------------------------------------------
-    def stage_timeout(self):
-        given = os.environ.get("FACTORY_STAGE_TIMEOUT")
-        if given is None:
-            given = first_word(self.profile().get("stageTimeout", "")) if self.gate_installed() else ""
-        value = seconds_of(given) if given else 0
-        if given and value is None:
-            err(f"factory: the stage time limit '{given}' is no number of seconds (90, 90s, 30m, 2h) — no limit applies")
-        return value or 0
-
-    @staticmethod
-    def isolated():
-        return os.environ.get("FACTORY_ISOLATION", "on") != "off"
-
-    def isolation_flags(self, tool):
-        if not self.isolated():
-            return ""
-        return (" ".join(shlex.quote(w) for w in isolation_args(TOOL[tool])) if tool in TOOL else "") + " "
-
-    def allowed_commands(self):
-        if getattr(self, "allowed_override", None):
-            return self.allowed_override
-        heads = [f"Bash({self.py} {self.gate_rel}:*)", f"Bash({self.py} .agents/factory/factory-cli.py:*)"]
-        for head in command_heads(self.profile()) + list(STAGE_SHELL_HEADS):
-            if f"Bash({head}:*)" not in heads:
-                heads.append(f"Bash({head}:*)")
-        return ",".join(heads)
-
-    def model_key(self, tool, stage):
-        return model_for(self.profile(), tool, (stage or "").split(":")[0])
-
-    @staticmethod
-    def tool_args(tool):
-        record = TOOL.get(tool)
-        return os.environ.get(record.args_env, "") if record and record.args_env else ""
-
-    def env_model(self, tool):
-        match = re.search(r".*(?:^| )(?:-m|--model)[ =]([^ ]*)", self.tool_args(tool))
-        return match.group(1) if match else ""
-
-    @staticmethod
-    def unit_keys(unit):
-        """The profile keys a unit is named by, most specific first: `review:ddd` → review.ddd, review."""
-        unit = (unit or "").replace(":", ".")
-        head = unit.split(".")[0]
-        return [unit] + ([head] if head != unit else [])
-
-    def tool_for(self, unit, given):
-        """The tool one unit runs with: `--tool` when the person named one for this run (FACTORY_TOOL_EXPLICIT), else
-        the profile's `tool.<unit>` (a review `tool.review.<perspective>`, then `tool.review`), else `tool:`, else
-        the run's tool. A unit is what one process carries: the shared builder and verifier, a review, a separate
-        stage, the integrate step."""
-        if os.environ.get("FACTORY_TOOL_EXPLICIT") or os.environ.get("FACTORY_TOOL_CMD"):
-            return given
-        profile = self.profile()
-        for key in self.unit_keys(unit):
-            named = first_word(profile.get(f"tool.{key}", ""))
-            if named:
-                return named
-        return first_word(profile.get("tool", "")) or given
-
-    def effort_choice(self, tool, unit):
-        """(level, note) — the reasoning effort of one unit: the profile's `effort.<tool>.<unit>`, else
-        `effort.<tool>`; a `--effort`/`model_reasoning_effort` in FACTORY_<TOOL>_ARGS wins, and a tool that takes no
-        effort gets a note, never a silent drop."""
-        profile = self.profile()
-        level = next((first_word(profile.get(f"effort.{tool}.{key}", "")) for key in self.unit_keys(unit)
-                      if first_word(profile.get(f"effort.{tool}.{key}", ""))), "") \
-            or first_word(profile.get(f"effort.{tool}", ""))
-        if not level:
-            return "", ""
-        if re.search(r"(--effort|model_reasoning_effort)", self.tool_args(tool)):
-            return "", f"overridden by FACTORY_{tool.upper()}_ARGS"
-        if tool not in TOOL or not TOOL[tool].effort:
-            return "", f"effort not applied — tool {tool} takes none"
-        return level, ""
-
-    def effort_field(self, tool, unit):
-        level, note = self.effort_choice(tool, unit)
-        if note:
-            print(f"factory: effort for {unit}: {note}")
-        return f"\teffort={level}" if level else (f"\teffort=no ({note})" if note else "")
-
-    def tools_of_run(self, given):
-        """Every tool this run may start: the given one and every `tool`/`tool.<unit>` the profile names."""
-        named = {first_word(v) for k, v in self.profile().items() if (k == "tool" or k.startswith("tool.")) and v}
-        return sorted({given} | {n for n in named if n})
-
-    def model_choice(self, tool, stage):
-        """The model flag for one stage, and why a request does not become one: (flag words, note). The model is
-        the project's choice, stated in the profile per tool and stage (`model.<tool>.<stage>`, falling back to
-        `model.<tool>`); the pipeline names none. A `--model`/`-m` in FACTORY_<TOOL>_ARGS wins — the person's local
-        override — and the run says so. Exactly one model flag is ever passed."""
-        requested = self.model_key(tool, stage)
-        if not requested:
-            return "", ""
-        if os.environ.get("FACTORY_TOOL_CMD"):
-            return "", "passed as FACTORY_MODEL to the custom command"
-        if self.env_model(tool):
-            return "", f"overridden by FACTORY_{tool.upper()}_ARGS ({self.env_model(tool)})"
-        flag = TOOL[tool].model_flag if tool in TOOL else ""
-        return (f"{flag} {requested}", "") if flag else ("", f"no model flag for tool {tool}")
-
-    def model_flag(self, tool, stage=""):
-        """The model a tool ran with, where its output does not say."""
-        if stage and self.model_key(tool, stage) and not self.env_model(tool):
-            return self.model_key(tool, stage)
-        match = re.search(r".*(?:-m|--model)[ =]([^ ]*)", self.tool_args(tool))
-        return match.group(1) if match else ""
-
     def protected_dirs(self):
         dirs = [".agents/factory", self.evidence_rel(), *TOOL_SKILL_DIRS, ".agents/skills"]
         return [d if os.path.isabs(d) or re.match(r"^[A-Za-z]:", d) else f"{self.home}/{d}" for d in dirs]
 
-    def usage_format(self, tool):
-        if os.environ.get("FACTORY_TOOL_CMD"):
-            return os.environ.get("FACTORY_USAGE_FORMAT") or "none"
-        return (TOOL[tool].usage if tool in TOOL else "") or "none"
-
-    def dry_lines(self, tool, prompt, model_stage):
-        print(f"   would run: {prompt}")
-        isolation = os.environ.get("FACTORY_ISOLATION")
-        print(f"   tool flags: {self.isolation_flags(tool)}" + (f"(FACTORY_ISOLATION={isolation})" if isolation else ""))
-        print(f"   shell allowed: {self.allowed_commands()}")
-        flags, note = self.model_choice(tool, model_stage)
-        print(f"   model: {flags}{note}")
-
     def invoke(self, tool, prompt, raw, stage, story, count=True):
-        """One stage's tool process; its output kept in <raw>, where the tool also says what the stage cost. A process
-        that ran into the tool's usage limit is kept beside it (`<raw>` with `-limit<n>` before `.out`, its usage
-        journaled), the runner waits for the reset and the same stage runs again — no round counted, no story set
-        aside (#161)."""
-        attempt = 0
-        while True:
-            code = self.invoke_once(tool, prompt, raw, stage, story, count and attempt == 0)
-            fmt = self.usage_format(tool)
-            limited = stream_limit(raw, None if fmt == "none" else fmt) if raw != os.devnull else None
-            if not limited:
-                return code
-            attempt += 1
-            kept = f"{raw[:-len('.out')]}-limit{attempt}.out" if raw.endswith(".out") else f"{raw}.limit{attempt}"
-            with contextlib.suppress(OSError):
-                os.replace(raw, kept)
-            self.record_usage(story, stage, tool, kept)
-            if not self.wait_for_limit(story, stage, tool, limited):
-                return code if code != 0 else 1
-            if attempt == 1:
-                prompt += (" An earlier process of this stage stopped at the tool's usage limit before it finished: "
-                           "read the files as they are and go on from there.")
-
-    def wait_for_limit(self, story, stage, tool, limited):
-        """Until a minute past the reset the tool named — or FACTORY_LIMIT_WAIT (30m) where it named none, or one past.
-        The claim is renewed while it waits, and the journal says until when, so the schedule reads the stage as
-        running, not as interrupted. False where the stop file, another worker or a signal ends the wait."""
-        now = time.time()
-        fallback = seconds_of(os.environ.get("FACTORY_LIMIT_WAIT", "")) or LIMIT_FALLBACK
-        until = limited["until"] + LIMIT_MARGIN if limited.get("until") and limited["until"] > now else now + fallback
-        when = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(until))
-        self.journal_line(story, f"{utc()}\tlimit\t{stage}\ttool={tool}\tuntil={when}")
-        said = f" ({limited['text']})" if limited.get("text") else ""
-        print(f"factory: {tool} reached its usage limit during {stage}{said} — waiting until {when}, then {stage} runs "
-              f"again; {self.stop_file} ends the wait.")
-        main = threading.current_thread() is threading.main_thread()
-        while time.time() < until:
-            if os.path.isfile(self.stop_file):
-                err(f"factory: {self.stop_file} exists — the wait for the usage limit ends; {stage} did not finish.")
-                return False
-            if main and not self.renew():
-                err("factory: another worker took over this checkout while the run waited for the usage limit.")
-                return False
-            self.sleep(min(LIMIT_POLL, max(1, until - time.time())))
-        print(f"factory: the usage limit reset — {stage} runs again.")
-        return True
-
-    def invoke_once(self, tool, prompt, raw, stage, story, count=True):
-        """One tool process, as `invoke` starts it."""
+        """One stage's tool process (`ToolProcesses.invoke`), counted against `--max-stages` where `count`."""
         if count:
             self.invocations += 1
-        flags, _note = self.model_choice(tool, stage)
-        command = os.environ.get("FACTORY_TOOL_CMD")
-        env = dict(os.environ, FACTORY_WORKER=self.worker, FACTORY_STAGE=stage or "", FACTORY_STORY=story or "",
-                   FACTORY_REQUEST=self.request_in_flight)
-        if command:
-            env.update(FACTORY_PROMPT=prompt, FACTORY_RUNS=self.runs, FACTORY_MODEL=self.model_key(tool, stage))
-            code = self.tool_process(["sh", "-c", command], env, raw, stdin=None, stage=stage)
-            if raw != os.devnull and not os.environ.get("FACTORY_USAGE_FORMAT"):
-                with contextlib.suppress(OSError):
-                    sys.stdout.write(read_text(raw))
-                    flush()
-            return code
-        if tool not in TOOL:
-            err(f"factory: unknown tool '{tool}'")
-            return 2
-        level, _note = self.effort_choice(tool, stage)
-        variables, argv = tool_command(TOOL[tool], model=flags.split(" ", 1)[1] if flags else "",
-                                       writable=self.add_dirs, readable=self.read_dirs,
-                                       protected=self.protected_dirs(), allowed=self.allowed_commands(), effort=level)
-        env.update(variables)
-        return self.tool_process(spawnable(argv + [prompt]), env, raw, stdin=subprocess.DEVNULL, stage=stage)
-
-    def tool_process(self, argv, env, raw, stdin, stage):
-        """A tool started in a session of its own, so a time limit or an interrupt stops it with what it started."""
-        flush()
-        with open(raw, "wb") as out:
-            try:
-                process = subprocess.Popen(argv, env=env, stdin=stdin, stdout=out, start_new_session=os.name != "nt")
-            except OSError as error:
-                err(f"factory: the tool could not be started — {error}")
-                return 127
-            try:
-                return self.wait(process, timeout=self.timeout or None)
-            except subprocess.TimeoutExpired:
-                stop_group(process)
-                err(f"factory: stage '{stage}' ran past its time limit of {self.timeout}s (FACTORY_STAGE_TIMEOUT, the "
-                    f"profile's stageTimeout:) — the tool was stopped.")
-                return TIMED_OUT
-            except KeyboardInterrupt:
-                stop_group(process, signal.SIGINT)
-                raise Stopped(SIGNAL_EXITS["SIGINT"])
-
-    def exit_field(self, code):
-        return "0" if code == 0 else "timeout" if code == TIMED_OUT else "nonzero"
-
-    def record_usage(self, story, stage, tool, raw, seconds=None, request=""):
-        """One `usage` line in the story's journal per invocation — a request's in the request journal, with its id —
-        and the stage's final message on screen. Returns the measured fields."""
-        fmt = self.usage_format(tool)
-        model = self.model_flag(tool, stage)
-        try:
-            lines = "\n".join(usage_lines(fmt, raw, model)).split("\n")
-        except Exception:                   # a raw output no reader understands costs the line, never the run
-            lines = ["unknown"]
-        fields = lines[0]
-        if seconds is not None:
-            fields += f"\tseconds={seconds}"
-        if fmt != "none" and len(lines) > 1:
-            print("\n".join(lines[1:]))
-        self.journal_line(story, f"{utc()}\tusage\t{stage}\ttool={tool}" + (f"\trequest={request}" if request else "")
-                          + f"\t{fields}")
-        # what only the stream says — a shared window's parts, the denied calls — goes into the journal now (WP-150)
-        if story and os.path.isfile(raw):
-            with contextlib.suppress(OSError, GateError, ValueError):
-                freeze_stream(journal_path(place("runs"), story), raw)
-        return fields
+        return self.processes.invoke(tool, prompt, raw, stage, story)
 
     # --- what the files say --------------------------------------------------------------------------------
     def verdict_of(self, story):
@@ -1062,13 +789,13 @@ class Run:
         self.record("--record-base", story)
         self.snapshot(story, f"before-{window}")
         self.owned("start", window, story)
-        tool = self.tool_for(window, tool)
-        self.journal_line(story, f"{utc()}\tstage-start\t{window}\ttool={tool}{self.effort_field(tool, window)}"
+        tool = self.tools.tool_for(window, tool)
+        self.journal_line(story, f"{utc()}\tstage-start\t{window}\ttool={tool}{self.tools.effort_field(tool, window)}"
                                  f"\tstages={','.join(stages)}")
         began = time.time()
         invoked = self.owned_invoke(story, window, lambda: self.invoke(tool, prompt, raw, window, story))
-        self.record_usage(story, window, tool, raw, int(time.time() - began))
-        self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit={self.exit_field(invoked)}")
+        self.processes.record_usage(story, window, tool, raw, int(time.time() - began))
+        self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit={exit_field(invoked)}")
         # What the window changed is recorded however it ended: a file a stage made before the tool failed or a signal
         # stopped it is the story's all the same, and only `stages-made.txt` takes an untracked file into its commit.
         self.snapshot(story, f"after-{window}")
@@ -1091,7 +818,7 @@ class Run:
         """Plan to tidy in one tool process, so each stage builds on what the one before read. The process runs
         each stage's gate itself; the runner checks, not believes: the red proof must exist and the gates after
         it run again here."""
-        tool = self.tool_for("builder", tool)
+        tool = self.tools.tool_for("builder", tool)
         stages, on = [], False
         for st in SHARED_WINDOWS["builder"]:
             on = on or st == start
@@ -1117,7 +844,7 @@ class Run:
             prompt += f" The judge asked for changes: {self.runs}/{story}/judge.md."
         print(f"── stage {'+'.join(stages)}  (tool: {tool}, one shared context)")
         if dry:
-            self.dry_lines(tool, prompt, "builder")
+            self.processes.dry_lines(tool, prompt, "builder")
             return 0
         refused = self.may_dispatch(story, "the shared stages")
         if refused == "budget":
@@ -1206,7 +933,7 @@ class Run:
                     f"rules every stage holds to says. Its input beside the diff: the story and its epic (epic.md "
                     f"beside it), {self.runs}/{story}/plan.md, tests.md and build.md, and the product and technical "
                     f"description. Your report: {folder}/{name}.md. "
-                    f"{self.where_things_are(self.tool_for(f'review:{name}', tool), story)}")
+                    f"{self.where_things_are(self.tools.tool_for(f'review:{name}', tool), story)}")
                    for name, carrier in zip(names, carriers)]
         if dry:
             for name, prompt in zip(names, prompts):
@@ -1226,10 +953,10 @@ class Run:
             os.remove(old)
         began = time.time()
         raws = {}
-        used = {name: self.tool_for(f"review:{name}", tool) for name in names}
+        used = {name: self.tools.tool_for(f"review:{name}", tool) for name in names}
         for name in names:
             self.journal_line(story, f"{utc()}\tstage-start\treview:{name}\ttool={used[name]}"
-                                     f"{self.effort_field(used[name], f'review:{name}')}")
+                                     f"{self.tools.effort_field(used[name], f'review:{name}')}")
             raws[name] = f"{self.evidence(story)}/review-{name}.{utc('%H%M%S')}.out"
         codes = {}
         threads = [threading.Thread(target=lambda n=name, p=prompt: codes.__setitem__(
@@ -1242,8 +969,8 @@ class Run:
         self.invocations += len(names)
         seconds = int(time.time() - began)
         for name in names:
-            self.record_usage(story, f"review:{name}", used[name], raws[name], seconds)
-            self.journal_line(story, f"{utc()}\tstage-end\treview:{name}\texit={self.exit_field(codes.get(name, 1))}")
+            self.processes.record_usage(story, f"review:{name}", used[name], raws[name], seconds)
+            self.journal_line(story, f"{utc()}\tstage-end\treview:{name}\texit={exit_field(codes.get(name, 1))}")
             if not os.path.isfile(f"{folder}/{name}.md"):
                 err(f"factory: the {name} reviewer left no {folder}/{name}.md — the judge runs that pass itself and says so.")
         self.checkpoint()
@@ -1282,7 +1009,7 @@ class Run:
     def run_shared_verifier(self, story, tool, dry, kind="story"):
         """Judge and document in one tool process — never one process with the builder: the judge's independence
         from the builder is the point of the split."""
-        tool = self.tool_for("verifier", tool)
+        tool = self.tools.tool_for("verifier", tool)
         stages = [st for st in SHARED_WINDOWS["verifier"] if self.kind_runs(kind, st)]
         document = (f" The skeleton: `{self.py} {self.cli_rel()} --document-skeleton {story}`; the document gate: "
                     f"`{self.py} {self.gate_rel} --story {story} --stage document --brief`.") if kind != "adopt" else ""
@@ -1291,7 +1018,7 @@ class Run:
                   f"{self.where_things_are(tool, story)}")
         print(f"── stage {'+'.join(stages)}  (tool: {tool}, one shared context)")
         if dry:
-            self.dry_lines(tool, prompt, "verifier")
+            self.processes.dry_lines(tool, prompt, "verifier")
             return 0
         refused = self.may_dispatch(story, "the shared stages")
         if refused == "budget":
@@ -1420,11 +1147,11 @@ class Run:
                     print(f"factory: {artefact} already holds — the document stage is not invoked again.")
                     ran.append("document")
                     break
-            unit_tool = self.tool_for(stage, tool)      # the run's tool stays `tool`: every stage resolves its own
+            unit_tool = self.tools.tool_for(stage, tool)      # the run's tool stays `tool`: every stage resolves its own
             print(f"── stage {stage}  (tool: {unit_tool}, fresh context)")
             self.tool_in_flight = unit_tool
             if dry:
-                self.dry_lines(unit_tool, self.prompt_for(stage, story), stage)
+                self.processes.dry_lines(unit_tool, self.prompt_for(stage, story), stage)
             else:
                 code = self.run_one(story, tool, stage, dry)
                 if code is not None:
@@ -1530,20 +1257,20 @@ class Run:
             os.makedirs(evidence, exist_ok=True)
             shutil.copy(artefact, f"{evidence}/{stage}.skeleton")
         self.snapshot(story, f"before-{stage}")
-        tool = self.tool_for(stage, tool)
-        flags, note = self.model_choice(tool, stage)
-        requested = self.model_key(tool, stage)
+        tool = self.tools.tool_for(stage, tool)
+        flags, note = self.tools.model_choice(tool, stage)
+        requested = self.tools.model_key(tool, stage)
         model_fields = (f"\tmodel_requested={requested}" if requested else "") + \
             (f"\tmodel_applied=no ({note})" if note else "")
         if note:
             print(f"factory: model.{tool}.{stage}: {requested} — {note}")
         self.owned("start", stage, story)
         self.journal_line(story, f"{stage_started}\tstage-start\t{stage}\ttool={tool}{model_fields}"
-                                 f"{self.effort_field(tool, stage)}")
+                                 f"{self.tools.effort_field(tool, stage)}")
         raw = f"{evidence}/{stage}.{utc('%H%M%S')}.out"
         began = time.time()
         invoked = self.owned_invoke(story, stage, lambda: self.invoke(tool, self.prompt_for(stage, story), raw, stage, story))
-        self.record_usage(story, stage, tool, raw, int(time.time() - began))
+        self.processes.record_usage(story, stage, tool, raw, int(time.time() - began))
         # recorded however the stage ended, as a shared window's: the files it made reach the story's commit
         self.snapshot(story, f"after-{stage}")
         self.record("--record-changes", story, stage)
@@ -1551,7 +1278,7 @@ class Run:
             self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit=owned")
             return 7
         if invoked != 0:
-            self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit={self.exit_field(invoked)}")
+            self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit={exit_field(invoked)}")
             self.checkpoint()
             err(f"factory: the tool exited non-zero during stage '{stage}'.")
             return 1
@@ -1624,12 +1351,12 @@ class Run:
         raw = f"{self.evidence(story)}/integrate.{utc('%H%M%S')}.out"
         began = time.time()
         self.owned("start", "integrate", story)
-        tool = self.tool_for("integrate", tool)
+        tool = self.tools.tool_for("integrate", tool)
         self.journal_line(story, f"{utc()}\tstage-start\tintegrate\ttool={tool}")
         code = self.owned_invoke(story, "integrate", lambda: self.invoke(
             tool, self.integrate_prompt(story, conflicts, lost), raw, "integrate", story))
-        self.record_usage(story, "integrate", tool, raw, int(time.time() - began))
-        self.journal_line(story, f"{utc()}\tstage-end\tintegrate\texit={self.exit_field(code)}")
+        self.processes.record_usage(story, "integrate", tool, raw, int(time.time() - began))
+        self.journal_line(story, f"{utc()}\tstage-end\tintegrate\texit={exit_field(code)}")
         if self.owned("end", "integrate", story, code) != 0:
             return 7
         self.checkpoint()
@@ -2044,7 +1771,7 @@ class Run:
         """A request's shell: a stage's, with the cli narrowed to the flags the dialog skills read and record with, and
         the runner's reading verbs — no flag and no verb that starts a run, a request, the factory or its page."""
         cli = f"Bash({self.py} .agents/factory/factory-cli.py:*)"
-        heads = [head for head in self.allowed_commands().split(",") if head != cli]
+        heads = [head for head in self.tools.allowed_commands().split(",") if head != cli]
         heads += [f"Bash({self.py} .agents/factory/factory-cli.py {flag}:*)" for flag in REQUEST_CLI_FLAGS]
         heads += [f"Bash(bash .agents/factory/factory.sh {verb}:*)"
                   for verb in ("backlog", "status", "decisions", "discover", "spec-delta", "help")]
@@ -2164,7 +1891,7 @@ class Run:
             if settled is not None:
                 return settled
         unit = f"request:{kind.name}"
-        unit_tool = self.tool_for(unit, tool)
+        unit_tool = self.tools.tool_for(unit, tool)
         if not os.environ.get("FACTORY_TOOL_CMD") and unit_tool not in TOOL:
             update_request(request, state="failed", error=f"no known tool {unit_tool!r} to run it with")
             return 1
@@ -2176,7 +1903,7 @@ class Run:
         raw = out_path(request["id"])
         os.makedirs(os.path.dirname(raw), exist_ok=True)
         before = self.dirty_files()
-        self.allowed_override = self.request_allowed()
+        self.tools.allowed_override = self.request_allowed()
         started = time.time()
         self.request_in_flight = request["id"]
         try:
@@ -2186,9 +1913,9 @@ class Run:
             request_journal("request-end", kind.name, request["id"], "exit=stopped", "state=queued")
             raise
         finally:
-            self.allowed_override = None
+            self.tools.allowed_override = None
             self.request_in_flight = ""
-        measured = self.record_usage(None, unit, unit_tool, raw, int(time.time() - started), request["id"])
+        measured = self.processes.record_usage(None, unit, unit_tool, raw, int(time.time() - started), request["id"])
         book_request_usage(wiring.book_request_cost(self.home, place("runs")), request["id"], unit_tool, measured)
         prune_outputs()
         if code != 0:
@@ -2555,24 +2282,6 @@ TOOL_SKILL_DIRS = tuple(tool.skills for tool in TOOLS)
 # One reader for the profile, a stage file and a decision record: the gate's. The runner calls these in its
 # own process; the cli prints the same answers for a person or a stage.
 
-COMMAND_KEYS = ("compile", "test", "e2eTest", "architecture", "format", "formatFix")
-
-
-def command_heads(profile):
-    """The first word of every command the profile declares, once each, in the profile's order."""
-    heads = []
-    for key, value in profile.items():
-        if key in COMMAND_KEYS or key.startswith("test."):
-            head = first_word(value)
-            if head and not head.startswith("{{") and head not in heads:
-                heads.append(head)
-    return heads
-
-
-def model_for(profile, tool, stage):
-    return first_word(profile.get(f"model.{tool}.{stage}") or profile.get(f"model.{tool}") or "")
-
-
 def verdict_of_story(runs, story_id):
     path = os.path.join(runs, story_id, "judge.md")
     return verdict_in(read_text(path)) if os.path.isfile(path) else ""
@@ -2653,44 +2362,6 @@ def read_bytes(path):
 
 def field_of(text, key):
     return next((line[len(key) + 2:] for line in text.split("\n") if line.startswith(f"{key}: ")), "")
-
-
-def flush():
-    sys.stdout.flush()
-    sys.stderr.flush()
-
-
-def err(text):
-    sys.stdout.flush()
-    print(text, file=sys.stderr, flush=True)
-
-
-def stop_group(process, first=None):
-    """A tool and what it started, stopped: <first> (TERM by default), then KILL after five seconds."""
-    if os.name == "nt":
-        process.kill()
-        process.wait()
-        return
-    for sig, grace in ((first or signal.SIGTERM, 5), (signal.SIGKILL, 5)):
-        with contextlib.suppress(OSError):
-            os.killpg(process.pid, sig)
-        try:
-            process.wait(timeout=grace)
-            return
-        except subprocess.TimeoutExpired:
-            continue
-
-
-def spawnable(argv):
-    """On Windows a tool found on the PATH may be a script or a `.cmd`, which no process starts by itself."""
-    if os.name != "nt":
-        return argv
-    found = shutil.which(argv[0]) or argv[0]
-    if found.lower().endswith((".cmd", ".bat")):
-        return ["cmd", "/c", found, *argv[1:]]
-    if not found.lower().endswith((".exe", ".com")):
-        return ["sh", found, *argv[1:]]
-    return [found, *argv[1:]]
 
 
 def run_options(argv):
@@ -2803,7 +2474,7 @@ def tools_ready(run, tool):
     is named: the unit is the process (`tool.builder`, `tool.verifier`), never a silent split."""
     if os.environ.get("FACTORY_TOOL_CMD") or tool == "stand-in":
         return 0
-    missing = [t for t in run.tools_of_run(tool) if t not in TOOL or not shutil.which(TOOL[t].command[0])]
+    missing = [t for t in run.tools.tools_of_run(tool) if t not in TOOL or not shutil.which(TOOL[t].command[0])]
     if missing:
         err(f"factory: the run would start {', '.join(missing)}, which "
             + ("is" if len(missing) == 1 else "are") + " no known tool or not on the PATH (tool / tool.<unit> in the "
