@@ -63,9 +63,9 @@ from .delivery.adapter.outgoing.process.console_lines import ConsoleLines
 from .delivery.application.backlog.run_backlog import RunBacklogCommand, RunBacklogUseCase
 from .delivery.application.shared.backlog_schedule import ScheduleRead
 from .delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
+from .delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
 from .delivery.domain.model.stage import StageName, StoryKind, Window
 from .delivery.domain.model.story_state import GateReport, Rounds, VerdictWord
-from .delivery.domain.service.story_route import StoryRoute
 from .delivery.adapter.outgoing.files.decision_record_files import request_records
 from .delivery.adapter.outgoing.files.request_files import (
     default_by, REQUEST_JOURNAL, requests_dir)
@@ -1038,27 +1038,9 @@ class Run:
         self.run([sys.executable, self.cli_path, "--worktree-link", story], cwd=os.environ.get("FACTORY_HOME") or self.home,
                  env=self.home_env())
 
-    def resolve_merge(self, story, tool, out, lost=None):
-        """A merge of the main line into the story that stopped on conflicts (`conflict: <path>` lines in <out>): the
-        stage-integrate agent resolves them in the worktree, then the merge is committed and squashed. A resolution
-        that dropped what the main line added to a test (#151) goes back to the same stage, naming the lines, at most
-        twice — never to a person, and never to the story's own stages, whose gates would call it the story's change.
-        `lost` starts with such a repair (the integrate gate refused `main-tests`). None when it holds, else the run's
-        exit code."""
-        conflicts = "".join(line[len("conflict: "):] + " " for line in out.split("\n") if line.startswith("conflict: "))
-        for attempt in (1, 2, 3):
-            stopped = self.integrate_stage(story, tool, conflicts, lost)
-            if stopped is not None:
-                return stopped
-            lost = main_tests_lost(self.pwd, self.runs, story)
-            if not lost:
-                return None
-            if attempt < 3:
-                print(f"factory: the resolution of {story} changed a test the main line holds — {lost_text(lost)}; "
-                      f"back to the integrate stage (attempt {attempt + 1}).")
-        err(f"factory: three resolutions of {story} kept dropping the main line's side of a test — {lost_text(lost)}. "
-            f"needs-human: the worktree {self.pwd} holds the merge.")
-        return 1
+    def integration(self, tool):
+        """The story's integration into the main line (`IntegrateStoryUseCase`), from the worktree it runs in."""
+        return IntegrateStoryUseCase(RunnerIntegration(self, tool), ConsoleLines())
 
     def integrate_stage(self, story, tool, conflicts, lost=None):
         """One stage-integrate session — the conflicts, or a repair of a resolution that lost the main line's side of a
@@ -1100,99 +1082,6 @@ class Run:
                 "merge.")
             return 1
         return None
-
-    def integrate_story(self, story, tool, dry):
-        """Delivered is the integration: the main line merged into the story (a stage-integrate agent where git stops
-        on a conflict), squashed, the gate once more on that tree, the main checkout fast-forwarded — under the lock,
-        journaled as the runner's own step. The run's exit, or None where the gate refused the story on the main
-        line: the build stage runs again, after the step."""
-        print("── integrate")
-        if dry:
-            print(f"   would merge {story}'s branch with the main line and fast-forward the main checkout")
-            return 0
-        with self.step(story, "integrate"):
-            code = self.integrate_attempts(story, tool)
-        if code != "round":
-            return code
-        # the integration took the links down; the build stage works with them again — and document.md is an
-        # earlier pass's: the document stage writes it for the story as it now is, or its gate passes it as it is
-        self.take_lock()
-        try:
-            self.link_worktree(story)
-        finally:
-            self.drop_lock()
-        self.journal_line(story, f"{utc()}\toutdated\tdocument.md\tby=integrate")
-        return None
-
-    def integrate_attempts(self, story, tool):
-        """The integration, again where the main line moved meanwhile: an exit code, or "round" where the gate
-        refused the story on the main line and the build stage runs again."""
-        home = os.environ.get("FACTORY_HOME") or self.home
-        attempt, repairs = 0, 0
-        while attempt < 3:
-            attempt += 1
-            self.take_lock()
-            try:
-                code, out = self.in_home("--integrate-prepare", story)
-                print(out)
-                if code == 3:
-                    stopped = self.resolve_merge(story, tool, out)
-                    if stopped is not None:
-                        return stopped
-                elif code != 0:
-                    err(f"factory: {story} could not be merged with the main line — the worktree {self.pwd} keeps it as it was.")
-                    return 1
-                print("── gate integrate")
-                code = self.gate("integrate", story, gate_path=f"{home}/{self.gate_rel}")
-            finally:
-                self.drop_lock()
-            if code == 0:
-                if claim_config_here(self.home):
-                    print(f"factory: story {story} is delivered on its branch and published — a person merges it.")
-                else:
-                    print(f"factory: story {story} is integrated and delivered.")
-                return 0
-            report = f"{self.runs}/{story}/.gate-integrate.txt"
-            # the checks that failed — not the report's closing `gate:fail story <id> stage <stage>` line
-            fails = [line for line in (read_text(report).splitlines() if os.path.isfile(report) else [])
-                     if line.startswith("gate:fail ") and not line.startswith("gate:fail story ")]
-            if fails and all(line.startswith("gate:fail moved") for line in fails):
-                print(f"factory: the main line moved on while {story} was merged — merged again (attempt {attempt + 1}).")
-                continue
-            # #151: the resolution dropped what the main line added to a test — the integrate stage's to put back
-            if any(line.startswith("gate:fail main-tests") for line in fails) and repairs < 2:
-                lost = main_tests_lost(self.pwd, self.runs, story)
-                if lost:
-                    repairs += 1
-                    attempt -= 1
-                    print(f"factory: the integrate gate named a test of the main line the resolution changed — "
-                          f"back to the integrate stage, not a round ({lost_text(lost)}).")
-                    self.take_lock()
-                    try:
-                        stopped = self.resolve_merge(story, tool, "", lost)
-                    finally:
-                        self.drop_lock()
-                    if stopped is not None:
-                        return stopped
-                    continue
-            if any(line.startswith("gate:fail checkout") for line in fails):
-                err(f"factory: the main checkout could not take {story} — see {report}; then: factory.sh run --story "
-                    f"{story} --from integrate")
-                return 1
-            reason = StoryRoute.environment(GateReport(read_text(report) if os.path.isfile(report) else ""))
-            if reason is not None:
-                err(f"factory: gate 'integrate' refused on the environment, not on the story — {reason.value}")
-                err(f"factory:   no round is counted. Fix it, then: factory.sh run --story {story}")
-                return 1
-            rounds = self.bump_rounds(story)
-            if StoryRoute.converged(Rounds(rounds)):
-                err(f"factory: gate 'integrate' refused in round {rounds} — three rounds did not converge. needs-human.")
-                return 1
-            err(f"factory: gate 'integrate' refused the story on the main line — round {rounds} runs the build stage "
-                "again with the gate's report.")
-            return "round"
-        err(f"factory: the main line moved on three times while {story} was integrated — run it again.")
-        return 1
 
     def run_story(self, story, tool, start, dry):
         """Every story in its worktree: made or brought up to date and linked, under the lock; the stages run in it
@@ -1239,7 +1128,7 @@ class Run:
         try:
             # Resumed onto a main line that changed what the story changes: the conflicts are resolved first, so the
             # next stage works on the main line as it is.
-            code = self.resolve_merge(story, tool, out) if "\nconflict: " in "\n" + out else None
+            code = self.integration(tool).resolve(story, out) if "\nconflict: " in "\n" + out else None
             if code is None:
                 if "\nconflict: " in "\n" + out:
                     self.link_worktree(story)
@@ -1495,7 +1384,66 @@ class RunnerStages:
         return bool(os.environ.get("FACTORY_HOME"))
 
     def integrate(self, story, dry):
-        return self._run.integrate_story(story, self._tool, dry)
+        return self._run.integration(self._tool).execute(IntegrateStoryCommand(story, dry))
+
+
+class RunnerIntegration:
+    """A story's integration on the runner (`StoryIntegration`): from the story's worktree into the main checkout,
+    the cli's integrate steps run there, the integrate stage and the gate as the runner starts them."""
+
+    def __init__(self, run, tool):
+        self._run = run
+        self._tool = tool
+
+    def lock(self):
+        self._run.take_lock()
+
+    def unlock(self):
+        self._run.drop_lock()
+
+    def step(self, story, work):
+        with self._run.step(story, "integrate"):
+            return work()
+
+    def prepare(self, story):
+        return self._run.in_home("--integrate-prepare", story)
+
+    def session(self, story, conflicts, lost):
+        return self._run.integrate_stage(story, self._tool, conflicts, list(lost) or None)
+
+    def lost(self, story):
+        return main_tests_lost(self._run.pwd, self._run.runs, story)
+
+    def lost_text(self, lost):
+        return lost_text(lost)
+
+    def gate(self, story):
+        home = os.environ.get("FACTORY_HOME") or self._run.home
+        return self._run.gate("integrate", story, gate_path=f"{home}/{self._run.gate_rel}")
+
+    def report(self, story):
+        path = self.report_place(story)
+        return GateReport(read_text(path) if os.path.isfile(path) else "")
+
+    def report_place(self, story):
+        return f"{self._run.runs}/{story}/.gate-integrate.txt"
+
+    def published(self):
+        return bool(claim_config_here(self._run.home))
+
+    def worktree(self):
+        return self._run.pwd
+
+    def relink(self, story):
+        self._run.take_lock()
+        try:
+            self._run.link_worktree(story)
+        finally:
+            self._run.drop_lock()
+        self._run.journal_line(story, f"{utc()}\toutdated\tdocument.md\tby=integrate")
+
+    def bump(self, story):
+        return Rounds(self._run.bump_rounds(story))
 
 
 class ChildProcess:

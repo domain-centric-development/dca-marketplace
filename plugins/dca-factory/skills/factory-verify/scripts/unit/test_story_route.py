@@ -7,7 +7,8 @@ import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind, Window
 from dca_factory.delivery.domain.model.story_state import GateReport, Rounds, VerdictWord
-from dca_factory.delivery.domain.service.story_route import Around, Judged, Move, StoryRoute
+from dca_factory.delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
+from dca_factory.delivery.domain.service.story_route import Around, Judged, Move, Refusal, StoryRoute
 
 
 def names(*words):
@@ -63,6 +64,19 @@ class Route(unittest.TestCase):
         self.assertIsNone(StoryRoute.red_check(StoryKind.STORY, StageName("test")))
         self.assertIsNone(StoryRoute.red_check(StoryKind.STORY, StageName("judge")))
         self.assertIsNone(StoryRoute.red_check(StoryKind.TASK, StageName("build")))
+
+
+class IntegrationRefusals(unittest.TestCase):
+
+    def test_what_the_failed_checks_on_the_main_line_say(self):
+        close = "gate:fail story S-1 stage integrate"
+        self.assertEqual(StoryRoute.integration(GateReport(f"gate:fail moved — main moved\n{close}")),
+                         frozenset((Refusal.MOVED,)))
+        self.assertEqual(StoryRoute.integration(GateReport(f"gate:fail moved\ngate:fail main-tests — x\n{close}")),
+                         frozenset((Refusal.MAIN_TESTS,)))
+        self.assertEqual(StoryRoute.integration(GateReport(f"gate:fail checkout — dirty\n{close}")),
+                         frozenset((Refusal.CHECKOUT,)))
+        self.assertEqual(StoryRoute.integration(GateReport(f"gate:fail tests-green\n{close}")), frozenset())
 
 
 class Lines:
@@ -204,6 +218,91 @@ class Run(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(stages.ran[-2:], ["judge", "gate adopt"])
         self.assertIn("factory: story S-1 is delivered (adopted: checked, nothing built).", said)
+
+
+class Integration:
+    """A main line that moves on <moves> times, then a gate that says what it is told."""
+
+    def __init__(self, moves=0, refusal="", lost=()):
+        self.moves, self.refusal, self._lost = moves, refusal, list(lost)
+        self.did, self.rounds, self.held = [], 0, 0
+
+    def lock(self):
+        self.held += 1
+
+    def unlock(self):
+        self.held -= 1
+
+    def step(self, story, work):
+        return work()
+
+    def prepare(self, story):
+        self.did.append("prepare")
+        return 0, ""
+
+    def session(self, story, conflicts, lost):
+        self.did.append("session")
+        return None
+
+    def lost(self, story):
+        return [self._lost.pop(0)] if self._lost else []
+
+    def lost_text(self, lost):
+        return "lost"
+
+    def gate(self, story):
+        self.did.append("gate")
+        if self.moves:
+            self.moves -= 1
+            self.last = "gate:fail moved"
+            return 1
+        self.last = self.refusal
+        return 1 if self.refusal else 0
+
+    def report(self, story):
+        return GateReport(self.last)
+
+    def report_place(self, story):
+        return "runs/S-1/.gate-integrate.txt"
+
+    def published(self):
+        return False
+
+    def worktree(self):
+        return "wt"
+
+    def relink(self, story):
+        self.did.append("relink")
+
+    def bump(self, story):
+        self.rounds += 1
+        return Rounds(self.rounds)
+
+
+class Integrate(unittest.TestCase):
+
+    def test_a_main_line_that_moved_on_is_merged_again(self):
+        integration = Integration(moves=1)
+        code = IntegrateStoryUseCase(integration, Lines()).execute(IntegrateStoryCommand("S-1"))
+        self.assertEqual(code, 0)
+        self.assertEqual(integration.did, ["prepare", "gate", "prepare", "gate"])
+        self.assertEqual(integration.held, 0)
+
+    def test_a_refusal_of_the_story_is_a_round_from_the_build_stage(self):
+        integration = Integration(refusal="gate:fail tests-green")
+        lines = Lines()
+        self.assertIsNone(IntegrateStoryUseCase(integration, lines).execute(IntegrateStoryCommand("S-1")))
+        self.assertEqual((integration.rounds, integration.did[-1]), (1, "relink"))
+
+    def test_a_lost_test_goes_back_to_the_integrate_stage_and_is_no_round(self):
+        integration = Integration(refusal="gate:fail main-tests — a test lost its case", lost=[("T.java", ["x"])])
+        IntegrateStoryUseCase(integration, Lines()).execute(IntegrateStoryCommand("S-1"))
+        self.assertEqual(integration.did[:4], ["prepare", "gate", "session", "prepare"])
+
+    def test_a_checkout_that_cannot_take_the_story_stops_for_a_person(self):
+        integration = Integration(refusal="gate:fail checkout — dirty")
+        self.assertEqual(IntegrateStoryUseCase(integration, Lines()).execute(IntegrateStoryCommand("S-1")), 1)
+        self.assertEqual(integration.rounds, 0)
 
 
 if __name__ == "__main__":
