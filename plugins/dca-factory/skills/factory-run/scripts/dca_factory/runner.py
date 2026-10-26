@@ -23,10 +23,10 @@ import sys
 import threading
 import time
 from .contract import (
-    ALL_KINDS, GateError, OWNED_DIGEST, SHARED_WINDOWS, STAGE, STAGE_FILES,
-    STAGE_ORDER, STAGES, WINDOW_DIGEST)
+    ALL_KINDS, GateError, SHARED_WINDOWS, STAGE, STAGE_FILES,
+    STAGE_ORDER, STAGES)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    evidence_dir, evidence_rel, place, PROFILE_FILE, read_profile,
+    evidence_rel, place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
@@ -52,6 +52,7 @@ from .delivery.adapter.outgoing.git.integration import (
     integration_target, lost_text, main_tests_lost)
 from .delivery.adapter.outgoing.files.delivery_files import perspectives_of
 from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS, tools_shell
+from .delivery.adapter.outgoing.process.gate_process import file_sha, GateProcess, hashing
 from .delivery.adapter.outgoing.tools.tool_choice import first_word, ToolChoice
 from .delivery.adapter.outgoing.tools.tool_processes import (
     err, exit_field, flush, SIGNAL_EXITS, Stopped, TIMED_OUT, ToolProcesses, utc)
@@ -128,9 +129,6 @@ REQUEST_CLI_FLAGS = ("--contract", "--free-id", "--window-start", "--window-end"
 STAGE_SHELL = ("cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git status, git diff, git log, git ls-files, "
                "git apply --check, and git rm (a file the plan removes)")
 
-#: The first line of a snapshot written without a hash: the observer reads such a snapshot as absent, because a
-#: snapshot of empty digests compares equal to every other and would read as "this stage changed nothing".
-NO_HASHES = "# no-sha256-command: names only, no content hashes"
 
 def newer(path, than):
     """`[ path -nt than ]`: path exists and is newer, or than does not exist."""
@@ -183,6 +181,7 @@ class Run:
         self.tools = ToolChoice(self.profile, self.py, self.gate_rel)
         self.timeout = self.tools.stage_timeout(self.gate_installed())
         self.processes = ToolProcesses(self, self.tools)
+        self.gates = GateProcess(self)
 
     # --- processes -----------------------------------------------------------------------------------------
     def wait(self, process, timeout=None):
@@ -293,13 +292,9 @@ class Run:
         return back
 
     # --- the pipeline, unchanged ---------------------------------------------------------------------------
-    @staticmethod
-    def hashing():
-        return os.environ.get("FACTORY_SHA256", "") != "none"
-
     def pipeline_hash(self, folder=None):
         """One SHA-256 over the installed files' digests — the stamp's `sha256:` line."""
-        if not self.hashing():
+        if not hashing():
             return None
         folder = folder or os.path.join(self.home, ".agents", "factory")
         listing = ""
@@ -637,13 +632,6 @@ class Run:
                 f"{self.worktree_sentence()} {self.where_things_are(self.tool_in_flight, story)}")
 
     # --- the gate --------------------------------------------------------------------------------------------
-    def owned(self, edge, window, story, code=None):
-        """What is the person's is unchanged across a stage window — recorded at its start, compared at its end."""
-        if not self.gate_installed():
-            return 0
-        return self.run([sys.executable, self.gate_path, "--owned", edge, window,
-                         *([str(code)] if code is not None else []), "--story", story])[0]
-
     def owned_invoke(self, story, window, call):
         """The tool of an owned window. Stopped inside it — an interrupt, a signal that ends the tool — the window is
         closed before the run ends: its end journaled, the person's parts compared and the digest gone, so a person
@@ -652,93 +640,20 @@ class Run:
             return call()
         except (Stopped, KeyboardInterrupt):
             self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit=stopped")
-            self.owned("end", window, story, 1)
+            self.gates.owned("end", window, story, 1)
             raise
 
-    def fresh_window(self, story):
-        """`--from <stage>`: a person names where the story starts, so a window a killed run left open is closed —
-        its digest of the story is gone, and a story the person changed since reads as changed after its plan,
-        never as changed under a stage."""
-        self.profile()
-        folder = evidence_dir(place("runs"), story)
-        left = [name for name in (OWNED_DIGEST, WINDOW_DIGEST) if os.path.isfile(os.path.join(folder, name))]
-        for name in left:
-            with contextlib.suppress(OSError):
-                os.remove(os.path.join(folder, name))
-        if OWNED_DIGEST in left:
-            self.journal_line(story, f"{utc()}\twindow-closed\t-\tby=--from")
-            print(f"factory: --from closes the stage window an earlier run of {story} left open.")
-
-    def record(self, flag, story, *more):
-        """`--record-base` / `--record-changes <stage>`: what the story's diff is taken against, and what it changed."""
-        if self.gate_installed():
-            self.run([sys.executable, self.gate_path, flag, *more, "--story", story], quiet=True,
-                     stdout=subprocess.DEVNULL)
-
     def gate(self, stage, story, gate_path=None):
+        """The gate of <stage> over <story> (`GateProcess.gate`), never under a pipeline that changed under the run."""
         gate_path = gate_path or self.gate_path
         if not os.path.isfile(gate_path):
             err(f"factory: no gate at {gate_path} — run 'factory.sh setup'")
             return 2
-        report = f"{self.runs}/{story}/.gate-{stage}.txt"
-        journal = self.evidence(story)
         os.makedirs(f"{self.runs}/{story}", exist_ok=True)
-        os.makedirs(journal, exist_ok=True)
+        os.makedirs(self.evidence(story), exist_ok=True)
         if self.guard_pipeline(stage, story):
             raise Stopped(7)
-        flush()
-        env = dict(os.environ, FACTORY_SUITES_KEY=self.suites_key)
-        process = subprocess.Popen([sys.executable, gate_path, "--story", story, "--stage", stage, "--record-suites"],
-                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
-        with open(report, "wb") as kept:
-            for chunk in iter(lambda: process.stdout.readline(), b""):
-                kept.write(chunk)
-                sys.stdout.buffer.write(chunk)
-                sys.stdout.flush()
-        code = process.wait()
-        # Every gate run is kept for the observer, with its verdict; only a refusal is kept where the next stage
-        # reads it. 3 is not a refusal: every check passed and a human is asked (acceptance).
-        shutil.copy(report, f"{journal}/gate-{stage}.{utc('%H%M%S')}.txt")
-        if code in (0, 3):
-            os.remove(report)
-        return code
-
-    def snapshot(self, story, label):
-        """What the working tree looks like right now, so a later stage's claim about what it changed can be
-        checked rather than believed."""
-        journal = self.evidence(story)
-        os.makedirs(journal, exist_ok=True)
-        hashing = self.hashing()
-        if not hashing:
-            err("factory: no sha256 command found (shasum, sha256sum, openssl) — the tree snapshots")
-            err("factory:   record file names without content, and factory-verify reports every check")
-            err("factory:   that needs a digest as not observed. Install one of the three for full evidence.")
-        lines = [NO_HASHES] if not hashing else []
-        prefix = subprocess.run(["git", "rev-parse", "--show-prefix"], capture_output=True, text=True).stdout.strip()
-        status = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain", "-z", "-uall", "--", "."],
-                                capture_output=True).stdout.decode("utf-8", errors="replace")
-        strip = lambda name: name[len(prefix):] if prefix and name.startswith(prefix) else name
-        origin = ""
-        for entry in status.split("\0"):
-            if not entry:
-                continue
-            if origin:                          # -z writes a rename's source as the next entry
-                if origin == "R":
-                    lines.append(f"deleted  {strip(entry)}")
-                origin = ""
-                continue
-            code, name = entry[:2], strip(entry[3:])
-            if code[:1] in ("R", "C"):
-                origin = code[:1]
-            if "D" in code:
-                lines.append(f"deleted  {name}")
-                continue
-            if not os.path.isfile(name):
-                continue
-            lines.append(f"{file_sha(name) if hashing else '-'}  {name}")
-        with contextlib.suppress(OSError):
-            with open(f"{journal}/tree-{label}.txt", "w", encoding="utf-8", newline="\n") as handle:
-                handle.write("".join(line + "\n" for line in lines))
+        return self.gates.gate(stage, story, gate_path)
 
     def adopt_gate(self, story, tool, dry):
         """Every scenario on a green test, the judge's pass, a break for every test the adoption wrote: passed, it
@@ -786,9 +701,9 @@ class Run:
         """One shared process — the builder or the verifier — from its snapshot to its usage line; the tool's exit
         code, or 7 when a person's file changed in it."""
         raw = f"{self.evidence(story)}/{window}.{utc('%H%M%S')}.out"
-        self.record("--record-base", story)
-        self.snapshot(story, f"before-{window}")
-        self.owned("start", window, story)
+        self.gates.record("--record-base", story)
+        self.gates.snapshot(story, f"before-{window}")
+        self.gates.owned("start", window, story)
         tool = self.tools.tool_for(window, tool)
         self.journal_line(story, f"{utc()}\tstage-start\t{window}\ttool={tool}{self.tools.effort_field(tool, window)}"
                                  f"\tstages={','.join(stages)}")
@@ -798,10 +713,10 @@ class Run:
         self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit={exit_field(invoked)}")
         # What the window changed is recorded however it ended: a file a stage made before the tool failed or a signal
         # stopped it is the story's all the same, and only `stages-made.txt` takes an untracked file into its commit.
-        self.snapshot(story, f"after-{window}")
-        self.record("--record-changes", story, window)
+        self.gates.snapshot(story, f"after-{window}")
+        self.gates.record("--record-changes", story, window)
         # The window closes before a signal that arrived ends the run: the person may change the story before the next.
-        if self.owned("end", window, story, invoked) != 0:
+        if self.gates.owned("end", window, story, invoked) != 0:
             return 7
         self.checkpoint()
         if invoked != 0:
@@ -1242,7 +1157,7 @@ class Run:
         # The previous verdict is an input to the next one, not something to overwrite.
         if stage == "judge" and os.path.isfile(f"{self.runs}/{story}/judge.md"):
             os.replace(f"{self.runs}/{story}/judge.md", f"{self.runs}/{story}/.judge-previous.md")
-        self.record("--record-base", story)
+        self.gates.record("--record-base", story)
         artefact = self.artefact(story, stage)
         evidence = self.evidence(story)
         had_file = os.path.isfile(artefact)
@@ -1256,7 +1171,7 @@ class Run:
         if not had_file and skeleton and os.path.isfile(artefact):
             os.makedirs(evidence, exist_ok=True)
             shutil.copy(artefact, f"{evidence}/{stage}.skeleton")
-        self.snapshot(story, f"before-{stage}")
+        self.gates.snapshot(story, f"before-{stage}")
         tool = self.tools.tool_for(stage, tool)
         flags, note = self.tools.model_choice(tool, stage)
         requested = self.tools.model_key(tool, stage)
@@ -1264,7 +1179,7 @@ class Run:
             (f"\tmodel_applied=no ({note})" if note else "")
         if note:
             print(f"factory: model.{tool}.{stage}: {requested} — {note}")
-        self.owned("start", stage, story)
+        self.gates.owned("start", stage, story)
         self.journal_line(story, f"{stage_started}\tstage-start\t{stage}\ttool={tool}{model_fields}"
                                  f"{self.tools.effort_field(tool, stage)}")
         raw = f"{evidence}/{stage}.{utc('%H%M%S')}.out"
@@ -1272,9 +1187,9 @@ class Run:
         invoked = self.owned_invoke(story, stage, lambda: self.invoke(tool, self.prompt_for(stage, story), raw, stage, story))
         self.processes.record_usage(story, stage, tool, raw, int(time.time() - began))
         # recorded however the stage ended, as a shared window's: the files it made reach the story's commit
-        self.snapshot(story, f"after-{stage}")
-        self.record("--record-changes", story, stage)
-        if self.owned("end", stage, story, invoked) != 0:
+        self.gates.snapshot(story, f"after-{stage}")
+        self.gates.record("--record-changes", story, stage)
+        if self.gates.owned("end", stage, story, invoked) != 0:
             self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit=owned")
             return 7
         if invoked != 0:
@@ -1350,14 +1265,14 @@ class Run:
         self.tool_in_flight = tool
         raw = f"{self.evidence(story)}/integrate.{utc('%H%M%S')}.out"
         began = time.time()
-        self.owned("start", "integrate", story)
+        self.gates.owned("start", "integrate", story)
         tool = self.tools.tool_for("integrate", tool)
         self.journal_line(story, f"{utc()}\tstage-start\tintegrate\ttool={tool}")
         code = self.owned_invoke(story, "integrate", lambda: self.invoke(
             tool, self.integrate_prompt(story, conflicts, lost), raw, "integrate", story))
         self.processes.record_usage(story, "integrate", tool, raw, int(time.time() - began))
         self.journal_line(story, f"{utc()}\tstage-end\tintegrate\texit={exit_field(code)}")
-        if self.owned("end", "integrate", story, code) != 0:
+        if self.gates.owned("end", "integrate", story, code) != 0:
             return 7
         self.checkpoint()
         record = f"{self.runs}/{story}/integrate.md"
@@ -1671,7 +1586,7 @@ class Run:
             if start:
                 if request.get("from"):
                     self.reset_rounds(request["story"], start)
-                    self.fresh_window(request["story"])
+                    self.gates.fresh_window(request["story"])
                 with contextlib.suppress(OSError):
                     os.remove(request["path"])
                 request_journal("request", "run", request["id"], request["story"], f"by={request.get('by', '')}",
@@ -2347,14 +2262,6 @@ def package_modules(folder):
     return sorted(found)
 
 
-def file_sha(path):
-    try:
-        with open(path, "rb") as handle:
-            return hashlib.sha256(handle.read()).hexdigest()
-    except OSError:
-        return ""
-
-
 def read_bytes(path):
     with open(path, "rb") as handle:
         return handle.read()
@@ -2532,7 +2439,7 @@ def run_start(run, options):
             if code:
                 return code
             if options.start:
-                run.fresh_window(story)
+                run.gates.fresh_window(story)
         return run.run_story(story, tool or "stand-in", start, options.dry_run)
     if not options.dry_run:
         code = run.take_checkout() or run.guard_pipeline_start()
