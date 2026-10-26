@@ -21,22 +21,12 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .agents import TOOL, tool_command
 from .streams import stream_limit, usage_lines
 from .tool_choice import seconds_of, ToolChoice
+from ....application.shared.run_stop import SIGNAL_EXITS, Stopped  # noqa: F401 — raised by the processes, caught by the runner
 
 TIMED_OUT = 124
 #: The usage limit (#161): the wait where the tool names no reset, the margin past the one it names, how often the
 #: wait looks at the stop file and renews the claim — seconds.
 LIMIT_FALLBACK, LIMIT_MARGIN, LIMIT_POLL = 1800, 60, 60
-SIGNAL_EXITS = {"SIGTERM": 143, "SIGHUP": 129, "SIGINT": 130}
-
-
-class Stopped(Exception):
-    """The run ends here with this exit code — the pipeline changed under it, a signal arrived."""
-
-    def __init__(self, code: int) -> None:
-        super().__init__(code)
-        self.code = code
-
-
 def utc(fmt: str = "%Y-%m-%dT%H:%M:%SZ") -> str:
     return time.strftime(fmt, time.gmtime())
 

@@ -126,9 +126,9 @@ from .delivery.adapter.outgoing.git.worktree_steps import (
 from .delivery.adapter.outgoing.files.migrations import migrate_layout
 from .delivery.adapter.outgoing.tools.tool_choice import command_heads, first_word, model_for
 from .runner import (
-    needs_human_lines, open_decision_files, run_main,
-    stage_names, stages_shell, verdict_of_story, request_main,
-    settle_command)
+    needs_human_lines, open_decision_files,
+    stage_names, stages_shell, verdict_of_story)
+from .delivery.adapter.incoming.runner.run_command import request_main, run_main, settle_command
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
 from .delivery.adapter.incoming.cli.status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
 from .delivery.adapter.incoming.cli.story_view import render_story_md, render_story_text, stage_caption, stage_cells
