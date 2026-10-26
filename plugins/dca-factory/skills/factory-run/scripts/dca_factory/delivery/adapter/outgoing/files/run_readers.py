@@ -1,8 +1,11 @@
 """What a run reads from a project's files the way the gate does: a story's verdict, a stage file's needs-human
 section, the decision records still open beside a story."""
 
+from __future__ import annotations
+
 import os
 import re
+import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place, shown
 from .decision_record_files import decisions_store, needs_human_ids, record_path
@@ -11,18 +14,18 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_
 from .run_marks import verdict_in
 
 
-def verdict_of_story(runs, story_id):
+def verdict_of_story(runs: str, story_id: str) -> str:
     path = os.path.join(runs, story_id, "judge.md")
     return verdict_in(read_text(path)) if os.path.isfile(path) else ""
 
 
-def needs_human_lines(path, story_id=None):
+def needs_human_lines(path: str, story_id: typing.Optional[str] = None) -> typing.Optional[typing.List[str]]:
     """`<id>\\t<stage>\\t<record path>` for every decision the file's needs-human section names; None when it
     asks nobody. The record lives beside the story, so the story's id says where to look."""
     ids = needs_human_ids(read_text(path)) if os.path.isfile(path) else None
     if ids is None:
         return None
-    lines = []
+    lines: typing.List[str] = []
     for decision_id in ids:
         record, stage = "", ""
         try:
@@ -38,7 +41,7 @@ def needs_human_lines(path, story_id=None):
     return lines
 
 
-def open_decision_files(cwd, story_id):
+def open_decision_files(cwd: str, story_id: str) -> typing.List[str]:
     """The records beside the story that carry no `## Answer` yet — the cheap check a run makes
     before a stage; the gate does the fine reading (a draft without a name is still open)."""
     try:
@@ -47,7 +50,7 @@ def open_decision_files(cwd, story_id):
         return []
     if not os.path.isdir(store):
         return []
-    found = []
+    found: typing.List[str] = []
     for name in sorted(os.listdir(store)):
         if not name.endswith(".md"):
             continue

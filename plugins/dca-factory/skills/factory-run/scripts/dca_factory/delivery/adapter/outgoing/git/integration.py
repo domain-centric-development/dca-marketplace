@@ -223,7 +223,7 @@ def _main_tests_lost(cwd: str, runs: str, story_id: str,
     return lost
 
 
-def lost_text(lost: typing.Iterable[typing.Tuple[str, typing.List[str]]]) -> str:
+def lost_text(lost: typing.Iterable[typing.Tuple[str, typing.Sequence[str]]]) -> str:
     """The lost lines as a reader takes them in: each file with its first lines."""
     return "; ".join(f"{rel} lost {', '.join(repr(l) for l in lines[:2])}"
                      + (f" and {len(lines) - 2} more line(s)" if len(lines) > 2 else "") for rel, lines in lost)

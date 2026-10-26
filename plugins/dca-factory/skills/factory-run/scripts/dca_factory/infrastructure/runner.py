@@ -36,8 +36,8 @@ class RunnerCases:
     (`RunCases`)."""
 
     def run_story(self, run: Run, tool: str, story: str, start: typing.Optional[str], dry: bool, gate_first: bool,
-                  shared: typing.FrozenSet[Window]) -> typing.Optional[int]:
-        return RunStoryUseCase(RunnerStages(run, tool), ConsoleLines()).execute(  # type: ignore[no-untyped-call]
+                  shared: typing.FrozenSet[Window]) -> int:
+        return RunStoryUseCase(RunnerStages(run, tool), ConsoleLines()).execute(
             RunStoryCommand(story, start, dry, gate_first, shared))
 
     def integrate(self, run: Run, tool: str, story: str, dry: bool) -> typing.Optional[int]:
@@ -47,7 +47,7 @@ class RunnerCases:
         return self._integration(run, tool).resolve(story, out)
 
     def run_backlog(self, run: Run, tool: str, slots: int, watch: bool, interval: int, dry: bool) -> int:
-        backlog = RunnerBacklog(run, tool)  # type: ignore[no-untyped-call]
+        backlog = RunnerBacklog(run, tool)
         return RunBacklogUseCase(backlog, backlog, backlog, self.queue(run), ConsoleLines()).execute(
             RunBacklogCommand(slots, watch, interval, dry, run.keep_going, run.stay))
 
@@ -62,12 +62,12 @@ class RunnerCases:
 
     @staticmethod
     def _integration(run: Run, tool: str) -> IntegrateStoryUseCase:
-        return IntegrateStoryUseCase(RunnerIntegration(run, tool), ConsoleLines())  # type: ignore[no-untyped-call]
+        return IntegrateStoryUseCase(RunnerIntegration(run, tool), ConsoleLines())
 
     @staticmethod
     def _work_request(run: Run) -> WorkRequestUseCase:
         return requests.work_request(run.home, run.runs_rel, run.profile, run.locked,
-                                     RunnerRequestSkill(run))  # type: ignore[no-untyped-call]
+                                     RunnerRequestSkill(run))
 
 
 def placed(cwd: str) -> None:
@@ -80,14 +80,14 @@ def run_for(options: argparse.Namespace) -> Run:
     home = os.environ.get("FACTORY_HOME") or os.path.realpath(cwd)
     placed(cwd)
     worker = os.environ.get("FACTORY_RUNNER_WORKER") if options.child else None
-    return Run(options, home, place("runs"), worker=worker, cases=RunnerCases())  # type: ignore[no-untyped-call]
+    return Run(options, home, place("runs"), worker=worker, cases=RunnerCases())
 
 
 def request_run_for(options: argparse.Namespace, worker: typing.Optional[str]) -> Run:
     """The run a request's own process works under: the runner's claim (`worker`), else one of its own."""
     cwd = os.getcwd()
     placed(cwd)
-    return Run(options, os.path.realpath(cwd), place("runs"), worker=worker,  # type: ignore[no-untyped-call]
+    return Run(options, os.path.realpath(cwd), place("runs"), worker=worker,
                cases=RunnerCases())
 
 
@@ -100,7 +100,7 @@ def settle(cwd: str, kind_name: str, fields: typing.Mapping[str, str], words: st
     checked = delivery.check_request(cwd).execute(CheckRequestCommand(kind_name, dict(fields), words,
                                                                       against_waiting=True))
     worker = os.environ.get("FACTORY_RUNNER_WORKER")
-    run = Run(options, os.path.realpath(cwd), place("runs"), worker=worker,  # type: ignore[no-untyped-call]
+    run = Run(options, os.path.realpath(cwd), place("runs"), worker=worker,
               cases=RunnerCases())
-    request = run.press(kind_name, checked.fields, checked.words, by)  # type: ignore[no-untyped-call]
+    request = run.press(kind_name, checked.fields, checked.words, by)
     return request, RunnerCases._work_request(run).settle(request, KIND[kind_name])

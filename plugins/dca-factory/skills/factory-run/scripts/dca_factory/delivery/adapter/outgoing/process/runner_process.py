@@ -7,6 +7,10 @@ process are `runner_ports`; what it reads from the project's files the gate's wa
 worktree steps, the layout migrations, the stage files' skeletons, the tool's and the gate's processes are adapters of
 their own.
 """
+
+from __future__ import annotations
+
+import argparse
 import contextlib
 import glob
 import hashlib
@@ -45,11 +49,16 @@ from ....application.profile.profile_rules import first_word, perspectives_of
 from ..tools.agents import TOOL, TOOLS
 from .gate_process import file_sha, GateProcess, hashing
 from ..tools.tool_choice import ToolChoice
-from ..tools.tool_processes import err, exit_field, flush, Stopped, ToolProcesses, utc
+from ..tools.tool_processes import err, exit_field, flush, ToolProcesses, utc
+from ....application.shared.run_stop import Stopped
 from ....domain.model.stage import Window
 from ..files.request_files import default_by, REQUEST_JOURNAL, requests_dir
 from ....application.requests.list_requests import target_text
 from ..files.run_readers import needs_human_lines, open_decision_files, verdict_of_story
+from ....application.requests.request_queue import RequestQueue
+from ....application.requests.work_request import RequestWorked
+from ....application.shared.requests import Request
+from ....application.shared.story_integration import Lost
 
 
 # --- the run: what `factory.sh run` starts once its checks before the first stage passed -------------------------
@@ -72,25 +81,26 @@ class RunCases(typing.Protocol):
     """The use cases a step of a run starts — a story's stages, its integration, the backlog, a request, a request's
     cost —, handed in by the composition root: the run and its adapters carry out steps and never build a use case."""
 
-    def run_story(self, run, tool, story, start, dry, gate_first, shared):
+    def run_story(self, run: Run, tool: str, story: str, start: typing.Optional[str], dry: bool, gate_first: bool,
+                  shared: typing.FrozenSet[Window]) -> int:
         """The story's stages from <start> on (`RunStoryUseCase`); its exit."""
 
-    def integrate(self, run, tool, story, dry):
+    def integrate(self, run: Run, tool: str, story: str, dry: bool) -> typing.Optional[int]:
         """The story integrated into the main line (`IntegrateStoryUseCase`); its exit."""
 
-    def resolve(self, run, tool, story, out):
+    def resolve(self, run: Run, tool: str, story: str, out: str) -> typing.Optional[int]:
         """A merge's conflicts resolved by the integrate stage; its exit, None to run on."""
 
-    def run_backlog(self, run, tool, slots, watch, interval, dry):
+    def run_backlog(self, run: Run, tool: str, slots: int, watch: bool, interval: int, dry: bool) -> int:
         """Story after story in the schedule's order (`RunBacklogUseCase`); its exit."""
 
-    def queue(self, run):
+    def queue(self, run: Run) -> RequestQueue:
         """The requests as the run works them (`RequestQueue`)."""
 
-    def work_request(self, run, request_id, tool):
+    def work_request(self, run: Run, request_id: str, tool: str) -> RequestWorked:
         """One request worked (`WorkRequestUseCase`): what it said and its exit."""
 
-    def book_request_cost(self, run, request_id, tool, measured):
+    def book_request_cost(self, run: Run, request_id: str, tool: str, measured: str) -> None:
         """A request's usage booked on the stories it worked on (`BookRequestCostUseCase`)."""
 
 
@@ -98,8 +108,9 @@ class Run:
     """One runner process: the story or the backlog it runs, and what it keeps between stages. The use cases a step
     starts are the composition root's (`cases`)."""
 
-    def __init__(self, options, home, runs, worker=None, cases=None):
-        self.cases = cases
+    def __init__(self, options: argparse.Namespace, home: str, runs: str, worker: typing.Optional[str] = None,
+                 cases: typing.Optional[RunCases] = None) -> None:
+        self._cases = cases
         self.py = os.environ.get("FACTORY_RUNNER_PYTHON") or "python3"   # the name the prompts and the list carry
         self.scripts = scripts_dir()
         self.cli_path = os.path.join(self.scripts, "factory-cli.py")
@@ -124,32 +135,43 @@ class Run:
         self.parallel = options.parallel
         self.keep_going = getattr(options, "keep_going", False)
         self.stay = getattr(options, "stay", False)
-        self.red_stale = {}                   # story → its tests whose red proof a merge left stale
+        #: story → its tests whose red proof a merge left stale
+        self.red_stale: typing.Dict[str, typing.List[str]] = {}
         self.options = options
-        self.add_dirs, self.read_dirs = [], []
+        self.add_dirs: typing.List[str] = []
+        self.read_dirs: typing.List[str] = []
         self.tool_in_flight = ""
         self.request_in_flight = ""         # the request whose process runs: a window it opens is its to measure
         self.pipeline_sha = os.environ.get("FACTORY_RUNNER_PIPELINE_SHA", "")
         self.claimed = False
         self.lock_held = False
         self.sleeping = False
-        self.pending = None
+        self.pending: typing.Optional[int] = None
         self.tools = ToolChoice(self.profile, self.py, self.gate_rel)
         self.timeout = self.tools.stage_timeout(self.gate_installed())
         self.processes = ToolProcesses(self, self.tools)
         self.gates = GateProcess(self)
 
+    @property
+    def cases(self) -> RunCases:
+        """The composition root's use cases; a run built without them reads, and starts no step."""
+        if self._cases is None:
+            raise RuntimeError("this run was built without the use cases a step starts")
+        return self._cases
+
     # --- processes -----------------------------------------------------------------------------------------
-    def wait(self, process, timeout=None):
+    def wait(self, process: "subprocess.Popen[bytes]", timeout: typing.Optional[float] = None) -> int:
         return process.wait(timeout=timeout)
 
-    def checkpoint(self):
+    def checkpoint(self) -> None:
         """A TERM or HUP that arrived ends the run here — between stages, never inside one."""
         if self.pending is not None:
             code, self.pending = self.pending, None
             raise Stopped(code)
 
-    def run(self, argv, *, capture=False, quiet=False, merge=False, cwd=None, env=None, stdin=None, stdout=None):
+    def run(self, argv: typing.List[str], *, capture: bool = False, quiet: bool = False, merge: bool = False,
+            cwd: typing.Optional[str] = None, env: typing.Optional[typing.Mapping[str, str]] = None,
+            stdin: typing.Optional[int] = None, stdout: typing.Optional[int] = None) -> typing.Tuple[int, str]:
         """A child process run to its end: (exit code, its stdout when captured)."""
         out = subprocess.PIPE if capture else stdout
         errors = subprocess.STDOUT if merge else (subprocess.DEVNULL if quiet else None)
@@ -165,12 +187,13 @@ class Run:
         text = data.decode("utf-8", errors="replace").replace("\r\n", "\n") if capture else ""
         return code, text.rstrip("\n")
 
-    def cli(self, *args, quiet=True, merge=False, cwd=None, env=None):
+    def cli(self, *args: str, quiet: bool = True, merge: bool = False, cwd: typing.Optional[str] = None,
+            env: typing.Optional[typing.Mapping[str, str]] = None) -> typing.Tuple[int, str]:
         """The cli beside this runner: (exit code, stdout without its last newlines)."""
         return self.run([sys.executable, self.cli_path, *args], capture=True, quiet=quiet and not merge, merge=merge,
                         cwd=cwd, env=env)
 
-    def profile(self):
+    def profile(self) -> typing.Dict[str, str]:
         """The stack profile as a cli started here would read it, with the places set from it — in a story's
         worktree the main checkout's (FACTORY_HOME). Read again on every question: a person may edit the profile
         while a run waits, and the places change as the runner moves between the checkout and a worktree."""
@@ -178,13 +201,13 @@ class Run:
         set_places(profile)
         return profile
 
-    def home_env(self):
+    def home_env(self) -> typing.Dict[str, str]:
         """The environment of a call made in the main checkout: no FACTORY_HOME, as there."""
         env = dict(os.environ)
         env.pop("FACTORY_HOME", None)
         return env
 
-    def journal_line(self, story, line):
+    def journal_line(self, story: typing.Optional[str], line: str) -> None:
         """Every journal line is numbered under the journal's lock, a folder — the same for the gate, the cli and
         a reviewer appending beside the runner."""
         self.profile()
@@ -198,12 +221,12 @@ class Run:
             journal_writer(place("runs"), story).write(line + "\n")
 
     @contextlib.contextmanager
-    def step(self, story, name):
+    def step(self, story: str, name: str) -> typing.Iterator[None]:
         """A step the runner works itself — integrate, merge, format — journaled as running (`step-start`/
         `step-end`), so the status shows it with its clock; no stage's reader counts it as a stage run. A delivery
         ends its integrate step itself, before its commit; the runner ends a step the journal still shows open."""
         self.journal_line(story, f"{utc()}\tstep-start\t{name}\tby=runner")
-        code = None
+        code: typing.Optional[int] = None
         try:
             yield
             code = 0
@@ -211,28 +234,28 @@ class Run:
             if step_open(place("runs"), story, name):
                 self.journal_line(story, f"{utc()}\tstep-end\t{name}\texit={'0' if code == 0 else 'stopped'}")
 
-    def gate_installed(self):
+    def gate_installed(self) -> bool:
         return os.path.isfile(self.gate_path)
 
     # --- places --------------------------------------------------------------------------------------------
-    def evidence(self, story):
+    def evidence(self, story: str) -> str:
         parent = os.path.dirname(self.runs)
         parent = ".dca-factory" if parent in (".", "") else parent
         return f"{parent}/evidence/{story}"
 
-    def evidence_rel(self):
+    def evidence_rel(self) -> str:
         parent = os.path.dirname(self.runs_rel)
         parent = ".dca-factory" if parent in (".", "") else parent
         return f"{parent}/evidence"
 
-    def stage_file(self, stage):
+    def stage_file(self, stage: str) -> str:
         return STAGE_FILES.get(stage, "")
 
-    def artefact(self, story, stage):
+    def artefact(self, story: str, stage: str) -> str:
         return f"{self.runs}/{story}/{self.stage_file(stage)}"
 
     # --- the pipeline, unchanged ---------------------------------------------------------------------------
-    def pipeline_hash(self, folder=None):
+    def pipeline_hash(self, folder: typing.Optional[str] = None) -> typing.Optional[str]:
         """One SHA-256 over the installed files' digests — the stamp's `sha256:` line."""
         if not hashing():
             return None
@@ -252,7 +275,7 @@ class Run:
                 listing += f"missing  {name}\n"
         return hashlib.sha256(listing.encode("utf-8")).hexdigest()
 
-    def guard_pipeline_start(self):
+    def guard_pipeline_start(self) -> int:
         stamp = os.path.join(self.home, STAMP)
         if not os.path.isfile(stamp):
             return 0
@@ -270,7 +293,7 @@ class Run:
             return 7
         return 0
 
-    def guard_pipeline(self, stage, story):
+    def guard_pipeline(self, stage: str, story: str) -> int:
         """Before every gate the runner runs: the pipeline is still the one the run started with."""
         if not self.pipeline_sha:
             return 0
@@ -286,7 +309,7 @@ class Run:
         return 7
 
     # --- the checkout ----------------------------------------------------------------------------------------
-    def take_checkout(self):
+    def take_checkout(self) -> int:
         if not self.gate_installed():
             err(f"factory: no gate at {self.gate_rel} — the checkout is not claimed; install the pipeline")
             return 0
@@ -296,20 +319,20 @@ class Run:
         self.claimed = True
         return 0
 
-    def release(self):
+    def release(self) -> None:
         if self.claimed:
             self.claimed = False
             with contextlib.suppress(Exception):
                 subprocess.run([sys.executable, self.cli_path, "--release", self.worker], cwd=self.home,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=self.home_env())
 
-    def renew(self):
+    def renew(self) -> bool:
         """The claim, renewed before a stage: False when another worker took the checkout over."""
         if not self.gate_installed():
             return True
         return self.take_claim(lambda _line: None) == 0
 
-    def take_claim(self, say):
+    def take_claim(self, say: typing.Callable[..., typing.Any]) -> int:
         """Take or renew the checkout's claim — one per main checkout, so a worktree renews its home's — after the
         stories' journals are frozen, as every command that writes does. 3 when another worker holds it; 1 when the
         claim cannot be written."""
@@ -320,7 +343,7 @@ class Run:
         except (OSError, ValueError):
             return 1
 
-    def take_lock(self):
+    def take_lock(self) -> int:
         """One integration at a time: the git work in the main checkout runs under a lock beside the run folder."""
         with contextlib.suppress(OSError):
             os.makedirs(os.path.dirname(self.lock_dir), exist_ok=True)
@@ -347,14 +370,14 @@ class Run:
                 continue
             self.sleep(2)
 
-    def drop_lock(self):
+    def drop_lock(self) -> int:
         if self.lock_held:
             self.lock_held = False
             with contextlib.suppress(OSError):
                 os.rmdir(self.lock_dir)
         return 0
 
-    def sleep(self, seconds):
+    def sleep(self, seconds: float) -> None:
         """A pause a TERM or HUP ends at once — nothing runs beside it."""
         self.checkpoint()
         self.sleeping = True
@@ -365,26 +388,27 @@ class Run:
         self.checkpoint()
 
     # --- the tool ----------------------------------------------------------------------------------------------
-    def protected_dirs(self):
+    def protected_dirs(self) -> typing.List[str]:
         dirs = [".agents/factory", self.evidence_rel(), *TOOL_SKILL_DIRS, ".agents/skills"]
         return [d if os.path.isabs(d) or re.match(r"^[A-Za-z]:", d) else f"{self.home}/{d}" for d in dirs]
 
-    def invoke(self, tool, prompt, raw, stage, story, count=True):
+    def invoke(self, tool: str, prompt: str, raw: str, stage: str, story: typing.Optional[str],
+               count: bool = True) -> int:
         """One stage's tool process (`ToolProcesses.invoke`), counted against `--max-stages` where `count`."""
         if count:
             self.invocations += 1
         return self.processes.invoke(tool, prompt, raw, stage, story)
 
     # --- what the files say --------------------------------------------------------------------------------
-    def verdict_of(self, story):
+    def verdict_of(self, story: str) -> str:
         self.profile()
         return verdict_of_story(place("runs"), story)
 
-    def asks_human(self, path):
+    def asks_human(self, path: str) -> bool:
         self.profile()
         return needs_human_lines(path) is not None
 
-    def back_to(self, story, stage=None):
+    def back_to(self, story: str, stage: typing.Optional[str] = None) -> str:
         """The stage a refusal sends the story back to: from the judge's file (`build` without one); with a stage,
         `test` where that stage found the defect in a test's own code, else nothing."""
         self.profile()
@@ -393,23 +417,23 @@ class Run:
             return "test" if os.path.isfile(path) and back_in(read_text(path)) == "test" else ""
         return back_in(read_text(path)) if os.path.isfile(path) else "build"
 
-    def start_stage(self, story):
+    def start_stage(self, story: str) -> str:
         self.profile()
         found = start_of(os.getcwd(), place("epics"), place("runs"), story, 1)
         return "" if found is None else found[1] or "none"
 
-    def open_decisions(self, story):
+    def open_decisions(self, story: str) -> str:
         self.profile()
         return "\n".join(open_decision_files(os.getcwd(), story))
 
-    def delivered(self, story):
+    def delivered(self, story: str) -> bool:
         self.profile()
         try:
             return is_delivered(read_front_matter(find_story(place("epics"), story))[0])
         except GateError:
             return False
 
-    def kind_of(self, story):
+    def kind_of(self, story: str) -> str:
         """`story`, `journey`, `adopt` or `task` — `story` for one that cannot be read."""
         self.profile()
         try:
@@ -417,7 +441,7 @@ class Run:
         except GateError:
             return "story"
 
-    def stopped_for_human(self, artefact, stage, story):
+    def stopped_for_human(self, artefact: str, stage: str, story: str) -> int:
         """A stage that ends with a needs-human section has stopped: name the record and the command that resumes.
         3 when the question is a record — what a backlog run can wait on —, 1 when the section names none."""
         err(f"factory: stage '{stage}' ends with a needs-human section — the run stops here.")
@@ -439,7 +463,7 @@ class Run:
         err(f"factory:   read {artefact} and decide; the stages after it were not run.")
         return 3 if ids else 1
 
-    def bump_rounds(self, story):
+    def bump_rounds(self, story: str) -> int:
         path = f"{self.evidence(story)}/.rounds"
         count = int("".join(c for c in read_text(path) if c.isdigit()) or 0) if os.path.isfile(path) else 0
         count += 1
@@ -448,7 +472,7 @@ class Run:
             handle.write(f"{count}\n")
         return count
 
-    def reset_rounds(self, story, given_from):
+    def reset_rounds(self, story: str, given_from: str) -> None:
         """A person's --from restarts the story's count; the old one is kept beside it, never deleted."""
         path = f"{self.evidence(story)}/.rounds"
         if not os.path.isfile(path):
@@ -459,11 +483,11 @@ class Run:
               f"{self.evidence(story)}/).")
 
     # --- what a stage is told ----------------------------------------------------------------------------------
-    def skill_dirs(self, tool):
+    def skill_dirs(self, tool: str) -> typing.List[str]:
         first = TOOL[tool].skills if tool in TOOL else ""
         return [d for d in (first, *TOOL_SKILL_DIRS, ".agents/skills") if d]
 
-    def where_things_are(self, tool, story):
+    def where_things_are(self, tool: str, story: typing.Optional[str]) -> str:
         """What a stage otherwise searches for — the profile, the run folder, the gate's expectations, the
         catalog — named in its prompt."""
         common = next((f"{d}/factory-run/reference/stage-common.md" for d in self.skill_dirs(tool)
@@ -491,7 +515,7 @@ class Run:
                 f"`{self.py} {cli_path} --contract <stage>`.{common}{catalog} The shell you have without asking: "
                 f"the gate, the cli, the profile's commands, and {STAGE_SHELL}.")
 
-    def cli_rel(self):
+    def cli_rel(self) -> str:
         """The cli as a stage's prompt names it: the project's copy by the path its allow-list grants
         (`.agents/factory/factory-cli.py`, linked into a story's worktree), else relative to where the stage works.
         An absolute path is a command the allow-list does not cover, and the stage is refused it."""
@@ -499,7 +523,7 @@ class Run:
             return ".agents/factory/factory-cli.py"
         return self.cli_path[len(self.pwd) + 1:] if self.cli_path.startswith(self.pwd + "/") else self.cli_path
 
-    def later_refusals(self, story, stage, where):
+    def later_refusals(self, story: str, stage: str, where: str) -> str:
         """The reports of the gates after <stage> that refused the story and sent it back."""
         found, seen = "", False
         for later in STAGE_ORDER:
@@ -511,15 +535,15 @@ class Run:
                           f"{self.runs}/{story}/.gate-{later}.txt.")
         return found
 
-    def worktree_sentence(self):
+    def worktree_sentence(self) -> str:
         home = os.environ.get("FACTORY_HOME")
         return f" This story's own worktree: {self.pwd}; the main checkout: {home}." if home else ""
 
-    def guard_sentence(self):
+    def guard_sentence(self) -> str:
         guard = first_word(self.profile().get("carrier.guard", ""))
         return f" The guard (the profile's carrier.guard): the {guard} skill." if guard else ""
 
-    def prompt_for(self, stage, story):
+    def prompt_for(self, stage: str, story: str) -> str:
         repeat = ""
         if os.path.isfile(f"{self.runs}/{story}/.gate-{stage}.txt"):
             repeat = f" The gate refused this stage before: {self.runs}/{story}/.gate-{stage}.txt."
@@ -536,7 +560,7 @@ class Run:
         return (f"Apply the stage-{stage} skill for backlog story {story}.{self.worktree_sentence()} "
                 f"{self.where_things_are(self.tool_in_flight, story)}{guard}{repeat}")
 
-    def integrate_prompt(self, story, conflicts, lost=None):
+    def integrate_prompt(self, story: str, conflicts: str, lost: typing.Optional[Lost] = None) -> str:
         if lost:
             target = integration_target(self.runs, story) or "the main line"
             return (f"Apply the stage-integrate skill for backlog story {story}. The resolution of the merge changed a "
@@ -549,7 +573,7 @@ class Run:
                 f"{self.worktree_sentence()} {self.where_things_are(self.tool_in_flight, story)}")
 
     # --- the gate --------------------------------------------------------------------------------------------
-    def owned_invoke(self, story, window, call):
+    def owned_invoke(self, story: str, window: str, call: typing.Callable[[], int]) -> int:
         """The tool of an owned window. Stopped inside it — an interrupt, a signal that ends the tool — the window is
         closed before the run ends: its end journaled, the person's parts compared and the digest gone, so a person
         may change the story before the next run."""
@@ -560,7 +584,7 @@ class Run:
             self.gates.owned("end", window, story, 1)
             raise
 
-    def gate(self, stage, story, gate_path=None):
+    def gate(self, stage: str, story: str, gate_path: typing.Optional[str] = None) -> int:
         """The gate of <stage> over <story> (`GateProcess.gate`), never under a pipeline that changed under the run."""
         gate_path = gate_path or self.gate_path
         if not os.path.isfile(gate_path):
@@ -573,7 +597,7 @@ class Run:
         return self.gates.gate(stage, story, gate_path)
 
     # --- the budget before a dispatch ------------------------------------------------------------------------
-    def used_tokens(self, story):
+    def used_tokens(self, story: str) -> int:
         try:
             self.profile()
             runs = place("runs")
@@ -581,7 +605,7 @@ class Run:
         except (OSError, ValueError, GateError):
             return 0
 
-    def may_dispatch(self, story, what, count=1):
+    def may_dispatch(self, story: str, what: str, count: int = 1) -> typing.Union[int, str, None]:
         """The claim renewed, the story's budget and the cap on stages checked before an invocation, never after.
         None when it may run, else the exit code (5 the checkout is gone, 4 a limit)."""
         self.checkpoint()
@@ -594,7 +618,7 @@ class Run:
             return "stages"
         return None
 
-    def window(self, story, tool, window, stages, prompt):
+    def window(self, story: str, tool: str, window: str, stages: typing.Sequence[str], prompt: str) -> int:
         """One shared process — the builder or the verifier — from its snapshot to its usage line; the tool's exit
         code, or 7 when a person's file changed in it."""
         raw = f"{self.evidence(story)}/{window}.{utc('%H%M%S')}.out"
@@ -622,11 +646,11 @@ class Run:
         return 0
 
     # --- the shared processes ----------------------------------------------------------------------------------
-    def budget_note(self, story, what):
+    def budget_note(self, story: str, what: str) -> int:
         err(f"factory: story {story} has reached its --story-budget {self.story_budget} — {what} are not dispatched.")
         return 4
 
-    def builder_window(self, story, tool, stages, start, dry):
+    def builder_window(self, story: str, tool: str, stages: typing.Sequence[str], start: str, dry: bool) -> int:
         """Plan to tidy in one tool process, so each stage builds on what the one before read; the process runs each
         stage's gate itself. The tool's exit, 0 in a dry run."""
         tool = self.tools.tool_for("builder", tool)
@@ -640,9 +664,9 @@ class Run:
             prompt += f" The build stage sent the story back: {self.runs}/{story}/build.md."
         if "test" in stages:
             prompt += self.red_stale_sentence(story)
-        for refused in stages:
-            if os.path.isfile(f"{self.runs}/{story}/.gate-{refused}.txt"):
-                prompt += f" The gate refused stage {refused} before: {self.runs}/{story}/.gate-{refused}.txt."
+        for earlier in stages:
+            if os.path.isfile(f"{self.runs}/{story}/.gate-{earlier}.txt"):
+                prompt += f" The gate refused stage {earlier} before: {self.runs}/{story}/.gate-{earlier}.txt."
         prompt += self.later_refusals(story, stages[-1], f"stage {start}")
         if os.path.isfile(f"{self.runs}/{story}/judge.md") and self.verdict_of(story) == "changes-requested":
             prompt += f" The judge asked for changes: {self.runs}/{story}/judge.md."
@@ -656,11 +680,11 @@ class Run:
         if refused == "stages":
             err(f"factory: --max-stages {self.max_stages} reached before the shared stages of {story}.")
             return 4
-        if refused:
+        if isinstance(refused, int):
             return refused
         return self.window(story, tool, "builder", stages, prompt)
 
-    def run_reviews(self, story, tool, dry):
+    def run_reviews(self, story: str, tool: str, dry: bool) -> int:
         """One tool process per perspective, started at once, each writing reviews/<perspective>.md; the judge then
         converges from the files."""
         self.profile()
@@ -690,7 +714,7 @@ class Run:
         if refused == "stages":
             err(f"factory: --max-stages {self.max_stages} reached before the reviews of {story} ({len(names)} process(es)).")
             return 4
-        if refused:
+        if isinstance(refused, int):
             return refused
         os.makedirs(folder, exist_ok=True)
         os.makedirs(self.evidence(story), exist_ok=True)
@@ -703,7 +727,7 @@ class Run:
             self.journal_line(story, f"{utc()}\tstage-start\treview:{name}\ttool={used[name]}"
                                      f"{self.tools.effort_field(used[name], f'review:{name}')}")
             raws[name] = f"{self.evidence(story)}/review-{name}.{utc('%H%M%S')}.out"
-        codes = {}
+        codes: typing.Dict[str, int] = {}
         threads = [threading.Thread(target=lambda n=name, p=prompt: codes.__setitem__(
                        n, self.invoke(used[n], p, raws[n], f"review:{n}", story, count=False)))
                    for name, prompt in zip(names, prompts)]
@@ -721,7 +745,7 @@ class Run:
         self.checkpoint()
         return 0
 
-    def verifier_window(self, story, tool, stages, dry):
+    def verifier_window(self, story: str, tool: str, stages: typing.Sequence[str], dry: bool) -> int:
         """Judge and document in one tool process — never one process with the builder: the judge's independence
         from the builder is the point of the split. The tool's exit, 0 in a dry run."""
         tool = self.tools.tool_for("verifier", tool)
@@ -740,7 +764,7 @@ class Run:
         if refused == "stages":
             err(f"factory: --max-stages {self.max_stages} reached before the shared stages of {story}.")
             return 4
-        if refused:
+        if isinstance(refused, int):
             return refused
         judge = f"{self.runs}/{story}/judge.md"
         if os.path.isfile(judge):
@@ -748,14 +772,14 @@ class Run:
         return self.window(story, tool, "verifier", stages, prompt)
 
     # --- a story's stages ----------------------------------------------------------------------------------------
-    def run_stages(self, story, tool, start=None, dry=False):
+    def run_stages(self, story: str, tool: str, start: typing.Optional[str] = None, dry: bool = False) -> int:
         """The story's stages from <start> on, in the checkout it is called in (`RunStoryUseCase`)."""
         shared = frozenset(window for window, on in ((Window.BUILDER, self.shared_builder),
                                                      (Window.VERIFIER, self.shared_verifier)) if on)
         gate_first, self.gate_first = self.gate_first, False
         return self.cases.run_story(self, tool, story, start, dry, gate_first, shared)
 
-    def red_proof_stale(self, story, start):
+    def red_proof_stale(self, story: str, start: str) -> bool:
         """A story whose red proof went stale goes to its test stage: a gate that holds the red proof (build, tidy)
         refuses a test changed after it was seen failing, and only the test stage can record it again — as a step of
         the runner, never as a stage's question and never as a round. A merge of the main line into the story's
@@ -774,7 +798,7 @@ class Run:
               f"'{start}' runs again.")
         return True
 
-    def red_stale_sentence(self, story):
+    def red_stale_sentence(self, story: str) -> str:
         moved = self.red_stale.get(story)
         if not moved:
             return ""
@@ -783,7 +807,7 @@ class Run:
                 f"where the code before this story fails it, else its break under {self.runs}/{story}/breaks/ "
                 f"(`<Class>--<method>.patch`, the smallest change to the production code that turns it red).")
 
-    def quiet_gate(self, stage, story):
+    def quiet_gate(self, stage: str, story: str) -> int:
         """A gate whose lines nobody reads — the runner asks it only whether a file already holds."""
         with open(os.devnull, "w") as null:
             saved = sys.stdout, sys.stderr
@@ -793,7 +817,7 @@ class Run:
             finally:
                 sys.stdout, sys.stderr = saved
 
-    def run_one(self, story, tool, stage):
+    def run_one(self, story: str, tool: str, stage: str) -> int:
         """One stage in a process of its own; 0 when it ran and its file stands, else the run's exit code."""
         self.checkpoint()
         if not self.renew():
@@ -864,7 +888,8 @@ class Run:
         return 0
 
     # --- a story in its worktree (WP-92) -------------------------------------------------------------------------
-    def as_home(self, step, *args, capture="merged"):
+    def as_home(self, step: typing.Callable[..., typing.Optional[int]], *args: str,
+                capture: str = "merged") -> typing.Tuple[int, str]:
         """A worktree step done in this process as in the main checkout — its directory, no FACTORY_HOME, the places
         its profile sets — and everything restored after it: (exit code, what it said). `capture` keeps what it
         says: `merged` both streams, `out` its standard output (the rest goes on to the terminal), `none` nothing."""
@@ -886,8 +911,8 @@ class Run:
             self.profile()
         return code or 0, said.getvalue().rstrip("\n")
 
-    def link_worktree(self, story):
-        def link(home, story):
+    def link_worktree(self, story: str) -> None:
+        def link(home: str, story: str) -> int:
             if not has_worktree(story, home):
                 print(f"factory: {story} has no worktree", file=sys.stderr)
                 return 1
@@ -895,7 +920,8 @@ class Run:
             return 0
         self.as_home(link, story, capture="none")
 
-    def integrate_stage(self, story, tool, conflicts, lost=None):
+    def integrate_stage(self, story: str, tool: str, conflicts: str,
+                        lost: typing.Optional[Lost] = None) -> typing.Optional[int]:
         """One stage-integrate session — the conflicts, or a repair of a resolution that lost the main line's side of a
         test — then the profile's formatter and the merge committed and squashed. None when it is, else an exit code."""
         what = f"the resolution lost the main line's side of {', '.join(rel for rel, _ in lost)}" if lost \
@@ -936,7 +962,7 @@ class Run:
             return 1
         return None
 
-    def run_story(self, story, tool, start, dry):
+    def run_story(self, story: str, tool: str, start: typing.Optional[str], dry: bool) -> int:
         """Every story in its worktree: made or brought up to date and linked, under the lock; the stages run in it
         with the run folder named absolutely and FACTORY_HOME naming this checkout; delivered, its worktree goes."""
         if dry:
@@ -982,11 +1008,13 @@ class Run:
         try:
             # Resumed onto a main line that changed what the story changes: the conflicts are resolved first, so the
             # next stage works on the main line as it is.
-            code = self.cases.resolve(self, tool, story, out) if "\nconflict: " in "\n" + out else None
-            if code is None:
+            resolved = self.cases.resolve(self, tool, story, out) if "\nconflict: " in "\n" + out else None
+            if resolved is None:
                 if "\nconflict: " in "\n" + out:
                     self.link_worktree(story)
                 code = self.run_stages(story, tool, start, dry)
+            else:
+                code = resolved
         finally:
             os.chdir(self.home)
             self.pwd = self.home
@@ -1006,26 +1034,26 @@ class Run:
     # A request is worked in a process of its own, `factory-cli.py --work-request <id>`, in the main checkout and under
     # this runner's claim: before the next story, between the stages of a running one (never one about that story), and
     # in a slot of its own in a parallel run. `run` and `stop` are the runner's own: a story to run next, the end.
-    def queue(self):
+    def queue(self) -> RequestQueue:
         """The requests as this runner works them (`RequestQueue`), read where the profile puts them."""
         return self.cases.queue(self)
 
-    def request_argv(self, request, tool):
+    def request_argv(self, request: Request, tool: str) -> typing.List[str]:
         argv = [sys.executable, self.cli_path, "--work-request", request["id"], "--tool", tool]
         return argv
 
-    def request_env(self):
+    def request_env(self) -> typing.Dict[str, str]:
         env = self.home_env()
         env.update(FACTORY_RUNNER_WORKER=self.worker, FACTORY_RUNNER_PIPELINE_SHA=self.pipeline_sha,
                    FACTORY_RUNNER_PYTHON=self.py)
         return env
 
-    def work_requests(self, tool, busy=()):
+    def work_requests(self, tool: str, busy: typing.Iterable[str] = ()) -> None:
         """Every request a skill works that is not about a story in <busy>, one after another, each in its own process
         in the main checkout. A signal that arrived ends the loop between two of them."""
         if not self.gate_installed():
             return
-        worked = set()
+        worked: typing.Set[str] = set()
         while True:
             self.checkpoint()
             request = self.queue().next(busy)
@@ -1036,7 +1064,7 @@ class Run:
             code, _ = self.run(self.request_argv(request, tool), cwd=self.home, env=self.request_env())
             self.queue().ended(request, code)
 
-    def between_stages(self, story, tool):
+    def between_stages(self, story: str, tool: str) -> None:
         """Before a stage of a story the runner runs alone: a `stop` — the run ends here, as after a TERM, the story
         resumable —, then the requests that are not about it."""
         if self.options.child:
@@ -1047,7 +1075,7 @@ class Run:
         self.work_requests(tool, busy=(story,))
         self.profile()
 
-    def wait_or_wake(self, interval):
+    def wait_or_wake(self, interval: float) -> None:
         """The watch's pause, cut short by a request: a person's press runs within seconds, not after the interval."""
         end = time.time() + interval
         while time.time() < end:
@@ -1060,28 +1088,28 @@ class Run:
 
     # --- one request, in its own process ----------------------------------------------------------------------
     @contextlib.contextmanager
-    def locked(self):
+    def locked(self) -> typing.Iterator[None]:
         self.take_lock()
         try:
             yield
         finally:
             self.drop_lock()
 
-    def work_request(self, request_id, tool):
+    def work_request(self, request_id: str, tool: str) -> RequestWorked:
         """One request worked (`WorkRequestUseCase`): what it said and its exit — 0 when it is done (and gone), 3 when
         its skill asked a person (waiting), 1 when it failed (kept, `error:`)."""
         self.profile()
         return self.cases.work_request(self, request_id, tool)
 
-    def press(self, kind_name, fields, words, by):
+    def press(self, kind_name: str, fields: typing.Mapping[str, str], words: str, by: str) -> Request:
         """A press as the request it would write: its fields, an id of now, the person who pressed."""
         return dict(fields, id=f"{utc('%Y%m%dT%H%M%S')}-{kind_name}", kind=kind_name, words=words,
                     by=" ".join((by or default_by(self.home)).split()), path=None)
 
-    def default_tool(self):
+    def default_tool(self) -> str:
         return first_word(self.profile().get("tool", "")) or "stand-in"
 
-    def tools_ready(self, tool):
+    def tools_ready(self, tool: str) -> int:
         """Before the first stage: every tool the run may start is a known record whose binary is on the PATH — a run
         that could not start a later unit's tool starts nothing. A `tool.<stage>` for a stage a shared process carries
         is named: the unit is the process (`tool.builder`, `tool.verifier`), never a silent split."""
@@ -1101,7 +1129,7 @@ class Run:
         return 0
 
     # --- the backlog -------------------------------------------------------------------------------------------
-    def parallel_slots(self):
+    def parallel_slots(self) -> typing.Optional[int]:
         """How many stories run at once: --parallel, else FACTORY_PARALLEL, else the profile's `parallel:`, else 1."""
         given = self.parallel or os.environ.get("FACTORY_PARALLEL") or first_word(self.profile().get("parallel", "")) or "1"
         if not given.isdigit() or int(given) == 0:
@@ -1109,7 +1137,7 @@ class Run:
             return None
         return int(given)
 
-    def run_backlog(self, tool, watch, interval, dry):
+    def run_backlog(self, tool: str, watch: bool, interval: int, dry: bool) -> int:
         """Story after story, in the order the schedule names, read off the files every time (`RunBacklogUseCase`)."""
         if not self.gate_installed():
             err(f"factory: no gate at {self.gate_rel} — run 'factory.sh setup'")
@@ -1119,15 +1147,17 @@ class Run:
             return 2
         return self.cases.run_backlog(self, tool, slots, watch, interval, dry)
 
-    def start_request_child(self, request, tool):
+    def start_request_child(self, request: Request, tool: str) -> ChildProcess:
         """A request's process beside the stories of a parallel run, its lines named with the request's id."""
         print(f"══ request {request['id']}  ({request['kind']} {target_text(request)}, by {request.get('by', '?')})")
         flush()
         process = subprocess.Popen(self.request_argv(request, tool), cwd=self.home, env=self.request_env(),
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-        def pump():
-            for line in iter(process.stdout.readline, b""):
+        stream = typing.cast(typing.IO[bytes], process.stdout)    # a pipe: Popen was given one
+
+        def pump() -> None:
+            for line in iter(stream.readline, b""):
                 sys.stdout.write(f"[request {request['id']}] "
                                  f"{line.decode('utf-8', errors='replace').rstrip(chr(13) + chr(10))}\n")
                 sys.stdout.flush()
@@ -1135,7 +1165,7 @@ class Run:
         thread.start()
         return ChildProcess(process, thread)
 
-    def start_child(self, story, tool, start):
+    def start_child(self, story: str, tool: str, start: str) -> ChildProcess:
         """One story's run as a runner process of its own — the same worker on the claim, the run's pipeline hash —
         its lines named with the story's id."""
         options = self.options
@@ -1147,8 +1177,10 @@ class Run:
         flush()
         process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
 
-        def pump():
-            for line in iter(process.stdout.readline, b""):
+        stream = typing.cast(typing.IO[bytes], process.stdout)    # a pipe: Popen was given one
+
+        def pump() -> None:
+            for line in iter(stream.readline, b""):
                 sys.stdout.write(f"[{story}] {line.decode('utf-8', errors='replace').rstrip(chr(13) + chr(10))}\n")
                 sys.stdout.flush()
         thread = threading.Thread(target=pump, daemon=True)
@@ -1162,11 +1194,11 @@ TOOL_SKILL_DIRS = tuple(tool.skills for tool in TOOLS)
 class ChildProcess:
     """A story's or a request's process beside a parallel run, its lines pumped to the runner's."""
 
-    def __init__(self, process, pump):
+    def __init__(self, process: "subprocess.Popen[bytes]", pump: threading.Thread) -> None:
         self.process = process
         self.pump = pump
 
-    def ended(self):
+    def ended(self) -> typing.Optional[int]:
         if self.process.poll() is None:
             return None
         self.pump.join()
@@ -1179,10 +1211,10 @@ STAMP = ".agents/factory/gate.installed"
 PIPELINE_FILES = ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh", "dca_factory/")
 
 
-def package_modules(folder):
+def package_modules(folder: str) -> typing.List[str]:
     """Every module of the package under <folder>, its subpackages' too, by its path below the folder with `/` —
     in the order the install's hash lists them (the C locale's, as Python sorts)."""
-    found = []
+    found: typing.List[str] = []
     for top, dirs, files in os.walk(folder):
         dirs[:] = [d for d in dirs if d != "__pycache__"]
         below = os.path.relpath(top, folder).replace(os.sep, "/")
@@ -1190,6 +1222,6 @@ def package_modules(folder):
     return sorted(found)
 
 
-def read_bytes(path):
+def read_bytes(path: str) -> bytes:
     with open(path, "rb") as handle:
         return handle.read()
