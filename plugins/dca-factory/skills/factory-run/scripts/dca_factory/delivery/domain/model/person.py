@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import dataclasses
 
 from ....building_blocks import Value
 
 
-@dataclasses.dataclass(frozen=True)
 class Person(Value):
     """Who asks or answers, as they name themselves — one line, its spaces collapsed."""
 

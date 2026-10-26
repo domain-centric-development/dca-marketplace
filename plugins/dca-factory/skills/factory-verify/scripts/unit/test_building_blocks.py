@@ -1,5 +1,6 @@
-"""The building blocks (WP-152): a value compares by its attributes and cannot change, an entity by its id, an
-aggregate collects its events until they are cleared, and the failures of the domain and of a use case stay apart."""
+"""The building blocks (WP-152): a value compares by its attributes and cannot change — a frozen dataclass by its base,
+without a decorator —, an entity by its id, an aggregate collects its events until they are cleared, and the failures
+of the domain and of a use case stay apart."""
 
 import dataclasses
 import typing
@@ -9,17 +10,18 @@ import support  # noqa: F401 — puts the package on the path
 from dca_factory import building_blocks as bb
 
 
-@dataclasses.dataclass(frozen=True)
 class ThingId(bb.Id):
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Colour(bb.Value):
     value: str
 
+    def __post_init__(self) -> None:
+        if not self.value.isalpha():
+            raise ValueError(f"{self.value!r} is no colour")
 
-@dataclasses.dataclass(frozen=True)
+
 class Painted(bb.DomainEvent):
     thing: ThingId
     colour: Colour
@@ -66,6 +68,22 @@ class BuildingBlocksTest(unittest.TestCase):
         with self.assertRaises(dataclasses.FrozenInstanceError):
             Colour("red").value = "blue"  # type: ignore[misc]
         self.assertIsInstance(ThingId("t"), bb.Value)
+
+    def test_the_base_makes_a_value_and_an_event_a_frozen_dataclass(self):
+        for cls in (ThingId, Colour, Painted):
+            self.assertTrue(dataclasses.is_dataclass(cls) and cls.__dataclass_params__.frozen, cls)  # type: ignore[attr-defined]
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            Painted(ThingId("t"), Colour("red")).colour = Colour("blue")  # type: ignore[misc]
+        with self.assertRaises(ValueError):
+            Colour("red!")
+        for marker in (bb.Value, bb.Id, bb.DomainEvent):
+            self.assertFalse(dataclasses.is_dataclass(marker), marker)
+
+    def test_a_decorator_of_its_own_fails_at_definition(self):
+        with self.assertRaises(TypeError):
+            @dataclasses.dataclass(frozen=True)
+            class Twice(bb.Value):
+                value: str
 
     def test_an_entity_is_its_identity(self):
         one, same = Thing(ThingId("t"), Colour("red")), Thing(ThingId("t"), Colour("blue"))

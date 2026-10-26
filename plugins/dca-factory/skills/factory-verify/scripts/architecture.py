@@ -7,6 +7,7 @@ moved into a context sit at the top of the package; they are checked for cycles 
 
     layer_findings(package)   an import against the direction of the layers, with the DCA rule id it breaks
     value_findings(package)   a bare primitive or time type in a domain field or a domain signature
+    marker_findings(package)  a dataclass decorator on a value, an identifier or a domain event — their base makes them
     cycle_findings(package)   an import cycle between two modules of the package
 
 Each returns its findings as lines `<module>:<line> <what>`; none means the package holds. Exempt: `web/fonts.py`,
@@ -189,13 +190,25 @@ def annotation_names(node):
     return names
 
 
+#: The building blocks whose subclasses are frozen dataclasses by their base (`building_blocks.py`).
+FROZEN_MARKERS = frozenset(("Value", "Id", "DomainEvent"))
+
+
+def marker_bases(cls):
+    """The building blocks among a class's direct bases that make it a frozen dataclass — `Value`, `bb.Value`;
+    a name inside a base's brackets (`Entity[Id]`) is no base."""
+    names = set()
+    for base in cls.bases:
+        base = base.value if isinstance(base, ast.Subscript) else base
+        names.add(getattr(base, "attr", getattr(base, "id", "")))
+    return FROZEN_MARKERS & names
+
+
 def is_wrapper(cls):
-    """A value object around one primitive: a frozen dataclass whose one field is `value`."""
-    frozen = any(isinstance(d, ast.Call) and getattr(d.func, "attr", getattr(d.func, "id", "")) == "dataclass"
-                 and any(k.arg == "frozen" and getattr(k.value, "value", False) is True for k in d.keywords)
-                 for d in cls.decorator_list)
+    """A value object around one primitive: a `Value` or an `Id` whose one field is `value`."""
     fields = [n for n in cls.body if isinstance(n, ast.AnnAssign) and "ClassVar" not in annotation_names(n.annotation)]
-    return frozen and len(fields) == 1 and getattr(fields[0].target, "id", "") == "value"
+    return bool(marker_bases(cls) - {"DomainEvent"}) and len(fields) == 1 \
+        and getattr(fields[0].target, "id", "") == "value"
 
 
 def value_findings(package):
@@ -239,6 +252,23 @@ def value_findings(package):
                                      f"{', '.join(bare)}")
                 elif isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     signature(item, f"{node.name}.")
+    return found
+
+
+def marker_findings(package):
+    """Every value, identifier or domain event that carries a dataclass decorator of its own: its base already makes it
+    a frozen dataclass, and a second decorator either fails at import or quietly changes what the base set."""
+    found = []
+    for dotted, (rel, tree) in sorted(parsed(package).items()):
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef) or not marker_bases(node):
+                continue
+            for decorator in node.decorator_list:
+                target = decorator.func if isinstance(decorator, ast.Call) else decorator
+                if getattr(target, "attr", getattr(target, "id", "")) == "dataclass":
+                    found.append(f"{rel}:{decorator.lineno} {node.name} is a "
+                                 f"{', '.join(sorted(marker_bases(node)))} — a frozen dataclass by its base, "
+                                 f"without a decorator")
     return found
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import typing
 
 from ....building_blocks import Value
@@ -11,7 +10,6 @@ from ....building_blocks import Value
 USAGE_FIELDS = ("input", "cache_read", "cache_write", "output")
 
 
-@dataclasses.dataclass(frozen=True)
 class TokenCount(Value):
     """A number of tokens, never negative."""
 
@@ -22,21 +20,18 @@ class TokenCount(Value):
             raise ValueError(f"{self.value} tokens")
 
 
-@dataclasses.dataclass(frozen=True)
 class ModelName(Value):
     """The model a process ran on, as its tool reports it — `unknown` where it did not."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Cost(Value):
     """What tokens cost, in dollars, as priced by the price table."""
 
     value: float
 
 
-@dataclasses.dataclass(frozen=True)
 class Shares(Value):
     """In how many even parts a usage is booked — at least one."""
 
@@ -47,7 +42,6 @@ class Shares(Value):
             raise ValueError(f"{self.value} shares")
 
 
-@dataclasses.dataclass(frozen=True)
 class Tokens(Value):
     """Tokens read, read from the cache, written to the cache, and written."""
 
@@ -57,7 +51,6 @@ class Tokens(Value):
     output: TokenCount
 
 
-@dataclasses.dataclass(frozen=True)
 class Usage(Value):
     """What one process used: its tokens on a model, and their cost where it was priced."""
 

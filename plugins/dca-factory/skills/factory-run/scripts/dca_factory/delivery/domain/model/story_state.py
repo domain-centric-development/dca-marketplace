@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import typing
 
@@ -35,14 +34,12 @@ class StateName(enum.Enum):
     SUPERSEDED = "superseded"
 
 
-@dataclasses.dataclass(frozen=True)
 class Detail(Value):
     """Why a story stands where it stands, for a person — "" where nothing needs saying."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Standing(Value):
     """A story's state, the stage it runs from (None where it runs from none), and why."""
 
@@ -51,14 +48,12 @@ class Standing(Value):
     detail: Detail
 
 
-@dataclasses.dataclass(frozen=True)
 class StatusWord(Value):
     """A story's `status:` as it is written, lower case — `approved`, `adopted`, `draft`, or a word nobody knows."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Claimant(Value):
     """Who claimed a story in another factory and since when, as the claim names it: `<who> (<host>) since <at>`."""
 
@@ -89,7 +84,6 @@ class Mark(enum.Enum):
     DOCUMENT_PASSED = "document-passed"
 
 
-@dataclasses.dataclass(frozen=True)
 class StoryFront(Value):
     """What a story says about itself, and the marks read before its run: enough for every story not running."""
 
@@ -103,21 +97,18 @@ class StoryFront(Value):
     claimant: typing.Optional[Claimant]
 
 
-@dataclasses.dataclass(frozen=True)
 class HandOverText(Value):
     """A stage's file of the story's current pass, as written."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class VerdictWord(Value):
     """The judge's `verdict:` — `pass`, `changes-requested`, `story-conflict` — or "" where it wrote none."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class HandOverFacts(Value):
     """A current stage file: its text, its `verdict:`, and the records its `## needs-human` names (None without
     one)."""
@@ -127,7 +118,6 @@ class HandOverFacts(Value):
     asks: typing.Optional[typing.Tuple[RecordId, ...]]
 
 
-@dataclasses.dataclass(frozen=True)
 class RecordFacts(Value):
     """A decision record of the story: its id, its state, the stage its answer resumes at, and its kind."""
 
@@ -137,14 +127,12 @@ class RecordFacts(Value):
     kind: RecordKind
 
 
-@dataclasses.dataclass(frozen=True)
 class GateReport(Value):
     """The text of a gate's refusal."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Rounds(Value):
     """How many rounds of judge and build the story took."""
 
@@ -160,13 +148,11 @@ class AcceptanceVerdict(enum.Enum):
     CORRECTION = "correction"
 
 
-@dataclasses.dataclass(frozen=True)
 class Acceptance(Value):
     verdict: AcceptanceVerdict
     record: typing.Optional[RecordId]
 
 
-@dataclasses.dataclass(frozen=True)
 class RunFacts(Value):
     """What the run of a released story left: the current pass's stage files, the records (or why they could not
     be read), the marks, the refusals, the rounds and the acceptance."""

@@ -4,7 +4,6 @@ for, the review reports are reports — and no stage changed the installed pipel
 
 from __future__ import annotations
 
-import dataclasses
 import typing
 
 from ....building_blocks import DomainService, Value
@@ -25,7 +24,6 @@ OUTCOME_CONTRACT = ContractNumber(14)
 JUDGE = StageName("judge")
 
 
-@dataclasses.dataclass(frozen=True)
 class StoryPassChecked(Value):
     """The findings, and whether the judge passed the story — a signal the gate's run records."""
 

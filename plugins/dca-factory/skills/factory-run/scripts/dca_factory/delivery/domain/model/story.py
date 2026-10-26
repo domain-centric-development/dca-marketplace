@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import typing
 
@@ -12,7 +11,6 @@ from .moment import Moment
 from .person import Person
 
 
-@dataclasses.dataclass(frozen=True)
 class StoryId(Id):
     """The name of one story for its whole life: the `id:` of its front matter, else its folder's name."""
 
@@ -32,7 +30,6 @@ class StoryStatus(enum.Enum):
     OTHER = ""
 
 
-@dataclasses.dataclass(frozen=True)
 class Assumption(Value):
     """A line under a story's `## Assumptions`, as written — `- answered: …` where a person settled it."""
 
@@ -43,14 +40,12 @@ class Assumption(Value):
             raise ValueError("an assumption is one line, not empty")
 
 
-@dataclasses.dataclass(frozen=True)
 class DeliveredOn(Value):
     """When a story was delivered, as its `delivered:` line says it — "" where the line is missing."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class DeliveredBy(Value):
     """Who claims a delivery: `gate`, `hand:<who>`, or "" for one delivered before the line existed."""
 
@@ -72,7 +67,6 @@ class GatePass(enum.Enum):
     MISSING = "missing"
 
 
-@dataclasses.dataclass(frozen=True)
 class Delivery(Value):
     """A story's delivered lines: when and by whom."""
 

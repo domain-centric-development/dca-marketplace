@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import re
 import typing
@@ -13,7 +12,6 @@ from .person import Person
 from .story import StoryId
 
 
-@dataclasses.dataclass(frozen=True)
 class RecordId(Id):
     """The name of one decision record: the `id:` of its front matter, else its file's name."""
 
@@ -24,7 +22,6 @@ class RecordId(Id):
 KEY = re.compile(r"^[A-Za-z0-9]{1,3}$")
 
 
-@dataclasses.dataclass(frozen=True)
 class OptionKey(Value):
     """One option of a record, by its key — `a`, `B`, `1`."""
 
@@ -58,7 +55,6 @@ class RecordKind(enum.Enum):
     ACCEPTANCE = "acceptance"
 
 
-@dataclasses.dataclass(frozen=True)
 class Given(Value):
     """What a person answered: an option's key or their words, as written."""
 
@@ -69,7 +65,6 @@ class Given(Value):
 ACCEPTED = Given("accepted")
 
 
-@dataclasses.dataclass(frozen=True)
 class Answer(Value):
     """The person's answer, who gave it and when."""
 

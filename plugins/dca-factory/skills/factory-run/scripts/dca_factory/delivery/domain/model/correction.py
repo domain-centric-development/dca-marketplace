@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 
 from ....building_blocks import Value
 
@@ -12,7 +11,6 @@ REASON_CODES = ("structural", "behavioural", "domain-concept", "domain-boundary"
                 "assumption")
 
 
-@dataclasses.dataclass(frozen=True)
 class ReasonCode(Value):
     """One of the reason codes a correction names, lower case."""
 

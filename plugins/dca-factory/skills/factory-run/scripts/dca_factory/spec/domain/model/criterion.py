@@ -10,35 +10,30 @@ import typing
 from ....building_blocks import Value
 
 
-@dataclasses.dataclass(frozen=True)
 class CriterionKey(Value):
     """A criterion's key — unique across its context, so a criterion moves between features keeping it."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class RuleText(Value):
     """The text of a `### Rule:` that groups criteria within a feature."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Line(Value):
     """One line of a criterion as written: its heading or its text, a step of a scenario."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Selector(Value):
     """A test, as the `Test:` line names it."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class FeatureName(Value):
     """A feature as its folder is named. Empty for what belongs to no feature: the context's own file."""
 
@@ -59,7 +54,6 @@ class FeatureName(Value):
 CONTEXT_WIDE = "context"
 
 
-@dataclasses.dataclass(frozen=True)
 class Place(Value):
     """A feature as the delta names it — its name, or `context` for none."""
 
@@ -73,7 +67,6 @@ class Form(enum.Enum):
     LINE = "line"
 
 
-@dataclasses.dataclass(frozen=True)
 class Wording(Value):
     """A criterion as it is compared word for word: its rule beside its lines, white space collapsed."""
 
@@ -81,7 +74,6 @@ class Wording(Value):
     lines: Line
 
 
-@dataclasses.dataclass(frozen=True)
 class Criterion(Value):
     """One statement of what holds, under its key and its rule, in its form, with the tests that prove it — and the
     feature it stands under in the spec."""

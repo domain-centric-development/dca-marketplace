@@ -4,32 +4,45 @@ decide on it."""
 
 from __future__ import annotations
 
-import dataclasses
 import enum
+import re
 import typing
 
 from ....building_blocks import DomainService, Value
 
 
-@dataclasses.dataclass(frozen=True)
+#: A hand-over's file name — one word or a hyphenated phrase, `.md`, no folder.
+HAND_OVER = re.compile(r"[a-z][a-z-]*\.md")
+
+#: A key of the stack profile — `format`, `e2eTest`, `test.integration`.
+PROFILE_KEY = re.compile(r"[a-z][A-Za-z0-9]*(\.[a-z][a-z0-9-]*)?")
+
+
 class StageName(Value):
-    """A stage by its name — `plan`, `build`, `integrate`."""
+    """A stage by its name — `plan`, `build`, `integrate`. Read from a decision record as its author wrote it, so it is
+    not held to a form: whether the pipeline knows the stage is the stage table's question."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class HandOver(Value):
     """A hand-over file a stage writes under the run folder — `plan.md`."""
 
     value: str
 
+    def __post_init__(self) -> None:
+        if not HAND_OVER.fullmatch(self.value):
+            raise ValueError(f"{self.value!r} is no hand-over file name")
 
-@dataclasses.dataclass(frozen=True)
+
 class ProfileCommand(Value):
     """A command the stack profile declares under this key — `architecture`, `format`."""
 
     value: str
+
+    def __post_init__(self) -> None:
+        if not PROFILE_KEY.fullmatch(self.value):
+            raise ValueError(f"{self.value!r} is no key of the stack profile")
 
 
 class StoryKind(enum.Enum):
@@ -77,7 +90,6 @@ ALL_KINDS = frozenset(StoryKind)
 TESTED_KINDS = frozenset((StoryKind.STORY, StoryKind.JOURNEY, StoryKind.ADOPT))
 
 
-@dataclasses.dataclass(frozen=True)
 class Stage(Value):
     """One row of the pipeline."""
 

@@ -10,6 +10,7 @@ from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as p
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.delivery.adapter.outgoing.files import epic_files as epics_files
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
+from dca_factory.delivery.domain.model import stage
 
 
 class FrontMatter(unittest.TestCase):
@@ -233,6 +234,18 @@ class StageTable(unittest.TestCase):
         self.assertEqual(contract.STAGE_CHECKS["build"], ("architecture", "format"))
         self.assertEqual(contract.STAGE_CHECKS["document"], ("architecture",))
         self.assertEqual(contract.POST_GATED, ("test", "build", "tidy", "document"))
+
+    def test_a_hand_over_and_a_profile_command_hold_their_form(self):
+        for name in ("plan.md", "tests.md", "integrate.md"):
+            self.assertEqual(name, stage.HandOver(name).value)
+        for name in ("../plan.md", "plan", "Plan.md", ""):
+            with self.assertRaises(ValueError, msg=name):
+                stage.HandOver(name)
+        for key in ("architecture", "format", "e2eTest", "test.integration"):
+            self.assertEqual(key, stage.ProfileCommand(key).value)
+        for key in ("", "Format", "test.", "a b"):
+            with self.assertRaises(ValueError, msg=key):
+                stage.ProfileCommand(key)
 
 
 class Epics(unittest.TestCase):

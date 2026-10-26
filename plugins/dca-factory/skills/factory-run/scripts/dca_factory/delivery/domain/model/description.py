@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import typing
 
@@ -17,7 +16,6 @@ class Part(enum.Enum):
     DOMAIN = "domain"
 
 
-@dataclasses.dataclass(frozen=True)
 class Heading(Value):
     """A `## ` heading of a part, as written."""
 
@@ -39,7 +37,6 @@ REQUIRED: typing.Mapping[Part, typing.Tuple[Heading, ...]] = {
 }
 
 
-@dataclasses.dataclass(frozen=True)
 class Written(Value):
     """A part as it is written: its headings in order, and those whose section says something — guidance in comments
     says nothing."""

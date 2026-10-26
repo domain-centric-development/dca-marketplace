@@ -4,7 +4,6 @@ turns it red."""
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import typing
 
@@ -30,7 +29,6 @@ class BreakOutcome(enum.Enum):
     UNAPPLIED = "unapplied"
 
 
-@dataclasses.dataclass(frozen=True)
 class BreakResult(Value):
     outcome: BreakOutcome
     said: Detail

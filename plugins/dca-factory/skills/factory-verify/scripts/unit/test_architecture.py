@@ -73,8 +73,9 @@ class ValuesTest(unittest.TestCase):
             plant(root, {
                 "delivery/domain/model/story.py":
                     "import dataclasses, datetime, typing\n"
-                    "@dataclasses.dataclass(frozen=True)\nclass StoryId:\n    value: str\n"
-                    "@dataclasses.dataclass(frozen=True)\nclass Pair:\n    value: str\n    other: int\n"
+                    "class StoryId(Id):\n    value: str\n"
+                    "class Pair(Value):\n    value: str\n    other: int\n"
+                    "@dataclasses.dataclass(frozen=True)\nclass Loose:\n    value: str\n"
                     "class Story:\n    title: str\n    LIMIT: typing.ClassVar[int] = 3\n"
                     "    def __str__(self) -> str: ...\n"
                     "    def rename(self, title: typing.Optional[str]) -> None: ...\n"
@@ -84,12 +85,35 @@ class ValuesTest(unittest.TestCase):
             })
             found = architecture.value_findings(root)
         said = " ".join(found)
-        self.assertEqual(6, len(found), found)
-        for part in ("Pair.value is str", "Pair.other is int", "Story.title is str", "rename(title) takes str",
-                     "is_draft returns bool", "due(at) takes datetime"):
+        self.assertEqual(7, len(found), found)
+        for part in ("Pair.value is str", "Pair.other is int", "Loose.value is str", "Story.title is str",
+                     "rename(title) takes str", "is_draft returns bool", "due(at) takes datetime"):
             self.assertIn(part, said)
         self.assertNotIn("StoryId", said)
         self.assertNotIn("release", said)
+
+
+class MarkersTest(unittest.TestCase):
+
+    def test_the_factory_leaves_the_dataclass_to_the_base(self):
+        self.assertEqual([], architecture.marker_findings(PACKAGE))
+
+    def test_a_decorator_on_a_value_an_id_or_an_event_is_found(self):
+        with tempfile.TemporaryDirectory() as root:
+            plant(root, {
+                "delivery/domain/model/story.py":
+                    "import dataclasses, typing\nfrom ....building_blocks import DomainEvent, Entity, Id, Value\n"
+                    "import building_blocks as bb\n"
+                    "@dataclasses.dataclass(frozen=True)\nclass StoryId(Id):\n    value: str\n"
+                    "@dataclasses.dataclass\nclass Title(bb.Value):\n    value: str\n"
+                    "@dataclasses.dataclass(frozen=True)\nclass Released(DomainEvent):\n    story: StoryId\n"
+                    "class Kept(Value):\n    value: str\n"
+                    "@dataclasses.dataclass(frozen=True)\nclass Command:\n    story: StoryId\n"
+                    "@dataclasses.dataclass\nclass Story(Entity[Id]):\n    title: Title\n",
+            })
+            found = architecture.marker_findings(root)
+        self.assertEqual(["StoryId is a Id", "Title is a Value", "Released is a DomainEvent"],
+                         [f.split(" ", 1)[1].split(" —")[0] for f in found], found)
 
 
 class CyclesTest(unittest.TestCase):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import re
 import typing
@@ -16,47 +15,40 @@ from .story import DeliveredOn, StoryId
 from .story_state import Detail, HandOverText, Rounds, StatusWord
 
 
-@dataclasses.dataclass(frozen=True)
 class Place(Value):
     """A file as the gate names it — where a person finds what a finding speaks of."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Count(Value):
     value: int
 
 
-@dataclasses.dataclass(frozen=True)
 class ScenarioKey(Value):
     """A criterion's key — the name the test stage binds."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class RowId(Value):
     """A finding row a task closes: `<story>#<n>`, or `<name>#<n>` of a project finding file."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class RowState(Value):
     """Where a finding row stands: `open`, or what closed it."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class EventName(Value):
     """An outcome event, as a story's `publishes:` names it."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class StageStory(Value):
     """One story under a gate: what its front matter and its criteria say."""
 
@@ -80,14 +72,12 @@ class StageStory(Value):
     feature: Detail = Detail("")
 
 
-@dataclasses.dataclass(frozen=True)
 class ContractNumber(Value):
     """A gate contract: what the gate reads and writes, raised when that changes incompatibly."""
 
     value: int
 
 
-@dataclasses.dataclass(frozen=True)
 class GateRelease(Value):
     """The gate that checks: the contract it implements and its version."""
 
@@ -95,19 +85,16 @@ class GateRelease(Value):
     version: Detail
 
 
-@dataclasses.dataclass(frozen=True)
 class ProfileKey(Value):
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class ProfileText(Value):
     """A profile value, as written."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class UnknownKey(Value):
     """A profile key nobody reads, and the nearest key that is read."""
 
@@ -115,7 +102,6 @@ class UnknownKey(Value):
     near: typing.Optional[ProfileKey]
 
 
-@dataclasses.dataclass(frozen=True)
 class ModelKey(Value):
     """A `model…` key of the profile and its value."""
 
@@ -123,7 +109,6 @@ class ModelKey(Value):
     value_written: ProfileText
 
 
-@dataclasses.dataclass(frozen=True)
 class RoundsRecord(Value):
     """The rounds a story ran without converging, as its counter holds them — None where the counter is no number."""
 
@@ -131,14 +116,12 @@ class RoundsRecord(Value):
     rounds: typing.Optional[Rounds]
 
 
-@dataclasses.dataclass(frozen=True)
 class OwnedPart(Value):
     """Something of the person's a stage may not change: the story, an answer."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class OwnedFacts(Value):
     """What a stage changed of the person's: the parts a past window marked, and those changed while this one runs —
     None where nothing records what they were."""
@@ -147,7 +130,6 @@ class OwnedFacts(Value):
     changed: typing.Optional[typing.Tuple[OwnedPart, ...]]
 
 
-@dataclasses.dataclass(frozen=True)
 class ContextMapFacts(Value):
     """The context map a story's context is looked up on: the designed map's file where the profile names one that
     is not there, the map found, and the names it gives."""
@@ -157,12 +139,10 @@ class ContextMapFacts(Value):
     names: typing.FrozenSet[ContextName]
 
 
-@dataclasses.dataclass(frozen=True)
 class ByteSize(Value):
     value: int
 
 
-@dataclasses.dataclass(frozen=True)
 class InstructionFile(Value):
     """The project's instruction file a tool loads first, and its size."""
 
@@ -170,21 +150,18 @@ class InstructionFile(Value):
     size: ByteSize
 
 
-@dataclasses.dataclass(frozen=True)
 class EpicField(Value):
     """A mandatory field of an epic's front matter."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Metric(Value):
     """An epic's `metric:` — the outcome event that measures it."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class EpicFacts(Value):
     """A story's epic: its file and name, the mandatory fields it lacks, the discovery report it names and lacks, why
     its dependencies do not hold, and its metric — or why the story names no epic there is."""
@@ -198,14 +175,12 @@ class EpicFacts(Value):
     unreadable: typing.Optional[Detail] = None
 
 
-@dataclasses.dataclass(frozen=True)
 class AnswerField(Value):
     """A line a confirmed answer carries: `answer:`, `by:`, `at:`."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class DecisionFacts(Value):
     """One decision record of the story, as its gate reads it: where it stands, the stage that asked it (open or a
     draft) or applies its answer, its question, the answer and who gave it, the answer lines a draft lacks."""
@@ -221,7 +196,6 @@ class DecisionFacts(Value):
     missing: typing.Tuple[AnswerField, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class HandOverAsk(Value):
     """A stage's hand-over as the decisions check reads it: its text, and the records its `## needs-human` names —
     None where it escalates nothing, none where it escalates without naming one."""
@@ -232,7 +206,6 @@ class HandOverAsk(Value):
     asks: typing.Optional[typing.Tuple[RecordId, ...]]
 
 
-@dataclasses.dataclass(frozen=True)
 class DecisionsFacts(Value):
     """The story's decision records under their store, and the stages' hand-overs — or why the store cannot be
     read."""
@@ -247,14 +220,12 @@ class DecisionsFacts(Value):
 SELECTOR_FORM = re.compile(r"^([\w.]+)#([\w]+)$")
 
 
-@dataclasses.dataclass(frozen=True)
 class Selector(Value):
     """A test as the tests table names it: `<Class>#<method>`."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class CommandKey(Value):
     """A profile key of a test command — `test`, `e2eTest`, `test.journey`."""
 
@@ -268,7 +239,6 @@ class TitleFound(enum.Enum):
     UNTITLED = "untitled"
 
 
-@dataclasses.dataclass(frozen=True)
 class TitleCheck(Value):
     """An end-user test's scenario title, and whether the test is reported under it."""
 
@@ -276,7 +246,6 @@ class TitleCheck(Value):
     found: TitleFound
 
 
-@dataclasses.dataclass(frozen=True)
 class MappedTest(Value):
     """One row of the tests table: the criterion, its test, the file it was found in, the command that runs that
     file, and — for an end-user test of a titled scenario — its title check."""
@@ -288,7 +257,6 @@ class MappedTest(Value):
     title: typing.Optional[TitleCheck]
 
 
-@dataclasses.dataclass(frozen=True)
 class TestTable(Value):
     """The test stage's table: where it stands and the criteria its rows name, row by row."""
 
@@ -297,7 +265,6 @@ class TestTable(Value):
     tests: Count
 
 
-@dataclasses.dataclass(frozen=True)
 class TestLocation(Value):
     """Where a mapped test was looked for: the file it was found in by its shape, or the file named after its class
     that lacks the method, or neither."""
@@ -309,7 +276,6 @@ class TestLocation(Value):
     shape: Detail
 
 
-@dataclasses.dataclass(frozen=True)
 class PlanLevels(Value):
     """The levels the plan gave: the keys its skeleton left without one, the keys it gave `browser-only`, the keys
     it gave `integration (adapter: …)` — an incoming adapter's translation, tested against a stubbed input port by
@@ -320,7 +286,6 @@ class PlanLevels(Value):
     adapter: typing.FrozenSet[ScenarioKey]
 
 
-@dataclasses.dataclass(frozen=True)
 class HandOverSize(Value):
     """A hand-over and the bytes of it the stage wrote."""
 
@@ -328,26 +293,22 @@ class HandOverSize(Value):
     size: ByteSize
 
 
-@dataclasses.dataclass(frozen=True)
 class HandOverName(Value):
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class ElementName(Value):
     """A domain type the plan names — `Task`, `TaskTitle`."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Rule(Value):
     """One invariant of a domain type, as the plan words it — a guard included."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class ElementRules(Value):
     """A domain type's line under the plan's `## Invariants`: its rules, none where it says why it has none."""
 
@@ -355,7 +316,6 @@ class ElementRules(Value):
     rules: typing.Tuple[Rule, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class InvariantRow(Value):
     """A row of the tests' `gate:invariants` table: the type, the rule numbers it covers, and its unit test — the
     selector where one is written as `<Class>#<method>`, the text where it is not."""
@@ -366,7 +326,6 @@ class InvariantRow(Value):
     malformed: typing.Optional[Detail]
 
 
-@dataclasses.dataclass(frozen=True)
 class InvariantFacts(Value):
     """What the plan says of the domain types it changes, and the tests' table of their rules."""
 
@@ -376,7 +335,6 @@ class InvariantFacts(Value):
     rows: typing.Optional[typing.Tuple[InvariantRow, ...]]
 
 
-@dataclasses.dataclass(frozen=True)
 class Clause(Value):
     """An expectation of a scenario — its `Then` or an `And`/`But` after it — numbered from 1."""
 
@@ -384,13 +342,11 @@ class Clause(Value):
     text: Detail
 
 
-@dataclasses.dataclass(frozen=True)
 class ScenarioClauses(Value):
     key: ScenarioKey
     clauses: typing.Tuple[Clause, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class ClauseRow(Value):
     """A row of the tests' `gate:clauses` table: the clause, the line that asserts it, the level it runs at."""
 
@@ -408,7 +364,6 @@ class AssertionAt(enum.Enum):
     ASSERTS = "asserts"
 
 
-@dataclasses.dataclass(frozen=True)
 class AssertionFact(Value):
     """A test file's line as an assertion: what the line does, and whether the file is one of the given tests."""
 
@@ -416,7 +371,6 @@ class AssertionFact(Value):
     among: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class PortName(Value):
     """A port type a test declares as a double."""
 
@@ -433,7 +387,6 @@ class Presence(enum.Enum):
     ABSENT = "absent"
 
 
-@dataclasses.dataclass(frozen=True)
 class PlannedFile(Value):
     """A file the plan's `## Files` says becomes new or is removed, and whether it is there after the build."""
 
@@ -451,7 +404,6 @@ class Unobserved(enum.Enum):
     NOT_OBSERVED = "not observed"
 
 
-@dataclasses.dataclass(frozen=True)
 class StageChanges(Value):
     """What a stage changed and what its hand-overs list: the files changed, the hand-overs read, the files they
     list — None where none has a list —, and the changed tests that are the version the test stage saw red again."""
@@ -472,13 +424,11 @@ class TestChange(enum.Enum):
     SWITCHED_OFF = "switched off"
 
 
-@dataclasses.dataclass(frozen=True)
 class ChangedTest(Value):
     place: Place
     how: TestChange
 
 
-@dataclasses.dataclass(frozen=True)
 class KeptTests(Value):
     """The tests that existed before the story, against their baseline: the ones that no longer expect what they
     did, the ones whose baseline git lost, the ones changed only around their assertions."""
@@ -488,7 +438,6 @@ class KeptTests(Value):
     arranged: typing.Tuple[Place, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class DecidedRecord(Value):
     """An answered decision about tests: the stage that asked it, and its text."""
 
@@ -497,7 +446,6 @@ class DecidedRecord(Value):
     text: Detail
 
 
-@dataclasses.dataclass(frozen=True)
 class PlannedTestChange(Value):
     """A row of the plan's `## Changed tests`: the test, and what the row cites."""
 
@@ -505,7 +453,6 @@ class PlannedTestChange(Value):
     cites: Detail
 
 
-@dataclasses.dataclass(frozen=True)
 class RedProof(Value):
     """The red ledger against the tests as they are: how many tests it names, how many without a file digest, the
     tests whose file changed since, and — at tidy — whether tidy reworked a test the red tree can prove again."""
@@ -516,7 +463,6 @@ class RedProof(Value):
     reproof: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class SpecDelta(Value):
     """The plan's `## Spec delta` against the story and the spec as it stands, as the spec's rules read it: what is
     wrong with it, the criteria that hold and that the story changes or removes, how many it adds and leaves."""
@@ -529,7 +475,6 @@ class SpecDelta(Value):
     holds: Count
 
 
-@dataclasses.dataclass(frozen=True)
 class SpecTests(Value):
     """The tests the spec the story changes names: the moved tests that are not there, how many the spec names
     outside the story's own, and the ones of those that are gone."""
@@ -540,7 +485,6 @@ class SpecTests(Value):
     missing: typing.Tuple[Detail, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class StoryCommit(Value):
     """The story's commit against the test files its mapping and its spec name: its short id, how many files, and
     the ones it lacks or holds otherwise than the worktree."""
@@ -558,7 +502,6 @@ class PlannedDigest(enum.Enum):
     SAME = "same"
 
 
-@dataclasses.dataclass(frozen=True)
 class PassGap(Value):
     """A stage of this pass without its hand-over: missing, or written for an earlier pass."""
 
@@ -566,7 +509,6 @@ class PassGap(Value):
     earlier: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class StoryPass(Value):
     """What a delivery rests on: the stages of this pass that did not write their file after the one before, the
     judge's verdict, and the story against the one planned."""
@@ -576,7 +518,6 @@ class StoryPass(Value):
     planned: PlannedDigest
 
 
-@dataclasses.dataclass(frozen=True)
 class OutcomeEvent(Value):
     """An outcome event the story publishes: the production files that declare it, and those that raise it."""
 
@@ -585,7 +526,6 @@ class OutcomeEvent(Value):
     raising: typing.Tuple[Place, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class OutcomeFacts(Value):
     """The story's outcome events in the production code, and the files the story changed — None where no record
     says."""
@@ -594,7 +534,6 @@ class OutcomeFacts(Value):
     changed: typing.Optional[typing.FrozenSet[Place]]
 
 
-@dataclasses.dataclass(frozen=True)
 class DocumentFacts(Value):
     """What the document stage wrote, read for what can be checked: why it cannot be read, whether it stopped with
     a question, how many documents it says it updated, the paths it names that do not resolve, its rows that say
@@ -608,7 +547,6 @@ class DocumentFacts(Value):
     unsourced: typing.Tuple[Detail, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class ProposalFacts(Value):
     """The terms the plan proposed, whether the project keeps a glossary, and the terms neither in one nor named
     open."""
@@ -618,7 +556,6 @@ class ProposalFacts(Value):
     missing: typing.Tuple[Detail, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class ReviewFacts(Value):
     """The review perspectives: the ones with a report, without a file, with a file that is no report."""
 
@@ -627,7 +564,6 @@ class ReviewFacts(Value):
     malformed: typing.Tuple[Detail, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class PipelineFacts(Value):
     """The installed pipeline's folder, and the files of it a stage changed — None where no stage left a record."""
 
@@ -635,7 +571,6 @@ class PipelineFacts(Value):
     touched: typing.Optional[typing.Tuple[Place, ...]]
 
 
-@dataclasses.dataclass(frozen=True)
 class Integration(Value):
     """The story's branch against the main line: whether the gate runs in the story's worktree (and the variable
     that names the main checkout), whether its target is recorded, the target, the paths left unmerged, the story's
@@ -650,7 +585,6 @@ class Integration(Value):
     moved: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class MainTestLines(Value):
     """A test file and lines of it: the main line's lines a merge rewrote, or lost."""
 
@@ -658,7 +592,6 @@ class MainTestLines(Value):
     lines: typing.Tuple[Detail, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class MainTests(Value):
     """The main line's side of the tests a merge met: the lines rewritten to a name the story re-signed, the files
     an answered integrate decision settles (with its ids), the lines the resolution lost, and the target."""
@@ -699,7 +632,6 @@ class Evidence(enum.Enum):
     EXIT_CODE = "exit code"
 
 
-@dataclasses.dataclass(frozen=True)
 class TestOutcome(Value):
     """One mapped test as its run left it: the command that ran it, the state, how the report showed it, the
     invocation (and, where it ran alone after a shared run missed it, that invocation), the exit code, the end of
@@ -720,7 +652,6 @@ class TestOutcome(Value):
     timeout: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class RunEnd(Value):
     """The end of one invocation's outcomes — shared where it carried several tests."""
 
@@ -728,7 +659,6 @@ class RunEnd(Value):
     shared: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class TestRun(Value):
     """A gate's run of the mapped tests: whether the profile names a test command at all, and what each
     invocation said, in order."""
@@ -737,7 +667,6 @@ class TestRun(Value):
     items: typing.Tuple[typing.Union[TestOutcome, RunEnd], ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class RedLedger(Value):
     """The red ledger as a run reads it: whether there is one (and its name), the tests it names, the decisions and
     corrections that changed an expectation, whether an earlier pass's build met the tests, and the tests whose file
@@ -751,7 +680,6 @@ class RedLedger(Value):
     moved: typing.FrozenSet[Selector]
 
 
-@dataclasses.dataclass(frozen=True)
 class CommandRun(Value):
     """One run of a profile command: the command, its exit code, the end of its output, and where it came from when
     the gate did not start it."""
@@ -762,7 +690,6 @@ class CommandRun(Value):
     reused: Detail
 
 
-@dataclasses.dataclass(frozen=True)
 class Retried(Value):
     """A red test outside the story, run again alone: the test and the invocation that ran it."""
 
@@ -770,7 +697,6 @@ class Retried(Value):
     alone: Detail
 
 
-@dataclasses.dataclass(frozen=True)
 class SuiteRun(Value):
     """A test command run whole: its key, the run, how many cases ran and failed by its reports (after a retry of
     red tests outside the story), the ones green alone (flaky), the ones red again, and whether its exit code is
@@ -785,7 +711,6 @@ class SuiteRun(Value):
     exit_code_only: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class SuiteCommands(Value):
     """The test commands the profile declares and the ones its policy requires: every key a run may need, with its
     command where the profile names one."""
@@ -794,7 +719,6 @@ class SuiteCommands(Value):
     required: typing.FrozenSet[CommandKey]
 
 
-@dataclasses.dataclass(frozen=True)
 class Snapshot(Value):
     """The commit's index against the working tree: why no tree could be written, the tree, what differs from it
     outside the pipeline's own and the tools' folders, and how many files the pipeline wrote itself."""
@@ -805,7 +729,6 @@ class Snapshot(Value):
     left: Count
 
 
-@dataclasses.dataclass(frozen=True)
 class ParityScenario(Value):
     """A scenario of a parity contract: its id, its title — what binds it to a test — and whether every
     configuration has to prove it."""
@@ -815,7 +738,6 @@ class ParityScenario(Value):
     always: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class ImplementationReports(Value):
     """One implementation's reports: its name, the glob, how many reports match, the newest, and the outcome each
     test name has in them."""
@@ -827,7 +749,6 @@ class ImplementationReports(Value):
     outcomes: typing.Tuple[typing.Tuple[Detail, Detail], ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class ParityFacts(Value):
     """A parity config: its file, the contract's file and digest, its scenarios, and each implementation's
     reports."""

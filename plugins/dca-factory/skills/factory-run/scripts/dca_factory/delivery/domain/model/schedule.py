@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import typing
 
@@ -13,7 +12,6 @@ from .story import StoryId
 from .story_state import Detail, Standing
 
 
-@dataclasses.dataclass(frozen=True)
 class ContextName(Value):
     """The bounded context a story changes, as its `context:` names it — "" where it names none."""
 
@@ -27,7 +25,6 @@ class Liveness(enum.Enum):
     SILENT = "silent"
 
 
-@dataclasses.dataclass(frozen=True)
 class Running(Value):
     """A stage — or the runner's own step — begun and not ended, since when, and whether it still counts as
     running."""
@@ -44,7 +41,6 @@ class Holding(enum.Enum):
     WORKTREE = "worktree"
 
 
-@dataclasses.dataclass(frozen=True)
 class Entry(Value):
     """One story as the schedule reads it."""
 
@@ -57,7 +53,6 @@ class Entry(Value):
     running: typing.Optional[Running]
 
 
-@dataclasses.dataclass(frozen=True)
 class EpicGraph(Value):
     """The epics' `depends_on:`, their order, and those on a cycle."""
 
@@ -66,7 +61,6 @@ class EpicGraph(Value):
     cycle: typing.FrozenSet[EpicId]
 
 
-@dataclasses.dataclass(frozen=True)
 class Slots(Value):
     """How many stories a runner runs at once, each in its worktree."""
 
@@ -80,7 +74,6 @@ class Wait(enum.Enum):
     NO = "no"
 
 
-@dataclasses.dataclass(frozen=True)
 class Schedule(Value):
     """Every story's standing in the order, the stories that start now, and why none does where none does."""
 

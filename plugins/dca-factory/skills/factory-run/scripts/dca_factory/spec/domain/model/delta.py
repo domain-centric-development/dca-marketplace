@@ -18,14 +18,12 @@ class Verdict(enum.Enum):
     CHANGES = "changes"
 
 
-@dataclasses.dataclass(frozen=True)
 class Reason(Value):
     """Why a criterion is removed, as the plan says it — empty where it says nothing."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Move(Value):
     """A criterion leaving one place for another."""
 
@@ -33,7 +31,6 @@ class Move(Value):
     destination: Place
 
 
-@dataclasses.dataclass(frozen=True)
 class Rename(Value):
     """A rule reworded: its old text, its new one."""
 
@@ -41,7 +38,6 @@ class Rename(Value):
     new: RuleText
 
 
-@dataclasses.dataclass(frozen=True)
 class Delta(Value):
     """The plan's `## Spec delta`: criteria added, changed, held, removed (with why), rules renamed, criteria moved
     between features, features born."""
@@ -59,7 +55,6 @@ class Delta(Value):
         return {Verdict.ADDS: self.adds, Verdict.CHANGES: self.changes, Verdict.HOLDS: self.holds}[verdict]
 
 
-@dataclasses.dataclass(frozen=True)
 class Problem(Value):
     """What is wrong with a delta or with where a story puts its criteria, in one sentence."""
 

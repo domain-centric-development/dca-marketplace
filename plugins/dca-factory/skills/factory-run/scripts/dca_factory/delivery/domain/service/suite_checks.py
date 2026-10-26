@@ -3,7 +3,6 @@ test commands the policy requires run whole and green — a red test outside the
 
 from __future__ import annotations
 
-import dataclasses
 import typing
 
 from ....building_blocks import DomainService, Value
@@ -16,7 +15,6 @@ FLAKY = CheckName("flaky")
 TEST = CheckName("test")
 
 
-@dataclasses.dataclass(frozen=True)
 class SuiteJudged(Value):
     """The findings of a suite's run, and the tests noted flaky."""
 

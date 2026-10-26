@@ -3,7 +3,6 @@ stage or the judge sent it back — decided over the stage table and what the ru
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import typing
 
@@ -34,7 +33,6 @@ class Around(enum.Enum):
     VERDICT = "verdict"         # the judge's verdict decides what comes after it
 
 
-@dataclasses.dataclass(frozen=True)
 class RouteStep(Value):
     """One stage of the route and how the run takes it; `skipped` says why a kind does not run it."""
 

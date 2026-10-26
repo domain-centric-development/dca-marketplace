@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import typing
 
 from ....building_blocks import DomainService, Value
@@ -17,7 +16,6 @@ DECISIONS = CheckName("decisions")
 INTEGRATE = StageName("integrate")
 
 
-@dataclasses.dataclass(frozen=True)
 class Applying(Value):
     """An answer its stage applied: the record is stamped applied, and the answer becomes an `answered:` line of the
     story — effects the gate's run carries out before the finding is said."""
@@ -26,7 +24,6 @@ class Applying(Value):
     stage: StageName
 
 
-@dataclasses.dataclass(frozen=True)
 class DecisionsChecked(Value):
     """What the check found, in order: findings, and the answers to apply where they stand."""
 

@@ -2,7 +2,8 @@
 
 Outside every bounded context, as the building blocks are a dependency of every module and of none of them: the
 domain, the application and the adapters of each context import from here, this module imports nothing of theirs.
-stdlib only — frozen dataclasses, `typing.Protocol`, `abc`.
+stdlib only — frozen dataclasses, `typing.Protocol`, `abc`. A subclass of `Value`, `Id` or `DomainEvent` is a frozen
+dataclass by its base: it declares its fields and carries no decorator of its own.
 
     Value, Id                  a characteristic without identity; the identifier of one entity for its whole life
     Entity, AggregateRoot      a domain object known by its identity; the entry to a cluster, collecting its events
@@ -21,9 +22,17 @@ life cycle, a value where something is described.
 from __future__ import annotations
 
 import abc
+import dataclasses
 import typing
 
 
+def _frozen(cls: type) -> None:
+    """Make a subclass of a marker a frozen dataclass — the markers themselves, declared here, stay plain classes."""
+    if cls.__module__ != __name__:
+        dataclasses.dataclass(frozen=True)(cls)
+
+
+@typing.dataclass_transform(frozen_default=True)   # the type checker's view of the same
 class Value:
     """Marker for Value Objects.
 
@@ -31,12 +40,11 @@ class Value:
     with the same attributes are the same value. It is immutable; a change produces a new instance. Having no life
     cycle of its own, it is never loaded or saved alone — it travels inside the entity or aggregate that holds it.
 
-    - immutable, with attribute equality: a frozen dataclass is the natural shape;
+    - immutable, with attribute equality: every subclass is a frozen dataclass by this base, without a decorator;
     - self-validating: `__post_init__` rejects what makes no sense in the domain;
     - behaviour without side effects, returning new values;
     - it references no aggregate root and no entity.
 
-        @dataclass(frozen=True)
         class OptionKey(Value):
             value: str
 
@@ -48,6 +56,10 @@ class Value:
     """
 
     __slots__ = ()
+
+    def __init_subclass__(cls, **kwargs: typing.Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _frozen(cls)
 
 
 class Id(Value):
@@ -92,17 +104,22 @@ class Entity(abc.ABC, typing.Generic[ID]):
         return other is not None and self.id == other.id
 
 
+@typing.dataclass_transform(frozen_default=True)   # the type checker's view of the same
 class DomainEvent:
     """Marker for Domain Events.
 
     Something that happened in the domain that domain experts care about, named in the past tense
-    (`DeliveryAccepted`, `StoryReleased`). Immutable — a frozen dataclass —, it carries when it happened as a value of
+    (`DeliveryAccepted`, `StoryReleased`). Immutable — a frozen dataclass by this base —, it carries when it happened as a value of
     the domain's own and the event's data; it is data, not a component, and internal to its bounded context, so it
     evolves without versioning. An aggregate registers it during a state change; the use case publishes and clears
     the events once the aggregate is saved.
     """
 
     __slots__ = ()
+
+    def __init_subclass__(cls, **kwargs: typing.Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _frozen(cls)
 
 
 class AggregateRoot(Entity[ID]):

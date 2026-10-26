@@ -3,7 +3,6 @@ and when a flaky test becomes a finding of its own."""
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import typing
 
@@ -25,7 +24,6 @@ class AcceptanceMode(enum.Enum):
     ALL = "all"
 
 
-@dataclasses.dataclass(frozen=True)
 class AcceptanceStep(Value):
     """What the acceptance says at the gate that delivers: the findings, whether to ask a person now, and whether
     the delivery goes on."""
@@ -35,7 +33,6 @@ class AcceptanceStep(Value):
     goes_on: Presence
 
 
-@dataclasses.dataclass(frozen=True)
 class FlakyFinding(Value):
     """A test flaky in this story and in others: a row of the project's own findings, for a task that fixes it."""
 

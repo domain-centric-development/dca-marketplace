@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import typing
 
 from ....building_blocks import DomainService, Id, Value
@@ -26,21 +25,18 @@ FIELDS = ("intent", "goal", "metric")
 DESCRIPTION_FILES = ("overview.md", "tech.md", "domain.md")
 
 
-@dataclasses.dataclass(frozen=True)
 class Topic(Id):
     """What a discovery is about — the name of its folder."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Text(Value):
     """A heading, a name, a field's text, as the report writes it."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class SourceId(Value):
     """A source as the report cites it — `S1`, `S12`."""
 
@@ -50,14 +46,12 @@ class SourceId(Value):
         return Count(int(self.value[1:]))
 
 
-@dataclasses.dataclass(frozen=True)
 class Count(Value):
     """A number of things."""
 
     value: int
 
 
-@dataclasses.dataclass(frozen=True)
 class Item(Value):
     """One `### <name>` block of a section: its name and its `- <field>: <text>` lines."""
 
@@ -68,7 +62,6 @@ class Item(Value):
         return self.fields.get(name, Text(""))
 
 
-@dataclasses.dataclass(frozen=True)
 class Report(Value):
     """A report as written: its `## ` headings in order, the sources it lists, the ones its text cites, and the items
     of its proposed work and its proposed description changes."""
@@ -80,7 +73,6 @@ class Report(Value):
     changes: typing.Tuple[Item, ...]
 
 
-@dataclasses.dataclass(frozen=True)
 class Problem(Value):
     """What is wrong with a report, in one sentence."""
 

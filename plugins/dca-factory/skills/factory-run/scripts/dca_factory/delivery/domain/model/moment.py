@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import re
 
 from ....building_blocks import Value
@@ -11,7 +10,6 @@ from ....building_blocks import Value
 MOMENT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
-@dataclasses.dataclass(frozen=True)
 class Moment(Value):
     """When something happened, in UTC to the second — `2026-10-25T10:00:00Z`."""
 

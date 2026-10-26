@@ -3,7 +3,6 @@ was seen red, ran by name, and is the version that was."""
 
 from __future__ import annotations
 
-import dataclasses
 import typing
 
 from ....building_blocks import DomainService, Value
@@ -12,7 +11,6 @@ from ..model.stage_story import (
 from ..model.verdict import CheckName, Finding, Said
 
 
-@dataclasses.dataclass(frozen=True)
 class BreakProof(Value):
     """A green test changed after an earlier pass's build met it: a break of the code shows whether its new
     assertion bites — the gate's run applies it to a copy and holds the test to the outcome."""
@@ -21,7 +19,6 @@ class BreakProof(Value):
     selector: Selector
 
 
-@dataclasses.dataclass(frozen=True)
 class TestsJudged(Value):
     """The findings and break proofs in order, and the tests that count as red now — the red ledger's next entries."""
 

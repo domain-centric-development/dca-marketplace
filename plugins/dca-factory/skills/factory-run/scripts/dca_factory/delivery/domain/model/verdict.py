@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import enum
 import typing
 
@@ -20,7 +19,6 @@ class FindingState(enum.Enum):
     WAIT = "wait"
 
 
-@dataclasses.dataclass(frozen=True)
 class CheckName(Value):
     """The name a check reports under — `story`, `contract`, `happy-path`."""
 
@@ -42,14 +40,12 @@ class CheckName(Value):
         return Finding(FindingState.WAIT, self, said)
 
 
-@dataclasses.dataclass(frozen=True)
 class Said(Value):
     """What a check says: for a refusal, the stage's next instruction."""
 
     value: str
 
 
-@dataclasses.dataclass(frozen=True)
 class Finding(Value):
     state: FindingState
     check: CheckName

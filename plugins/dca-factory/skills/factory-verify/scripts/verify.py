@@ -4384,6 +4384,9 @@ def verify_setup(runner, verbose=False):
     bare = architecture.value_findings(package)
     check("package: no bare primitive or time type in a domain field or a domain signature — each is a value object",
           not bare, bare[:8])
+    decorated = architecture.marker_findings(package)
+    check("package: a value, an identifier, a domain event is a frozen dataclass by its base — no decorator of its own",
+          not decorated, decorated[:8])
     cycles = architecture.cycle_findings(package)
     check("package: no import cycle among the package's modules", not cycles, cycles[:4])
     entries = {name: open(os.path.join(os.path.dirname(runner), name), encoding="utf-8").read()
