@@ -7,6 +7,7 @@ import unittest
 
 from support import project, write
 from dca_factory import runner
+from dca_factory.infrastructure.runner import RunnerCases
 from dca_factory.delivery.adapter.outgoing.tools import agents
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
@@ -14,7 +15,7 @@ from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as p
 
 def a_run(p):
     options = types.SimpleNamespace(max_stages=0, story_budget=0, builder="shared", verifier="shared", parallel=0)
-    return runner.Run(options, p.root, ".dca-factory/runs", worker="unit:host:1")
+    return runner.Run(options, p.root, ".dca-factory/runs", worker="unit:host:1", cases=RunnerCases())
 
 
 class Readers(unittest.TestCase):
@@ -85,7 +86,7 @@ class RoundTool(unittest.TestCase):
             p.story("S-1")
             options = types.SimpleNamespace(max_stages=0, story_budget=0, builder="separate", verifier="separate",
                                             parallel=0)
-            run = runner.Run(options, p.root, ".dca-factory/runs", worker="unit:host:1")
+            run = runner.Run(options, p.root, ".dca-factory/runs", worker="unit:host:1", cases=RunnerCases())
             used, sent = [], []
 
             def run_one(story, tool, stage, dry=False):

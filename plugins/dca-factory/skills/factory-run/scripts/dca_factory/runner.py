@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+import typing
 from .delivery.adapter.outgoing.git.worktree_steps import (
     integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
@@ -52,17 +53,10 @@ from .delivery.adapter.outgoing.process.gate_process import file_sha, GateProces
 from .delivery.adapter.outgoing.tools.tool_choice import ToolChoice
 from .delivery.adapter.outgoing.tools.tool_processes import (
     err, exit_field, flush, Stopped, TIMED_OUT, ToolProcesses, utc)
-from .delivery.adapter.incoming.runner.usage import book_request_usage
-from .delivery.application.requests.work_request import WorkRequestCommand
 from .delivery.adapter.outgoing.files.request_files import out_path, prune_outputs, stamp_utc
 from .delivery.adapter.outgoing.files.decision_record_files import project_record_path
 from .delivery.application.shared.request_skill import SkillRun
-from .infrastructure import requests as request_wiring
-from .delivery.adapter.outgoing.process.console_lines import ConsoleLines
-from .delivery.application.backlog.run_backlog import RunBacklogCommand, RunBacklogUseCase
 from .delivery.application.shared.backlog_schedule import ScheduleRead
-from .delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
-from .delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
 from .delivery.domain.model.stage import StageName, StoryKind, Window
 from .delivery.domain.model.story_state import GateReport, Rounds, VerdictWord
 from .delivery.adapter.outgoing.files.decision_record_files import request_records
@@ -70,7 +64,6 @@ from .delivery.adapter.outgoing.files.request_files import (
     default_by, REQUEST_JOURNAL, requests_dir)
 from .delivery.application.requests.list_requests import target_text
 from .delivery.application.shared.requests import KIND
-from .infrastructure import delivery as wiring
 
 
 
@@ -130,7 +123,7 @@ class RunnerRequestSkill:
             run.tools.allowed_override = None
             run.request_in_flight = ""
         measured = run.processes.record_usage(None, unit, tool, raw, int(time.time() - started), request["id"])
-        book_request_usage(wiring.book_request_cost(run.home, place("runs")), request["id"], tool, measured)
+        run.cases.book_request_cost(run, request["id"], tool, measured)
         prune_outputs()
         return SkillRun(code, code == TIMED_OUT, shown(raw))
 
@@ -217,10 +210,38 @@ class RunnerRequestSkill:
         return ",".join(heads)
 
 
-class Run:
-    """One runner process: the story or the backlog it runs, and what it keeps between stages."""
+class RunCases(typing.Protocol):
+    """The use cases a step of a run starts — a story's stages, its integration, the backlog, a request, a request's
+    cost —, handed in by the composition root: the run and its adapters carry out steps and never build a use case."""
 
-    def __init__(self, options, home, runs, worker=None):
+    def run_story(self, run, tool, story, start, dry, gate_first, shared):
+        """The story's stages from <start> on (`RunStoryUseCase`); its exit."""
+
+    def integrate(self, run, tool, story, dry):
+        """The story integrated into the main line (`IntegrateStoryUseCase`); its exit."""
+
+    def resolve(self, run, tool, story, out):
+        """A merge's conflicts resolved by the integrate stage; its exit, None to run on."""
+
+    def run_backlog(self, run, tool, slots, watch, interval, dry):
+        """Story after story in the schedule's order (`RunBacklogUseCase`); its exit."""
+
+    def queue(self, run):
+        """The requests as the run works them (`RequestQueue`)."""
+
+    def work_request(self, run, request_id, tool):
+        """One request worked (`WorkRequestUseCase`): what it said and its exit."""
+
+    def book_request_cost(self, run, request_id, tool, measured):
+        """A request's usage booked on the stories it worked on (`BookRequestCostUseCase`)."""
+
+
+class Run:
+    """One runner process: the story or the backlog it runs, and what it keeps between stages. The use cases a step
+    starts are the composition root's (`cases`)."""
+
+    def __init__(self, options, home, runs, worker=None, cases=None):
+        self.cases = cases
         self.py = os.environ.get("FACTORY_RUNNER_PYTHON") or "python3"   # the name the prompts and the list carry
         self.scripts = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.cli_path = os.path.join(self.scripts, "factory-cli.py")
@@ -876,8 +897,7 @@ class Run:
         shared = frozenset(window for window, on in ((Window.BUILDER, self.shared_builder),
                                                      (Window.VERIFIER, self.shared_verifier)) if on)
         gate_first, self.gate_first = self.gate_first, False
-        use_case = RunStoryUseCase(RunnerStages(self, tool), ConsoleLines())
-        return use_case.execute(RunStoryCommand(story, start, dry, gate_first, shared))
+        return self.cases.run_story(self, tool, story, start, dry, gate_first, shared)
 
     def red_proof_stale(self, story, start):
         """A story whose red proof went stale goes to its test stage: a gate that holds the red proof (build, tidy)
@@ -1019,10 +1039,6 @@ class Run:
             return 0
         self.as_home(link, story, capture="none")
 
-    def integration(self, tool):
-        """The story's integration into the main line (`IntegrateStoryUseCase`), from the worktree it runs in."""
-        return IntegrateStoryUseCase(RunnerIntegration(self, tool), ConsoleLines())
-
     def integrate_stage(self, story, tool, conflicts, lost=None):
         """One stage-integrate session — the conflicts, or a repair of a resolution that lost the main line's side of a
         test — then the profile's formatter and the merge committed and squashed. None when it is, else an exit code."""
@@ -1110,7 +1126,7 @@ class Run:
         try:
             # Resumed onto a main line that changed what the story changes: the conflicts are resolved first, so the
             # next stage works on the main line as it is.
-            code = self.integration(tool).resolve(story, out) if "\nconflict: " in "\n" + out else None
+            code = self.cases.resolve(self, tool, story, out) if "\nconflict: " in "\n" + out else None
             if code is None:
                 if "\nconflict: " in "\n" + out:
                     self.link_worktree(story)
@@ -1136,7 +1152,7 @@ class Run:
     # in a slot of its own in a parallel run. `run` and `stop` are the runner's own: a story to run next, the end.
     def queue(self):
         """The requests as this runner works them (`RequestQueue`), read where the profile puts them."""
-        return request_wiring.request_queue(self.home, self.worker, self.profile)
+        return self.cases.queue(self)
 
     def request_argv(self, request, tool):
         argv = [sys.executable, self.cli_path, "--work-request", request["id"], "--tool", tool]
@@ -1187,10 +1203,6 @@ class Run:
                     return
 
     # --- one request, in its own process ----------------------------------------------------------------------
-    def request_use_case(self):
-        """The use case that works one request, over the main checkout, under this runner's lock."""
-        return request_wiring.work_request(self.home, self.runs_rel, self.profile, self.locked, RunnerRequestSkill(self))
-
     @contextlib.contextmanager
     def locked(self):
         self.take_lock()
@@ -1203,7 +1215,7 @@ class Run:
         """One request worked (`WorkRequestUseCase`): what it said and its exit — 0 when it is done (and gone), 3 when
         its skill asked a person (waiting), 1 when it failed (kept, `error:`)."""
         self.profile()
-        return self.request_use_case().execute(WorkRequestCommand(request_id, tool, self.worker))
+        return self.cases.work_request(self, request_id, tool)
 
     def press(self, kind_name, fields, words, by):
         """A press as the request it would write: its fields, an id of now, the person who pressed."""
@@ -1249,9 +1261,7 @@ class Run:
         slots = self.parallel_slots()
         if slots is None:
             return 2
-        backlog = RunnerBacklog(self, tool)
-        use_case = RunBacklogUseCase(backlog, backlog, backlog, self.queue(), ConsoleLines())
-        return use_case.execute(RunBacklogCommand(slots, watch, interval, dry, self.keep_going, self.stay))
+        return self.cases.run_backlog(self, tool, slots, watch, interval, dry)
 
     def start_request_child(self, request, tool):
         """A request's process beside the stories of a parallel run, its lines named with the request's id."""
@@ -1392,7 +1402,7 @@ class RunnerStages:
         return bool(os.environ.get("FACTORY_HOME"))
 
     def integrate(self, story, dry):
-        return self._run.integration(self._tool).execute(IntegrateStoryCommand(story, dry))
+        return self._run.cases.integrate(self._run, self._tool, story, dry)
 
 
 class RunnerIntegration:
