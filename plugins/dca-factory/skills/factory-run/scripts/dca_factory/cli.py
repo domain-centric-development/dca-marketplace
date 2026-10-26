@@ -123,9 +123,10 @@ from .delivery.domain.model.story import AlreadyDelivered, NotDelivered, Nothing
 from .infrastructure import delivery as wiring
 from .delivery.adapter.outgoing.process import factory_process
 from .web import service as web
+from .delivery.adapter.outgoing.files.skeletons import contract_text, document_skeleton, files_skeleton, plan_skeleton
 from .runner import (
-    contract_text, document_skeleton, files_skeleton, integrate_finish, integrate_prepare, link_places, migrate_layout,
-    command_heads, first_word, model_for, needs_human_lines, open_decision_files, plan_skeleton, run_main,
+    integrate_finish, integrate_prepare, link_places, migrate_layout,
+    command_heads, first_word, model_for, needs_human_lines, open_decision_files, run_main,
     stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove, request_main,
     settle_command)
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
