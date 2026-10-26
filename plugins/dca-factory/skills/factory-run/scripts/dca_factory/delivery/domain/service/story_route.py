@@ -7,7 +7,7 @@ import enum
 import typing
 
 from ....building_blocks import DomainService, Value
-from ..model.stage import PIPELINE, Stage, StageName, StoryKind, Trait, Window
+from ..model.stage import PIPELINE, Pipeline, Stage, StageName, StoryKind, Trait, Window
 from ..model.story_state import Detail, GateReport, HandOverText, MAX_ROUNDS, Rounds, VerdictWord
 
 JUDGE, TEST = StageName("judge"), StageName("test")
@@ -111,6 +111,23 @@ class StoryRoute(DomainService):
                 around.add(Around.VERDICT)
             steps.append(RouteStep(stage.name, Move.STAGE, frozenset(around)))
         return tuple(steps)
+
+    @staticmethod
+    def applying(asked: StageName, applies: StageName) -> StageName:
+        """The stage that applies an answer: the one the answer names (`applies: test` — an answer that changes a
+        test goes back to the test stage, whoever asked), else the stage that asked."""
+        return applies if applies in Pipeline.order(StoryKind.STORY) else asked
+
+    @staticmethod
+    def resumes_at(asked: StageName, applies: StageName) -> StageName:
+        """Where the story resumes for an answer: the earlier of the stage that asked and the one the answer names.
+        A plan's question answered `applies: test` still re-plans — the plan lists the tests that change — and the
+        test stage after it takes the changed expectation."""
+        order = Pipeline.order(StoryKind.STORY)
+        named = StoryRoute.applying(asked, applies)
+        if asked not in order:
+            return named
+        return min((asked, named), key=lambda stage: order.index(stage) if stage in order else len(order))
 
     @staticmethod
     def window(kind: StoryKind, window: Window, start: typing.Optional[StageName] = None) -> typing.Tuple[StageName, ...]:

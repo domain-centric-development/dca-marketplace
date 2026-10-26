@@ -18,12 +18,13 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, factory_home, HOME_VARIABLE, in_worktree, places_in, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
 from ....application.profile.profile_rules import perspectives_of
 from ....application.shared.front import is_acceptance
-from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
+from ....domain.model.decision_record import (
+    ANSWERED_WORDS, AnswerField, DecisionState, RecordId, RecordKind, WAITING_WORDS)
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AnswerField, AssertionAt, ChangedTest, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
+    AssertionAt, ChangedTest, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
     TestChange, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
@@ -71,7 +72,6 @@ from .design_files import (
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_clauses)
 from .run_marks import OWNED_CHANGED
 from .story_layout import delivered_on, EPIC_FILE, epic_folder, find_story, story_kind
-from ....domain.model.decision_record import ANSWERED_WORDS, WAITING_WORDS
 
 Front = typing.Mapping[str, typing.Any]
 

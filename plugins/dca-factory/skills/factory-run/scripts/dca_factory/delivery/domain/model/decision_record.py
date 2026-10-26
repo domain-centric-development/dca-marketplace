@@ -40,6 +40,33 @@ class DecisionState(enum.Enum):
     ANSWERED = "answered"
     APPLIED = "applied"
 
+    @classmethod
+    def of(cls, sections: typing.AbstractSet[Section], given: typing.AbstractSet[AnswerField]) -> DecisionState:
+        """`## Applied` makes a record applied, no `## Answer` leaves it open, an answer lacking one of its lines is a
+        draft."""
+        if Section.APPLIED in sections:
+            return cls.APPLIED
+        if Section.ANSWER not in sections:
+            return cls.OPEN
+        return cls.ANSWERED if all(field in given for field in ANSWER_FIELDS) else cls.DRAFT
+
+
+class Section(enum.Enum):
+    """The sections of a record its state follows from."""
+
+    ANSWER = "answer"
+    APPLIED = "applied"
+
+
+class AnswerField(Value):
+    """A line a confirmed answer carries: `answer:`, `by:`, `at:`."""
+
+    value: str
+
+
+#: The lines an answer carries before it counts: what was answered, by whom, when.
+ANSWER_FIELDS = (AnswerField("answer"), AnswerField("by"), AnswerField("at"))
+
 
 #: A record waits for a person while it has no answer or an incomplete one.
 WAITING = frozenset((DecisionState.OPEN, DecisionState.DRAFT))

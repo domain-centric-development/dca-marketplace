@@ -7,6 +7,7 @@ import enum
 import typing
 
 from ....building_blocks import DomainService, Value
+from ..model.decision_record import DecisionState, Given, WAITING
 from ..model.stage_story import Presence
 from ..model.story import StoryId
 from ..model.story_state import Acceptance, AcceptanceVerdict, Detail
@@ -55,6 +56,25 @@ class AcceptanceRules(DomainService):
             return Presence.PRESENT
         return Presence.PRESENT if browser is Presence.PRESENT and end_user_test is Presence.PRESENT \
             else Presence.ABSENT
+
+    @staticmethod
+    def accepts(given: Given) -> Presence:
+        """An answer that accepts the delivery: it begins with `accept`."""
+        return Presence.PRESENT if given.value.strip().lower().startswith("accept") else Presence.ABSENT
+
+    @staticmethod
+    def verdict(latest: typing.Optional[DecisionState], given: Given, same_story: Presence) -> AcceptanceVerdict:
+        """Where the story's acceptance stands, from its latest record: none asks for one; one waiting is open; an
+        answer holds only for the story it was given for — a story changed since (a correction written in) is asked
+        again once it has run —; it accepts or it asks for a correction."""
+        if latest is None:
+            return AcceptanceVerdict.ASK
+        if latest in WAITING:
+            return AcceptanceVerdict.OPEN
+        if same_story is Presence.ABSENT:
+            return AcceptanceVerdict.ASK
+        return AcceptanceVerdict.ACCEPTED if AcceptanceRules.accepts(given) is Presence.PRESENT \
+            else AcceptanceVerdict.CORRECTION
 
     @staticmethod
     def at_delivery(acceptance: Acceptance) -> AcceptanceStep:

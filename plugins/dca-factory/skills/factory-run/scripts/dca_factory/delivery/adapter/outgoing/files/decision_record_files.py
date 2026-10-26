@@ -8,19 +8,23 @@ import re
 import time
 import typing
 
-from ..pipeline.stage_rows import STAGE_ORDER
 from .journal_files import mark_questioned
 from .story_layout import DECISIONS_DIR, find_story, story_digest, story_files, story_folder, story_id_of
 from .....sharedkernel.adapter.outgoing.profile.profile_files import DEFAULTS, place, PLACES_REL, shown
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import Front, MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import fields_of, section_of, sections_of
 from ....application.shared.decision_record_repository import RecordNotFound
-from ....application.shared.front import accepted, is_acceptance
+from ....application.shared.front import is_acceptance
 from ....application.shared.story_repository import StoryNotFound
-from ....domain.model.decision_record import Asker, DecisionRecord, DecisionState, OptionKey, RecordId, RecordKind
+from ....domain.model.decision_record import (
+    ANSWER_FIELDS as DOMAIN_ANSWER_FIELDS, ANSWERED_WORDS, AnswerField, Asker, DecisionRecord, DecisionState, OptionKey,
+    Given, RecordId, RecordKind, Section, WAITING_WORDS)
+from ....domain.model.stage import StageName
+from ....domain.model.story_state import AcceptanceVerdict
 from ....domain.model.story import StoryId
-from ....domain.model.decision_record import ANSWERED_WORDS, WAITING_WORDS
-from ....domain.service.acceptance_rules import AcceptanceMode
+from ....domain.service.story_route import StoryRoute
+from ....domain.model.stage_story import Presence
+from ....domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
 
 GateError = MarkdownError
 
@@ -177,19 +181,14 @@ def record_path(story_id: str, rid: str, story_path: typing.Optional[str] = None
     return os.path.join(store, rid[len(story_id) + 1:] + ".md") if rid.startswith(story_id + "-") else os.path.join(store, rid + ".md")
 
 
-ANSWER_FIELDS = ("answer", "by", "at")
+ANSWER_FIELDS = tuple(field.value for field in DOMAIN_ANSWER_FIELDS)
 
 
 def decision_state(text: str) -> typing.Tuple[str, typing.Dict[str, str]]:
-    """('open' | 'draft' | 'answered' | 'applied', answer fields)."""
+    """('open' | 'draft' | 'answered' | 'applied', answer fields) — the state as the domain reads it off the sections."""
     answer = fields_of(section_of(text, "answer"))
-    if section_of(text, "applied") is not None:
-        return "applied", answer
-    if section_of(text, "answer") is None:
-        return "open", answer
-    if all(answer.get(field) for field in ANSWER_FIELDS):
-        return "answered", answer
-    return "draft", answer
+    sections = {section for section in Section if section_of(text, section.value) is not None}
+    return DecisionState.of(sections, {AnswerField(f) for f, value in answer.items() if value}).value, answer
 
 
 #: One option of a record's `## Options`, in every form a stage writes it: an optional list marker, optional bold,
@@ -255,17 +254,16 @@ def read_decisions(store: str, story_id: str) -> Records:
 def applying_stage(front: Front, answer: typing.Mapping[str, str]) -> str:
     """The stage that applies an answer: the one the answer names (`applies: test` — an answer that changes a
     test goes back to the test stage, whoever asked), else the record's `stage:`, the stage that asked."""
-    named = str((answer or {}).get("applies", "")).strip().lower()
-    return named if named in STAGE_ORDER else str(front.get("stage", "")).strip()
+    return StoryRoute.applying(StageName(str(front.get("stage", "")).strip()),
+                               StageName(str((answer or {}).get("applies", "")).strip().lower())).value
 
 
 def resume_stage(front: Front, answer: typing.Mapping[str, str]) -> typing.Optional[str]:
     """Where the story resumes for an answer: the earlier of the stage that asked and the one the answer
     names. A plan's question answered `applies: test` still re-plans — the plan lists the tests that change —
     and the test stage after it takes the changed expectation."""
-    asked, named = str(front.get("stage", "")).strip(), applying_stage(front, answer)
-    order = lambda st: STAGE_ORDER.index(st) if st in STAGE_ORDER else len(STAGE_ORDER)
-    return min((asked, named), key=order) if asked in STAGE_ORDER else named
+    return StoryRoute.resumes_at(StageName(str(front.get("stage", "")).strip()),
+                                 StageName(str((answer or {}).get("applies", "")).strip().lower())).value
 
 
 def answered_decisions(cwd: str, story_id: str, stage: str) -> typing.List[str]:
@@ -410,13 +408,16 @@ def acceptance_state(cwd: str, story_id: str,
     story changed since — a correction written in — is asked again once it has run."""
     records = acceptance_records(cwd, story_id, story_path)
     if not records:
-        return "ask", None
+        return AcceptanceRules.verdict(None, Given(""), Presence.ABSENT).value, None
     rid, front, state, answer, _body = records[-1]
-    if state in WAITING_WORDS:
-        return "open", rid
-    if str(front.get("digest", "")).strip() != story_digest(story_path or ""):
-        return "ask", rid
-    return ("accepted" if accepted(answer) else "correction"), rid
+    same = Presence.PRESENT if str(front.get("digest", "")).strip() == story_digest(story_path or "") else Presence.ABSENT
+    return AcceptanceRules.verdict(DecisionState(state), Given(str(answer.get("answer", ""))), same).value, rid
+
+
+def latest_verdict(records: Records) -> AcceptanceVerdict:
+    """What the latest of a story's acceptance records says, the story's digest left aside."""
+    _rid, _front, state, answer, _body = records[-1]
+    return AcceptanceRules.verdict(DecisionState(state), Given(str(answer.get("answer", ""))), Presence.PRESENT)
 
 
 def record_sections(body: str) -> typing.List[typing.Dict[str, str]]:

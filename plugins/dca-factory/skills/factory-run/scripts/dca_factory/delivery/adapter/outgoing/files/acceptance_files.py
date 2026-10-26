@@ -9,10 +9,10 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_
 from ....application.shared.front import accepted
 from ....domain.model.decision_record import RecordId
 from ....domain.model.story import StoryId
-from .decision_record_files import acceptance_records, Records
+from .decision_record_files import acceptance_records, latest_verdict, Records
+from ....domain.model.story_state import AcceptanceVerdict
 from .run_marks import accepted_criteria
 from .story_layout import find_story
-from ....domain.model.decision_record import ANSWERED_WORDS
 
 
 class AcceptanceFiles:
@@ -28,7 +28,8 @@ class AcceptanceFiles:
 
     def correction_of(self, story: StoryId) -> typing.Optional[RecordId]:
         _path, records = self._records(story)
-        if not records or records[-1][2] not in ANSWERED_WORDS or accepted(records[-1][3]):
+        # Whatever the story says since: the correction is what the person answered last.
+        if not records or latest_verdict(records) is not AcceptanceVerdict.CORRECTION:
             return None
         return RecordId(records[-1][0])
 

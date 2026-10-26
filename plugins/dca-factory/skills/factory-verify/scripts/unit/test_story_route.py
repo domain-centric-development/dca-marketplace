@@ -32,6 +32,14 @@ class Route(unittest.TestCase):
                           ("judge", Move.VERIFIER)])
         self.assertEqual([Around.PAUSE in s.around for s in steps], [True, False, False, True])
 
+    def test_an_answer_applies_where_it_names_and_resumes_at_the_earlier_stage(self):
+        plan, test, build = names("plan", "test", "build")
+        self.assertEqual(StoryRoute.applying(build, test), test)
+        self.assertEqual(StoryRoute.applying(build, StageName("nowhere")), build)
+        self.assertEqual(StoryRoute.resumes_at(plan, test), plan)
+        self.assertEqual(StoryRoute.resumes_at(build, test), test)
+        self.assertEqual(StoryRoute.resumes_at(StageName("integrate"), test), test)
+
     def test_an_adoption_changes_nothing_so_its_judge_gets_no_reviews(self):
         for shared in (frozenset(), frozenset((Window.VERIFIER,))):
             judge = [s for s in StoryRoute.steps(StoryKind.ADOPT, StageName("plan"), shared) if s.stage.value == "judge"]

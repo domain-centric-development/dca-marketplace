@@ -7,7 +7,7 @@ import re
 import typing
 
 from ....building_blocks import Value
-from .decision_record import DecisionState, RecordId, RecordKind
+from .decision_record import AnswerField, DecisionState, RecordId, RecordKind
 from .epic import EpicId
 from .schedule import ContextName
 from .stage import StageName, StoryKind
@@ -173,12 +173,6 @@ class EpicFacts(Value):
     dependency_problem: typing.Optional[Detail]
     metric: Metric
     unreadable: typing.Optional[Detail] = None
-
-
-class AnswerField(Value):
-    """A line a confirmed answer carries: `answer:`, `by:`, `at:`."""
-
-    value: str
 
 
 class DecisionFacts(Value):

@@ -12,16 +12,14 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..pipeline.stage_rows import POST_GATED, SHARED_WINDOWS, STAGE_FILES
 from .story_layout import EPIC_FILE, epic_folder
 from ....domain.model.stage import StoryKind
-from ....domain.model.story_state import HandOverText
+from ....domain.model.story_state import AcceptanceVerdict, HandOverText
 from ....domain.service.story_route import StoryRoute
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
-from .decision_record_files import acceptance_records
-from ....application.shared.front import accepted
+from .decision_record_files import acceptance_records, latest_verdict
 from .journal_files import journal_events
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....application.status.texts import parse_time
-from ....domain.model.decision_record import ANSWERED_WORDS
 
 
 OWNED_CHANGED = ".owned-changed"
@@ -115,7 +113,7 @@ def gate_passed_on_record(cwd: str, runs: str, story_id: str, story_path: typing
         records = acceptance_records(cwd, story_id, story_path)
     except GateError:
         records = []
-    if records and records[-1][2] in ANSWERED_WORDS and accepted(records[-1][3]):
+    if records and latest_verdict(records) is AcceptanceVerdict.ACCEPTED:
         return f"{records[-1][0]} accepted"
     return ""
 
