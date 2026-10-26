@@ -12,12 +12,12 @@ import unittest
 from unittest import mock
 
 from support import contract, evidence, gate_story, state, verdict, write
-from dca_factory import cli, runner
+from dca_factory import cli
 from dca_factory.delivery.domain.service.spec_checks import SpecChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
-from dca_factory.delivery.adapter.outgoing.git import worktrees
+from dca_factory.delivery.adapter.outgoing.git import worktrees, worktree_steps
 from dca_factory.delivery.adapter.outgoing.files import snapshots
 from dca_factory.delivery.adapter.outgoing.claims import remote_claims
 from dca_factory.delivery.adapter.outgoing.files import delivery_writes
@@ -204,13 +204,13 @@ class Published(unittest.TestCase):
             quiet(cli.claim_command, a, runs, epics, "S-01")
             os.makedirs(os.path.join(runs, "S-01"), exist_ok=True)
             write(os.path.join(profiles.evidence_dir(runs, "S-01"), "target"), "main\n")
-            quiet(runner.worktree_prepare, a, runs, "S-01")
+            quiet(worktree_steps.worktree_prepare, a, runs, "S-01")
             wt = worktrees.worktree_of("S-01", a)
             write(os.path.join(wt, "src", "thing.txt"), "the first thing\n")
             write(os.path.join(profiles.evidence_dir(runs, "S-01"), snapshots.STAGES_MADE), "src/thing.txt\n")
             write(os.path.join(runs, "S-01", "tests.md"),
                   "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n| shows-s-01 | a.ThingTest#shows |\n")
-            self.assertEqual(quiet(runner.integrate_prepare, a, runs, epics, "S-01")[0], 0)
+            self.assertEqual(quiet(worktree_steps.integrate_prepare, a, runs, epics, "S-01")[0], 0)
             result = verdict()
             front = markdown.read_front_matter(layout.find_story(epics, "S-01"))[0]
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: a}):
@@ -240,13 +240,13 @@ class Published(unittest.TestCase):
         quiet(cli.claim_command, clone, runs, epics, story)
         os.makedirs(os.path.join(runs, story), exist_ok=True)
         write(os.path.join(profiles.evidence_dir(runs, story), "target"), "main\n")
-        quiet(runner.worktree_prepare, clone, runs, story)
+        quiet(worktree_steps.worktree_prepare, clone, runs, story)
         wt = worktrees.worktree_of(story, clone)
         write(os.path.join(wt, "src", f"{story}.txt"), "x\n")
         write(os.path.join(profiles.evidence_dir(runs, story), snapshots.STAGES_MADE), f"src/{story}.txt\n")
         write(os.path.join(runs, story, "tests.md"), "<!-- gate:tests -->\n| criterion | test |\n|---|---|\n"
                                                     f"| shows-{story.lower()} | a.ThingTest#{story.replace('-', '')} |\n")
-        quiet(runner.integrate_prepare, clone, runs, epics, story)
+        quiet(worktree_steps.integrate_prepare, clone, runs, epics, story)
         result = verdict()
         front = markdown.read_front_matter(layout.find_story(epics, story))[0]
         with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: clone}):
@@ -306,9 +306,9 @@ class Published(unittest.TestCase):
             os.makedirs(os.path.join(runs_b, "S-02"), exist_ok=True)
             write(os.path.join(profiles.evidence_dir(runs_b, "S-02"), "target"), "main\n")
             write(os.path.join(runs_b, "S-02", "plan.md"), "# Plan\n\n## Spec delta\n- adds shows-s-01\n")
-            quiet(runner.worktree_prepare, b, runs_b, "S-02")
+            quiet(worktree_steps.worktree_prepare, b, runs_b, "S-02")
             wt = worktrees.worktree_of("S-02", b)
-            quiet(runner.integrate_prepare, b, runs_b, epics_b, "S-02")
+            quiet(worktree_steps.integrate_prepare, b, runs_b, epics_b, "S-02")
             story_path = layout.find_story(epics_b, "S-02")
             front, body = markdown.read_front_matter(story_path)
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: b}):

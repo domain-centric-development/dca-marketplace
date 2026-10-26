@@ -124,10 +124,12 @@ from .infrastructure import delivery as wiring
 from .delivery.adapter.outgoing.process import factory_process
 from .web import service as web
 from .delivery.adapter.outgoing.files.skeletons import contract_text, document_skeleton, files_skeleton, plan_skeleton
+from .delivery.adapter.outgoing.git.worktree_steps import (
+    integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
 from .runner import (
-    integrate_finish, integrate_prepare, link_places, migrate_layout,
+    migrate_layout,
     command_heads, first_word, model_for, needs_human_lines, open_decision_files, run_main,
-    stage_names, stages_shell, verdict_of_story, worktree_prepare, worktree_prune, worktree_remove, request_main,
+    stage_names, stages_shell, verdict_of_story, request_main,
     settle_command)
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
 from .delivery.adapter.incoming.cli.status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
