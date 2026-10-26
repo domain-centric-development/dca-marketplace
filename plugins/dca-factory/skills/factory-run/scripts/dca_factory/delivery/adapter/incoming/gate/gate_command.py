@@ -62,60 +62,46 @@ delivered`, written by the gate alone), so deleting the run folder loses history
 A command the profile does not declare is skipped and named, never failed.
 """
 
+from __future__ import annotations
+
 import argparse
-import contextlib
 import json
 import os
 import subprocess
 import sys
-from .contract import CONTRACT, VERSION
-from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from .delivery.adapter.outgoing.files.migrations import layout_hint
-from .delivery.adapter.outgoing.pipeline.stage_rows import STAGE, STAGES
-from .delivery.adapter.outgoing.files.story_layout import (
-    find_story, story_folder)
-from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    location, place, PROFILE_FILE, read_profile,
-    resolve_profile, set_places)
-from .delivery.application.description.check_description import CheckDescriptionCommand
-from .discovery.api import check_report
-from .infrastructure.description import check_description
-from .infrastructure.gate import check_backlog as backlog_use_case, check_change, check_parity, stage_run
-from .delivery.application.delivery.check_change import CheckChangeCommand
-from .delivery.application.delivery.check_parity import CheckParityCommand
-from .delivery.application.backlog.check_backlog import CheckBacklogCommand
-from .delivery.domain.model.story import StoryId
-from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
-from .delivery.adapter.outgoing.files.snapshots import (
-    record_base, record_changes)
-from .delivery.adapter.outgoing.files.owned_files import owned_end
-from .delivery.adapter.outgoing.files.run_marks import (
-    backlog_digest, step_open)
-from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned
-from .delivery.adapter.outgoing.files.journal_files import journal_append
-from .delivery.domain.model.verdict import FindingState
-from .delivery.domain.service.profile_checks import ProfileChecks
-from .delivery.application.delivery.check_stage import (
-    run_checks, run_passed, Verdict)
-from .delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles
-from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS
-from .delivery.adapter.outgoing.files.criteria_files import criteria_of
+import typing
+
+from .....contract import CONTRACT, VERSION
+from .....discovery.api import check_report
+from .....infrastructure import gate as wiring
+from .....infrastructure.description import check_description
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from .....sharedkernel.adapter.outgoing.profile.profile_files import (
+    location, place, PROFILE_FILE, read_profile, resolve_profile, set_places)
+from ....application.backlog.check_backlog import CheckBacklogCommand
+from ....application.delivery.check_change import CheckChangeCommand
+from ....application.delivery.check_parity import CheckParityCommand
+from ....application.delivery.check_stage import Verdict
+from ....application.description.check_description import CheckDescriptionCommand
+from ....domain.model.stage import PIPELINE, Trait
+from ....domain.model.story import StoryId
+from ....domain.model.verdict import FindingState
 
 
-def check_contract(result, profile):
+def check_contract(result: Verdict, profile: wiring.Profile) -> None:
     """The profile's contract and its unknown keys (`ProfileChecks.contract`)."""
-    result.take(ProfileChecks.contract(StageEvidenceFiles(".", "", "", profile)))
+    result.take(wiring.contract_findings(profile))
 
 
-def check_models(result, profile):
+def check_models(result: Verdict, profile: wiring.Profile) -> None:
     """The profile's model keys, each bound to a tool (`ProfileChecks.models`)."""
-    result.take(ProfileChecks.models(StageEvidenceFiles(".", "", "", profile)))
+    result.take(wiring.model_findings(profile))
 
 
 #: Where the method keeps the project's conventions; `verify_command:` there is the architecture command the
 #: profile's `architecture:` was copied from at setup. Two files, two owners — the method's and the factory's —
 #: and nothing merges them, so the pair is compared and a difference is named.
-def check_project(result, cwd, profile):
+def check_project(result: Verdict, cwd: str, profile: wiring.Profile) -> bool:
     """The two mandatory parts of the project description — the description feature's check, said as the gate
     says its checks."""
     checked = check_description(cwd, profile).execute(CheckDescriptionCommand())
@@ -124,12 +110,13 @@ def check_project(result, cwd, profile):
     return checked.complete
 
 
-def check_backlog(cwd, epics, profile, only=None):
+def check_backlog(cwd: str, epics: str, profile: wiring.Profile, only: typing.Optional[str] = None) -> int:
     """The plan gate's backlog checks over every story that is not done, or over `only` (`CheckBacklogUseCase`),
     said one line per finding that did not pass."""
-    if layout_hint(cwd, profile):
-        print(f"gate:note layout — {layout_hint(cwd, profile)}")
-    checked = backlog_use_case(cwd, epics, profile).execute(CheckBacklogCommand(StoryId(only) if only else None))
+    hint = wiring.layout_note(cwd, profile)
+    if hint:
+        print(f"gate:note layout — {hint}")
+    checked = wiring.check_backlog(cwd, epics, profile).execute(CheckBacklogCommand(StoryId(only) if only else None))
     for verdict in checked.verdicts:
         for finding in verdict.findings:
             if finding.state is not FindingState.PASS:
@@ -149,11 +136,12 @@ def check_backlog(cwd, epics, profile, only=None):
 class Result(Verdict):
     """A gate run's verdict, as the gate reports it."""
 
-    def report(self, story_id, stage, as_json, brief=False):
-        if MISSING_TOOLS and not any(check == "environment" for _s, check, _m in self.entries):
-            tools = sorted({tool for tool, _c in MISSING_TOOLS})
+    def report(self, story_id: typing.Optional[str], stage: str, as_json: bool, brief: bool = False) -> int:
+        missing = wiring.missing_tools()
+        if missing and not any(check == "environment" for _s, check, _m in self.entries):
+            tools = sorted({tool for tool, _c in missing})
             self.fail("environment", f"the shell running the gate found no {', '.join(f'`{t}`' for t in tools)} "
-                                     f"(`{MISSING_TOOLS[0][1]}`) — the process that runs the gate lacks a tool on "
+                                     f"(`{missing[0][1]}`) — the process that runs the gate lacks a tool on "
                                      f"its PATH. No stage can fix that: put it on the PATH, then run the story again")
         if brief:
             # A stage that runs its own gate reads the report into its context: what passed is one line
@@ -205,9 +193,14 @@ MOVED_TO_CLI = frozenset((
 ))
 
 
-def hand_over_to_cli(argv):
+#: The folder of the entry scripts — `story-gate.py` and `factory-cli.py` beside the package.
+SCRIPTS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))))))
+
+
+def hand_over_to_cli(argv: typing.Sequence[str]) -> int:
     """Run the CLI beside this file with the same arguments, where a moved flag is asked of the gate."""
-    cli = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "factory-cli.py")
+    cli = os.path.join(SCRIPTS, "factory-cli.py")
     if not os.path.isfile(cli):
         print(f"gate:fail cli — {' '.join(a for a in argv if a in MOVED_TO_CLI)} moved to factory-cli.py, "
               f"which is not beside this gate; 'factory.sh update' puts it there", file=sys.stderr)
@@ -216,7 +209,7 @@ def hand_over_to_cli(argv):
     return completed.returncode
 
 
-def main(argv):
+def main(argv: typing.Sequence[str]) -> int:
     # `--brief` is the gate's own beside `--stage` (a stage's compact report); alone it is the status's, moved.
     moved = MOVED_TO_CLI - ({"--brief"} if "--stage" in argv else set())
     if any(token.split("=", 1)[0] in moved for token in argv):
@@ -229,7 +222,7 @@ def main(argv):
     parser.add_argument("--story")
     parser.add_argument(
         "--stage",
-        choices=tuple(s.name for s in STAGES if s.gated),
+        choices=tuple(s.name.value for s in PIPELINE if Trait.GATED in s.traits),
     )
     parser.add_argument("--change", action="store_true",
                         help="run the profile's checks outside a story and exit")
@@ -288,18 +281,18 @@ def main(argv):
         if not args.story:
             parser.error("--owned needs --story")
         if args.owned[0] == "start":
-            record_owned(args.runs, args.story)
+            wiring.window_start(args.runs, args.story)
             return 0
         if len(args.owned) < 2:
             parser.error("--owned takes start|end and the window's name")
-        return owned_end(args.runs, args.story, args.owned[1], args.owned[2] if len(args.owned) > 2 else "0")
+        return wiring.window_end(args.runs, args.story, args.owned[1], args.owned[2] if len(args.owned) > 2 else "0")
     if args.record_base or args.record_changes:
         if not args.story:
             parser.error("--record-base/--record-changes need --story")
         if args.record_base:
-            record_base(cwd, args.runs, args.story)
+            wiring.story_base(cwd, args.runs, args.story)
         if args.record_changes:
-            record_changes(cwd, args.runs, args.story, args.record_changes)
+            wiring.stage_changes(cwd, args.runs, args.story, args.record_changes)
         return 0
     if args.check_discovery:
         result = Result()
@@ -317,8 +310,9 @@ def main(argv):
         try:
             profile = read_profile(resolve_profile(args.profile, cwd))
             check_project(result, cwd, profile)
-            if layout_hint(cwd, profile):
-                result.note("layout", layout_hint(cwd, profile))
+            hint = wiring.layout_note(cwd, profile)
+            if hint:
+                result.note("layout", hint)
         except GateError as error:
             result.fail("project", str(error))
         for state, check, message in result.entries:
@@ -329,14 +323,15 @@ def main(argv):
         try:
             if args.change:
                 profile = read_profile(resolve_profile(args.profile, cwd))
-                if layout_hint(cwd, profile):
-                    result.fail("layout", layout_hint(cwd, profile))
+                hint = wiring.layout_note(cwd, profile)
+                if hint:
+                    result.fail("layout", hint)
                 check_contract(result, profile)
-                changed = check_change(cwd, profile).execute(CheckChangeCommand(args.staged, args.checks))
+                changed = wiring.check_change(cwd, profile).execute(CheckChangeCommand(args.staged, args.checks))
                 result.entries += changed.entries
                 result.flaky += changed.flaky
             else:
-                result.take(check_parity().execute(CheckParityCommand(args.parity)))
+                result.take(wiring.check_parity().execute(CheckParityCommand(args.parity)))
         except GateError as error:
             result.fail("gate", str(error))
         return result.report(label, label, args.json)
@@ -344,62 +339,11 @@ def main(argv):
         parser.error("--story and --stage are required (or --change, --parity, --check-backlog, --project; "
                      "status, schedule, usage and the inbox are factory-cli.py's)")
     result = Result()
-    hint = layout_hint(cwd, read_profile(resolve_profile(args.profile, cwd)))
+    profile = read_profile(resolve_profile(args.profile, cwd))
+    hint = wiring.layout_note(cwd, profile)
     if hint:
         # Not a note: a profile or a story the gate does not read would leave every check skipped and named,
         # and a green run that covers nothing.
         result.fail("layout", hint)
-    story_path = story_id = None
-    try:
-        story_path = find_story(args.epics, args.story)
-        front, body = read_front_matter(story_path)
-        story_id = str(front.get("id") or os.path.basename(story_folder(story_path)))
-        observe_writes(args.runs, story_id)
-        criteria = criteria_of(story_path, body, front)
-        run = stage_run(lambda run: close_record(run), result=result, args=args, cwd=cwd, runs=args.runs, stage=STAGE[args.stage], story_id=story_id,
-                      story_path=story_path, front=front, body=body, criteria=criteria,
-                      profile=read_profile(resolve_profile(args.profile, cwd)))
-        run_checks(run)
-    except GateError as error:
-        result.fail("gate", str(error))
-        return journal_gate(result, args, story_id, story_path, result.report(args.story, args.stage, args.json,
-                                                                              args.brief))
-    if not result.failed:
-        run_passed(run)
-    return journal_gate(result, args, story_id, story_path, result.report(story_id, args.stage, args.json, args.brief))
-
-
-def close_record(run):
-    """A delivery's last events, journaled before its commit: the gate's passing verdict and the end of the runner's
-    integrate step it runs in, where that step is open. The commit then holds the story's record whole — a delivered
-    story leaves no journal line behind in the checkout. A commit that fails after it is journaled as the refusal."""
-    journal_append(run.runs, run.story_id, "gate", run.args.stage, *gate_fields(run.result, run.args, 0))
-    run.result.closed = True
-    if step_open(run.runs, run.story_id, "integrate"):
-        journal_append(run.runs, run.story_id, "step-end", "integrate", "exit=0")
-
-
-def gate_fields(result, args, code):
-    """A gate run's event fields: `exit=<code> fail=<checks> by=<who>` — the runner's (`by=runner`, the one that
-    signs suites), a stage's own under a runner (`by=<stage>`), a session's (`by=session`)."""
-    failed = sorted({check for state, check, _ in result.entries if state == "fail"})
-    by = "runner" if args.record_suites else (os.environ.get("FACTORY_STAGE") or "stage") \
-        if os.environ.get("FACTORY_WORKER") else "session"
-    fields = [f"exit={code}"] + ([f"fail={','.join(failed)}"] if failed else []) + [f"by={by}"]
-    if result.flaky:
-        fields.append(f"flaky={','.join(dict.fromkeys(result.flaky))}")
-    return fields
-
-
-def journal_gate(result, args, story_id, story_path, code):
-    """Every gate run over a story is an event (`gate_fields`); a delivery journaled its passing verdict before its
-    commit (`close_record`). The plan gate's refusal carries the backlog's digest, so a repair is seen without a
-    clock."""
-    if not story_id or code == 0 and result.closed:
-        return code
-    fields = gate_fields(result, args, code)
-    if args.stage == "plan" and code == 1 and story_path:
-        fields.append(f"backlog={backlog_digest(story_path)}")
-    with contextlib.suppress(OSError):
-        journal_append(args.runs, story_id, "gate", args.stage, *fields)
-    return code
+    return wiring.gate_story(result, args, cwd, profile,
+                             lambda said: result.report(said, args.stage, args.json, args.brief))

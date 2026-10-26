@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from support import write
-from dca_factory import gate
+from dca_factory.infrastructure import gate  # noqa: F401 — registers the stage checks
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.delivery.adapter.outgoing.files import signals as journal_signals
 from dca_factory.delivery.adapter.outgoing.files import status_facts

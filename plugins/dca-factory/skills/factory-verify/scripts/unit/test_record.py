@@ -106,7 +106,6 @@ class Record(unittest.TestCase):
             self.assertIsNone(story_record.record_story(p.runs, "S-1"))
             events = journals.journal_events(p.runs, "S-1")
             self.assertEqual([e["kind"] for e in events].count("record"), 1)
-            from dca_factory import gate
             signals = status_facts.story_signals(p.runs, "S-1", [], "")
             self.assertEqual((signals["plan_open"], signals["rules"], signals["domain"]),
                              (1, {"killed": 1}, {"domain-concept": 1}))
@@ -125,7 +124,6 @@ class Record(unittest.TestCase):
             journals.journal_append(p.runs, "S-1", "usage", "builder", "tool=claude", "seconds=40")
             journals.journal_append(p.runs, "S-1", "gate", "plan", "exit=0", "by=runner")
             self.assertEqual(story_record.record_story(p.runs, "S-1"), {"unknown": "plan,streams"})
-            from dca_factory import gate
             self.assertIsNone(status_facts.story_signals(p.runs, "S-1", [], "")["plan_open"])
 
 
@@ -224,7 +222,6 @@ class OneWayToRead(unittest.TestCase):
 
     def test_the_readers_hold_no_stream_or_hand_over_parser(self):
         import inspect
-        from dca_factory import gate
         for reader in (status_facts.story_signals, detail.window_parts):
             text = inspect.getsource(reader)
             for parser in ("stream_parts", "stream_denials", "plan.md", "judge.md", "INVARIANT_BREAKS", "read_text"):

@@ -4,7 +4,7 @@ import os
 import unittest
 
 from support import project, write
-from dca_factory import gate
+from dca_factory.infrastructure import gate  # noqa: F401 — registers the stage checks
 from dca_factory.sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from dca_factory.delivery.adapter.outgoing.files import stage_evidence_files
 from dca_factory.delivery.adapter.outgoing.files import test_files

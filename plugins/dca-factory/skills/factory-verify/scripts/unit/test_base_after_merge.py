@@ -8,7 +8,7 @@ import unittest
 
 from support import write
 from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
-from dca_factory import gate
+from dca_factory.infrastructure import gate  # noqa: F401 — registers the stage checks
 from dca_factory.delivery.adapter.outgoing.files import snapshots
 from dca_factory.delivery.adapter.outgoing.files import kept_files as gate_kept
 from dca_factory.delivery.adapter.outgoing.git import integration

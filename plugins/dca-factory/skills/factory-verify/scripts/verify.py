@@ -158,8 +158,11 @@ def cli_in(root):
 
 
 PACKAGE = "dca_factory"
-MODULES = ("contract", "gate", "runner", "cli")
-GATE_SIDE = ("contract", "gate")                 # what decides; the runner and the cli show and start
+MODULES = ("contract", "runner", "cli")
+#: The gate's command line, an incoming adapter: what decides, with the version stamp; the runner and the cli show and
+#: start.
+GATE_MODULE = "delivery/adapter/incoming/gate/gate_command"
+GATE_SIDE = ("contract", GATE_MODULE)
 #: What is built in layers (WP-152): the building blocks, the shared kernel, the contexts, the web host, the root.
 LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "web", "infrastructure")
 
@@ -4353,7 +4356,7 @@ def verify_setup(runner, verbose=False):
                                 encoding="utf-8", errors="replace")
         check("gate: a flag that moved to the cli is handed over, so an older caller still gets its answer",
               handed.returncode == 0 and handed.stdout.startswith("factory:"), handed.stdout.strip()[:200])
-    modules = package_text(runner)
+    modules = package_text(runner, MODULES + (GATE_MODULE,))
     gate_text = "\n".join(modules[m] for m in GATE_SIDE)
     cli_text = "\n".join(modules[m] for m in MODULES if m not in GATE_SIDE)
     runner_text = open(runner, encoding="utf-8").read()
@@ -4425,7 +4428,7 @@ def verify_setup(runner, verbose=False):
     # every flag the README shows on a command line is one its program accepts
     argparse_flags = lambda text: {flag for call in re.findall(r"add_argument\(([^)]*)", text)
                                    for flag in re.findall(r'"(--[\w-]+)"', call)}
-    accepted = {"gate": argparse_flags(modules["gate"]), "cli": argparse_flags(modules["cli"]),
+    accepted = {"gate": argparse_flags(modules[GATE_MODULE]), "cli": argparse_flags(modules["cli"]),
                 "verify": argparse_flags(open(__file__, encoding="utf-8").read()),
                 "sh": {flag for labels in re.findall(r"^\s*((?:--[\w-]+\|?)+)\)", runner_text, re.M)
                        for flag in labels.split("|")}}
@@ -4817,7 +4820,7 @@ def stage_lists(modules, runner_text):
     it — and any stage name the gate's `main` decides on. A stage is a row: a list beside the table drifts from it."""
     import ast
     found = []
-    for label, text in ((f"{name}.py", modules[name]) for name in MODULES):
+    for label, text in ((f"{name}.py", modules[name]) for name in MODULES + (GATE_MODULE,)):
         tree = ast.parse(text)
         skip = set()
         for node in ast.walk(tree):
@@ -4826,7 +4829,7 @@ def stage_lists(modules, runner_text):
             if isinstance(node, ast.FunctionDef):
                 for decorator in node.decorator_list:
                     skip.update(range(decorator.lineno, decorator.end_lineno + 1))
-            if isinstance(node, ast.FunctionDef) and node.name == "main" and label == "gate.py":
+            if isinstance(node, ast.FunctionDef) and node.name == "main" and label == f"{GATE_MODULE}.py":
                 for inner in ast.walk(node):
                     if isinstance(inner, ast.Constant) and inner.value in STAGE_NAMES:
                         found.append(f"{label}:{inner.lineno} main names {inner.value!r}")
