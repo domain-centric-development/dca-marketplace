@@ -111,6 +111,12 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
         super().__init__(*args, **kwargs)
         self.followers, self.followers_lock = set(), threading.Lock()
 
+    def server_bind(self):
+        """Bound without `HTTPServer`'s name lookup: it asks the resolver for 127.0.0.1's full name (`getfqdn`), which
+        on some machines hangs for longer than a start may wait, and the page never uses the name."""
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
     def end_followers(self):
         """The follow processes still streaming — a daemon thread dies with the page and never reaches its own
         `finally`, so the page ends them, or they outlive it."""
