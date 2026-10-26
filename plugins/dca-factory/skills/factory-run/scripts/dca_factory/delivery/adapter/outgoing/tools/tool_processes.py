@@ -97,7 +97,7 @@ class ToolHost(typing.Protocol):
 
     def protected_dirs(self) -> typing.List[str]: ...
 
-    def journal_line(self, story: str, line: str) -> None: ...
+    def journal_line(self, story: typing.Optional[str], line: str) -> None: ...
 
     def renew(self) -> bool: ...
 
@@ -122,7 +122,7 @@ class ToolProcesses:
         flags, note = self._choice.model_choice(tool, model_stage)
         print(f"   model: {flags}{note}")
 
-    def invoke(self, tool: str, prompt: str, raw: str, stage: str, story: str) -> int:
+    def invoke(self, tool: str, prompt: str, raw: str, stage: str, story: typing.Optional[str]) -> int:
         """One stage's tool process; its output kept in <raw>, where the tool also says what the stage cost. A process
         that ran into the tool's usage limit is kept beside it (`<raw>` with `-limit<n>` before `.out`, its usage
         journaled), the runner waits for the reset and the same stage runs again — no round counted, no story set
@@ -145,7 +145,7 @@ class ToolProcesses:
                 prompt += (" An earlier process of this stage stopped at the tool's usage limit before it finished: "
                            "read the files as they are and go on from there.")
 
-    def wait_for_limit(self, story: str, stage: str, tool: str, limited: typing.Mapping[str, typing.Any]) -> bool:
+    def wait_for_limit(self, story: typing.Optional[str], stage: str, tool: str, limited: typing.Mapping[str, typing.Any]) -> bool:
         """Until a minute past the reset the tool named — or FACTORY_LIMIT_WAIT (30m) where it named none, or one past.
         The claim is renewed while it waits, and the journal says until when, so the schedule reads the stage as
         running, not as interrupted. False where the stop file, another worker or a signal ends the wait."""
@@ -170,7 +170,7 @@ class ToolProcesses:
         print(f"factory: the usage limit reset — {stage} runs again.")
         return True
 
-    def invoke_once(self, tool: str, prompt: str, raw: str, stage: str, story: str) -> int:
+    def invoke_once(self, tool: str, prompt: str, raw: str, stage: str, story: typing.Optional[str]) -> int:
         """One tool process, as `invoke` starts it."""
         host, choice = self._host, self._choice
         flags, _note = choice.model_choice(tool, stage)
@@ -216,7 +216,7 @@ class ToolProcesses:
                 stop_group(process, signal.SIGINT)
                 raise Stopped(SIGNAL_EXITS["SIGINT"])
 
-    def record_usage(self, story: str, stage: str, tool: str, raw: str, seconds: typing.Optional[int] = None,
+    def record_usage(self, story: typing.Optional[str], stage: str, tool: str, raw: str, seconds: typing.Optional[int] = None,
                      request: str = "") -> str:
         """One `usage` line in the story's journal per invocation — a request's in the request journal, with its id —
         and the stage's final message on screen. Returns the measured fields."""

@@ -147,3 +147,7 @@ class RequestStore(Store, typing.Protocol):
     def shown(self, request: Request) -> str:
         """Where the request is kept, as a person reads it."""
         ...
+
+    def journal(self, *fields: str) -> None:
+        """One line of the request journal: what happened to a request, when."""
+        ...

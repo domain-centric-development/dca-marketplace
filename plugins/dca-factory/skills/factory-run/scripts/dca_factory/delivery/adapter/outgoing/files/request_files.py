@@ -215,3 +215,6 @@ class RequestFiles:
 
     def shown(self, request: Request) -> str:
         return str(shown(request["path"]))
+
+    def journal(self, *fields: str) -> None:
+        journal(*fields)

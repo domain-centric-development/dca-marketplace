@@ -26,11 +26,10 @@ from .contract import (
     ALL_KINDS, GateError, SHARED_WINDOWS, STAGE, STAGE_FILES,
     STAGE_ORDER, STAGES)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    evidence_rel, place, PROFILE_FILE, read_profile,
+    place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
-from .delivery.adapter.outgoing.git.repository import git, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
-    decisions_store, needs_human_ids, record_path, stamp_applied)
+    decisions_store, needs_human_ids, record_path)
 from .delivery.adapter.outgoing.files.story_layout import (
     find_story, is_delivered, story_kind)
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
@@ -45,9 +44,7 @@ from .delivery.adapter.outgoing.files.run_marks import (
 from .delivery.adapter.outgoing.git.worktrees import has_worktree
 from .delivery.adapter.outgoing.files.journal_files import journal_writer
 from .delivery.adapter.outgoing.files.kept_files import stale_red_proof
-from .delivery.adapter.outgoing.files.delivery_writes import story_journals
-from .delivery.adapter.outgoing.git.change import in_places, people_places
-from .delivery.adapter.outgoing.build.commands import run as run_command, tail
+from .delivery.adapter.outgoing.build.commands import run as run_command
 from .delivery.adapter.outgoing.git.integration import (
     integration_target, lost_text, main_tests_lost)
 from .delivery.adapter.outgoing.files.delivery_files import perspectives_of
@@ -56,17 +53,20 @@ from .delivery.adapter.outgoing.process.gate_process import file_sha, GateProces
 from .delivery.adapter.outgoing.tools.tool_choice import first_word, ToolChoice
 from .delivery.adapter.outgoing.tools.tool_processes import (
     err, exit_field, flush, SIGNAL_EXITS, Stopped, TIMED_OUT, ToolProcesses, utc)
-from .building_blocks import UseCaseException
 from .delivery.adapter.incoming.runner.usage import book_request_usage
-from .delivery.adapter.outgoing.files.decision_record_files import project_record_path, request_records
-from .delivery.adapter.outgoing.files.journal_files import mark_questioned
+from .delivery.application.requests.work_request import WorkRequestCommand
+from .delivery.adapter.outgoing.files.request_files import out_path, prune_outputs, stamp_utc
+from .delivery.adapter.outgoing.files.decision_record_files import project_record_path
+from .delivery.application.shared.request_skill import SkillRun
+from .infrastructure import requests as request_wiring
+from .delivery.adapter.outgoing.files.decision_record_files import request_records
 from .delivery.adapter.outgoing.files.request_files import (
-    default_by, find_request, list_requests, out_path, prune_outputs, read_request, REQUEST_JOURNAL, requests_dir,
-    stamp_utc, update_request)
+    default_by, list_requests, read_request, REQUEST_JOURNAL, requests_dir,
+    update_request)
 from .delivery.adapter.outgoing.files.request_files import journal as request_journal
 from .delivery.application.requests.check_request import CheckRequestCommand
 from .delivery.application.requests.list_requests import target_text
-from .delivery.application.shared.requests import KIND, RequestRefused, stories_of, written_keys
+from .delivery.application.shared.requests import KIND, stories_of
 from .infrastructure import delivery as wiring
 
 
@@ -137,6 +137,122 @@ def newer(path, than):
     return not os.path.exists(than) or os.path.getmtime(path) > os.path.getmtime(than)
 
 
+class RunnerRequestSkill:
+    """A request's skill as the runner starts it: the prompt that names the skill, the request's arguments, the rules
+    for a skill run for a request and where things are; the shell narrowed to what the dialog skills read and record
+    with; the tool's process, its usage journaled and booked to the request."""
+
+    def __init__(self, run):
+        self._run = run
+
+    def tool_for(self, unit, given):
+        return self._run.tools.tool_for(unit, given)
+
+    @staticmethod
+    def known(tool):
+        return bool(os.environ.get("FACTORY_TOOL_CMD")) or tool in TOOL
+
+    def run(self, request, kind, unit, tool):
+        run = self._run
+        run.tool_in_flight = tool
+        raw = out_path(request["id"])
+        os.makedirs(os.path.dirname(raw), exist_ok=True)
+        run.tools.allowed_override = self.request_allowed()
+        started = time.time()
+        run.request_in_flight = request["id"]
+        try:
+            code = run.invoke(tool, self.request_prompt(request, tool), raw, unit, None)
+        finally:
+            run.tools.allowed_override = None
+            run.request_in_flight = ""
+        measured = run.processes.record_usage(None, unit, tool, raw, int(time.time() - started), request["id"])
+        book_request_usage(wiring.book_request_cost(run.home, place("runs")), request["id"], tool, measured)
+        prune_outputs()
+        return SkillRun(code, code == TIMED_OUT, shown(raw))
+
+    def request_skill(self, kind):
+        """The skill a request's kind runs, as its prompt names it."""
+        if kind.skill == "description":
+            return ("the project's description skill — the skill whose description says it writes the project "
+                    "description, `dca-describe` in a DCA project —")
+        return f"the {kind.skill} skill"
+
+    @staticmethod
+    def request_arguments(request):
+        """The arguments a session would give the skill for this request — the same words the cockpit sends."""
+        kind, words, option = request["kind"], request.get("words", ""), request.get("option", "")
+        story, record = request.get("story", ""), request.get("record", "")
+        if kind in ("wish", "discover", "describe"):
+            return words
+        if kind == "release":
+            return f"release {request.get('story') or request.get('epic')}"
+        if kind in ("stories", "journey"):
+            return f"{kind} {request['epic']}"
+        if kind == "epic-from":
+            return f"epic {request['proposal']} --from {request['report']}"
+        if kind == "answer":
+            given = option or words
+            why = f" — rationale: {words}" if option and words else ""
+            return f"{story + ' ' if story else ''}{record}: answer {given}{why}"
+        if kind == "accept":
+            return f"{story} {record}: answer accepted"
+        if kind == "correct":
+            code = f"{option}: " if option else ""
+            return f"{story}{' ' + record if record else ''}: correction: {code}{words}"
+        return words
+
+    def request_prompt(self, request, tool):
+        kind = KIND[request["kind"]]
+        reference = next((f"{d}/factory-run/reference/requests.md" for d in self._run.skill_dirs(tool)
+                          if os.path.isfile(f"{d}/factory-run/reference/requests.md")), "")
+        if not reference:
+            own = os.path.abspath(os.path.join(self._run.scripts, "..", "reference", "requests.md"))
+            reference = own[len(self._run.pwd) + 1:] if own.startswith(self._run.pwd + "/") else own
+        by = request.get("by") or "a person"
+        topic_file = shown(project_record_path(request["id"], request["kind"]))
+        lines = [
+            f"Apply {self.request_skill(kind)} with the arguments: {self.request_arguments(request)}",
+            f"This is request {request['id']} of the factory, written by {by} at {request.get('asked', '?')}. You run "
+            f"headless: no person reads this session and nobody answers in it. The rules for a skill run for a request "
+            f"are in {reference} — read them first.",
+            f"In short: the request is {by}'s confirmation of what it names — write it as theirs (`by: {by}`), as the "
+            f"skill would on their confirmation. Where the skill would ask the person and the files do not settle it, do "
+            f"not guess and do not ask here: write the question as one decision record with `request: {request['id']}` "
+            f"in its front matter and its file name without `.md` as its `id:` — beside the story it concerns, else as "
+            f"{topic_file} — and end. The factory shows it "
+            f"and runs this request again once it is answered. Start no stage and no `factory.sh run`, commit nothing: "
+            f"the factory commits what this request wrote.",
+            f"Now is {stamp_utc()} (UTC) — the time a field such as `created:` takes.",
+        ]
+        if kind.name == "wish":
+            lines.append("A wish becomes a backlog item kept as a draft (`status: draft`): the person releases it.")
+        if kind.name == "correct" and not request.get("option"):
+            lines.append("The person named no reason code for the correction: where their words point to exactly one, "
+                         "write that one; else ask it as a record whose options are the codes.")
+        answered = request.get("answered", "")
+        if answered:
+            records = [shown(path) for path, rid, _s in request_records(self._run.home, request["id"])]
+            lines.append(f"This request ran before and asked; its question is answered now ({answered}: "
+                         f"{', '.join(records)}). Read the answer and go on from there — write nothing the answer and "
+                         f"the request do not settle.")
+        story = (request.get("story") or "").split()
+        lines.append(self._run.where_things_are(tool, story[0] if len(story) == 1 else None)
+                     + " For a request, also `bash .agents/factory/factory.sh` backlog, status, decisions, discover, "
+                     "spec-delta and help.")
+        return "\n\n".join(lines)
+
+    def request_allowed(self):
+        """A request's shell: a stage's, with the cli narrowed to the flags the dialog skills read and record with, and
+        the runner's reading verbs — no flag and no verb that starts a run, a request, the factory or its page."""
+        cli = f"Bash({self._run.py} .agents/factory/factory-cli.py:*)"
+        heads = [head for head in self._run.tools.allowed_commands().split(",") if head != cli]
+        heads += [f"Bash({self._run.py} .agents/factory/factory-cli.py {flag}:*)" for flag in REQUEST_CLI_FLAGS]
+        heads += [f"Bash(bash .agents/factory/factory.sh {verb}:*)"
+                  for verb in ("backlog", "status", "decisions", "discover", "spec-delta", "help")]
+        heads.append("Bash(date:*)")                # the backlog skill dates what it writes
+        return ",".join(heads)
+
+
 class Run:
     """One runner process: the story or the backlog it runs, and what it keeps between stages."""
 
@@ -172,7 +288,6 @@ class Run:
         self.add_dirs, self.read_dirs = [], []
         self.tool_in_flight = ""
         self.request_in_flight = ""         # the request whose process runs: a window it opens is its to measure
-        self.settled_commit = ""            # the commit of the last request the factory settled itself
         self.pipeline_sha = os.environ.get("FACTORY_RUNNER_PIPELINE_SHA", "")
         self.claimed = False
         self.lock_held = False
@@ -1611,315 +1726,24 @@ class Run:
                     return
 
     # --- one request, in its own process ----------------------------------------------------------------------
-    def request_skill(self, kind):
-        """The skill a request's kind runs, as its prompt names it."""
-        if kind.skill == "description":
-            return ("the project's description skill — the skill whose description says it writes the project "
-                    "description, `dca-describe` in a DCA project —")
-        return f"the {kind.skill} skill"
+    def request_use_case(self):
+        """The use case that works one request, over the main checkout, under this runner's lock."""
+        return request_wiring.work_request(self.home, self.runs_rel, self.profile, self.locked, RunnerRequestSkill(self))
 
-    @staticmethod
-    def request_arguments(request):
-        """The arguments a session would give the skill for this request — the same words the cockpit sends."""
-        kind, words, option = request["kind"], request.get("words", ""), request.get("option", "")
-        story, record = request.get("story", ""), request.get("record", "")
-        if kind in ("wish", "discover", "describe"):
-            return words
-        if kind == "release":
-            return f"release {request.get('story') or request.get('epic')}"
-        if kind in ("stories", "journey"):
-            return f"{kind} {request['epic']}"
-        if kind == "epic-from":
-            return f"epic {request['proposal']} --from {request['report']}"
-        if kind == "answer":
-            given = option or words
-            why = f" — rationale: {words}" if option and words else ""
-            return f"{story + ' ' if story else ''}{record}: answer {given}{why}"
-        if kind == "accept":
-            return f"{story} {record}: answer accepted"
-        if kind == "correct":
-            code = f"{option}: " if option else ""
-            return f"{story}{' ' + record if record else ''}: correction: {code}{words}"
-        return words
-
-    def request_prompt(self, request, tool):
-        kind = KIND[request["kind"]]
-        reference = next((f"{d}/factory-run/reference/requests.md" for d in self.skill_dirs(tool)
-                          if os.path.isfile(f"{d}/factory-run/reference/requests.md")), "")
-        if not reference:
-            own = os.path.abspath(os.path.join(self.scripts, "..", "reference", "requests.md"))
-            reference = own[len(self.pwd) + 1:] if own.startswith(self.pwd + "/") else own
-        by = request.get("by") or "a person"
-        topic_file = shown(project_record_path(request["id"], request["kind"]))
-        lines = [
-            f"Apply {self.request_skill(kind)} with the arguments: {self.request_arguments(request)}",
-            f"This is request {request['id']} of the factory, written by {by} at {request.get('asked', '?')}. You run "
-            f"headless: no person reads this session and nobody answers in it. The rules for a skill run for a request "
-            f"are in {reference} — read them first.",
-            f"In short: the request is {by}'s confirmation of what it names — write it as theirs (`by: {by}`), as the "
-            f"skill would on their confirmation. Where the skill would ask the person and the files do not settle it, do "
-            f"not guess and do not ask here: write the question as one decision record with `request: {request['id']}` "
-            f"in its front matter and its file name without `.md` as its `id:` — beside the story it concerns, else as "
-            f"{topic_file} — and end. The factory shows it "
-            f"and runs this request again once it is answered. Start no stage and no `factory.sh run`, commit nothing: "
-            f"the factory commits what this request wrote.",
-            f"Now is {stamp_utc()} (UTC) — the time a field such as `created:` takes.",
-        ]
-        if kind.name == "wish":
-            lines.append("A wish becomes a backlog item kept as a draft (`status: draft`): the person releases it.")
-        if kind.name == "correct" and not request.get("option"):
-            lines.append("The person named no reason code for the correction: where their words point to exactly one, "
-                         "write that one; else ask it as a record whose options are the codes.")
-        answered = request.get("answered", "")
-        if answered:
-            records = [shown(path) for path, rid, _s in request_records(self.home, request["id"])]
-            lines.append(f"This request ran before and asked; its question is answered now ({answered}: "
-                         f"{', '.join(records)}). Read the answer and go on from there — write nothing the answer and "
-                         f"the request do not settle.")
-        story = (request.get("story") or "").split()
-        lines.append(self.where_things_are(tool, story[0] if len(story) == 1 else None)
-                     + " For a request, also `bash .agents/factory/factory.sh` backlog, status, decisions, discover, "
-                     "spec-delta and help.")
-        return "\n\n".join(lines)
-
-    def request_allowed(self):
-        """A request's shell: a stage's, with the cli narrowed to the flags the dialog skills read and record with, and
-        the runner's reading verbs — no flag and no verb that starts a run, a request, the factory or its page."""
-        cli = f"Bash({self.py} .agents/factory/factory-cli.py:*)"
-        heads = [head for head in self.tools.allowed_commands().split(",") if head != cli]
-        heads += [f"Bash({self.py} .agents/factory/factory-cli.py {flag}:*)" for flag in REQUEST_CLI_FLAGS]
-        heads += [f"Bash(bash .agents/factory/factory.sh {verb}:*)"
-                  for verb in ("backlog", "status", "decisions", "discover", "spec-delta", "help")]
-        heads.append("Bash(date:*)")                # the backlog skill dates what it writes
-        return ",".join(heads)
-
-    def people_paths(self):
-        """What a request may write and the factory commits — what a person writes and no code is
-        (`people_places`, the same the commit hook takes as the backlog alone): (folders, files, never)."""
-        self.profile()
-        return people_places()
-
-    def dirty_files(self):
-        """{path: digest} of everything git sees changed or new in the main checkout, outside the factory's folder.
-        A story's decision records count: a request's question and a person's answer are written there."""
-        # not through `git()`, which strips the answer: the first entry's leading blank is its status column
-        done = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all", "--no-renames"],
-                              cwd=self.home, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        found = {}
-        if done.returncode != 0:
-            return found
-        for entry in done.stdout.split("\0"):
-            if len(entry) < 4:
-                continue
-            path = entry[3:]
-            if path.startswith((self.runs_rel.rstrip("/") + "/", evidence_rel() + "/", ".dca-factory/")):
-                continue
-            full = os.path.join(self.home, path)
-            try:
-                with open(full, "rb") as handle:
-                    found[path] = hashlib.sha256(handle.read()).hexdigest()
-            except OSError:
-                found[path] = "deleted"
-        return found
-
-    def request_wrote(self, request, before):
-        """What a request wrote so far — the people's paths it changed that were clean before, and what an earlier
-        attempt of it wrote —, kept in its file when it fails or is interrupted: an attempt after it commits them as
-        its own, never as a person's."""
-        places = self.people_paths()
-        after = self.dirty_files()
-        new = {p for p, digest in after.items() if before.get(p) != digest and p not in before}
-        own = set(str(request.get("wrote") or "").split())
-        return " ".join(sorted(p for p in (new | own) & set(after) if in_places(p, places)))
-
-    def commit_request(self, request, before):
-        """What the request wrote, committed on its own: the paths it changed that were clean before — or that an
-        earlier attempt of it wrote (`wrote:`) — and that are the backlog or the description. A path a person had
-        changed before, or code, stays as it is and is named."""
-        after = self.dirty_files()
-        own = set(str(request.get("wrote") or "").split())
-        changed = sorted(p for p, digest in after.items() if before.get(p) != digest or p in own)
-        places = self.people_paths()
-        mine = [p for p in changed if (p not in before or p in own) and in_places(p, places)]
-        theirs = [p for p in changed if p in before and p not in own]
-        stray = [p for p in changed if p not in before and p not in mine]
-        if theirs:
-            print(f"factory: request {request['id']} changed what was changed by hand before — left uncommitted: "
-                  f"{', '.join(theirs[:8])}")
-        if stray:
-            err(f"factory: request {request['id']} changed what is neither backlog nor description (code, the spec) — "
-                f"left uncommitted: "
-                f"{', '.join(stray[:8])}")
-        self.commit_refusal = ""
-        if not mine:
-            return ""
-        mine += story_journals(self.home)       # what it did to a story is in that story's record too
+    @contextlib.contextmanager
+    def locked(self):
         self.take_lock()
         try:
-            git(self.home, "add", "--", *mine)
-            message = (f"chore(backlog): {request['kind']} {target_text(request)}\n\nRequest: {request['id']}\n"
-                       f"By: {request.get('by', '')}\n")
-            # through the commit hook, as a person's backlog commit: it runs what the profile's `checks.backlog:` names
-            done = git(self.home, *git_identity(self.home), "commit", "--quiet", "-m", message, "--", *mine)
-            if done[0] != 0:
-                git(self.home, "reset", "--quiet", "--", *mine)
+            yield
         finally:
             self.drop_lock()
-        if done[0] != 0:
-            self.commit_refusal = f"what it wrote could not be committed — {tail(done[1], 1500)}"
-            err(f"factory: request {request['id']}: {self.commit_refusal}; it stays in the checkout, unstaged")
-            return ""
-        return git(self.home, "rev-parse", "--short", "HEAD")[1].strip()
 
     def work_request(self, request_id, tool):
-        """One request worked: its skill run headless with the request as the person's confirmation. Exit 0 when it is
-        done (and gone), 3 when its skill asked a person (waiting), 1 when it failed (kept, `error:`)."""
+        """One request worked (`WorkRequestUseCase`): exit 0 when it is done (and gone), 3 when its skill asked a person
+        (waiting), 1 when it failed (kept, `error:`)."""
         self.profile()
-        try:
-            request = find_request(request_id)
-        except RequestRefused as error:
-            err(f"factory: {error}")
-            return 1
-        if request["state"] != "queued":
-            print(f"factory: request {request_id} is {request['state']} — nothing to do")
-            return 0
-        kind = KIND[request["kind"]]
-        if not kind.skill:
-            update_request(request, state="failed", error=f"a {kind.name} request is the runner's, no skill works it")
-            return 1
-        if request.get("worked"):
-            return self.commit_worked(request, kind)
-        # what held when it was written may not hold now — an answer given by hand, a story released meanwhile. A
-        # request resumed after its own question is past that: what its first run did (an answer written, an
-        # acceptance taken) is why its record no longer reads open, so it is not checked again.
-        if not request.get("answered"):
-            fields = {k: request[k] for k in written_keys(kind) if request.get(k)}
-            try:
-                wiring.check_request(self.home).execute(CheckRequestCommand(kind.name, fields, request.get("words", "")))
-            except (UseCaseException, GateError) as error:
-                update_request(request, state="failed", error=f"no longer holds — {error}")
-                request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", str(error))
-                err(f"factory: request {request['id']} no longer holds — {error}")
-                return 1
-        if not request.get("answered"):
-            settled = self.settle_request(request, kind)
-            if settled is not None:
-                return settled
-        unit = f"request:{kind.name}"
-        unit_tool = self.tools.tool_for(unit, tool)
-        if not os.environ.get("FACTORY_TOOL_CMD") and unit_tool not in TOOL:
-            update_request(request, state="failed", error=f"no known tool {unit_tool!r} to run it with")
-            return 1
-        attempts = int(request.get("attempts") or 0) + 1
-        update_request(request, state="running", worker=self.worker, started=utc(), attempts=str(attempts), error=None)
-        request_journal("request-start", kind.name, request["id"], target_text(request),
-                        f"by={request.get('by', '')}", f"tool={unit_tool}", f"attempt={attempts}")
-        self.tool_in_flight = unit_tool
-        raw = out_path(request["id"])
-        os.makedirs(os.path.dirname(raw), exist_ok=True)
-        before = self.dirty_files()
-        self.tools.allowed_override = self.request_allowed()
-        started = time.time()
-        self.request_in_flight = request["id"]
-        try:
-            code = self.invoke(unit_tool, self.request_prompt(request, unit_tool), raw, unit, None)
-        except (Stopped, KeyboardInterrupt):
-            update_request(request, state="queued", worker=None, started=None, wrote=self.request_wrote(request, before))
-            request_journal("request-end", kind.name, request["id"], "exit=stopped", "state=queued")
-            raise
-        finally:
-            self.tools.allowed_override = None
-            self.request_in_flight = ""
-        measured = self.processes.record_usage(None, unit, unit_tool, raw, int(time.time() - started), request["id"])
-        book_request_usage(wiring.book_request_cost(self.home, place("runs")), request["id"], unit_tool, measured)
-        prune_outputs()
-        if code != 0:
-            why = "ran past its time limit" if code == TIMED_OUT else f"ended with exit {code}"
-            update_request(request, state="failed", worker=None, wrote=self.request_wrote(request, before),
-                           error=f"the tool {why} — its output: {shown(raw)}")
-            request_journal("request-end", kind.name, request["id"], f"exit={code}", "state=failed")
-            err(f"factory: request {request['id']} — the tool {why}; it stays as failed (`factory.sh requests`).")
-            return 1
-        asked = [(path, rid) for path, rid, state in request_records(self.home, request["id"])
-                 if state in ("open", "draft")]
-        if asked:
-            commit = self.commit_request(request, before)
-            update_request(request, state="waiting", worker=None, record_file=shown(asked[0][0]),
-                           wrote=self.request_wrote(request, before) if self.commit_refusal else None)
-            request_journal("request-end", kind.name, request["id"], "exit=0", "state=waiting",
-                            f"record={asked[0][1]}", f"commit={commit or '-'}")
-            print(f"factory: request {request['id']} asks a person — {shown(asked[0][0])}; it runs again once answered.")
-            return 3
-        for path, _rid, state in request_records(self.home, request["id"]):
-            if state == "answered":
-                stamp_applied(path, "request")
-        if kind.name in ("wish", "stories"):
-            mark_questioned(self.home, place("runs"), self.request_wrote(request, before).split(), request["id"])
-        # gone before its commit: a crash between the two leaves what it wrote uncommitted — never a request that
-        # would run its skill a second time
-        with contextlib.suppress(OSError):
-            os.remove(request["path"])
-        commit = self.commit_request(request, before)
-        if self.commit_refusal:
-            # its skill did its part; what it wrote waits in the checkout for a person, as the failed request says —
-            # and its retry commits it, never running the skill again (`worked:`)
-            update_request(request, restore=True, state="failed", worker=None, error=self.commit_refusal,
-                           wrote=self.request_wrote(request, before), worked=utc())
-            request_journal("request-end", kind.name, request["id"], "exit=0", "state=failed", "commit=refused")
-            return 1
-        request_journal("request-end", kind.name, request["id"], "exit=0", "state=done", f"commit={commit or '-'}")
-        print(f"factory: request {request['id']} done" + (f" — committed {commit}" if commit else " — nothing to commit"))
-        return 0
-
-    def settle_request(self, request, kind):
-        """A request the factory settles itself (`settle`): written and committed at once, no tool started. None where
-        a skill must work it. A request settled on a press (`settle_command`) has no file: nothing to keep or remove."""
-        before = self.dirty_files()
-        try:
-            wrote = wiring.settlement(self.home, place("runs")).settle(request, utc())
-        except (UseCaseException, GateError) as error:
-            if request.get("path"):
-                update_request(request, state="failed", error=f"no longer holds — {error}")
-            request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", str(error))
-            err(f"factory: request {request['id']} no longer holds — {error}")
-            return 1
-        if wrote is None:
-            return None
-        request_journal("request-start", kind.name, request["id"], target_text(request),
-                        f"by={request.get('by', '')}", "tool=factory", "attempt=1")
-        if request.get("path"):
-            with contextlib.suppress(OSError):
-                os.remove(request["path"])
-        commit = self.commit_request(request, before)
-        self.settled_commit = commit
-        if self.commit_refusal:
-            if request.get("path"):
-                update_request(request, restore=True, state="failed", worker=None, error=self.commit_refusal,
-                               wrote=self.request_wrote(request, before), worked=utc())
-            request_journal("request-end", kind.name, request["id"], "exit=0", "state=failed", "commit=refused")
-            return 1
-        request_journal("request-end", kind.name, request["id"], "exit=0", "state=done", "by=factory",
-                        f"commit={commit or '-'}")
-        print(f"factory: request {request['id']} settled by the factory, no tool" +
-              (f" — committed {commit}" if commit else ""))
-        return 0
-
-    def commit_worked(self, request, kind):
-        """A request whose skill did its part and whose commit was refused, queued again: what it wrote is committed —
-        the skill is not run again, and what it wrote is not checked as a new request (an answer it wrote reads as
-        answered by now). Refused again, it stays failed with the reason."""
-        commit = self.commit_request(request, self.dirty_files())
-        if self.commit_refusal or not commit:
-            why = self.commit_refusal or "nothing it wrote is left in the checkout to commit"
-            update_request(request, state="failed", worker=None, error=why)
-            request_journal("request-end", kind.name, request["id"], "exit=1", "state=failed", "commit=refused")
-            err(f"factory: request {request['id']}: {why}")
-            return 1
-        with contextlib.suppress(OSError):
-            os.remove(request["path"])
-        request_journal("request-end", kind.name, request["id"], "exit=0", "state=done", f"commit={commit}")
-        print(f"factory: request {request['id']} done — committed {commit}")
-        return 0
+        worked = self.request_use_case().execute(WorkRequestCommand(request_id, tool, self.worker))
+        return said(worked)
 
     # --- the backlog -------------------------------------------------------------------------------------------
     def parallel_slots(self):
@@ -2360,6 +2184,13 @@ def request_main(argv):
             run.release()
 
 
+def said(worked):
+    """What a request's use case said on its way, printed where the person reads it; its exit code."""
+    for stream, line in worked.said:
+        (err if stream == "err" else print)(line)
+    return worked.code
+
+
 def settle_command(cwd, kind_name, fields, words, by):
     """`factory.sh request <kind> … --settle`: the request settled at once where the factory can (`settle`), no file
     written and no tool started — a press in a session's view takes the same shortcut a page's request takes.
@@ -2371,8 +2202,10 @@ def settle_command(cwd, kind_name, fields, words, by):
     run = Run(run_options([]), os.path.realpath(cwd), place("runs"), worker=os.environ.get("FACTORY_RUNNER_WORKER"))
     request = dict(fields, id=f"{utc('%Y%m%dT%H%M%S')}-{kind_name}", kind=kind_name, words=words,
                    by=" ".join((by or default_by(cwd)).split()), path=None)
-    code = run.settle_request(request, KIND[kind_name])
-    return (3 if code is None else code), request["id"], run.settled_commit
+    settled = run.request_use_case().settle(request, KIND[kind_name])
+    if settled is None:
+        return 3, request["id"], ""
+    return said(settled), request["id"], settled.commit
 
 
 def tools_ready(run, tool):

@@ -9,6 +9,7 @@ import time
 import typing
 
 from .....contract import STAGE_ORDER
+from .journal_files import mark_questioned
 from .story_layout import DECISIONS_DIR, find_story, story_digest, story_files, story_folder, story_id_of
 from .....sharedkernel.adapter.outgoing.profile.profile_files import DEFAULTS, place, PLACES_REL, shown
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import Front, MarkdownError, read_front_matter, read_text
@@ -453,3 +454,21 @@ class DecisionInboxFiles:
 
     def where(self) -> str:
         return f"{place('epics')}/<epic>/<story>/{DECISIONS_DIR}/"
+
+
+class RequestRecordFiles:
+    """The records the requests of the project <cwd> wrote, beside the stories and the project's own."""
+
+    def __init__(self, cwd: str) -> None:
+        self._cwd = cwd
+
+    def asked(self, request: str) -> typing.List[typing.Tuple[str, str, str]]:
+        return [(str(shown(path)), rid, state) for path, rid, state in request_records(self._cwd, request)]
+
+    def applied(self, request: str) -> None:
+        for path, _rid, state in request_records(self._cwd, request):
+            if state == "answered":
+                stamp_applied(path, "request")
+
+    def questioned(self, paths: typing.Sequence[str], request: str) -> None:
+        mark_questioned(self._cwd, place("runs"), paths, request)
