@@ -88,7 +88,7 @@ class HappyPathAndTitles(unittest.TestCase):
         self.assertEqual(stage_evidence_files.happy_paths(self.BODY), ["shows-the-thing"])
 
     def test_a_title_line_names_the_scenario_else_the_key_in_words(self):
-        self.assertEqual(gate.scenario_titles(self.BODY),
+        self.assertEqual(test_files.scenario_titles(self.BODY),
                          {"shows-the-thing": "The thing is shown", "shows-nothing": "Shows nothing"})
 
 

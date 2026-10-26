@@ -7,10 +7,13 @@ import os
 import re
 import typing
 
-from .....contract import GateError, MAPPING_ROW, SELECTOR
+from .....contract import CRITERION, GateError, MAPPING_ROW, SELECTOR
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
-from ....domain.model.stage_story import Place, ScenarioKey, Selector, TestLocation
+from ....domain.model.stage_story import (
+    CommandKey, MappedTest, Place, ScenarioKey, Selector, TestLocation, TitleCheck, TitleFound)
 from ....domain.model.story_state import Detail
+from ..build.commands import command_for
+from ..build.test_reports import display_name_of, unescape_literal
 
 Mapping = typing.Dict[str, typing.List[str]]
 
@@ -172,3 +175,87 @@ def stage_bytes(path: str, name: str) -> int:
         end = text.find("\n## ", start + 1)
         text = text[:start] + (text[end:] if end >= 0 else "")
     return len(text.encode("utf-8"))
+
+
+TITLE_LINE = re.compile(r"^Title:\s*(\S.*?)\s*$")
+
+
+def scenario_titles(body: str) -> typing.Dict[str, str]:
+    """{key: title} for every criterion: the `Title:` line under a scenario's heading, else the key in words
+    (`shows-empty-state` → "Shows empty state"). An end-user test carries it verbatim as its display name, so two
+    implementations of one story name the test alike and a report names the scenario it proves."""
+    section = body.split("## Acceptance criteria", 1)[-1].split("\n## ", 1)[0] if "## Acceptance criteria" in body else ""
+    titles: typing.Dict[str, str] = {}
+    current: typing.Optional[str] = None
+    for line in section.splitlines():
+        stripped = line.strip()
+        heading = re.match(r"^####\s+([a-z0-9][a-z0-9-]*)", stripped)
+        criterion = CRITERION.match(stripped)
+        if heading:
+            current = heading.group(1)
+            titles[current] = current.replace("-", " ").capitalize()
+        elif criterion:
+            current = None
+            titles[criterion.group(1)] = criterion.group(1).replace("-", " ").capitalize()
+        elif current and "{{" not in stripped:   # a template placeholder names nothing
+            title = TITLE_LINE.match(stripped)
+            if title:
+                titles[current] = title.group(1)
+    return titles
+
+
+def carries_title(path: str, method: str, title: str) -> bool:
+    """The test is reported under the title: its display name where the declaration gives one, else a string
+    literal that is the title — never the words somewhere in a comment or another test."""
+    display = display_name_of(path, method)
+    if display is not None:
+        return display == title
+    text = read_text(path) if os.path.isfile(path) else ""
+    return any(unescape_literal(m.group(2)) == title
+               for m in re.finditer(r"""(["'`])((?:\\.|(?!\1).)*)\1""", text))
+
+
+def mapped_tests(cwd: str, profile: typing.Mapping[str, typing.Any], body: str,
+                 mapping: typing.Mapping[str, typing.Sequence[str]],
+                 located: typing.Mapping[str, str]) -> typing.Tuple[MappedTest, ...]:
+    """The tests table's rows as the test-design checks read them: each test's file, the command that runs it, and an
+    end-user test's title check."""
+    titles = scenario_titles(body)
+    rows = []
+    for key, selectors in mapping.items():
+        for selector in selectors:
+            path = located.get(selector)
+            command = command_for(profile, path)[0] if path else None
+            title = None
+            if path and command in ("e2eTest", "test.journey") and key in titles:
+                carries = carries_title(os.path.join(cwd, path), selector.split("#", 1)[-1], titles[key])
+                title = TitleCheck(Detail(titles[key]), TitleFound.TITLED if carries else TitleFound.UNTITLED)
+            rows.append(MappedTest(ScenarioKey(key), Selector(selector), Place(path) if path else None,
+                                   CommandKey(command) if command else None, title))
+    return tuple(rows)
+
+
+class StageTestFiles:
+    """The tests table of a story under the run folder <runs>, its tests in the project <cwd>, as the profile runs
+    them."""
+
+    def __init__(self, cwd: str, runs: str, profile: typing.Mapping[str, typing.Any]) -> None:
+        self._cwd = cwd
+        self._runs = runs
+        self._profile = profile
+
+    def table(self, story: str) -> typing.Tuple[typing.Optional[str], Mapping, typing.Optional[str]]:
+        """(the table's file, the mapping, why it cannot be read)."""
+        try:
+            path, mapping = read_mapping(self._runs, story)
+        except GateError as error:
+            return None, {}, str(error)
+        return path, mapping, None
+
+    def locate(self, mapping: typing.Mapping[str, typing.Sequence[str]]
+               ) -> typing.Tuple[typing.Dict[str, str], typing.Tuple[TestLocation, ...]]:
+        return locate_tests(self._cwd, mapping)
+
+    def mapped(self, body: str, mapping: typing.Mapping[str, typing.Sequence[str]],
+               located: typing.Mapping[str, str]) -> typing.Tuple[MappedTest, ...]:
+        return mapped_tests(self._cwd, self._profile, body, mapping, located)

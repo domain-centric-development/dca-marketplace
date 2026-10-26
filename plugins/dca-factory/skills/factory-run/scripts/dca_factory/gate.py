@@ -94,8 +94,6 @@ from .discovery.api import check_report
 from .infrastructure.description import check_description
 from .sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
-from .delivery.adapter.outgoing.build.test_reports import (
-    display_name_of, unescape_literal)
 from .spec.api import (
     derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
 from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED
@@ -119,7 +117,7 @@ from .delivery.domain.service.story_checks import StoryChecks
 from .delivery.domain.service.decision_checks import Applying, DecisionChecks
 from .delivery.domain.model.stage import StageName
 from .delivery.domain.model.stage_story import (
-    CommandKey, Count, MappedTest, Place, Presence, ScenarioKey, Selector, TestTable, TitleCheck, TitleFound)
+    CommandKey, Count, MappedTest, Place, Presence, ScenarioKey, Selector, TestTable)
 from .delivery.domain.model.story_state import Detail
 from .delivery.domain.service.design_checks import DesignChecks
 from .delivery.domain.service.kept_checks import KeptChecks
@@ -132,7 +130,7 @@ from .delivery.domain.model.verdict import Finding
 from .delivery.application.delivery.stage_checks import table_tests  # registers the checks over the evidence alone
 from .delivery.application.delivery.check_stage import (
     check, on_pass, run_checks, run_passed, StageRun, Verdict)
-from .delivery.domain.model.stage import StoryKind, TESTED_KINDS as TESTED, Trait
+from .delivery.domain.model.stage import StoryKind, Trait
 from .delivery.domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
 from .delivery.domain.model.story_state import Acceptance, AcceptanceVerdict
 from .delivery.domain.model.decision_record import RecordId
@@ -148,7 +146,7 @@ from .delivery.adapter.outgoing.build.suite_runs import command_run, suite_comma
 from .delivery.domain.model.stage_story import Expectation
 from .delivery.adapter.outgoing.build.test_runs import red_ledger, run_tests
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
-from .delivery.adapter.outgoing.files.test_files import locate_tests
+from .delivery.adapter.outgoing.files.test_files import locate_tests, StageTestFiles
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, split_list
 from .delivery.adapter.outgoing.files.test_files import read_mapping
 from .delivery.adapter.outgoing.files.design_files import STEP, read_invariant_rows
@@ -162,6 +160,7 @@ from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, command_for
 from .delivery.adapter.outgoing.build.suite_runs import SuiteOwner, test_files
 from .delivery.adapter.outgoing.build.breaks import apply_break, break_copy, break_patch, break_path, characterization_tests, qualify_selector
 from .delivery.adapter.outgoing.git.change import backlog_paths
+from .delivery.adapter.outgoing.files.test_files import scenario_titles
 
 
 def story_ids(epics):
@@ -331,30 +330,6 @@ def close_findings(result, front):
         result.ok("findings", f"closed {', '.join(closed)} — set to done in their findings.md")
 
 
-TITLE_LINE = re.compile(r"^Title:\s*(\S.*?)\s*$")
-
-
-def scenario_titles(body):
-    """{key: title} for every criterion: the `Title:` line under a scenario's heading, else the key in words
-    (`shows-empty-state` → "Shows empty state"). An end-user test carries it verbatim as its display name, so two
-    implementations of one story name the test alike and a report names the scenario it proves."""
-    section = body.split("## Acceptance criteria", 1)[-1].split("\n## ", 1)[0] if "## Acceptance criteria" in body else ""
-    titles, current = {}, None
-    for line in section.splitlines():
-        stripped = line.strip()
-        heading = re.match(r"^####\s+([a-z0-9][a-z0-9-]*)", stripped)
-        criterion = CRITERION.match(stripped)
-        if heading:
-            current = heading.group(1)
-            titles[current] = current.replace("-", " ").capitalize()
-        elif criterion:
-            current = None
-            titles[criterion.group(1)] = criterion.group(1).replace("-", " ").capitalize()
-        elif current and TITLE_LINE.match(stripped) and "{{" not in stripped:   # a template placeholder names nothing
-            titles[current] = TITLE_LINE.match(stripped).group(1)
-    return titles
-
-
 def scenarios_of(body):
     """The criteria as a person reads them (WP-146), in the story's order: [{key, title, rule, happy, steps, text}] —
     `steps` the scenario's `[{word, text}]` (Given / When / Then / And / But), `text` the line form's criterion, `rule`
@@ -388,17 +363,6 @@ def scenarios_of(body):
                               text=criterion.group(2).strip()))
             current = None
     return found
-
-
-def carries_title(path, method, title):
-    """The test is reported under the title: its display name where the declaration gives one, else a string
-    literal that is the title — never the words somewhere in a comment or another test."""
-    display = display_name_of(path, method)
-    if display is not None:
-        return display == title
-    text = read_text(path) if os.path.isfile(path) else ""
-    return any(unescape_literal(m.group(2)) == title
-               for m in re.finditer(r"""(["'`])((?:\\.|(?!\1).)*)\1""", text))
 
 
 def check_clauses(result, profile, cwd, runs, story_id, front, body, mapping, located):
@@ -600,6 +564,7 @@ def gate_run(**fields):
     run = StageRun(**fields)
     run.kind = story_kind(run.front)
     run.evidence = StageEvidenceFiles(run.cwd, run.runs, run.args.epics, run.profile)
+    run.tests = StageTestFiles(run.cwd, run.runs, run.profile)
     run.story = stage_story(run.story_id, run.story_path, run.front, run.body, run.criteria)
     run.contract = ProfileChecks.contract_number(run.evidence)
     # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
@@ -709,28 +674,6 @@ def check_exists(result, cwd, mapping):
     located, looked = locate_tests(cwd, mapping)
     take(result, TestChecks.exist(looked))
     return located
-
-
-def mapped_tests(run):
-    """The tests table's rows as the test-design checks read them: each test's file, the command that runs it, and an
-    end-user test's title check."""
-    cached = getattr(run, "tests", None)
-    if cached is not None and cached[0] is run.mapping and cached[1] is run.located:
-        return cached[2]
-    titles = scenario_titles(run.body)
-    rows = []
-    for key, selectors in (run.mapping or {}).items():
-        for selector in selectors:
-            path = (run.located or {}).get(selector)
-            command = command_for(run.profile, path)[0] if path else None
-            title = None
-            if path and command in ("e2eTest", "test.journey") and key in titles:
-                carries = carries_title(os.path.join(run.cwd, path), selector.split("#", 1)[-1], titles[key])
-                title = TitleCheck(Detail(titles[key]), TitleFound.TITLED if carries else TitleFound.UNTITLED)
-            rows.append(MappedTest(ScenarioKey(key), Selector(selector), Place(path) if path else None,
-                                   CommandKey(command) if command else None, title))
-    run.tests = (run.mapping, run.located, tuple(rows))
-    return run.tests[2]
 
 
 def check_compiles(result, profile, cwd):
@@ -1275,43 +1218,6 @@ def _integrated(run):
             check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
     else:
         check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
-
-
-@check("tests-mapped", stages=lambda s: Trait.TESTED in s.traits, kinds=TESTED)
-def _mapping(run):
-    run.mapping = check_mapping(run.result, run.runs, run.story_id, run.criteria)
-    run.located = check_exists(run.result, run.cwd, run.mapping)
-
-
-# Integrated, the story's diff carries the main line's changes beside its own: the file list, the tests that existed
-# before and the red proof were the stages' to hold, and they held.
-@check("files-listed", stages=lambda s: Trait.LISTS in s.traits)
-def _files_listed(run):
-    take(run.result, KeptChecks.files_listed(run.story, StageName(run.stage.name), mapped_tests(run), run.evidence))
-    take(run.result, KeptChecks.tests_kept(run.story, run.evidence))
-
-
-@check("test-design", stages=lambda s: Trait.RED in s.traits)
-def _test_design(run):
-    take(run.result, TestChecks.plan_levels(run.story, run.evidence))
-    tests = mapped_tests(run)
-    take(run.result, DesignChecks.invariants(run.story, run.contract, tests, run.evidence))
-    take(run.result, TestChecks.levels(run.story, run.contract, tests, run.evidence))
-    take(run.result, DesignChecks.clauses(run.story, run.contract, tests, run.evidence))
-    take(run.result, TestChecks.titles(run.story, run.contract, tests, run.evidence))
-
-
-@check("tests-real", stages=("test", "adopt"))
-def _tests_real(run):
-    if contract_of(run.profile) >= 21:
-        take(run.result, DesignChecks.tests_real(run.story, mapped_tests(run), run.evidence))
-
-
-@check("red-proof", stages=lambda s: Trait.LISTS in s.traits, kinds=TESTED)
-def _red_proof(run):
-    # the red proof compares digests, so it belongs here, before any process
-    if run.expected == "green":
-        take(run.result, KeptChecks.red_proof(run.story, StageName(run.stage.name), mapped_tests(run), run.evidence))
 
 
 def whole_suites(run):
