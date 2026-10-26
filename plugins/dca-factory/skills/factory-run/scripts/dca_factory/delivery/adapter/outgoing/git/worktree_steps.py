@@ -193,7 +193,8 @@ def worktree_prepare(cwd: str, runs: str, story_id: str) -> int:
                     return 1
                 print(f"worktree: {story_id} merged with {target} as it is now", file=sys.stderr)
             elif conflicted:
-                with open(os.path.join(evidence_dir(runs, story_id), CONFLICTS_FILE), "w", encoding="utf-8") as handle:
+                with open(os.path.join(evidence_dir(runs, story_id), CONFLICTS_FILE), "w", encoding="utf-8",
+                          newline="\n") as handle:          # read line by line by a shell, on Windows too
                     handle.write("\n".join(conflicted) + "\n")
                 record_main_tests(path, runs, story_id, target)
                 for conflict in conflicted:
@@ -328,7 +329,8 @@ def integrate_prepare(cwd: str, runs: str, epics: str, story_id: str) -> int:
             if not conflicted:
                 print(f"factory: merging {target} into {story_id} failed — {done[1]}", file=sys.stderr)
                 return 1
-            with open(os.path.join(evidence_dir(runs, story_id), CONFLICTS_FILE), "w", encoding="utf-8") as handle:
+            with open(os.path.join(evidence_dir(runs, story_id), CONFLICTS_FILE), "w", encoding="utf-8",
+                      newline="\n") as handle:          # read line by line by a shell, on Windows too
                 handle.write("\n".join(conflicted) + "\n")
             record_main_tests(path, runs, story_id, target)
             for conflict in conflicted:

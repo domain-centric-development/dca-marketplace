@@ -10649,7 +10649,10 @@ def verify_requests(runner, verbose=False):
             try:
                 for root in (first_root, second_root):
                     code, out = run_runner(runner, root, "serve", "--background", env=env)
-                    said.append(f"exit {code}: {out.strip()[-300:]}")
+                    page_log = os.path.join(root, ".dca-factory", "serve.log")
+                    said.append(f"exit {code}: {out.strip()[-300:]}"
+                                + (f" — serve.log: {open(page_log, encoding='utf-8').read()[-600:]!r}"
+                                   if code and os.path.isfile(page_log) else ""))
                     servers.append(json.load(open(os.path.join(root, ".dca-factory", "serve.json"), encoding="utf-8"))
                                    if os.path.isfile(os.path.join(root, ".dca-factory", "serve.json")) else {})
                 served = servers[0]
