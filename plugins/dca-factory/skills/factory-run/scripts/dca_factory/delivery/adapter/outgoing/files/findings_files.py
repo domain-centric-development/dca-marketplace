@@ -10,6 +10,9 @@ import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import findings_dir, PROJECT_FINDINGS
 from .story_layout import story_files, story_folder, story_id_of
+from ....domain.model.stage_story import FindingKey, OPEN_ROW, Place
+from ....domain.model.story_state import Detail
+from ....domain.service.finding_rules import FindingRules
 
 
 FINDINGS_FILE = "findings.md"
@@ -111,12 +114,14 @@ def record_findings(story_path: str, story_id: str, front: typing.Mapping[str, t
     new = confirmed_defects(read_text(judge))
     path = findings_path(story_path)
     have = findings_rows(path)
-    known = {(r[2], r[4]) for r in have}
-    added = [r for r in new if (r[1], r[3]) not in known]
+    known = {FindingKey(Place(r[2]), Detail(r[4])) for r in have}
+    key = lambda row: FindingKey(Place(row[1]), Detail(row[3]))
+    kept = FindingRules.kept(known, [key(r) for r in new])
+    added = [r for r in new if key(r) in kept]
     if not have and not added:
         return 0, 0
     append_findings(story_path, story_id, front, added)
-    return len(added), sum(1 for r in findings_rows(path) if r[6] == "open")
+    return len(added), sum(1 for r in findings_rows(path) if r[6] == OPEN_ROW.value)
 
 
 def append_findings(story_path: str, story_id: str, front: typing.Mapping[str, typing.Any],
@@ -169,7 +174,7 @@ def finding_records(epics: str) -> typing.List[typing.Dict[str, typing.Any]]:
 
     def add(owner: str, path: str, project: bool) -> None:
         for n, perspective, where, severity, defect, fix, status, plain in findings_rows(path):
-            if status == "open":
+            if status == OPEN_ROW.value:
                 found.append(dict(owner=owner, row=f"{owner}#{n}", path=path, project=project, where=where,
                                   severity=severity, defect=defect, perspective=perspective, fix=fix, plain=plain))
     for story_path in story_files(epics):

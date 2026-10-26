@@ -43,6 +43,18 @@ class RowState(Value):
     value: str
 
 
+#: A finding row nobody closed yet — the only one a task may close; its delivery sets the row to DONE_ROW.
+OPEN_ROW = RowState("open")
+DONE_ROW = RowState("done")
+
+
+class FindingKey(Value):
+    """What makes a kept finding the same as another: where it is (`file:line`) and the defect it names."""
+
+    place: Place
+    defect: Detail
+
+
 class EventName(Value):
     """An outcome event, as a story's `publishes:` names it."""
 

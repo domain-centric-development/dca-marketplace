@@ -40,6 +40,7 @@ from .stage_evidence_files import closed_rows, closes_of
 from .story_files import StoryFiles
 from .story_layout import journeys_hold, story_digest, story_folder, story_kind
 from .test_files import locate_tests, read_mapping
+from ....domain.model.stage_story import DONE_ROW, OPEN_ROW
 
 Front = typing.Mapping[str, typing.Any]
 
@@ -49,13 +50,13 @@ def close_findings(result: typing.Any, front: Front) -> None:
     closed: typing.List[str] = []
     for row_id in closes_of(front):
         path, row = closed_rows(row_id)
-        if not path or row is None or row[6] != "open":
+        if not path or row is None or row[6] != OPEN_ROW.value:
             continue
         lines = read_text(path).splitlines()
         for index, line in enumerate(lines):
             cells = findings_cells(line)
             if cells and cells[0] == row[0]:
-                cells[-1] = "done"
+                cells[-1] = DONE_ROW.value
                 lines[index] = "| " + " | ".join(cells) + " |"
         with open(path, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines) + "\n")

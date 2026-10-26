@@ -4,7 +4,7 @@ and where an acceptance stands from its latest record."""
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
-from dca_factory.delivery.domain.model.decision_record import AnswerField, DecisionState, Given, Section
+from dca_factory.delivery.domain.model.decision_record import AnswerField, DecisionState, Given, RecordKind, Section
 from dca_factory.delivery.domain.model.stage_story import Presence
 from dca_factory.delivery.domain.model.story_state import AcceptanceVerdict
 from dca_factory.delivery.domain.service.acceptance_rules import AcceptanceRules
@@ -39,6 +39,16 @@ class Acceptance(unittest.TestCase):
                       AcceptanceVerdict.ACCEPTED)
         self.assertIs(AcceptanceRules.verdict(DecisionState.ANSWERED, Given("the button is red"), Presence.PRESENT),
                       AcceptanceVerdict.CORRECTION)
+
+    def test_a_correction_and_an_answered_question_back_a_change_an_acceptance_that_accepted_does_not(self):
+        answered, waiting = DecisionState.ANSWERED, DecisionState.OPEN
+        self.assertIs(AcceptanceRules.corrects(answered, Given("the label is wrong")), Presence.PRESENT)
+        self.assertIs(AcceptanceRules.corrects(answered, Given("accepted")), Presence.ABSENT)
+        self.assertIs(AcceptanceRules.corrects(waiting, Given("")), Presence.ABSENT)
+        self.assertIs(AcceptanceRules.backs_change(RecordKind.QUESTION, answered, Given("b")), Presence.PRESENT)
+        self.assertIs(AcceptanceRules.backs_change(RecordKind.QUESTION, waiting, Given("")), Presence.ABSENT)
+        self.assertIs(AcceptanceRules.backs_change(RecordKind.ACCEPTANCE, answered, Given("accepted")),
+                      Presence.ABSENT)
 
 
 if __name__ == "__main__":

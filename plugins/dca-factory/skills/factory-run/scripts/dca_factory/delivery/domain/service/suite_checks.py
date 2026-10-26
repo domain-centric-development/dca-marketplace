@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import DomainService, Value
-from ..model.stage_story import CommandKey, CommandRun, Presence, SuiteCommands, SuiteRun
+from ..model.stage_story import CommandKey, CommandRun, Count, Presence, SuiteCommands, SuiteRun
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, Findings, Said
 
@@ -30,8 +30,22 @@ def red(check: CheckName, said: Said, must: Presence, strict: Presence) -> Findi
     return check.fail(said)
 
 
+#: How many red tests outside the story a gate runs again, each alone, once (WP-113): a whole suite red in a test the
+#: story did not write, change or name, green alone, was the suite's load or order, not this story — the gate passes
+#: with `flaky <test>` noted. More red tests than this outside the story is a broken suite, not a flake.
+FLAKY_LIMIT = Count(3)
+
+
 class SuiteChecks(DomainService):
     """The checks over the gate's own command runs."""
+
+    @staticmethod
+    def retries(failed: Count, own_red: Presence) -> Presence:
+        """Whether the red tests of a run are run again, each alone: some and at most FLAKY_LIMIT, none of them the
+        story's own — a red test of the story's own stands as it is. Green alone, a test is flaky and the run counts
+        green; red again, the run stays red."""
+        return Presence.PRESENT if 0 < failed.value <= FLAKY_LIMIT.value and own_red is Presence.ABSENT \
+            else Presence.ABSENT
 
     @staticmethod
     def missing(check: CheckName, key: CommandKey) -> Finding:

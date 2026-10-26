@@ -6,7 +6,7 @@ from __future__ import annotations
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
-from ..model.stage_story import ContractNumber, StageStory
+from ..model.stage_story import ContractNumber, OPEN_ROW, StageStory
 from ..model.story_state import MAX_ROUNDS
 from ..model.verdict import CheckName, Findings, Said
 
@@ -91,7 +91,7 @@ class StoryChecks(DomainService):
             state = evidence.finding_row(row)
             if state is None:
                 wrong.append(f"{row.value} (no such finding row)")
-            elif state.value != "open":
+            elif state != OPEN_ROW:
                 wrong.append(f"{row.value} ({state.value} already)")
         if wrong:
             return (TASK.fail(Said(

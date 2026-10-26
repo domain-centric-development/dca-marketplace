@@ -12,6 +12,7 @@ from ..files.hand_over_patterns import SELECTOR
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, runs_top
 from ....domain.model.stage_story import CommandKey, CommandRun, Count, Presence, Retried, SuiteCommands, SuiteRun
+from ....domain.service.suite_checks import FLAKY_LIMIT, SuiteChecks
 from ....domain.model.story_state import Detail
 from ..files.delivery_files import SKIP_DIRS, TEST_FILE
 from ..files.design_files import locate_selector
@@ -22,10 +23,6 @@ from .test_reports import fill, outcome_for
 Profile = typing.Mapping[str, typing.Any]
 Ran = typing.Dict[typing.Tuple[str, str], str]
 
-#: WP-113: a whole suite red in a test the story did not write, change or name is run again for that test alone, once.
-#: Green alone, the red was the suite's load or order, not this story: the gate passes with `flaky <test>` noted. More
-#: red tests than this outside the story is a broken suite, not a flake — nothing is run again.
-FLAKY_LIMIT = 3
 
 
 class SuiteOwner(typing.NamedTuple):
@@ -118,10 +115,12 @@ def retry_outside(cwd: str, profile: Profile, command: str, code: int, ran: Ran,
     if owner is None:
         return code, ran, [], []
     failed = sorted(key for key, outcome in ran.items() if outcome == "failed")
-    if not failed or len(failed) > FLAKY_LIMIT:
+    if not failed:
         return code, ran, [], []
-    own_files = story_test_files(cwd, owner)
-    if own_files is None or any(story_owns(cwd, owner, own_files, cls, method) for cls, method in failed):
+    own_files = story_test_files(cwd, owner) if len(failed) <= FLAKY_LIMIT.value else None
+    # A story whose own tests cannot be told apart counts every red test as its own.
+    own = own_files is None or any(story_owns(cwd, owner, own_files, cls, method) for cls, method in failed)
+    if SuiteChecks.retries(Count(len(failed)), Presence.PRESENT if own else Presence.ABSENT) is Presence.ABSENT:
         return code, ran, [], []
     flaky: typing.List[typing.Tuple[str, str, str]] = []
     still: typing.List[typing.Tuple[str, str, str]] = []

@@ -7,7 +7,7 @@ import enum
 import typing
 
 from ....building_blocks import DomainService, Value
-from ..model.decision_record import DecisionState, Given, WAITING
+from ..model.decision_record import ANSWERED_STATES, DecisionState, Given, RecordKind, WAITING
 from ..model.stage_story import Presence
 from ..model.story import StoryId
 from ..model.story_state import Acceptance, AcceptanceVerdict, Detail
@@ -61,6 +61,20 @@ class AcceptanceRules(DomainService):
     def accepts(given: Given) -> Presence:
         """An answer that accepts the delivery: it begins with `accept`."""
         return Presence.PRESENT if given.value.strip().lower().startswith("accept") else Presence.ABSENT
+
+    @staticmethod
+    def corrects(state: DecisionState, given: Given) -> Presence:
+        """An acceptance answered with anything but `accept…`: the person asks for a correction."""
+        return Presence.PRESENT if state in ANSWERED_STATES and AcceptanceRules.accepts(given) is Presence.ABSENT \
+            else Presence.ABSENT
+
+    @staticmethod
+    def backs_change(kind: RecordKind, state: DecisionState, given: Given) -> Presence:
+        """A person's answer that backs a change of what holds: a question answered, or an acceptance's correction —
+        never an acceptance that accepted."""
+        if kind is RecordKind.ACCEPTANCE:
+            return AcceptanceRules.corrects(state, given)
+        return Presence.PRESENT if state in ANSWERED_STATES else Presence.ABSENT
 
     @staticmethod
     def verdict(latest: typing.Optional[DecisionState], given: Given, same_story: Presence) -> AcceptanceVerdict:

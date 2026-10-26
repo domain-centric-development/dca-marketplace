@@ -12,13 +12,15 @@ from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....spec.api import (
     context_files, derived, feature_name, journeys_path, merge, read_context, read_delta, read_spec, render_spec,
     scenarios_path, story_entries)
-from ....application.shared.front import accepted, is_acceptance
+from ....application.shared.front import is_acceptance
 from ....application.shared.story_spec import SpecChange
 from ....domain.model.story import StoryId
 from ..files.decision_record_files import records_of
 from ..files.kept_files import human_line
 from ..files.story_layout import journeys_hold, find_story
-from ....domain.model.decision_record import ANSWERED_WORDS
+from ....domain.model.decision_record import DecisionState, Given, RecordKind
+from ....domain.model.stage_story import Presence
+from ....domain.service.acceptance_rules import AcceptanceRules
 
 Front = typing.Mapping[str, typing.Any]
 Entries = typing.List[typing.Dict[str, typing.Any]]
@@ -89,7 +91,9 @@ def spec_backing(cwd: str, story_id: str, body: str, story_path: typing.Optional
         return "the story's `## Changed expectations`"
     try:
         answered = [str(f["id"]).strip() for _p, f, _b, state, a in records_of(story_id, story_path)
-                    if state in ANSWERED_WORDS and not (is_acceptance(f) and accepted(a))]
+                    if AcceptanceRules.backs_change(RecordKind.ACCEPTANCE if is_acceptance(f) else RecordKind.QUESTION,
+                                                    DecisionState(state), Given(str(a.get("answer", ""))))
+                    is Presence.PRESENT]
     except GateError:
         answered = []
     return f"decision {', '.join(answered)}" if answered else ""
