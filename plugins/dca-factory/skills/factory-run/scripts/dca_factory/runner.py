@@ -62,6 +62,10 @@ from .infrastructure import requests as request_wiring
 from .delivery.adapter.outgoing.process.console_lines import ConsoleLines
 from .delivery.application.backlog.run_backlog import RunBacklogCommand, RunBacklogUseCase
 from .delivery.application.shared.backlog_schedule import ScheduleRead
+from .delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
+from .delivery.domain.model.stage import StageName, StoryKind, Window
+from .delivery.domain.model.story_state import GateReport, Rounds, VerdictWord
+from .delivery.domain.service.story_route import StoryRoute
 from .delivery.adapter.outgoing.files.decision_record_files import request_records
 from .delivery.adapter.outgoing.files.request_files import (
     default_by, REQUEST_JOURNAL, requests_dir)
@@ -274,7 +278,6 @@ class Run:
         self.worker = worker or f"runner:{socket.gethostname() or 'host'}:{os.getpid()}"
         self.suites_key = secrets.token_hex(16)
         self.invocations = 0
-        self.nested_code = 0
         self.gate_first = False
         self.max_stages = options.max_stages
         self.story_budget = options.story_budget
@@ -389,22 +392,6 @@ class Run:
 
     def artefact(self, story, stage):
         return f"{self.runs}/{story}/{self.stage_file(stage)}"
-
-    @staticmethod
-    def kind_runs(kind, stage):
-        return stage in STAGE and kind in STAGE[stage].kinds
-
-    def back_for(self, kind, stage):
-        """Where a round goes back to: <stage>, or the last builder stage before it the kind runs."""
-        if self.kind_runs(kind, stage):
-            return stage
-        back = stage
-        for st in SHARED_WINDOWS["builder"]:
-            if self.kind_runs(kind, st):
-                back = st
-            if st == stage:
-                break
-        return back
 
     # --- the pipeline, unchanged ---------------------------------------------------------------------------
     def pipeline_hash(self, folder=None):
@@ -614,17 +601,6 @@ class Run:
         err(f"factory:   read {artefact} and decide; the stages after it were not run.")
         return 3 if ids else 1
 
-    def refused_from(self, story, refused):
-        """The stage a refused gate's round starts at: the refused stage, or an earlier one whose file the story's
-        state reads as an earlier pass's."""
-        start = self.start_stage(story)
-        for st in STAGE_ORDER:
-            if st == refused:
-                break
-            if st == start:
-                return start
-        return refused
-
     def bump_rounds(self, story):
         path = f"{self.evidence(story)}/.rounds"
         count = int("".join(c for c in read_text(path) if c.isdigit()) or 0) if os.path.isfile(path) else 0
@@ -633,18 +609,6 @@ class Run:
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(f"{count}\n")
         return count
-
-    def environment_refused(self, stage, story):
-        """A refusal whose cause is the machine: no stage can put a tool on the PATH, so no round is counted."""
-        report = f"{self.runs}/{story}/.gate-{stage}.txt"
-        lines = read_text(report).splitlines() if os.path.isfile(report) else []
-        if not any(line.startswith("gate:fail environment") for line in lines):
-            return False
-        reason = next((line[len("gate:fail environment — "):] for line in lines
-                       if line.startswith("gate:fail environment — ")), "")
-        err(f"factory: gate '{stage}' refused on the environment, not on the story — {reason}")
-        err(f"factory:   no round is counted. Fix it, then: factory.sh run --story {story}")
-        return True
 
     def reset_rounds(self, story, given_from):
         """A person's --from restarts the story's count; the old one is kept beside it, never deleted."""
@@ -770,26 +734,6 @@ class Run:
             raise Stopped(7)
         return self.gates.gate(stage, story, gate_path)
 
-    def adopt_gate(self, story, tool, dry):
-        """Every scenario on a green test, the judge's pass, a break for every test the adoption wrote: passed, it
-        delivers the story; refused, the test stage runs again, one round counted."""
-        print("── gate adopt")
-        if dry:
-            return 0
-        if self.gate("adopt", story) == 0:
-            if os.environ.get("FACTORY_HOME"):
-                return self.integrate_story(story, tool, dry)
-            print(f"factory: story {story} is delivered (adopted: checked, nothing built).")
-            return 0
-        if self.environment_refused("adopt", story):
-            return 1
-        rounds = self.bump_rounds(story)
-        if rounds >= 3:
-            err(f"factory: gate 'adopt' refused in round {rounds} — three rounds did not converge. needs-human.")
-            return 1
-        err(f"factory: gate 'adopt' refused — round {rounds} runs the test stage again with the gate's report.")
-        return self.run_stages(story, tool, "test", dry)
-
     # --- the budget before a dispatch ------------------------------------------------------------------------
     def used_tokens(self, story):
         try:
@@ -844,18 +788,10 @@ class Run:
         err(f"factory: story {story} has reached its --story-budget {self.story_budget} — {what} are not dispatched.")
         return 4
 
-    def run_shared_builder(self, story, tool, start, dry, kind="story"):
-        """Plan to tidy in one tool process, so each stage builds on what the one before read. The process runs
-        each stage's gate itself; the runner checks, not believes: the red proof must exist and the gates after
-        it run again here."""
+    def builder_window(self, story, tool, stages, start, dry):
+        """Plan to tidy in one tool process, so each stage builds on what the one before read; the process runs each
+        stage's gate itself. The tool's exit, 0 in a dry run."""
         tool = self.tools.tool_for("builder", tool)
-        stages, on = [], False
-        for st in SHARED_WINDOWS["builder"]:
-            on = on or st == start
-            if self.kind_runs(kind, st) and on:
-                stages.append(st)
-        if not stages:
-            return 0
         prompt = (f"Carry out these stages of the delivery pipeline for backlog story {story}, one after another, in "
                   f"this one session: {', '.join(f'stage-{s}' for s in stages)}. The gate: "
                   f"`{self.py} {self.gate_rel} --story {story} --stage <stage> --brief`; the skeletons: "
@@ -884,64 +820,7 @@ class Run:
             return 4
         if refused:
             return refused
-        code = self.window(story, tool, "builder", stages, prompt)
-        if code:
-            return code
-        # A `back: test` the session already acted on is no round: tidy.md newer than build.md says it repaired the
-        # test, built again and tidied — the re-checked gates below decide.
-        repaired = "tidy" in stages and newer(f"{self.runs}/{story}/tidy.md", f"{self.runs}/{story}/build.md")
-        sent_back = "build" in stages and self.back_to(story, "build") == "test"
-        if sent_back and repaired:
-            print("factory: build.md names a defect in a test's own code that the shared session repaired before tidy "
-                  "— the gates re-check it.")
-        if sent_back and not repaired:
-            rounds = self.bump_rounds(story)
-            if rounds >= 3:
-                err(f"factory: the build stage sent the story back in round {rounds} — three rounds did not converge. "
-                    "needs-human.")
-                return 1
-            err(f"factory: the build stage found a defect in a test's own code — round {rounds} goes back to the test stage.")
-            self.nested_code = self.run_stages(story, tool, "test", dry)
-            return 99
-        for st in stages:
-            artefact = self.artefact(story, st)
-            if not os.path.isfile(artefact):
-                err(f"factory: the shared stages produced no {artefact} — stage '{st}' is not finished.")
-                return 1
-            if self.asks_human(artefact):
-                return self.stopped_for_human(artefact, st, story)
-        # Checked, not believed: a story's tests were seen red; a journey's and an adoption's are green at their
-        # test gate, so that gate runs again here.
-        for st in stages:
-            if not (STAGE[st].in_order and STAGE[st].tested and not STAGE[st].suite):
-                continue
-            if kind != "story":
-                print(f"── gate {st}  (re-checked by the runner)")
-                if self.gate(st, story) != 0:
-                    err(f"factory: the runner's re-check of gate '{st}' refused the shared stages' work.")
-                    return 1
-            elif not os.path.isfile(f"{self.evidence(story)}/.tests-red") \
-                    or not os.path.getsize(f"{self.evidence(story)}/.tests-red"):
-                err(f"factory: the shared stages left no red proof ({self.evidence(story)}/.tests-red) — the {st} "
-                    f"gate never saw the tests fail.")
-                return 1
-        for st in stages:
-            if not STAGE[st].post_gated or (STAGE[st].tested and not STAGE[st].suite):
-                continue
-            print(f"── gate {st}  (re-checked by the runner)")
-            if self.gate(st, story) != 0:
-                if self.environment_refused(st, story):
-                    return 1
-                rounds = self.bump_rounds(story)
-                if rounds >= 3:
-                    err(f"factory: the runner's re-check of gate '{st}' refused in round {rounds} — three rounds did "
-                        "not converge. needs-human.")
-                    return 1
-                err(f"factory: the runner's re-check of gate '{st}' refused — round {rounds} runs the shared stages "
-                    f"again from '{st}' with the gate's report.")
-                self.nested_code = self.run_stages(story, tool, st, dry)
-                return 99
-        return 0
+        return self.window(story, tool, "builder", stages, prompt)
 
     def run_reviews(self, story, tool, dry, kind="story"):
         """One tool process per perspective, started at once, each writing reviews/<perspective>.md; the judge then
@@ -1006,43 +885,12 @@ class Run:
         self.checkpoint()
         return 0
 
-    def judged(self, story, tool, dry, kind):
-        """The judge's verdict decides what comes next — read from its file, never assumed. None to go on."""
-        verdict = self.verdict_of(story)
-        if verdict == "pass":
-            print("factory: judge verdict 'pass'.")
-            return None
-        if verdict == "changes-requested":
-            rounds = self.bump_rounds(story)
-            if rounds >= 3:
-                err(f"factory: judge verdict 'changes-requested' in round {rounds} — three rounds did not converge. "
-                    "needs-human.")
-                return 1
-            back = self.back_for(kind, self.back_to(story) or "build")
-            err(f"factory: judge verdict 'changes-requested' — round {rounds} goes back to the {back} stage.")
-            return self.run_stages(story, tool, back, dry)
-        if verdict == "story-conflict":
-            err("factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes back to the "
-                f"build stage. needs-human: read {self.runs}/{story}/judge.md.")
-            return 1
-        if not verdict:
-            err(f"factory: {self.runs}/{story}/judge.md carries no 'verdict:' line — the judge stage is not finished.")
-            return 1
-        err(f"factory: judge verdict '{verdict}' is not one of pass|changes-requested|story-conflict.")
-        return 1
-
-    def accepting(self, story):
-        err(f"factory: story {story} waits for a human's acceptance — answer it with /factory-decisions;")
-        err("factory:   the story holds the checkout until then.")
-        return 3
-
-    def run_shared_verifier(self, story, tool, dry, kind="story"):
+    def verifier_window(self, story, tool, stages, dry):
         """Judge and document in one tool process — never one process with the builder: the judge's independence
-        from the builder is the point of the split."""
+        from the builder is the point of the split. The tool's exit, 0 in a dry run."""
         tool = self.tools.tool_for("verifier", tool)
-        stages = [st for st in SHARED_WINDOWS["verifier"] if self.kind_runs(kind, st)]
         document = (f" The skeleton: `{self.py} {self.cli_rel()} --document-skeleton {story}`; the document gate: "
-                    f"`{self.py} {self.gate_rel} --story {story} --stage document --brief`.") if kind != "adopt" else ""
+                    f"`{self.py} {self.gate_rel} --story {story} --stage document --brief`.") if "document" in stages else ""
         prompt = (f"Carry out these stages of the delivery pipeline for backlog story {story}, one after another, in "
                   f"this one session: {', '.join(f'stage-{s}' for s in stages)}.{document} "
                   f"{self.where_things_are(tool, story)}")
@@ -1061,179 +909,35 @@ class Run:
         judge = f"{self.runs}/{story}/judge.md"
         if os.path.isfile(judge):
             os.replace(judge, f"{self.runs}/{story}/.judge-previous.md")
-        code = self.window(story, tool, "verifier", stages, prompt)
-        if code:
-            return code
-        if not os.path.isfile(judge):
-            err(f"factory: the shared stages produced no {judge} — stage 'judge' is not finished.")
-            return 1
-        if self.asks_human(judge):
-            return self.stopped_for_human(judge, "judge", story)
-        code = self.judged(story, tool, dry, kind)
-        if code is not None:
-            return code
-        if self.kind_runs(kind, "adopt"):
-            return self.adopt_gate(story, tool, dry)
-        artefact = f"{self.runs}/{story}/document.md"
-        if not os.path.isfile(artefact):
-            err(f"factory: the shared stages produced no {artefact} — stage 'document' is not finished.")
-            return 1
-        if self.asks_human(artefact):
-            return self.stopped_for_human(artefact, "document", story)
-        print("── gate document  (re-checked by the runner)")
-        gate_code = self.gate("document", story)
-        if gate_code == 3:
-            return self.accepting(story)
-        if gate_code != 0:
-            if self.environment_refused("document", story):
-                return 1
-            rounds = self.bump_rounds(story)
-            if rounds >= 3:
-                err(f"factory: gate 'document' refused in round {rounds} — three rounds did not converge. needs-human.")
-                return 1
-            again = self.refused_from(story, "document")
-            err(f"factory: gate 'document' refused — round {rounds} runs stage '{again}' again with the gate's report.")
-            return self.run_stages(story, tool, again, dry)
-        return 0
+        return self.window(story, tool, "verifier", stages, prompt)
 
     # --- a story's stages ----------------------------------------------------------------------------------------
     def run_stages(self, story, tool, start=None, dry=False):
-        """The story's stages from <start> on, in the checkout it is called in."""
-        start = start or STAGE_ORDER[0]
-        waiting = self.open_decisions(story)
-        if waiting:
-            err(f"factory: story {story} waits for a decision — no stage runs until it is answered:")
-            for record in waiting.split():
-                err(f"factory:   {record}")
-            err("factory:   answer under '## Answer' with answer:, by: and at:, then run the stage that asked (--from <stage>).")
-            return 3
-        kind = self.kind_of(story)
-        # Every gate passed in the story's worktree: only the integration is left, and it delivers the story; an
-        # adopted story whose judge passed: only the adopt gate.
-        if start == "integrate":
-            return self.integrate_story(story, tool, dry)
-        if start == "adopt":
-            return self.adopt_gate(story, tool, dry)
-        start = self.red_proof_start(story, kind, start, dry)
-        started, ran, built = False, [], False
-        for stage in STAGE_ORDER:
-            started = started or stage == start
-            if not started:
-                continue
-            if not dry and (stage == start or not (self.shared_builder and STAGE[stage].window == "builder")):
-                self.between_stages(story, tool)
-            row = STAGE[stage]
-            if not self.kind_runs(kind, stage):
-                why = {"journey": "a journey builds nothing", "adopt": "an adopted story is not built",
-                       "task": "a task has no criterion to test — the existing suite is its evidence"}.get(
-                    kind, f"a {kind} story does not run it")
-                print(f"── stage {stage}  (skipped: {why})")
-                continue
-            if row.gated and not row.post_gated:
-                print(f"── gate {stage}")
-                if self.gate(stage, story) != 0:
-                    err(f"factory: gate '{stage}' refused the story. Fix it before the stage runs.")
-                    return 1
-            if self.shared_builder and row.window == "builder":
-                if not built:
-                    code = self.run_shared_builder(story, tool, stage, dry, kind)
-                    if code == 99:                  # a refused re-check ran the story again from there
-                        return self.nested_code
-                    if code != 0:
-                        return code
-                    built = True
-                ran.append(stage)
-                continue
-            # The reviews come before the judge: one process per perspective, at once.
-            if stage == "judge":
-                code = self.run_reviews(story, tool, dry, kind)
-                if code != 0:
-                    return code
-            # The verifier runs where the judge would; resumed at the document stage alone it runs in its own context.
-            if self.shared_verifier and stage == SHARED_WINDOWS["verifier"][0]:
-                code = self.run_shared_verifier(story, tool, dry, kind)
-                if code != 0:
-                    return code
-                ran += [st for st in SHARED_WINDOWS["verifier"] if self.kind_runs(kind, st)]
-                break
-            artefact = self.artefact(story, stage)
-            # Resumed at a gated stage whose file exists: the gate decides first, on today's tree.
-            if self.gate_first and stage == start and not dry and stage != "document" and row.post_gated \
-                    and os.path.isfile(artefact):
-                self.gate_first = False
-                print(f"── gate {stage}  (the file exists — checked before the stage is invoked)")
-                if self.quiet_gate(stage, story) == 0:
-                    print(f"factory: {artefact} already holds — stage '{stage}' is not invoked again.")
-                    ran.append(stage)
-                    continue
-                if self.environment_refused(stage, story):
-                    return 1
-            self.gate_first = False
-            # A resumed story whose document file exists and was never refused: its gate decides first.
-            if stage == "document" and not dry and os.path.isfile(artefact) \
-                    and not os.path.isfile(f"{self.runs}/{story}/.gate-document.txt") and not self.delivered(story):
-                print("── gate document  (the file exists — checked before the stage is invoked)")
-                if self.quiet_gate("document", story) == 0:
-                    print(f"factory: {artefact} already holds — the document stage is not invoked again.")
-                    ran.append("document")
-                    break
-            unit_tool = self.tools.tool_for(stage, tool)      # the run's tool stays `tool`: every stage resolves its own
-            print(f"── stage {stage}  (tool: {unit_tool}, fresh context)")
-            self.tool_in_flight = unit_tool
-            if dry:
-                self.processes.dry_lines(unit_tool, self.prompt_for(stage, story), stage)
-            else:
-                code = self.run_one(story, tool, stage, dry)
-                if code is not None:
-                    return code
-            if row.post_gated:
-                print(f"── gate {stage}")
-                gate_code = 0 if dry else self.gate(stage, story)
-                if gate_code == 3:
-                    return self.accepting(story)
-                if gate_code != 0:
-                    if self.environment_refused(stage, story):
-                        return 1
-                    rounds = self.bump_rounds(story)
-                    if rounds >= 3:
-                        err(f"factory: gate '{stage}' refused in round {rounds} — three rounds did not converge. needs-human.")
-                        return 1
-                    again = self.refused_from(story, stage)
-                    err(f"factory: gate '{stage}' refused — round {rounds} runs stage '{again}' again with the gate's report.")
-                    return self.run_stages(story, tool, again, dry)
-            ran.append(stage)
-            if stage == "judge" and not dry:
-                code = self.judged(story, tool, dry, kind)
-                if code is not None:
-                    return code
-                if self.kind_runs(kind, "adopt"):
-                    return self.adopt_gate(story, tool, dry)
-        # What ran, not what the script knows how to run.
-        print(f"factory: story {story} ran through {','.join(ran) or 'nothing'}.")
-        if os.environ.get("FACTORY_HOME") and not dry and self.start_stage(story) == "integrate":
-            return self.integrate_story(story, tool, dry)
-        return 0
+        """The story's stages from <start> on, in the checkout it is called in (`RunStoryUseCase`)."""
+        shared = frozenset(window for window, on in ((Window.BUILDER, self.shared_builder),
+                                                     (Window.VERIFIER, self.shared_verifier)) if on)
+        gate_first, self.gate_first = self.gate_first, False
+        use_case = RunStoryUseCase(RunnerStages(self, tool), ConsoleLines())
+        return use_case.execute(RunStoryCommand(story, start, dry, gate_first, shared))
 
-    def red_proof_start(self, story, kind, start, dry):
-        """Where a story whose red proof went stale starts: a gate that holds the red proof (build, tidy) refuses a
-        test changed after it was seen failing, and only the test stage can record it again — so the story goes to
-        its test stage, as a step of the runner, never as a stage's question and never as a round. A merge of the
-        main line into the story's branch is what changes a test that way (the resumed story's merge, the integrate
-        stage's resolution, the integration a gate refused afterwards); the test stage records the tests as they now
-        are, a break where the code already meets them."""
-        if dry or start not in STAGE or not STAGE[start].lists or STAGE[start].red or not self.kind_runs(kind, "test"):
-            return start
+    def red_proof_stale(self, story, start):
+        """A story whose red proof went stale goes to its test stage: a gate that holds the red proof (build, tidy)
+        refuses a test changed after it was seen failing, and only the test stage can record it again — as a step of
+        the runner, never as a stage's question and never as a round. A merge of the main line into the story's
+        branch is what changes a test that way (the resumed story's merge, the integrate stage's resolution, the
+        integration a gate refused afterwards); the test stage records the tests as they now are, a break where the
+        code already meets them. True when it went stale."""
         self.profile()
         moved = stale_red_proof(os.getcwd(), place("runs"), story, start)
         if not moved:
             self.red_stale.pop(story, None)
-            return start
+            return False
         self.red_stale[story] = moved
         self.journal_line(story, f"{utc()}\tred-stale\ttest\tfrom={start}\ttests={len(moved)}")
         print(f"factory: {', '.join(moved)} changed after the test stage saw it fail — the red proof is about the "
               f"earlier version, so the story goes to its test stage to record it on the files as they are, then "
               f"'{start}' runs again.")
-        return "test"
+        return True
 
     def red_stale_sentence(self, story):
         moved = self.red_stale.get(story)
@@ -1254,8 +958,8 @@ class Run:
             finally:
                 sys.stdout, sys.stderr = saved
 
-    def run_one(self, story, tool, stage, dry):
-        """One stage in a process of its own; None when it ran and its file stands, else the run's exit code."""
+    def run_one(self, story, tool, stage):
+        """One stage in a process of its own; 0 when it ran and its file stands, else the run's exit code."""
         self.checkpoint()
         if not self.renew():
             err(f"factory: the checkout was taken over by another worker before stage '{stage}' — stopping.")
@@ -1322,21 +1026,7 @@ class Run:
             err(f"factory: stage '{stage}' produced no {artefact} beyond the pipeline's skeleton — a stage is finished "
                 "when it wrote its file.")
             return 1
-        # The build stage found a defect in a test's own code: the round goes to the test stage, no human is asked.
-        sent_back = self.back_to(story, stage) if stage == "build" else ""
-        if sent_back:
-            rounds = self.bump_rounds(story)
-            if rounds >= 3:
-                err(f"factory: the build stage sent the story back in round {rounds} — three rounds did not converge. "
-                    "needs-human.")
-                return 1
-            err(f"factory: the build stage found a defect in a test's own code — round {rounds} goes back to the "
-                f"{sent_back} stage.")
-            return self.run_stages(story, tool, sent_back, dry)
-        # A stage that ends with a needs-human section has stopped, whatever its file otherwise says.
-        if self.asks_human(artefact):
-            return self.stopped_for_human(artefact, stage, story)
-        return None
+        return 0
 
     # --- a story in its worktree (WP-92) -------------------------------------------------------------------------
     def in_home(self, *args, merge=True):
@@ -1414,7 +1104,8 @@ class Run:
     def integrate_story(self, story, tool, dry):
         """Delivered is the integration: the main line merged into the story (a stage-integrate agent where git stops
         on a conflict), squashed, the gate once more on that tree, the main checkout fast-forwarded — under the lock,
-        journaled as the runner's own step. A refusal on the main line runs the build stage again, after the step."""
+        journaled as the runner's own step. The run's exit, or None where the gate refused the story on the main
+        line: the build stage runs again, after the step."""
         print("── integrate")
         if dry:
             print(f"   would merge {story}'s branch with the main line and fast-forward the main checkout")
@@ -1431,7 +1122,7 @@ class Run:
         finally:
             self.drop_lock()
         self.journal_line(story, f"{utc()}\toutdated\tdocument.md\tby=integrate")
-        return self.run_stages(story, tool, "build", dry)
+        return None
 
     def integrate_attempts(self, story, tool):
         """The integration, again where the main line moved meanwhile: an exit code, or "round" where the gate
@@ -1488,10 +1179,13 @@ class Run:
                 err(f"factory: the main checkout could not take {story} — see {report}; then: factory.sh run --story "
                     f"{story} --from integrate")
                 return 1
-            if self.environment_refused("integrate", story):
+            reason = StoryRoute.environment(GateReport(read_text(report) if os.path.isfile(report) else ""))
+            if reason is not None:
+                err(f"factory: gate 'integrate' refused on the environment, not on the story — {reason.value}")
+                err(f"factory:   no round is counted. Fix it, then: factory.sh run --story {story}")
                 return 1
             rounds = self.bump_rounds(story)
-            if rounds >= 3:
+            if StoryRoute.converged(Rounds(rounds)):
                 err(f"factory: gate 'integrate' refused in round {rounds} — three rounds did not converge. needs-human.")
                 return 1
             err(f"factory: gate 'integrate' refused the story on the main line — round {rounds} runs the build stage "
@@ -1697,6 +1391,111 @@ class Run:
         thread = threading.Thread(target=pump, daemon=True)
         thread.start()
         return ChildProcess(process, thread)
+
+
+class RunnerStages:
+    """A story's stages on the runner (`StoryStages`): its files read with the package's readers, in the checkout or
+    the worktree it runs in, its gates and its processes as the runner starts them."""
+
+    def __init__(self, run, tool):
+        self._run = run
+        self._tool = tool
+
+    def open_decisions(self, story):
+        return self._run.open_decisions(story).split()
+
+    def kind(self, story):
+        return StoryKind(self._run.kind_of(story))
+
+    def red_stale(self, story, start):
+        return self._run.red_proof_stale(story, start.value)
+
+    def pause(self, story):
+        self._run.between_stages(story, self._tool)
+
+    def gate(self, stage, story):
+        return self._run.gate(stage, story)
+
+    def quiet_gate(self, stage, story):
+        return self._run.quiet_gate(stage, story)
+
+    def report(self, story, stage):
+        path = f"{self._run.runs}/{story}/.gate-{stage}.txt"
+        return GateReport(read_text(path) if os.path.isfile(path) else "")
+
+    def artefact(self, story, stage):
+        return self._run.artefact(story, stage)
+
+    def holds(self, story, stage):
+        return os.path.isfile(self._run.artefact(story, stage))
+
+    def refused_before(self, story, stage):
+        return os.path.isfile(f"{self._run.runs}/{story}/.gate-{stage}.txt")
+
+    def delivered(self, story):
+        return self._run.delivered(story)
+
+    def asks_human(self, story, stage):
+        return self._run.asks_human(self._run.artefact(story, stage))
+
+    def stopped_for_human(self, story, stage):
+        return self._run.stopped_for_human(self._run.artefact(story, stage), stage, story)
+
+    def stage(self, story, stage):
+        self._announce(stage)
+        return self._run.run_one(story, self._tool, stage)
+
+    def dry(self, story, stage):
+        tool = self._announce(stage)
+        self._run.processes.dry_lines(tool, self._run.prompt_for(stage, story), stage)
+
+    def _announce(self, stage):
+        tool = self._run.tools.tool_for(stage, self._tool)      # the run's tool stays: every stage resolves its own
+        print(f"── stage {stage}  (tool: {tool}, fresh context)")
+        self._run.tool_in_flight = tool
+        return tool
+
+    def builder(self, story, stages, start, dry):
+        return self._run.builder_window(story, self._tool, stages, start, dry)
+
+    def reviews(self, story, kind, dry):
+        return self._run.run_reviews(story, self._tool, dry, kind.value)
+
+    def verifier(self, story, stages, dry):
+        return self._run.verifier_window(story, self._tool, stages, dry)
+
+    def sent_back(self, story):
+        return self._run.back_to(story, "build") == "test"
+
+    def repaired(self, story):
+        return newer(f"{self._run.runs}/{story}/tidy.md", f"{self._run.runs}/{story}/build.md")
+
+    def red_proof(self, story):
+        ledger = self.red_ledger(story)
+        return os.path.isfile(ledger) and os.path.getsize(ledger) > 0
+
+    def red_ledger(self, story):
+        return f"{self._run.evidence(story)}/.tests-red"
+
+    def bump(self, story):
+        return Rounds(self._run.bump_rounds(story))
+
+    def resumes(self, story):
+        start = self._run.start_stage(story)
+        return StageName(start) if start and start != "none" else None
+
+    def verdict(self, story):
+        return VerdictWord(self._run.verdict_of(story) or "")
+
+    def back(self, story):
+        back = self._run.back_to(story)
+        return StageName(back) if back else None
+
+    def in_worktree(self):
+        return bool(os.environ.get("FACTORY_HOME"))
+
+    def integrate(self, story, dry):
+        return self._run.integrate_story(story, self._tool, dry)
 
 
 class ChildProcess:
