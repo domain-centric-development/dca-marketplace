@@ -47,6 +47,14 @@ class Scheduling(DomainService):
     so what depends on them is blocked."""
 
     @staticmethod
+    def twin(story: StoryId, others: typing.Sequence[Detail]) -> typing.Optional[Standing]:
+        """Two stories under one id would share a run folder and a row: each stops, naming where the others are."""
+        if not others:
+            return None
+        return Standing(StateName.STOPPED, None, Detail(
+            f"id {story.value!r} is not unique — also {', '.join(o.value for o in others)}; give one of them another"))
+
+    @staticmethod
     def schedule(entries: typing.Sequence[Entry], graph: EpicGraph, main_line: MainLine,
                  slots: typing.Optional[Slots] = None, busy: typing.Tuple[StoryId, ...] = (),
                  skip: typing.Tuple[StoryId, ...] = ()) -> Schedule:

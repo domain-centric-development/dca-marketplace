@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import DomainService, Value
 from ..model.stage_story import (
     Evidence, Expectation, Presence, RedLedger, RunEnd, RunState, ScenarioKey, Selector, TestOutcome, TestRun)
-from ..model.verdict import CheckName, Finding, Said
+from ..model.verdict import CheckName, Finding, FindingState, Said
 
 
 class BreakProof(Value):
@@ -33,9 +33,22 @@ def timeout_said(selector: Selector) -> Said:
                 f"the failure names it.")
 
 
+#: The check that holds every mapped test red at the test stage.
+RED_CHECK = CheckName("tests-red")
+#: What it says of a test it lets through green — on a decision, or one an earlier pass's build met.
+GREEN_NOW = "is green now"
+
+
 class TestVerdicts(DomainService):
     """Expected red: every mapped test fails. Green: all pass. A guard — a journey over delivered stories — is green
     without ever having been red: its steps exist before it is written."""
+
+    @staticmethod
+    def let_through_green(check: CheckName, state: FindingState, said: Said) -> Presence:
+        """Whether a finding of the test gate says a test went through green — then the tree is past the red state,
+        and the red tree an earlier pass recorded stays."""
+        return Presence.PRESENT if check == RED_CHECK and state is FindingState.PASS and GREEN_NOW in said.value \
+            else Presence.ABSENT
 
     @staticmethod
     def judge(expected: Expectation, guard: Presence, run: TestRun, ledger: RedLedger) -> TestsJudged:
@@ -121,7 +134,7 @@ class TestVerdicts(DomainService):
                  now_red: typing.Set[Selector]) -> typing.List[typing.Union[Finding, BreakProof]]:
         """The test's verdict against what the ledger and the stage expect — unchanged by how it ran."""
         changed_on = ", ".join(r.value for r in ledger.changed_on)
-        green, red = CheckName("tests-green"), CheckName("tests-red")
+        green, red = CheckName("tests-green"), RED_CHECK
         selector, key = test.selector.value, test.key.value
         passed = test.state is RunState.PASSED
         if not passed:
@@ -142,7 +155,7 @@ class TestVerdicts(DomainService):
                 f"build stage."))]
         if expected is Expectation.RED and passed and test.selector in ledger.was_red and changed_on:
             now_red.add(test.selector)
-            return [red.ok(Said(f"{selector} is green now and was recorded red before; its expectation changed on "
+            return [red.ok(Said(f"{selector} {GREEN_NOW} and was recorded red before; its expectation changed on "
                                 f"decision {changed_on} ({key})"))]
         if expected is Expectation.RED and passed and test.selector in ledger.was_red \
                 and ledger.built_before is Presence.PRESENT:
@@ -152,7 +165,7 @@ class TestVerdicts(DomainService):
                 # bites.
                 return [BreakProof(test.key, test.selector)]
             now_red.add(test.selector)
-            return [red.ok(Said(f"{selector} is green now and was recorded red in an earlier pass of this story, "
+            return [red.ok(Said(f"{selector} {GREEN_NOW} and was recorded red in an earlier pass of this story, "
                                 f"whose build met it ({key})"))]
         if expected is Expectation.RED and passed:
             return [red.fail(Said(

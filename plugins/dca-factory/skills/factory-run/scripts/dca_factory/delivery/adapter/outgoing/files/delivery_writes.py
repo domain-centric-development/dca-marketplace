@@ -41,6 +41,8 @@ from .story_files import StoryFiles
 from .story_layout import journeys_hold, story_digest, story_folder, story_kind
 from .test_files import locate_tests, read_mapping
 from ....domain.model.stage_story import DONE_ROW, OPEN_ROW
+from ....domain.model.verdict import CheckName, FindingState, Said
+from ....domain.service.test_verdicts import TestVerdicts
 
 Front = typing.Mapping[str, typing.Any]
 
@@ -70,7 +72,8 @@ def record_red_tree(result: typing.Any, cwd: str, runs: str, story_id: str) -> N
     """At the test gate's pass: the tree as it is, when every mapped test was red in this run. A pass that let a test
     through green — a back round after the build, a decision — has production code past the red state: the tree an
     earlier pass recorded stays, since tidy's tests are laid over it anyway."""
-    if any(c == "tests-red" and st == "pass" and " is green now" in m for st, c, m in result.entries):
+    if any(TestVerdicts.let_through_green(CheckName(c), FindingState(st), Said(m)) is Presence.PRESENT
+           for st, c, m in result.entries):
         return
     tree = git_tree(cwd)
     if tree:

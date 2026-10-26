@@ -17,6 +17,7 @@ from ....application.status.texts import parse_time
 from ....domain.model.schedule import EpicGraph
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, Standing, StateName
+from ....domain.service.scheduling import Scheduling
 from ..git.repository import git
 from ..git.worktrees import has_worktree, uncommitted_story
 from .epic_files import epic_graph, graph_of
@@ -56,12 +57,12 @@ class BacklogFiles:
                 continue
             story_id = str(front.get("id") or name).strip()
             title, kind = story_title(front, body), story_kind(front)
-            if story_id.lower() in twice:
-                # Two stories under one id would share a run folder and a row here: both stop, both are named.
-                others = [shown(p) for p in twice[story_id.lower()] if os.path.normpath(p) != os.path.normpath(path)]
+            others = [Detail(shown(p)) for p in twice.get(story_id.lower(), [])
+                      if os.path.normpath(p) != os.path.normpath(path)]
+            twin = Scheduling.twin(StoryId(story_id), others)
+            if twin is not None:
                 found.append(BacklogStory(
-                    f"{story_id} ({shown(path)})", path, epic, front, body, title, kind, (), "", False, False, None,
-                    stopped(f"id {story_id!r} is not unique — also {', '.join(others)}; give one of them another")))
+                    f"{story_id} ({shown(path)})", path, epic, front, body, title, kind, (), "", False, False, None, twin))
                 continue
             found.append(BacklogStory(
                 story_id, path, str(front.get("epic") or epic).strip(), front, body, title, kind,
