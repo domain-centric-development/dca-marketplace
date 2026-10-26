@@ -54,23 +54,18 @@ import time
 from .contract import CONTRACT, VERSION
 from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    DEFAULTS, location, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
+    DEFAULTS, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
 from .infrastructure.schedule import schedule_data, start_of
 from .infrastructure.profile import ask_profile
 from .delivery.application.profile.ask_profile import AskProfileQuery, Question
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
-from .delivery.application.status import actions
-from .delivery.application.status.actions import offered
 from .delivery.application.status.show_status import ShowStatusQuery
 from .delivery.application.status.show_story import ShowStoryQuery, UnknownStory
 from .delivery.application.status.show_epic import ShowEpicQuery, UnknownEpic
 from .delivery.application.status.show_help import ShowHelpQuery
 from .delivery.application.status.texts import stamp_text
-from .discovery.api import list_reports
-from .delivery.adapter.outgoing.files.story_files import names_story
 from .delivery.application.decisions.list_decisions import ListDecisionsQuery
 from .delivery.application.requests.list_requests import ListRequestsQuery
-from .delivery.application.requests.pending import mark_pending
 from .delivery.application.requests.pending_requests import PendingRequestsQuery
 from .delivery.application.requests.retry_request import RetryRequestCommand
 from .delivery.application.requests.take_back_request import TakeBackRequestCommand
@@ -100,6 +95,12 @@ from .delivery.application.delivery.release_story_claim import ReleaseStoryClaim
 from .delivery.application.delivery.refresh_claims import RefreshClaimsCommand
 from .delivery.application.delivery.next_free_story_id import NextFreeStoryIdQuery
 from .delivery.application.upkeep.migrate_layout import MigrateLayoutCommand
+from .delivery.application.lifecycle.start_factory import StartFactoryCommand
+from .delivery.application.lifecycle.stop_factory import StopFactoryCommand
+from .delivery.application.lifecycle.start_page import StartPageCommand
+from .delivery.application.lifecycle.show_running_page import ShowRunningPageQuery
+from .delivery.application.lifecycle.show_worker import ShowWorkerQuery
+from .delivery.application.status.show_discovery import ShowDiscoveryQuery
 from .delivery.application.upkeep.let_journals_into_git import LetJournalsIntoGitCommand
 from .delivery.application.delivery.probe_tool import Probed, ProbeToolQuery
 from .delivery.application.cost.read_tool_usage import ReadToolUsageQuery
@@ -121,7 +122,6 @@ from .delivery.adapter.incoming.cli import spec_delta_view as spec_delta_text
 from .delivery.application.delivery.check_spec import CheckSpecQuery
 from .delivery.application.delivery.show_spec_delta import ShowSpecDeltaQuery
 from .delivery.application.delivery.take_back_delivery import TakeBackDeliveryCommand
-from .delivery.adapter.outgoing.process import factory_process
 from .web import service as web
 from .delivery.adapter.outgoing.git.worktree_steps import (
     integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
@@ -153,23 +153,8 @@ def resolve(epics, argument):
 
 
 def discovery_model(cwd, epics):
-    """Every discovery topic with its proposed epics — and which of them the backlog already holds — and its
-    proposed description changes, as discovery says them; with what a person can do with each."""
-    folder = location(read_profile(resolve_profile(None, cwd)), "discovery")
-    model = list_reports(cwd, folder)
-    for topic in model["topics"]:
-        for proposal in topic["proposals"]:
-            proposal["actions"] = [] if proposal["epic"] else offered(make_action(
-                text="the proposal, written as an epic",
-                skill=f"/factory-backlog epic {proposal['id']} --from {topic['report']}", label="make epic",
-                primary=True))
-        for change in topic["description_changes"]:
-            change["actions"] = offered(make_action(text="the change, written into the description",
-                                                    skill=f"/dca-describe {change['target']}: {change['change']}",
-                                                    label="apply"))
-        mark_pending([a for item in topic["proposals"] + topic["description_changes"] for a in item["actions"]],
-                     pending_requests(cwd))
-    return dict(project=os.path.basename(os.path.abspath(cwd)), store=model["store"], topics=model["topics"])
+    """Every discovery topic with its proposals and changes and what a person can do with each (`ShowDiscoveryUseCase`)."""
+    return wiring.show_discovery(cwd).execute(ShowDiscoveryQuery(os.path.basename(os.path.abspath(cwd))))
 
 
 def discovery_list(cwd, epics, fmt="text", colour="auto"):
@@ -211,8 +196,7 @@ def list_decisions(cwd, story_id=None, fmt="text", colour="auto"):
         print(json.dumps(json_ready(model), indent=2, ensure_ascii=False))
         return 0
     first = next((r for r in records if r in waiting), None)
-    how = make_action(skill="/factory-decisions",
-                      shell=f"write the answer into {first['path']} under `## Answer`") if first else None
+    how = model["how"]
     if fmt == "md":
         lead = "look" if first and first["kind"] == "acceptance" else "question" if waiting else "done"
         out = [f"### Decisions — {model['project']}" + (f" · {story_id}" if story_id else ""), "",
@@ -313,12 +297,6 @@ def usage_report(runs, story_filter=None, total_only=False, cwd=".", epics=None,
     caption = "Tokens" + ("" if model["priced"] or not model["measured"] else " — no price in a session log")
     print("\n".join(section(caption, colour) + table_text(headers, rows, right, total=True, colour=colour) + [""]))
     return 0
-
-
-def make_action(text="", skill="", shell="", look="", label="", primary=False):
-    """An action, every way — `actions.make_action`, with this project's stories to tell a story's id from a wish."""
-    return actions.make_action(names_story, text=text, skill=skill, shell=shell, look=look, label=label,
-                               primary=primary)
 
 
 def status_model(cwd, epics, runs, live=False):
@@ -880,7 +858,7 @@ def up_command(argv):
               file=sys.stderr)
         return 2
     placed()
-    return factory_process.up(os.getcwd(), run_args, args.serve, args.port, args.by or "")
+    return wiring.start_factory().execute(StartFactoryCommand(tuple(run_args), args.serve, args.port, args.by or ""))
 
 
 def down_command(argv):
@@ -890,7 +868,7 @@ def down_command(argv):
     parser.add_argument("--by")
     args = parser.parse_args(argv)
     placed()
-    return factory_process.down(os.getcwd(), args.now, not args.no_wait, args.by or "")
+    return wiring.stop_factory().execute(StopFactoryCommand(args.now, not args.no_wait, args.by or ""))
 
 
 def serve_command(argv):
@@ -903,12 +881,15 @@ def serve_command(argv):
     placed()
     if args.by_up:
         return web.serve_here(os.getcwd(), args.port, by_up=True)
-    served = factory_process.running_page(os.getcwd())
-    if served:
-        factory_process.say(f"the page runs already — {served['url']}")
-        return 0
     if args.background:
-        return factory_process.start_page(os.getcwd(), args.port)
+        started = wiring.start_page().execute(StartPageCommand(args.port))
+        if started.running:
+            print(f"factory: the page runs already — {started.running['url']}")
+        return started.exit
+    served = wiring.show_running_page().execute(ShowRunningPageQuery())
+    if served:
+        print(f"factory: the page runs already — {served['url']}")
+        return 0
     return web.serve_here(os.getcwd(), args.port, args.open)
 
 
@@ -917,8 +898,8 @@ def worker_command(argv):
     parser.add_argument("--format", choices=("text", "json"), default="text")
     args = parser.parse_args(argv)
     placed()
-    info = factory_process.worker(os.getcwd())
-    print(json.dumps(info) if args.format == "json" else factory_process.worker_line(info))
+    info, line = wiring.show_worker().execute(ShowWorkerQuery())
+    print(json.dumps(info) if args.format == "json" else line)
     return 0
 
 

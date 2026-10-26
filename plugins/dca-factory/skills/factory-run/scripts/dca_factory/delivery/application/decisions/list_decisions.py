@@ -61,8 +61,11 @@ class ListDecisionsUseCase:
             records.append(record)
         records.sort(key=lambda r: (r["rank"], r["id"]))
         waiting = [r for r in records if r["state"] in ("open", "draft", "unreadable")]
+        # what a person does with the first record that waits: the inbox skill, or the answer written by hand
+        how = make_action(self._stories.names_story, skill="/factory-decisions",
+                          shell=f"write the answer into {waiting[0]['path']} under `## Answer`") if waiting else None
         return dict(project=self._inbox.project_name(), story=query.story, records=records, waiting=len(waiting),
-                    store=self._inbox.where())
+                    store=self._inbox.where(), how=how)
 
 
 def record_actions(record: Facts, names_story: NamesStory) -> typing.List[Action]:

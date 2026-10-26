@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
+from ..delivery.adapter.outgoing.discovery.discovery_list_files import DiscoveryListFiles
+from ..delivery.adapter.outgoing.process.factory_process_files import FactoryProcessFiles
 from ..delivery.adapter.outgoing.tools.runner_table_files import RunnerTableFiles
 from ..delivery.adapter.outgoing.tools.tool_binary_files import ToolBinaryFiles
 from ..delivery.adapter.outgoing.claims.checkout_files import CheckoutFiles
@@ -32,6 +34,12 @@ from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
 from ..delivery.adapter.outgoing.spec.spec_delta_files import SpecDeltaFiles
 from ..delivery.adapter.outgoing.git.published_branches import PublishedBranchFiles
+from ..delivery.application.status.show_discovery import ShowDiscoveryUseCase
+from ..delivery.application.lifecycle.show_running_page import ShowRunningPageUseCase
+from ..delivery.application.lifecycle.show_worker import ShowWorkerUseCase
+from ..delivery.application.lifecycle.start_factory import StartFactoryUseCase
+from ..delivery.application.lifecycle.start_page import StartPageUseCase
+from ..delivery.application.lifecycle.stop_factory import StopFactoryUseCase
 from ..delivery.application.upkeep.let_journals_into_git import LetJournalsIntoGitUseCase
 from ..delivery.application.upkeep.migrate_layout import MigrateLayoutUseCase
 from ..delivery.application.delivery.next_free_story_id import NextFreeStoryIdUseCase
@@ -296,3 +304,27 @@ def migrate_layout(cwd: str) -> MigrateLayoutUseCase:
 
 def let_journals_into_git(cwd: str) -> LetJournalsIntoGitUseCase:
     return LetJournalsIntoGitUseCase(ProjectUpkeepFiles(cwd))
+
+
+def start_factory() -> StartFactoryUseCase:
+    return StartFactoryUseCase(FactoryProcessFiles())
+
+
+def stop_factory() -> StopFactoryUseCase:
+    return StopFactoryUseCase(FactoryProcessFiles())
+
+
+def start_page() -> StartPageUseCase:
+    return StartPageUseCase(FactoryProcessFiles())
+
+
+def show_worker() -> ShowWorkerUseCase:
+    return ShowWorkerUseCase(FactoryProcessFiles())
+
+
+def show_running_page() -> ShowRunningPageUseCase:
+    return ShowRunningPageUseCase(FactoryProcessFiles())
+
+
+def show_discovery(cwd: str) -> ShowDiscoveryUseCase:
+    return ShowDiscoveryUseCase(DiscoveryListFiles(cwd), RequestFiles(cwd), StoryFiles(cwd))
