@@ -6,7 +6,8 @@ from __future__ import annotations
 import os
 import typing
 
-from .....contract import GateError, order_for, STAGE_FILES, STAGE_ORDER
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from ..pipeline.stage_rows import order_for, STAGE_FILES, STAGE_ORDER
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, factory_home
 from ....application.shared.front import is_acceptance

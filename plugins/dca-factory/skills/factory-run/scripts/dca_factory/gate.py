@@ -68,8 +68,10 @@ import json
 import os
 import subprocess
 import sys
-from .contract import (
-    CONTRACT, GateError, layout_hint, STAGE, STAGES, VERSION)
+from .contract import CONTRACT, VERSION
+from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from .delivery.adapter.outgoing.files.migrations import layout_hint
+from .delivery.adapter.outgoing.pipeline.stage_rows import STAGE, STAGES
 from .delivery.adapter.outgoing.files.story_layout import (
     find_story, story_folder)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (

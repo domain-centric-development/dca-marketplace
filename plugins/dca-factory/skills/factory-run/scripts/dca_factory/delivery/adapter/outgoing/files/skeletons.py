@@ -9,7 +9,9 @@ from __future__ import annotations
 import os
 import sys
 import typing
-from .....contract import GateError, MAPPING_ROW, SELECTOR, STAGE, STAGE_FILES, STAGE_ORDER
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from .hand_over_patterns import MAPPING_ROW, SELECTOR
+from ..pipeline.stage_rows import STAGE, STAGE_FILES, STAGE_ORDER
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, place, read_profile, resolve_profile
 from .....spec.api import derived, place_name, story_entries

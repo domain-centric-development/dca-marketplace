@@ -21,9 +21,8 @@ import subprocess
 import sys
 import threading
 import time
-from .contract import (
-    ALL_KINDS, GateError, SHARED_WINDOWS, STAGE, STAGE_FILES,
-    STAGE_ORDER, STAGES)
+from .delivery.adapter.outgoing.pipeline.stage_rows import ALL_KINDS, SHARED_WINDOWS, STAGE, STAGE_FILES, STAGE_ORDER, STAGES
+from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)

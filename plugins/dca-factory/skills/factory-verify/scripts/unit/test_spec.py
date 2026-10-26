@@ -6,7 +6,7 @@ import contextlib
 import os
 import unittest
 
-from support import contract, project, write
+from support import project, write
 from dca_factory import cli
 from dca_factory.delivery.adapter.outgoing.files import migrations
 from dca_factory.spec import api as spec

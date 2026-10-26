@@ -8,7 +8,7 @@ import sys
 import time
 import unittest
 
-from support import contract, project, write
+from support import project, write
 
 from dca_factory import cli, state
 from dca_factory.delivery.domain.model.correction import REASON_CODES

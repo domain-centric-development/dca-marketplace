@@ -42,6 +42,7 @@ new discovery: a future crossing, shown so it is not forgotten.
 | `web/` | the host that shows every context at once — the page and its server; it calls read models and use cases only |
 | `infrastructure/` | the composition root: wires each port to its adapter |
 
-The modules not yet moved into a context (`contract`, `state`, `gate`, `runner`, `cli`) sit at
-the package's top until their move; `factory-verify` holds the layers of everything moved
-(`architecture.py`) and `mypy --strict` its types (`mypy.ini`).
+`contract.py` at the package's top is the version stamp alone — `CONTRACT` and `VERSION`, read by
+name by `factory.sh` and by an installed copy of any other release. The modules not yet moved into a
+context (`state`, `gate`, `runner`, `cli`) sit beside it until their move; `factory-verify` holds the
+layers of everything moved (`architecture.py`) and `mypy --strict` its types (`mypy.ini`).

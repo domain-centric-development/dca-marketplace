@@ -8,7 +8,7 @@ import re
 import time
 import typing
 
-from .....contract import STAGE_ORDER
+from ..pipeline.stage_rows import STAGE_ORDER
 from .journal_files import mark_questioned
 from .story_layout import DECISIONS_DIR, find_story, story_digest, story_files, story_folder, story_id_of
 from .....sharedkernel.adapter.outgoing.profile.profile_files import DEFAULTS, place, PLACES_REL, shown

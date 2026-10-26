@@ -15,7 +15,8 @@ if SCRIPTS not in sys.path:
     sys.path.insert(0, SCRIPTS)
 os.environ.pop("FACTORY_HOME", None)                        # a case runs in no story's worktree
 
-from dca_factory import contract, state  # noqa: E402,F401
+from dca_factory import state  # noqa: E402,F401
+from dca_factory.delivery.adapter.outgoing.pipeline.stage_rows import STAGE_FILES  # noqa: E402
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
@@ -76,7 +77,7 @@ class Project:
 
     def handover(self, story_id, stage, text=None):
         """A stage's hand-over file under the run folder, as the stage would leave it."""
-        name = contract.STAGE_FILES[stage]
+        name = STAGE_FILES[stage]
         return write(os.path.join(self.runs, story_id, name), text if text is not None else f"# {stage}\n")
 
     def run_file(self, story_id, name, text=""):
@@ -87,7 +88,7 @@ class Project:
 
     def wrote(self, story_id, stage, at=None):
         """The journal's `wrote` event for the hand-over as it is on disk now."""
-        name = contract.STAGE_FILES[stage]
+        name = STAGE_FILES[stage]
         digest = layout.file_digest(os.path.join(self.runs, story_id, name))
         return journal.journal_append(self.runs, story_id, "wrote", name, f"sha={digest}", at=at)
 

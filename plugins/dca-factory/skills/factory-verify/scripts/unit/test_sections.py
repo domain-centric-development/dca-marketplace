@@ -4,7 +4,7 @@ what is up with a story, with the view its detail opens with."""
 
 import unittest
 
-from support import contract  # noqa: F401 — puts the package on the path
+import support  # noqa: F401 — puts the package on the path
 from dca_factory import cli
 from dca_factory.delivery.adapter.incoming.cli import terminal
 from dca_factory.delivery.adapter.outgoing.files import detail_files as detail

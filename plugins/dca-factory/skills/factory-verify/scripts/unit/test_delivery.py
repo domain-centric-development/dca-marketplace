@@ -6,7 +6,7 @@ import io
 import os
 import unittest
 
-from support import contract, project, state, write
+from support import project, state, write
 from dca_factory import cli
 from dca_factory.delivery.adapter.outgoing.files import migrations
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records

@@ -9,7 +9,8 @@ from ..git.integration import MAIN_TESTS
 from .kept_files import TESTS_BASELINE
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
-from .....contract import GateError, STAGE_FILES
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from ..pipeline.stage_rows import STAGE_FILES
 from ....application.schedule.stand_story import stand_story
 from ....domain.model.moment import Moment
 from ....domain.model.story import Delivery, StoryId

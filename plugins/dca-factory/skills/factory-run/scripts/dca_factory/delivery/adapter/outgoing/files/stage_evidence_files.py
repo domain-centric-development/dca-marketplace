@@ -8,7 +8,10 @@ import os
 import re
 import typing
 
-from .....contract import CONTRACT, GateError, HAPPY_MARK, order_for, SELECTOR, SHARED_WINDOWS, STAGE_FILES, STAGES, VERSION
+from .....contract import CONTRACT, VERSION
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from .hand_over_patterns import HAPPY_MARK, SELECTOR
+from ..pipeline.stage_rows import order_for, SHARED_WINDOWS, STAGE_FILES, STAGES
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (

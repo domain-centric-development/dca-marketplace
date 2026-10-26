@@ -8,7 +8,7 @@ import re
 import subprocess
 import typing
 
-from .....contract import SELECTOR
+from ..files.hand_over_patterns import SELECTOR
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, runs_top
 from ....domain.model.stage_story import CommandKey, CommandRun, Count, Presence, Retried, SuiteCommands, SuiteRun

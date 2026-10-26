@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 import typing
 
-from .....contract import CRITERION, GateError
+from .hand_over_patterns import CRITERION
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .story_layout import story_kind
 from .stage_evidence_files import happy_paths
 from .design_files import STEP

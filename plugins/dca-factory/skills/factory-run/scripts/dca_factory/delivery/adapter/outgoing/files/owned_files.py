@@ -10,7 +10,7 @@ import os
 import sys
 import typing
 
-from .....contract import OWNED_DIGEST, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, WINDOW_DIGEST
+from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError as GateError, read_text, split_front
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, evidence_rel, in_worktree, place, worktree_owned)
@@ -20,6 +20,19 @@ from .run_marks import OWNED_CHANGED, pass_marks, STORY_DIGEST, write_mark, writ
 from ....domain.model.story import StoryId
 from .story_layout import (
     DECISIONS_DIR, file_digest, find_story, STATE_KEYS, story_digest, STORY_FILE, story_id_of)
+
+
+# --- what is the person's: the story and the answers (WP-94) --------------------------------------------------
+# A story's file and every decision's `## Answer` are written by a person — through `/factory-decisions`, by hand —
+# and by the gate where it delivers or reopens a story; never by a stage. At a stage window's start the runner (or a
+# session's `--stage-start`) records a digest of them; a gate inside the window and the window's end compare. A
+# change under a stage is marked (`.owned-changed`) and the story stays stopped until a person looked at it and
+# confirms (`factory-cli.py --owned-confirm <story>`). `by:` is free text: the digest is the proof, not the name.
+OWNED_DIGEST = ".owned-digest"
+
+
+#: The hand-overs' digests at a window's start: what the window left as it was.
+WINDOW_DIGEST = ".window-digest"
 
 def write_story_fields(path: str, **fields: typing.Optional[str]) -> None:
     """Set — or with None remove — flat keys in a story's front matter; everything else stays byte for byte.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import typing
 
-from .....contract import GateError
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import factory_home, in_worktree, shown
 from ....application.shared.stage_delivery import AcceptanceFacts

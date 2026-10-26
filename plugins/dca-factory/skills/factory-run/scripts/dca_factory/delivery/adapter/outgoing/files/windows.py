@@ -8,7 +8,7 @@ import glob
 import os
 import typing
 from datetime import datetime, timezone
-from .....contract import GateError
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, place, read_profile, resolve_profile
 from .journal_files import append_event, journal_writer, read_events
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text

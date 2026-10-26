@@ -9,7 +9,7 @@ import os
 import re
 import typing
 
-from .....contract import GateError
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, factory_home, runs_top
 from .repository import git, git_blob
 from ..files.decision_record_files import records_of

@@ -3,8 +3,9 @@
 import os
 import unittest
 
-from support import contract, project, write
+from support import project, write
 from dca_factory import gate
+from dca_factory.sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from dca_factory.delivery.adapter.outgoing.files import stage_evidence_files
 from dca_factory.delivery.adapter.outgoing.files import test_files
 from dca_factory.delivery.adapter.outgoing.files import criteria_files
@@ -21,15 +22,15 @@ class LineForm(unittest.TestCase):
                          [("shows-the-thing", "the thing shows"), ("shows-nothing", "nothing")])
 
     def test_a_dash_line_without_a_key_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "has no key"):
+        with self.assertRaisesRegex(GateError, "has no key"):
             criteria("- The thing shows\n")
 
     def test_no_criteria_at_all_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "no acceptance criteria"):
+        with self.assertRaisesRegex(GateError, "no acceptance criteria"):
             criteria_files.criteria_of("story.md", "# Story\n\nNothing here.\n")
 
     def test_a_key_twice_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "appears twice"):
+        with self.assertRaisesRegex(GateError, "appears twice"):
             criteria("- shows-it: a\n- shows-it: b\n")
 
 
@@ -56,27 +57,27 @@ class ScenarioForm(unittest.TestCase):
                          [("shows-it", "the thing shows in bright colours")])
 
     def test_an_and_after_when_is_a_second_trigger(self):
-        with self.assertRaisesRegex(contract.GateError, "has 2 triggers"):
+        with self.assertRaisesRegex(GateError, "has 2 triggers"):
             criteria("#### shows-it\n- Given a thing\n- When I look\n- And I blink\n- Then it shows\n")
 
     def test_a_scenario_without_then_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "has no `Then`"):
+        with self.assertRaisesRegex(GateError, "has no `Then`"):
             criteria("#### shows-it\n- Given a thing\n- When I look\n")
 
     def test_a_rule_without_a_scenario_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "has no scenario"):
+        with self.assertRaisesRegex(GateError, "has no scenario"):
             criteria("### Rule: things show\n### Rule: another\n#### shows-it\n- When I look\n- Then it shows\n")
 
     def test_a_step_outside_a_scenario_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "stands outside a scenario"):
+        with self.assertRaisesRegex(GateError, "stands outside a scenario"):
             criteria("- Given a thing\n")
 
     def test_a_third_level_heading_must_be_a_rule(self):
-        with self.assertRaisesRegex(contract.GateError, "is a `### Rule: <text>`"):
+        with self.assertRaisesRegex(GateError, "is a `### Rule: <text>`"):
             criteria("### Things\n")
 
     def test_a_scenario_heading_must_be_a_key(self):
-        with self.assertRaisesRegex(contract.GateError, "is not a key"):
+        with self.assertRaisesRegex(GateError, "is not a key"):
             criteria("#### Shows It\n- When I look\n- Then it shows\n")
 
 
@@ -112,13 +113,13 @@ class Mapping(unittest.TestCase):
     def test_a_selector_that_is_no_class_and_method_is_refused(self):
         with project() as p:
             self.write_tests(p, "| shows-it | WidgetTest.showsIt |\n")
-            with self.assertRaisesRegex(contract.GateError, "is not `<Class>#<method>`"):
+            with self.assertRaisesRegex(GateError, "is not `<Class>#<method>`"):
                 test_files.read_mapping(p.runs, "S-1")
 
     def test_a_tests_file_without_the_table_marker_is_refused(self):
         with project() as p:
             write(os.path.join(p.runs, "S-1", "tests.md"), "| shows-it | com.example.WidgetTest#showsIt |\n")
-            with self.assertRaisesRegex(contract.GateError, "no `<!-- gate:tests -->` table"):
+            with self.assertRaisesRegex(GateError, "no `<!-- gate:tests -->` table"):
                 test_files.read_mapping(p.runs, "S-1")
 
 

@@ -7,7 +7,7 @@ import os
 import re
 import typing
 from datetime import datetime, timezone
-from .....contract import GateError
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..files.story_layout import STORY_FILE, story_files, story_folder
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, factory_home, place, read_profile, resolve_profile, STORY_BRANCH
 from ..git.repository import git, git_blob

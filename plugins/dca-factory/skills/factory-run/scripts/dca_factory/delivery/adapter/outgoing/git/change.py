@@ -9,7 +9,7 @@ import os
 import time
 import typing
 
-from .....contract import GateError
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_rel, findings_rel, PLACES_REL, read_profile)
 from ....domain.model.stage_story import (

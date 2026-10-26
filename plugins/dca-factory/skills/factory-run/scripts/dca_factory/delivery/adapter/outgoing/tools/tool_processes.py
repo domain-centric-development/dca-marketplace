@@ -15,7 +15,7 @@ import typing
 
 from ..files.journal_files import journal_path
 from ..files.stream_records import freeze_stream
-from .....contract import GateError
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .agents import TOOL, tool_command

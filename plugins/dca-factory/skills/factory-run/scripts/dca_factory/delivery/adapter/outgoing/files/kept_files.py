@@ -21,7 +21,8 @@ import subprocess
 import tempfile
 from .owned_files import run_owned
 from .delivery_files import TEST_DIR, TEST_FILE
-from .....contract import GateError, STAGES
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from ..pipeline.stage_rows import STAGES
 from .decision_record_files import answered_decisions
 from .run_marks import last_ended
 from .test_files import read_mapping

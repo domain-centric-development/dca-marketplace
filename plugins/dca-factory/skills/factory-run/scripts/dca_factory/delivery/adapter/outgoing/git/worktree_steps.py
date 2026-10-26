@@ -12,7 +12,7 @@ import re
 import shutil
 import sys
 import typing
-from .....contract import STAGE_FILES, STAGES
+from ..pipeline.stage_rows import STAGE_FILES, STAGES
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import Front, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, place, shown, STORY_BRANCH, worktree_places)

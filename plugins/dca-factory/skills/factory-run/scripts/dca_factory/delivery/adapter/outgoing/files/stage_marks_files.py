@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from .....contract import order_for
+from ..pipeline.stage_rows import order_for
 from ..build import commands
 from ..build.commands import open_suites_record
 from .run_marks import current_stage_files

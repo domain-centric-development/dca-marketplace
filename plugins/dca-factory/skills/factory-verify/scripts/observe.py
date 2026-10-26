@@ -40,12 +40,12 @@ _PACKAGE_DIR = _HERE if os.path.isdir(os.path.join(_HERE, "dca_factory")) else \
 # every start would cost each call a tenth of a second.
 sys.pycache_prefix = sys.pycache_prefix or os.path.join(os.path.expanduser("~"), ".cache", "dca-factory")
 sys.path.insert(0, _PACKAGE_DIR)
-from dca_factory import contract as _contract  # noqa: E402
+from dca_factory.delivery.adapter.outgoing.files import hand_over_patterns as _patterns  # noqa: E402
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as _profile  # noqa: E402
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as _markdown  # noqa: E402
 from dca_factory.delivery.adapter.outgoing.files import story_layout as _layout  # noqa: E402
-CRITERION, MAPPING_ROW, SELECTOR = _contract.CRITERION, _contract.MAPPING_ROW, _contract.SELECTOR
-GateError = _contract.GateError
+CRITERION, MAPPING_ROW, SELECTOR = _patterns.CRITERION, _patterns.MAPPING_ROW, _patterns.SELECTOR
+GateError = _markdown.GateError
 
 
 

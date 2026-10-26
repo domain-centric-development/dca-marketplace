@@ -4,7 +4,7 @@ moves an older conventions file and the description section's places into it."""
 import os
 import unittest
 
-from support import contract, project, write
+from support import project, write
 from dca_factory.delivery.adapter.outgoing.files import migrations
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 

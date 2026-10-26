@@ -52,8 +52,10 @@ import shlex
 import sys
 import textwrap
 import time
-from .contract import (
-    ALL_KINDS, CONTRACT, FORM_CHECKS, GateError, layout_hint, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER, VERSION)
+from .delivery.adapter.outgoing.pipeline.stage_rows import ALL_KINDS, FORM_CHECKS, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
+from .contract import CONTRACT, VERSION
+from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from .delivery.adapter.outgoing.files.migrations import layout_hint
 from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE, open_findings
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_dir, evidence_rel, location, place, PROFILE_FILE, read_profile,

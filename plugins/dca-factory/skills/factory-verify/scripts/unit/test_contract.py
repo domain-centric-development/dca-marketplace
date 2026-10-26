@@ -4,13 +4,15 @@ import os
 import tempfile
 import unittest
 
-from support import contract, project, write
+from support import project, write
 from dca_factory.delivery.adapter.outgoing.files import decision_record_files as records
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.delivery.adapter.outgoing.files import epic_files as epics_files
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 from dca_factory.delivery.domain.model import stage
+from dca_factory.delivery.adapter.outgoing.files import hand_over_patterns as patterns
+from dca_factory.delivery.adapter.outgoing.pipeline import stage_rows as rows
 
 
 class FrontMatter(unittest.TestCase):
@@ -37,15 +39,15 @@ class FrontMatter(unittest.TestCase):
         self.assertEqual(front["url"], "http://host:8080/x")
 
     def test_a_file_without_front_matter_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "no front matter"):
+        with self.assertRaisesRegex(markdown.GateError, "no front matter"):
             self.read("# Title\n")
 
     def test_front_matter_not_closed_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "not closed"):
+        with self.assertRaisesRegex(markdown.GateError, "not closed"):
             self.read("---\nid: S-1\n")
 
     def test_a_line_without_a_colon_is_refused(self):
-        with self.assertRaisesRegex(contract.GateError, "cannot read front-matter line"):
+        with self.assertRaisesRegex(markdown.GateError, "cannot read front-matter line"):
             self.read("---\nid S-1\n---\n")
 
 
@@ -133,7 +135,7 @@ class StoryFields(unittest.TestCase):
         with project() as p:
             p.story("S-1", epic="one")
             p.story("S-1", epic="two")
-            with self.assertRaisesRegex(contract.GateError, "is not unique"):
+            with self.assertRaisesRegex(markdown.GateError, "is not unique"):
                 layout.find_story(p.epics, "S-1")
             self.assertEqual(list(layout.duplicate_ids(p.epics)), ["s-1"])
 
@@ -141,22 +143,22 @@ class StoryFields(unittest.TestCase):
         with project() as p:
             p.epic("sample")
             write(os.path.join(p.epics, "sample", "S-9.md"), "---\nid: S-9\n---\n")
-            with self.assertRaisesRegex(contract.GateError, "older flat layout"):
+            with self.assertRaisesRegex(markdown.GateError, "older flat layout"):
                 layout.find_story(p.epics, "S-9")
 
 
 class Selectors(unittest.TestCase):
 
     def test_a_selector_is_a_qualified_class_and_a_method(self):
-        self.assertEqual(contract.SELECTOR.match("com.example.WidgetTest#showsIt").groups(),
+        self.assertEqual(patterns.SELECTOR.match("com.example.WidgetTest#showsIt").groups(),
                          ("com.example.WidgetTest", "showsIt"))
-        self.assertIsNone(contract.SELECTOR.match("com.example.WidgetTest.showsIt"))
-        self.assertIsNone(contract.SELECTOR.match("WidgetTest#shows it"))
+        self.assertIsNone(patterns.SELECTOR.match("com.example.WidgetTest.showsIt"))
+        self.assertIsNone(patterns.SELECTOR.match("WidgetTest#shows it"))
 
     def test_a_mapping_row_is_key_and_first_cell(self):
-        row = contract.MAPPING_ROW.match("| shows-the-thing | com.example.WidgetTest#showsIt | end-to-end |")
+        row = patterns.MAPPING_ROW.match("| shows-the-thing | com.example.WidgetTest#showsIt | end-to-end |")
         self.assertEqual(row.groups(), ("shows-the-thing", "com.example.WidgetTest#showsIt"))
-        self.assertIsNone(contract.MAPPING_ROW.match("| Shows-The-Thing | x#y |"))
+        self.assertIsNone(patterns.MAPPING_ROW.match("| Shows-The-Thing | x#y |"))
 
 
 class Decisions(unittest.TestCase):
@@ -190,14 +192,14 @@ class Decisions(unittest.TestCase):
             found = records.read_decisions(store, "S-1")
             self.assertEqual([(r[1]["id"], r[3]) for r in found], [("S-1-01", "open")])
             write(os.path.join(store, "02.md"), "---\nid: S-1-03\nstory: S-1\n---\n")
-            with self.assertRaisesRegex(contract.GateError, "is named '02'"):
+            with self.assertRaisesRegex(markdown.GateError, "is named '02'"):
                 records.read_decisions(store, "S-1")
 
     def test_a_record_naming_another_story_is_refused(self):
         with project() as p:
             store = records.decisions_store(p.story("S-1"))
             write(os.path.join(store, "01.md"), "---\nid: S-1-01\nstory: S-2\n---\n")
-            with self.assertRaisesRegex(contract.GateError, "names story 'S-2'"):
+            with self.assertRaisesRegex(markdown.GateError, "names story 'S-2'"):
                 records.read_decisions(store, "S-1")
 
     def test_an_answer_resumes_at_the_earlier_of_the_asking_and_the_named_stage(self):
@@ -211,29 +213,29 @@ class Decisions(unittest.TestCase):
 class StageTable(unittest.TestCase):
 
     def test_the_run_order_of_each_kind(self):
-        self.assertEqual(contract.stage_order("story"), ("plan", "test", "build", "tidy", "judge", "document"))
-        self.assertEqual(contract.stage_order("journey"), ("plan", "test", "judge", "document"))
-        self.assertEqual(contract.stage_order("adopt"), ("plan", "test", "judge"))
-        self.assertEqual(contract.STAGE_ORDER, contract.stage_order())
+        self.assertEqual(rows.stage_order("story"), ("plan", "test", "build", "tidy", "judge", "document"))
+        self.assertEqual(rows.stage_order("journey"), ("plan", "test", "judge", "document"))
+        self.assertEqual(rows.stage_order("adopt"), ("plan", "test", "judge"))
+        self.assertEqual(rows.STAGE_ORDER, rows.stage_order())
 
     def test_adopt_and_integrate_are_rows_outside_the_run_order(self):
-        self.assertEqual([s.name for s in contract.STAGES if not s.in_order], ["adopt", "integrate"])
-        self.assertNotIn("integrate", contract.STAGE_FILES)
-        self.assertEqual(contract.STAGE["integrate"].file, "integrate.md")
+        self.assertEqual([s.name for s in rows.STAGES if not s.in_order], ["adopt", "integrate"])
+        self.assertNotIn("integrate", rows.STAGE_FILES)
+        self.assertEqual(rows.STAGE["integrate"].file, "integrate.md")
 
     def test_each_stage_writes_its_own_file(self):
-        self.assertEqual(contract.STAGE_FILES, {"plan": "plan.md", "test": "tests.md", "build": "build.md",
+        self.assertEqual(rows.STAGE_FILES, {"plan": "plan.md", "test": "tests.md", "build": "build.md",
                                                 "tidy": "tidy.md", "judge": "judge.md", "document": "document.md"})
 
     def test_the_shared_windows_carry_their_stages(self):
-        self.assertEqual(contract.SHARED_WINDOWS, {"builder": ("plan", "test", "build", "tidy"),
+        self.assertEqual(rows.SHARED_WINDOWS, {"builder": ("plan", "test", "build", "tidy"),
                                                   "verifier": ("judge", "document")})
 
     def test_the_gated_stages_and_their_commands(self):
-        self.assertNotIn("judge", contract.STAGE_CHECKS)
-        self.assertEqual(contract.STAGE_CHECKS["build"], ("architecture", "format"))
-        self.assertEqual(contract.STAGE_CHECKS["document"], ("architecture",))
-        self.assertEqual(contract.POST_GATED, ("test", "build", "tidy", "document"))
+        self.assertNotIn("judge", rows.STAGE_CHECKS)
+        self.assertEqual(rows.STAGE_CHECKS["build"], ("architecture", "format"))
+        self.assertEqual(rows.STAGE_CHECKS["document"], ("architecture",))
+        self.assertEqual(rows.POST_GATED, ("test", "build", "tidy", "document"))
 
     def test_a_hand_over_and_a_profile_command_hold_their_form(self):
         for name in ("plan.md", "tests.md", "integrate.md"):

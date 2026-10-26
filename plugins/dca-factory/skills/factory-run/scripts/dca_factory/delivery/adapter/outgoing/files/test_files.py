@@ -7,7 +7,8 @@ import os
 import re
 import typing
 
-from .....contract import CRITERION, GateError, MAPPING_ROW, SELECTOR
+from .hand_over_patterns import CRITERION, MAPPING_ROW, SELECTOR
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....domain.model.stage_story import (
     CommandKey, MappedTest, Place, ScenarioKey, Selector, TestLocation, TitleCheck, TitleFound)

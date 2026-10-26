@@ -15,6 +15,10 @@ class MarkdownError(Exception):
     that is no `key: value`. The message names the file and says what is wrong."""
 
 
+#: What the gate calls a project file it cannot read as it should.
+GateError = MarkdownError
+
+
 def read_text(path: str) -> str:
     if not os.path.isfile(path):
         raise MarkdownError(f"{path}: file not found")

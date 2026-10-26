@@ -4,7 +4,7 @@ carries keeps the test its mapping names when the story is delivered."""
 import os
 import unittest
 
-from support import contract, evidence, gate_story, project, verdict, write
+from support import evidence, gate_story, project, verdict, write
 from dca_factory.delivery.application.delivery.stage_checks import table_tests
 from dca_factory.delivery.domain.service.spec_checks import SpecChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles

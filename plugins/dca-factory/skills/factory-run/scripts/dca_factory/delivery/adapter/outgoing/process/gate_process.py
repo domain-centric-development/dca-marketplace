@@ -12,7 +12,7 @@ import subprocess
 import sys
 import typing
 
-from .....contract import OWNED_DIGEST, WINDOW_DIGEST
+from ..files.owned_files import OWNED_DIGEST, WINDOW_DIGEST
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, place
 from ..tools.tool_processes import err, flush, utc
 

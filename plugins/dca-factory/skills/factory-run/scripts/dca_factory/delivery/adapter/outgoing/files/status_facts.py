@@ -11,7 +11,7 @@ import os
 import re
 import typing
 
-from .....contract import SHARED_WINDOWS, STAGE_ORDER
+from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE_ORDER
 from .findings_files import finding_records
 from .story_layout import delivered_on, find_story, story_kind
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, read_profile, resolve_profile, shown

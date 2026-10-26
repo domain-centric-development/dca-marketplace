@@ -6,7 +6,9 @@ from __future__ import annotations
 import os
 import typing
 
-from .....contract import GateError, layout_hint, STAGE_FILES
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from .migrations import layout_hint
+from ..pipeline.stage_rows import STAGE_FILES
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     factory_home, PROFILE_FILE, read_profile, resolve_profile, shown)

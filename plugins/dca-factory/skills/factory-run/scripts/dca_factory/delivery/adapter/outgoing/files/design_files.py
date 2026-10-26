@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 import re
 import typing
-from .....contract import SELECTOR
+from .hand_over_patterns import SELECTOR
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....domain.service.design_checks import CLAUSES_MARKER, INVARIANTS_MARKER

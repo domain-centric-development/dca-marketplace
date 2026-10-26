@@ -5,8 +5,8 @@ import os
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from support import contract, project, write
-from dca_factory.contract import SHARED_WINDOWS
+from support import project, write
+from dca_factory.delivery.adapter.outgoing.pipeline.stage_rows import SHARED_WINDOWS
 from dca_factory.delivery.adapter.outgoing.files.detail_files import DetailFactFiles
 from dca_factory.delivery.application.status.show_story import window_running
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles

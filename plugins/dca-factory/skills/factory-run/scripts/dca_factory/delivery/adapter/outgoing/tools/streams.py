@@ -11,7 +11,7 @@ import re
 import typing
 from datetime import datetime, timezone
 
-from .....contract import STAGE_ORDER
+from ..pipeline.stage_rows import STAGE_ORDER
 from .....sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError as GateError, read_text
 from ....application.status.texts import parse_time

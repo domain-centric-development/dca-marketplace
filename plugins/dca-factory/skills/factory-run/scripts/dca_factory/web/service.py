@@ -23,7 +23,7 @@ import urllib.parse
 import zlib
 
 from ..building_blocks import UseCaseException
-from ..contract import GateError
+from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..delivery.adapter.outgoing.files.request_files import default_by, stamp_utc
 from ..delivery.adapter.outgoing.process.factory_process import (
     cli_path, own_file, read_json, say, SERVE_FILE, write_json)

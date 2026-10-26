@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 import typing
-from .....contract import STAGE_ORDER
+from ..pipeline.stage_rows import STAGE_ORDER
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, evidence_rel
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .owned_files import run_owned

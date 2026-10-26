@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import typing
 
-from .....contract import GateError, MAPPING_ROW, SELECTOR
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from ..files.hand_over_patterns import MAPPING_ROW, SELECTOR
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....spec.api import (

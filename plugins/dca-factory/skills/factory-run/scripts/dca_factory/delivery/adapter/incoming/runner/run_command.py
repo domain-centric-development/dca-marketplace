@@ -15,9 +15,9 @@ import signal
 import sys
 import typing
 
-from .....contract import STAGES
 from .....infrastructure import runner as wiring
 from ....application.shared.run_stop import SIGNAL_EXITS, Stopped
+from ....domain.model.stage import PIPELINE, Trait
 
 
 def err(text: str) -> None:
@@ -121,7 +121,8 @@ def run_start(run: typing.Any, options: argparse.Namespace) -> int:
                 return 1
             print(f"factory: story {story} starts at {start}" + (f" — {detail}" if detail else ""))
         else:
-            names = [s.name for s in STAGES if s.in_order] + [s.name for s in STAGES if not s.in_order]
+            names = [s.name.value for s in PIPELINE if Trait.IN_ORDER in s.traits] \
+                + [s.name.value for s in PIPELINE if Trait.IN_ORDER not in s.traits]
             if start not in names:
                 err(f"factory: --from {start} names no stage ({' '.join(names)}) — nothing ran, the rounds are as "
                     "they were")

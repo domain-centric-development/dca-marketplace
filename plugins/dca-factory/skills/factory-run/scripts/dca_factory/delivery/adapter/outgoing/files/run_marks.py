@@ -7,7 +7,9 @@ import os
 import re
 import typing
 from datetime import datetime, timezone
-from .....contract import CRITERION, GateError, POST_GATED, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
+from .hand_over_patterns import CRITERION
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from ..pipeline.stage_rows import POST_GATED, SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
 from .story_layout import delivered_by, EPIC_FILE, epic_folder
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from .decision_record_files import acceptance_records

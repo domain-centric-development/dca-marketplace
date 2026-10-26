@@ -4,7 +4,7 @@ that runs again: it moved the test itself, and its gate re-proves it on the red 
 import os
 import unittest
 
-from support import contract, project, write
+from support import project, write
 from dca_factory import gate, state
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles

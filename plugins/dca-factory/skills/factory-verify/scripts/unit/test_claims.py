@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from support import contract, evidence, gate_story, state, verdict, write
+from support import evidence, gate_story, state, verdict, write
 from dca_factory import cli
 from dca_factory.delivery.domain.service.spec_checks import SpecChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles

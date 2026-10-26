@@ -11,7 +11,7 @@ import subprocess
 import time
 import typing
 
-from .....contract import GateError
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     FLAKY_FINDINGS, JOURNAL, evidence_dir, evidence_rel, factory_home, place, places_in, shown)

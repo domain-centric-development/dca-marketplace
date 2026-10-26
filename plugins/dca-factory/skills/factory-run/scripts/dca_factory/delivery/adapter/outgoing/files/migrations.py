@@ -13,7 +13,8 @@ import shutil
 import time
 import typing
 
-from .....contract import CONTRACT, GateError
+from .....contract import CONTRACT
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_dir, evidence_rel, METHOD_PROFILE, METHOD_ROOT, place, PROFILE_FILE, read_flat, read_profile,
@@ -480,3 +481,36 @@ def migrate_layout(cwd: str) -> int:
     if not moved:
         print("migrate: nothing to move — the layout is current")
     return 0
+
+
+def layout_hint(cwd: str, profile: typing.Mapping[str, str]) -> typing.Optional[str]:
+    """An older layout, named and never read: `factory.sh update` migrates it. The places this gate reads are
+    the profile's and the defaults; a folder from before is not a fallback, because a reader that quietly
+    took it would keep two layouts alive."""
+    old = []
+    if profile.get("backlog") and not profile.get("epics"):
+        old.append("`backlog:` in the profile is now `epics:`")
+    if os.path.isdir(os.path.join(cwd, "backlog")) and not os.path.isdir(os.path.join(cwd, "project")):
+        old.append("backlog/ at the root is now product/epics/ (and backlog/product.md product/overview.md)")
+    if os.path.isdir(os.path.join(cwd, "project", "backlog")) and not os.path.isdir(os.path.join(cwd, place("epics"))):
+        old.append(f"project/backlog/ is now {place('epics')}/")
+    if os.path.isdir(os.path.join(cwd, "project")) and not os.path.isdir(os.path.join(cwd, "product")) \
+            and place("epics").replace("\\", "/").endswith("product/epics"):
+        old.append("project/ is now product/ (and project/product.md product/overview.md)")
+    if os.path.isfile(os.path.join(cwd, ".agents", "factory", "factory.profile.yaml")) \
+            and not os.path.isfile(os.path.join(cwd, PROFILE_FILE)):
+        old.append(f".agents/factory/factory.profile.yaml is now {PROFILE_FILE} at the project root")
+    if os.path.isdir(os.path.join(cwd, ".agents", "factory", "decisions")):
+        old.append(f".agents/factory/decisions/ now lives in each story's folder, as <story>/{DECISIONS_DIR}/")
+    flat = flat_stories(os.path.join(cwd, place("epics")))
+    if flat:
+        old.append(f"{len(flat)} story file(s) in the flat layout ({shown(flat[0])}{', …' if len(flat) > 1 else ''}) — "
+                   f"a story is a folder now, <epic>/<story>/{STORY_FILE} with its {DECISIONS_DIR}/ and "
+                   f"{FINDINGS_FILE} inside")
+    tasks = os.path.join(cwd, "tasks")
+    if os.path.isdir(tasks) and any(os.path.isdir(os.path.join(tasks, d, ".verify")) or os.path.isfile(os.path.join(tasks, d, ".story-digest"))
+                                    for d in os.listdir(tasks)):
+        old.append(f"the run artefacts under tasks/ now live under {place('runs')}/ (tasks/ is the project's again)")
+    if not old:
+        return None
+    return "the layout changed — `factory.sh update` migrates it (once, and says what it moved): " + "; ".join(old)

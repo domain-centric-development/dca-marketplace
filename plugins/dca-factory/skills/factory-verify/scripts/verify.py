@@ -4419,7 +4419,8 @@ def verify_setup(runner, verbose=False):
           not spawned, spawned)
     duplicated = [n for n in ("CRITERION", "MAPPING_ROW", "SELECTOR") if re.search(rf"^{n} = re\.compile", observe_text, re.M)]
     check("observe: defines no reader the gate has — it imports the gate's",
-          not duplicated and "def front_matter(" not in observe_text and "from dca_factory import" in observe_text,
+          not duplicated and "def front_matter(" not in observe_text
+          and re.search(r"^from dca_factory[. ]", observe_text, re.M),
           duplicated)
     # every flag the README shows on a command line is one its program accepts
     argparse_flags = lambda text: {flag for call in re.findall(r"add_argument\(([^)]*)", text)
