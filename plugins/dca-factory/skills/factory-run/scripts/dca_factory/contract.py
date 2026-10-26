@@ -51,7 +51,7 @@ SELECTOR = SELECTOR_FORM
 CONTRACT = 26
 
 
-VERSION = "0.94.0"
+VERSION = "0.95.0"
 
 
 # --- what is the person's: the story and the answers (WP-94) --------------------------------------------------

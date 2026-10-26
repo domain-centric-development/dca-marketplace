@@ -19,7 +19,7 @@ delivered epic.
 **Type:** Feature
 
 **Related terms:** `Epic`, `Story`, `Draft`, `Release`, `Journey` — use cases `release_stories`,
-`backfill_created`
+`backfill_created`, `check_backlog`, `run_backlog`
 
 ### Decisions (decisions)
 
@@ -37,8 +37,9 @@ corrected.
 
 **Type:** Feature
 
-**Related terms:** `Stage`, `Gate`, `Evidence`, `Journal`, `Round`, `Delivery` — use cases `reopen_story`,
-`prove_delivery`, `deliver_by_hand`, `confirm_owned`, `claim_story`
+**Related terms:** `Stage`, `Gate`, `Evidence`, `Journal`, `Round`, `Delivery` — use cases `run_story`,
+`integrate_story`, `reopen_story`, `prove_delivery`, `deliver_by_hand`, `confirm_owned`, `claim_story`, `check_spec`,
+`show_spec_delta`, `take_back_delivery`
 
 ### Description (description)
 
@@ -229,7 +230,11 @@ correction with a reason code.
 ### Stage · Gate · Round
 
 **Definition:** A step of a story's run — plan, test, build, tidy, judge, document — closed by its gate, the
-deterministic check that lets the next stage start; a round is one more pass after a refusal.
+deterministic check that lets the next stage start; a round is one more pass after a refusal. The route — which
+stage runs in its own process and which a shared window carries, which a kind skips, the gates around each, where a
+refusal, the build stage or the judge sends the story back, when the rounds did not converge — is the domain service
+`StoryRoute`; the use case `run_story` walks it through the port `StoryStages`, a round one more pass of its loop,
+and `integrate_story` brings the delivered story onto the main line through `StoryIntegration`.
 
 **Type:** Concept
 
@@ -259,8 +264,9 @@ the story's record.
 ### Request (request)
 
 **Definition:** A person's press, kept as one file until it is done: an asynchronous command for one of the use cases
-— write a wish, release, answer, accept, correct, run, stop. No term of the model: the queue is an incoming adapter
-and a store; `settle` decides which press needs no judgement and executes its use case.
+— write a wish, release, answer, accept, correct, run, stop. No term of the model: the folder is an incoming adapter
+and a store; the runner takes the next one through `RequestQueue`, works it with the use case `work_request`, and
+`settle` decides which press needs no judgement and executes its use case.
 
 **Type:** Concept
 
