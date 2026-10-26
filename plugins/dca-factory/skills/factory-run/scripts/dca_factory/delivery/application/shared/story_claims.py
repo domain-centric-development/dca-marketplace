@@ -50,3 +50,16 @@ class StoryClaims(typing.Protocol):
     def claim(self, story: StoryId) -> ClaimOutcome:
         """The story claimed on the remote — a claim commit on its main line, its trailers saying who and which."""
         ...
+
+    def release(self, story: StoryId, force: bool) -> int:
+        """The story's claim given up by hand — this factory's, or with <force> another's; its exit, said."""
+        ...
+
+    def refresh(self) -> int:
+        """The remote's claims fetched into the cache the schedule reads, a delivered story's released; its exit."""
+        ...
+
+    def free_id(self, prefix: str) -> str:
+        """The next `<prefix>-<n>` nobody uses — no local story, none on the remote main line or in its history's
+        trailers, no remote claim."""
+        ...

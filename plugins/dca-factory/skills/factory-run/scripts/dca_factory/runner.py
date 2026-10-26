@@ -14,14 +14,13 @@ import hashlib
 import os
 import re
 import secrets
-import shlex
 import shutil
 import socket
 import subprocess
 import sys
 import threading
 import time
-from .delivery.adapter.outgoing.pipeline.stage_rows import ALL_KINDS, SHARED_WINDOWS, STAGE, STAGE_FILES, STAGE_ORDER, STAGES
+from .delivery.adapter.outgoing.pipeline.stage_rows import SHARED_WINDOWS, STAGE, STAGE_FILES, STAGE_ORDER
 from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     place, PROFILE_FILE, read_profile,
@@ -37,8 +36,7 @@ from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here
 from .delivery.adapter.outgoing.claims.checkout_claim import claim
 from .delivery.adapter.outgoing.files.windows import freeze_all
 from .delivery.adapter.outgoing.files.usage_files import journal_usage
-from .delivery.adapter.outgoing.files.run_marks import (
-    back_in, run_stories, STAGE_WORD, step_open, verdict_in)
+from .delivery.adapter.outgoing.files.run_marks import back_in, run_stories, step_open, verdict_in
 from .delivery.adapter.outgoing.git.worktrees import has_worktree
 from .delivery.adapter.outgoing.files.journal_files import journal_writer
 from .delivery.adapter.outgoing.files.kept_files import stale_red_proof
@@ -46,7 +44,7 @@ from .delivery.adapter.outgoing.build.commands import run as run_command
 from .delivery.adapter.outgoing.git.integration import (
     integration_target, lost_text, main_tests_lost)
 from .delivery.application.profile.profile_rules import first_word, perspectives_of
-from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS, tools_shell
+from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS
 from .delivery.adapter.outgoing.process.gate_process import file_sha, GateProcess, hashing
 from .delivery.adapter.outgoing.tools.tool_choice import ToolChoice
 from .delivery.adapter.outgoing.tools.tool_processes import (
@@ -71,43 +69,6 @@ from .delivery.application.requests.list_requests import target_text
 from .delivery.application.shared.requests import KIND
 from .infrastructure import delivery as wiring
 
-
-FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
-
-
-def stage_names(window=None, every=False):
-    """The table's stage names in its order: the run order (every row with `every`), narrowed to those `window`
-    carries."""
-    return [s.name for s in STAGES if (every or s.in_order) and (window is None or s.window == window)]
-
-
-def stages_shell(places=()):
-    """The table as the runner reads it once at its start, one bash assignment per line: the run order, the steps
-    after it, each shared window's stages, which gate runs before and which after its stage, the stages whose gate
-    runs the mapped tests without the suite, the stages under the guard, which kind runs which row, the hand-over each stage writes — and the
-    places asked for, quoted. Every name is the table's, checked to be a plain word; nothing is read from a file."""
-    names = [s.name for s in STAGES] + list(SHARED_WINDOWS) + list(ALL_KINDS)
-    bad = [name for name in names if not STAGE_WORD.fullmatch(name)]
-    bad += [file for file in STAGE_FILES.values() if not FILE_WORD.fullmatch(file)]
-    if bad:
-        print(f"factory-cli: the stage table holds a name the runner cannot take as a word: {', '.join(bad)}",
-              file=sys.stderr)
-        return 2
-    array = lambda name, values: f"{name}=({' '.join(values)})"
-    lines = [array("STAGES", STAGE_ORDER), array("STEPS", [s.name for s in STAGES if not s.in_order])]
-    lines += [array(f"{window.upper().replace('-', '_')}_STAGES", stages) for window, stages in SHARED_WINDOWS.items()]
-    lines += [array("PRE_GATED", [s.name for s in STAGES if s.in_order and s.gated and not s.post_gated]),
-              array("POST_GATED", [s.name for s in STAGES if s.in_order and s.post_gated]),
-              array("RED_STAGES", [s.name for s in STAGES if s.in_order and s.tested and not s.suite]),
-              array("GUARDED_STAGES", [s.name for s in STAGES if s.guarded])]
-    lines.append("KIND_STAGES=' " + " ".join(f"{kind}:{s.name}" for s in STAGES for kind in s.kinds) + " '")
-    lines.append("STAGE_FILES=' " + " ".join(f"{name}:{file}" for name, file in STAGE_FILES.items()) + " '")
-    tools = tools_shell()
-    if tools is None:
-        return 2
-    lines += tools + [f"PLACE_{key.upper()}={shlex.quote(place(key))}" for key in places]
-    print("\n".join(lines))
-    return 0
 
 
 # --- the run: what `factory.sh run` starts once its checks before the first stage passed -------------------------

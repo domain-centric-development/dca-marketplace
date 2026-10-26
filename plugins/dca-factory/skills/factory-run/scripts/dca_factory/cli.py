@@ -46,20 +46,18 @@ import argparse
 import contextlib
 import json
 import os
+import re
+import shlex
 import sys
 import textwrap
 import time
-from .delivery.adapter.outgoing.pipeline.stage_rows import SHARED_WINDOWS, STAGE_ORDER
 from .contract import CONTRACT, VERSION
 from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    DEFAULTS, evidence_rel, location, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
+    DEFAULTS, location, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
 from .infrastructure.schedule import schedule_data, start_of
 from .infrastructure.profile import ask_profile
 from .delivery.application.profile.ask_profile import AskProfileQuery, Question
-from .delivery.adapter.outgoing.claims.remote_claims import (
-    claim_config_here, free_id, refresh_claims, release_claim)
-from .delivery.adapter.outgoing.files.story_record import ignore_journals_in
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.application.status import actions
 from .delivery.application.status.actions import offered
@@ -79,7 +77,6 @@ from .delivery.application.requests.take_back_request import TakeBackRequestComm
 from .delivery.application.requests.write_request import WriteRequestCommand
 from .delivery.application.shared.requests import DuplicateRequest, KIND, KINDS, RequestRefused
 from .building_blocks import UseCaseException
-from .delivery.adapter.outgoing.claims.story_claims import claim_target
 from .delivery.application.shared.story_repository import StoryNotFound
 from .delivery.application.backlog.backfill_created import BackfillCreatedCommand
 from .delivery.application.delivery.claim_story import ClaimStoryCommand
@@ -98,6 +95,12 @@ from .delivery.application.status.show_journal_story import ShowJournalStoryQuer
 from .delivery.application.cost.show_spent import ShowSpentQuery
 from .delivery.application.status.list_findings import ListFindingsQuery
 from .delivery.application.delivery.show_story_kind import ShowStoryKindQuery
+from .delivery.application.delivery.show_stage_table import ShowStageTableQuery
+from .delivery.application.delivery.release_story_claim import ReleaseStoryClaimCommand
+from .delivery.application.delivery.refresh_claims import RefreshClaimsCommand
+from .delivery.application.delivery.next_free_story_id import NextFreeStoryIdQuery
+from .delivery.application.upkeep.migrate_layout import MigrateLayoutCommand
+from .delivery.application.upkeep.let_journals_into_git import LetJournalsIntoGitCommand
 from .delivery.application.delivery.probe_tool import Probed, ProbeToolQuery
 from .delivery.application.cost.read_tool_usage import ReadToolUsageQuery
 from .delivery.application.delivery.show_hand_over_contract import ShowHandOverContractQuery
@@ -113,7 +116,7 @@ from .delivery.application.checkout.mark_listening import MarkListeningCommand
 from .delivery.application.status.follow_output import FollowOutputQuery
 from .delivery.application.status.show_stage_outputs import ShowStageOutputsQuery
 from .delivery.domain.model.run_argument import ArgumentMeaning
-from .delivery.domain.model.stage import PIPELINE
+from .delivery.domain.model.stage import Pipeline, PIPELINE, StoryKind, Window
 from .delivery.adapter.incoming.cli import spec_delta_view as spec_delta_text
 from .delivery.application.delivery.check_spec import CheckSpecQuery
 from .delivery.application.delivery.show_spec_delta import ShowSpecDeltaQuery
@@ -122,8 +125,6 @@ from .delivery.adapter.outgoing.process import factory_process
 from .web import service as web
 from .delivery.adapter.outgoing.git.worktree_steps import (
     integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
-from .delivery.adapter.outgoing.files.migrations import migrate_layout
-from .runner import stage_names, stages_shell
 from .delivery.adapter.incoming.runner.run_command import request_main, run_main, settle_command
 from .delivery.adapter.incoming.cli.terminal import MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width
 from .delivery.adapter.incoming.cli.status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
@@ -653,6 +654,35 @@ def prove(cwd, runs, epics, story_id):
 
 # --- the carriers the profile names ------------------------------------------------------
 
+#: A name the shell runner takes as one word: a stage, a shared process, a kind — and a hand-over's file.
+SHELL_WORD = re.compile(r"[a-z][a-z0-9_-]*")
+FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
+
+
+def stages_shell(table):
+    """The stage table (`ShowStageTableUseCase`) as the runner reads it once at its start, one bash assignment per
+    line, then the tool table and the places asked for, quoted. Every name is checked to be a plain word."""
+    names = [row["name"] for row in table["rows"]] + list(table["windows"]) + sorted({k for k, _s in table["kinds"]})
+    bad = [name for name in names if not SHELL_WORD.fullmatch(name)]
+    bad += [file for file in table["files"].values() if not FILE_WORD.fullmatch(file)]
+    if bad:
+        print(f"factory-cli: the stage table holds a name the runner cannot take as a word: {', '.join(bad)}",
+              file=sys.stderr)
+        return 2
+    if table["tools"] is None:
+        return 2
+    array = lambda name, values: f"{name}=({' '.join(values)})"
+    lines = [array("STAGES", table["order"]), array("STEPS", table["steps"])]
+    lines += [array(f"{window.upper().replace('-', '_')}_STAGES", stages) for window, stages in table["windows"].items()]
+    lines += [array("PRE_GATED", table["pre_gated"]), array("POST_GATED", table["post_gated"]),
+              array("RED_STAGES", table["red"]), array("GUARDED_STAGES", table["guarded"])]
+    lines.append("KIND_STAGES=' " + " ".join(f"{kind}:{stage}" for kind, stage in table["kinds"]) + " '")
+    lines.append("STAGE_FILES=' " + " ".join(f"{name}:{file}" for name, file in table["files"].items()) + " '")
+    lines += table["tools"] + [f"PLACE_{key.upper()}={shlex.quote(value)}" for key, value in table["places"].items()]
+    print("\n".join(lines))
+    return 0
+
+
 def answer(profile_path, question, **fields):
     """The profile's answer to one question, a line per item (`AskProfileUseCase`)."""
     print("\n".join(ask_profile(profile_path).execute(AskProfileQuery(question, **fields))))
@@ -1013,7 +1043,7 @@ def main(argv):
                         help="the gate's stage table: the run order, space-separated (--window, --all "
                              "narrow or widen it); with --shell the bash lines the runner reads once at its start "
                              "(and `PLACE_<KEY>=` for --place), and exit")
-    parser.add_argument("--window", choices=tuple(SHARED_WINDOWS), help="with --stages: the stages that shared process carries")
+    parser.add_argument("--window", choices=tuple(w.value for w in Window), help="with --stages: the stages that shared process carries")
     parser.add_argument("--shell", action="store_true", help="with --stages: the stage and the tool table as bash "
                                                                 "assignments")
     parser.add_argument("--tool-probe", metavar="TOOL",
@@ -1022,7 +1052,7 @@ def main(argv):
     parser.add_argument("--place", metavar="KEY",
                         help="where the factory reads KEY (product, tech, domain, epics, runs), from the profile or its default")
     parser.add_argument("--contract", metavar="STAGE",
-                        help=f"the exact shape the gate holds that stage's file to ({', '.join(STAGE_ORDER)}), or "
+                        help=f"the exact shape the gate holds that stage's file to ({', '.join(s.value for s in Pipeline.order(StoryKind.STORY))}), or "
                              "review or glossary, from the gate's own constants, and exit")
     parser.add_argument("--files-skeleton", nargs=2, metavar=("STORY", "STAGE"),
                         help="write the test, build or tidy hand-over's file list from what the tree changed "
@@ -1085,13 +1115,16 @@ def main(argv):
         if args.shell:
             if args.place and args.place not in DEFAULTS:
                 parser.error(f"--place takes one of {', '.join(DEFAULTS)}")
-            return stages_shell((args.place,) if args.place else ())
-        print(" ".join(stage_names(args.window, args.every)))
+            return stages_shell(wiring.show_stage_table().execute(
+                ShowStageTableQuery((args.place,) if args.place else (), with_tools=True)))
+        table = wiring.show_stage_table().execute(ShowStageTableQuery())
+        print(" ".join(row["name"] for row in table["rows"] if (args.every or row["in_order"])
+                       and (args.window is None or row["window"] == args.window)))
         return 0
     if args.contract:
         text = wiring.show_hand_over_contract(cwd, args.runs).execute(ShowHandOverContractQuery(args.contract))
         if text is None:
-            print(f"factory-cli: --contract takes one of {', '.join(STAGE_ORDER)}, review or glossary, not {args.contract!r}", file=sys.stderr)
+            print(f"factory-cli: --contract takes one of {', '.join(s.value for s in Pipeline.order(StoryKind.STORY))}, review or glossary, not {args.contract!r}", file=sys.stderr)
             return 2
         print(text)
         return 0
@@ -1104,7 +1137,7 @@ def main(argv):
         return wiring.write_skeleton(cwd, args.runs).execute(
             WriteSkeletonCommand(Skeleton.DOCUMENT, args.document_skeleton))
     if args.migrate_layout:
-        return migrate_layout(cwd)
+        return wiring.migrate_layout(cwd).execute(MigrateLayoutCommand())
     if args.place:
         if args.place not in DEFAULTS:
             parser.error(f"--place takes one of {', '.join(DEFAULTS)}")
@@ -1187,16 +1220,12 @@ def main(argv):
     if args.claim_story:
         return claim_command(cwd, args.runs, args.epics, args.claim_story)
     if args.claims_refresh:
-        config = claim_config_here(cwd)
-        return refresh_claims(cwd, args.runs, config, claim_target(cwd)) if config else 0
+        return wiring.refresh_claims(cwd, args.epics, args.runs).execute(RefreshClaimsCommand())
     if args.release_claim:
-        config = claim_config_here(cwd)
-        if not config:
-            print("release: the profile names no `claim_remote:` — there is no claim to release")
-            return 1
-        return release_claim(cwd, args.runs, config, args.release_claim, args.force)
+        return wiring.release_story_claim(cwd, args.epics, args.runs).execute(
+            ReleaseStoryClaimCommand(StoryId(args.release_claim), args.force))
     if args.free_id:
-        print(free_id(cwd, args.epics, claim_config_here(cwd), claim_target(cwd), args.free_id))
+        print(wiring.next_free_story_id(cwd, args.epics, args.runs).execute(NextFreeStoryIdQuery(args.free_id)))
         return 0
     if args.undeliver_branch:
         return undeliver_branch(cwd, args.runs, args.epics, args.undeliver_branch)
@@ -1209,8 +1238,9 @@ def main(argv):
     if args.backfill_created:
         return backfill_created(cwd, args.epics)
     if args.ignore_journals:
-        if ignore_journals_in(cwd, evidence_rel()):
-            print(f"journals: .gitignore lets the story journals ({evidence_rel()}/<story>/journal.tsv) into git — the "
+        journals = wiring.let_journals_into_git(cwd).execute(LetJournalsIntoGitCommand())
+        if journals:
+            print(f"journals: .gitignore lets the story journals ({journals}/<story>/journal.tsv) into git — the "
                   f"rest of the pipeline's folder stays out")
         return 0
     if args.status and args.brief:

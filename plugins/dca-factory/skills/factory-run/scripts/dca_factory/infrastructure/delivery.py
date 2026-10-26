@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
+from ..delivery.adapter.outgoing.tools.runner_table_files import RunnerTableFiles
 from ..delivery.adapter.outgoing.tools.tool_binary_files import ToolBinaryFiles
 from ..delivery.adapter.outgoing.claims.checkout_files import CheckoutFiles
+from ..delivery.adapter.outgoing.files.project_upkeep_files import ProjectUpkeepFiles
 from ..delivery.adapter.outgoing.files.hand_over_skeleton_files import HandOverSkeletonFiles
 from ..delivery.adapter.outgoing.files.session_mark_files import SessionMarkFiles
 from ..delivery.adapter.outgoing.claims.story_claims import RemoteStoryClaims
@@ -30,6 +32,12 @@ from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
 from ..delivery.adapter.outgoing.spec.spec_delta_files import SpecDeltaFiles
 from ..delivery.adapter.outgoing.git.published_branches import PublishedBranchFiles
+from ..delivery.application.upkeep.let_journals_into_git import LetJournalsIntoGitUseCase
+from ..delivery.application.upkeep.migrate_layout import MigrateLayoutUseCase
+from ..delivery.application.delivery.next_free_story_id import NextFreeStoryIdUseCase
+from ..delivery.application.delivery.refresh_claims import RefreshClaimsUseCase
+from ..delivery.application.delivery.release_story_claim import ReleaseStoryClaimUseCase
+from ..delivery.application.delivery.show_stage_table import ShowStageTableUseCase
 from ..delivery.application.cost.read_tool_usage import ReadToolUsageUseCase
 from ..delivery.application.delivery.probe_tool import ProbeToolUseCase
 from ..delivery.application.delivery.show_hand_over_contract import ShowHandOverContractUseCase
@@ -264,3 +272,27 @@ def probe_tool() -> ProbeToolUseCase:
 
 def read_tool_usage() -> ReadToolUsageUseCase:
     return ReadToolUsageUseCase(ToolBinaryFiles())
+
+
+def show_stage_table() -> ShowStageTableUseCase:
+    return ShowStageTableUseCase(RunnerTableFiles())
+
+
+def release_story_claim(cwd: str, epics: str, runs: str) -> ReleaseStoryClaimUseCase:
+    return ReleaseStoryClaimUseCase(RemoteStoryClaims(cwd, runs, epics))
+
+
+def refresh_claims(cwd: str, epics: str, runs: str) -> RefreshClaimsUseCase:
+    return RefreshClaimsUseCase(RemoteStoryClaims(cwd, runs, epics))
+
+
+def next_free_story_id(cwd: str, epics: str, runs: str) -> NextFreeStoryIdUseCase:
+    return NextFreeStoryIdUseCase(RemoteStoryClaims(cwd, runs, epics))
+
+
+def migrate_layout(cwd: str) -> MigrateLayoutUseCase:
+    return MigrateLayoutUseCase(ProjectUpkeepFiles(cwd))
+
+
+def let_journals_into_git(cwd: str) -> LetJournalsIntoGitUseCase:
+    return LetJournalsIntoGitUseCase(ProjectUpkeepFiles(cwd))

@@ -11,7 +11,7 @@ from ....domain.model.story import StoryId
 from ..git.repository import git
 from ..files.run_marks import story_title
 from ..files.story_layout import epic_folder, find_story
-from .remote_claims import cached_claims, claim_config_here, claim_story, refresh_claims
+from .remote_claims import cached_claims, claim_config_here, claim_story, free_id, refresh_claims, release_claim
 
 #: a claim's exit codes, as the runner reads them
 CLAIM_CODES = {0: Claim.OWN, 3: Claim.ELSEWHERE, 4: Claim.NEEDS_PERSON}
@@ -57,3 +57,17 @@ class RemoteStoryClaims:
             found = cached_claims(self._runs).get(story.value, {})
             held = ClaimHeld(str(found.get("who", "?")), str(found.get("host", "?")), str(found.get("since", "?")))
         return ClaimOutcome(claim, held, tuple(said))
+
+    def release(self, story: StoryId, force: bool) -> int:
+        config = claim_config_here(self._cwd)
+        if not config:
+            print("release: the profile names no `claim_remote:` — there is no claim to release")
+            return 1
+        return release_claim(self._cwd, self._runs, config, story.value, force)
+
+    def refresh(self) -> int:
+        config = claim_config_here(self._cwd)
+        return refresh_claims(self._cwd, self._runs, config, claim_target(self._cwd)) if config else 0
+
+    def free_id(self, prefix: str) -> str:
+        return free_id(self._cwd, self._epics, claim_config_here(self._cwd), claim_target(self._cwd), prefix)
