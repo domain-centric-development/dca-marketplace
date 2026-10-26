@@ -215,6 +215,25 @@ profile and what the profile says under it, as written.
 
 **Type:** Value Object
 
+### Run argument (RunArgument) · Argument meaning (ArgumentMeaning)
+
+**Definition:** What follows `/factory-run`, and what it asks for: nothing is the backlog; one word naming a story is
+that story; one word naming none is an unknown id — refused, never taken for a new story, so a typo stays a typo;
+more than one word is a wish the backlog turns into a story. A page's button that offers one unknown word offers it
+as a wish, since the page wrote the words itself.
+
+**Type:** Value Object
+
+**Operations:** meaning (`meaning`)
+
+### Refusal kind (RefusalKind)
+
+**Definition:** What a refused gate cost: `form` when every check it names is about how a hand-over is written
+(`FORM_CHECKS`: files listed, story pass, tests mapped, test titles, plan levels, levels, documented, decisions,
+reviews, layout) — a round spent with the work right —, else `substance`.
+
+**Type:** Value Object
+
 ---
 
 ## Concepts

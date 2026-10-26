@@ -7,6 +7,7 @@ import typing
 
 from ....domain.model.stage import (
     PIPELINE, Stage as PipelineStage, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait)
+from ....domain.model.verdict import FORM_CHECKS as DOMAIN_FORM_CHECKS
 
 
 class Stage(typing.NamedTuple):
@@ -111,7 +112,5 @@ def order_for(kind: str) -> typing.Tuple[str, ...]:
     return {"journey": JOURNEY_ORDER, "adopt": ADOPT_ORDER, "task": TASK_ORDER}.get(kind, STAGE_ORDER)
 
 
-#: Checks about how a hand-over is written rather than whether the work is right: a refusal by one of them costs a
-#: round without the code being wrong. The journal names every refusal's checks; reports count the two apart.
-FORM_CHECKS = ("files-listed", "story-pass", "tests-mapped", "test-titles", "plan-levels", "levels", "documented",
-               "decisions", "reviews", "layout")
+#: The checks about a hand-over's form — the domain's (`verdict.FORM_CHECKS`).
+FORM_CHECKS = DOMAIN_FORM_CHECKS

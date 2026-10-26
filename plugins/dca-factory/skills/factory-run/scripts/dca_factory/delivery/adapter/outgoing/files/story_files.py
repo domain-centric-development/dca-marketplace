@@ -6,7 +6,8 @@ import contextlib
 import os
 import typing
 
-from .story_layout import delivered_by, delivered_on, epic_folder, find_story, story_files, story_folder, story_id_of
+from .story_layout import (
+    delivered_by, delivered_on, epic_folder, find_story, story_files, story_folder, story_id_of, story_ids)
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
@@ -101,6 +102,9 @@ class StoryFiles:
 
     def delete_by_id(self, aggregate_id: StoryId) -> None:
         os.remove(self.path_of(aggregate_id))
+
+    def ids(self) -> typing.Sequence[StoryId]:
+        return [StoryId(story_id) for story_id in story_ids(self._epics)] if os.path.isdir(self._epics) else []
 
     def names_story(self, word: str) -> bool:
         return names_story(word)

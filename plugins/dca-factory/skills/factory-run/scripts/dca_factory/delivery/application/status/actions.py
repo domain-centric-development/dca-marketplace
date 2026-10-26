@@ -9,6 +9,8 @@ import re
 import typing
 
 from ...domain.model.correction import REASON_CODES
+from ...domain.model.run_argument import ArgumentMeaning, RunArgument
+from ...domain.model.story import StoryId
 from ..shared.requests import ID_WORD
 
 #: A request as an action offers it: {kind, fields, words, open} — `open` names what the person still has to give.
@@ -59,10 +61,13 @@ def request_of(skill: typing.Optional[str], names_story: NamesStory) -> typing.O
     text = " ".join(str(skill or "").split())
     head, _, rest = text.partition(" ")
     if head == "/factory-run":
-        # as the skill reads it: a story's id runs that story, every other word is a wish
-        if not rest:
+        # as the skill reads it (`RunArgument`): a story's id runs that story, more words are a wish; a button that
+        # names one word no story has offers it as a wish, since a page writes the words it offers itself
+        argument = RunArgument(rest)
+        meaning = argument.meaning(StoryId(rest) if argument.single_word() and names_story(rest) else None)
+        if meaning is ArgumentMeaning.BACKLOG:
             return None
-        return dict(kind="run", fields=dict(story=rest), words="", open="") if names_story(rest) \
+        return dict(kind="run", fields=dict(story=rest), words="", open="") if meaning is ArgumentMeaning.STORY \
             else dict(kind="wish", fields={}, words=rest, open="")
     if head == "/factory-backlog":
         verb, _, tail = rest.partition(" ")

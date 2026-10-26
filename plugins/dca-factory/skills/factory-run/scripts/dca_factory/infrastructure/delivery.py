@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
 from ..delivery.adapter.outgoing.claims.story_claims import RemoteStoryClaims
+from ..delivery.adapter.outgoing.files.refusal_files import GateRefusalFiles
 from ..delivery.adapter.outgoing.files.acceptance_files import AcceptanceFiles
 from ..delivery.adapter.outgoing.files.created_files import CreatedFiles
 from ..delivery.adapter.outgoing.files.description_files import DescriptionFiles
@@ -23,6 +24,8 @@ from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
 from ..delivery.adapter.outgoing.spec.spec_delta_files import SpecDeltaFiles
 from ..delivery.adapter.outgoing.git.published_branches import PublishedBranchFiles
+from ..delivery.application.status.show_refusals import ShowRefusalsUseCase
+from ..delivery.application.run.resolve_run_argument import ResolveRunArgumentUseCase
 from ..delivery.application.delivery.check_spec import CheckSpecUseCase
 from ..delivery.application.delivery.show_spec_delta import ShowSpecDeltaUseCase
 from ..delivery.application.delivery.take_back_delivery import TakeBackDeliveryUseCase
@@ -150,3 +153,11 @@ def show_spec_delta(runs: str, epics: str) -> ShowSpecDeltaUseCase:
 
 def take_back_delivery(cwd: str, runs: str, epics: str) -> TakeBackDeliveryUseCase:
     return TakeBackDeliveryUseCase(PublishedBranchFiles(cwd, runs, epics))
+
+
+def resolve_run_argument(cwd: str) -> ResolveRunArgumentUseCase:
+    return ResolveRunArgumentUseCase(StoryFiles(cwd))
+
+
+def show_refusals(runs: str) -> ShowRefusalsUseCase:
+    return ShowRefusalsUseCase(GateRefusalFiles(runs))

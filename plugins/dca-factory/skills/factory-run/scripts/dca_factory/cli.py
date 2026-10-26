@@ -50,7 +50,7 @@ import os
 import sys
 import textwrap
 import time
-from .delivery.adapter.outgoing.pipeline.stage_rows import FORM_CHECKS, SHARED_WINDOWS, STAGE_ORDER
+from .delivery.adapter.outgoing.pipeline.stage_rows import SHARED_WINDOWS, STAGE_ORDER
 from .contract import CONTRACT, VERSION
 from .sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .delivery.adapter.outgoing.files.migrations import layout_hint
@@ -58,7 +58,7 @@ from .delivery.adapter.outgoing.files.findings_files import FINDINGS_FILE, open_
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_dir, evidence_rel, location, place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
-from .delivery.adapter.outgoing.files.story_layout import find_story, story_id_of, story_kind
+from .delivery.adapter.outgoing.files.story_layout import find_story, story_kind
 from .sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from .delivery.adapter.outgoing.tools.streams import follow_lines, tokens_of, usage_from
 from .infrastructure.schedule import schedule_data, start_of
@@ -75,8 +75,7 @@ from .delivery.adapter.outgoing.files.owned_files import owned_end
 from .delivery.adapter.outgoing.files.run_marks import run_stories
 from .delivery.adapter.outgoing.git.worktrees import has_worktree, worktree_of
 from .delivery.adapter.outgoing.files.owned_files import record_owned
-from .delivery.adapter.outgoing.files.journal_files import journal_events, journal_writer
-from .delivery.adapter.outgoing.files.story_layout import story_ids
+from .delivery.adapter.outgoing.files.journal_files import journal_writer
 from .delivery.adapter.outgoing.tools.agents import TOOL, TOOLS, unprobed_flags
 from .delivery.adapter.outgoing.files.status_facts import (
     follow_newest, story_facts)
@@ -112,6 +111,9 @@ from .delivery.domain.model.moment import Moment
 from .delivery.domain.model.person import Person
 from .delivery.domain.model.story import AlreadyDelivered, NotDelivered, NothingToDeliver, NothingToProve, StoryId
 from .infrastructure import delivery as wiring
+from .delivery.application.run.resolve_run_argument import ResolveRunArgumentQuery
+from .delivery.application.status.show_refusals import ShowRefusalsQuery
+from .delivery.domain.model.run_argument import ArgumentMeaning
 from .delivery.adapter.incoming.cli import spec_delta_view as spec_delta_text
 from .delivery.application.delivery.check_spec import CheckSpecQuery
 from .delivery.application.delivery.show_spec_delta import ShowSpecDeltaQuery
@@ -136,23 +138,17 @@ def resolve(epics, argument):
     """What `/factory-run <argument>` means — decided here, not by a model: one word naming a story is that
     story; one word naming none is an unknown id, never a new story (a typo stays a typo); more than one
     word is a wish, for the backlog skill to turn into a story; nothing is the backlog."""
-    words = argument.split()
-    if not words:
-        print("backlog")
+    resolved = wiring.resolve_run_argument(".").execute(ResolveRunArgumentQuery(argument))
+    if resolved.meaning is ArgumentMeaning.STORY and resolved.story:
+        print(f"story {resolved.story.value}")
         return 0
-    if len(words) > 1:
-        print("wish")
-        return 0
-    try:
-        path = find_story(epics, words[0])
-    except GateError:
-        known = story_ids(epics) if os.path.isdir(epics) else []
-        print(f"unknown {words[0]} — no story by that id under {epics.replace(os.sep, '/')}/"
+    if resolved.meaning is ArgumentMeaning.UNKNOWN:
+        known = [story.value for story in resolved.known]
+        print(f"unknown {resolved.word} — no story by that id under {epics.replace(os.sep, '/')}/"
               + (f"; the backlog has: {', '.join(known)}" if known else "; the backlog has no story yet")
               + ". A wish takes more than one word.")
         return 2
-    front, _ = read_front_matter(path)
-    print(f"story {story_id_of(path, front)}")
+    print(resolved.meaning.value)
     return 0
 
 
@@ -273,32 +269,13 @@ def owned_confirm(runs, story_id, cwd="."):
         print(f"owned: {story_id} — {', '.join(result.parts)} confirmed as the person's; the story runs on")
     return 0
 
-def refusal_counts(runs, story_id):
-    """{who: {"form": n, "substance": n, "checks": {check: n}}} of a story's gate refusals, from its journal: the
-    runner's (`by=runner`, or no `by` in an older journal) and the stages' own self-checks apart. A refusal is form
-    when every check it names is one of FORM_CHECKS — the hand-over's shape, not the work."""
-    counts = {}
-    for event in journal_events(runs, story_id):
-        fields = event["fields"]
-        if event["kind"] != "gate" or fields.get("exit") != "1":
-            continue
-        who = "runner" if fields.get("by", "runner") == "runner" else "stages"
-        failed = [c for c in fields.get("fail", "").split(",") if c]
-        entry = counts.setdefault(who, {"form": 0, "substance": 0, "checks": {}})
-        entry["form" if failed and all(c in FORM_CHECKS for c in failed) else "substance"] += 1
-        for check in failed or ["unnamed"]:
-            entry["checks"][check] = entry["checks"].get(check, 0) + 1
-    return counts
-
-
 def refusals_report(runs, story_filter=None, fmt="text"):
-    """`--refusals`: every story's refusals, form against substance — what a bench counts."""
-    stories = [s for s in run_stories(runs) if not story_filter or s == story_filter]
-    data = {story: refusal_counts(runs, story) for story in stories}
+    """`--refusals`: every story's refusals, form against substance — what a bench counts (`ShowRefusalsUseCase`)."""
+    model = wiring.show_refusals(runs).execute(ShowRefusalsQuery(story_filter))
     if fmt == "json":
-        print(json.dumps({"form_checks": list(FORM_CHECKS), "stories": data}, indent=2, sort_keys=True))
+        print(json.dumps(model, indent=2, sort_keys=True))
         return 0
-    for story, counts in data.items():
+    for story, counts in model["stories"].items():
         if not counts:
             print(f"{story}  no refusal")
             continue
