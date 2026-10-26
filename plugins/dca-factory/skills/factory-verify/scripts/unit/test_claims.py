@@ -311,7 +311,7 @@ class Published(unittest.TestCase):
             front, body = markdown.read_front_matter(story_path)
             result = gate.Result()
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: b}):
-                with gate.places_in(wt):
+                with profiles.places_in(wt):
                     gate.check_spec_delta(result, wt, runs_b, "S-02", story_path, front, body)
             self.assertTrue(any(e[0] == "fail" and e[1] == "spec-delta" for e in result.entries), result.entries)
 

@@ -232,11 +232,13 @@ class HandOverAsk(Value):
 
 @dataclasses.dataclass(frozen=True)
 class DecisionsFacts(Value):
-    """The story's decision records under their store, and the stages' hand-overs."""
+    """The story's decision records under their store, and the stages' hand-overs — or why the store cannot be
+    read."""
 
     store: Place
     records: typing.Tuple[DecisionFacts, ...]
     hand_overs: typing.Tuple[HandOverAsk, ...]
+    unreadable: typing.Optional[Detail] = None
 
 
 @dataclasses.dataclass(frozen=True)

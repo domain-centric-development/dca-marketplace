@@ -60,7 +60,7 @@ class StageEvidence(DomainGateway, typing.Protocol):
         ...
 
     def decisions(self, story: StageStory) -> DecisionsFacts:
-        """The story's decision records and the stages' hand-overs; the gate's error where the store cannot be read."""
+        """The story's decision records and the stages' hand-overs — or why the store cannot be read."""
         ...
 
     def record_place(self, story: StageStory, record: RecordId) -> Place:

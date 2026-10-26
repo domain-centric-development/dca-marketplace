@@ -8,6 +8,7 @@ project's findings — resolved once per process; in a story's worktree the main
 
 from __future__ import annotations
 
+import contextlib
 import difflib
 import os
 import typing
@@ -313,3 +314,19 @@ def resolve_profile(given: typing.Optional[str], cwd: str) -> typing.Optional[st
 def profile_of(cwd: str, given: typing.Optional[str] = None) -> Profile:
     """The project's stack profile as a value, read once: the one named, else the project's own."""
     return Profile(read_profile(resolve_profile(given, cwd)))
+
+
+@contextlib.contextmanager
+def places_in(cwd: str) -> typing.Iterator[None]:
+    """The epics and the spec read from this worktree, not the main checkout — where the remote main line is what
+    the story was merged with (WP-93 D)."""
+    home = factory_home() or cwd
+    saved = dict(PLACES)
+    try:
+        for key in ("epics", "spec"):
+            own = saved.get(key) or DEFAULTS[key]
+            PLACES[key] = os.path.join(cwd, os.path.relpath(own if os.path.isabs(own) else os.path.join(home, own), home))
+        yield
+    finally:
+        PLACES.clear()
+        PLACES.update(saved)

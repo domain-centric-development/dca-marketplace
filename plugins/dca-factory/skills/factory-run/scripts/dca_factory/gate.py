@@ -74,7 +74,7 @@ import sys
 import tempfile
 import time
 from .contract import (
-    CONTRACT, CRITERION, GateError, layout_hint, order_for, SELECTOR, STAGE, STAGE_CHECKS, STAGES, VERSION)
+    CONTRACT, CRITERION, GateError, layout_hint, SELECTOR, STAGE, STAGE_CHECKS, STAGES, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import (
     append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
     PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
@@ -82,8 +82,8 @@ from .delivery.adapter.outgoing.files.story_layout import (
     duplicate_ids, file_digest, find_story, is_delivered, story_digest,
     story_files, story_folder, story_id_of, story_kind)
 from .sharedkernel.adapter.outgoing.profile.profile_files import (
-    DEFAULTS, evidence_dir, evidence_rel, factory_home, FLAKY_FINDINGS, in_worktree,
-    JOURNAL, location, place, PLACES, PROFILE_FILE, read_profile,
+    evidence_dir, evidence_rel, factory_home, FLAKY_FINDINGS, in_worktree,
+    JOURNAL, location, place, PROFILE_FILE, read_profile,
     resolve_profile, set_places, shown)
 from .delivery.adapter.outgoing.git.repository import git, git_identity
 from .delivery.adapter.outgoing.files.decision_record_files import (
@@ -98,12 +98,12 @@ from .spec.api import (
     derived, merge, merge_context, lint_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
 from .delivery.adapter.outgoing.claims.remote_claims import claim_config_here, PUBLISHED
 from .delivery.adapter.outgoing.files.story_record import INVARIANT_BREAKS
-from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open, record_judge_signal
+from .delivery.adapter.outgoing.files.signals import journal_signal, latest_signal, plan_left_open
 from .delivery.adapter.outgoing.files.snapshots import (
     git_tree, record_base, record_changes)
 from .delivery.adapter.outgoing.files.owned_files import owned_end, run_owned
 from .delivery.adapter.outgoing.files.run_marks import (
-    backlog_digest, current_stage_files, last_ended, step_open,
+    backlog_digest, last_ended, step_open,
     STORY_DIGEST, verdict_in, write_mark)
 from .delivery.adapter.outgoing.files.owned_files import observe_writes, record_owned
 from .delivery.adapter.outgoing.files.journal_files import flaky_tests, journal_append, journal_events
@@ -122,7 +122,6 @@ from .delivery.domain.model.story_state import Detail
 from .delivery.domain.service.design_checks import DesignChecks
 from .delivery.domain.service.kept_checks import KeptChecks
 from .delivery.domain.service.spec_checks import SpecChecks
-from .delivery.domain.service.delivery_checks import DeliveryChecks
 from .delivery.domain.service.integration_checks import IntegrationChecks
 from .delivery.domain.service.test_verdicts import BreakProof, TestVerdicts
 from .delivery.domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult
@@ -147,6 +146,8 @@ from .delivery.domain.model.stage_story import Expectation
 from .delivery.adapter.outgoing.build.test_runs import red_ledger, run_tests
 from .delivery.domain.service.test_checks import HANDOVER_BUDGET, TestChecks  # noqa: F401 — HANDOVER_BUDGET: read by the runner
 from .delivery.adapter.outgoing.files.test_files import locate_tests, StageTestFiles
+from .delivery.adapter.outgoing.files.stage_marks_files import StageMarkFiles
+from .delivery.adapter.outgoing.files.stage_evidence_files import MainLineEvidence
 from .delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles, StageEvidenceFiles, stage_story, closed_rows, closes_of, happy_paths, split_list
 from .delivery.adapter.outgoing.files.test_files import read_mapping
 from .delivery.adapter.outgoing.files.design_files import STEP, read_invariant_rows
@@ -155,12 +156,12 @@ from .delivery.adapter.outgoing.files.kept_files import TESTS_BASELINE
 from .delivery.adapter.outgoing.spec.story_spec_files import moved_tests, story_spec
 from .delivery.adapter.outgoing.files.delivery_files import TEST_DIR, TEST_FILE
 from .delivery.adapter.outgoing.git.integration import integration_target
-from .delivery.adapter.outgoing.build import commands
-from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, command_for, open_suites_record, run, tail, test_command_keys
+from .delivery.adapter.outgoing.build.commands import MISSING_TOOLS, command_for, run, tail, test_command_keys
 from .delivery.adapter.outgoing.build.suite_runs import SuiteOwner, test_files
 from .delivery.adapter.outgoing.build.breaks import apply_break, break_copy, break_patch, break_path, characterization_tests, qualify_selector
 from .delivery.adapter.outgoing.git.change import backlog_paths
 from .delivery.adapter.outgoing.files.test_files import scenario_titles
+from .sharedkernel.adapter.outgoing.profile.profile_files import places_in
 
 
 def story_ids(epics):
@@ -565,6 +566,10 @@ def gate_run(**fields):
     run.kind = story_kind(run.front)
     run.evidence = StageEvidenceFiles(run.cwd, run.runs, run.args.epics, run.profile)
     run.tests = StageTestFiles(run.cwd, run.runs, run.profile)
+    run.main_line = MainLineEvidence(run.cwd, run.runs, run.args.epics, run.profile)
+    run.marks = StageMarkFiles(run.cwd, run.runs, run.kind)
+    run.stamps = DecisionStampFiles(run.runs)
+    run.describe = check_description(run.cwd, run.profile)
     run.story = stage_story(run.story_id, run.story_path, run.front, run.body, run.criteria)
     run.contract = ProfileChecks.contract_number(run.evidence)
     # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
@@ -1162,62 +1167,9 @@ def hand_over_to_cli(argv):
 COMPILES = CheckName("compiles")
 
 
-@check("suites")
-def _suites(run):
-    if not run.args.record_suites:
-        return
-    key = os.environ.get("FACTORY_SUITES_KEY", "")
-    if key:
-        commands.SUITES_RECORD = open_suites_record(run.cwd, run.runs, run.story_id, key)
-    else:
-        run.result.note("suites", "--record-suites without FACTORY_SUITES_KEY in the environment — nothing is "
-                                  "recorded or reused")
-
-
-@check("decisions")
-def _decisions(run):
-    check_decisions(run.result, run.runs, run.story_id, run.cwd, run.stage.name, run.story_path, run.story)
-
-
-@check("plan", stages=("plan",))
-def _plan(run):
-    take(run.result, StoryChecks.happy_path(run.story, run.contract, run.evidence))
-    take(run.result, BacklogChecks.context_map(run.story, run.evidence))
-    take(run.result, ProfileChecks.instruction_size(run.evidence))
-    check_project(run.result, run.cwd, run.profile)
-    take(run.result, ProfileChecks.models(run.evidence))
-
-
-@check("document", stages=("document",))
-def _document(run):
-    passed = DeliveryChecks.story_pass(run.story, run.evidence)
-    take(run.result, passed.findings)
-    if passed.judge_passed is Presence.PRESENT:
-        record_judge_signal(run.runs, run.story_id,
-                            current_stage_files(run.runs, run.story_id, order_for(run.kind))["judge"])
-    take(run.result, DeliveryChecks.outcome_raised(run.story, run.contract, run.evidence))
-    take(run.result, DeliveryChecks.documented(run.story, run.evidence))
-    take(run.result, DeliveryChecks.proposals_landed(run.story, run.evidence))
-    take(run.result, DeliveryChecks.reviews(run.story, run.evidence))
-
-
 @check("adopt", stages=("adopt",))
 def _adopt(run):
     check_adopt(run.result, run.profile, run.cwd, run.runs, run.story_id, run.front, run.criteria)
-
-
-@check("integrate", stages=("integrate",))
-def _integrated(run):
-    take(run.result, IntegrationChecks.integrated(run.story, run.evidence))
-    take(run.result, IntegrationChecks.main_tests(run.story, run.evidence))
-    # The spec as the main line holds it now: a key another story added meanwhile, or a criterion it changed, is a
-    # question to a person — never a silent last-writer-wins (WP-98 R3). With claims on a remote the main line is the
-    # remote's, merged into this worktree (WP-93 D).
-    if claim_config_here(factory_home() or run.cwd):
-        with places_in(run.cwd):
-            check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
-    else:
-        check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
 
 
 def whole_suites(run):
@@ -1665,22 +1617,6 @@ def merge_spec(result, story_path, story_id, front, runs):
                       f"{sum(v == 'changes' for v in found.values())} changed, {len(delta['removes'])} removed"
                       + (f", {len(delta['moves'])} moved" if delta["moves"] else "")
                       + (f", {len(delta['renames'])} rule(s) renamed" if delta["renames"] else ""))
-
-
-@contextlib.contextmanager
-def places_in(cwd):
-    """The epics and the spec read from this worktree, not the main checkout — where the remote main line is what
-    the story was merged with (WP-93 D)."""
-    home = factory_home() or cwd
-    saved = dict(PLACES)
-    try:
-        for key in ("epics", "spec"):
-            own = saved.get(key) or DEFAULTS[key]
-            PLACES[key] = os.path.join(cwd, os.path.relpath(own if os.path.isabs(own) else os.path.join(home, own), home))
-        yield
-    finally:
-        PLACES.clear()
-        PLACES.update(saved)
 
 
 def publish_story(result, cwd, story_path, story_id, front, runs, config):

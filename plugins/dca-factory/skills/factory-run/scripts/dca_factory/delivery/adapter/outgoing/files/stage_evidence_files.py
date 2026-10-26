@@ -12,7 +12,7 @@ from .....contract import CONTRACT, GateError, HAPPY_MARK, order_for, SELECTOR, 
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
-    evidence_dir, factory_home, HOME_VARIABLE, in_worktree, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
+    evidence_dir, factory_home, HOME_VARIABLE, in_worktree, places_in, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
 from ....application.shared.front import is_acceptance
 from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
 from ....domain.model.epic import EpicId
@@ -45,6 +45,7 @@ from .kept_files import bare_path, row_cells
 from .run_marks import current_stage_files, STORY_DIGEST, verdict_in
 from .snapshots import NOT_OBSERVED
 from .story_layout import story_digest
+from ..claims.remote_claims import claim_config_here
 from ..git.integration import (
     CONFLICT_MARKER, integration_target, lost_text, MAIN_TESTS, main_tests_adapted, main_tests_lost, main_tests_waiver,
     merge_target)
@@ -292,9 +293,14 @@ class StageEvidenceFiles:
 
     def decisions(self, story: StageStory) -> DecisionsFacts:
         story_id = story.story.value
-        store = decisions_store(story.place.value)
+        try:
+            place_of = story.place.value or find_story(place("epics"), story_id)
+            store = decisions_store(place_of)
+            read = read_decisions(store, story_id)
+        except GateError as error:
+            return DecisionsFacts(Place(""), (), (), Detail(str(error)))
         records = []
-        for path, front, body, state, answer in read_decisions(store, story_id):
+        for path, front, body, state, answer in read:
             asked = state in ("open", "draft")
             stage = str(front.get("stage", "")).strip() if asked else resume_stage(front, answer)
             records.append(DecisionFacts(
@@ -812,3 +818,19 @@ class DecisionStampFiles:
         stamp_applied(path, applying.stage.value)
         written = write_answered(story.place.value, self._runs, rid, answer_sentence(body, answer))
         return Place(shown(story.place.value)) if written else None
+
+
+class MainLineEvidence(StageEvidenceFiles):
+    """The evidence at the integrate gate: the spec as the main line holds it now. With claims on a remote the main
+    line is the remote's, merged into this worktree — its epics and spec read from the worktree (WP-93 D)."""
+
+    def _main_line(self) -> typing.ContextManager[None]:
+        return places_in(self._cwd) if claim_config_here(factory_home() or self._cwd) else contextlib.nullcontext()
+
+    def spec_delta(self, story: StageStory) -> typing.Optional[SpecDelta]:
+        with self._main_line():
+            return super().spec_delta(story)
+
+    def spec_backing(self, story: StageStory) -> typing.Optional[Detail]:
+        with self._main_line():
+            return super().spec_backing(story)

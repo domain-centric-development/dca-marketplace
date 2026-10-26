@@ -46,6 +46,8 @@ class DecisionChecks(DomainService):
     @staticmethod
     def check(story: StageStory, gating: StageName, evidence: StageEvidence) -> DecisionsChecked:
         facts = evidence.decisions(story)
+        if facts.unreadable is not None:
+            return DecisionsChecked((DECISIONS.fail(Said(facts.unreadable.value)),))
         known = {record.record for record in facts.records}
         items: typing.List[typing.Union[Finding, Applying]] = []
         # 1. a stage that stopped must have written a record for its question

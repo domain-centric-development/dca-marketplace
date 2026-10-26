@@ -65,8 +65,8 @@ class Signals(unittest.TestCase):
                  "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
                  "| ddd | A.java:3 | minor | a | domain-term: `Item` is a `Line` | rename |\n"
                  "| clean-code | B.java:9 | minor | b | a long method | split |\n")
-        gate.record_judge_signal(self.runs, "S-1", judge)
-        gate.record_judge_signal(self.runs, "S-1", judge)
+        journal_signals.record_judge_signal(self.runs, "S-1", judge)
+        journal_signals.record_judge_signal(self.runs, "S-1", judge)
         signals = gate.story_signals(self.runs, "S-1", [], "")
         self.assertEqual((signals["findings"], signals["domain"]), ({"ddd": 1, "clean-code": 1}, {"domain-term": 1}))
         self.assertEqual(sum(1 for e in journal.journal_events(self.runs, "S-1") if e["kind"] == "signal"), 1)

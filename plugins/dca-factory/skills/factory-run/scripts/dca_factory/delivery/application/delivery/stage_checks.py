@@ -9,6 +9,10 @@ from ...domain.model.stage import Stage, StageName, TESTED_KINDS, Trait
 from ...domain.model.stage_story import ContractNumber, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable
 from ...domain.model.verdict import CheckName, Said
 from ...domain.service.kept_checks import KeptChecks
+from ...domain.service.decision_checks import Applying, DecisionChecks
+from ...domain.service.integration_checks import IntegrationChecks
+from ...domain.model.stage_story import Presence
+from ..description.check_description import CheckDescriptionCommand
 from ...domain.service.backlog_checks import BacklogChecks
 from ...domain.service.delivery_checks import DeliveryChecks
 from ...domain.service.design_checks import DesignChecks
@@ -171,3 +175,54 @@ def _red_proof(run: Run) -> None:
     # the red proof compares digests, so it belongs here, before any process
     if run.expected == "green":
         run.result.take(KeptChecks.red_proof(run.story, StageName(run.stage.name), mapped(run), run.evidence))
+
+
+@check("suites")
+def _suites(run: Run) -> None:
+    if run.args.record_suites and not run.marks.record_suites(run.story_id):
+        run.result.note("suites", "--record-suites without FACTORY_SUITES_KEY in the environment — nothing is "
+                                  "recorded or reused")
+
+
+@check("decisions")
+def _decisions(run: Run) -> None:
+    """An answer applied is stamped in its record and becomes an `answered:` line of the story before it is said."""
+    checked = DecisionChecks.check(run.story, StageName(run.stage.name), run.evidence)
+    for item in checked.items:
+        if isinstance(item, Applying):
+            run.result.take((DecisionChecks.applied(item, run.stamps.apply(run.story, item)),))
+        else:
+            run.result.take((item,))
+
+
+@check("plan", stages=("plan",))
+def _plan(run: Run) -> None:
+    run.result.take(StoryChecks.happy_path(run.story, run.contract, run.evidence))
+    run.result.take(BacklogChecks.context_map(run.story, run.evidence))
+    run.result.take(ProfileChecks.instruction_size(run.evidence))
+    # the two mandatory parts of the project description — the description feature's check, said as the gate says
+    # its checks
+    for verdict in run.describe.execute(CheckDescriptionCommand()).verdicts:
+        getattr(run.result, verdict.state)(verdict.part, verdict.said)
+    run.result.take(ProfileChecks.models(run.evidence))
+
+
+@check("document", stages=("document",))
+def _document(run: Run) -> None:
+    passed = DeliveryChecks.story_pass(run.story, run.evidence)
+    run.result.take(passed.findings)
+    if passed.judge_passed is Presence.PRESENT:
+        run.marks.judge_passed(run.story_id)
+    run.result.take(DeliveryChecks.outcome_raised(run.story, run.contract, run.evidence))
+    run.result.take(DeliveryChecks.documented(run.story, run.evidence))
+    run.result.take(DeliveryChecks.proposals_landed(run.story, run.evidence))
+    run.result.take(DeliveryChecks.reviews(run.story, run.evidence))
+
+
+@check("integrate", stages=("integrate",))
+def _integrated(run: Run) -> None:
+    run.result.take(IntegrationChecks.integrated(run.story, run.evidence))
+    run.result.take(IntegrationChecks.main_tests(run.story, run.evidence))
+    # The spec as the main line holds it now: a key another story added meanwhile, or a criterion it changed, is a
+    # question to a person — never a silent last-writer-wins (WP-98 R3).
+    run.result.take(SpecChecks.delta(run.story, run.main_line))
