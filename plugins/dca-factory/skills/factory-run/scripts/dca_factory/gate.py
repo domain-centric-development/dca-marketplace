@@ -73,9 +73,8 @@ import subprocess
 import sys
 import tempfile
 import time
-import typing
 from .contract import (
-    ALL_KINDS, CONTRACT, CRITERION, GateError, layout_hint, order_for, SELECTOR, STAGE, STAGE_CHECKS, STAGES, TESTED_KINDS, VERSION)
+    CONTRACT, CRITERION, GateError, layout_hint, order_for, SELECTOR, STAGE, STAGE_CHECKS, STAGES, VERSION)
 from .delivery.adapter.outgoing.files.findings_files import (
     append_finding_rows, confirmed_defects, findings_cells, findings_path, open_findings,
     PLAIN_COLUMN, project_findings_head, project_findings_path, record_findings)
@@ -130,6 +129,9 @@ from .delivery.domain.service.integration_checks import IntegrationChecks
 from .delivery.domain.service.test_verdicts import BreakProof, TestVerdicts
 from .delivery.domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult
 from .delivery.domain.model.verdict import Finding
+from .delivery.application.delivery.check_stage import (
+    check, on_pass, run_checks, run_passed, StageRun, Verdict)
+from .delivery.domain.model.stage import StoryKind, TESTED_KINDS as TESTED, Trait
 from .delivery.domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
 from .delivery.domain.model.story_state import Acceptance, AcceptanceVerdict
 from .delivery.domain.model.decision_record import RecordId
@@ -588,9 +590,20 @@ def check_invariant_breaks(result, profile, cwd, runs, story_id, mapping):
 
 def take(result, findings):
     """A domain check's findings into the result, as the gate reports them."""
-    for finding in findings:
-        getattr(result, "ok" if finding.state is FindingState.PASS else finding.state.value)(finding.check.value,
-                                                                                           finding.said.value)
+    result.take(findings)
+
+
+def gate_run(**fields):
+    """What one gate run over a story knows: the fields `main` read, and the story, its evidence and its contract
+    from them."""
+    run = StageRun(**fields)
+    run.kind = story_kind(run.front)
+    run.evidence = StageEvidenceFiles(run.cwd, run.runs, run.args.epics, run.profile)
+    run.story = stage_story(run.story_id, run.story_path, run.front, run.body, run.criteria)
+    run.contract = ProfileChecks.contract_number(run.evidence)
+    # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
+    run.expected = "red" if run.stage.red and run.kind == "story" else "green"
+    return run
 
 
 def check_contract(result, profile):
@@ -1131,37 +1144,8 @@ def ask_acceptance(cwd, runs, story_id, story_path, profile, criteria):
     return rid
 
 
-class Result:
-    def __init__(self):
-        self.entries = []
-        self.written = []          # the files a delivery wrote into the project — what integrate commits on main
-        self.flaky = []            # the tests outside the story red in a whole run and green alone (WP-113)
-        self.closed = False        # a delivery journaled its passing verdict before its commit (close_record)
-
-    def ok(self, check, message):
-        self.entries.append(("pass", check, message))
-
-    def fail(self, check, message):
-        self.entries.append(("fail", check, message))
-
-    def skip(self, check, message):
-        self.entries.append(("skip", check, message))
-
-    def note(self, check, message):
-        """A fact worth reading that fails nothing and covers nothing — it is not a skipped check."""
-        self.entries.append(("note", check, message))
-
-    def wait(self, check, message):
-        """Nothing failed, and a human has to answer before the story goes on — exit 3, not 0."""
-        self.entries.append(("wait", check, message))
-
-    @property
-    def waiting(self):
-        return any(state == "wait" for state, _, _ in self.entries)
-
-    @property
-    def failed(self):
-        return any(state == "fail" for state, _, _ in self.entries)
+class Result(Verdict):
+    """A gate run's verdict, as the gate reports it."""
 
     def report(self, story_id, stage, as_json, brief=False):
         if MISSING_TOOLS and not any(check == "environment" for _s, check, _m in self.entries):
@@ -1230,70 +1214,6 @@ def hand_over_to_cli(argv):
     return completed.returncode
 
 
-class GateRun:
-    """What one gate run over a story knows; the registered checks read it and leave their findings in `result`
-    (and the mapping and the located tests for the checks after them)."""
-
-    def __init__(self, **fields):
-        self.mapping, self.located = {}, {}
-        self.__dict__.update(fields)
-        self.kind = story_kind(self.front)
-        self.evidence = StageEvidenceFiles(self.cwd, self.runs, self.args.epics, self.profile)
-        self.story = stage_story(self.story_id, self.story_path, self.front, self.body, self.criteria)
-        self.contract = ProfileChecks.contract_number(self.evidence)
-        # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
-        self.expected = "red" if self.stage.red and self.kind == "story" else "green"
-
-
-class Check(typing.NamedTuple):
-    name: str
-    run: typing.Callable
-    stages: tuple
-    needs_process: bool
-    unrun: typing.Callable       #: the check names a refusal before it leaves unproven
-    kinds: tuple                 #: the story kinds it holds (a task has no criteria, so none of their checks)
-
-
-#: The checks a gate run holds a story to, in this order: every check that needs no process first, and a refusal among
-#: them ends the run before a suite starts — a file list that is wrong is wrong in a millisecond, not after a minute of
-#: tests. What did not run is named, so the report says what is still unproven.
-CHECKS = []
-
-
-def check(name, stages=None, needs_process=False, unrun=None, kinds=ALL_KINDS):
-    """Register a check against the stage table: `stages` names rows (None — every gated stage) or is a predicate
-    over a row; `kinds` the story kinds it holds."""
-    if stages is None:
-        chosen = tuple(s.name for s in STAGES if s.gated)
-    elif callable(stages):
-        chosen = tuple(s.name for s in STAGES if s.gated and stages(s))
-    else:
-        unknown = [name for name in stages if name not in STAGE or not STAGE[name].gated]
-        if unknown:
-            raise ValueError(f"check {name}: no gated stage {', '.join(unknown)}")
-        chosen = tuple(stages)
-
-    def register(function):
-        CHECKS.append(Check(name, function, chosen, needs_process, unrun or (lambda run: [name]), tuple(kinds)))
-        return function
-    return register
-
-
-def run_checks(run):
-    chosen = [c for c in CHECKS if run.stage.name in c.stages and run.kind in c.kinds]
-    for entry in (c for c in chosen if not c.needs_process):
-        entry.run(run)
-    process = [c for c in chosen if c.needs_process]
-    if run.result.failed and process:
-        refused = sorted({check for state, check, _m in run.result.entries if state == "fail"})
-        for entry in process:
-            for name in entry.unrun(run):
-                run.result.skip(name, f"not run — {', '.join(refused)} refused first; fix that, then it runs")
-        return
-    for entry in process:
-        entry.run(run)
-
-
 #: The check a gate's compile command reports under.
 COMPILES = CheckName("compiles")
 
@@ -1318,7 +1238,7 @@ def _epic(run):
     take(run.result, BacklogChecks.epic(run.story, run.evidence))
 
 
-@check("outcome", stages=("plan",), kinds=TESTED_KINDS)
+@check("outcome", stages=("plan",), kinds=TESTED)
 def _outcome_named(run):
     take(run.result, BacklogChecks.outcome(run.story, run.contract, run.evidence))
 
@@ -1367,7 +1287,7 @@ def _document(run):
     take(run.result, DeliveryChecks.reviews(run.story, run.evidence))
 
 
-@check("pipeline", stages=lambda s: s.name != "plan")
+@check("pipeline", stages=lambda s: s.name.value != "plan")
 def _pipeline(run):
     take(run.result, DeliveryChecks.pipeline_untouched(run.story, run.evidence))
 
@@ -1396,7 +1316,7 @@ def _integrated(run):
         check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
 
 
-@check("tests-mapped", stages=lambda s: s.tested, kinds=TESTED_KINDS)
+@check("tests-mapped", stages=lambda s: Trait.TESTED in s.traits, kinds=TESTED)
 def _mapping(run):
     run.mapping = check_mapping(run.result, run.runs, run.story_id, run.criteria)
     run.located = check_exists(run.result, run.cwd, run.mapping)
@@ -1404,13 +1324,13 @@ def _mapping(run):
 
 # Integrated, the story's diff carries the main line's changes beside its own: the file list, the tests that existed
 # before and the red proof were the stages' to hold, and they held.
-@check("files-listed", stages=lambda s: s.lists)
+@check("files-listed", stages=lambda s: Trait.LISTS in s.traits)
 def _files_listed(run):
     take(run.result, KeptChecks.files_listed(run.story, StageName(run.stage.name), mapped_tests(run), run.evidence))
     take(run.result, KeptChecks.tests_kept(run.story, run.evidence))
 
 
-@check("test-design", stages=lambda s: s.red)
+@check("test-design", stages=lambda s: Trait.RED in s.traits)
 def _test_design(run):
     take(run.result, TestChecks.plan_levels(run.story, run.evidence))
     tests = mapped_tests(run)
@@ -1425,12 +1345,12 @@ def _spec_delta(run):
     check_spec_delta(run.result, run.cwd, run.runs, run.story_id, run.story_path, run.front, run.body)
 
 
-@check("spec-tests", stages=("document", "adopt", "integrate"), kinds=TESTED_KINDS)
+@check("spec-tests", stages=("document", "adopt", "integrate"), kinds=TESTED)
 def _spec_tests(run):
     check_spec_tests(run.result, run.cwd, run.runs, run.story_id, run.front, run.mapping)
 
 
-@check("tests-committed", stages=("integrate",), kinds=TESTED_KINDS)
+@check("tests-committed", stages=("integrate",), kinds=TESTED)
 def _tests_committed(run):
     check_tests_committed(run.result, run.cwd, run.front, run.mapping, run.runs)
 
@@ -1447,12 +1367,12 @@ def _plan_files(run):
         take(run.result, DesignChecks.plan_files(run.story, run.evidence))
 
 
-@check("size", stages=lambda s: s.sizes)
+@check("size", stages=lambda s: bool(s.sizes))
 def _size(run):
     take(run.result, TestChecks.size(run.story, tuple(HandOverName(name) for name in run.stage.sizes), run.evidence))
 
 
-@check("red-proof", stages=lambda s: s.lists, kinds=TESTED_KINDS)
+@check("red-proof", stages=lambda s: Trait.LISTS in s.traits, kinds=TESTED)
 def _red_proof(run):
     # the red proof compares digests, so it belongs here, before any process
     if run.expected == "green":
@@ -1468,7 +1388,7 @@ def whole_suites(run):
                  if k in set(split_list(run.profile.get("required"))) and run.profile.get(k))
 
 
-@check("tests", stages=lambda s: s.tested, needs_process=True,
+@check("tests", stages=lambda s: Trait.TESTED in s.traits, needs_process=True,
        unrun=lambda run: ["compiles", f"tests-{run.expected}"] + (["suite"] if run.stage.suite else []))
 def _tests(run):
     check_compiles(run.result, run.profile, run.cwd)
@@ -1483,35 +1403,21 @@ def _tests(run):
         check_required_suites(run.result, run.profile, run.cwd, run.whole_runs, owner)
 
 
-@check("invariant-breaks", stages=("test",), needs_process=True, kinds=("story",))
+@check("invariant-breaks", stages=("test",), needs_process=True, kinds=frozenset((StoryKind.STORY,)))
 def _invariant_breaks(run):
     if contract_of(run.profile) >= 25:
         check_invariant_breaks(run.result, run.profile, run.cwd, run.runs, run.story_id, run.mapping)
 
 
-@check("red-reproof", stages=("tidy",), needs_process=True, kinds=("story",))
+@check("red-reproof", stages=("tidy",), needs_process=True, kinds=frozenset((StoryKind.STORY,)))
 def _red_reproof(run):
     reprove_red(run.result, run.profile, run.cwd, run.runs, run.story_id, run.mapping, run.located)
 
 
-@check("commands", stages=lambda s: s.commands, needs_process=True,
+@check("commands", stages=lambda s: bool(s.commands), needs_process=True,
        unrun=lambda run: [key for key in run.stage.commands if run.profile.get(key)])
 def _commands(run):
     check_stage_commands(run.result, run.profile, run.cwd, run.stage.name)
-
-
-#: What a passing gate does, per stage — the writes a verdict makes.
-PASSED = {}
-
-
-def on_pass(stage):
-    if stage not in STAGE or not STAGE[stage].gated:
-        raise ValueError(f"on_pass: no gated stage {stage}")
-
-    def register(function):
-        PASSED.setdefault(stage, []).append(function)
-        return function
-    return register
 
 
 @on_pass("plan")
@@ -1754,7 +1660,7 @@ def main(argv):
         story_id = str(front.get("id") or os.path.basename(story_folder(story_path)))
         observe_writes(args.runs, story_id)
         criteria = criteria_of(story_path, body, front)
-        run = GateRun(result=result, args=args, cwd=cwd, runs=args.runs, stage=STAGE[args.stage], story_id=story_id,
+        run = gate_run(result=result, args=args, cwd=cwd, runs=args.runs, stage=STAGE[args.stage], story_id=story_id,
                       story_path=story_path, front=front, body=body, criteria=criteria,
                       profile=read_profile(resolve_profile(args.profile, cwd)))
         run_checks(run)
@@ -1763,8 +1669,7 @@ def main(argv):
         return journal_gate(result, args, story_id, story_path, result.report(args.story, args.stage, args.json,
                                                                               args.brief))
     if not result.failed:
-        for finish in PASSED.get(args.stage, ()):
-            finish(run)
+        run_passed(run)
     return journal_gate(result, args, story_id, story_path, result.report(story_id, args.stage, args.json, args.brief))
 
 
