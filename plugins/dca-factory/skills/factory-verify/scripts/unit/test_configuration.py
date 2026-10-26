@@ -5,7 +5,7 @@ import os
 import unittest
 
 from support import contract, project, write
-from dca_factory import runner
+from dca_factory.delivery.adapter.outgoing.files import migrations
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 
 
@@ -43,13 +43,13 @@ class Migration(unittest.TestCase):
                   "# P\n\n- conventions: `.agents/dca/conventions.md` — layout\n\n<!-- dca-describe: start -->\n"
                   "- product: `docs/what.md` — x\n- tech: `product/tech.md` — y\n<!-- dca-describe: end -->\n")
             said = []
-            runner.migrate_configuration(p.root, said.append)
+            migrations.migrate_configuration(p.root, said.append)
             method = profiles.read_flat(os.path.join(p.root, profiles.METHOD_PROFILE))
             self.assertEqual(method, {"catalog_path": "x", "verify_command": "make arch", "overview": "docs/what.md"})
             self.assertFalse(os.path.exists(os.path.join(p.root, ".agents", "dca", "conventions.md")))
             self.assertIn("- configuration: `dca.profile.yaml`", read(os.path.join(p.root, "AGENTS.md")))
             again = []
-            runner.migrate_configuration(p.root, again.append)
+            migrations.migrate_configuration(p.root, again.append)
             self.assertEqual(again, [])
 
     def test_a_section_naming_the_default_places_writes_no_place(self):
@@ -57,7 +57,7 @@ class Migration(unittest.TestCase):
             write(os.path.join(p.root, "AGENTS.md"),
                   "<!-- dca-describe: start -->\n- product: `product/overview.md` — x\n- tech: `project/tech.md` — y\n"
                   "<!-- dca-describe: end -->\n")
-            runner.migrate_configuration(p.root, lambda _: None)
+            migrations.migrate_configuration(p.root, lambda _: None)
             self.assertFalse(os.path.exists(os.path.join(p.root, profiles.METHOD_PROFILE)))
 
 

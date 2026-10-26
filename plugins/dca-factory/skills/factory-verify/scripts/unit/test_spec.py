@@ -7,7 +7,8 @@ import os
 import unittest
 
 from support import contract, project, write
-from dca_factory import cli, runner
+from dca_factory import cli
+from dca_factory.delivery.adapter.outgoing.files import migrations
 from dca_factory.spec import api as spec
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
@@ -181,13 +182,13 @@ class HandAndMigration(unittest.TestCase):
                                           "| lists-in-order | a.WidgetTest#listsInOrder |\n")
             write(os.path.join(p.root, "src", "main", "java", "a", "widgets", "domain", "glossary.md"), "# Widgets\n")
             said = []
-            runner.migrate_glossaries(p.root, said.append)
-            runner.migrate_spec(p.root, p.epics, p.runs, said.append)
+            migrations.migrate_glossaries(p.root, said.append)
+            migrations.migrate_spec(p.root, p.epics, p.runs, said.append)
             text = read(os.path.join(p.root, "product", "spec", "widgets", "scenarios.md"))
             self.assertIn("Test: a.WidgetTest#showsTheName", text)
             self.assertTrue(os.path.isfile(os.path.join(p.root, "product", "spec", "widgets", "glossary.md")))
             again = []
-            runner.migrate_spec(p.root, p.epics, p.runs, again.append)
+            migrations.migrate_spec(p.root, p.epics, p.runs, again.append)
             self.assertEqual(again, [])
 
 
@@ -196,14 +197,14 @@ class HandAndMigration(unittest.TestCase):
         with project() as p:
             profiles.set_places({})
             p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
-            runner.migrate_spec(p.root, p.epics, p.runs, lambda _: None)
+            migrations.migrate_spec(p.root, p.epics, p.runs, lambda _: None)
             root_file = os.path.join(p.root, "product", "spec", "widgets", "scenarios.md")
             preamble, entries = spec.read_spec(root_file)
             write(os.path.join(p.root, "product", "spec", "widgets", "naming", "scenarios.md"),
                   spec.render_spec([], entries, "widgets — naming"))
             os.remove(root_file)
             said = []
-            runner.migrate_spec(p.root, p.epics, p.runs, said.append)
+            migrations.migrate_spec(p.root, p.epics, p.runs, said.append)
             self.assertEqual(said, [])
             self.assertFalse(os.path.isfile(root_file))
 
@@ -219,7 +220,7 @@ class HandAndMigration(unittest.TestCase):
             write(feature, spec.render_spec([], [item for item in later if item["key"] == "shows-the-name"],
                                             "widgets — naming"))
             said = []
-            runner.migrate_spec(p.root, p.epics, p.runs, said.append)
+            migrations.migrate_spec(p.root, p.epics, p.runs, said.append)
             root_file = os.path.join(p.root, "product", "spec", "widgets", "scenarios.md")
             text = read(root_file)
             self.assertIn("lists-in-order", text)
@@ -238,7 +239,7 @@ class HandAndMigration(unittest.TestCase):
             write(root_file, spec.render_spec([], [item for item in spec.story_entries(STORY.split("---", 2)[2])
                                                    if item["key"] == "shows-the-name"], "widgets"))
             said = []
-            runner.migrate_spec(p.root, p.epics, p.runs, said.append)
+            migrations.migrate_spec(p.root, p.epics, p.runs, said.append)
             self.assertEqual(said, [])
             self.assertNotIn("lists-in-order", read(root_file))
 
@@ -247,7 +248,7 @@ class HandAndMigration(unittest.TestCase):
             profiles.set_places({})
             p.story("S-1", text=STORY.replace("status: approved", "status: delivered\ndelivered: 2026-10-01T00:00:00Z"))
             self.assertEqual(self.quiet(cli.spec_check, p.root, p.runs, p.epics)[0], 1)
-            runner.migrate_spec(p.root, p.epics, p.runs, lambda _: None)
+            migrations.migrate_spec(p.root, p.epics, p.runs, lambda _: None)
             self.assertEqual(self.quiet(cli.spec_check, p.root, p.runs, p.epics)[0], 0)
 
 
@@ -260,7 +261,7 @@ class Layout(unittest.TestCase):
             write(os.path.join(p.root, "AGENTS.md"), "<!-- dca-describe: start -->\n- product: `project/product.md` — x\n"
                                                      "- tech: `project/tech.md` — y\n<!-- dca-describe: end -->\n")
             with contextlib.redirect_stdout(io.StringIO()):
-                runner.migrate_layout(p.root)
+                migrations.migrate_layout(p.root)
             text = read(os.path.join(p.root, "AGENTS.md"))
             self.assertIn("`product/overview.md`", text)
             self.assertIn("`product/tech.md`", text)

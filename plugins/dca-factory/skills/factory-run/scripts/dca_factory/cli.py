@@ -126,8 +126,8 @@ from .web import service as web
 from .delivery.adapter.outgoing.files.skeletons import contract_text, document_skeleton, files_skeleton, plan_skeleton
 from .delivery.adapter.outgoing.git.worktree_steps import (
     integrate_finish, integrate_prepare, link_places, worktree_prepare, worktree_prune, worktree_remove)
+from .delivery.adapter.outgoing.files.migrations import migrate_layout
 from .runner import (
-    migrate_layout,
     command_heads, first_word, model_for, needs_human_lines, open_decision_files, run_main,
     stage_names, stages_shell, verdict_of_story, request_main,
     settle_command)
