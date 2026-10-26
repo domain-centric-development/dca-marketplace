@@ -430,6 +430,26 @@ class TestChange(enum.Enum):
     SWITCHED_OFF = "switched off"
 
 
+class TestEdit(enum.Enum):
+    """What a story did to a test that existed before it: kept it (lines added only), arranged it anew with every
+    assertion kept, switched it off, or changed what it expects."""
+
+    KEPT = "kept"
+    ARRANGED = "arranged"
+    SWITCHED_OFF = "switched off"
+    CHANGED = "changed"
+
+    @classmethod
+    def of(cls, switched_off: Presence, lines_kept: Presence, assertions_kept: Presence) -> TestEdit:
+        """An added line that switches the test off outweighs all; every line still there in its order is kept;
+        every assertion still there is an arrangement; anything else changes what the test expects."""
+        if switched_off is Presence.PRESENT:
+            return cls.SWITCHED_OFF
+        if lines_kept is Presence.PRESENT:
+            return cls.KEPT
+        return cls.ARRANGED if assertions_kept is Presence.PRESENT else cls.CHANGED
+
+
 class ChangedTest(Value):
     place: Place
     how: TestChange

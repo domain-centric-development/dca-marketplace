@@ -26,7 +26,7 @@ from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
     AssertionAt, ChangedTest, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
-    TestChange, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
+    TestChange, TestEdit, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
     ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
@@ -505,13 +505,15 @@ class StageEvidenceFiles:
             # Additions only: every line the test had is still there, in the same order, outside a comment — and no
             # added line switches it off.
             remaining = iter(now)
-            if switched_off(was, now):
+            off = switched_off(was, now)
+            kept = not off and all(any(old == new for new in remaining) for old in was)
+            held = not off and not kept and assertions_kept("\n".join(was), "\n".join(now))
+            edit = TestEdit.of(*(Presence.PRESENT if fact else Presence.ABSENT for fact in (off, kept, held)))
+            if edit is TestEdit.SWITCHED_OFF:
                 changed.append(ChangedTest(Place(rel), TestChange.SWITCHED_OFF))
-            elif all(any(old == new for new in remaining) for old in was):
-                pass
-            elif assertions_kept("\n".join(was), "\n".join(now)):
+            elif edit is TestEdit.ARRANGED:
                 arranged.append(Place(rel))
-            else:
+            elif edit is TestEdit.CHANGED:
                 changed.append(ChangedTest(Place(rel), TestChange.CHANGED))
         return KeptTests(tuple(changed), tuple(lost), tuple(arranged))
 

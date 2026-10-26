@@ -234,6 +234,22 @@ reviews, layout) — a round spent with the work right —, else `substance`.
 
 **Type:** Value Object
 
+### Current pass (CurrentPass) · Journal marks (JournalMarks)
+
+**Definition:** Which of a story's hand-overs say where it stands, read from the journal's order alone: each file by
+the number of its latest write (a file gated after it is written also by its gate's later pass or hold), none that
+was marked an earlier pass's since. Up the run order, the first file older than one before it ends the current pass —
+a stage that ran again makes every later file history. The rules: the domain service `CurrentPass`.
+
+**Type:** Concept
+
+### Test edit (TestEdit)
+
+**Definition:** What a story did to a test that existed before it: `kept` (lines added only), `arranged` (rewritten,
+every assertion kept), `switched off`, or `changed` what it expects — in that order of weight, switched off first.
+
+**Type:** Value Object
+
 ### Claim · Worker (Worker) · Meeting (Meeting) · Fate (Fate)
 
 **Definition:** Several factories on one backlog (WP-93) claim a story by its branch on a shared remote. A worker is a

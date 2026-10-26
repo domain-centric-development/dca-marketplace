@@ -9,7 +9,7 @@ import typing
 from datetime import datetime, timezone
 from .hand_over_patterns import CRITERION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from ..pipeline.stage_rows import POST_GATED, SHARED_WINDOWS, STAGE_FILES
+from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE_FILES
 from .story_layout import EPIC_FILE, epic_folder
 from ....domain.model.stage import StoryKind
 from ....domain.model.story_state import AcceptanceVerdict, HandOverText
@@ -20,6 +20,9 @@ from .journal_files import journal_events
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....application.status.texts import parse_time
+from ....domain.model.journal_marks import JournalMarks, MarkKind, MarkName, Seq
+from ....domain.model.stage import StageName
+from ....domain.service.current_pass import CurrentPass
 
 
 OWNED_CHANGED = ".owned-changed"
@@ -151,13 +154,19 @@ def pass_marks(runs: str, story_id: str) -> typing.Dict[str, int]:
     return marks
 
 
+def journal_marks(marks: typing.Mapping[str, int]) -> JournalMarks:
+    """The `<kind>:<name>` marks as the domain reads them."""
+    seqs = {}
+    for key, seq in marks.items():
+        kind, _, name = key.partition(":")
+        seqs[(MarkKind(kind), MarkName(name))] = Seq(seq)
+    return JournalMarks(seqs)
+
+
 def written_at(marks: typing.Mapping[str, int], stage: str) -> typing.Optional[int]:
-    """When the stage's file last held for the pass: its last write, or a later pass of its own gate."""
-    name = STAGE_FILES[stage]
-    at = marks.get(f"wrote:{name}", 0)
-    if stage in POST_GATED:
-        at = max(at, marks.get(f"pass:{stage}", 0), marks.get(f"held:{stage}", 0))
-    return None if marks.get(f"outdated:{name}", -1) > at else at
+    """When the stage's file last held for the pass (`CurrentPass.written_at`)."""
+    at = CurrentPass.written_at(journal_marks(marks), StageName(stage))
+    return None if at is None else at.value
 
 
 def gate_passed_since(runs: str, story_id: str, gate: str, stage: str) -> bool:
@@ -174,19 +183,9 @@ def current_stage_files(runs: str, story_id: str, order: typing.Iterable[str]) -
     passed after the file before it was written holds for this pass, though its own file is older: a shared session
     that went back to its test stage after the build and had the build gate pass again."""
     folder = os.path.join(runs, story_id)
-    marks = pass_marks(runs, story_id)
-    texts: typing.Dict[str, str] = {}
-    newest: typing.Optional[int] = None
-    for stage in order:
-        path = os.path.join(folder, STAGE_FILES[stage])
-        if not os.path.isfile(path):
-            continue
-        written = written_at(marks, stage)
-        if written is None or (newest is not None and written < newest):
-            break
-        texts[stage] = read_text(path)
-        newest = max(written, newest or 0)
-    return texts
+    present = {StageName(stage) for stage in order if os.path.isfile(os.path.join(folder, STAGE_FILES[stage]))}
+    holding = CurrentPass.holding(journal_marks(pass_marks(runs, story_id)), [StageName(s) for s in order], present)
+    return {stage.value: read_text(os.path.join(folder, STAGE_FILES[stage.value])) for stage in holding}
 
 
 def backlog_digest(story_path: typing.Optional[str]) -> str:
