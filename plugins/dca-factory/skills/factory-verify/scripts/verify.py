@@ -4902,6 +4902,10 @@ def main(argv=None):
     # suite runs separate stages unless a case asks for shared ones (`--shared-builder`) or clears these.
     os.environ.setdefault("FACTORY_SHARED_BUILDER", "0")
     os.environ.setdefault("FACTORY_SHARED_VERIFIER", "0")
+    # A suite started in the background inherits an ignored SIGINT, and every runner it starts would too — the
+    # interrupt cases would then send a Ctrl-C nobody hears. A handler of our own gives the children the default.
+    if hasattr(signal, "SIGINT") and signal.getsignal(signal.SIGINT) == signal.SIG_IGN:
+        signal.signal(signal.SIGINT, signal.default_int_handler)
     # Every case runs in a throwaway directory, so a path given relative to the caller's directory
     # would resolve to nothing there — and the whole suite would fail with the gate merely missing.
     args.gate = os.path.abspath(args.gate)
